@@ -417,6 +417,7 @@ function TerminalPanel() {
                   key={tab.id}
                   data-tour={tab.id === "agent" ? "agent" : undefined}
                   type="button"
+                  aria-pressed={isActive}
                   disabled={isPlaybackSnapshotActive}
                   onClick={() => setActiveTab(tab.id)}
                   className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
@@ -442,6 +443,7 @@ function TerminalPanel() {
                 >
                   <button
                     type="button"
+                    aria-pressed={isActiveSession}
                     disabled={isPlaybackSnapshotActive}
                     onClick={() => {
                       setActiveTab("terminal");

@@ -3,7 +3,7 @@ import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
-import { DOCK_TAB_STRIP_CLASS } from "./terminalPanel/runtimeDockHelpers";
+import { DOCK_TAB_STRIP_CLASS, dockTabStateClassName } from "./terminalPanel/runtimeDockHelpers";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
@@ -426,13 +426,12 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                 key={tab.id}
                 data-tour={tab.id === "agent" ? "agent" : undefined}
                 type="button"
+                aria-pressed={isActive}
                 disabled={isPlaybackSnapshotActive}
                 onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
-                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
-                  isActive
-                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
-                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
-                } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
+                  isActive,
+                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
               >
                 {tab.icon}
                 {tab.label}

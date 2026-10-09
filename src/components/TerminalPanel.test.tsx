@@ -44,9 +44,12 @@ const actions = {
   updateRunnerConfig: () => {},
 } as unknown as WebContainerRuntimeActions;
 
-function dock(status: WebContainerRuntimeStatus) {
+function dock(
+  status: WebContainerRuntimeStatus,
+  terminalSessions: WebContainerRuntimeOutput["terminalSessions"] = [],
+) {
   const metadata = {
-    activeTerminalSessionId: null,
+    activeTerminalSessionId: terminalSessions[0]?.id ?? null,
     status,
     errorMessage: null,
     activeCommand: null,
@@ -55,7 +58,7 @@ function dock(status: WebContainerRuntimeStatus) {
     previewUrl: null,
     runnerConfig: { enabled: true, runCommand: "npm run dev", initCommand: "npm install" },
   } as unknown as WebContainerRuntimeMetadata;
-  const output: WebContainerRuntimeOutput = { lastOutput: null, terminalSessions: [] };
+  const output: WebContainerRuntimeOutput = { lastOutput: null, terminalSessions };
 
   return (
     <RuntimePanelStoreProvider>
@@ -108,5 +111,45 @@ describe("TerminalPanel", () => {
     expect(screen.queryByTestId("Console")).toBeNull();
     expect(screen.getByRole("status")).toBe(status);
     expect(status).toHaveTextContent("Runner is starting");
+  });
+
+  it("marks the dock tab on screen as pressed", () => {
+    render(dock("ready"));
+    const pressed = () =>
+      ["Runner", "Console", "Agent"].map((name) =>
+        screen.getByRole("button", { name }).getAttribute("aria-pressed"),
+      );
+    expect(pressed()).toEqual(["true", "false", "false"]);
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Console" }));
+    });
+
+    expect(pressed()).toEqual(["false", "true", "false"]);
+  });
+
+  it("marks the terminal session on screen as pressed", () => {
+    render(
+      dock("ready", [
+        { id: "shell-1", title: "Terminal 1", output: "" },
+        { id: "shell-2", title: "Terminal 2", output: "" },
+      ]),
+    );
+    expect(screen.getByRole("button", { name: "Terminal 1" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Terminal 1" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Terminal 1", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminal 2", pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Runner", pressed: false })).toBeInTheDocument();
+    // The close button beside each session stays a plain button.
+    expect(screen.getAllByRole("button", { name: "Close terminal" })[0]).not.toHaveAttribute(
+      "aria-pressed",
+    );
   });
 });

@@ -502,12 +502,29 @@ describe("playground runner panels", () => {
     expect(dock).toHaveAttribute("data-cursor-replay-target", "runtime-dock");
     expect(screen.getByRole("button", { name: panel.runnerTab })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Agent" })).toHaveAttribute("data-tour", "agent");
+    expect(screen.getByRole("button", { name: panel.runnerTab })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Agent" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText(panel.command, { selector: "p" })).toBeInTheDocument();
     expect(screen.getByTestId("console")).toHaveAttribute("data-session", panel.surface);
     expect(screen.getByRole("button", { name: "Run" })).toHaveAttribute(
       "data-studio-target",
       STUDIO_RUN_BUTTON_TARGET_ID,
     );
+  });
+
+  it.each(CASES)("$kind: marks the Agent tab pressed once it is on screen", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    await renderPanel(panel);
+
+    await click(screen.getByRole("button", { name: "Agent" }));
+
+    expect(screen.getByRole("button", { name: "Agent", pressed: true })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: panel.runnerTab, pressed: false }),
+    ).toBeInTheDocument();
   });
 
   it.each(CASES)(
