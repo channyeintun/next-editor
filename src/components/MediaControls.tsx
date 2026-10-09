@@ -453,12 +453,14 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       className={`${positioning} bottom-0 left-0 z-101 w-full border-t border-[#0f131a] bg-[#11141c] ${containerPadding} ${containerHeight} pointer-events-none`}
     >
       {/* Caption file picker — kept outside the record-only controls so "Import captions…"
-          works once a recording is loaded (when the audio-source row is no longer rendered). */}
+          works once a recording is loaded (when the audio-source row is no longer rendered).
+          Only ever opened by click(), so out of layout and the tab order: an sr-only input
+          was a Tab stop whose focus ring was clipped away. */}
       <input
         ref={captionFileInputRef}
         type="file"
         accept=".vtt,.srt,text/vtt,application/x-subrip"
-        className="sr-only"
+        className="hidden"
         onChange={(event) => void handleCaptionFileChange(event)}
       />
       {playerShortcuts.feedback ? (
@@ -557,7 +559,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               ref={audioFileInputRef}
               type="file"
               accept="audio/*,.webm,.ogg,.opus,.mp3,.wav,.m4a,.mp4,.aac"
-              className="sr-only"
+              // Opened by click() from the File button and the record button, like the
+              // caption picker: no Tab stop of its own.
+              className="hidden"
               onChange={handleAudioFileChange}
             />
             {isCameraSupported ? (

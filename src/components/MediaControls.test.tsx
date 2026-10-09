@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import MediaControls from "./MediaControls";
 import { NextEditorProvider } from "../contexts/NextEditorProvider";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
@@ -71,10 +71,10 @@ const seen: { actions: NextEditorActions | null; loaded: Recording | null } = {
   loaded: null,
 };
 
-function Player({ large = false }: { large?: boolean }) {
+function Player({ large = false, recordMode = false }: { large?: boolean; recordMode?: boolean }) {
   seen.actions = useNextEditorActions();
   seen.loaded = useNextEditorMetadata().currentRecording;
-  return <MediaControls recordMode={false} large={large} />;
+  return <MediaControls recordMode={recordMode} large={large} />;
 }
 
 /** The learner's player bar with the lesson loaded. */
@@ -91,12 +91,22 @@ async function renderPlayer({ large = false }: { large?: boolean } = {}) {
   return view;
 }
 
+/** A file input the bar opens with click(); it has no role or name of its own. */
+const filePicker = (container: HTMLElement, accept: string) => {
+  const input = container.querySelector<HTMLInputElement>(
+    `input[type="file"][accept^="${accept}"]`,
+  );
+  if (!input) throw new Error(`No file picker accepting ${accept}`);
+  return input;
+};
+
 const playedFill = () =>
   screen
     .getByRole("slider", { name: "Playback progress" })
     .querySelector<HTMLElement>(".next-editor-progress-bar");
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
 });
 
@@ -111,5 +121,35 @@ describe("MediaControls", () => {
   it("keeps the default bar's blue, where the thumb stands out above the thin bar", async () => {
     await renderPlayer();
     expect(playedFill()).toHaveStyle({ backgroundColor: "#3b82f6" });
+  });
+
+  it("opens the caption picker from Import captions without a hidden Tab stop of its own", async () => {
+    const { container } = await renderPlayer();
+    const picker = filePicker(container, ".vtt");
+    // Out of layout (display: none), so Tab never lands on it; an sr-only input took focus
+    // with its focus ring clipped away.
+    expect(picker).toHaveClass("hidden");
+    expect(picker).not.toHaveClass("sr-only");
+    const open = vi.spyOn(picker, "click").mockImplementation(() => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import captions…" }));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the narration file picker from the File option without a Tab stop of its own", () => {
+    // The author's bar before a take: the audio-source row is showing.
+    const { container } = render(
+      <Providers>
+        <Player recordMode />
+      </Providers>,
+    );
+    const picker = filePicker(container, "audio/");
+    expect(picker).toHaveClass("hidden");
+    expect(picker).not.toHaveClass("sr-only");
+    const open = vi.spyOn(picker, "click").mockImplementation(() => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "File" }));
+    expect(open).toHaveBeenCalledTimes(1);
   });
 });
