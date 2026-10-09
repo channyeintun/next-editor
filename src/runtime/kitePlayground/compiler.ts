@@ -165,21 +165,30 @@ export async function instantiateKiteCompiler(wasmBytes: BufferSource): Promise<
  * A dynamic import so the 2 MB module code-splits out of the main bundle: a
  * lesson that never runs Kite never downloads a Kite compiler. The promise is
  * cached rather than the value, so two runs racing on first use share one
- * instantiation instead of starting two.
+ * instantiation instead of starting two. A failed load is not cached; the next
+ * call tries again.
  */
 let pending: Promise<KiteCompiler> | null = null;
 
 export function loadKiteCompiler(): Promise<KiteCompiler> {
   if (!pending) {
-    pending = import("../../core/kite/build/kite-compiler.wasm").then((wasm) =>
-      kiteCompilerFromExports(
-        (
-          wasm as unknown as {
-            default?: KiteCompilerExports;
-          } & KiteCompilerExports
-        ).default ?? (wasm as unknown as KiteCompilerExports),
-      ),
-    );
+    pending = import("../../core/kite/build/kite-compiler.wasm")
+      .then((wasm) =>
+        kiteCompilerFromExports(
+          (
+            wasm as unknown as {
+              default?: KiteCompilerExports;
+            } & KiteCompilerExports
+          ).default ?? (wasm as unknown as KiteCompilerExports),
+        ),
+      )
+      .catch((error: unknown) => {
+        // A transient chunk failure (offline, a stale tab after a deploy) must
+        // not leave every later Run replaying it; sharedContainer.ts resets its
+        // boot promise the same way.
+        pending = null;
+        throw error;
+      });
   }
   return pending;
 }

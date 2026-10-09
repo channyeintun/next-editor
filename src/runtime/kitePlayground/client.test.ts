@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { runKiteSource } from "./client";
 import { instantiateKiteCompiler, type KiteCompiler } from "./compiler";
@@ -56,6 +56,36 @@ describe("kite compiler", () => {
     for (let i = 0; i < 40; i += 1) {
       expect(kite.run(`fn main() {\n    io.print(${i})\n}\n`)).toBe(`${i}\n`);
     }
+  });
+});
+
+describe("loadKiteCompiler", () => {
+  const WASM = "../../core/kite/build/kite-compiler.wasm";
+
+  afterEach(() => {
+    vi.doUnmock(WASM);
+    vi.resetModules();
+  });
+
+  // A transient chunk failure (offline, a stale tab after a deploy) used to stay
+  // cached, so every later Run reported the compiler unavailable until a reload.
+  it("forgets a failed load, so the next call tries again", async () => {
+    vi.resetModules();
+    vi.doMock(WASM, () => Promise.reject(new Error("gone")));
+    const { loadKiteCompiler } = await import("./compiler");
+
+    const first = loadKiteCompiler();
+    // Vitest wraps a failing mock factory's error; the original is its cause.
+    await expect(first).rejects.toMatchObject({ cause: new Error("gone") });
+
+    const exports = (await WebAssembly.instantiate(readFileSync(wasmPath))).instance.exports;
+    vi.doMock(WASM, () => ({ default: exports }));
+    const second = loadKiteCompiler();
+    expect(second).not.toBe(first);
+
+    const compiler = await second;
+    expect(compiler.check("fn main() {\n    io.print(1)\n}\n")).toBe("");
+    await expect(loadKiteCompiler()).resolves.toBe(compiler);
   });
 });
 
