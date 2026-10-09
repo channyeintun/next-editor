@@ -25,13 +25,13 @@ const playlist: OwnedPlaylist = {
   thumbnail: null,
 };
 
-function renderCard() {
+function renderCard(onManage: () => void = () => {}) {
   render(
     <MemoryRouter>
       <PlaylistCard
         playlist={playlist}
         isManaging={false}
-        onManage={() => {}}
+        onManage={onManage}
         onDeleted={() => {}}
       />
     </MemoryRouter>,
@@ -92,6 +92,17 @@ describe("PlaylistCard", () => {
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Playlist options" })).toHaveFocus();
+  });
+
+  it("focuses the options trigger before opening the manage panel", () => {
+    let focusedOnManage: Element | null = null;
+    renderCard(() => {
+      focusedOnManage = document.activeElement;
+    });
+
+    openMenuItem("Manage lessons");
+
+    expect(focusedOnManage).toBe(screen.getByRole("button", { name: "Playlist options" }));
   });
 
   it("names the rename field", () => {

@@ -1,6 +1,7 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS, useCreatePlaylist } from "@next-editor/infra";
+import { useModalFocus } from "@app/hooks/useModalFocus";
 
 const ghostButton =
   "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
@@ -16,7 +17,21 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
   const [titleError, setTitleError] = useState<string | null>(null);
   const titleErrorId = useId();
   const createPlaylist = useCreatePlaylist();
+  const titleId = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
+  // Tab wraps inside the card, Escape closes (not while a create is in
+  // flight), and focus goes back to "New playlist" on close. The name field's
+  // autoFocus is what moves focus in on open.
+  const { onKeyDown } = useModalFocus(cardRef, {
+    active: true,
+    onEscape: () => {
+      if (!createPlaylist.isPending) onClose();
+    },
+  });
 
+  // Still closes on Escape when focus has fallen to <body> (the fields and
+  // buttons are disabled while a create is in flight), where the card's own
+  // handler above cannot hear it.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !createPlaylist.isPending) onClose();
@@ -45,13 +60,21 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-[#0b0d12]/62 px-4 py-16 backdrop-blur-[2px]"
       onClick={() => !createPlaylist.isPending && onClose()}
+      onKeyDown={onKeyDown}
     >
       <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">New playlist</h3>
+          <h3 id={titleId} className="text-sm font-semibold text-white">
+            New playlist
+          </h3>
           <button
             type="button"
             aria-label="Close"

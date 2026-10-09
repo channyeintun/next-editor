@@ -145,6 +145,9 @@ export default function PlaylistCard({
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
+                    // Focus the trigger first, so the panel takes it as the
+                    // place to return focus to, not this unmounting item.
+                    triggerRef.current?.focus();
                     onManage();
                   }}
                   className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"

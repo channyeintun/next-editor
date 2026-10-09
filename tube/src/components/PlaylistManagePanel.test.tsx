@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { OwnedPlaylist } from "@next-editor/infra";
 
@@ -32,7 +33,75 @@ const playlist: OwnedPlaylist = {
   thumbnail: null,
 };
 
+/** The card's options trigger that opens the panel, the way PlaylistsSection does. */
+function Harness({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Playlist options
+      </button>
+      {open ? (
+        <PlaylistManagePanel
+          playlist={playlist}
+          onClose={() => {
+            onClose();
+            setOpen(false);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function openPanel(onClose = vi.fn<() => void>()) {
+  render(<Harness onClose={onClose} />);
+  const opener = screen.getByRole("button", { name: "Playlist options" });
+  opener.focus();
+  fireEvent.click(opener);
+  return { opener, onClose };
+}
+
 describe("PlaylistManagePanel", () => {
+  it("is a modal dialog named by its heading, with focus on Close", () => {
+    openPanel();
+
+    const dialog = screen.getByRole("dialog", { name: "Manage “Rust basics”" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+  });
+
+  it("closes once on Escape and returns focus to the opener", () => {
+    const { opener, onClose } = openPanel();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it("still closes on Escape when focus has fallen to the page", () => {
+    const { onClose } = openPanel();
+    screen.getByRole("button", { name: "Close" }).blur();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("wraps Tab inside the dialog", () => {
+    openPanel();
+    const close = screen.getByRole("button", { name: "Close" });
+    const lastRemove = screen.getAllByRole("button", { name: "Remove" }).at(-1)!;
+
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(lastRemove).toHaveFocus();
+
+    fireEvent.keyDown(lastRemove, { key: "Tab" });
+    expect(close).toHaveFocus();
+  });
+
   it("announces a failed remove", () => {
     removeLesson.mockImplementation((_variables, options) => {
       options?.onError?.();

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { useModalFocus } from "@app/hooks/useModalFocus";
 import {
   usePlaylistLessons,
   useRemoveLessonFromPlaylist,
@@ -31,6 +32,11 @@ export default function PlaylistManagePanel({
   // own isPending would otherwise disable every row's button while any one
   // of them is in flight.
   const [removingLessonId, setRemovingLessonId] = useState<string | null>(null);
+  const titleId = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
+  // Focus moves in on open (to Close), Tab wraps inside the card, Escape
+  // closes, and focus goes back to the card's options trigger on close.
+  const { onKeyDown } = useModalFocus(cardRef, { active: true, onEscape: onClose });
 
   const removeLesson = useRemoveLessonFromPlaylist();
   const reorder = useReorderPlaylistLessons();
@@ -42,6 +48,8 @@ export default function PlaylistManagePanel({
   // it. Unpublished members render below with a "draft" tag instead.
   const { data: members, isPending: membersPending } = usePlaylistLessons(playlist.id);
 
+  // Still closes on Escape when focus has fallen to <body> (a removed row's
+  // button unmounts), where the card's own handler above cannot hear it.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -81,17 +89,24 @@ export default function PlaylistManagePanel({
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-[#0b0d12]/62 px-4 py-16 backdrop-blur-[2px]"
       onClick={onClose}
+      onKeyDown={onKeyDown}
     >
       <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-          <h3 className="min-w-0 truncate text-sm font-semibold text-white">
+          <h3 id={titleId} className="min-w-0 truncate text-sm font-semibold text-white">
             Manage &ldquo;{playlist.title}&rdquo;
           </h3>
           <button
             type="button"
+            autoFocus
             aria-label="Close"
             onClick={onClose}
             className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white"
