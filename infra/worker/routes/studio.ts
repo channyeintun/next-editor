@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { requireUser } from "../auth/requireUser";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
+import { sanitizeUpstreamText } from "../upstreamText";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
 import { keyVaultOf } from "../athanlab/keyVault";
 
@@ -98,26 +99,17 @@ function jobUrl(modal: ModalConfig, callId: string): URL {
 }
 
 /**
- * Make upstream text safe to hand back to the browser: the configured
- * credentials and endpoint host are redacted wherever they appear, anything
- * shaped like a Modal token too, control characters are flattened, and the
- * result is length-bounded.
+ * Make Modal text safe to hand back to the browser (upstreamText.ts): the
+ * configured credentials and endpoint host are redacted wherever they appear,
+ * anything shaped like a Modal token too, control characters are flattened,
+ * and the result is length-bounded.
  */
-function sanitizeUpstreamText(text: string, modal: ModalConfig): string | null {
-  let cleaned = text;
-  for (const secret of [modal.tokenSecret, modal.tokenId, new URL(modal.jobsUrl).hostname]) {
-    cleaned = cleaned.split(secret).join("[redacted]");
-  }
-  cleaned = cleaned
-    .replace(MODAL_TOKEN_PATTERN, "[redacted]")
-    // eslint-disable-next-line no-control-regex -- intentionally flattens control characters (newlines, ANSI escapes) out of quoted upstream text
-    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned) return null;
-  return cleaned.length > MAX_UPSTREAM_DETAIL_CHARS
-    ? `${cleaned.slice(0, MAX_UPSTREAM_DETAIL_CHARS - 1)}…`
-    : cleaned;
+function sanitizeModalText(text: string, modal: ModalConfig): string | null {
+  return sanitizeUpstreamText(text, {
+    secrets: [modal.tokenSecret, modal.tokenId, new URL(modal.jobsUrl).hostname],
+    secretPattern: MODAL_TOKEN_PATTERN,
+    maxChars: MAX_UPSTREAM_DETAIL_CHARS,
+  });
 }
 
 /**
@@ -140,7 +132,7 @@ async function upstreamErrorDetail(upstream: Response, modal: ModalConfig): Prom
     await upstream.body?.cancel().catch(() => undefined);
     return null;
   }
-  if (!isJson) return sanitizeUpstreamText(body.text, modal);
+  if (!isJson) return sanitizeModalText(body.text, modal);
 
   let payload: unknown;
   try {
@@ -151,7 +143,7 @@ async function upstreamErrorDetail(upstream: Response, modal: ModalConfig): Prom
   if (typeof payload !== "object" || payload === null) return null;
   const { detail, error } = payload as Record<string, unknown>;
   const message = typeof detail === "string" ? detail : typeof error === "string" ? error : null;
-  return message === null ? null : sanitizeUpstreamText(message, modal);
+  return message === null ? null : sanitizeModalText(message, modal);
 }
 
 async function hasBurmeseTtsAccess(env: Env, userId: string): Promise<boolean> {
@@ -472,7 +464,7 @@ async function wavResponse(c: Context, upstream: Response, modal: ModalConfig) {
       contentType: contentType || null,
     });
     const received = contentType
-      ? `"${sanitizeUpstreamText(contentType, modal) ?? "unknown"}"`
+      ? `"${sanitizeModalText(contentType, modal) ?? "unknown"}"`
       : "no content type";
     return c.json(
       {

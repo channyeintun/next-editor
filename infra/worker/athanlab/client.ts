@@ -1,4 +1,5 @@
 import { readBodyWithLimit } from "../httpBody";
+import { sanitizeUpstreamText } from "../upstreamText";
 
 /**
  * The Worker's only way to talk to AthanLab (https://athanlab.com/docs).
@@ -131,24 +132,21 @@ export interface AthanLabError {
 }
 
 /**
- * Make AthanLab text safe to hand back to the browser and to logs: the
- * caller's key and anything else shaped like a key are redacted, control
- * characters are flattened, and the result is length-bounded.
+ * Make AthanLab text safe to hand back to the browser and to logs
+ * (upstreamText.ts): the caller's key and anything else shaped like a key are
+ * redacted, control characters are flattened, and the result is
+ * length-bounded.
  */
 export function sanitizeAthanLabText(
   text: string,
   apiKey: string,
   maxChars = MAX_MESSAGE_CHARS,
 ): string | null {
-  let cleaned = apiKey ? text.split(apiKey).join("[redacted]") : text;
-  cleaned = cleaned
-    .replace(KEY_LIKE_PATTERN, "[redacted]")
-    // eslint-disable-next-line no-control-regex -- intentionally flattens control characters (newlines, ANSI escapes) out of quoted upstream text
-    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned) return null;
-  return cleaned.length > maxChars ? `${cleaned.slice(0, maxChars - 1)}…` : cleaned;
+  return sanitizeUpstreamText(text, {
+    secrets: [apiKey],
+    secretPattern: KEY_LIKE_PATTERN,
+    maxChars,
+  });
 }
 
 /** The Retry-After header in whole seconds, or null when absent or not a number. */
