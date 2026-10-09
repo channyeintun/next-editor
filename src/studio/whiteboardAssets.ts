@@ -91,7 +91,7 @@ export function planWhiteboardDrawFrames(
 
 /**
  * How long a drawn apply keeps the Performer busy. The compiler models this as
- * busy time (script/compile.ts) — the Performer is strictly sequential, so
+ * busy time (script/actionTiming.ts) — the Performer is strictly sequential, so
  * without it every following action starts late and fails the timing gate.
  */
 export function whiteboardDrawDurationMs(assetCount: number, drawMs: number): number {

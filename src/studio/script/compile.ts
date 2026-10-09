@@ -1,12 +1,4 @@
 import {
-  BLOCK_CADENCE,
-  FAST_EXPLAINER_CADENCE,
-  LINE_BY_LINE_CADENCE,
-  NATURAL_CADENCE,
-  compileTypingChunks,
-  createSeededRandom,
-} from "../cadence";
-import {
   POINTER_AIM_MAX_MS,
   POINTER_PRESS_MS,
   POINTER_SETTLE_MS,
@@ -23,13 +15,19 @@ import {
 import { STUDIO_DOCK_TOGGLE_TARGET_ID } from "../targets";
 import { CONSOLE_MIN_COLUMNS, CONSOLE_VISIBLE_ROWS } from "../consoleLines";
 import { expandConsoleTabs, fixtureRunConsoleLines } from "../fixtureConsoleLines";
-import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 import {
   markerTimeMs,
   sceneStartMs,
   type NarrationAlignment,
   buildCaptionTrack,
 } from "./alignment";
+import {
+  actionBusyMsById,
+  pointDurationOf,
+  selectDurationOf,
+  typingChunksOf,
+  typingSeedsOf,
+} from "./actionTiming";
 import type { ExtractedNarration } from "./markers";
 import { requireMarker } from "./markers";
 import type { LessonScript, ScriptAction } from "./schema";
@@ -90,13 +88,6 @@ interface TimedAction {
   authoredIndex: number;
 }
 
-const CADENCES = {
-  natural: NATURAL_CADENCE,
-  "fast-explainer": FAST_EXPLAINER_CADENCE,
-  "line-by-line": LINE_BY_LINE_CADENCE,
-  block: BLOCK_CADENCE,
-} as const;
-
 /** How long before an action the click that performs it releases. */
 const CURSOR_CLICK_LEAD_MS = 80;
 // A click move's budget: the travel plus the rest on the control and the
@@ -112,16 +103,6 @@ const CURSOR_CLICK_NEEDS_MS = CURSOR_CLICK_LEAD_MS + CURSOR_TRAVEL_MIN_MS + CURS
 /** Window (before the run's click lead) for chevron click → dock opens → Run press. */
 const CURSOR_OPEN_AND_RUN_NEEDS_MS =
   2 * (CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) + CURSOR_CLICK_LEAD_MS;
-// Drag-select timing: a base grab plus per-character travel, seed-jittered. The
-// driver spends this whole budget sweeping a button-held pointer across the
-// span, so it is tuned to the reference human recording (human-interactions.ne),
-// whose drag-selects ran ~333–1116ms (median ~750ms).
-const SELECT_DRAG_BASE_MS = 460;
-const SELECT_DRAG_PER_CHAR_MS = 11;
-/** Only the first ~80 chars of the span add travel time — long blocks don't crawl. */
-const SELECT_DRAG_CHAR_CAP = 80;
-const SELECT_DRAG_JITTER_MS = 200;
-const SELECT_DRAG_MAX_MS = 1_200;
 /**
  * The plan schema's timeline failures: a busy action running into the next
  * one, or the last action starting after the narration ends. It mirrors the
@@ -238,80 +219,6 @@ function advancePointerUiState(action: ScriptAction, ui: PointerUiState): void {
   }
 }
 
-/**
- * Typing seeds are `build.seed + authored index` in scene order. Exported so
- * the dialog scheduler derives byte-identical chunk schedules to the ones this
- * compiler materializes — the two must never disagree about typing durations.
- */
-export function typingSeedsOf(script: LessonScript): Map<string, number> {
-  const seeds = new Map<string, number>();
-  let actionIndex = 0;
-  for (const scene of script.scenes) {
-    for (const action of scene.actions) {
-      seeds.set(action.id, script.build.seed + actionIndex);
-      actionIndex += 1;
-    }
-  }
-  return seeds;
-}
-
-export function typingDurationOf(action: ScriptAction, seed: number): number {
-  if (action.type !== "editor.type") {
-    return 0;
-  }
-  return compileTypingChunks(action.text, CADENCES[action.cadence], seed).reduce(
-    (total, chunk) => total + chunk.delayMs,
-    0,
-  );
-}
-
-/**
- * Materialized drag-glide duration for an `editor.select` (0 for any other
- * action). Longer spans travel a little longer, capped so a whole-block
- * selection never crawls; the seed adds reproducible jitter so plans stay
- * byte-identical between the scheduler and the compiler.
- */
-export function selectDurationOf(action: ScriptAction, seed: number): number {
-  if (action.type !== "editor.select") {
-    return 0;
-  }
-  const chars = Math.min(action.target.text.length, SELECT_DRAG_CHAR_CAP);
-  const base = SELECT_DRAG_BASE_MS + chars * SELECT_DRAG_PER_CHAR_MS;
-  const jitter = Math.round(createSeededRandom(seed)() * SELECT_DRAG_JITTER_MS);
-  return Math.min(SELECT_DRAG_MAX_MS, Math.round(base + jitter));
-}
-
-/**
- * Travel budget for a `console.point` (0 for any other action): the longest
- * human approach, so the move from wherever the pointer rests — the Run button,
- * the line above — never has to rush. A hop to the next line takes far less.
- */
-export function pointDurationOf(action: ScriptAction): number {
-  return action.type === "console.point" ? POINTER_AIM_MAX_MS : 0;
-}
-
-/** Time a drawn whiteboard apply spends emitting its frames. */
-export function whiteboardDrawDurationOf(action: ScriptAction): number {
-  if (action.type !== "whiteboard.apply") {
-    return 0;
-  }
-  return whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs);
-}
-
-/**
- * Time a timed action keeps the Performer busy: typing chunks, a select drag,
- * or the frames of a drawn whiteboard apply. The Performer runs plan order
- * sequentially, so anything not modeled here pushes every later action late.
- */
-function actionBusyMs(action: ScriptAction, seed: number): number {
-  return (
-    typingDurationOf(action, seed) +
-    selectDurationOf(action, seed) +
-    pointDurationOf(action) +
-    whiteboardDrawDurationOf(action)
-  );
-}
-
 export function compileLessonScript({
   script,
   extracted,
@@ -334,6 +241,7 @@ export function compileLessonScript({
   let pending: TimedAction[] = [];
   const resolvedEndAt = new Map<string, number>();
   const typingSeed = typingSeedsOf(script);
+  const busyById = actionBusyMsById(script);
   // dependent id → predecessor id, for every `afterAction`-anchored action. Emitted
   // into the plan so the timing gate measures a dependent's drift relative to its
   // predecessor's acknowledgement rather than a placeholder planned time (STUDIO-03).
@@ -349,11 +257,11 @@ export function compileLessonScript({
         const marker = requireMarker(extracted, anchor.mark);
         entry.at = Math.max(0, markerTimeMs(alignment, marker) + anchor.offsetMs);
         authored.push(entry);
-        resolvedEndAt.set(action.id, entry.at + actionBusyMs(action, typingSeed.get(action.id)!));
+        resolvedEndAt.set(action.id, entry.at + busyById.get(action.id)!);
       } else if ("scene" in anchor) {
         entry.at = Math.max(0, sceneStartMs(alignment, extracted, scene.id) + anchor.offsetMs);
         authored.push(entry);
-        resolvedEndAt.set(action.id, entry.at + actionBusyMs(action, typingSeed.get(action.id)!));
+        resolvedEndAt.set(action.id, entry.at + busyById.get(action.id)!);
       } else {
         pending.push(entry);
       }
@@ -383,10 +291,7 @@ export function compileLessonScript({
       // and preview waits remain zero-modelled and therefore keep the predecessor
       // start as a placeholder; their timing is measured from the actual ack.
       entry.at = referencedEnd;
-      resolvedEndAt.set(
-        entry.action.id,
-        referencedEnd + actionBusyMs(entry.action, typingSeed.get(entry.action.id)!),
-      );
+      resolvedEndAt.set(entry.action.id, referencedEnd + busyById.get(entry.action.id)!);
       dependencies.set(entry.action.id, anchor.afterAction);
       authored.push(entry);
       progressed = true;
@@ -440,7 +345,7 @@ export function compileLessonScript({
       hasRunOutput = true;
     }
     const target = clickTargetForAction(entry.action, script, ui);
-    const busyMs = actionBusyMs(entry.action, typingSeed.get(entry.action.id)!);
+    const busyMs = busyById.get(entry.action.id)!;
 
     if (target) {
       // A move may not start while an earlier edit is still typing, and — the
@@ -533,11 +438,7 @@ export function compileLessonScript({
             timeoutMs: action.timeoutMs,
             path: action.target.file,
             anchor: { after: action.target.after, occurrence: action.target.occurrence },
-            chunks: compileTypingChunks(
-              action.text,
-              CADENCES[action.cadence],
-              typingSeed.get(action.id)!,
-            ),
+            chunks: typingChunksOf(action, typingSeed.get(action.id)!),
           };
         case "editor.select":
           return {

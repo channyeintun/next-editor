@@ -3,13 +3,7 @@ import { estimateAlignment, type NarrationAlignment, AlignmentError } from "./al
 import type { NarrationDialog } from "./dialogs";
 import type { ExtractedNarration } from "./markers";
 import type { LessonScript } from "./schema";
-import {
-  pointDurationOf,
-  selectDurationOf,
-  typingDurationOf,
-  typingSeedsOf,
-  whiteboardDrawDurationOf,
-} from "./compile";
+import { actionBusyMsById } from "./actionTiming";
 
 /**
  * Joint dialog/action scheduling: instead of squeezing actions into one fixed
@@ -21,8 +15,8 @@ import {
  *
  * The output combined alignment feeds `compileLessonScript` unchanged: marker
  * resolution there reads token starts, and this scheduler wrote those token
- * starts. Typing durations are derived through the same exported helpers the
- * compiler uses, so both stages see identical numbers.
+ * starts. Busy time comes from actionTiming.ts, the helpers the compiler
+ * uses, so both stages see identical numbers.
  */
 
 /**
@@ -87,7 +81,6 @@ export function scheduleDialogs({
   }
 
   const warnings: string[] = [];
-  const typingSeeds = typingSeedsOf(script);
 
   // Marker name → the dialog whose start it anchors ("end" markers → null).
   const dialogStartByToken = new Map<number, number>();
@@ -117,19 +110,10 @@ export function scheduleDialogs({
   // both pretending to begin at the root mark (STUDIO-03).
   const resolvedDialog = new Map<string, number | null | undefined>();
   const directOffset = new Map<string, number>();
-  const busyById = new Map<string, number>();
+  const busyById = actionBusyMsById(script);
   const predecessorById = new Map<string, string>();
-  const afterActionOf = new Map<string, string>();
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
-      const seed = typingSeeds.get(action.id) ?? script.build.seed;
-      busyById.set(
-        action.id,
-        typingDurationOf(action, seed) +
-          selectDurationOf(action, seed) +
-          pointDurationOf(action) +
-          whiteboardDrawDurationOf(action),
-      );
       const anchor = action.at;
       if ("mark" in anchor) {
         resolvedDialog.set(action.id, markerDialogIndex.get(anchor.mark));
@@ -139,21 +123,21 @@ export function scheduleDialogs({
         directOffset.set(action.id, anchor.offsetMs);
       } else {
         predecessorById.set(action.id, anchor.afterAction);
-        afterActionOf.set(action.id, anchor.afterAction);
       }
     }
   }
   // Fixpoint: an afterAction action inherits its predecessor's resolved anchor.
   // Leftovers are cycles/unknown references, which the compiler reports with full
   // context; here they simply contribute no narration push.
+  const unresolved = new Map(predecessorById);
   let anchorProgressed = true;
-  while (afterActionOf.size > 0 && anchorProgressed) {
+  while (unresolved.size > 0 && anchorProgressed) {
     anchorProgressed = false;
     // Deleting the just-resolved (current) entry mid-iteration is safe for a Map.
-    for (const [id, predecessorId] of afterActionOf) {
+    for (const [id, predecessorId] of unresolved) {
       if (!resolvedDialog.has(predecessorId)) continue;
       resolvedDialog.set(id, resolvedDialog.get(predecessorId));
-      afterActionOf.delete(id);
+      unresolved.delete(id);
       anchorProgressed = true;
     }
   }
@@ -260,7 +244,6 @@ export function scheduleDialogs({
         actionProgressed = true;
       }
     }
-    busyUntilMs = Math.max(busyUntilMs, 0);
   }
 
   const totalDurationMs = Math.ceil(Math.max(previousEndMs, busyUntilMs) + RECORDING_BUFFER_MS);

@@ -3,16 +3,18 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import {
-  compileLessonScript,
+  actionBusyMsById,
   typingDurationOf,
   typingSeedsOf,
   whiteboardDrawDurationOf,
-} from "./compile";
+} from "./actionTiming";
+import { compileLessonScript } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
 import { extractScriptNarration, type ExtractedNarration } from "./markers";
 import { RECORDING_BUFFER_MS, ScheduleError, scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
+import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 
 function loadPilot(name: string): LessonScript {
   return parseLessonScript(
@@ -159,6 +161,48 @@ describe("scheduleDialogs", () => {
     );
     const nextDialog = schedule.timeline[dialogIndex + 1];
     expect(nextDialog.startMs).toBeGreaterThanOrEqual(secondPlan.at + secondBusyMs);
+  });
+
+  // The scheduler reserves narration time from actionBusyMsById; the compiled
+  // plan carries the materialized chunks/durations the Performer spends. The
+  // two must agree for every timed action, or narration and actions drift.
+  it("reserves exactly the busy window each compiled action carries", () => {
+    const tour = loadPilot("go-cube-tour");
+    for (const action of tour.scenes.flatMap((scene) => scene.actions)) {
+      if (action.type === "whiteboard.apply" && action.upsertIds.length > 0) {
+        action.drawMs = 1_500;
+      }
+    }
+
+    for (const script of [loadPilot("go-swap"), tour]) {
+      const { extracted, schedule } = scheduleFor(script);
+      const { plan } = compileLessonScript({
+        script,
+        extracted,
+        alignment: schedule.alignment,
+        narration: {
+          audioPath: "studio-tts://test",
+          mimeType: "audio/wav",
+          durationMs: schedule.totalDurationMs,
+        },
+      });
+      const busyById = actionBusyMsById(script);
+      let timedActions = 0;
+      for (const action of plan.actions) {
+        if (!busyById.has(action.id)) continue;
+        const carriedMs =
+          action.type === "editor.type"
+            ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
+            : action.type === "editor.select" || action.type === "console.point"
+              ? action.durationMs
+              : action.type === "whiteboard.apply"
+                ? whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs)
+                : 0;
+        if (carriedMs > 0) timedActions += 1;
+        expect(busyById.get(action.id), `${plan.lesson.slug}/${action.id}`).toBe(carriedMs);
+      }
+      expect(timedActions).toBeGreaterThan(0);
+    }
   });
 
   it("produces an alignment the compiler accepts without overlap failures", () => {
