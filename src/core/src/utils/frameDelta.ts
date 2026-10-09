@@ -1,6 +1,6 @@
 import type { EditorFrame, MouseCursorPosition, EditorSelection, EditorPosition } from "../types";
 import type { PreviewState } from "../preview";
-import type { SlidePreviewState } from "../slides";
+import { slidePreviewStateChanged } from "../slides";
 import type { PositionDelta, SelectionDelta, FrameDelta, Keyframe, DeltaFrame } from "./deltaTypes";
 import { isKeyframe } from "./deltaTypes";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "./equality";
@@ -149,22 +149,6 @@ function mouseCursorChanged(
 }
 
 /**
- * Helper to check if slide state changed.
- */
-function slideStateChanged(
-  prev: SlidePreviewState | undefined,
-  next: SlidePreviewState | undefined,
-): boolean {
-  if (!prev && !next) return false;
-  if (!prev || !next) return true;
-  return (
-    prev.isOpen !== next.isOpen ||
-    prev.isMaximized !== next.isMaximized ||
-    prev.currentSlideId !== next.currentSlideId
-  );
-}
-
-/**
  * Helper to check if preview state changed.
  */
 function previewStateChanged(
@@ -223,7 +207,7 @@ export function createFrameDelta(
     delta.mouseCursor = next.state.mouseCursor;
   }
 
-  if (slideStateChanged(prev.state.slideState, next.state.slideState)) {
+  if (slidePreviewStateChanged(prev.state.slideState, next.state.slideState)) {
     delta.slideState = next.state.slideState;
   }
 

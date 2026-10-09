@@ -226,6 +226,34 @@ describe("previewState delta stays incremental", () => {
   });
 });
 
+describe("slideState deltas", () => {
+  const withSlides = (timestamp: number, indexv: number): EditorFrame => {
+    const frame = frameAt(timestamp, "editor content");
+    return {
+      ...frame,
+      state: {
+        ...frame.state,
+        slideState: { isOpen: true, isMaximized: false, currentSlideId: "deck-1", indexv },
+        currentSlideIndex: 0,
+      },
+    };
+  };
+
+  // A Google-slides build step changes only indexv. It used to be left out of the
+  // delta, so the frame was skipped and a retake restored the earlier build step.
+  it("records and reconstructs a build-step-only change", () => {
+    const first = withSlides(0, 1);
+    const second = withSlides(16, 2);
+
+    const delta = createFrameDelta(first, second);
+
+    expect(delta.slideState).toEqual(second.state.slideState);
+    expect(delta.currentSlideIndex).toBeUndefined();
+    const frames = [{ ...first, isKeyframe: true as const }, delta];
+    expect(reconstructFrameAtIndex(frames, 1)?.state.slideState?.indexv).toBe(2);
+  });
+});
+
 describe("keyframe index cache", () => {
   // Streaming playback (APPEND_RECORDING_DELTA) pushes decoded frames into the
   // same array the cache is keyed on, so the scan has to keep up with it.

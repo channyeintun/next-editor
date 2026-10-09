@@ -2,6 +2,7 @@ import type * as monaco from "monaco-editor";
 import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { EditorFrame } from "../types";
 import type { PreviewState } from "../preview";
+import { slidePreviewStateChanged } from "../slides";
 import { isKeyframe, type DeltaFrame, type FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent } from "../workspace";
 import {
@@ -274,9 +275,7 @@ function mirrorFrameSlideState(
 
   const hasChanged =
     !prevSlideState ||
-    slideState.isOpen !== prevSlideState.isOpen ||
-    slideState.currentSlideId !== prevSlideState.currentSlideId ||
-    slideState.indexv !== prevSlideState.indexv ||
+    slidePreviewStateChanged(prevSlideState, slideState) ||
     currentSlideIndex !== prevSlideIndex;
 
   if (hasChanged) {

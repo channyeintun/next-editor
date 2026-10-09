@@ -66,6 +66,27 @@ export interface SlidePreviewState {
   currentInteraction?: IframeInteractionEvent;
 }
 
+/**
+ * Whether the slide panel changed between two recorded states: opened or closed,
+ * maximized, moved to another slide, or revealed another build step. The one home
+ * for "did the slide panel change", read by the frame delta encoder and the frame
+ * replay mirror. `currentInteraction` is not compared: it is ephemeral, and
+ * nothing replays it from a frame.
+ */
+export function slidePreviewStateChanged(
+  prev: SlidePreviewState | undefined,
+  next: SlidePreviewState | undefined,
+): boolean {
+  if (!prev && !next) return false;
+  if (!prev || !next) return true;
+  return (
+    prev.isOpen !== next.isOpen ||
+    prev.isMaximized !== next.isMaximized ||
+    prev.currentSlideId !== next.currentSlideId ||
+    prev.indexv !== next.indexv
+  );
+}
+
 export interface SlideEvent {
   type:
     | "slide_open"
