@@ -1,7 +1,4 @@
 // @vitest-environment node
-import { readdirSync, readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 import {
   acquireCredentialProbe,
@@ -12,46 +9,17 @@ import {
   releaseCredentialProbe,
   type PutProviderCredentialParams,
 } from "./providerCredentials";
+import { openSqliteD1 } from "./testing";
 
-const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
-
-/**
- * A database at the production schema: every migration applied in the order
- * wrangler applies them, with foreign keys enforced as D1 enforces them, and
- * one user to own credentials.
- */
+/** A database at the production schema with one user to own credentials. */
 function openDb() {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec("PRAGMA foreign_keys = ON");
-  const migrations = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-  for (const name of migrations) {
-    sqlite.exec(readFileSync(`${MIGRATIONS_DIR}${name}`, "utf8"));
-  }
-  sqlite
+  const database = openSqliteD1();
+  database.sqlite
     .prepare(
       "INSERT INTO users (id, google_sub, email, username, created_at) VALUES (?, ?, ?, ?, 0)",
     )
     .run("user-1", "google-1", "user@example.com", "user");
-
-  function statement(sql: string, args: unknown[] = []) {
-    return {
-      bind: (...bound: unknown[]) => statement(sql, bound),
-      first: async () => sqlite.prepare(sql).get(...(args as never[])) ?? null,
-      all: async () => ({ results: sqlite.prepare(sql).all(...(args as never[])) }),
-      // As D1 reports it: rows this statement wrote (node:sqlite alone repeats
-      // the previous write's count after a read).
-      run: async () => {
-        const before = sqlite.prepare("SELECT total_changes() AS n").get()?.n;
-        const result = sqlite.prepare(sql).run(...(args as never[]));
-        const after = sqlite.prepare("SELECT total_changes() AS n").get()?.n;
-        return { meta: { changes: before === after ? 0 : Number(result.changes) } };
-      },
-    };
-  }
-
-  return { db: { prepare: (sql: string) => statement(sql) } as unknown as D1Database, sqlite };
+  return database;
 }
 
 /** The nonce `sealed()` stores by default: names the sealed key a lease is for. */

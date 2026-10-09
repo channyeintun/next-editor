@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vite-plus/test";
 import {
   getUserByUsername,
@@ -7,6 +7,7 @@ import {
   upsertUserByGoogleSub,
   USERNAME_PATTERN,
 } from "./queries";
+import { openSqliteD1 } from "./testing";
 
 /**
  * The gallery's paging, exercised against real SQLite rather than a stub, so
@@ -21,47 +22,33 @@ import {
  * and never renders another at all.
  */
 
-/** The lessons columns this query touches, per migrations/0001_init.sql. */
-function createDb(rows: Array<{ id: string; publishedAt: number; status?: string }>) {
-  const db = new DatabaseSync(":memory:");
-  db.exec(`
-    CREATE TABLE lessons (
-      id TEXT PRIMARY KEY,
-      slug TEXT UNIQUE NOT NULL,
-      status TEXT NOT NULL DEFAULT 'draft',
-      published_at INTEGER
-    );
-    CREATE INDEX idx_lessons_published ON lessons(status, published_at DESC);
-  `);
-  const insert = db.prepare(
-    "INSERT INTO lessons (id, slug, status, published_at) VALUES (?,?,?,?)",
-  );
-  for (const row of rows) {
-    insert.run(row.id, `slug-${row.id}`, row.status ?? "published", row.publishedAt);
-  }
-  return db;
+function insertUser(sqlite: DatabaseSync, id: string, username: string): void {
+  sqlite
+    .prepare(
+      "INSERT INTO users (id, google_sub, email, username, created_at) VALUES (?, ?, ?, ?, 0)",
+    )
+    .run(id, `google-${id}`, `${id}@example.com`, username);
 }
 
-/** Just enough of the D1 surface for the statements this module issues. */
-function asD1(db: DatabaseSync): D1Database {
-  return {
-    prepare(sql: string) {
-      let bound: unknown[] = [];
-      const statement = {
-        bind(...args: unknown[]) {
-          bound = args;
-          return statement;
-        },
-        async all<T>() {
-          return { results: db.prepare(sql).all(...(bound as never[])) as T[] };
-        },
-        async first<T>() {
-          return (db.prepare(sql).get(...(bound as never[])) as T | undefined) ?? null;
-        },
-      };
-      return statement;
-    },
-  } as unknown as D1Database;
+/** A database at the production schema holding these lessons, stored in this order. */
+function createDb(rows: Array<{ id: string; publishedAt: number; status?: string }>): D1Database {
+  const { db, sqlite } = openSqliteD1();
+  insertUser(sqlite, "owner", "owner");
+  const insert = sqlite.prepare(
+    `INSERT INTO lessons (id, slug, owner_id, title, ne, status, published_at, created_at, updated_at)
+     VALUES (?, ?, 'owner', ?, ?, ?, ?, 0, 0)`,
+  );
+  for (const row of rows) {
+    insert.run(
+      row.id,
+      `slug-${row.id}`,
+      row.id,
+      `media/lessons/${row.id}/${row.id}.ne`,
+      row.status ?? "published",
+      row.publishedAt,
+    );
+  }
+  return db;
 }
 
 // Six published lessons. Two share a millisecond, and with a page size of 3
@@ -80,7 +67,7 @@ const ALL_SLUGS = ROWS.map((row) => `slug-${row.id}`);
 
 describe("listPublishedLessons", () => {
   it("returns every published lesson exactly once across pages", async () => {
-    const db = asD1(createDb(ROWS));
+    const db = createDb(ROWS);
 
     const first = await listPublishedLessons(db, 0, 3);
     const second = await listPublishedLessons(db, 1, 3);
@@ -96,8 +83,8 @@ describe("listPublishedLessons", () => {
   it("orders tied rows by data, not by the order they were stored", async () => {
     // Two databases holding the same lessons, inserted in a different order.
     // Anything the sort leaves to storage layout shows up as a difference here.
-    const natural = asD1(createDb(ROWS));
-    const shuffled = asD1(createDb([...ROWS].reverse()));
+    const natural = createDb(ROWS);
+    const shuffled = createDb([...ROWS].reverse());
 
     const fromNatural = (await listPublishedLessons(natural, 0, 10)).rows.map((row) => row.slug);
     const fromShuffled = (await listPublishedLessons(shuffled, 0, 10)).rows.map((row) => row.slug);
@@ -109,8 +96,8 @@ describe("listPublishedLessons", () => {
     // Page 0 and page 1 are separate requests and may be served from different
     // cache entries or replicas. Model that worst case directly: fetch each
     // page from a database whose tied rows are stored the other way round.
-    const forPageZero = asD1(createDb(ROWS));
-    const forPageOne = asD1(createDb([ROWS[0], ROWS[1], ROWS[3], ROWS[2], ROWS[4], ROWS[5]]));
+    const forPageZero = createDb(ROWS);
+    const forPageOne = createDb([ROWS[0], ROWS[1], ROWS[3], ROWS[2], ROWS[4], ROWS[5]]);
 
     const page0 = await listPublishedLessons(forPageZero, 0, 3);
     const page1 = await listPublishedLessons(forPageOne, 1, 3);
@@ -143,13 +130,11 @@ describe("listPublishedLessons", () => {
   });
 
   it("ignores drafts and reports the last page", async () => {
-    const db = asD1(
-      createDb([
-        { id: "p1", publishedAt: 3 },
-        { id: "p2", publishedAt: 2 },
-        { id: "d1", publishedAt: 1, status: "draft" },
-      ]),
-    );
+    const db = createDb([
+      { id: "p1", publishedAt: 3 },
+      { id: "p2", publishedAt: 2 },
+      { id: "d1", publishedAt: 1, status: "draft" },
+    ]);
 
     const page = await listPublishedLessons(db, 0, 12);
 
@@ -159,37 +144,20 @@ describe("listPublishedLessons", () => {
 });
 
 /**
- * D1 stand-in for the first-sign-in path: `taken` are the usernames already in
- * the users table, and every candidate the loop probes is recorded.
+ * The first-sign-in path at the production schema: `taken` are the usernames
+ * already in the users table, and every candidate the loop probes is recorded.
  */
 function makeUserDb(taken: string[]) {
-  const takenSet = new Set(taken);
   const probed: string[] = [];
-  const db = {
-    prepare(sql: string) {
-      return {
-        bind(...args: unknown[]) {
-          return {
-            async first() {
-              if (sql.includes("SELECT * FROM users WHERE google_sub")) {
-                return null;
-              }
-              if (sql.includes("SELECT 1 FROM users WHERE username")) {
-                const candidate = args[0] as string;
-                probed.push(candidate);
-                return takenSet.has(candidate) ? { 1: 1 } : null;
-              }
-              if (sql.includes("INSERT INTO users")) {
-                return { id: args[0], username: args[5] };
-              }
-              throw new Error(`unexpected statement: ${sql}`);
-            },
-          };
-        },
-      };
+  const { db, sqlite } = openSqliteD1({
+    onStatement: (sql, args) => {
+      if (sql.includes("SELECT 1 FROM users WHERE username")) probed.push(args[0] as string);
     },
-  };
-  return { db: db as unknown as D1Database, probed };
+  });
+  for (const [index, username] of taken.entries()) {
+    insertUser(sqlite, `taken-${index}`, username);
+  }
+  return { db, probed };
 }
 
 describe("upsertUserByGoogleSub", () => {
@@ -254,17 +222,17 @@ describe("getUserByUsername", () => {
   // break every profile and author link those names already have.
   it("still resolves usernames issued before the rename rule", async () => {
     const legacy = ["jo", "maximilian-alexander-von-habsburg-lothringen", "100%-sure-66666666"];
-    const sqlite = new DatabaseSync(":memory:");
-    sqlite.exec("CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT UNIQUE)");
-    const insert = sqlite.prepare("INSERT INTO users (id, username) VALUES (?, ?)");
+    const { db, sqlite } = openSqliteD1();
     for (const [index, username] of legacy.entries()) {
-      insert.run(`user-${index}`, username);
+      insertUser(sqlite, `user-${index}`, username);
     }
-    const db = asD1(sqlite);
 
     for (const [index, username] of legacy.entries()) {
       expect(username).not.toMatch(USERNAME_PATTERN);
-      expect(await getUserByUsername(db, username)).toEqual({ id: `user-${index}`, username });
+      expect(await getUserByUsername(db, username)).toMatchObject({
+        id: `user-${index}`,
+        username,
+      });
     }
   });
 });

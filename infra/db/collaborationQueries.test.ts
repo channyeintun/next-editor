@@ -1,7 +1,5 @@
 // @vitest-environment node
-import { readdirSync, readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vite-plus/test";
 import type { CollaborationInviteRole } from "../../src/collaboration/protocol";
 import {
@@ -12,6 +10,7 @@ import {
   removeCollaborationMember,
   setCollaborationRoomStatus,
 } from "./collaborationQueries";
+import { openSqliteD1, type SqliteD1 } from "./testing";
 
 interface RecordedStatement {
   sql: string;
@@ -94,79 +93,12 @@ describe("createProvisioningCollaborationRoom", () => {
   });
 });
 
-const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
-
 const OWNER_ID = "owner";
 const VIEWER_ID = "viewer";
 const NEWCOMER_ID = "newcomer";
 
-interface CollaborationDb {
-  db: D1Database;
-  sqlite: DatabaseSync;
-  /**
-   * Runs `write` just before the next batch starts, where another request's
-   * commit can land after this request's pre-reads.
-   */
-  beforeNextBatch(write: () => void): void;
-}
-
-/**
- * A database at the production schema: every migration applied in the order
- * wrangler applies them, with foreign keys enforced as D1 enforces them. The
- * D1 stand-in runs a batch as one transaction, as D1 does.
- */
-function openCollaborationDb(): CollaborationDb {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec("PRAGMA foreign_keys = ON");
-  const migrations = readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-  for (const name of migrations) {
-    sqlite.exec(readFileSync(`${MIGRATIONS_DIR}${name}`, "utf8"));
-  }
-
-  let pendingWrite: (() => void) | null = null;
-
-  function statement(sql: string, args: unknown[] = []) {
-    const run = () => {
-      const result = sqlite.prepare(sql).run(...(args as never[]));
-      return { meta: { changes: Number(result.changes) } };
-    };
-    return {
-      bind: (...bound: unknown[]) => statement(sql, bound),
-      first: async () => sqlite.prepare(sql).get(...(args as never[])) ?? null,
-      all: async () => ({ results: sqlite.prepare(sql).all(...(args as never[])) }),
-      run: async () => run(),
-      runNow: run,
-    };
-  }
-
-  async function batch(statements: Array<ReturnType<typeof statement>>) {
-    const write = pendingWrite;
-    pendingWrite = null;
-    write?.();
-    sqlite.exec("BEGIN");
-    try {
-      const results = statements.map((entry) => entry.runNow());
-      sqlite.exec("COMMIT");
-      return results;
-    } catch (error) {
-      sqlite.exec("ROLLBACK");
-      throw error;
-    }
-  }
-
-  return {
-    db: { prepare: (sql: string) => statement(sql), batch } as unknown as D1Database,
-    sqlite,
-    beforeNextBatch(write) {
-      pendingWrite = write;
-    },
-  };
-}
-
 /** An active room owned by OWNER_ID, with an unused viewer and editor invitation. */
-async function openRoom({ db, sqlite }: CollaborationDb) {
+async function openRoom({ db, sqlite }: SqliteD1) {
   const insertUser = sqlite.prepare(
     "INSERT INTO users (id, google_sub, email, username, created_at) VALUES (?, ?, ?, ?, 0)",
   );
@@ -237,7 +169,7 @@ function hasClaimed(sqlite: DatabaseSync, invitationId: string, userId: string):
 
 describe("claimCollaborationInvitation", () => {
   it("admits a first-time claimant once, recording one claim and spending one use", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, editorInvitation } = await openRoom(database);
     const versionBefore = roleVersion(sqlite, roomId);
@@ -254,7 +186,7 @@ describe("claimCollaborationInvitation", () => {
   // call, through updateCollaborationMemberRole, so a viewer the owner demoted
   // cannot promote themselves with an editor link that is still valid.
   it("leaves an existing viewer a viewer when they claim an editor invitation, spending none of its uses", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
     await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
@@ -272,7 +204,7 @@ describe("claimCollaborationInvitation", () => {
   // concurrent claim can admit the user in between. The batch has to apply the
   // same rule as the check, or this path upgrades the role the check protects.
   it("leaves a member who joined between the membership check and the batch as they are", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
     database.beforeNextBatch(() => {
@@ -303,7 +235,7 @@ describe("claimCollaborationInvitation", () => {
   // claim is what stops the invitation that admitted them from admitting them
   // again. Otherwise "Remove" would last only until they reopened their link.
   it("refuses a removed member who re-presents the invitation that admitted them", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation } = await openRoom(database);
     await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
@@ -319,7 +251,7 @@ describe("claimCollaborationInvitation", () => {
   });
 
   it("does not re-admit a removed member past max_members", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
     limitRoomTo(sqlite, roomId, 2);
@@ -336,7 +268,7 @@ describe("claimCollaborationInvitation", () => {
   // This is how the owner lets a removed member back in: a link they have
   // never used admits them like anyone else.
   it("admits a removed member through a new invitation, spending a seat and a use", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
     await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
@@ -350,7 +282,7 @@ describe("claimCollaborationInvitation", () => {
   });
 
   it("refuses a claim when the room is full", async () => {
-    const database = openCollaborationDb();
+    const database = openSqliteD1();
     const { db, sqlite } = database;
     const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
     limitRoomTo(sqlite, roomId, 2);

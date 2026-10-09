@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { putProviderCredential } from "../../db/providerCredentials";
 import { KEY_CHECK_PAUSE_FAILURES } from "../athanlab/breaker";
 import { keyVaultOf, sealApiKey } from "../athanlab/keyVault";
-import { insertSignedInUser, openSqliteD1, type SqliteD1 } from "../athanlab/testing";
+import { insertSignedInUser, openSqliteD1, type SqliteD1 } from "../../db/testing";
 import type { Env } from "../env";
 import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 import { athanlabRoute, athanlabTtsRoute } from "./athanlab";
