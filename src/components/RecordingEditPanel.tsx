@@ -462,7 +462,10 @@ export default function RecordingEditPanel({
         </ul>
       ) : null}
 
-      {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+      {/* Mounted before any message, so the result of Suggest or Apply is announced. */}
+      <div aria-live="polite">
+        {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+      </div>
 
       <div className="mt-3 flex items-center gap-2">
         <span className="mr-auto text-xs text-slate-400">

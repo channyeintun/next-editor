@@ -212,6 +212,38 @@ describe("RecordingEditPanel", () => {
     expect(opener).toHaveFocus();
   });
 
+  it("announces when there is no dead air to suggest", async () => {
+    // Something happens every two seconds: no stretch is quiet for long enough to cut.
+    const busy: Recording = {
+      ...take,
+      frames: compressFrames(
+        [0, 2_000, 4_000, 6_000, 8_000].map((timestamp, index) => ({
+          timestamp,
+          state: {
+            content: "abcde".slice(0, index + 1),
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+          },
+        })),
+      ),
+    };
+
+    render(
+      <Providers>
+        <RecordingEditPanel recording={busy} onClose={() => {}} onApplied={() => {}} />
+      </Providers>,
+    );
+    await screen.findByText(/No narration/);
+    const region = screen.getByRole("dialog").querySelector('[aria-live="polite"]');
+    // The live region is there, empty, before the message arrives.
+    expect(region).toBeEmptyDOMElement();
+
+    fireEvent.click(screen.getByRole("button", { name: /Suggest dead-air cuts/ }));
+
+    expect(region).toHaveTextContent("No stretch of dead air long enough to cut.");
+  });
+
   it("says while it reads the narration, and when it cannot", async () => {
     const responses: ((response: Response) => void)[] = [];
     vi.stubGlobal(
