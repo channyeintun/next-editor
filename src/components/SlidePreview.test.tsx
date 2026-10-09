@@ -346,3 +346,36 @@ describe("SlidePreview focus and keys", () => {
     expect(onSlideEvent).not.toHaveBeenCalled();
   });
 });
+
+describe("SlidePreview slide counter", () => {
+  /** The counter's text as a screen reader reads it (aria-hidden parts left out). */
+  const spokenText = (element: Element) => {
+    const copy = element.cloneNode(true) as Element;
+    copy.querySelectorAll("[aria-hidden='true']").forEach((node) => node.remove());
+    return copy.textContent?.replace(/\s+/g, " ").trim();
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    isPlaying = false;
+  });
+
+  it("announces the slide position politely when the user moves", () => {
+    const { container } = render(<SlidePreview slides={slides} currentSlideIndex={0} isOpen />);
+
+    const counter = container.querySelector("[aria-live]")!;
+    expect(counter).toHaveAttribute("aria-live", "polite");
+    expect(counter).toHaveAttribute("aria-atomic", "true");
+    expect(spokenText(counter)).toBe("Slide 1 of 2");
+  });
+
+  it("keeps quiet during playback so it never talks over the narration", () => {
+    isPlaying = true;
+    const { container } = render(<SlidePreview slides={slides} currentSlideIndex={1} isOpen />);
+
+    const counter = container.querySelector("[aria-live]")!;
+    expect(counter).toHaveAttribute("aria-live", "off");
+    expect(spokenText(counter)).toBe("Slide 2 of 2");
+  });
+});

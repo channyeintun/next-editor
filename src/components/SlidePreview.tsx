@@ -329,9 +329,18 @@ function SlidePreview({
             </>
           )}
 
-          {/* Slide counter */}
-          <div className="absolute bottom-4 right-4 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
-            {currentSlideIndex + 1} / {slides.length}
+          {/* Slide counter. Reads "Slide 3 of 10" when the user moves; silent during
+              playback so it never talks over the narration. */}
+          <div
+            aria-live={isPlaying ? "off" : "polite"}
+            aria-atomic="true"
+            className="absolute bottom-4 right-4 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white"
+          >
+            <span className="sr-only">Slide </span>
+            {currentSlideIndex + 1}
+            <span aria-hidden="true"> / </span>
+            <span className="sr-only"> of </span>
+            {slides.length}
           </div>
 
           {/* Keyboard navigation hint */}
