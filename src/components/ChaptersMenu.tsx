@@ -121,7 +121,7 @@ export default function ChaptersMenu({
         >
           <p
             id={headingId}
-            className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase"
+            className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-slate-300 uppercase"
           >
             Chapters
           </p>
