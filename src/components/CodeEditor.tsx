@@ -1296,9 +1296,24 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       inert={isWorkspaceCovered}
     >
       {workspaceEventRecorder}
+      {/* Lets keyboard users bypass the header that repeats on every lesson.
+          Focus moves without following the hash, which the router would see
+          as a navigation. */}
+      <a
+        href="#editor-main"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("editor-main")?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-950"
+      >
+        Skip to editor
+      </a>
       {editorHeader}
-      <div
-        className="flex min-h-0 flex-1 overflow-hidden"
+      <main
+        id="editor-main"
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 overflow-hidden outline-none"
         data-cursor-replay-target="workspace-body"
       >
         {fileSidebar}
@@ -1340,7 +1355,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             </Suspense>
           ) : null}
         </div>
-      </div>
+      </main>
     </div>
   );
 };

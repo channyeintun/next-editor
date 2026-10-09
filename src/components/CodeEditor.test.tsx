@@ -100,6 +100,27 @@ function press(name: string) {
   });
 }
 
+describe("CodeEditor bypass block", () => {
+  it("skips the header to the main editor region without navigating", async () => {
+    await renderWorkspace();
+    const main = screen.getByRole("main");
+    const headerControl = screen.getByTestId("header-control");
+    const skipLink = screen.getByRole("link", { name: "Skip to editor" });
+
+    expect(main).not.toContainElement(headerControl);
+    expect(
+      skipLink.compareDocumentPosition(headerControl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    let followedHref = true;
+    act(() => {
+      followedHref = fireEvent.click(skipLink);
+    });
+    expect(followedHref).toBe(false);
+    expect(main).toHaveFocus();
+  });
+});
+
 describe("CodeEditor workspace under an overlay", () => {
   it("is inert while the whiteboard covers it", async () => {
     const workspace = await renderWorkspace();
