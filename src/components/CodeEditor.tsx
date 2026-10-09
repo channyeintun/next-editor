@@ -1271,11 +1271,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       editor.onDidChangeModelContent((changeEvent) =>
         handleModelContentChange(editor, changeEvent),
       ),
-      editor.onDidChangeCursorPosition(() => {
-        if (isApplyingExternalModelValueRef.current) return;
-        onEditorChange();
-        publishCollaborationCursor(editor);
-      }),
+      // Monaco fires the position and the selection events back to back for
+      // the same cursor-state change (codeEditorWidget's CursorStateChanged),
+      // so this one listener covers caret moves as well as selections; a
+      // position listener would only capture the same state a second time.
+      // The studio driver relies on selection capture coming from here too.
       editor.onDidChangeCursorSelection(() => {
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();

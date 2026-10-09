@@ -250,4 +250,16 @@ describe("CodeEditor's Monaco listeners", () => {
 
     expect(stopFollowing.mock.calls).toEqual([["local-editor-input"], ["local-scroll"]]);
   });
+
+  it("captures a cursor-state change once, from the selection event", () => {
+    render(<CodeEditor />);
+    expect(editor.listeners.has("onDidChangeCursorSelection")).toBe(true);
+    expect(editor.listeners.has("onDidChangeCursorPosition")).toBe(false);
+
+    // Monaco fires both events, back to back, for one caret move.
+    editor.fire("onDidChangeCursorPosition");
+    editor.fire("onDidChangeCursorSelection");
+
+    expect(handleEditorChange).toHaveBeenCalledTimes(1);
+  });
 });
