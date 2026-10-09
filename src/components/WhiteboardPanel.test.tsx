@@ -1,5 +1,5 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   WhiteboardElementJSON,
@@ -639,14 +639,60 @@ describe("WhiteboardPanel dialog", () => {
   it("closes on Escape in its header bar, but leaves Escape on the canvas to Excalidraw", () => {
     render(<WhiteboardPanel />);
 
-    // The canvas area follows the header bar.
-    const canvasArea = screen.getByRole("dialog", { name: "Whiteboard" }).lastElementChild;
-    expect(canvasArea).not.toBeNull();
-    fireEvent.keyDown(canvasArea as Element, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("region", { name: "Whiteboard drawing" }), {
+      key: "Escape",
+    });
     expect(whiteboardState.setOpen).not.toHaveBeenCalled();
 
     fireEvent.keyDown(screen.getByRole("button", { name: "Close whiteboard" }), { key: "Escape" });
     expect(whiteboardState.setOpen).toHaveBeenCalledExactlyOnceWith(false);
     expect(stopFollowing).toHaveBeenCalledWith("local-whiteboard-input");
+  });
+});
+
+describe("WhiteboardPanel text alternative", () => {
+  function text(id: string, fields: Record<string, unknown>): WhiteboardElementJSON {
+    return { id, version: 1, versionNonce: 1, isDeleted: false, type: "text", ...fields };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canvasElements = [];
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+    whiteboardStore = createWhiteboardStore();
+  });
+
+  it("lists the board's text inside the named drawing region", () => {
+    whiteboardState = makeWhiteboardState("external", [
+      text("title", { text: "Stack" }),
+      // The author's text, not the copy Excalidraw wrapped to fit its container.
+      text("note", { text: "Heap memory\nlives longer", originalText: "Heap memory lives longer" }),
+      text("erased", { text: "Gone", isDeleted: true }),
+      element("stroke", [[0, 0]]),
+    ]);
+
+    render(<WhiteboardPanel />);
+
+    const region = screen.getByRole("region", { name: "Whiteboard drawing" });
+    const list = within(region).getByRole("list", { name: "Text on the whiteboard" });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Stack", "Heap memory lives longer"]);
+    expect(within(region).getByText("Stack")).toBeInTheDocument();
+    expect(within(region).queryByText("Gone")).not.toBeInTheDocument();
+  });
+
+  it("follows the scene as playback writes text to the board", () => {
+    whiteboardState = makeWhiteboardState("external", []);
+    const view = render(<WhiteboardPanel />);
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+
+    whiteboardState = makeWhiteboardState("external", [text("title", { text: "Stack" })]);
+    view.rerender(<WhiteboardPanel />);
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Stack");
   });
 });

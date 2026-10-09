@@ -279,11 +279,24 @@ export default function WhiteboardPanel() {
             for it. Zen mode is a default (via initialData, so the presenter can
             still toggle it), not the controlled `zenModeEnabled` prop. */}
         <div
+          role="region"
+          aria-label="Whiteboard drawing"
           className="relative flex-1 [&_.default-sidebar-trigger]:hidden"
           onPointerDownCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
           onWheelCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
           onKeyDownCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
         >
+          {/* Excalidraw paints into a canvas with no text alternative, so the
+              board's text is listed for screen readers (originalText keeps the
+              author's line breaks; text holds the wrapped ones). Not live: a
+              playing lesson would announce every stroke. */}
+          <ul className="sr-only" aria-label="Text on the whiteboard">
+            {scene.elements
+              .filter((element) => element.type === "text" && !element.isDeleted)
+              .map((element) => (
+                <li key={element.id}>{String(element.originalText ?? element.text ?? "")}</li>
+              ))}
+          </ul>
           <Excalidraw
             excalidrawAPI={(api) => {
               // Excalidraw hands over a new API each time the canvas mounts
