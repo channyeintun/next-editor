@@ -1,7 +1,7 @@
 import axios from "axios";
 import { apiClient } from "../apiClient";
 import type { AuthorSummary, PlaylistSummary } from "../../db/types";
-import type { Lesson } from "../../../tube/src/types";
+import type { Lesson } from "../../lessons/types";
 
 export interface AuthorProfile {
   user: AuthorSummary;

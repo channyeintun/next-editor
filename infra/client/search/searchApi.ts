@@ -1,6 +1,6 @@
 import { apiClient } from "../apiClient";
 import type { AuthorSummary } from "../../db/types";
-import type { Lesson } from "../../../tube/src/types";
+import type { Lesson } from "../../lessons/types";
 
 export interface SearchResults {
   authors: AuthorSummary[];

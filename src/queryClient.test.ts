@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { injectLessonDocument } from "../infra/worker/ssr/lessonDetail";
-import type { Lesson } from "../tube/src/types";
+import type { Lesson } from "../infra/lessons/types";
 import { hydrateServerQueryState, queryClient } from "./queryClient";
 
 const SHELL = "<!doctype html><html><head><title>Next Editor</title></head><body></body></html>";

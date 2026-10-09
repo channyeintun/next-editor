@@ -1,5 +1,5 @@
 import seedManifest from "../../tube/data/lessons.json";
-import type { Lesson } from "../../tube/src/types";
+import type { Lesson } from "../lessons/types";
 import { getPublishedLessonBySlug } from "../db/queries";
 import { lessonRowToLesson } from "../db/types";
 import type { Env } from "./env";

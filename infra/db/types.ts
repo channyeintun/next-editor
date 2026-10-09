@@ -1,4 +1,4 @@
-import type { Lesson, Playlist } from "../../tube/src/types";
+import type { Lesson, Playlist } from "../lessons/types";
 
 export interface UserRow {
   id: string;

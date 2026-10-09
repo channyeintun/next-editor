@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { hydrate, QueryClient, type DehydratedState } from "@tanstack/react-query";
 import { describe, expect, it } from "vite-plus/test";
-import type { Lesson } from "../../../tube/src/types";
+import type { Lesson } from "../../lessons/types";
 import {
   buildLessonJsonLd,
   injectLessonDocument,

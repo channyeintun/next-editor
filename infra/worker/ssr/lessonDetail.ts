@@ -1,5 +1,5 @@
 import { dehydrate, QueryClient } from "@tanstack/react-query";
-import type { Lesson } from "../../../tube/src/types";
+import type { Lesson } from "../../lessons/types";
 import {
   lessonDetailQueryKey,
   SERVER_QUERY_STATE_ELEMENT_ID,
