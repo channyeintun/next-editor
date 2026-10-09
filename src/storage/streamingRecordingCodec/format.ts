@@ -228,13 +228,35 @@ export function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Ar
  */
 const MSGPACK_ENCODE_OPTIONS = { ignoreUndefined: true, maxDepth: 1_100 } as const;
 
+const UNREADABLE_RECORDING_ERROR = "UnreadableRecordingError";
+
+/**
+ * A writer's refusal to produce a file readers would reject. Deterministic: encoding the
+ * same recording again fails the same way.
+ */
+export class UnreadableRecordingError extends Error {
+  constructor(reason: string) {
+    super(`Recording is too large to save: ${reason}`);
+    this.name = UNREADABLE_RECORDING_ERROR;
+  }
+}
+
+/**
+ * Whether an error is a writer's refusal, including one rethrown across the codec
+ * worker's boundary: comlink rethrows a plain Error that keeps the thrown one's `name`,
+ * so `instanceof` fails there.
+ */
+export function isUnreadableRecordingError(error: unknown): boolean {
+  return error instanceof Error && error.name === UNREADABLE_RECORDING_ERROR;
+}
+
 /**
  * The MAX_* limits in this file protect readers from hostile files, so a writer must never
  * cross one: the take would save without complaint and then never open again. Writers
  * refuse with this error instead, while the recording still exists in memory.
  */
 export function refuseUnreadableRecording(reason: string): never {
-  throw new Error(`Recording is too large to save: ${reason}`);
+  throw new UnreadableRecordingError(reason);
 }
 
 export function formatMiB(bytes: number): string {

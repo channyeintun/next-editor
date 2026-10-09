@@ -9,7 +9,7 @@ import {
 } from "./recordingCodec";
 import type { RecordingCodecWorkerApi } from "./recordingCodec.worker";
 import { hydrateDecodedRecordingWorkspaceAssets } from "./recordingWorkspaceAssets";
-import type { DecodedRecording } from "./streamingRecordingCodec";
+import { isUnreadableRecordingError, type DecodedRecording } from "./streamingRecordingCodec";
 
 interface RecordingCodecWorkerClient {
   api: Remote<RecordingCodecWorkerApi>;
@@ -117,7 +117,13 @@ export async function encodeRecordingToStream(recording: DecodedRecording): Prom
     return encodeRecordingToStreamInProcess(recording);
   }
 
-  return callCodecWorker(client, client.api.encodeRecordingToStream(recording)).catch(() =>
-    encodeRecordingToStreamInProcess(recording),
+  // The in-process retry serves a worker that died and a worker that cannot read an
+  // asset only this thread holds. A refusal to save a too-large take is the
+  // recording's own and would fail again, after seconds of main-thread encoding.
+  return callCodecWorker(client, client.api.encodeRecordingToStream(recording)).catch(
+    (error: unknown) => {
+      if (isUnreadableRecordingError(error)) throw error;
+      return encodeRecordingToStreamInProcess(recording);
+    },
   );
 }

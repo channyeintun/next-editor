@@ -3,17 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Recording } from "../core/src";
 import { decompressBinaryToRecording as decodeInProcess } from "./recordingCodec";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";
-import { STREAM_FORMAT_VERSION } from "./streamingRecordingCodec/format";
+import { STREAM_FORMAT_VERSION, UnreadableRecordingError } from "./streamingRecordingCodec/format";
 
 // The real worker needs the wasm diff codec, which Vitest cannot import; the
 // client only awaits it, so a resolved stand-in is enough here.
 vi.mock("../core/dmp/dmpCodec", () => ({ loadDmpCodec: async () => ({}) }));
 
-type WorkerBehavior = "decode" | "die";
+type WorkerBehavior = "decode" | "die" | "refuse" | "unreadable-asset";
 
 /**
  * A Worker stand-in speaking comlink over a MessageChannel. It either runs the
- * real in-process decoder, as the worker module does, or dies mid-call.
+ * real in-process decoder, as the worker module does, or dies mid-call. Its
+ * encoder refuses the take as too large ("refuse"), or fails the way a worker
+ * that cannot read a main-thread-only asset does ("unreadable-asset").
  */
 function installWorker(behavior: WorkerBehavior): void {
   class FakeWorker {
@@ -28,6 +30,12 @@ function installWorker(behavior: WorkerBehavior): void {
             if (behavior === "decode") return decodeInProcess(bytes);
             setTimeout(() => this.errorListeners.forEach((listener) => listener()), 0);
             return new Promise(() => {});
+          },
+          encodeRecordingToStream: () => {
+            if (behavior === "refuse") {
+              throw new UnreadableRecordingError("the .ne file would exceed 512 MiB");
+            }
+            throw new Error("Workspace asset is missing or corrupt");
           },
         },
         port2,
@@ -101,5 +109,33 @@ describe("decompressBinaryToRecording through the codec worker", () => {
     await expect(decompressBinaryToRecording(bytes)).rejects.toThrow(
       `Unsupported SCR3 format version: ${STREAM_FORMAT_VERSION + 1}`,
     );
+  });
+});
+
+describe("encodeRecordingToStream through the codec worker", () => {
+  beforeEach(() => {
+    // The client sends an encode to the worker only where IndexedDB exists.
+    vi.stubGlobal("indexedDB", {});
+  });
+
+  // This take encodes fine in process, so a rejection means no in-process retry ran:
+  // the refusal is deterministic, and retrying it repeated the whole encode on the
+  // main thread only to fail the same way.
+  it("reports the worker's too-large refusal instead of re-encoding in process", async () => {
+    installWorker("refuse");
+    const { encodeRecordingToStream: encodeThroughClient } = await importClient();
+
+    await expect(encodeThroughClient(recording)).rejects.toThrow(
+      "Recording is too large to save: the .ne file would exceed 512 MiB",
+    );
+  });
+
+  it("re-encodes in process when the worker fails for another reason", async () => {
+    installWorker("unreadable-asset");
+    const { encodeRecordingToStream: encodeThroughClient } = await importClient();
+
+    const bytes = await encodeThroughClient(recording);
+
+    expect(Array.from(bytes)).toEqual(Array.from(await encodeRecordingToStream(recording)));
   });
 });
