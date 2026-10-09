@@ -2,7 +2,7 @@
  * Minimal 16-bit PCM mono WAV encode/decode/stitch — pure and
  * environment-agnostic, used by the in-page narration builder to combine
  * per-dialog synthesis into the single external-audio blob the recorder
- * expects. No compression: WAV keeps the stitch a byte-level operation and
+ * expects. No compression: PCM keeps the stitch a sample-level operation and
  * every duration exact (samples / rate).
  */
 
@@ -146,17 +146,15 @@ export function validateDialogWav(bytes: Uint8Array, expectedSampleRate: number)
   return Math.round((pcm.length / sampleRate) * 1000);
 }
 
-export interface StitchSegment {
-  bytes: Uint8Array;
-  startMs: number;
-}
-
 /**
- * Place each segment's samples at its scheduled offset in one silent canvas.
- * Overlaps are a scheduling bug and fail loudly rather than mixing audio.
+ * Place each segment's samples at its scheduled offset in one silent canvas
+ * and write it as a WAV. Overlaps are a scheduling bug and fail loudly rather
+ * than mixing audio. Every segment must already be at `sampleRate`: the
+ * narration builder validates each take at the provider's rate before it
+ * levels and stitches them.
  */
-export function stitchWavSegments(
-  segments: readonly StitchSegment[],
+export function stitchPcmSegments(
+  segments: readonly { pcm: Int16Array; startMs: number }[],
   totalDurationMs: number,
   sampleRate: number,
 ): Uint8Array<ArrayBuffer> {
@@ -166,19 +164,15 @@ export function stitchWavSegments(
   const placed = [...segments].sort((left, right) => left.startMs - right.startMs);
   let previousEndSample = 0;
   for (const segment of placed) {
-    const decoded = decodeWavPcm16(segment.bytes);
-    if (decoded.sampleRate !== sampleRate) {
-      throw new Error(`Segment sample rate ${decoded.sampleRate} != stitch rate ${sampleRate}`);
-    }
     const startSample = Math.round((segment.startMs / 1000) * sampleRate);
     if (startSample < previousEndSample) {
       throw new Error(`Segment at ${segment.startMs}ms overlaps the previous one`);
     }
-    if (startSample + decoded.pcm.length > totalSamples) {
+    if (startSample + segment.pcm.length > totalSamples) {
       throw new Error(`Segment at ${segment.startMs}ms runs past the stitched duration`);
     }
-    canvas.set(decoded.pcm, startSample);
-    previousEndSample = startSample + decoded.pcm.length;
+    canvas.set(segment.pcm, startSample);
+    previousEndSample = startSample + segment.pcm.length;
   }
 
   return encodeWavPcm16(canvas, sampleRate);

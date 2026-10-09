@@ -21,7 +21,7 @@ import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/pr
 import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizeAthanLabWav } from "./tts/athanlabSynth";
-import { decodeWavPcm16, encodeWavPcm16, stitchWavSegments, validateDialogWav } from "./tts/wav";
+import { decodeWavPcm16, stitchPcmSegments, validateDialogWav } from "./tts/wav";
 
 /**
  * The in-page Director stage (narration + compile at render time): split the
@@ -308,7 +308,6 @@ export async function buildPlanFromScript(
     takes.map((wav) => decodeWavPcm16(wav).pcm),
     provider.sampleRate,
   );
-  const segments = leveled.dialogs.map(({ pcm }) => encodeWavPcm16(pcm, provider.sampleRate));
   const levelingWarnings = leveled.dialogs.flatMap(({ leveledLufs }, index) => {
     const offLu = leveledLufs === null ? 0 : leveledLufs - leveled.levelLufs;
     if (Math.abs(offLu) <= MAX_LEVEL_DEVIATION_LU) {
@@ -330,9 +329,11 @@ export async function buildPlanFromScript(
     lexicon,
   });
 
-  const stitched = stitchWavSegments(
+  // The leveled samples go straight onto the canvas: every take was validated
+  // at the provider's rate, so there is nothing to re-encode or re-check.
+  const stitched = stitchPcmSegments(
     schedule.timeline.map((entry, index) => ({
-      bytes: segments[index],
+      pcm: leveled.dialogs[index].pcm,
       startMs: entry.startMs,
     })),
     schedule.totalDurationMs,

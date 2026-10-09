@@ -8,7 +8,9 @@ import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
 import { measureIntegratedLoudness, NARRATION_LOUDNESS_TARGET_LUFS } from "./tts/loudness";
 import { athanLabProfileOf, ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
-import { decodeWavPcm16, encodeWavPcm16, type StitchSegment } from "./tts/wav";
+import { decodeWavPcm16, encodeWavPcm16 } from "./tts/wav";
+
+type PcmSegment = { pcm: Int16Array; startMs: number };
 
 const tts = vi.hoisted(() => ({
   getCachedDialogWav:
@@ -57,14 +59,14 @@ vi.mock("../googleSlides/fetchPublishedDeck", async (importOriginal) => ({
 }));
 
 // The real stitch, watched so tests can measure each placed dialog.
-const stitch = vi.hoisted(() => ({ segments: [] as StitchSegment[][] }));
+const stitch = vi.hoisted(() => ({ segments: [] as PcmSegment[][] }));
 vi.mock("./tts/wav", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./tts/wav")>();
   return {
     ...actual,
-    stitchWavSegments: (segments: StitchSegment[], totalDurationMs: number, rate: number) => {
+    stitchPcmSegments: (segments: PcmSegment[], totalDurationMs: number, rate: number) => {
       stitch.segments.push(segments);
-      return actual.stitchWavSegments(segments, totalDurationMs, rate);
+      return actual.stitchPcmSegments(segments, totalDurationMs, rate);
     },
   };
 });
@@ -80,12 +82,16 @@ function voicedWav(durationMs: number, sampleRate: number, amplitude = 0.1): Uin
   return encodeWavPcm16(pcm, sampleRate);
 }
 
-function loudnessOfWav(wav: Uint8Array): number | null {
-  const { pcm, sampleRate } = decodeWavPcm16(wav);
+function loudnessOfPcm(pcm: Int16Array, sampleRate: number): number | null {
   return measureIntegratedLoudness(
     Float32Array.from(pcm, (sample) => sample / 0x8000),
     sampleRate,
   );
+}
+
+function loudnessOfWav(wav: Uint8Array): number | null {
+  const { pcm, sampleRate } = decodeWavPcm16(wav);
+  return loudnessOfPcm(pcm, sampleRate);
 }
 
 function loadPilot() {
@@ -431,14 +437,24 @@ describe("buildPlanFromScript narration", () => {
     expect(placed.length).toBe(result.dialogCount);
     expect(placed.length).toBeGreaterThan(2);
     for (const segment of placed) {
-      const loudness = loudnessOfWav(segment.bytes);
+      const loudness = loudnessOfPcm(segment.pcm, 24_000);
       expect(Math.abs(loudness! - NARRATION_LOUDNESS_TARGET_LUFS)).toBeLessThan(0.2);
     }
     // Leveling changes the volume only: each placed dialog keeps its take's length.
     const cached = tts.putCachedDialogWav.mock.calls.map(
       ([, take]) => (take as { wav: Uint8Array }).wav,
     );
-    expect(placed.map((segment) => segment.bytes.length)).toEqual(cached.map((wav) => wav.length));
+    expect(placed.map((segment) => segment.pcm.length)).toEqual(
+      cached.map((wav) => decodeWavPcm16(wav).pcm.length),
+    );
+    // The narration is byte for byte what writing each leveled dialog as a WAV
+    // and decoding it back onto the canvas produced.
+    const canvas = new Int16Array(Math.ceil((result.narration.durationMs / 1000) * 24_000));
+    for (const segment of placed) {
+      const roundTripped = decodeWavPcm16(encodeWavPcm16(segment.pcm, 24_000)).pcm;
+      canvas.set(roundTripped, Math.round((segment.startMs / 1000) * 24_000));
+    }
+    expect(result.narration.bytes).toEqual(encodeWavPcm16(canvas, 24_000));
     // The cache holds the take as synthesized, quiet ones still quiet.
     expect(loudnessOfWav(cached[1])! - loudnessOfWav(cached[0])!).toBeCloseTo(-9, 0);
     expect(result.warnings.filter((warning) => warning.includes("leveling"))).toEqual([]);
@@ -459,7 +475,7 @@ describe("buildPlanFromScript narration", () => {
 
     const result = await buildPlanFromScript(loadPilot());
 
-    const levels = stitch.segments[0].map((segment) => loudnessOfWav(segment.bytes)!);
+    const levels = stitch.segments[0].map((segment) => loudnessOfPcm(segment.pcm, 24_000)!);
     expect(levels.length).toBeGreaterThan(2);
     expect(Math.max(...levels) - Math.min(...levels)).toBeLessThan(0.2);
     expect(Math.max(...levels)).toBeLessThan(NARRATION_LOUDNESS_TARGET_LUFS - 3);

@@ -3,7 +3,7 @@ import {
   decodeWavPcm16,
   encodeWavPcm16,
   floatTo16BitPcm,
-  stitchWavSegments,
+  stitchPcmSegments,
   trimSilence,
   validateDialogWav,
   wavDurationMs,
@@ -11,9 +11,12 @@ import {
 
 const RATE = 24_000;
 
+function tonePcm(durationMs: number, value: number): Int16Array {
+  return new Int16Array(Math.round((durationMs / 1000) * RATE)).fill(value);
+}
+
 function toneWav(durationMs: number, value: number): Uint8Array {
-  const samples = new Int16Array(Math.round((durationMs / 1000) * RATE)).fill(value);
-  return encodeWavPcm16(samples, RATE);
+  return encodeWavPcm16(tonePcm(durationMs, value), RATE);
 }
 
 describe("wav codec", () => {
@@ -74,12 +77,12 @@ describe("trimSilence", () => {
   });
 });
 
-describe("stitchWavSegments", () => {
+describe("stitchPcmSegments", () => {
   it("places segments at their offsets inside a silent canvas", () => {
-    const stitched = stitchWavSegments(
+    const stitched = stitchPcmSegments(
       [
-        { bytes: toneWav(500, 1000), startMs: 200 },
-        { bytes: toneWav(300, 2000), startMs: 1_000 },
+        { pcm: tonePcm(500, 1000), startMs: 200 },
+        { pcm: tonePcm(300, 2000), startMs: 1_000 },
       ],
       1_600,
       RATE,
@@ -95,12 +98,31 @@ describe("stitchWavSegments", () => {
     expect(sampleAt(1_450)).toBe(0); // tail
   });
 
-  it("fails loudly on overlap, overflow, and rate mismatch", () => {
+  it("writes exactly the WAV of the canvas it places the segments on", () => {
+    const first = Int16Array.from({ length: 4_800 }, (_, index) => (index % 200) - 100);
+    const second = tonePcm(250, -3_000);
+    // Out of order on purpose: placement follows startMs, not argument order.
+    const stitched = stitchPcmSegments(
+      [
+        { pcm: second, startMs: 700 },
+        { pcm: first, startMs: 100 },
+      ],
+      1_000,
+      RATE,
+    );
+
+    const canvas = new Int16Array(RATE);
+    canvas.set(first, 2_400);
+    canvas.set(second, 16_800);
+    expect(stitched).toEqual(encodeWavPcm16(canvas, RATE));
+  });
+
+  it("fails loudly on overlap and overflow", () => {
     expect(() =>
-      stitchWavSegments(
+      stitchPcmSegments(
         [
-          { bytes: toneWav(500, 1), startMs: 0 },
-          { bytes: toneWav(500, 1), startMs: 400 },
+          { pcm: tonePcm(500, 1), startMs: 0 },
+          { pcm: tonePcm(500, 1), startMs: 400 },
         ],
         2_000,
         RATE,
@@ -108,16 +130,8 @@ describe("stitchWavSegments", () => {
     ).toThrow(/overlaps/);
 
     expect(() =>
-      stitchWavSegments([{ bytes: toneWav(500, 1), startMs: 1_800 }], 2_000, RATE),
+      stitchPcmSegments([{ pcm: tonePcm(500, 1), startMs: 1_800 }], 2_000, RATE),
     ).toThrow(/runs past/);
-
-    expect(() =>
-      stitchWavSegments(
-        [{ bytes: encodeWavPcm16(new Int16Array(100), 16_000), startMs: 0 }],
-        1_000,
-        RATE,
-      ),
-    ).toThrow(/sample rate/);
   });
 });
 
