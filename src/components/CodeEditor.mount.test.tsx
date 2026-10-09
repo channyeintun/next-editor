@@ -118,14 +118,7 @@ vi.mock("./FileSidebar", () => ({ default: () => null }));
 vi.mock("./WorkspaceEventRecorder", () => ({ WorkspaceEventRecorder: () => null }));
 vi.mock("./BinaryFilePreview", () => ({ default: () => null }));
 vi.mock("./Preview", () => ({ default: () => null }));
-vi.mock("./TerminalPanel", () => ({ default: () => null }));
-vi.mock("./GoPlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./KotlinPlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./RustPlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./ZigPlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./HaskellPlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./KitePlaygroundRunnerPanel", () => ({ default: () => null }));
-vi.mock("./AsmPlaygroundRunnerPanel", () => ({ default: () => null }));
+vi.mock("./terminalPanel/RuntimeDock", () => ({ default: () => null }));
 
 const { default: CodeEditor } = await import("./CodeEditor");
 

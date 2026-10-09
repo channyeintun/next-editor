@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -10,26 +10,13 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
-import {
-  executionKindForLessonType,
-  isWorkspaceTextFile,
-  lessonSupportsPreview,
-  lessonSupportsTerminal,
-  type WorkspaceExecutionKind,
-  type WorkspaceLessonType,
-} from "../types/workspace";
+import { isWorkspaceTextFile, lessonSupportsPreview } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
 import BinaryFilePreview from "./BinaryFilePreview";
-import TerminalPanel from "./TerminalPanel";
-import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
-import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
-import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
-import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
-import HaskellPlaygroundRunnerPanel from "./HaskellPlaygroundRunnerPanel";
-import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
+import RuntimeDock from "./terminalPanel/RuntimeDock";
 import { createMonacoTextEditEvent } from "./codeEditor/textEditEvent";
 import { useCollaborationPresence } from "./codeEditor/useCollaborationPresence";
 import { useFollowViewport } from "./codeEditor/useFollowViewport";
@@ -58,44 +45,6 @@ import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 
 const Preview = lazy(() => import("./Preview"));
-// The other runner panels are thin clients in front of a Worker proxy, but this
-// one reaches the whole first-party x86-64 assembler and CPU in `src/core/x86`,
-// which only an `asm` lesson can ever run. Splitting it out keeps that code from
-// being fetched and parsed on every editor load, the way `Preview` already is.
-const AsmPlaygroundRunnerPanel = lazy(() => import("./AsmPlaygroundRunnerPanel"));
-
-// One entry per non-webcontainer execution kind. The `Record` is what makes a new
-// playground kind a compile error here rather than a lesson that renders an editor
-// with no dock at all — no Run button, no console, and nothing to point at.
-const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, ComponentType> = {
-  "go-playground": GoPlaygroundRunnerPanel,
-  "kotlin-playground": KotlinPlaygroundRunnerPanel,
-  "rust-playground": RustPlaygroundRunnerPanel,
-  "zig-playground": ZigPlaygroundRunnerPanel,
-  "haskell-playground": HaskellPlaygroundRunnerPanel,
-  "kite-playground": KitePlaygroundRunnerPanel,
-  "asm-playground": AsmPlaygroundRunnerPanel,
-};
-
-/**
- * The dock under the editor that runs the lesson: the terminal for a lesson
- * that runs in the WebContainer, its playground's runner panel otherwise, and
- * nothing for a lesson type that has neither.
- */
-function RuntimeDock({ lessonType }: { lessonType: WorkspaceLessonType }) {
-  if (lessonSupportsTerminal(lessonType)) return <TerminalPanel />;
-  const executionKind = executionKindForLessonType(lessonType);
-  const RunnerPanel = executionKind === "webcontainer" ? null : RUNNER_PANELS[executionKind];
-  if (!RunnerPanel) return null;
-  return (
-    // Only the asm panel is lazy; the rest resolve synchronously and
-    // never suspend, so this Suspense is inert for them.
-    <Suspense fallback={null}>
-      <RunnerPanel />
-    </Suspense>
-  );
-}
-
 interface CodeEditorProps {
   showImportExport?: boolean;
   breadcrumb?: ReactNode;
