@@ -35,6 +35,10 @@ const REQUEST_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
   overviewRulerLanes: 0,
   folding: false,
   wordWrap: "on",
+  // Tab moves focus out of the short JSON body instead of indenting, so a
+  // keyboard user is never trapped in the editor (Enter still auto-indents).
+  tabFocusMode: true,
+  ariaLabel: "Request body (JSON)",
 };
 
 const RESPONSE_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
@@ -49,6 +53,7 @@ const RESPONSE_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
   folding: true,
   wordWrap: "on",
   domReadOnly: true,
+  ariaLabel: "Response body",
 };
 
 const METHOD_COLORS: Record<HttpMethod, string> = {

@@ -5,11 +5,14 @@ import {
   useApiClientStoreInstance,
 } from "../../contexts/ApiClientStoreContext";
 import type { ApiClientReplayPayload, ApiClientStoreInstance } from "../../stores/apiClientStore";
+import type { MonacoEditorProps } from "../../monaco";
 import ApiClientPanel from "./ApiClientPanel";
 
-// The editors are irrelevant here and Monaco does not load under jsdom.
+// Monaco does not load under jsdom; the stub only records the editor options.
+const monacoEditor = vi.hoisted(() => vi.fn<(props: MonacoEditorProps) => null>(() => null));
+
 vi.mock("../../monaco", () => ({
-  MonacoEditor: () => null,
+  MonacoEditor: monacoEditor,
   useOwnedModel: () => null,
   toInternalModelUri: (name: string) => `inmemory://internal/${name}`,
 }));
@@ -199,6 +202,44 @@ describe("ApiClientPanel toggle states", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(document.getElementById("api-response-headers")).toHaveTextContent(
       "content-type:application/json",
+    );
+  });
+});
+
+describe("ApiClientPanel body editors", () => {
+  it("lets Tab leave the request body and names both editors", () => {
+    monacoEditor.mockClear();
+    const store = renderPanel();
+
+    act(() => {
+      store.trigger.applyReplayState({
+        method: "POST",
+        path: "/api/items",
+        body: "{}",
+        headers: [],
+        sending: false,
+        history: [],
+        result: {
+          ok: true,
+          response: {
+            status: 201,
+            statusText: "Created",
+            headers: [],
+            body: "{}",
+            durationMs: 12,
+            bodyBytes: 2,
+          },
+        },
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Body" }));
+
+    const options = monacoEditor.mock.calls.map(([props]) => props.options);
+    expect(options).toContainEqual(
+      expect.objectContaining({ ariaLabel: "Request body (JSON)", tabFocusMode: true }),
+    );
+    expect(options).toContainEqual(
+      expect.objectContaining({ ariaLabel: "Response body", readOnly: true }),
     );
   });
 });
