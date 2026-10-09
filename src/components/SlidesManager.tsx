@@ -386,10 +386,15 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#11141c] p-1">
+      <div
+        role="group"
+        aria-label="Slide type"
+        className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#11141c] p-1"
+      >
         <button
           type="button"
           onClick={() => setContentType("markdown")}
+          aria-pressed={contentType === "markdown"}
           className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
             contentType === "markdown"
               ? "border-slate-600 bg-slate-700 text-white"
@@ -404,6 +409,7 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
         <button
           type="button"
           onClick={() => setContentType("html")}
+          aria-pressed={contentType === "html"}
           className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
             contentType === "html"
               ? "border-slate-600 bg-slate-700 text-white"

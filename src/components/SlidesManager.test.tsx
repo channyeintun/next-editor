@@ -99,6 +99,23 @@ describe("SlidesManager", () => {
     ]);
   });
 
+  it("exposes which slide type is selected", () => {
+    renderManager([]);
+    const types = screen.getByRole("group", { name: "Slide type" });
+    const markdown = screen.getByRole("button", { name: "Markdown" });
+    const html = screen.getByRole("button", { name: "HTML" });
+
+    expect(types).toContainElement(markdown);
+    expect(types).toContainElement(html);
+    expect(markdown).toHaveAttribute("aria-pressed", "true");
+    expect(html).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(html);
+
+    expect(html).toHaveAttribute("aria-pressed", "true");
+    expect(markdown).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("edits a slide's text and background in place", () => {
     const html: Slide = { id: "h", content: "<p>Old</p>", contentType: "html", order: 1 };
     const emitted = renderManager([slide("a", 0), html]);
