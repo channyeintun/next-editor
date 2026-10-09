@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceActions, WorkspaceSidebarState } from "../contexts/WorkspaceContext";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
@@ -257,5 +257,39 @@ describe("FileSidebar name field", () => {
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(document.body).toHaveFocus();
+  });
+});
+
+describe("FileSidebar tree structure", () => {
+  const itemOf = (element: HTMLElement) => element.closest("li")!;
+
+  it("nests each folder's entries in a list inside the folder's item", () => {
+    render(<FileSidebar />);
+
+    const files = screen.getByRole("list", { name: "Files" });
+    expect(Array.from(files.children, (child) => child.tagName)).toEqual(["LI", "LI"]);
+    expect(within(files).getAllByRole("listitem")).toHaveLength(5);
+
+    const src = itemOf(row("src"));
+    expect(within(src).getAllByRole("list")).toHaveLength(2);
+    expect(src).toContainElement(row("app.ts"));
+    expect(itemOf(row("lib"))).toContainElement(row("util.ts"));
+    expect(itemOf(row("lib"))).not.toContainElement(row("app.ts"));
+    expect(src).not.toContainElement(row("index.html"));
+  });
+
+  it("drops a collapsed folder's list, and lists a new entry inside its folder", () => {
+    render(<FileSidebar />);
+
+    fireEvent.click(row("lib"));
+    expect(row("lib")).toHaveAttribute("aria-expanded", "false");
+    expect(within(itemOf(row("lib"))).queryByRole("list")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(row("lib"), { key: "ContextMenu" });
+    fireEvent.click(row("New File"));
+
+    const field = screen.getByRole("textbox");
+    expect(itemOf(row("lib"))).toContainElement(field);
+    expect(field.closest("li")?.parentElement?.closest("li")).toBe(itemOf(row("lib")));
   });
 });

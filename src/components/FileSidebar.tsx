@@ -463,9 +463,13 @@ function FileSidebarPanel() {
       const isEditing = editState?.mode === "rename" && editState.path === node.path;
       const isCollapsed = collapsedFolders.has(node.path);
       const isExpanded = !isCollapsed;
+      const isCreatingInside = editState?.mode === "create" && editState.parentPath === node.path;
+      const showsChildren = isExpanded && node.children.length > 0;
 
+      // Each folder is a list item holding a nested list of what it contains,
+      // so membership and depth are exposed, not only shown by indentation.
       return (
-        <div key={node.path} className="space-y-0.5">
+        <li key={node.path} className="space-y-0.5">
           {isEditing ? (
             renderInlineInput("folder", depth)
           ) : (
@@ -491,12 +495,13 @@ function FileSidebarPanel() {
             </div>
           )}
 
-          {editState?.mode === "create" && editState.parentPath === node.path
-            ? renderInlineInput(editState.kind, depth + 1)
-            : null}
-
-          {isExpanded ? node.children.map((child) => renderNode(child, depth + 1)) : null}
-        </div>
+          {showsChildren || isCreatingInside ? (
+            <ul role="list" className="space-y-0.5">
+              {isCreatingInside ? <li>{renderInlineInput(editState.kind, depth + 1)}</li> : null}
+              {showsChildren ? node.children.map((child) => renderNode(child, depth + 1)) : null}
+            </ul>
+          ) : null}
+        </li>
       );
     }
 
@@ -504,11 +509,11 @@ function FileSidebarPanel() {
     const isActive = activeFilePath === node.path;
 
     if (isEditing) {
-      return <div key={node.path}>{renderInlineInput("file", depth)}</div>;
+      return <li key={node.path}>{renderInlineInput("file", depth)}</li>;
     }
 
     return (
-      <div key={node.path} className="px-1.5">
+      <li key={node.path} className="px-1.5">
         <button
           type="button"
           {...{ [STUDIO_TARGET_ATTRIBUTE]: studioTargetIdForFile(node.path) }}
@@ -531,7 +536,7 @@ function FileSidebarPanel() {
             {node.name}
           </span>
         </button>
-      </div>
+      </li>
     );
   };
 
@@ -603,12 +608,13 @@ function FileSidebarPanel() {
         onScroll={handleSidebarScroll}
         className="relative min-h-0 flex-1 overflow-y-auto px-1.5 py-2"
       >
-        <div className="space-y-0.5">
-          {editState?.mode === "create" && editState.parentPath === ""
-            ? renderInlineInput(editState.kind, 0)
-            : null}
+        {/* role="list" stays: Safari drops list semantics under list-style: none. */}
+        <ul role="list" aria-label="Files" className="space-y-0.5">
+          {editState?.mode === "create" && editState.parentPath === "" ? (
+            <li>{renderInlineInput(editState.kind, 0)}</li>
+          ) : null}
           {tree.map((node) => renderNode(node, 0))}
-        </div>
+        </ul>
 
         <FileContextMenu
           menu={contextMenu}
