@@ -43,24 +43,25 @@ export async function listPasskeyCredentials(
 
 /**
  * Resolves a login assertion's credential id to the credential row and its
- * owning user in one call — sign-in has no session yet, so the credential is
- * the only key available.
+ * owning user in one round trip — sign-in has no session yet, so the
+ * credential is the only key available. The user's SELECT finds its row
+ * through the credential with a subselect, so both run in one batch.
  */
 export async function getPasskeyCredentialWithUser(
   db: D1Database,
   credentialId: string,
 ): Promise<{ credential: PasskeyCredentialRow; user: UserRow } | null> {
-  const credential = await db
-    .prepare("SELECT * FROM passkey_credentials WHERE id = ?")
-    .bind(credentialId)
-    .first<PasskeyCredentialRow>();
-  if (!credential) return null;
-
-  const user = await db
-    .prepare("SELECT * FROM users WHERE id = ?")
-    .bind(credential.user_id)
-    .first<UserRow>();
-  if (!user) return null;
+  const [credentialResult, userResult] = await db.batch([
+    db.prepare("SELECT * FROM passkey_credentials WHERE id = ?").bind(credentialId),
+    db
+      .prepare(
+        "SELECT * FROM users WHERE id = (SELECT user_id FROM passkey_credentials WHERE id = ?)",
+      )
+      .bind(credentialId),
+  ]);
+  const credential = credentialResult.results?.[0] as PasskeyCredentialRow | undefined;
+  const user = userResult.results?.[0] as UserRow | undefined;
+  if (!credential || !user) return null;
 
   return { credential, user };
 }

@@ -82,33 +82,24 @@ const MAX_USERNAME_INSERT_ATTEMPTS = 5;
 // Keyed on google_sub (stable across logins); email/name/avatar refresh on
 // every sign-in so profile changes on the Google side propagate here.
 // username is only assigned here on first sign-in, never touched again by
-// this function afterward — see updateUsername for user-initiated renames
-// (unlike a single INSERT ... ON CONFLICT, this needs a read-then-write
-// split so a new user's username can be looked up for uniqueness before the
-// row exists).
+// this function afterward — see updateUsername for user-initiated renames.
+// The refresh runs first, as one UPDATE ... RETURNING, so a returning user
+// costs one round trip; only when it matches no row does the INSERT path run
+// (unlike a single INSERT ... ON CONFLICT, that path needs a new user's
+// username looked up for uniqueness before the row exists).
 export async function upsertUserByGoogleSub(
   db: D1Database,
   params: UpsertUserParams,
 ): Promise<UserRow> {
   const existing = await db
-    .prepare("SELECT * FROM users WHERE google_sub = ?")
-    .bind(params.googleSub)
+    .prepare(
+      `UPDATE users SET email = ?, name = ?, avatar_url = ?
+       WHERE google_sub = ?
+       RETURNING *`,
+    )
+    .bind(params.email, params.name, params.avatarUrl, params.googleSub)
     .first<UserRow>();
-
-  if (existing) {
-    const row = await db
-      .prepare(
-        `UPDATE users SET email = ?, name = ?, avatar_url = ?
-         WHERE google_sub = ?
-         RETURNING *`,
-      )
-      .bind(params.email, params.name, params.avatarUrl, params.googleSub)
-      .first<UserRow>();
-    if (!row) {
-      throw new Error("upsertUserByGoogleSub: UPDATE ... RETURNING produced no row");
-    }
-    return row;
-  }
+  if (existing) return existing;
 
   const base = params.name ?? params.email.split("@")[0];
   for (let attempt = 1; ; attempt++) {
@@ -136,8 +127,8 @@ export async function upsertUserByGoogleSub(
       return row;
     } catch (error) {
       // Two concurrent first-sign-ins for the same brand-new google_sub (e.g.
-      // the OAuth callback opened in two tabs) both pass the SELECT above and
-      // race to INSERT; the loser hits the UNIQUE(google_sub) constraint. The
+      // the OAuth callback opened in two tabs) both find no row to UPDATE above
+      // and race to INSERT; the loser hits the UNIQUE(google_sub) constraint. The
       // winner's row is what should be returned either way.
       const row = await db
         .prepare("SELECT * FROM users WHERE google_sub = ?")
@@ -158,24 +149,22 @@ export async function upsertUserByGoogleSub(
 
 export async function createSession(db: D1Database, userId: string): Promise<SessionRow> {
   const now = Date.now();
-  // Opportunistic cleanup: sweep this user's own expired sessions on every new
-  // sign-in so the table doesn't grow unbounded (there's no separate cron for
-  // this yet). Bounded to this user's rows only, so it stays cheap.
-  await db
-    .prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?")
-    .bind(userId, now)
-    .run();
-
   const session: SessionRow = {
     id: crypto.randomUUID(),
     user_id: userId,
     created_at: now,
     expires_at: now + SESSION_TTL_MS,
   };
-  await db
-    .prepare("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
-    .bind(session.id, session.user_id, session.created_at, session.expires_at)
-    .run();
+  // Opportunistic cleanup: sweep this user's own expired sessions on every new
+  // sign-in so the table doesn't grow unbounded (there's no separate cron for
+  // this yet). Bounded to this user's rows only, so it stays cheap, and batched
+  // with the INSERT so sign-in pays one round trip for both.
+  await db.batch([
+    db.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, now),
+    db
+      .prepare("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
+      .bind(session.id, session.user_id, session.created_at, session.expires_at),
+  ]);
   return session;
 }
 

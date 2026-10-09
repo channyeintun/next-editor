@@ -1,7 +1,8 @@
 // @vitest-environment node
 import type { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
+  createSession,
   getUserByUsername,
   listPublishedLessons,
   upsertUserByGoogleSub,
@@ -213,6 +214,83 @@ describe("upsertUserByGoogleSub", () => {
     expect(row.username).toMatch(/^user-[0-9a-f]{8}$/);
     expect(row.username).toMatch(USERNAME_PATTERN);
     expect(probed.length, "unbounded username probing").toBeLessThanOrEqual(51);
+  });
+
+  // A returning user is the common sign-in, so the refresh is the only
+  // statement: one D1 round trip rather than a read and then a write.
+  it("refreshes a returning user's profile in one statement and keeps their username", async () => {
+    const statements: string[] = [];
+    const { db, sqlite } = openSqliteD1({ onStatement: (sql) => statements.push(sql) });
+    insertUser(sqlite, "user-1", "ada");
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "google-user-1",
+      email: "ada@new.example.com",
+      name: "Ada L.",
+      avatarUrl: "https://example.com/ada.png",
+    });
+
+    expect(row).toMatchObject({
+      id: "user-1",
+      username: "ada",
+      email: "ada@new.example.com",
+      name: "Ada L.",
+      avatar_url: "https://example.com/ada.png",
+    });
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/^\s*UPDATE users\b/);
+  });
+
+  // The same brand-new user's OAuth callback finishing in two tabs: both find
+  // no row to refresh and race to INSERT, and the loser answers with the row
+  // the winner wrote.
+  it("answers with the row a concurrent first sign-in inserted first", async () => {
+    let raced = false;
+    const { db, sqlite } = openSqliteD1({
+      onStatement: (sql) => {
+        if (raced || !sql.includes("INSERT INTO users")) return;
+        raced = true;
+        insertUser(sqlite, "winner", "ada");
+      },
+    });
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "google-winner",
+      email: "ada@example.com",
+      name: "Ada",
+      avatarUrl: null,
+    });
+
+    expect(row).toMatchObject({ id: "winner", username: "ada" });
+    expect(sqlite.prepare("SELECT id FROM users").all()).toEqual([{ id: "winner" }]);
+  });
+});
+
+describe("createSession", () => {
+  it("sweeps the user's own expired sessions and stores the new one, in one batch", async () => {
+    const { db, sqlite } = openSqliteD1();
+    insertUser(sqlite, "user-1", "ada");
+    insertUser(sqlite, "user-2", "grace");
+    const insertSession = sqlite.prepare(
+      "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, 0, ?)",
+    );
+    insertSession.run("expired", "user-1", 1);
+    insertSession.run("live", "user-1", Number.MAX_SAFE_INTEGER);
+    insertSession.run("someone-elses-expired", "user-2", 1);
+    const batch = vi.spyOn(db, "batch");
+
+    const session = await createSession(db, "user-1");
+
+    const ids = sqlite
+      .prepare("SELECT id FROM sessions")
+      .all()
+      .map((row) => row.id);
+    expect(ids.sort()).toEqual([session.id, "live", "someone-elses-expired"].sort());
+    expect(sqlite.prepare("SELECT * FROM sessions WHERE id = ?").get(session.id)).toEqual({
+      ...session,
+    });
+    expect(session.expires_at - session.created_at).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(batch).toHaveBeenCalledTimes(1);
   });
 });
 
