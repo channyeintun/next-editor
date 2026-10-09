@@ -1,6 +1,7 @@
 import {
   Maximize,
   Minimize,
+  Pause,
   Play,
   SquareArrowOutUpRight,
   BookOpen,
@@ -179,6 +180,12 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   // audio would need a second click.
   const [isDemoMounted, setIsDemoMounted] = useState(false);
   const [frameworkIndex, setFrameworkIndex] = useState(0);
+  // The "Works with" word rotates only when motion is allowed, and the Pause
+  // animation button stops it (WCAG 2.2.2). canRotate starts false so the SSR
+  // markup and the first client render match; the button appears after
+  // hydration.
+  const [canRotate, setCanRotate] = useState(false);
+  const [rotationPaused, setRotationPaused] = useState(false);
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
   const featuresSection = useInView();
@@ -198,13 +205,16 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   }, [isMobile]);
 
   useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (mq.matches) return;
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) setCanRotate(true);
+  }, []);
+
+  useEffect(() => {
+    if (!canRotate || rotationPaused) return;
     const id = setInterval(() => {
       setFrameworkIndex((i) => (i + 1) % FRAMEWORKS.length);
     }, 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [canRotate, rotationPaused]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -575,14 +585,32 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
         >
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
             <span className="block">Works with</span>
+            {/* Screen readers get one stable heading instead of a word that
+                changes every two seconds. */}
+            <span className="sr-only">any JS/TS framework</span>
             <span
               key={frameworkIndex}
+              aria-hidden="true"
               className="block text-pinata-cyan animate-[fade-up_0.4s_cubic-bezier(0.22,1,0.36,1)_forwards] motion-reduce:animate-none"
               style={{ color: FRAMEWORK_COLORS[FRAMEWORKS[frameworkIndex]] }}
             >
               {FRAMEWORKS[frameworkIndex]}
             </span>
           </h2>
+          {canRotate && (
+            <button
+              type="button"
+              onClick={() => setRotationPaused((paused) => !paused)}
+              className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            >
+              {rotationPaused ? (
+                <Play className="size-3.5" aria-hidden="true" />
+              ) : (
+                <Pause className="size-3.5" aria-hidden="true" />
+              )}
+              {rotationPaused ? "Play animation" : "Pause animation"}
+            </button>
+          )}
           <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-12 max-w-2xl mx-auto">
             Record lessons for any stack — or even with vanilla HTML, CSS, and JavaScript.
           </p>
