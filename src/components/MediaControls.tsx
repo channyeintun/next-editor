@@ -165,7 +165,9 @@ const PlaybackProgress = ({
         height={large ? "10px" : "2px"}
         hoverHeight={large ? "14px" : "6px"}
         backgroundColor="#475569"
-        progressColor="#3b82f6"
+        // The large bar is as tall as its thumb, so the fill's edge alone shows the position:
+        // blue-300 keeps that edge at 4.2:1 against the track.
+        progressColor={large ? "#93c5fd" : "#3b82f6"}
         className="w-full"
       />
     </div>
