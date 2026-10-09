@@ -5,13 +5,9 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { lessonDetailQueryKey } from "@app/shared/serverQueryState";
 import { fetchLessonsPage, findLessonBySlug } from "../lib/lessons";
 import type { Lesson } from "../types";
-
-/** Also produced by the edge render (infra/worker/ssr/lessonDetail.ts) — the two must match. */
-export function lessonDetailQueryKey(slug: string | undefined) {
-  return ["lessons", "detail", slug] as const;
-}
 
 /**
  * Seed the detail cache from a list that already carries whole Lesson objects.

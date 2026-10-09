@@ -1,5 +1,9 @@
 import { dehydrate, QueryClient } from "@tanstack/react-query";
 import type { Lesson } from "../../../tube/src/types";
+import {
+  lessonDetailQueryKey,
+  SERVER_QUERY_STATE_ELEMENT_ID,
+} from "../../../src/shared/serverQueryState";
 import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 
 // Data-only SSR. The lesson *page* is the editor — Monaco, WebContainers, the
@@ -11,14 +15,6 @@ import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 //
 // Keep this string-based rather than HTMLRewriter: it has to be unit-testable
 // in the worker suite's plain node environment.
-
-/** Where the dehydrated React Query cache is parked for the client to pick up. */
-export const QUERY_STATE_ELEMENT_ID = "__NE_QUERY_STATE__";
-
-/** Must stay identical to useLesson()'s key in tube/src/hooks/useLessons.ts. */
-export function lessonDetailQueryKey(slug: string): readonly [string, string, string] {
-  return ["lessons", "detail", slug];
-}
 
 function escapeAttribute(value: string): string {
   return value
@@ -194,7 +190,7 @@ export function dehydrateLessonDetail(slug: string, lesson: Lesson | null) {
 
 function queryStateScript(slug: string, lesson: Lesson | null): string {
   const payload = serializeForScript(dehydrateLessonDetail(slug, lesson));
-  return `<script type="application/json" id="${QUERY_STATE_ELEMENT_ID}">${payload}</script>`;
+  return `<script type="application/json" id="${SERVER_QUERY_STATE_ELEMENT_ID}">${payload}</script>`;
 }
 
 export interface LessonDocumentContext {

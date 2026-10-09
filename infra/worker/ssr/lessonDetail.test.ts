@@ -6,11 +6,14 @@ import type { Lesson } from "../../../tube/src/types";
 import {
   buildLessonJsonLd,
   injectLessonDocument,
-  QUERY_STATE_ELEMENT_ID,
   renderLessonDetailResponse,
   renderMissingLessonResponse,
   toIsoDuration,
 } from "./lessonDetail";
+import {
+  lessonDetailQueryKey,
+  SERVER_QUERY_STATE_ELEMENT_ID,
+} from "../../../src/shared/serverQueryState";
 
 const INDEX_HTML = readFileSync(
   fileURLToPath(new URL("../../../index.html", import.meta.url)),
@@ -34,7 +37,7 @@ const CONTEXT = { lesson: LESSON, slug: LESSON.slug, origin: "https://nexteditor
 
 function readQueryState(document: string): DehydratedState {
   const match = new RegExp(
-    `<script type="application/json" id="${QUERY_STATE_ELEMENT_ID}">([\\s\\S]*?)</script>`,
+    `<script type="application/json" id="${SERVER_QUERY_STATE_ELEMENT_ID}">([\\s\\S]*?)</script>`,
   ).exec(document);
   if (!match) throw new Error("no dehydrated query state in document");
   return JSON.parse(match[1]);
@@ -128,6 +131,8 @@ describe("lesson detail SSR", () => {
     hydrate(queryClient, readQueryState(document));
 
     expect(queryClient.getQueryData(["lessons", "detail", "requested-slug"])).toEqual(LESSON);
+    // The key the browser's useLesson() builds, from the same shared module.
+    expect(queryClient.getQueryData(lessonDetailQueryKey("requested-slug"))).toEqual(LESSON);
   });
 
   it("neutralizes a closing script tag hidden in lesson text", () => {

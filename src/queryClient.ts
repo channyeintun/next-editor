@@ -1,4 +1,5 @@
 import { hydrate, QueryClient } from "@tanstack/react-query";
+import { SERVER_QUERY_STATE_ELEMENT_ID } from "./shared/serverQueryState";
 
 // Most application queries invalidate explicitly after mutations. Individual
 // volatile queries (auth/search/playlist membership) override this session cache.
@@ -12,9 +13,6 @@ export const queryClient = new QueryClient({
     },
   },
 });
-
-/** Kept in sync with infra/worker/ssr/lessonDetail.ts. */
-const SERVER_QUERY_STATE_ELEMENT_ID = "__NE_QUERY_STATE__";
 
 /**
  * Adopt the cache the edge already filled. A direct visit to a server-rendered
