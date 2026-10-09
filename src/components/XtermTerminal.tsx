@@ -14,6 +14,12 @@ interface XtermTerminalProps {
   output: string;
   sessionId: string | null;
   interactive: boolean;
+  /**
+   * Names the output region for screen readers ("Runner output", "Console",
+   * "Terminal"). A passive terminal's input field takes it too, so it does not
+   * announce itself as xterm's "Terminal input".
+   */
+  label: string;
   shouldFocus?: boolean;
   scrollLine?: number;
   /**
@@ -67,6 +73,7 @@ function XtermTerminal({
   output,
   sessionId,
   interactive,
+  label,
   shouldFocus = false,
   scrollLine,
   keepScrolledOffOutput = false,
@@ -114,6 +121,10 @@ function XtermTerminal({
       fontSize: 13,
       lineHeight: 1.5,
       scrollback: 2000,
+      // The DOM renderer hides its rows from assistive technology; this mode
+      // adds xterm's readable row list (and a live region, which index.css
+      // silences on passive outputs).
+      screenReaderMode: true,
       theme: interactive ? TERMINAL_THEME : PASSIVE_TERMINAL_THEME,
     });
     const fitAddon = new FitAddon();
@@ -124,6 +135,9 @@ function XtermTerminal({
 
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    if (!interactive) {
+      terminal.textarea?.setAttribute("aria-label", label);
+    }
     updateSize();
 
     const resizeObserver = new ResizeObserver(() => {
@@ -289,6 +303,8 @@ function XtermTerminal({
   return (
     <div
       ref={containerRef}
+      role="region"
+      aria-label={label}
       className={`xterm-terminal size-full ${interactive ? "" : "passive"}`.trim()}
       style={terminalStyle}
       data-cursor-replay-target={cursorReplayTargetId}

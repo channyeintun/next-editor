@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import XtermTerminal from "./XtermTerminal";
 
@@ -10,14 +10,19 @@ const xterm = vi.hoisted(() => {
     rows = 18;
     options: Record<string, unknown>;
     calls: Array<"reset" | string> = [];
+    /** xterm's helper textarea, which it names "Terminal input". */
+    textarea = Object.assign(document.createElement("textarea"), { tabIndex: 0 });
 
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
+      this.textarea.setAttribute("aria-label", "Terminal input");
       FakeTerminal.instances.push(this);
     }
 
     loadAddon() {}
-    open() {}
+    open(parent: HTMLElement) {
+      parent.append(this.textarea);
+    }
     focus() {}
     scrollToLine() {}
     dispose() {}
@@ -60,6 +65,7 @@ function renderTerminal(output: string, keepScrolledOffOutput: boolean) {
       sessionId="runner"
       output={output}
       interactive={false}
+      label="Runner output"
       keepScrolledOffOutput={keepScrolledOffOutput}
     />,
   );
@@ -78,6 +84,7 @@ function renderTerminal(output: string, keepScrolledOffOutput: boolean) {
           sessionId="runner"
           output={nextOutput}
           interactive={false}
+          label="Runner output"
           keepScrolledOffOutput={nextKeepScrolledOffOutput}
         />,
       );
@@ -122,6 +129,23 @@ describe("XtermTerminal", () => {
       "reset",
       "Waiting for runner output...",
     ]);
+  });
+
+  it("exposes a passive output to screen readers as a named region", () => {
+    const { terminal } = renderTerminal("Compiled successfully\n", true);
+
+    expect(terminal.options.screenReaderMode).toBe(true);
+    const region = screen.getByRole("region", { name: "Runner output" });
+    // The output takes no input, so its focus target does not claim to.
+    expect(within(region).getByRole("textbox", { name: "Runner output" })).toBe(terminal.textarea);
+  });
+
+  it("keeps xterm's input name on the interactive shell", () => {
+    render(<XtermTerminal sessionId="shell-1" output="" interactive label="Terminal" />);
+
+    expect(xterm.FakeTerminal.instances.at(-1)?.options.screenReaderMode).toBe(true);
+    const region = screen.getByRole("region", { name: "Terminal" });
+    expect(within(region).getByRole("textbox", { name: "Terminal input" })).toBeInTheDocument();
   });
 
   it("drops the slid-off scrollback once scroll lines are recorded again", () => {

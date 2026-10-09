@@ -515,6 +515,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
               sessionId={scrollSurface}
               output={consoleContent}
               interactive={false}
+              label={`${runnerTab.label} output`}
               scrollLine={
                 isPlaybackSnapshotActive ? effectiveScrollLines[scrollSurface] : undefined
               }

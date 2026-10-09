@@ -117,6 +117,12 @@ body {
   display: none !important;
 }
 
+/* xterm's assertive live region would read out every streamed or replayed
+   character of a passive output; its row list stays readable instead. */
+.xterm-terminal.passive .xterm .live-region {
+  display: none;
+}
+
 @keyframes terminal-blink {
   0%,
   100% {

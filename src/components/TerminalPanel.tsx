@@ -588,6 +588,7 @@ function TerminalPanel() {
                     sessionId="runner"
                     output={runnerOutput}
                     interactive={false}
+                    label="Runner output"
                     scrollLine={
                       isPlaybackSnapshotActive ? effectiveTerminalScrollLines.runner : undefined
                     }
@@ -612,6 +613,7 @@ function TerminalPanel() {
                     sessionId={effectiveActiveTerminalSessionId}
                     output={effectiveTerminalOutput || ""}
                     interactive={!isPlaybackSnapshotActive}
+                    label="Terminal"
                     shouldFocus={!isPlaybackSnapshotActive && displayActiveTab === "terminal"}
                     scrollLine={
                       isPlaybackSnapshotActive && effectiveActiveTerminalSessionId
@@ -657,6 +659,7 @@ function TerminalPanel() {
                   sessionId="console"
                   output={consoleContent}
                   interactive={false}
+                  label="Console"
                   scrollLine={
                     isPlaybackSnapshotActive ? effectiveTerminalScrollLines.console : undefined
                   }
