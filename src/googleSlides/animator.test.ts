@@ -1,10 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { DeckStepAnimator, buildTimeline, sampleStyles, timeForRevealed } from "./animator";
+import { describe, expect, it } from "vite-plus/test";
+import { buildTimeline, sampleStyles, timeForRevealed } from "./animator";
 import type { DeckStep } from "./types";
-
-afterEach(() => {
-  document.body.innerHTML = "";
-});
 
 const steps: DeckStep[] = [
   // Step 0: fade el1 in over 400ms starting at 0.
@@ -44,6 +40,69 @@ describe("buildTimeline", () => {
     expect(tl.total).toBe(700);
     const el3 = tl.entries.find((e) => e.entry.elementId === "el3");
     expect(el3).toMatchObject({ start: 500, end: 700 }); // 400 + delay 100 .. +200
+  });
+
+  // The steps reach the slide frame by postMessage, so buildTimeline validates
+  // them instead of trusting the DeckStep type.
+  it("clamps a delay or duration to 60 s", () => {
+    const tl = buildTimeline([
+      [{ elementId: "a", delayMs: 0, durationMs: 100000, tracks: [] }],
+      [{ elementId: "b", delayMs: 100000, durationMs: 0, tracks: [] }],
+    ]);
+    expect(tl.stepEndTimes).toEqual([60000, 120000]);
+    expect(tl.entries[0]).toMatchObject({ start: 0, end: 60000 });
+    expect(tl.entries[1].entry).toMatchObject({ delayMs: 60000, durationMs: 0 });
+  });
+
+  it("reads at most 1000 steps", () => {
+    const many: DeckStep[] = Array.from({ length: 1001 }, (_, index) => [
+      { elementId: `e${index}`, delayMs: 0, durationMs: 1, tracks: [] },
+    ]);
+    const tl = buildTimeline(many);
+    expect(tl.stepEndTimes).toHaveLength(1000);
+    expect(tl.entries.some((e) => e.entry.elementId === "e1000")).toBe(false);
+    expect(tl.total).toBe(1000);
+  });
+
+  it("drops entries without a string elementId and coerces a NaN delay to 0", () => {
+    const tl = buildTimeline([
+      [
+        { elementId: 7, delayMs: 0, durationMs: 100, tracks: [] },
+        { elementId: "x".repeat(1025), delayMs: 0, durationMs: 100, tracks: [] },
+        { elementId: "ok", delayMs: Number.NaN, durationMs: 50, tracks: [] },
+      ],
+    ]);
+    expect(tl.entries.map((e) => e.entry.elementId)).toEqual(["ok"]);
+    expect(tl.entries[0]).toMatchObject({ start: 0, end: 50 });
+    expect(tl.total).toBe(50);
+  });
+
+  it("keeps only the first four known tracks, with non-finite numbers as 0", () => {
+    const tl = buildTimeline([
+      [
+        {
+          elementId: "a",
+          delayMs: 0,
+          durationMs: 10,
+          tracks: [
+            { kind: "rotate", from: 0, to: 1 },
+            { kind: "opacity", from: Number.POSITIVE_INFINITY, to: 1 },
+            null,
+            { kind: "translate", fromX: "1", fromY: 0, toX: 1, toY: 1 },
+            { kind: "scale", from: 0, to: 1 },
+          ],
+        },
+      ],
+    ]);
+    expect(tl.entries[0].entry.tracks).toEqual([
+      { kind: "opacity", from: 0, to: 1 },
+      { kind: "translate", fromX: 0, fromY: 0, toX: 1, toY: 1 },
+    ]);
+  });
+
+  it("returns an empty timeline for anything but an array of steps", () => {
+    expect(buildTimeline(undefined)).toEqual({ entries: [], stepEndTimes: [], total: 0 });
+    expect(buildTimeline([null])).toEqual({ entries: [], stepEndTimes: [0], total: 0 });
   });
 });
 
@@ -134,91 +193,5 @@ describe("sampleStyles", () => {
     ]);
     const s = sampleStyles(tl2, 25); // 25% linear -> easeInOutCubic(0.25) = 0.0625
     expect(s.get("x")?.transform).toBe("scale(0.0625)");
-  });
-});
-
-describe("DeckStepAnimator (snap path)", () => {
-  function makeSvg(ids: string[]): SVGSVGElement {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    for (const id of ids) {
-      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.setAttribute("id", id);
-      svg.appendChild(g);
-    }
-    document.body.appendChild(svg);
-    return svg;
-  }
-
-  it("hides fade-in targets on construction", () => {
-    const svg = makeSvg(["el1", "el2", "el3"]);
-    const a = new DeckStepAnimator(svg, steps);
-    expect((svg.querySelector("#el1") as SVGElement).style.opacity).toBe("0");
-    a.dispose();
-  });
-
-  it("snaps to full reveal on a multi-step jump", () => {
-    const svg = makeSvg(["el1", "el2", "el3"]);
-    const a = new DeckStepAnimator(svg, steps);
-    a.setRevealed(2); // jump from 0 to 2 -> not a single forward step -> snaps
-    expect((svg.querySelector("#el1") as SVGElement).style.opacity).toBe("1");
-    expect((svg.querySelector("#el2") as SVGElement).style.opacity).toBe("1");
-    a.dispose();
-  });
-
-  it("snaps backward without throwing", () => {
-    const svg = makeSvg(["el1", "el2", "el3"]);
-    const a = new DeckStepAnimator(svg, steps);
-    a.setRevealed(2);
-    a.setRevealed(0); // backward -> snap
-    expect((svg.querySelector("#el1") as SVGElement).style.opacity).toBe("0");
-    a.dispose();
-  });
-
-  it("ignores missing elements", () => {
-    const svg = makeSvg(["el1"]); // el2/el3 absent
-    const a = new DeckStepAnimator(svg, steps);
-    expect(() => a.setRevealed(2)).not.toThrow();
-    a.dispose();
-  });
-
-  it("retries a missing element on later calls instead of caching the miss permanently", () => {
-    const svg = makeSvg(["el1"]); // el2/el3 absent at construction time
-    const a = new DeckStepAnimator(svg, steps);
-
-    // el2 is absent -> setRevealed should not throw, and nothing to assert on
-    // el2 yet since it doesn't exist in the DOM.
-    expect(() => a.setRevealed(2)).not.toThrow();
-    expect(svg.querySelector("#el2")).toBeNull();
-
-    // Now insert el2 into the SVG and change progress again: a permanently
-    // cached miss would mean el2 never gets styled; the fix re-queries on
-    // every miss, so it should now be found and styled.
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.setAttribute("id", "el2");
-    svg.appendChild(g);
-
-    a.setRevealed(0); // change progress so a new style is applied
-    a.setRevealed(2);
-    expect((svg.querySelector("#el2") as SVGElement).style.opacity).toBe("1");
-    a.dispose();
-  });
-
-  it("snaps on the very first setRevealed(1) (fresh mount / seek), then animates a later forward step", () => {
-    const raf = vi.spyOn(globalThis, "requestAnimationFrame");
-    const svg = makeSvg(["el1", "el2", "el3"]);
-    const a = new DeckStepAnimator(svg, steps);
-
-    // First call landing on step 1 is a fresh mount / seek -> snap, no rAF,
-    // no intermediate value: el1 is fully revealed immediately.
-    a.setRevealed(1);
-    expect(raf).not.toHaveBeenCalled();
-    expect((svg.querySelector("#el1") as SVGElement).style.opacity).toBe("1");
-
-    // A later genuine forward increment (1 -> 2) animates via rAF.
-    a.setRevealed(2);
-    expect(raf).toHaveBeenCalled();
-
-    a.dispose();
-    raf.mockRestore();
   });
 });

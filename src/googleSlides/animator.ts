@@ -1,14 +1,15 @@
-// Replays the build-step animations of an imported Google Slides slide against
-// its inline SVG. Ported from the reference implementation (see
-// google-slide-research.md §1.5). The timeline math is pure and testable; the
-// class wraps DOM application and a single requestAnimationFrame tween used for
-// the one-step-forward case.
+// The build-step animation timeline of an imported Google Slides slide, ported
+// from the reference implementation (see google-slide-research.md §1.5). The
+// math is pure and unit-tested here, and it is also what ships: the sandboxed
+// slide frame's animation bridge (utils/sandboxedSlideDocument.ts) inlines these
+// functions verbatim via .toString().
+//
+// Keep every exported function a self-contained `function` declaration: nest
+// helpers inside it and reference only globals (Array, Map, Math, Number). No
+// runtime imports and no module-scope constants or helpers — they would not
+// exist inside the frame. Type-only imports are erased and are fine.
 
-import type { DeckStep, DeckStepEntry } from "./types";
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
+import type { DeckStepEntry, DeckStepTrack } from "./types";
 
 interface TimedEntry {
   entry: DeckStepEntry;
@@ -31,18 +32,72 @@ export interface DeckTimeline {
  * previous ended; within a step, an entry starts at its delay and lasts its
  * duration, so the step's length is the max of (delay + duration) over its
  * entries.
+ *
+ * The steps arrive in the frame by postMessage, so they are validated here
+ * rather than trusted: delays and durations are clamped to 0..60 s, at most
+ * 1000 steps, 10000 entries and 4 tracks per entry are read, an entry needs a
+ * string elementId of at most 1024 characters, only opacity/scale/translate
+ * tracks are kept, and non-finite numbers become 0.
  */
-export function buildTimeline(steps: DeckStep[]): DeckTimeline {
+export function buildTimeline(steps: unknown): DeckTimeline {
+  function finite(value: unknown, fallback: number): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  }
+  function clampTime(value: unknown): number {
+    return Math.min(60000, Math.max(0, finite(value, 0)));
+  }
+
   const entries: TimedEntry[] = [];
   const stepEndTimes: number[] = [];
   let cursor = 0;
-  for (const step of steps) {
+  if (!Array.isArray(steps)) return { entries, stepEndTimes, total: 0 };
+  for (
+    let stepIndex = 0;
+    stepIndex < steps.length && stepIndex < 1000 && entries.length < 10000;
+    stepIndex += 1
+  ) {
+    const step: unknown = steps[stepIndex];
     let stepLength = 0;
-    for (const entry of step) {
-      const start = cursor + entry.delayMs;
-      const end = start + entry.durationMs;
-      entries.push({ entry, start, end });
-      stepLength = Math.max(stepLength, entry.delayMs + entry.durationMs);
+    if (Array.isArray(step)) {
+      for (let index = 0; index < step.length && entries.length < 10000; index += 1) {
+        const source: unknown = step[index];
+        if (!source || typeof source !== "object") continue;
+        const {
+          elementId,
+          delayMs,
+          durationMs,
+          tracks: sourceTracks,
+        } = source as Record<string, unknown>;
+        if (typeof elementId !== "string" || elementId.length > 1024) continue;
+        const tracks: DeckStepTrack[] = [];
+        const trackList = Array.isArray(sourceTracks) ? sourceTracks : [];
+        for (let trackIndex = 0; trackIndex < trackList.length && trackIndex < 4; trackIndex += 1) {
+          const track: unknown = trackList[trackIndex];
+          if (!track || typeof track !== "object") continue;
+          const { kind, from, to, fromX, fromY, toX, toY } = track as Record<string, unknown>;
+          if (kind === "opacity" || kind === "scale") {
+            tracks.push({ kind, from: finite(from, 0), to: finite(to, 0) });
+          } else if (kind === "translate") {
+            tracks.push({
+              kind,
+              fromX: finite(fromX, 0),
+              fromY: finite(fromY, 0),
+              toX: finite(toX, 0),
+              toY: finite(toY, 0),
+            });
+          }
+        }
+        const delay = clampTime(delayMs);
+        const duration = clampTime(durationMs);
+        const start = cursor + delay;
+        const end = start + duration;
+        entries.push({
+          entry: { elementId, delayMs: delay, durationMs: duration, tracks },
+          start,
+          end,
+        });
+        stepLength = Math.max(stepLength, delay + duration);
+      }
     }
     cursor += stepLength;
     stepEndTimes.push(cursor);
@@ -65,6 +120,10 @@ export interface ElementStyle {
  * plain overwrite-in-iteration-order behavior).
  */
 export function sampleStyles(timeline: DeckTimeline, t: number): Map<string, ElementStyle> {
+  function easeInOutCubic(x: number): number {
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  }
+
   const styles = new Map<string, ElementStyle>();
   for (const { entry, start, end } of timeline.entries) {
     const duration = end - start;
@@ -100,94 +159,4 @@ export function timeForRevealed(timeline: DeckTimeline, stepsRevealed: number): 
   if (stepsRevealed <= 0) return 0;
   if (stepsRevealed >= timeline.stepEndTimes.length) return timeline.total;
   return timeline.stepEndTimes[stepsRevealed - 1];
-}
-
-export class DeckStepAnimator {
-  private readonly svg: SVGSVGElement;
-  private readonly timeline: DeckTimeline;
-  private readonly elementCache = new Map<string, Element | null>();
-  private revealed = 0;
-  private rafId: number | null = null;
-  // The first setRevealed after construction is a fresh mount / seek and always
-  // snaps: landing at step 1 must not be mistaken for a user-driven forward step.
-  private hasRevealed = false;
-
-  constructor(svg: SVGSVGElement, steps: DeckStep[]) {
-    this.svg = svg;
-    this.timeline = buildTimeline(steps);
-    // Start fully hidden so fade-in targets are not flashed before their step.
-    this.apply(0);
-  }
-
-  private resolve(id: string): Element | null {
-    // Only a found element is cached; a miss is retried on every call so an
-    // element added to the DOM later (e.g. lazily-mounted SVG content) is
-    // picked up instead of staying permanently unresolved.
-    const cached = this.elementCache.get(id);
-    if (cached != null) return cached;
-    const el = this.svg.querySelector(`#${CSS.escape(id)}`);
-    if (el) this.elementCache.set(id, el);
-    return el;
-  }
-
-  private apply(t: number): void {
-    const styles = sampleStyles(this.timeline, t);
-    for (const [id, style] of styles) {
-      const el = this.resolve(id);
-      // Animated nodes can live in a sandboxed iframe. Cross-realm DOM nodes do
-      // not pass the parent window's HTMLElement/SVGElement instanceof checks,
-      // but both supported element types expose a CSSStyleDeclaration.
-      if (!el || !("style" in el)) continue;
-      const elementStyle = (el as HTMLElement | SVGElement).style;
-      if (style.opacity !== undefined) elementStyle.opacity = String(style.opacity);
-      elementStyle.transform = style.transform ?? "";
-    }
-  }
-
-  private cancelRaf(): void {
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-  }
-
-  /**
-   * Reveals `stepsRevealed` steps (0..steps.length). A single forward increment
-   * animates in real time; any other change (backward, multi-step jump, replay
-   * seek) snaps instantly.
-   */
-  setRevealed(stepsRevealed: number, opts?: { playbackRate?: number }): void {
-    this.cancelRaf();
-    const target = timeForRevealed(this.timeline, stepsRevealed);
-    // A fresh mount / seek (the first call) always snaps; only subsequent calls
-    // can animate a single forward increment.
-    const isSingleForward = this.hasRevealed && stepsRevealed === this.revealed + 1;
-    const from = timeForRevealed(this.timeline, this.revealed);
-    this.revealed = stepsRevealed;
-    this.hasRevealed = true;
-
-    if (!isSingleForward || target <= from || typeof requestAnimationFrame !== "function") {
-      this.apply(target);
-      return;
-    }
-
-    const rate = opts?.playbackRate && opts.playbackRate > 0 ? opts.playbackRate : 1;
-    const wallDuration = (target - from) / rate;
-    const startWall = performance.now();
-    const tick = () => {
-      const elapsed = performance.now() - startWall;
-      const p = wallDuration <= 0 ? 1 : Math.min(elapsed / wallDuration, 1);
-      this.apply(from + (target - from) * p);
-      if (p < 1) {
-        this.rafId = requestAnimationFrame(tick);
-      } else {
-        this.rafId = null;
-      }
-    };
-    this.rafId = requestAnimationFrame(tick);
-  }
-
-  dispose(): void {
-    this.cancelRaf();
-  }
 }
