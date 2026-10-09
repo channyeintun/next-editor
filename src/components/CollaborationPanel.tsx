@@ -445,6 +445,15 @@ function RoomOwnerSection({
             className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/3"
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}
+            {/* The copy icon is hidden from assistive tech, so the action is
+                spelled out ahead of the visible link. The space sits outside
+                the hidden span because a name drops an element's own trailing
+                whitespace. */}
+            {copied ? null : (
+              <>
+                <span className="sr-only">Copy invitation link:</span>{" "}
+              </>
+            )}
             <span className="min-w-0 flex-1 truncate">
               {copied ? "Copied invitation link" : shareUrl}
             </span>

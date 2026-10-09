@@ -459,7 +459,8 @@ describe("CollaborationPanel status messages", () => {
     Reflect.deleteProperty(navigator, "clipboard");
   });
 
-  it("announces a copied invitation link, and shows a copy that failed", async () => {
+  /** An owner's room whose next invitation carries the token "invite-token". */
+  function makeInvitingOwnerState() {
     const createInvitation = vi.fn<CollaborationContextValue["createInvitation"]>(async (role) => ({
       id: "70000000-0000-4000-8000-000000000001",
       roomId: "20000000-0000-4000-8000-000000000001",
@@ -471,7 +472,11 @@ describe("CollaborationPanel status messages", () => {
       createdAt: Date.now(),
       token: "invite-token",
     }));
-    collaborationState = { ...makeCollaborationState(), role: "owner", createInvitation };
+    return { ...makeCollaborationState(), role: "owner", createInvitation };
+  }
+
+  it("announces a copied invitation link, and shows a copy that failed", async () => {
+    collaborationState = makeInvitingOwnerState();
     render(<CollaborationPanel />);
     fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
 
@@ -485,6 +490,25 @@ describe("CollaborationPanel status messages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The invitation link could not be copied. Select and copy it manually.",
     );
+  });
+
+  it("names the invitation link button by its copy action as well as the link", async () => {
+    collaborationState = makeInvitingOwnerState();
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    // A first copy that fails leaves the link on screen, not yet copied.
+    writeText.mockRejectedValueOnce(new Error("Clipboard permission denied"));
+    fireEvent.click(screen.getByRole("button", { name: "Editor link" }));
+    const copyLink = await screen.findByRole("button", {
+      name: /^Copy invitation link: http:\/\/\S+\/code\?invite=invite-token$/,
+    });
+
+    fireEvent.click(copyLink);
+    expect(
+      await screen.findByRole("button", { name: "Copied invitation link" }),
+    ).toBeInTheDocument();
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("invite=invite-token"));
   });
 
   it("announces connection changes while the panel is closed", () => {
