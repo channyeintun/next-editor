@@ -125,6 +125,15 @@ describe("AthanLabPanel key form focus", () => {
     expect(keyInput()).toHaveClass("border-slate-500");
   });
 
+  it("paints the key placeholder brighter than the preflight default", () => {
+    athan.keyStatus = { connected: false };
+    renderPanel();
+
+    // Preflight's 50% currentcolor composites to 4.44:1; slate-400 is 6.64:1.
+    expect(keyInput()).toHaveAttribute("placeholder", "ak_live_…");
+    expect(keyInput()).toHaveClass("placeholder:text-slate-400");
+  });
+
   it("keeps focus on the key field while checking, then announces the rejection and ties it to the field", async () => {
     const save = deferred<unknown>();
     athan.saveKey.mockReturnValue(save.promise);

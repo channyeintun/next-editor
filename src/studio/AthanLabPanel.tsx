@@ -458,7 +458,7 @@ export default function AthanLabPanel({
               }}
               placeholder={connected ? "ak_live_… (paste to replace)" : "ak_live_…"}
               aria-label="AthanLab API key"
-              className="ph-no-capture min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+              className="ph-no-capture min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 placeholder:text-slate-400 disabled:opacity-50"
             />
             <button
               type="button"
