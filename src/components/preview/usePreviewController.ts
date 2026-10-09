@@ -58,7 +58,8 @@ import {
   storeResultToRecorded,
   type ApiClientHistoryEntry,
 } from "../../stores/apiClientStore";
-import { hasRrwebPreviewSeed, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
+import { hasRrwebPreviewSeed } from "../../core/src/preview";
+import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";

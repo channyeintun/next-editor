@@ -77,6 +77,14 @@ export interface PreviewRecordedEvent {
   delay?: number;
 }
 
+/**
+ * The rrweb EventType and IncrementalSource values the app branches on, mirrored
+ * from rrweb's enums so nothing here (or in storage) imports rrweb. The recorder
+ * script inlines them into the code it injects into the preview frame.
+ */
+export const RRWEB_EVENT_TYPE = { FullSnapshot: 2, IncrementalSnapshot: 3, Meta: 4 } as const;
+export const RRWEB_INCREMENTAL_SOURCE = { Mutation: 0, MouseMove: 1 } as const;
+
 export interface PreviewInitialDocument {
   version: number;
   time: number;
@@ -84,6 +92,19 @@ export interface PreviewInitialDocument {
   route?: string;
   // rrweb Meta + FullSnapshot events that seed replay.
   events?: PreviewRecordedEvent[];
+}
+
+/**
+ * True when a recording's preview can be replayed by rrweb: it has a seed (an
+ * initial document carrying Meta + FullSnapshot events). A seed alone is a
+ * complete stream; patch batches without one are not replayable. Legacy
+ * custom-op records have no `events`. The machine's replay call checks only that
+ * initial documents exist; the preview decides with this whether to replay.
+ */
+export function hasRrwebPreviewSeed(
+  initialDocuments: readonly PreviewInitialDocument[] | undefined,
+): boolean {
+  return Boolean(initialDocuments?.some((document) => document.events?.length));
 }
 
 export interface PreviewDomPatchBatch {

@@ -4,20 +4,13 @@
 // ~77 KB of text that only a booting WebContainer needs, so it lives apart from
 // rrwebPreview.ts (which playback imports) and is loaded with the preview script.
 import rrwebRecorderBundle from "virtual:rrweb-recorder-bundle";
+import { RRWEB_EVENT_TYPE, RRWEB_INCREMENTAL_SOURCE } from "../../core/src/preview";
 import {
   PREVIEW_RRWEB_FORMAT_VERSION,
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
-
-// rrweb EventType numeric values we branch on while recording. Hardcoded so the
-// injected script does not need to import rrweb's enum.
-const RRWEB_EVENT_TYPE_FULL_SNAPSHOT = 2;
-const RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT = 3;
-const RRWEB_EVENT_TYPE_META = 4;
-// IncrementalSource.Mutation — a DOM add/remove/attribute/text change.
-const RRWEB_INCREMENTAL_SOURCE_MUTATION = 0;
 
 // Corrective-checkpoint throttle. rrweb's incremental mutation capture is lossy in
 // real browsers for some swap patterns (notably htmx innerHTML swaps, where a
@@ -109,10 +102,10 @@ export function createRrwebPreviewRecorderScript({
       var initialDocumentMessageType = ${JSON.stringify(RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE)};
       var patchBatchMessageType = ${JSON.stringify(RUNTIME_PATCH_BATCH_MESSAGE_TYPE)};
       var version = ${JSON.stringify(PREVIEW_RRWEB_FORMAT_VERSION)};
-      var fullSnapshotType = ${JSON.stringify(RRWEB_EVENT_TYPE_FULL_SNAPSHOT)};
-      var incrementalType = ${JSON.stringify(RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT)};
-      var mutationSource = ${JSON.stringify(RRWEB_INCREMENTAL_SOURCE_MUTATION)};
-      var metaType = ${JSON.stringify(RRWEB_EVENT_TYPE_META)};
+      var fullSnapshotType = ${JSON.stringify(RRWEB_EVENT_TYPE.FullSnapshot)};
+      var incrementalType = ${JSON.stringify(RRWEB_EVENT_TYPE.IncrementalSnapshot)};
+      var mutationSource = ${JSON.stringify(RRWEB_INCREMENTAL_SOURCE.Mutation)};
+      var metaType = ${JSON.stringify(RRWEB_EVENT_TYPE.Meta)};
       var checkpointThrottleMs = ${JSON.stringify(RRWEB_CHECKPOINT_THROTTLE_MS)};
       var source = 'runtime-preview';
       var documentId = 'rrweb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);

@@ -56,14 +56,3 @@ export function buildRrwebReplayEvents(
 
   return events as unknown as eventWithTime[];
 }
-
-// True when a recording's preview can be replayed by rrweb: it has a seed (an
-// initial document carrying Meta + FullSnapshot events). A seed alone is a
-// complete stream; patch batches without one are not replayable, which is also
-// the machine's rule for calling the replay applier. Legacy custom-op records
-// have no `events`.
-export function hasRrwebPreviewSeed(
-  initialDocuments: PreviewInitialDocument[] | undefined,
-): boolean {
-  return Boolean(initialDocuments?.some((document) => document.events?.length));
-}

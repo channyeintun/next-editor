@@ -1,5 +1,6 @@
 import type { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
+import { RRWEB_EVENT_TYPE, RRWEB_INCREMENTAL_SOURCE } from "../../core/src/preview";
 
 type ReplayerConstructor = (typeof import("@rrweb/replay"))["Replayer"];
 type ReplayModuleLoader = () => Promise<{ Replayer: ReplayerConstructor }>;
@@ -19,11 +20,6 @@ export function computeRrwebOffsetMs(currentTime: number, firstEventTime: number
   return Math.max(0, currentTime - firstEventTime);
 }
 
-// rrweb EventType.IncrementalSnapshot and IncrementalSource.MouseMove, hardcoded
-// (like rrwebPreview.ts) so this module keeps its rrweb imports type-only.
-const RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT = 3;
-const RRWEB_INCREMENTAL_SOURCE_MOUSE_MOVE = 1;
-
 // After casting a MouseMove, rrweb's next `pause` skips only the events at or
 // before its FIRST sampled position (up to ~500ms before the event), so every
 // later seek re-cast the mutations in that window. Re-casting is not
@@ -38,8 +34,8 @@ function withoutMouseMoveLookback(event: eventWithTime): eventWithTime {
     data: { source?: number; positions?: { timeOffset: number }[] };
   };
   if (
-    type !== RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT ||
-    data.source !== RRWEB_INCREMENTAL_SOURCE_MOUSE_MOVE ||
+    type !== RRWEB_EVENT_TYPE.IncrementalSnapshot ||
+    data.source !== RRWEB_INCREMENTAL_SOURCE.MouseMove ||
     !data.positions?.some((position) => position.timeOffset !== 0)
   ) {
     return event;

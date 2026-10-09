@@ -15,6 +15,7 @@ import type {
   MouseCursorPosition,
 } from "../types";
 import type { TextEditEvent } from "../textEdit";
+import { hasRrwebPreviewSeed } from "../preview";
 import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/contentDelta";
 import { pushFrame } from "../utils/frameStreamEncoder";
 import { getRecordingTimestamp } from "./recordingSession";
@@ -240,7 +241,7 @@ const withoutUnreplayedPreviewContent = (
   const previewState = frame.state.previewState;
   if (
     previewState?.content === undefined ||
-    !session.previewInitialDocuments.some((document) => document.events?.length)
+    !hasRrwebPreviewSeed(session.previewInitialDocuments)
   ) {
     return frame;
   }

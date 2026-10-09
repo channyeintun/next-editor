@@ -1,4 +1,8 @@
-import type { PreviewDomPatchBatch } from "../../core/src/preview";
+import {
+  RRWEB_EVENT_TYPE,
+  RRWEB_INCREMENTAL_SOURCE,
+  type PreviewDomPatchBatch,
+} from "../../core/src/preview";
 
 // ============================================================================
 // Preview-patch added-node dedup (stream-only representation)
@@ -31,11 +35,6 @@ import type { PreviewDomPatchBatch } from "../../core/src/preview";
 // lockstep: every non-marker dedupable node in the stream is a first occurrence,
 // and both sides append it to their template list at the same index.
 // ============================================================================
-
-// rrweb EventType.IncrementalSnapshot / IncrementalSource.Mutation. Hardcoded
-// (as in rrwebPreview.ts) so storage never depends on rrweb's enums.
-const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3;
-const MUTATION_SOURCE = 0;
 
 /** Stream-only shape: replaces a mutation add's `node` whose content repeats. */
 interface DedupAddMarker {
@@ -125,13 +124,13 @@ function mapMutationAdds(
 
   let eventsChanged = false;
   const nextEvents = record.events.map((event) => {
-    if (!isRecord(event) || event.type !== INCREMENTAL_SNAPSHOT_EVENT_TYPE) {
+    if (!isRecord(event) || event.type !== RRWEB_EVENT_TYPE.IncrementalSnapshot) {
       return event;
     }
     const data = event.data;
     if (
       !isRecord(data) ||
-      data.source !== MUTATION_SOURCE ||
+      data.source !== RRWEB_INCREMENTAL_SOURCE.Mutation ||
       !Array.isArray(data.adds) ||
       data.adds.length === 0
     ) {
