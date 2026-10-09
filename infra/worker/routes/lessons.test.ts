@@ -102,6 +102,46 @@ describe("lessonsRoute lesson ids", () => {
     },
   );
 
+  it("answers 409 when the lesson id is already taken", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(insertDraftLesson).mockRejectedValueOnce(
+      new Error("D1_ERROR: UNIQUE constraint failed: lessons.id: SQLITE_CONSTRAINT"),
+    );
+
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "a lesson with this id already exists",
+    });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  // The client reads a 409 as "already uploaded", so a transient D1 failure
+  // after a large upload must not answer with one.
+  it("answers 500, not 409, when the insert fails for any other reason", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(insertDraftLesson).mockRejectedValueOnce(
+      new Error("D1_ERROR: Network connection lost."),
+    );
+
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "failed to create lesson" });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it("does not route an id outside the charset to the owner-only handlers", async () => {
     const response = await lessonsRoute.request(
       `https://nexteditor.dev/x..${VICTIM_ID}`,

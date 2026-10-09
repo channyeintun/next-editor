@@ -18,6 +18,7 @@ import {
   MAX_SLUG_INSERT_ATTEMPTS,
   slugifyTitle,
 } from "../../db/slug";
+import { isUniqueViolation } from "../../db/uniqueViolation";
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
@@ -161,11 +162,17 @@ lessonsRoute.post("/", requireUser, async (c) => {
         }
         continue;
       }
-      // Only realistic cause: `id` (the primary key) already exists — a
-      // vanishingly unlikely UUID collision, or a retried request reusing an
-      // id from an earlier attempt. Either way, ask the client to use a fresh id.
+      // `id` (the primary key) already exists: a retried request reusing an id
+      // from an earlier attempt, or a vanishingly unlikely UUID collision.
+      // Either way, ask the client to use a fresh id.
+      if (isUniqueViolation(error, "lessons.id")) {
+        console.error("Draft lesson id already exists", error);
+        return c.json({ error: "a lesson with this id already exists" }, 409);
+      }
+      // Anything else (D1 unreachable or overloaded, say) is a server error
+      // the client can retry as-is; a 409 would tell it the upload is a duplicate.
       console.error("Failed to insert draft lesson", error);
-      return c.json({ error: "a lesson with this id already exists" }, 409);
+      return c.json({ error: "failed to create lesson" }, 500);
     }
   }
 });
