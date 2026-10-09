@@ -3,7 +3,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 import { RuntimePreviewRenderer } from "./RuntimePreviewRenderer";
 
-function renderFrame(allowSameOrigin: boolean) {
+function renderFrame(allowSameOrigin: boolean, inert?: boolean) {
   const { container } = render(
     <RuntimePreviewRenderer
       iframeRef={createRef<HTMLIFrameElement>()}
@@ -11,6 +11,7 @@ function renderFrame(allowSameOrigin: boolean) {
       isRrwebReplayActive={false}
       disablePointerEvents={false}
       allowSameOrigin={allowSameOrigin}
+      inert={inert}
     />,
   );
   return container.querySelector("iframe");
@@ -40,5 +41,27 @@ describe("RuntimePreviewRenderer", () => {
     expect(renderFrame(true)?.getAttribute("sandbox")).not.toBe(
       renderFrame(false)?.getAttribute("sandbox"),
     );
+  });
+
+  it("is inert only while something covers it", () => {
+    // The API client overlay is opaque, so the frame under it must leave the
+    // tab order and the accessibility tree (WCAG 2.4.11).
+    expect(renderFrame(true, true)).toHaveAttribute("inert");
+    expect(renderFrame(true)).not.toHaveAttribute("inert");
+  });
+
+  it("makes the rrweb replay container inert as well", () => {
+    const replayContainerRef = createRef<HTMLDivElement>();
+    render(
+      <RuntimePreviewRenderer
+        iframeRef={createRef<HTMLIFrameElement>()}
+        replayContainerRef={replayContainerRef}
+        isRrwebReplayActive
+        disablePointerEvents={false}
+        allowSameOrigin={false}
+        inert
+      />,
+    );
+    expect(replayContainerRef.current).toHaveAttribute("inert");
   });
 });

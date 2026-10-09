@@ -37,6 +37,9 @@ function Preview() {
       isRrwebReplayActive={controller.isRrwebReplayActive}
       disablePointerEvents={controller.disablePointerEvents}
       allowSameOrigin={controller.allowSameOriginPreview}
+      // The API overlay below is opaque and only exists when the mode toggle
+      // does, so focus and screen readers must skip the frame it covers.
+      inert={controller.showModeToggle && isApiMode}
     />
   );
 

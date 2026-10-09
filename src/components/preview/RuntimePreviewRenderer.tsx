@@ -11,6 +11,12 @@ interface RuntimePreviewRendererProps {
    * See the sandbox comment below for why that has to change the sandbox.
    */
   allowSameOrigin: boolean;
+  /**
+   * True while an opaque overlay (the API client) covers the frame. Keeps the
+   * hidden frame out of the tab order and the accessibility tree without
+   * changing `display` or the element's key, so the frame is not reloaded.
+   */
+  inert?: boolean;
 }
 
 export function RuntimePreviewRenderer({
@@ -19,6 +25,7 @@ export function RuntimePreviewRenderer({
   isRrwebReplayActive,
   disablePointerEvents,
   allowSameOrigin,
+  inert = false,
 }: RuntimePreviewRendererProps) {
   // During runtime playback the recorded session is replayed by an rrweb Replayer
   // that mounts its own iframe into this container — the live runtime iframe is not
@@ -28,6 +35,7 @@ export function RuntimePreviewRenderer({
     return (
       <div
         ref={replayContainerRef}
+        inert={inert}
         className={`absolute inset-0 block size-full overflow-hidden bg-transparent ${disablePointerEvents ? "pointer-events-none" : ""}`}
         data-cursor-replay-target="preview-frame"
         data-cursor-replay-scale="content"
@@ -60,6 +68,7 @@ export function RuntimePreviewRenderer({
     <iframe
       key={allowSameOrigin ? "preview-frame-local" : "preview-frame-isolated"}
       ref={iframeRef}
+      inert={inert}
       className={`absolute inset-0 block border-0 bg-transparent align-middle size-full ${disablePointerEvents ? "pointer-events-none" : ""}`}
       title="Runtime Preview"
       sandbox={sandbox}
