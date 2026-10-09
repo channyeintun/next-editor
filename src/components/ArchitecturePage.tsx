@@ -1088,36 +1088,41 @@ export default function ArchitecturePage() {
             </svg>
           </div>
 
-          <div className="legend">
-            <div className="legend-item">
-              <span className="swatch solid" /> cloudflare-owned binding
-            </div>
-            <div className="legend-item">
-              <span className="swatch dash" /> external service
-            </div>
-            <div className="legend-item">
-              <span className="swatch arrow" /> data flow
-            </div>
-            <div className="legend-item">
-              <span className="swatch arrow dashed" /> external call
-            </div>
-            <div className="legend-item">
-              <span className="tagdot">#</span> see note
-            </div>
-          </div>
+          {/* role="list" is explicit because Safari drops list semantics
+              from lists styled with list-style:none (Tailwind preflight). */}
+          <ul className="legend" role="list">
+            <li className="legend-item">
+              <span className="swatch solid" aria-hidden="true" /> cloudflare-owned binding
+            </li>
+            <li className="legend-item">
+              <span className="swatch dash" aria-hidden="true" /> external service
+            </li>
+            <li className="legend-item">
+              <span className="swatch arrow" aria-hidden="true" /> data flow
+            </li>
+            <li className="legend-item">
+              <span className="swatch arrow dashed" aria-hidden="true" /> external call
+            </li>
+            <li className="legend-item">
+              <span className="tagdot" aria-hidden="true">
+                #
+              </span>{" "}
+              see note
+            </li>
+          </ul>
 
           <div className="notes">
             <h2>Notes</h2>
-            <div className="notes-grid">
+            <ol className="notes-grid" role="list">
               {notes.map((note) => (
-                <div className="note" key={note.n}>
+                <li className="note" key={note.n}>
                   <span className="n">{note.n}</span>
                   <span>
                     <b>{note.title} —</b> <span className="d">{note.detail}</span>
                   </span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
 
           <div className="build">
