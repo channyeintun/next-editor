@@ -273,7 +273,7 @@ export default function PlaylistCard({
                     onError: () => setDeleteError("Couldn't delete the playlist — try again."),
                   });
                 }}
-                className="rounded bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rose-400"
+                className="rounded bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rose-700"
               >
                 Delete
               </button>
