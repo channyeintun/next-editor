@@ -60,6 +60,40 @@ describe("PlaylistCard", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("returns focus to the options trigger when Escape closes the menu", () => {
+    renderCard();
+    const trigger = screen.getByRole("button", { name: "Playlist options" });
+    fireEvent.click(trigger);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("focuses Cancel in the delete confirmation and returns focus to the trigger", () => {
+    renderCard();
+    openMenuItem("Delete");
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+
+    fireEvent.click(cancel);
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Playlist options" })).toHaveFocus();
+  });
+
+  it("returns focus to the trigger when the rename is cancelled", () => {
+    renderCard();
+    openMenuItem("Rename");
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Playlist name" }), { key: "Escape" });
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Playlist options" })).toHaveFocus();
+  });
+
   it("names the rename field", () => {
     renderCard();
     openMenuItem("Rename");

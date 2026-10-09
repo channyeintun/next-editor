@@ -44,6 +44,8 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   const [titleError, setTitleError] = useState<string | null>(null);
   const titleErrorId = useId();
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const triggerRefocusPending = useRef(false);
 
   const publish = usePublishFromLibrary();
   const unpublish = useUnpublishLesson();
@@ -60,6 +62,31 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     updateName.isPending;
   const hasMutationError =
     publish.isError || unpublish.isError || del.isError || updateThumbnail.isError;
+
+  // Menu actions, the confirmations, the rename field and the playlist
+  // popover all unmount the control that had focus, which would drop focus to
+  // <body>. Each hands focus back to the options trigger instead. The trigger
+  // is disabled while a mutation is in flight (a publish, a saved rename) and
+  // focus() on a disabled button does nothing, so a request made while busy
+  // is honoured once the trigger is enabled again — unless the user has moved
+  // focus somewhere else in the meantime.
+  const focusTrigger = () => {
+    triggerRefocusPending.current = true;
+    triggerRef.current?.focus();
+  };
+
+  useEffect(() => {
+    if (!triggerRefocusPending.current || isBusy) return;
+    triggerRefocusPending.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      triggerRef.current?.focus();
+    }
+  });
+
+  const closeRename = () => {
+    setRenaming(false);
+    focusTrigger();
+  };
 
   const handleSelectThumbnail = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
@@ -100,14 +127,14 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
       return;
     }
     if (trimmed === lesson.title) {
-      setRenaming(false);
+      closeRename();
       return;
     }
     setTitleError(null);
     updateName.mutate(
       { lessonId: lesson.id, title: trimmed },
       {
-        onSuccess: () => setRenaming(false),
+        onSuccess: closeRename,
         onError: () => setTitleError("Couldn't update the lesson name — try again."),
       },
     );
@@ -116,7 +143,10 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   useEffect(() => {
     if (!menuOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -155,6 +185,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
 
         <div className="absolute right-2 top-2">
           <button
+            ref={triggerRef}
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
             disabled={isBusy}
@@ -189,6 +220,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                       setConfirming("unpublish");
                     } else {
                       publish.mutate(lesson.id);
+                      focusTrigger();
                     }
                   }}
                   className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
@@ -219,6 +251,9 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
+                    // Focus the trigger before the picker opens, so focus is on
+                    // it (not <body>) when the picker closes.
+                    triggerRef.current?.focus();
                     thumbnailInputRef.current?.click();
                   }}
                   className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
@@ -257,7 +292,13 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
           )}
 
           {addingToPlaylist && (
-            <AddToPlaylistPopover lesson={lesson} onClose={() => setAddingToPlaylist(false)} />
+            <AddToPlaylistPopover
+              lesson={lesson}
+              onClose={() => {
+                setAddingToPlaylist(false);
+                focusTrigger();
+              }}
+            />
           )}
         </div>
 
@@ -282,7 +323,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitRename();
-                if (e.key === "Escape") setRenaming(false);
+                if (e.key === "Escape") closeRename();
               }}
               maxLength={MAX_TITLE_CHARS}
               disabled={updateName.isPending}
@@ -300,7 +341,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
             <button
               type="button"
               aria-label="Cancel rename"
-              onClick={() => setRenaming(false)}
+              onClick={closeRename}
               disabled={updateName.isPending}
               className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
             >
@@ -355,7 +396,15 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
               will stop working. You can publish it again anytime.
             </p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirming(null)} className={ghostButton}>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setConfirming(null);
+                  focusTrigger();
+                }}
+                className={ghostButton}
+              >
                 Cancel
               </button>
               <button
@@ -363,6 +412,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                 onClick={() => {
                   setConfirming(null);
                   unpublish.mutate(lesson.id);
+                  focusTrigger();
                 }}
                 className={confirmButton}
               >
@@ -376,7 +426,15 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
               Delete this lesson permanently? This can’t be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirming(null)} className={ghostButton}>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setConfirming(null);
+                  focusTrigger();
+                }}
+                className={ghostButton}
+              >
                 Cancel
               </button>
               <button
@@ -384,6 +442,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                 onClick={() => {
                   setConfirming(null);
                   del.mutate(lesson.id);
+                  focusTrigger();
                 }}
                 className="rounded bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rose-400"
               >

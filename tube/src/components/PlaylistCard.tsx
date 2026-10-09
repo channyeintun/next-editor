@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Check, ListMusic, MoreVertical, Trash2, X } from "lucide-react";
 import {
@@ -38,6 +38,10 @@ export default function PlaylistCard({
   const [titleError, setTitleError] = useState<string | null>(null);
   const titleErrorId = useId();
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Menu actions, the delete confirmation and the rename field all unmount
+  // the control that had focus; each hands focus back to the options trigger
+  // so it does not drop to <body>.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const update = useUpdatePlaylist();
   const del = useDeletePlaylist();
@@ -45,13 +49,21 @@ export default function PlaylistCard({
   useEffect(() => {
     if (!menuOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
   const href = `/learn/playlist/${playlist.slug}`;
+
+  const closeRename = () => {
+    setRenaming(false);
+    triggerRef.current?.focus();
+  };
 
   const submitRename = () => {
     const trimmed = titleValue.trim();
@@ -60,14 +72,14 @@ export default function PlaylistCard({
       return;
     }
     if (trimmed === playlist.title) {
-      setRenaming(false);
+      closeRename();
       return;
     }
     setTitleError(null);
     update.mutate(
       { playlistId: playlist.id, title: trimmed },
       {
-        onSuccess: () => setRenaming(false),
+        onSuccess: closeRename,
         onError: () => setTitleError("Couldn't rename the playlist — try again."),
       },
     );
@@ -103,6 +115,7 @@ export default function PlaylistCard({
 
         <div className="absolute right-2 top-2">
           <button
+            ref={triggerRef}
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             aria-label="Playlist options"
@@ -182,7 +195,7 @@ export default function PlaylistCard({
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitRename();
-                if (e.key === "Escape") setRenaming(false);
+                if (e.key === "Escape") closeRename();
               }}
               maxLength={MAX_TITLE_CHARS}
               disabled={update.isPending}
@@ -200,7 +213,7 @@ export default function PlaylistCard({
             <button
               type="button"
               aria-label="Cancel rename"
-              onClick={() => setRenaming(false)}
+              onClick={closeRename}
               disabled={update.isPending}
               className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
             >
@@ -235,7 +248,15 @@ export default function PlaylistCard({
               Delete this playlist permanently? This can't be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirming(null)} className={ghostButton}>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setConfirming(null);
+                  triggerRef.current?.focus();
+                }}
+                className={ghostButton}
+              >
                 Cancel
               </button>
               <button
@@ -243,6 +264,7 @@ export default function PlaylistCard({
                 onClick={() => {
                   setConfirming(null);
                   setDeleteError(null);
+                  triggerRef.current?.focus();
                   del.mutate(playlist.id, {
                     onSuccess: onDeleted,
                     onError: () => setDeleteError("Couldn't delete the playlist — try again."),

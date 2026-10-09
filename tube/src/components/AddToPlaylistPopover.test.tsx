@@ -85,6 +85,12 @@ describe("AddToPlaylistPopover", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("moves focus into the popover when it opens", () => {
+    render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
+
+    expect(screen.getByRole("dialog", { name: "Add to playlist" })).toHaveFocus();
+  });
+
   it("caps a new playlist's name at the Worker's limit", () => {
     render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
 

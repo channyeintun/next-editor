@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { OwnedLesson } from "@next-editor/infra";
@@ -25,6 +25,10 @@ vi.mock("@next-editor/infra", async () => {
       isPending: rename.isPending,
       isError: false,
     }),
+    usePlaylistsForLesson: () => ({ data: [], isPending: false, isError: false }),
+    useCreatePlaylist: idleMutation,
+    useAddLessonToPlaylist: idleMutation,
+    useRemoveLessonFromPlaylist: idleMutation,
   };
 });
 
@@ -51,10 +55,14 @@ function card() {
   );
 }
 
+function openMenuItem(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Lesson options" }));
+  fireEvent.click(screen.getByRole("menuitem", { name }));
+}
+
 function startRename() {
   const view = render(card());
-  fireEvent.click(screen.getByRole("button", { name: "Lesson options" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Update lesson name" }));
+  openMenuItem("Update lesson name");
   return view;
 }
 
@@ -74,6 +82,82 @@ describe("MyLessonCard", () => {
 
     fireEvent.click(backdrop);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the options trigger when Escape closes the menu", () => {
+    render(card());
+    const trigger = screen.getByRole("button", { name: "Lesson options" });
+    fireEvent.click(trigger);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("focuses Cancel in the delete confirmation and returns focus to the trigger", () => {
+    render(card());
+    openMenuItem("Delete");
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+
+    fireEvent.click(cancel);
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lesson options" })).toHaveFocus();
+  });
+
+  it("focuses Cancel in the unpublish confirmation", () => {
+    render(card());
+    openMenuItem("Unpublish");
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
+  it("moves focus into the playlist popover and back to the trigger when it closes", () => {
+    render(card());
+    openMenuItem("Add to playlist");
+
+    expect(screen.getByRole("dialog", { name: "Add to playlist" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lesson options" })).toHaveFocus();
+  });
+
+  it("returns focus to the trigger when the rename is cancelled", () => {
+    startRename();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel rename" }));
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lesson options" })).toHaveFocus();
+  });
+
+  it("returns focus to the trigger once a saved rename settles", () => {
+    let settle: (() => void) | undefined;
+    rename.mutate.mockImplementation((_variables, options) => {
+      settle = options?.onSuccess;
+    });
+    const view = startRename();
+    fireEvent.change(screen.getByRole("textbox", { name: "Lesson name" }), {
+      target: { value: "Renamed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save lesson name" }));
+    rename.isPending = true;
+    view.rerender(card());
+    const trigger = screen.getByRole("button", { name: "Lesson options" });
+    expect(trigger).toBeDisabled();
+
+    act(() => settle?.());
+    expect(trigger).not.toHaveFocus();
+
+    rename.isPending = false;
+    view.rerender(card());
+
+    expect(trigger).toHaveFocus();
   });
 
   it("names the rename field", () => {

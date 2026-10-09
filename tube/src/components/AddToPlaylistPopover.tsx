@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import {
   MAX_TITLE_CHARS,
@@ -33,6 +33,7 @@ export default function AddToPlaylistPopover({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const { data: playlists, isPending, isError } = usePlaylistsForLesson(lesson.id);
   const createPlaylist = useCreatePlaylist();
@@ -45,6 +46,13 @@ export default function AddToPlaylistPopover({
     showFilter && trimmedFilter
       ? playlists?.filter((p) => p.title.toLowerCase().includes(trimmedFilter))
       : playlists;
+
+  // The menu item that opened the popover has just unmounted. Move focus into
+  // the popover so keyboard and screen-reader users land in it, unless the
+  // filter's autoFocus has already put focus there.
+  useEffect(() => {
+    if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
+  }, []);
 
   // Escape backs out one layer at a time: cancel the quick-create sub-form
   // first, then clear an active filter, and only then close the whole
@@ -116,8 +124,10 @@ export default function AddToPlaylistPopover({
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-label="Add to playlist"
+        tabIndex={-1}
         className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] text-left shadow-xl"
       >
         <div className="border-b border-white/10 px-4 py-2.5">
