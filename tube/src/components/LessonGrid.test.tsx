@@ -183,3 +183,28 @@ describe("LessonGrid status messages", () => {
     expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
   });
 });
+
+describe("LessonGrid clear search", () => {
+  it("returns focus to the search field when Clear search removes itself", () => {
+    gallery = galleryState({ isPending: true });
+    render(<LessonGrid />);
+    typeQuery("rust");
+
+    const clear = screen.getByRole("button", { name: "Clear search" });
+    clear.focus();
+    fireEvent.click(clear);
+
+    const field = screen.getByRole("textbox", { name: "Search authors and lessons" });
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+    expect(field).toHaveValue("");
+    expect(field).toHaveFocus();
+
+    // The debounced query then empties and the gallery branch takes over; the
+    // field is the same element, so it keeps focus.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.queryByText("results for rust")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search authors and lessons" })).toHaveFocus();
+  });
+});
