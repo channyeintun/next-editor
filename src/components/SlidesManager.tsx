@@ -212,9 +212,12 @@ function getPreviewText(slide: Slide, index: number): string {
 function GoogleSlidesImport({
   slides,
   onSlidesChange,
+  onRemove,
 }: {
   slides: Slide[];
   onSlidesChange: (slides: Slide[]) => void;
+  /** Takes the deck left once the imported slides are removed, and offers an undo. */
+  onRemove: (remaining: Slide[]) => void;
 }) {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -253,7 +256,7 @@ function GoogleSlidesImport({
   };
 
   const removeDeck = () => {
-    onSlidesChange(
+    onRemove(
       slides
         .filter((slide) => slide.contentType !== "google-svg")
         .map((slide, index) => ({ ...slide, order: index })),
@@ -465,6 +468,25 @@ export default function SlidesManager({
   const [editContent, setEditContent] = useState("");
   const [editBackground, setEditBackground] = useState<string | undefined>(undefined);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // The deck before the last removal, and the deck that removal left.
+  const [undo, setUndo] = useState<{ before: Slide[]; after: Slide[] } | null>(null);
+  // Undo is offered only while the deck is still exactly what the removal left: any later
+  // change (an add, edit, move, import, or one made elsewhere) retires it, so restoring
+  // can never throw away newer work.
+  const undoSlides = undo?.after === slides ? undo.before : null;
+  const removedCount = undoSlides ? undoSlides.length - slides.length : 0;
+
+  /** Saves a deck with slides taken out, keeping the one before it for Undo. */
+  const removeSlides = (remaining: Slide[]) => {
+    setUndo({ before: slides, after: remaining });
+    onSlidesChange(remaining);
+  };
+
+  const undoRemoval = () => {
+    if (!undoSlides) return;
+    setUndo(null);
+    onSlidesChange(undoSlides);
+  };
 
   const addSlide = ({ content, contentType, background }: NewSlide) => {
     const newSlide: Slide = {
@@ -482,7 +504,7 @@ export default function SlidesManager({
     const updatedSlides = slides
       .filter((slide) => slide.id !== slideId)
       .map((slide, index) => ({ ...slide, order: index }));
-    onSlidesChange(updatedSlides);
+    removeSlides(updatedSlides);
   };
 
   const moveSlide = (slideId: string, direction: "up" | "down") => {
@@ -575,7 +597,11 @@ export default function SlidesManager({
 
       <div className="editor-scrollbar flex-1 space-y-5 overflow-y-auto p-5">
         {/* Import from Google Slides */}
-        <GoogleSlidesImport slides={slides} onSlidesChange={onSlidesChange} />
+        <GoogleSlidesImport
+          slides={slides}
+          onSlidesChange={onSlidesChange}
+          onRemove={removeSlides}
+        />
 
         {/* Add Section */}
         <NewSlideForm onCreate={addSlide} />
@@ -589,6 +615,23 @@ export default function SlidesManager({
             <span className="rounded-full border border-slate-700 bg-[#1d1f29] px-2 py-0.5 text-[10px] text-slate-400">
               {slides.length} {slides.length === 1 ? "slide" : "slides"}
             </span>
+          </div>
+
+          {/* Always mounted, so the message is announced when it appears. Empty, it takes
+              no space: its margins collapse into the heading row's. */}
+          <div role="status">
+            {undoSlides && (
+              <div className="flex items-center justify-between rounded-md border border-slate-700 bg-[#11141c] px-3 py-1.5 text-xs text-slate-300">
+                {removedCount} {removedCount === 1 ? "slide" : "slides"} removed
+                <button
+                  type="button"
+                  onClick={undoRemoval}
+                  className="font-semibold text-cyan-300 hover:underline"
+                >
+                  Undo
+                </button>
+              </div>
+            )}
           </div>
 
           {slides.length === 0 ? (

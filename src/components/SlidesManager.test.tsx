@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Slide } from "../types/slides";
 import SlidesManager from "./SlidesManager";
@@ -19,6 +20,27 @@ function renderManager(slides: Slide[]) {
       onClose={() => {}}
     />,
   );
+  return emitted;
+}
+
+/** Like renderManager, but feeds each emitted deck back in, as the slides store does. */
+function renderLiveManager(initial: Slide[]) {
+  const emitted: Slide[][] = [];
+  function LiveManager() {
+    const [slides, setSlides] = useState(initial);
+    return (
+      <SlidesManager
+        slides={slides}
+        onSlidesChange={(next) => {
+          emitted.push(next);
+          setSlides(next);
+        }}
+        onStartPresentation={() => {}}
+        onClose={() => {}}
+      />
+    );
+  }
+  render(<LiveManager />);
   return emitted;
 }
 
@@ -241,6 +263,56 @@ describe("SlidesManager", () => {
 
     fireEvent.click(screen.getByLabelText("Texture 1"));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("undoes a slide deletion", () => {
+    const given = [slide("a", 0), slide("b", 1)];
+    const emitted = renderLiveManager(given);
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+
+    expect(emitted).toEqual([[slide("b", 0)]]);
+    expect(status).toHaveTextContent("1 slide removed");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(emitted.at(-1)).toBe(given);
+    expect(status).toBeEmptyDOMElement();
+    expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(2);
+  });
+
+  it("undoes removing an imported deck, bringing back its link", () => {
+    const deckSlide = (id: string, order: number): Slide => ({
+      id,
+      content: "<svg></svg>",
+      contentType: "google-svg",
+      order,
+      sourceUrl: "https://docs.google.com/presentation/d/e/x/pub",
+    });
+    const given = [deckSlide("g1", 0), slide("a", 1), deckSlide("g2", 2)];
+    const emitted = renderLiveManager(given);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove deck" }));
+
+    expect(emitted).toEqual([[slide("a", 0)]]);
+    expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("2 slides removed");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(emitted.at(-1)).toBe(given);
+    expect(screen.getByRole("button", { name: "Update" })).toBeInTheDocument();
+  });
+
+  it("stops offering Undo once the deck changes again", () => {
+    renderLiveManager([slide("a", 0), slide("b", 1)]);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Create Slide"));
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("does not open an imported Google slide for editing", () => {
