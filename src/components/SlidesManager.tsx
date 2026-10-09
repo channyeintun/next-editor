@@ -667,8 +667,8 @@ export default function SlidesManager({
                           </p>
                         </div>
 
-                        {/* Right: Actions */}
-                        <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                        {/* Right: Actions (revealed on hover, and whenever focus is in the card) */}
+                        <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 sm:group-focus-within:opacity-100">
                           <button
                             type="button"
                             onClick={() => moveSlide(slide.id, "up")}
