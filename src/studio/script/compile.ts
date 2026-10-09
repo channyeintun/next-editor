@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import {
   POINTER_AIM_MAX_MS,
   POINTER_PRESS_MS,
@@ -10,6 +11,7 @@ import {
   type StudioPlan,
   type StudioSlide,
   type StudioTargetRef,
+  type studioPlanActionSchema,
 } from "../plan";
 import { STUDIO_DOCK_TOGGLE_TARGET_ID } from "../targets";
 import {
@@ -71,9 +73,15 @@ export interface CompileOutput {
   warnings: string[];
 }
 
+/**
+ * A plan action as `parseStudioPlan` takes it, before its defaults apply. Typing
+ * the assembled list with it makes a misspelt or missing field a type error
+ * instead of a silent plan default.
+ */
+type StudioPlanActionInput = z.input<typeof studioPlanActionSchema>;
+
 interface TimedAction {
   action: ScriptAction;
-  sceneId: string;
   at: number;
   /**
    * Position in scene/action authoring order. Two actions can resolve to the same
@@ -191,7 +199,7 @@ export function compileLessonScript({
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       const anchor = action.at;
-      const entry = { action, sceneId: scene.id, at: Number.NaN, authoredIndex };
+      const entry = { action, at: Number.NaN, authoredIndex };
       authoredIndex += 1;
       if ("mark" in anchor) {
         const marker = requireMarker(extracted, anchor.mark);
@@ -343,7 +351,7 @@ export function compileLessonScript({
   }
 
   // ---- Assemble the plan ---------------------------------------------------
-  const planActions = [
+  const planActions: StudioPlanActionInput[] = [
     ...dockOpenings.map((opening) => ({
       id: opening.id,
       type: "runtime.expandDock" as const,
@@ -359,17 +367,8 @@ export function compileLessonScript({
       durationMs: move.durationMs,
       press: true,
     })),
-    ...authored.map((entry) => {
-      const { action, at } = entry;
+    ...authored.map(({ action, at }): StudioPlanActionInput => {
       switch (action.type) {
-        case "workspace.openFile":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            path: action.path,
-          };
         case "editor.type":
           return {
             id: action.id,
@@ -399,119 +398,12 @@ export function compileLessonScript({
             target: action.target,
             durationMs: pointDurationOf(action),
           };
-        case "runtime.run":
-        case "runtime.collapseDock":
-          return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
-        case "runtime.start":
-        case "runtime.waitForReady":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            retry: action.retry,
-          };
-        case "preview.open":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            mode: action.mode,
-            retry: action.retry,
-          };
-        case "preview.click":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            target: action.target,
-            retry: action.retry,
-          };
-        case "preview.input":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            target: action.target,
-            value: action.value,
-            retry: action.retry,
-          };
-        case "preview.scroll":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            target: action.target,
-            top: action.top,
-            left: action.left,
-            retry: action.retry,
-          };
-        case "preview.route":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            route: action.route,
-            retry: action.retry,
-          };
-        case "slide.show":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            slideId: action.slideId,
-            maximized: action.maximized,
-          };
-        case "slide.close":
-          return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
-        case "whiteboard.apply":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            open: action.open,
-            maximized: action.maximized,
-            upsertIds: action.upsertIds,
-            clear: action.clear,
-            drawMs: action.drawMs,
-          };
-        case "expect.output":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            contains: action.contains,
-          };
-        case "expect.file":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            path: action.path,
-            contains: action.contains,
-          };
-        case "expect.preview":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            target: action.target,
-            textContains: action.textContains,
-            value: action.value,
-            route: action.route,
-            attribute: action.attribute,
-            retry: action.retry,
-          };
+        default: {
+          // Every other action carries its authored fields into the plan as
+          // they are; only the narration anchor becomes an absolute time.
+          const { at: _anchor, ...fields } = action;
+          return { ...fields, at };
+        }
       }
     }),
   ].sort((left, right) => {

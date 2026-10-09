@@ -587,6 +587,36 @@ describe("multi-surface pilot (go-cube-tour)", () => {
     expect(plan.runtime.fixture.transientErrorKinds).toEqual(["unavailable"]);
   });
 
+  // Every action type but typing, selecting and pointing carries its authored
+  // fields into the plan unchanged. A field dropped on the way would not fail:
+  // the plan schema would quietly fill in its default instead.
+  it("carries every authored field of a passthrough action into the plan", () => {
+    const tour = loadTourScript();
+    const board = tour.scenes
+      .flatMap((scene) => scene.actions)
+      .find((action) => action.id === "open-board");
+    if (board?.type !== "whiteboard.apply") throw new Error("tour lost its board action");
+    // Off-default values, so a field that fell back to its default would show.
+    board.maximized = false;
+    board.clear = true;
+    board.drawMs = 250;
+    const preview = parseLessonScript(
+      YAML.parse(
+        readFileSync(resolve(__dirname, "./__fixtures__/typescript-vite-preview.yaml"), "utf8"),
+      ),
+    );
+
+    for (const script of [tour, preview]) {
+      const { plan } = compileLessonScript(scheduledInputFor(script));
+      for (const action of script.scenes.flatMap((scene) => scene.actions)) {
+        if (["editor.type", "editor.select", "console.point"].includes(action.type)) continue;
+        const compiled = plan.actions.find((candidate) => candidate.id === action.id);
+        const { at: _anchor, ...authored } = action;
+        expect(compiled).toEqual({ ...authored, at: compiled?.at });
+      }
+    }
+  });
+
   it("rejects a slide.show for an unpinned slide", () => {
     const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
     raw.scenes[0].actions[0].slideId = "ghost";
