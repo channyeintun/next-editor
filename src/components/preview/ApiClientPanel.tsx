@@ -197,7 +197,7 @@ export default function ApiClientPanel({
           onClick={onSend}
           disabled={!canSend}
           title={runtimeReady ? undefined : "Waiting for the server to start"}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-600 px-3 font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-700 px-3 font-semibold text-white transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           Send
