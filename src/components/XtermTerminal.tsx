@@ -20,6 +20,8 @@ interface XtermTerminalProps {
    * announce itself as xterm's "Terminal input".
    */
   label: string;
+  /** The id of text that tells the user how to leave the interactive shell. */
+  describedBy?: string;
   shouldFocus?: boolean;
   scrollLine?: number;
   /**
@@ -65,6 +67,9 @@ const PASSIVE_TERMINAL_THEME = {
   cursorAccent: "transparent",
 } as const;
 
+/** Keys held down on the way to a chord; they keep a pending Escape alive. */
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
+
 type TerminalStyle = CSSProperties & {
   "--terminal-background"?: string;
 };
@@ -74,6 +79,7 @@ function XtermTerminal({
   sessionId,
   interactive,
   label,
+  describedBy,
   shouldFocus = false,
   scrollLine,
   keepScrolledOffOutput = false,
@@ -137,6 +143,29 @@ function XtermTerminal({
     terminal.open(container);
     if (!interactive) {
       terminal.textarea?.setAttribute("aria-label", label);
+    }
+    // xterm keeps Tab and Shift+Tab for the shell, which traps keyboard focus.
+    // Returning false hands a key back to the browser: a passive output lets
+    // Tab move focus at once, and the shell lets it after an Escape, so Tab
+    // still completes commands.
+    let leaveOnTab = false;
+    terminal.attachCustomKeyEventHandler((event) => {
+      const isPlainTab = event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey;
+      if (!interactive) {
+        return !isPlainTab;
+      }
+      if (event.type !== "keydown" || MODIFIER_KEYS.has(event.key)) {
+        return true;
+      }
+      if (isPlainTab && leaveOnTab) {
+        leaveOnTab = false;
+        return false;
+      }
+      leaveOnTab = event.key === "Escape";
+      return true;
+    });
+    if (describedBy) {
+      terminal.textarea?.setAttribute("aria-describedby", describedBy);
     }
     updateSize();
 

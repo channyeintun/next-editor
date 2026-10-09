@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   Bot,
@@ -154,6 +154,7 @@ function TerminalPanel() {
   const setIsSettingsOpen = (open: boolean) =>
     runtimePanelStore.trigger.setIsSettingsOpen({ open });
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
+  const terminalExitHintId = useId();
   const { handleRuntimeEvent } = useNextEditorActions();
   const {
     closeTerminalSession,
@@ -614,6 +615,7 @@ function TerminalPanel() {
                     output={effectiveTerminalOutput || ""}
                     interactive={!isPlaybackSnapshotActive}
                     label="Terminal"
+                    describedBy={terminalExitHintId}
                     shouldFocus={!isPlaybackSnapshotActive && displayActiveTab === "terminal"}
                     scrollLine={
                       isPlaybackSnapshotActive && effectiveActiveTerminalSessionId
@@ -636,7 +638,10 @@ function TerminalPanel() {
                     }
                   />
                 </div>
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p id={terminalExitHintId} className="font-mono text-[11px] text-slate-300">
+                    Press Esc, then Tab, to leave the terminal
+                  </p>
                   <button
                     type="button"
                     disabled={isPlaybackSnapshotActive || !effectiveActiveTerminalSessionId}
