@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import {
+  DEFAULT_FILE_SIDEBAR_WIDTH,
   FILE_SIDEBAR_KEYBOARD_LARGE_STEP,
   FILE_SIDEBAR_KEYBOARD_STEP,
   getClampedFileSidebarWidth,
@@ -32,6 +33,17 @@ function renderHandle(width = 280) {
 }
 
 const clamp = (width: number) => getClampedFileSidebarWidth(width, window.innerWidth);
+/** The preset a click steps to from the 280px test width: 360px, if it fits. */
+const nextPresetFrom280 = () => clamp(Math.min(360, getFileSidebarMaxWidth(window.innerWidth)));
+
+/** Presses and releases the primary button on the handle, `drift` px apart. */
+function click(handle: HTMLElement, drift = 0) {
+  fireEvent.pointerDown(handle, { button: 0, clientX: 300, pointerId: 1 });
+  if (drift) {
+    fireEvent.pointerMove(window, { clientX: 300 + drift });
+  }
+  fireEvent.pointerUp(window, { clientX: 300 + drift });
+}
 
 describe("SidebarResizeHandle", () => {
   it("describes the width as a focusable vertical separator", () => {
@@ -45,6 +57,7 @@ describe("SidebarResizeHandle", () => {
     );
     expect(handle()).toHaveAttribute("aria-valuenow", "280");
     expect(handle()).toHaveAttribute("tabindex", "0");
+    expect(handle()).toHaveAccessibleDescription("Drag, click, or use the arrow keys to resize");
   });
 
   it("steps the width with the arrow keys, Home and End", () => {
@@ -92,6 +105,50 @@ describe("SidebarResizeHandle", () => {
 
     fireEvent.pointerMove(window, { clientX: 400 });
     expect(onWidthChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("steps to the next preset width on a click, so resizing never needs a drag", () => {
+    const { handle, onWidthChange, container } = renderHandle(280);
+
+    click(handle());
+
+    expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(nextPresetFrom280());
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(document.body.style.cursor).toBe("");
+  });
+
+  it("steps up from the narrowest width and wraps back to it from the widest", () => {
+    const narrowest = renderHandle(MIN_FILE_SIDEBAR_WIDTH);
+    click(narrowest.handle());
+    expect(narrowest.onWidthChange).toHaveBeenCalledExactlyOnceWith(
+      clamp(DEFAULT_FILE_SIDEBAR_WIDTH),
+    );
+    narrowest.unmount();
+
+    const widest = renderHandle(getFileSidebarMaxWidth(window.innerWidth));
+    click(widest.handle());
+    expect(widest.onWidthChange).toHaveBeenCalledExactlyOnceWith(clamp(MIN_FILE_SIDEBAR_WIDTH));
+  });
+
+  it("treats a press that wanders less than 4px as a click, and a longer one as a drag", () => {
+    const jitter = renderHandle(280);
+    click(jitter.handle(), 3);
+    // The 3px follow, then the step that replaces it.
+    expect(jitter.onWidthChange.mock.calls).toEqual([[clamp(283)], [nextPresetFrom280()]]);
+    jitter.unmount();
+
+    const drag = renderHandle(280);
+    click(drag.handle(), 4);
+    expect(drag.onWidthChange.mock.calls).toEqual([[clamp(284)]]);
+  });
+
+  it("does not step when the press is cancelled", () => {
+    const { handle, onWidthChange } = renderHandle(280);
+
+    fireEvent.pointerDown(handle(), { button: 0, clientX: 300, pointerId: 1 });
+    fireEvent.pointerCancel(window, { clientX: 300 });
+
+    expect(onWidthChange).not.toHaveBeenCalled();
   });
 
   it("keeps the width in bounds when the window resizes", () => {

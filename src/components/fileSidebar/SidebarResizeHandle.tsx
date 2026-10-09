@@ -14,8 +14,24 @@ interface SidebarResizeHandleProps {
   onWidthChange: (width: number) => void;
 }
 
+/** How far a press may wander and still count as a click rather than a drag. */
+const CLICK_MOVE_TOLERANCE = 4;
+
+/**
+ * The width a click on the handle steps to: the next preset wider than
+ * `width`, wrapping back to the narrowest after the widest that fits.
+ */
+function getNextPresetWidth(width: number, viewportWidth: number): number {
+  const max = getFileSidebarMaxWidth(viewportWidth);
+  const presets = [MIN_FILE_SIDEBAR_WIDTH, DEFAULT_FILE_SIDEBAR_WIDTH, 360, max]
+    .filter((preset, index, all) => preset <= max && all.indexOf(preset) === index)
+    .sort((a, b) => a - b);
+  return presets.find((preset) => preset > width + 1) ?? presets[0];
+}
+
 /**
  * The file sidebar's width: the drag handle on its right edge (pointer drag,
+ * a click that steps through preset widths so dragging is never required,
  * arrow keys, Home and End), and keeping the width in bounds as the window
  * resizes.
  */
@@ -25,6 +41,7 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
     y: 0,
     width: DEFAULT_FILE_SIDEBAR_WIDTH,
   });
+  const movedRef = useRef(false);
   const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
@@ -51,6 +68,9 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
 
     const handlePointerMove = (event: PointerEvent) => {
       const dragOffset = event.clientX - resizeStartRef.current.x;
+      if (Math.abs(dragOffset) >= CLICK_MOVE_TOLERANCE) {
+        movedRef.current = true;
+      }
       const nextWidth = resizeStartRef.current.width + dragOffset;
       onWidthChange(getClampedFileSidebarWidth(nextWidth, window.innerWidth));
       dispatchRecordedCursorVisibility({
@@ -66,6 +86,13 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
         y: event.clientY,
         visible: true,
       });
+      // A press released without dragging steps to the next preset width, so
+      // a single click or tap can resize the sidebar. The start width is read
+      // from the ref because this listener does not track `width`.
+      if (event.type === "pointerup" && !movedRef.current) {
+        const nextWidth = getNextPresetWidth(resizeStartRef.current.width, window.innerWidth);
+        onWidthChange(getClampedFileSidebarWidth(nextWidth, window.innerWidth));
+      }
       setIsResizing(false);
     };
 
@@ -89,6 +116,7 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
 
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    movedRef.current = false;
     resizeStartRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -142,6 +170,7 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
           typeof window === "undefined" ? undefined : window.innerWidth,
         )}
         aria-valuenow={Math.round(width)}
+        title="Drag, click, or use the arrow keys to resize"
         tabIndex={0}
         onPointerDown={handlePointerDown}
         onKeyDown={handleKeyDown}
