@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { PropsWithChildren } from "react";
+import { useState, type PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import RecordingEditPanel from "./RecordingEditPanel";
 import { NextEditorProvider } from "../contexts/NextEditorProvider";
@@ -170,6 +170,46 @@ describe("RecordingEditPanel", () => {
     // Cut is disabled again with no selection, so focus goes back to the start edge.
     expect(cut).toBeDisabled();
     expect(screen.getByRole("button", { name: "Start at playhead" })).toHaveFocus();
+  });
+
+  it("takes focus when it opens and gives it back to the opener when it closes", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Edit
+          </button>
+          {open ? (
+            <RecordingEditPanel
+              recording={take}
+              onClose={() => setOpen(false)}
+              onApplied={() => {}}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    render(
+      <Providers>
+        <Harness />
+      </Providers>,
+    );
+    const opener = screen.getByRole("button", { name: "Edit" });
+    opener.focus();
+    fireEvent.click(opener);
+
+    // The panel comes before its opener in the page, so Tab alone would never reach it.
+    expect(screen.getByRole("dialog", { name: "Edit recording" })).toHaveFocus();
+    await screen.findByText(/No narration/);
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    fireEvent.click(cancel);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 
   it("says while it reads the narration, and when it cannot", async () => {

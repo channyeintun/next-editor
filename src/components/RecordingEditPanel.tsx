@@ -171,6 +171,7 @@ export default function RecordingEditPanel({
   const [narrationState, setNarrationState] = useState<NarrationState>("loading");
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ startX: number; startTime: number } | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -180,6 +181,19 @@ export default function RecordingEditPanel({
   const cuts = normalizeMediaSpans(edits.filter((edit) => edit.kind === "cut"));
   const mutes = normalizeMediaSpans(edits.filter((edit) => edit.kind === "mute"));
   const removedMs = cuts.reduce((total, cut) => total + (cut.end - cut.start), 0);
+
+  // The panel is rendered before the player bar that opens it, so Tab from the opener
+  // would never reach it: focus moves into it on open. Closing unmounts the focused
+  // control, so focus goes back to the opener, but only when it was lost with the panel
+  // (never taken from the editor or anything else focused since).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    return () => {
+      const active = document.activeElement;
+      if ((active === null || active === document.body) && opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,8 +322,10 @@ export default function RecordingEditPanel({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label="Edit recording"
+      tabIndex={-1}
       className="pointer-events-auto absolute bottom-full left-0 z-46 mb-2 w-full rounded-lg border border-slate-700 bg-[#151821] p-3 text-sm text-slate-200 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
     >
       <div className="mb-2 flex items-center gap-2">
