@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { playlistKeys } from "../../lessons/queryKeys";
 import {
   addLessonToPlaylist,
   createPlaylist,
@@ -11,48 +12,47 @@ import {
   updatePlaylist,
 } from "./playlistsApi";
 
-const MY_PLAYLISTS_QUERY_KEY = ["playlists", "mine"] as const;
-
 export function useMyPlaylists() {
   return useQuery({
-    queryKey: MY_PLAYLISTS_QUERY_KEY,
+    queryKey: playlistKeys.mine,
     queryFn: fetchMyPlaylists,
   });
 }
 
-// Backs the "Add to playlist" popover on a lesson card. Same "playlists"
-// prefix as MY_PLAYLISTS_QUERY_KEY, so any mutation below invalidates it too.
+// Backs the "Add to playlist" popover on a lesson card. Under the same
+// playlistKeys.all prefix as playlistKeys.mine, so any mutation below
+// invalidates it too.
 export function usePlaylistsForLesson(lessonId: string | undefined) {
   return useQuery({
-    queryKey: ["playlists", "mine", "for-lesson", lessonId],
+    queryKey: playlistKeys.forLesson(lessonId),
     queryFn: () => fetchMyPlaylistsForLesson(lessonId!),
     enabled: !!lessonId,
   });
 }
 
 // Owner-scoped membership (all members, including unpublished) for the
-// manage panel. Same "playlists" prefix, so every mutation below invalidates
+// manage panel. Same playlistKeys.all prefix, so every mutation below invalidates
 // it, and so do the lessons mutations in useMyLessons.ts (a member's published
 // status changes there). staleTime 0 (not the app default of Infinity) still
 // refetches each time the panel opens, so it never shows a list from an
 // earlier open.
 export function usePlaylistLessons(playlistId: string | undefined) {
   return useQuery({
-    queryKey: ["playlists", "members", playlistId],
+    queryKey: playlistKeys.members(playlistId),
     queryFn: () => fetchPlaylistLessons(playlistId!),
     enabled: !!playlistId,
     staleTime: 0,
   });
 }
 
-// Invalidates every query keyed under "playlists" (React Query matches by
-// key prefix), not just MY_PLAYLISTS_QUERY_KEY — the My Library management
+// Invalidates every query keyed under playlistKeys.all (React Query matches
+// by key prefix), not just playlistKeys.mine — the My Library management
 // panel also reads a specific playlist's current membership via tube's
-// usePlaylist(slug) (key ["playlists", "detail", slug]), and the
-// add-to-playlist popover reads usePlaylistsForLesson (key ["playlists",
-// "mine", "for-lesson", lessonId]), all sharing the same QueryClient. A
-// narrowly-scoped invalidation would need threading the slug/lessonId
-// through every mutation; invalidating the whole "playlists" prefix is
+// usePlaylist(slug) (playlistKeys.detail), and the add-to-playlist popover
+// reads usePlaylistsForLesson (playlistKeys.forLesson), all sharing the same
+// QueryClient; lessons/queryKeys.ts keeps every one of them under that
+// prefix. A narrowly-scoped invalidation would need threading the
+// slug/lessonId through every mutation; invalidating the whole prefix is
 // simpler and cheap at this scale. TData is preserved (not widened to
 // unknown) so callers like useCreatePlaylist can chain off the created row.
 function useMyPlaylistsMutation<TVariables, TData>(
@@ -61,7 +61,7 @@ function useMyPlaylistsMutation<TVariables, TData>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["playlists"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: playlistKeys.all }),
   });
 }
 

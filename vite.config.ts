@@ -158,6 +158,9 @@ export default ({ mode }: { mode: string }) => {
         // infra/db/** is plain SQL-building logic against the D1 interface, so it
         // runs here rather than in the Workers-runtime suite.
         "infra/db/**/*.{test,spec}.{ts,tsx}",
+        // infra/lessons/** holds the lesson rules the client and the Worker share,
+        // plain logic with no runtime of its own.
+        "infra/lessons/**/*.{test,spec}.{ts,tsx}",
       ],
       alias: {
         // y-monaco imports Monaco's deep editor API entrypoint. Keep it inline

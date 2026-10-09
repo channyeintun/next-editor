@@ -5,22 +5,8 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { lessonDetailQueryKey } from "@app/shared/serverQueryState";
+import { lessonKeys, primeLessonDetails } from "../../../infra/lessons/queryKeys";
 import { fetchLessonsPage, findLessonBySlug } from "../lib/lessons";
-import type { Lesson } from "../types";
-
-/**
- * Seed the detail cache from a list that already carries whole Lesson objects.
- * Every card in the gallery or a playlist holds exactly what the detail route
- * asks for, so clicking one should resolve from cache rather than re-fetching
- * the row the list just downloaded. Called from the list query functions (not
- * during render) so it covers every card without per-card wiring.
- */
-export function primeLessonDetails(queryClient: QueryClient, lessons: readonly Lesson[]): void {
-  for (const lesson of lessons) {
-    queryClient.setQueryData(lessonDetailQueryKey(lesson.slug), lesson);
-  }
-}
 
 // Paginated lesson gallery: D1-backed user-published lessons newest first, with
 // the bundled seed appended to the last page (see lib/lessons.ts). Overrides the queryClient-wide
@@ -33,7 +19,7 @@ export function primeLessonDetails(queryClient: QueryClient, lessons: readonly L
 // the grid would fetch page 0 a second time.
 export function lessonsInfiniteQueryOptions(queryClient: QueryClient) {
   return infiniteQueryOptions({
-    queryKey: ["lessons", "infinite"],
+    queryKey: lessonKeys.infinite,
     queryFn: async ({ pageParam }) => {
       const page = await fetchLessonsPage(pageParam);
       primeLessonDetails(queryClient, page.lessons);
@@ -56,13 +42,13 @@ export function useLessonsInfinite() {
 // Same live-data override as useLessonsInfinite above.
 //
 // Two paths keep this from fetching at all: an in-app navigation from a list
-// (primed above), and a direct visit to a URL the Worker server-rendered
-// (dehydrated into the cache before the first render — see
+// (primed by primeLessonDetails), and a direct visit to a URL the Worker
+// server-rendered (dehydrated into the cache before the first render — see
 // hydrateServerQueryState in src/queryClient.ts). The fetch below is the
 // fallback for everything else.
 export function useLesson(slug: string | undefined) {
   return useQuery({
-    queryKey: lessonDetailQueryKey(slug),
+    queryKey: lessonKeys.detail(slug),
     queryFn: () => findLessonBySlug(slug!),
     enabled: !!slug,
     staleTime: 60_000,
