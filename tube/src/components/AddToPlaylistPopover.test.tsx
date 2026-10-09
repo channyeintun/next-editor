@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
-import type { OwnedLesson } from "@next-editor/infra";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { OwnedLesson, OwnedPlaylistWithMembership } from "@next-editor/infra";
 import { MAX_TITLE_CHARS } from "../../../infra/lessons/metadataLimits";
 
 type MutateOptions = { onSuccess?: (created: { id: string }) => void; onError?: () => void };
@@ -8,12 +8,19 @@ type MutateOptions = { onSuccess?: (created: { id: string }) => void; onError?: 
 const createPlaylist = vi.hoisted(() =>
   vi.fn<(variables: { title: string }, options?: MutateOptions) => void>(),
 );
+const playlistsForLesson = vi.hoisted(() => ({
+  data: [] as OwnedPlaylistWithMembership[],
+}));
 
 vi.mock("@next-editor/infra", async () => {
   const idleMutation = () => ({ mutate: vi.fn<() => void>(), isPending: false });
   return {
     ...(await import("../../../infra/lessons/metadataLimits")),
-    usePlaylistsForLesson: () => ({ data: [], isPending: false, isError: false }),
+    usePlaylistsForLesson: () => ({
+      data: playlistsForLesson.data,
+      isPending: false,
+      isError: false,
+    }),
     useCreatePlaylist: () => ({ mutate: createPlaylist, isPending: false }),
     useAddLessonToPlaylist: idleMutation,
     useRemoveLessonFromPlaylist: idleMutation,
@@ -35,7 +42,37 @@ const lesson: OwnedLesson = {
   publishedAt: null,
 };
 
+const playlist = (
+  id: string,
+  title: string,
+  containsLesson: boolean,
+): OwnedPlaylistWithMembership => ({
+  id,
+  slug: id,
+  title,
+  description: "",
+  lessonCount: containsLesson ? 1 : 0,
+  updatedAt: 0,
+  thumbnail: null,
+  containsLesson,
+});
+
 describe("AddToPlaylistPopover", () => {
+  beforeEach(() => {
+    playlistsForLesson.data = [];
+  });
+
+  it("exposes each playlist's membership as a pressed state", () => {
+    playlistsForLesson.data = [
+      playlist("p1", "Rust basics", true),
+      playlist("p2", "Web tour", false),
+    ];
+    render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "Rust basics", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Web tour", pressed: false })).toBeInTheDocument();
+  });
+
   it("caps a new playlist's name at the Worker's limit", () => {
     render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
 

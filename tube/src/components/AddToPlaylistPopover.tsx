@@ -154,15 +154,17 @@ export default function AddToPlaylistPopover({
               <button
                 key={playlist.id}
                 type="button"
+                aria-pressed={playlist.containsLesson}
                 disabled={togglingId === playlist.id}
                 onClick={() => toggle(playlist)}
                 className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:cursor-default disabled:opacity-60"
               >
                 <span
+                  aria-hidden="true"
                   className={`flex size-4 shrink-0 items-center justify-center rounded border ${
                     playlist.containsLesson
                       ? "border-pinata-purple bg-pinata-purple"
-                      : "border-white/20"
+                      : "border-slate-400"
                   }`}
                 >
                   {playlist.containsLesson && <Check className="size-3 text-white" />}
