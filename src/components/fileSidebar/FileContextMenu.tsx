@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDismissOnOutsideInteraction } from "../../hooks/useDismissOnOutsideInteraction";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -156,14 +157,18 @@ export default function FileContextMenu({
         Upload Files Here
       </button>
       {canOpenInPreview ? (
+        // The file already in the preview is marked by a check and aria-current,
+        // not by its colour alone.
         <button
           type="button"
+          aria-current={isInPreview ? "true" : undefined}
           onClick={() => onOpenInPreview(menu.path)}
           className={`flex w-full items-center px-4 py-2 text-sm transition-colors ${
             isInPreview ? "text-sky-200 hover:bg-slate-800" : "text-slate-200 hover:bg-slate-800"
           }`}
         >
           Open in Preview
+          {isInPreview ? <Check size={14} className="ml-auto text-sky-200" /> : null}
         </button>
       ) : null}
       <div className="my-2 border-t border-slate-700" />

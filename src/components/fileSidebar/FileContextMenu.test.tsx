@@ -128,9 +128,18 @@ describe("FileContextMenu", () => {
     expect(screen.queryByRole("button", { name: "Open in Preview" })).not.toBeInTheDocument();
     hidden.unmount();
 
+    const notShown = renderMenu(fileMenu, { canOpenInPreview: true });
+    expect(item("Open in Preview")).not.toHaveAttribute("aria-current");
+    expect(item("Open in Preview").querySelector("svg")).toBeNull();
+    notShown.unmount();
+
     const { onOpenInPreview } = renderMenu(fileMenu, { canOpenInPreview: true, isInPreview: true });
     const openInPreview = item("Open in Preview");
     expect(openInPreview).toHaveClass("text-sky-200");
+    // Not by hue alone: the state is exposed, and a check (hidden from the
+    // accessibility tree, so the name stays the same) shows it.
+    expect(openInPreview).toHaveAttribute("aria-current", "true");
+    expect(openInPreview.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     fireEvent.click(openInPreview);
     expect(onOpenInPreview).toHaveBeenCalledWith("src/index.html");
   });
