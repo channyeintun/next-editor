@@ -54,19 +54,18 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 /**
- * Call one of the string-in, string-out exports.
+ * Call one of the bytes-in, string-out exports.
  *
  * The answer is copied out **before** anything else runs. A later allocation
  * can grow the module's memory, and growing it detaches every view onto the old
  * buffer — so a `Uint8Array` held across a call is a use-after-free wearing a
  * safe-looking type.
  */
-function callWithSource(
+function callWithBytes(
   exports: KiteCompilerExports,
   entry: (pointer: number, length: number) => number,
-  source: string,
+  input: Uint8Array,
 ): string {
-  const input = encoder.encode(source);
   const at = exports.kite_alloc(input.length);
   new Uint8Array(exports.memory.buffer, at, input.length).set(input);
 
@@ -82,11 +81,11 @@ function callWithSource(
 /** Wrap instantiated exports. */
 export function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompiler {
   return {
-    run: (source) => callWithSource(exports, exports.kite_run, source),
-    check: (source) => callWithSource(exports, exports.kite_check, source),
-    format: (source) => callWithSource(exports, exports.kite_format, source),
+    run: (source) => callWithBytes(exports, exports.kite_run, encoder.encode(source)),
+    check: (source) => callWithBytes(exports, exports.kite_check, encoder.encode(source)),
+    format: (source) => callWithBytes(exports, exports.kite_format, encoder.encode(source)),
     checkModule: (entry, siblings = {}) =>
-      callWithFramedModule(exports, exports.kite_check_module, entry, siblings),
+      callWithBytes(exports, exports.kite_check_module, frameModule(entry, siblings)),
   };
 }
 
@@ -100,14 +99,14 @@ export function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompi
  * for the compiler to read.
  */
 function frameModule(entry: string, siblings: Record<string, string>): Uint8Array {
-  const entries: [string, Uint8Array][] = [["main", encoder.encode(entry)]];
+  const entries: [Uint8Array, Uint8Array][] = [[encoder.encode("main"), encoder.encode(entry)]];
   for (const [name, source] of Object.entries(siblings)) {
-    entries.push([name, encoder.encode(source)]);
+    entries.push([encoder.encode(name), encoder.encode(source)]);
   }
 
   let total = 4;
   for (const [name, body] of entries) {
-    total += 4 + encoder.encode(name).length + 4 + body.length;
+    total += 4 + name.length + 4 + body.length;
   }
 
   const out = new Uint8Array(total);
@@ -116,38 +115,16 @@ function frameModule(entry: string, siblings: Record<string, string>): Uint8Arra
   view.setUint32(at, entries.length, true);
   at += 4;
   for (const [name, body] of entries) {
-    const encoded = encoder.encode(name);
-    view.setUint32(at, encoded.length, true);
+    view.setUint32(at, name.length, true);
     at += 4;
-    out.set(encoded, at);
-    at += encoded.length;
+    out.set(name, at);
+    at += name.length;
     view.setUint32(at, body.length, true);
     at += 4;
     out.set(body, at);
     at += body.length;
   }
   return out;
-}
-
-/** As {@link callWithSource}, for the calls that take a framed module. */
-function callWithFramedModule(
-  exports: KiteCompilerExports,
-  entry: (pointer: number, length: number) => number,
-  source: string,
-  siblings: Record<string, string>,
-): string {
-  const input = frameModule(source, siblings);
-  const at = exports.kite_alloc(input.length);
-  new Uint8Array(exports.memory.buffer, at, input.length).set(input);
-
-  const answer = entry(at, input.length);
-  const length = exports.kite_answer_length();
-  // Copied out before anything else allocates; see callWithSource.
-  const bytes = new Uint8Array(exports.memory.buffer, answer, length).slice();
-
-  exports.kite_free(answer, length);
-  exports.kite_free(at, input.length);
-  return decoder.decode(bytes);
 }
 
 /**
