@@ -21,7 +21,7 @@ export default function AgentErrorNotice({
           <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-sans text-xs leading-5 text-red-300/90">
             {error}
           </pre>
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[11px] text-slate-400">
             Try again. If it keeps failing, check the provider status or choose another model.
           </p>
         </div>

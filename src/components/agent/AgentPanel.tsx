@@ -81,7 +81,7 @@ function ToolCallChip({ item }: { item: Extract<ChatItem, { kind: "tool_call" }>
     <div className="ml-4 inline-flex max-w-full items-center gap-1.5 rounded-md bg-[#1e2129] px-2.5 py-1 font-mono text-[11px] text-slate-400">
       <span className="sr-only">Tool call: </span>
       <span className="text-[#64a3ff]">{item.name}</span>
-      {summary ? <span className="truncate text-slate-500">{summary}</span> : null}
+      {summary ? <span className="truncate text-slate-300">{summary}</span> : null}
     </div>
   );
 }
@@ -110,7 +110,7 @@ function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result"
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-[11px] font-semibold text-slate-500 hover:text-slate-300"
+          className="mt-1 text-[11px] font-semibold text-slate-300 hover:text-slate-100"
         >
           {expanded ? "Show less" : "Show more"}
         </button>
@@ -439,7 +439,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
               they must scroll with it rather than stretch the page's overflow. */}
           <div className="relative min-h-0 flex-1 overflow-y-auto p-3">
             {items.length === 0 ? (
-              <p className="px-1 text-xs text-slate-500">
+              <p className="px-1 text-xs text-slate-300">
                 Ask the agent to build or fix something in this workspace.
               </p>
             ) : (
@@ -488,7 +488,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 aria-label="Message the agent"
                 placeholder="Ask anything about this workspace"
                 rows={2}
-                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500 read-only:cursor-wait disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-400 read-only:cursor-wait disabled:cursor-not-allowed disabled:opacity-60"
               />
               <div role="status">
                 {attachmentError ? (
@@ -505,7 +505,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
                   disabled={isReplayActive}
-                  className="max-w-[calc(100%-3rem)] truncate rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="max-w-[calc(100%-3rem)] truncate rounded px-1.5 py-1 text-[11px] font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                   title="Choose agent model"
                 >
                   {selectedModelLabel}
