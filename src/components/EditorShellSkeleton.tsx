@@ -64,7 +64,7 @@ export default function EditorShellSkeleton({
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </div>
           {breadcrumb ?? (
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               Editor
             </span>
           )}

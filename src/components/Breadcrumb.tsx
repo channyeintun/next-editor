@@ -10,7 +10,7 @@ export default function Breadcrumb({ title }: { title: string }) {
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs">
       <Link
         to="/learn"
-        className="shrink-0 font-bold capitalize tracking-wider text-slate-400 transition-colors hover:text-white"
+        className="shrink-0 font-bold capitalize tracking-wider text-slate-300 transition-colors hover:text-white"
       >
         Lessons
       </Link>
