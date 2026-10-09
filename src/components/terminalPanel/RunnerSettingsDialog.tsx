@@ -33,7 +33,7 @@ function RunnerToggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-[#10c776]" : "bg-slate-700"
+          checked ? "bg-[#10c776]" : "bg-slate-500"
         } disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <span
@@ -68,7 +68,7 @@ function RunnerCommandField({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
+        className="mt-2 h-11 w-full rounded-lg border border-slate-500 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-300 disabled:cursor-default disabled:opacity-70"
       />
       <span className="mt-2 block text-xs text-slate-300">{description}</span>
     </label>
