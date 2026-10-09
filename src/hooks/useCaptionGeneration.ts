@@ -82,7 +82,11 @@ export function useCaptionGeneration() {
     abortRef.current = controller;
     setState({ status: "running", progress: null });
     await runCaptionJob(recording, controller, {
-      update: setState,
+      // A cancelled or replaced job settles later; cancel() has already set idle, and
+      // its late write must not reset the job that replaced it.
+      update: (next) => {
+        if (!controller.signal.aborted) setState(next);
+      },
       onCaptions: (language, cues) => {
         const trackId = `auto-${language}-${Date.now()}`;
         addCaptionTrack(recording.id, {

@@ -155,6 +155,32 @@ describe("useCaptionGeneration", () => {
     expect(actions.addCaptionTrack).not.toHaveBeenCalled();
   });
 
+  it("keeps a restarted job running after the cancelled one settles", async () => {
+    whisper.generateCaptions
+      .mockImplementationOnce(
+        (_recording, _audio, { signal }) =>
+          new Promise((_, reject) => {
+            signal?.addEventListener("abort", () => reject(new DOMException("Aborted")));
+          }),
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const { result } = renderHook(() => useCaptionGeneration());
+
+    let cancelled: Promise<void> = Promise.resolve();
+    act(() => {
+      cancelled = result.current.start(lesson);
+    });
+    await waitFor(() => expect(whisper.generateCaptions).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      result.current.cancel();
+      void result.current.start(lesson);
+      await cancelled;
+    });
+    await waitFor(() => expect(whisper.generateCaptions).toHaveBeenCalledTimes(2));
+
+    expect(result.current.state).toEqual({ status: "running", progress: null });
+  });
+
   it("stops a job still running when the player goes away", async () => {
     let signal: AbortSignal | undefined;
     whisper.generateCaptions.mockImplementation((_recording, _audio, options) => {
