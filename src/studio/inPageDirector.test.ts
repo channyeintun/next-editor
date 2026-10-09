@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { ParsedDeck } from "../googleSlides/types";
-import { sha256HexOfJson } from "./hash";
+import { sha256Hex, sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
 import { measureIntegratedLoudness, NARRATION_LOUDNESS_TARGET_LUFS } from "./tts/loudness";
@@ -448,13 +448,17 @@ describe("buildPlanFromScript narration", () => {
       cached.map((wav) => decodeWavPcm16(wav).pcm.length),
     );
     // The narration is byte for byte what writing each leveled dialog as a WAV
-    // and decoding it back onto the canvas produced.
+    // and decoding it back onto the canvas produced. Compared by digest: a
+    // deep equality walk over megabytes of audio takes seconds.
     const canvas = new Int16Array(Math.ceil((result.narration.durationMs / 1000) * 24_000));
     for (const segment of placed) {
       const roundTripped = decodeWavPcm16(encodeWavPcm16(segment.pcm, 24_000)).pcm;
       canvas.set(roundTripped, Math.round((segment.startMs / 1000) * 24_000));
     }
-    expect(result.narration.bytes).toEqual(encodeWavPcm16(canvas, 24_000));
+    const expected = encodeWavPcm16(canvas, 24_000);
+    expect(result.narration.bytes.byteLength).toBe(expected.byteLength);
+    expect(result.narration.audioSha256).toBe(await sha256Hex(expected));
+    expect(await sha256Hex(result.narration.bytes)).toBe(result.narration.audioSha256);
     // The cache holds the take as synthesized, quiet ones still quiet.
     expect(loudnessOfWav(cached[1])! - loudnessOfWav(cached[0])!).toBeCloseTo(-9, 0);
     expect(result.warnings.filter((warning) => warning.includes("leveling"))).toEqual([]);
