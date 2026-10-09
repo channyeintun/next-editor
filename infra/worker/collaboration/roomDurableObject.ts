@@ -35,6 +35,7 @@ import {
   type CollaborationTeachingInitializationInput,
   type CollaborationRole,
   type CollaborationRoomControlCommand,
+  type CollaborationWebSocketErrorCode,
   type CollaborationWebSocketServerMessage,
 } from "../../../src/collaboration/protocol";
 import {
@@ -958,6 +959,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         totalMs: performance.now() - handlerStartedAt,
         error: error instanceof Error ? error.message : String(error),
       });
+      // The quota counts every byte the room ever accepted and compaction
+      // never lowers it, so a refusal is permanent: fatal, or the client would
+      // reconnect and resend the same update until its reconnects ran out. A
+      // persistence failure may pass, so its 1011 close lets the client retry.
       const quotaExceeded = error instanceof CollaborationRoomSqliteQuotaError;
       this.rejectSocket(
         socket,
@@ -965,7 +970,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         quotaExceeded
           ? "Collaboration room document quota exceeded"
           : "Collaboration update could not be persisted",
-        false,
+        quotaExceeded,
         quotaExceeded ? undefined : 1011,
         event.updateId,
       );
@@ -1300,7 +1305,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
   private rejectSocket(
     socket: WebSocket,
-    code: string,
+    code: CollaborationWebSocketErrorCode,
     message: string,
     fatal: boolean,
     closeCode?: number,

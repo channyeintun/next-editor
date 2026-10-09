@@ -10,6 +10,7 @@ import {
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
   collaborationDocumentUpdateInputSchema,
+  collaborationWebSocketErrorCodeSchema,
   collaborationCreateRoomInputSchema,
   collaborationAwarenessClientStateSchema,
   collaborationAwarenessInputSchema,
@@ -300,6 +301,19 @@ describe("collaboration protocol", () => {
         streamId: "1-0",
         data: update,
       }).success,
+    ).toBe(false);
+  });
+
+  it("accepts every room error code and nothing else", () => {
+    const error = { type: "error", message: "Refused", fatal: false };
+
+    for (const code of collaborationWebSocketErrorCodeSchema.options) {
+      expect(collaborationWebSocketServerMessageSchema.safeParse({ ...error, code }).success).toBe(
+        true,
+      );
+    }
+    expect(
+      collaborationWebSocketServerMessageSchema.safeParse({ ...error, code: "teapot" }).success,
     ).toBe(false);
   });
 });

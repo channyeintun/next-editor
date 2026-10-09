@@ -13,6 +13,7 @@ import {
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  COLLABORATION_WEBSOCKET_ERROR_STATUS,
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
   collaborationAwarenessClientStateSchema,
@@ -733,14 +734,7 @@ export class CollaborationRoomProvider {
     message: Extract<CollaborationWebSocketServerMessage, { type: "error" }>,
     attemptId: string,
   ): void {
-    const status =
-      message.code === "read-only" || message.code === "access-revoked"
-        ? 403
-        : message.code === "rate-limited"
-          ? 429
-          : message.code === "invalid-message" || message.code === "invalid-session"
-            ? 400
-            : 503;
+    const status = COLLABORATION_WEBSOCKET_ERROR_STATUS[message.code];
     if (message.updateId) {
       const pending = this.pendingWebSocketAcks.get(message.updateId);
       if (pending) {

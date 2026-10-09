@@ -43,6 +43,10 @@ import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
 import { stubWebSocketUpgrade } from "../testing/webSocketUpgrade";
 import { CollaborationRoomDurableObject } from "./roomDurableObject";
+import {
+  CollaborationRoomSqliteQuotaError,
+  RoomSqliteDocumentStore,
+} from "./roomSqliteDocumentStore";
 
 vi.mock("../../db/collaborationQueries", () => ({
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
@@ -454,6 +458,40 @@ describe("CollaborationRoomDurableObject document updates", () => {
     await control(2, MEMBER_ID, null);
 
     expect(member.closeCode).toBe(4003);
+  });
+
+  // The byte quota never goes down, so the same update would be refused on
+  // every reconnect: the refusal ends the session instead of inviting a retry.
+  it("refuses an update over the room's byte quota as fatal", async () => {
+    const { room, connect, edit } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+    const updateId = uuid();
+    vi.spyOn(RoomSqliteDocumentStore.prototype, "append").mockImplementationOnce(() => {
+      throw new CollaborationRoomSqliteQuotaError();
+    });
+
+    await room.webSocketMessage(editor as never, edit("+big", updateId));
+
+    expect(errors(editor)).toEqual([
+      expect.objectContaining({ code: "quota-exceeded", fatal: true, updateId }),
+    ]);
+    expect(acks(editor)).toEqual([]);
+  });
+
+  it("closes with 1011 so the client retries when an update cannot be persisted", async () => {
+    const { room, connect, edit } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+    const updateId = uuid();
+    vi.spyOn(RoomSqliteDocumentStore.prototype, "append").mockImplementationOnce(() => {
+      throw new Error("disk full");
+    });
+
+    await room.webSocketMessage(editor as never, edit("+lost", updateId));
+
+    expect(errors(editor)).toEqual([
+      expect.objectContaining({ code: "persistence-failed", fatal: false, updateId }),
+    ]);
+    expect(editor.closeCode).toBe(1011);
   });
 });
 

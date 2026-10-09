@@ -449,6 +449,34 @@ export interface CollaborationBootstrapResponse {
   hasMore: boolean;
 }
 
+/**
+ * Every code the room sends in a WebSocket `error` message. A new code needs a
+ * status in COLLABORATION_WEBSOCKET_ERROR_STATUS (typecheck fails otherwise).
+ */
+export const collaborationWebSocketErrorCodeSchema = z.enum([
+  "invalid-session",
+  "invalid-message",
+  "rate-limited",
+  "read-only",
+  "access-revoked",
+  "quota-exceeded",
+  "persistence-failed",
+]);
+
+export type CollaborationWebSocketErrorCode = z.infer<typeof collaborationWebSocketErrorCodeSchema>;
+
+/** The HTTP-style status the client gives a refused request for each error code. */
+export const COLLABORATION_WEBSOCKET_ERROR_STATUS: Record<CollaborationWebSocketErrorCode, number> =
+  {
+    "invalid-session": 400,
+    "invalid-message": 400,
+    "rate-limited": 429,
+    "read-only": 403,
+    "access-revoked": 403,
+    "quota-exceeded": 503,
+    "persistence-failed": 503,
+  };
+
 export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -474,7 +502,7 @@ export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("t
   z
     .object({
       type: z.literal("error"),
-      code: z.string().min(1).max(64),
+      code: collaborationWebSocketErrorCodeSchema,
       message: z.string().min(1).max(512),
       fatal: z.boolean(),
       updateId: collaborationIdSchema.optional(),

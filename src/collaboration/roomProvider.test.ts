@@ -907,6 +907,41 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("fails with the room's message instead of reconnecting when its byte quota is spent", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    provider.doc.getText("source").insert(0, "over quota");
+    void provider.flushNow();
+    const update = await nextClientUpdate(sockets[0]!);
+    sockets[0]!.message({
+      type: "error",
+      code: "quota-exceeded",
+      message: "Collaboration room document quota exceeded",
+      fatal: true,
+      updateId: update.updateId,
+    });
+    await waitUntil(() => provider.connectionState === "failed");
+    // The ack rejection must not schedule a reconnect out of the failed state.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toBe(
+      "Collaboration room document quota exceeded",
+    );
+    expect(sockets).toHaveLength(1);
+    provider.stop();
+  });
+
   it("drops every unsent local edit when one change is too large to send, reports it and fails", async () => {
     const { sockets, factory } = socketRecorder();
     const rejected: string[] = [];
