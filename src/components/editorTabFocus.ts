@@ -37,6 +37,9 @@ export const TAB_MOVES_FOCUS_PRECONDITION = [
   ...CONTEXTS_THAT_OWN_ESCAPE.map((key) => `!${key}`),
 ].join(" && ");
 
+/** How to leave the editor by keyboard, for the end of its accessible name. */
+export const LEAVE_EDITOR_HINT = "Press Escape, then Tab, to leave.";
+
 /**
  * In a writable Monaco editor Tab types a tab and Shift+Tab outdents, so
  * neither leaves it. This makes Escape switch the editor to "Tab moves focus"

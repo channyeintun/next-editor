@@ -81,7 +81,7 @@ import {
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
-import { addEscapeThenTabExit } from "./editorTabFocus";
+import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 
 // y-monaco transactions carry their MonacoBinding as the origin. Registered
 // here, at module load and so before any binding exists, because undo.ts must
@@ -282,11 +282,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [activeTextContent, activeFile.path, isBinaryActiveFile, selectedLanguage, usesPlaybackModel]);
 
   // Stable options identity so MonacoEditor's updateOptions only runs when
-  // playback state actually changes, not on every keystroke re-render.
+  // playback state or the open file actually changes, not on every keystroke
+  // re-render. The accessible name says which file is open and how to leave.
   const collaborationReadOnly = Boolean(collaboration?.provider && !collaboration.canWrite);
   const editorOptions = useMemo(
-    () => getEditorOptions(isPlaying, collaborationReadOnly),
-    [collaborationReadOnly, isPlaying],
+    () => ({
+      ...getEditorOptions(isPlaying, collaborationReadOnly),
+      ariaLabel: `${activeFile.path}, code editor. ${LEAVE_EDITOR_HINT}`,
+    }),
+    [activeFile.path, collaborationReadOnly, isPlaying],
   );
 
   const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {

@@ -4,12 +4,16 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
 
 // Monaco itself is not under test: the workspace's own markup is. Each model
-// helper becomes a stand-in, and the editor view renders nothing.
+// helper becomes a stand-in, and the editor view is a bare textarea named the
+// way Monaco names its own hidden one, from the `ariaLabel` option.
 vi.mock("../monaco", () => ({
   monaco: {},
-  MonacoEditor: () => null,
+  MonacoEditor: ({ options }: { options?: { ariaLabel?: string } }) => (
+    <textarea aria-label={options?.ariaLabel} readOnly />
+  ),
   getEditorOptions: () => ({}),
   syncWorkspaceModel: () => ({ uri: { toString: () => "file:///index.html" } }),
   getOrCreatePlaybackModel: () => ({ uri: { toString: () => "playback:///index.html" } }),
@@ -42,10 +46,14 @@ vi.mock("./whiteboardPanelLoader", () => ({
 
 const { default: Editor } = await import("./Editor");
 
-/** Opens and closes the overlays the way playback, a presenter or the header would. */
+/**
+ * Opens and closes the overlays the way playback, a presenter or the header
+ * would, and opens a second file the way the file sidebar would.
+ */
 function OverlayControls() {
   const whiteboard = useWhiteboardContext();
   const slides = useSlidesContext();
+  const workspace = useWorkspaceActions();
   const openSlides = (isMaximized: boolean) =>
     slides.handleSlideEvent({
       type: "slide_open",
@@ -66,6 +74,15 @@ function OverlayControls() {
       </button>
       <button type="button" onClick={() => slides.closePresentation()}>
         Close slides
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          workspace.createFile("notes.md", "# Notes");
+          workspace.setActiveFilePath("notes.md");
+        }}
+      >
+        Open notes
       </button>
     </div>
   );
@@ -118,6 +135,25 @@ describe("CodeEditor bypass block", () => {
     });
     expect(followedHref).toBe(false);
     expect(main).toHaveFocus();
+  });
+});
+
+describe("CodeEditor accessible name", () => {
+  it("names the open file and how to leave the editor", async () => {
+    await renderWorkspace();
+    expect(
+      screen.getByRole("textbox", {
+        name: /^\S+, code editor\. Press Escape, then Tab, to leave\.$/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /^notes\.md,/ })).not.toBeInTheDocument();
+
+    press("Open notes");
+    expect(
+      screen.getByRole("textbox", {
+        name: "notes.md, code editor. Press Escape, then Tab, to leave.",
+      }),
+    ).toBeInTheDocument();
   });
 });
 
