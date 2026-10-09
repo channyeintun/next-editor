@@ -20,13 +20,13 @@ export function ReceiptList({ receipts }: { receipts: ActionReceipt[] }) {
                   ? "text-emerald-400"
                   : receipt.status === "failed"
                     ? "text-rose-400"
-                    : "text-slate-500"
+                    : "text-slate-400"
               }
             >
               {receipt.status === "ok" ? "✓" : receipt.status === "failed" ? "✗" : "–"}
             </span>
             <span className="truncate">{receipt.actionId}</span>
-            <span className="ml-auto shrink-0 text-slate-500">
+            <span className="ml-auto shrink-0 text-slate-400">
               {receipt.startedAtMs !== null
                 ? `${Math.round(receipt.startedAtMs)}ms (+${Math.round(
                     (receipt.startedAtMs ?? 0) - receipt.plannedAtMs,
@@ -74,7 +74,7 @@ export function CheckList({ report }: { report: StudioRenderReport }) {
     <div className="mt-3">
       <h3 className="font-semibold text-slate-300">
         Checks{" "}
-        <span className="text-slate-500">
+        <span className="text-slate-400">
           ({report.checks.filter((check) => check.ok).length}/{report.checks.length} ok
           {report.timing ? ` · p95 ${report.timing.p95Ms}ms` : ""})
         </span>

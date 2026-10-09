@@ -489,7 +489,7 @@ export default function AthanLabPanel({
               {saveError.message}
             </p>
           ) : null}
-          <p className="mt-1 text-slate-500">
+          <p className="mt-1 text-slate-400">
             Get a key at{" "}
             <a
               href={ATHANLAB_DASHBOARD_URL}

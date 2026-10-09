@@ -1170,7 +1170,7 @@ export default function StudioController() {
             className="size-3.5 accent-sky-500 disabled:opacity-50"
           />
           Screen recording
-          <span className="text-slate-500">
+          <span className="text-slate-400">
             {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
           </span>
         </label>

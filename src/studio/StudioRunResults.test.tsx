@@ -45,6 +45,9 @@ describe("ReceiptList", () => {
 
     const rows = screen.getAllByRole("listitem").map((row) => row.textContent);
     expect(rows).toEqual(["✓scene.1.type1012ms (+12)", "✗run1991ms (+-9)", "–never—"]);
+    // Secondary text keeps 4.5:1 on the console panel (slate-400, 7.20:1).
+    expect(screen.getByText("1012ms (+12)")).toHaveClass("text-slate-400");
+    expect(screen.getByText("–")).toHaveClass("text-slate-400");
   });
 
   it("lists failed actions with their error and any diagnostic screenshot", () => {
@@ -92,6 +95,7 @@ describe("CheckList", () => {
     );
 
     expect(screen.getByRole("heading")).toHaveTextContent("Checks (1/2 ok · p95 12ms)");
+    expect(screen.getByText("(1/2 ok · p95 12ms)")).toHaveClass("text-slate-400");
     expect(screen.getByText("within budget", { exact: false })).toHaveClass("text-slate-400");
     expect(screen.getByText("2 cues missing", { exact: false })).toHaveClass("text-rose-300");
     expect(screen.getByText("Uncaught TypeError: x")).toBeInTheDocument();
