@@ -119,6 +119,24 @@ function resolveWorkspaceSnapshotForReplay({
   return resolved;
 }
 
+/**
+ * The snapshot at `toIndex` for a workspace that shows the one at `fromIndex`: the
+ * events in between are folded forward, or undone when `toIndex` is earlier, as a seek
+ * does. A retake uses it to undo the stretch it discards: the panel resizes recorded
+ * there are moves, so they are reversed rather than dropped.
+ */
+export function resolveWorkspaceSnapshotBetween(
+  workspaceEvents: WorkspaceRecordingEvent[],
+  toIndex: number,
+  fromIndex: number,
+): WorkspaceRecordingSnapshot {
+  return resolveWorkspaceSnapshotForReplay({
+    workspaceEvents,
+    nextIndex: toIndex,
+    lastAppliedIndex: fromIndex,
+  });
+}
+
 export function getWorkspaceReplayResult({
   workspaceEvents,
   currentTime,

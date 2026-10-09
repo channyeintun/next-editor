@@ -215,21 +215,22 @@ describe("retaking", () => {
     actor.stop();
   });
 
+  const project = (content: string): WorkspaceRecordingSnapshot => ({
+    activeFilePath: "index.html",
+    project: {
+      id: "p",
+      name: "P",
+      lessonType: "html-css",
+      entryFilePath: "index.html",
+      folders: [],
+      files: {
+        "index.html": { path: "index.html", name: "index.html", language: "html", content },
+      },
+    },
+  });
+
   it("puts the workspace back, undoing the panel moves it discards", () => {
     const advance = pinClocks();
-    const project = (content: string): WorkspaceRecordingSnapshot => ({
-      activeFilePath: "index.html",
-      project: {
-        id: "p",
-        name: "P",
-        lessonType: "html-css",
-        entryFilePath: "index.html",
-        folders: [],
-        files: {
-          "index.html": { path: "index.html", name: "index.html", language: "html", content },
-        },
-      },
-    });
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
     const actor = startTake(new RecordingEditor(), {
@@ -248,6 +249,58 @@ describe("retaking", () => {
     expect(restored.project.files["index.html"].content).toBe("<p>kept</p>");
     expect(restored.sidebarWidthDelta).toBe(-40);
     expect(sessionOf(actor).workspaceEvents).toHaveLength(1);
+    actor.stop();
+  });
+
+  it("undoes every panel move it discards, summed", () => {
+    const advance = pinClocks();
+    let live = project("<p>kept</p>");
+    const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
+    const actor = startTake(new RecordingEditor(), {
+      getWorkspaceSnapshot: () => live,
+      applyWorkspaceSnapshot,
+    });
+
+    advance(1_000);
+    live = project("<p>discarded</p>");
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 40 });
+    advance(500);
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 25, previewDockWidthDelta: -10 });
+    advance(500);
+    actor.send({ type: "RETAKE_RECORDING" });
+
+    expect(applyWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    const restored = applyWorkspaceSnapshot.mock.calls[0][0];
+    expect(restored.project.files["index.html"].content).toBe("<p>kept</p>");
+    expect(restored.sidebarWidthDelta).toBe(-65);
+    expect(restored.previewDockWidthDelta).toBe(10);
+    actor.stop();
+  });
+
+  // The host applies a width delta only when it is finite and non-zero, so moves that
+  // cancel out leave the panels where they are.
+  it("leaves the panels alone when the moves it discards cancel out", () => {
+    const advance = pinClocks();
+    let live = project("<p>kept</p>");
+    const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
+    const actor = startTake(new RecordingEditor(), {
+      getWorkspaceSnapshot: () => live,
+      applyWorkspaceSnapshot,
+    });
+
+    advance(1_000);
+    live = project("<p>discarded</p>");
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 40 });
+    advance(500);
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: -40 });
+    advance(500);
+    actor.send({ type: "RETAKE_RECORDING" });
+
+    expect(applyWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    const restored = applyWorkspaceSnapshot.mock.calls[0][0];
+    expect(restored.project.files["index.html"].content).toBe("<p>kept</p>");
+    expect(restored.sidebarWidthDelta ?? 0).toBe(0);
+    expect(restored.previewDockWidthDelta ?? 0).toBe(0);
     actor.stop();
   });
 

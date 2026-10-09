@@ -11,6 +11,7 @@ import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
 import { RUNTIME_CHECKPOINT_DUE, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
 import { getRecordingTimestamp, restartPreviewStream } from "./recordingSession";
 import { rewindRecordingClock } from "./recordingClock";
+import { resolveWorkspaceSnapshotBetween } from "./replayState";
 import type { RecordingTracks } from "./recordingAssembly";
 import type { RecordingSafePoint, RecordingSession } from "./types";
 
@@ -130,9 +131,7 @@ export function rewindSessionToSafePoint(
   session.safePoints = session.safePoints.filter((point) => point.recordingTime <= time);
   session.chapters = session.chapters.filter((chapter) => chapter.time <= time);
 
-  const droppedWorkspace = session.workspaceEvents.slice(
-    keptUntil(session.workspaceEvents, time, byTimestamp).length,
-  );
+  const originalWorkspace = session.workspaceEvents;
   const whiteboardChanged = session.whiteboardEvents.some((event) => event.timestamp > time);
   const runtimeChanged = session.runtimeEvents.some((event) => event.timestamp > time);
   const chatChanged = session.chatEvents.some((event) => event.timestamp > time);
@@ -155,6 +154,18 @@ export function rewindSessionToSafePoint(
   };
   Object.assign(session, kept);
 
+  // The workspace at the safe point, read off the uncut track: the discarded resizes are
+  // undone the way a backward seek undoes them.
+  const keptWorkspaceCount = kept.workspaceEvents.length;
+  const workspace =
+    keptWorkspaceCount > 0 && keptWorkspaceCount < originalWorkspace.length
+      ? resolveWorkspaceSnapshotBetween(
+          originalWorkspace,
+          keptWorkspaceCount - 1,
+          originalWorkspace.length - 1,
+        )
+      : undefined;
+
   // The next frame is diffed against the last kept one, as if nothing came after it.
   const frame =
     session.frames.length > 0
@@ -174,39 +185,12 @@ export function rewindSessionToSafePoint(
 
   return {
     frame,
-    workspace:
-      droppedWorkspace.length > 0 ? restoredWorkspace(session, droppedWorkspace) : undefined,
+    workspace,
     whiteboard: whiteboardChanged
       ? session.whiteboardEvents.reduce(applyWhiteboardEvent, EMPTY_WHITEBOARD_SCENE)
       : undefined,
     runtimeChanged,
     chatChanged,
     previewStreamed,
-  };
-}
-
-function restoredWorkspace(
-  session: RecordingSession,
-  dropped: RecordingSession["workspaceEvents"],
-): WorkspaceRecordingSnapshot | undefined {
-  const last = session.workspaceEvents[session.workspaceEvents.length - 1];
-  if (!last) return undefined;
-
-  // Panel widths are recorded as moves, so the discarded moves are undone.
-  let sidebar = 0;
-  let dock = 0;
-  for (const event of dropped) {
-    sidebar += event.snapshot.sidebarWidthDelta ?? 0;
-    dock += event.snapshot.previewDockWidthDelta ?? 0;
-  }
-  const {
-    sidebarWidthDelta: _sidebarWidthDelta,
-    previewDockWidthDelta: _previewDockWidthDelta,
-    ...snapshot
-  } = last.snapshot;
-  return {
-    ...snapshot,
-    ...(sidebar !== 0 ? { sidebarWidthDelta: -sidebar } : {}),
-    ...(dock !== 0 ? { previewDockWidthDelta: -dock } : {}),
   };
 }
