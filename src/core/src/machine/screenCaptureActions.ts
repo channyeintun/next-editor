@@ -34,17 +34,6 @@ export const setScreenStream = ({ context, event }: EditorActionArgs): EditorCon
   };
 };
 
-export const storeScreenStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "SCREEN_STARTED") return {};
-  return {
-    screen: {
-      ...context.screen,
-      mimeType: event.mimeType,
-      hasAudio: event.hasAudio,
-    },
-  };
-};
-
 export const notifyScreenRecordingReady = ({ context, event }: EditorActionArgs): void => {
   if (event.type !== "SCREEN_STOPPED") return;
   context.onScreenRecordingReady?.({

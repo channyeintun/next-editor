@@ -42,14 +42,6 @@ export type ScreenRecordingEvent = RecorderControlEvent;
 
 export type ScreenRecordingEmit =
   | {
-      type: "SCREEN_STARTED";
-      actorId: string;
-      mimeType: string;
-      /** Whether the capture graph supplied an audio track. */
-      hasAudio: boolean;
-      startedAtPerf: number;
-    }
-  | {
       type: "SCREEN_STOPPED";
       actorId: string;
       blob: Blob;
@@ -215,7 +207,7 @@ export const screenRecordingActor = fromTypedCallback<
         audioContextCtor: input.audioContextCtor,
       });
       audioContext = mix.audioContext;
-      // Reported on SCREEN_STARTED/SCREEN_STOPPED; the host decides how to surface a silent file.
+      // Reported on SCREEN_STOPPED; the host decides how to surface a silent file.
       hasAudio = mix.stream.getAudioTracks().length > 0;
 
       mediaRecorder = new MediaRecorder(mix.stream, {
@@ -272,13 +264,6 @@ export const screenRecordingActor = fromTypedCallback<
       mediaRecorder.onstart = () => {
         if (!disposed && !failed) {
           startedAtPerfMs = performance.now();
-          sendBack({
-            type: "SCREEN_STARTED",
-            actorId: self.id,
-            mimeType,
-            hasAudio,
-            startedAtPerf: startedAtPerfMs,
-          });
           syncPauseState();
         }
       };

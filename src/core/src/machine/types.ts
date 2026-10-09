@@ -213,15 +213,6 @@ export interface ScreenState {
   actorId: string | null;
   /** Whether a screen recording is active (its actor has been spawned and started). */
   isRecording: boolean;
-  /** Detected MIME type of the screen recording container. */
-  mimeType: string;
-  /**
-   * Whether the capture mixed any audio track. False means a silent video: the browser returned
-   * no display/tab audio and no microphone track was supplied (e.g. a screen/window share, or a
-   * tab shared with "share tab audio" off). Consumers surface this so a "narration included"
-   * promise is not made for a file that has none.
-   */
-  hasAudio: boolean;
 }
 
 /**
@@ -753,8 +744,6 @@ export const createIdleCameraState = (): CameraState => ({
 export const createIdleScreenState = (): ScreenState => ({
   actorId: null,
   isRecording: false,
-  mimeType: "",
-  hasAudio: false,
 });
 
 /**

@@ -46,7 +46,6 @@ import {
 import { captureInitialFrame, captureFrame, capturePreviewRefreshFrame } from "./frameCapture";
 import {
   setScreenStream,
-  storeScreenStarted,
   notifyScreenRecordingReady,
   clearScreenRecording,
   handleScreenError,
@@ -281,9 +280,7 @@ export const editorMachine = setup({
         context.currentFrame !== null ||
         context.lastAppliedFrameIndex >= 0),
     isCurrentScreenRecorderEvent: ({ context, event }) =>
-      (event.type === "SCREEN_STARTED" ||
-        event.type === "SCREEN_STOPPED" ||
-        event.type === "SCREEN_ERROR") &&
+      (event.type === "SCREEN_STOPPED" || event.type === "SCREEN_ERROR") &&
       context.screen.actorId === event.actorId,
     isForLoadedRecording: isEventForLoadedRecording,
     // Stream growth for the loaded recording after the viewer has taken the workspace over.
@@ -389,7 +386,6 @@ export const editorMachine = setup({
         screen: {
           ...context.screen,
           isRecording: true,
-          mimeType: "",
         },
       });
     }),
@@ -486,7 +482,6 @@ export const editorMachine = setup({
     handleAudioRecordingError: assign(handleAudioRecordingError),
     handleExternalAudioError: assign(handleExternalAudioError),
     setScreenStream: assign(setScreenStream),
-    storeScreenStarted: assign(storeScreenStarted),
     notifyScreenRecordingReady,
     clearScreenRecording: assign(clearScreenRecording),
     handleScreenError: assign(handleScreenError),
@@ -636,10 +631,6 @@ export const editorMachine = setup({
     // `Recording`, so these are handled at the machine root and fire in any state. SCREEN_STOPPED
     // may land after the machine has already moved on to `loading`/`playback` or begun another
     // capture. Every completion is delivered, but only the current actor may clear screen context.
-    SCREEN_STARTED: {
-      guard: "isCurrentScreenRecorderEvent",
-      actions: "storeScreenStarted",
-    },
     SCREEN_STOPPED: [
       {
         guard: "isCurrentScreenRecorderEvent",

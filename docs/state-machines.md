@@ -171,8 +171,8 @@ handler of its own for them:
 - `START_RECORDING` releases the display stream of a start that no state accepted (only
   `idle` accepts one).
 - `ADD_CAPTION_TRACK` and `SET_CHAPTERS` change the loaded recording (`isForLoadedRecording`).
-- `SCREEN_STARTED`, `SCREEN_STOPPED` and `SCREEN_ERROR` follow the screen recorder, which is
-  independent of the take's finalize join.
+- `SCREEN_STOPPED` and `SCREEN_ERROR` follow the screen recorder, which is independent of the
+  take's finalize join.
 
 ## Core States
 

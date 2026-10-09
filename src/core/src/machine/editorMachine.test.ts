@@ -3795,7 +3795,7 @@ describe("editorMachine local screen recording", () => {
     expect(actor.getSnapshot().context.screen.isRecording).toBe(false);
   });
 
-  it("spawns the screen actor and records its MIME type and audio flag on SCREEN_STARTED", async () => {
+  it("spawns the screen actor and marks it recording", async () => {
     const actor = start();
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
     await waitFor(actor, (s) => s.matches("recording"));
@@ -3804,8 +3804,6 @@ describe("editorMachine local screen recording", () => {
     expect(screen.actorId).toMatch(/^screenRecorder-/);
     expect(actor.getSnapshot().children[screen.actorId!]).toBeDefined();
     expect(screen.isRecording).toBe(true);
-    expect(screen.mimeType).toBe("video/webm;codecs=vp9,opus");
-    expect(screen.hasAudio).toBe(false);
   });
 
   it("saves the screen blob after stop — even once the machine reaches playback — and clears context", async () => {
@@ -3868,17 +3866,21 @@ describe("editorMachine local screen recording", () => {
     });
     const display = new FakeScreenStream([new FakeScreenTrack("video")]);
     const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
-    const actor = start({ enableAudioRecording: true });
+    const ready: boolean[] = [];
+    const actor = start({
+      enableAudioRecording: true,
+      onScreenRecordingReady: (payload) => ready.push(payload.hasAudio),
+    });
 
     actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
     await waitFor(actor, (s) => s.matches("recording"));
-    // The microphone is the only audio source, so this shows it reached the mix.
-    expect(actor.getSnapshot().context.screen.hasAudio).toBe(true);
 
     // The user ends the share early; the screen recorder tears down and stops its tracks.
     videoTrack.dispatch("ended");
     await waitFor(actor, (s) => s.context.screen.isRecording === false);
 
+    // The microphone is the only audio source, so this shows it reached the mix.
+    expect(ready).toEqual([true]);
     expect(micTrack.stopped).toBe(false);
     expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().children.audioRecorder).toBeDefined();
