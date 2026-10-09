@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { Recording } from "../core/src";
 
 interface ApplyPersistedPlaybackSettingsOptions {
@@ -14,12 +14,15 @@ interface ApplyPersistedPlaybackSettingsOptions {
 }
 
 /**
- * Hydrates the machine from the persisted player-level speed/volume. Keyed on
+ * Hydrates the machine from the persisted player-level speed/volume. Pushed when
+ * a recording is (re)loaded and whenever a persisted value changes. Keyed on
  * currentRecording because SET_SPEED/SET_VOLUME are only handled inside the
  * machine's playback state (earlier sends are dropped), and setRecording
  * assigns a fresh recording object exactly when playback is (re)entered.
  * MediaControls writes user changes to both the machine and the settings
- * store, so after this first push the two stay equal and the effect no-ops.
+ * store, so after this first push the two stay equal and the push no-ops.
+ * A machine-only change, such as RecordingEditPanel silencing a pending mute,
+ * is deliberately not reverted: the machine's values are read, not watched.
  */
 export function useApplyPersistedPlaybackSettings({
   currentRecording,
@@ -30,23 +33,19 @@ export function useApplyPersistedPlaybackSettings({
   setPlaybackSpeed,
   setVolume,
 }: ApplyPersistedPlaybackSettingsOptions): void {
-  useEffect(() => {
-    if (!currentRecording) {
-      return;
-    }
+  const pushPersisted = useEffectEvent(() => {
     if (playbackSpeed !== persistedSpeed) {
       setPlaybackSpeed(persistedSpeed);
     }
     if (volume !== persistedVolume) {
       setVolume(persistedVolume);
     }
-  }, [
-    currentRecording,
-    playbackSpeed,
-    persistedSpeed,
-    volume,
-    persistedVolume,
-    setPlaybackSpeed,
-    setVolume,
-  ]);
+  });
+
+  useEffect(() => {
+    if (!currentRecording) {
+      return;
+    }
+    pushPersisted();
+  }, [currentRecording, persistedSpeed, persistedVolume]);
 }
