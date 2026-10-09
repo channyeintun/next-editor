@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   type DmpCodec,
   DmpBaseMismatchError,
@@ -326,5 +326,41 @@ describe("dmp codec (diff-match-patch in Rust)", () => {
 
     expect(delta.length).toBeLessThan(4_096);
     expect(sameBytes(codec.applyDelta(a, delta), b)).toBe(true);
+  });
+});
+
+describe("loadDmpCodec", () => {
+  const WASM = "./build/next-editor-dmp.wasm";
+
+  afterEach(() => {
+    vi.doUnmock(WASM);
+    vi.resetModules();
+  });
+
+  // A transient chunk failure (offline, a stale tab after a deploy) used to stay
+  // cached, so every later load replayed the same rejection until a reload.
+  it("forgets a failed load, so the next call tries again", async () => {
+    vi.resetModules();
+    vi.doMock(WASM, () => Promise.reject(new Error("gone")));
+    const { isDmpCodecLoaded, loadDmpCodec } = await import("./dmpCodec");
+
+    const first = loadDmpCodec();
+    // Vitest wraps a failing mock factory's error; the original is its cause.
+    await expect(first).rejects.toMatchObject({ cause: new Error("gone") });
+    expect(isDmpCodecLoaded()).toBe(false);
+
+    const exports = (await WebAssembly.instantiate(readFileSync(wasmPath))).instance.exports;
+    vi.doMock(WASM, () => exports);
+    const second = loadDmpCodec();
+    expect(second).not.toBe(first);
+
+    const codec = await second;
+    expect(isDmpCodecLoaded()).toBe(true);
+    expect(
+      dec.decode(
+        codec.applyDelta(enc.encode("a"), codec.diffDelta(enc.encode("a"), enc.encode("ab"))),
+      ),
+    ).toBe("ab");
+    await expect(loadDmpCodec()).resolves.toBe(codec);
   });
 });

@@ -163,7 +163,8 @@ export function installDmpCodec(codec: DmpCodec): void {
 /**
  * Load and cache the codec via the WASM-ESM integration, then install it as the
  * singleton. A no-op once a codec is present, so it's safe to call repeatedly and
- * won't instantiate again when one was installed directly.
+ * won't instantiate again when one was installed directly. A failed load is not
+ * cached; the next call tries again.
  * Run `bun run build:wasm` to produce the artifact.
  */
 export function loadDmpCodec(): Promise<DmpCodec> {
@@ -175,7 +176,12 @@ export function loadDmpCodec(): Promise<DmpCodec> {
     const codec = bind(wasm as unknown as DmpExports);
     current = codec;
     return codec;
-  })();
+  })().catch((error: unknown) => {
+    // A transient chunk failure (offline, a stale tab after a deploy) must not
+    // disable decoding for the rest of the page's life.
+    cached = undefined;
+    throw error;
+  });
   return cached;
 }
 
