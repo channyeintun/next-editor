@@ -20,9 +20,10 @@ export interface RuntimePanelContext {
    * paused, ready or ended) sets this, and from then on it wins over the recording's full-height changes, across pause, resume,
    * seeking and the end of playback. It ends (back to null) when the editor leaves
    * playback: another recording is loaded, the lesson is unloaded, or a take starts
-   * (see useEndViewerDockOverride). It is viewer-only: selectRecordingState leaves
-   * it out, so no recording or runtime track ever captures it, and the live
-   * isFullHeight that record mode and the studio Performer drive is left untouched.
+   * (see useEndViewerDockOverride in hooks/useRuntimeDockLayout.ts). It is
+   * viewer-only: selectRecordingState leaves it out, so no recording or runtime
+   * track ever captures it, and the live isFullHeight that record mode and the
+   * studio Performer drive is left untouched.
    */
   viewerFullHeight: boolean | null;
 }

@@ -183,6 +183,15 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+/**
+ * A sidebar or preview-dock width delta that changes something: a finite,
+ * non-zero number. Recording keeps every snapshot that carries one, and replay
+ * applies only those.
+ */
+export function isNonZeroWidthDelta(value: unknown): value is number {
+  return isFiniteNumber(value) && value !== 0;
+}
+
 function areWorkspaceWidthDeltasEqual(
   left: WorkspaceRecordingSnapshot,
   right: WorkspaceRecordingSnapshot,

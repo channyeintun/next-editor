@@ -38,7 +38,8 @@ with the mode:
   read becomes the forward sync's new baseline, so it is not written back.
 - **Recording:** the machine only _reads_ the workspace — it pulls immutable
   snapshots and timed `WORKSPACE_EVENT`s from the store (via
-  `getWorkspaceSnapshot` / `handleWorkspaceEvent` in `NextEditorProvider`). The
+  `getWorkspaceSnapshot` in `src/hooks/useWorkspaceRecordingAdapter.ts` and
+  `handleWorkspaceEvent` in `NextEditorProvider`). The
   store stays the owner; the recording accumulates a history.
 - **Playback:** the machine _drives_ the store. `applyWorkspaceSnapshot` calls
   `loadProject(...)`, so the store becomes a _render target_ reflecting the
@@ -51,8 +52,9 @@ with the mode:
 
 Workspace-shaped state has exactly **one writer at a time**: the user/UI when not
 playing back, the machine during playback. The hand-off is enforced by
-`suppressWorkspaceEventsRef` in `NextEditorProvider` (its
-`useWorkspaceRecordingAdapter`) — while the machine writes a recorded snapshot
+`suppressWorkspaceEventsRef` from `useWorkspaceRecordingAdapter`
+(`src/hooks/useWorkspaceRecordingAdapter.ts`), which `NextEditorProvider`'s
+`handleWorkspaceEvent` checks — while the machine writes a recorded snapshot
 into the store, store → machine `WORKSPACE_EVENT` emission is gated for that tick
 so playback writes are not recaptured as new edits.
 
@@ -487,7 +489,7 @@ flowchart TB
 1. `useNextEditorActorActions` wraps `send` in senders (`startRecording`, `play`, `syncEditorRef`, etc.). Their identities are held in `useState`, because the React Compiler skips hookless hooks and `CodeEditor` keys an unmount cleanup on `syncEditorRef`.
 2. `useNextEditorInteractionEffects` re-asserts `SET_EDITOR_REF` on mount and after every transition (a send to a stopped actor is dropped), and calls `usePlaybackInteractionPause` (`machine/playbackInteraction.ts`), which pauses playback on editor input or the Space key.
 3. `useLeavePageGuards` keeps the viewer's edits on `pagehide` or when the tab is hidden, and asks before unloading while a take is in progress (`selectIsTakeInProgress`).
-4. The machine input's host hooks come from the app's stores: `useWorkspaceRecordingAdapter` supplies `getWorkspaceSnapshot` / `applyWorkspaceSnapshot` and the suppression flag, and the slide hooks come from `src/stores/slidesRecordingAdapter.ts`. They are declared once, as `EditorMachineHostHooks`, for both the input and the context; `createInitialContext` copies each one by name, and a `satisfies` check makes a hook missing from that copy a type error.
+4. The machine input's host hooks come from the app's stores: `useWorkspaceRecordingAdapter` (`src/hooks/useWorkspaceRecordingAdapter.ts`) supplies `getWorkspaceSnapshot` / `applyWorkspaceSnapshot` and the suppression flag, and the slide hooks come from `src/stores/slidesRecordingAdapter.ts`. They are declared once, as `EditorMachineHostHooks`, for both the input and the context; `createInitialContext` copies each one by name, and a `satisfies` check makes a hook missing from that copy a type error.
 5. Components read state through the context hooks, which select slices with `NextEditorActorContext.useSelector` (`useNextEditorMetadata` for flags, `useNextEditorPlayback` for speed/volume/duration, `useLiveTime` for the playhead).
 
 ## Practical Summary

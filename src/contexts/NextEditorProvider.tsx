@@ -20,15 +20,13 @@ import {
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { selectRecordingState } from "../stores/runtimePanelStore";
-import {
-  useWebContainerRuntimeSaveWorkspace,
-  useWebContainerRuntimeSnapshotGetter,
-} from "../hooks/useWebContainerRuntime";
-import { useWorkspaceActions } from "../hooks/useWorkspace";
+import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
+import { useEndViewerDockOverride } from "../hooks/useRuntimeDockLayout";
+import { useWorkspaceRecordingAdapter } from "../hooks/useWorkspaceRecordingAdapter";
 import { createRecordingStorage, type RecordingStorage } from "../storage/RecordingStorage";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
-import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../types/workspace";
+import type { WorkspaceWidthDeltas } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
 import { createChatCheckpoint } from "../agent/chatRecording";
 import { keepLearnerWorkspace } from "../stores/learnerVersionsStore";
@@ -100,159 +98,6 @@ function useLeavePageGuards(actorRef: EditorActorRef): void {
     window.addEventListener("beforeunload", confirmLeaving);
     return () => window.removeEventListener("beforeunload", confirmLeaving);
   }, [isTakeInProgress]);
-}
-
-/**
- * Ends the viewer's full-height choice for the runtime dock (runtimePanelStore's
- * viewerFullHeight) when the editor leaves playback. It lasts for as long as one
- * recording stays loaded, through play, pause, seeking, stopping and the end; it ends
- * when another recording is loaded, the lesson is unloaded, or a take starts, since
- * each of those leaves `playback`. Any reload of the same lesson ends it too: the URL
- * loader's whole-file retry after a dropped stream, and a late narration blob that
- * sends a finished take back through `loading`. Each of those restarts the replay at
- * `ready` and ends the whiteboard's playback session as well, so the dock starting
- * over with them is deliberate. The actor is subscribed to directly rather than
- * through a selector, so a brief `loading` between two recordings is never missed.
- */
-function useEndViewerDockOverride(actorRef: EditorActorRef): void {
-  const { store: runtimePanelStore } = useRuntimePanelStore();
-  useEffect(() => {
-    const subscription = actorRef.subscribe((snapshot) => {
-      if (
-        !snapshot.matches("playback") &&
-        runtimePanelStore.getSnapshot().context.viewerFullHeight !== null
-      ) {
-        runtimePanelStore.trigger.clearViewerFullHeight();
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [actorRef, runtimePanelStore]);
-}
-
-/**
- * The workspace side of recording and replay. getWorkspaceSnapshot reads the workspace
- * store for the machine, reusing its last snapshot while nothing it holds has changed;
- * applyWorkspaceSnapshot loads a replayed snapshot back into the store. The workspace
- * events that load sets off are suppressed until the next task
- * (suppressWorkspaceEventsRef), so playback writes are not recaptured as new edits.
- */
-function useWorkspaceRecordingAdapter() {
-  const {
-    getProject,
-    getActiveFilePath,
-    getCollapsedFolders,
-    getSidebarScrollTop,
-    getSidebarWidth,
-    getSidebarCollapsed,
-    loadProject,
-    setSidebarWidth,
-    startSidebarCollapsed,
-  } = useWorkspaceActions();
-  const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
-  const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
-  const previewHandle = usePreviewAdapterHandle();
-  const workspaceSnapshotRef = useRef<WorkspaceRecordingSnapshot | null>(null);
-  const suppressWorkspaceEventsRef = useRef(false);
-  const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (clearWorkspaceEventSuppressionTimeoutRef.current !== null) {
-        window.clearTimeout(clearWorkspaceEventSuppressionTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const suppressWorkspaceEvents = () => {
-    suppressWorkspaceEventsRef.current = true;
-
-    if (clearWorkspaceEventSuppressionTimeoutRef.current !== null) {
-      window.clearTimeout(clearWorkspaceEventSuppressionTimeoutRef.current);
-    }
-
-    clearWorkspaceEventSuppressionTimeoutRef.current = window.setTimeout(() => {
-      suppressWorkspaceEventsRef.current = false;
-      clearWorkspaceEventSuppressionTimeoutRef.current = null;
-    }, 0);
-  };
-
-  const getWorkspaceSnapshot = (): WorkspaceRecordingSnapshot => {
-    const project = getProject();
-    const activeFilePath = getActiveFilePath();
-    const collapsedFolders = getCollapsedFolders();
-    const sidebarScrollTop = getSidebarScrollTop();
-    const sidebarCollapsed = getSidebarCollapsed();
-    const cachedSnapshot = workspaceSnapshotRef.current;
-
-    if (
-      cachedSnapshot &&
-      cachedSnapshot.project === project &&
-      cachedSnapshot.activeFilePath === activeFilePath &&
-      cachedSnapshot.collapsedFolders === collapsedFolders &&
-      (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop &&
-      (cachedSnapshot.sidebarCollapsed ?? false) === sidebarCollapsed
-    ) {
-      return cachedSnapshot;
-    }
-
-    const nextSnapshot = {
-      project,
-      activeFilePath,
-      collapsedFolders,
-      sidebarScrollTop,
-      sidebarCollapsed,
-    } satisfies WorkspaceRecordingSnapshot;
-
-    workspaceSnapshotRef.current = nextSnapshot;
-    return nextSnapshot;
-  };
-
-  const applyWorkspaceSnapshot = (snapshot: WorkspaceRecordingSnapshot) => {
-    suppressWorkspaceEvents();
-    loadProject(
-      snapshot.project,
-      snapshot.activeFilePath,
-      snapshot.collapsedFolders ?? [],
-      snapshot.sidebarScrollTop ?? 0,
-    );
-    // Only when the recording says so. Absent — every recording made before
-    // this, and every lesson that does not ask — the viewer's own preference
-    // stands, and even when it is present this is the opening frame rather
-    // than a lock: the toggle keeps working mid-replay, and nothing is
-    // written back to their storage.
-    if (typeof snapshot.sidebarCollapsed === "boolean") {
-      startSidebarCollapsed(snapshot.sidebarCollapsed);
-    }
-    if (
-      typeof snapshot.sidebarWidthDelta === "number" &&
-      Number.isFinite(snapshot.sidebarWidthDelta) &&
-      snapshot.sidebarWidthDelta !== 0
-    ) {
-      setSidebarWidth(getSidebarWidth() + snapshot.sidebarWidthDelta);
-    }
-    if (
-      typeof snapshot.previewDockWidthDelta === "number" &&
-      Number.isFinite(snapshot.previewDockWidthDelta) &&
-      snapshot.previewDockWidthDelta !== 0
-    ) {
-      previewHandle.dockWidthDeltaApplier.current?.(snapshot.previewDockWidthDelta);
-    }
-    // The runtime's workspace sync already moves these files into the container.
-    // Saving as well re-runs a finished run-on-save runner on them, so the live
-    // console, shown whenever playback is not playing (ready, paused, ended),
-    // follows the replayed workspace, including a next lesson loaded in place
-    // under the same starter project id. Only when the runner has not already run
-    // this code: a pause re-applies the workspace it shows, and file switches and
-    // sidebar scrolls replay as whole snapshots. Only for a runtime that has been
-    // started (any status but idle): starting one is the auto-start's call
-    // (allowAmbientStart, runOnStartup, browser support) or the viewer's, never
-    // the replay's.
-    if (getRuntimeRecordingSnapshot().status !== "idle") {
-      void saveRuntimeWorkspace({ rerunOnlyIfChanged: true });
-    }
-  };
-
-  return { getWorkspaceSnapshot, applyWorkspaceSnapshot, suppressWorkspaceEventsRef };
 }
 
 const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({

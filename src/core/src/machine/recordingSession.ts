@@ -10,6 +10,7 @@ import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { ChatRecordingEvent } from "../chat";
 import {
   areWorkspaceSnapshotsEqual,
+  isNonZeroWidthDelta,
   toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingSnapshot,
   type WorkspaceWidthDeltas,
@@ -158,10 +159,6 @@ export function appendPreviewPatchBatch(
     time: getRecordingTimestamp(session),
   });
   return true;
-}
-
-function isNonZeroWidthDelta(value: unknown): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value !== 0;
 }
 
 /**

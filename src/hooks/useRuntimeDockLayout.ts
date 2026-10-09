@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useSelector } from "@xstate/store-react";
+import type { EditorActorRef } from "../core/src/useNextEditor";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   selectActiveTab,
@@ -90,4 +92,31 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
     fillsColumn: displayIsFullHeight && !displayIsCollapsed,
     toggleFullHeight,
   };
+}
+
+/**
+ * Ends the viewer's full-height choice for the runtime dock (runtimePanelStore's
+ * viewerFullHeight) when the editor leaves playback. It lasts for as long as one
+ * recording stays loaded, through play, pause, seeking, stopping and the end; it ends
+ * when another recording is loaded, the lesson is unloaded, or a take starts, since
+ * each of those leaves `playback`. Any reload of the same lesson ends it too: the URL
+ * loader's whole-file retry after a dropped stream, and a late narration blob that
+ * sends a finished take back through `loading`. Each of those restarts the replay at
+ * `ready` and ends the whiteboard's playback session as well, so the dock starting
+ * over with them is deliberate. The actor is subscribed to directly rather than
+ * through a selector, so a brief `loading` between two recordings is never missed.
+ */
+export function useEndViewerDockOverride(actorRef: EditorActorRef): void {
+  const { store: runtimePanelStore } = useRuntimePanelStore();
+  useEffect(() => {
+    const subscription = actorRef.subscribe((snapshot) => {
+      if (
+        !snapshot.matches("playback") &&
+        runtimePanelStore.getSnapshot().context.viewerFullHeight !== null
+      ) {
+        runtimePanelStore.trigger.clearViewerFullHeight();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [actorRef, runtimePanelStore]);
 }
