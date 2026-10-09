@@ -4,7 +4,7 @@ const styles = `
 .arch-page{
   --arch-page-bg:#e4e9ee;
   --paper:#eef2f6; --paper-strong:#e2e9f1; --grid-line:#c9d6e3;
-  --ink:#14243a; --ink-soft:#4a5d75; --ink-faint:#7c8ea4;
+  --ink:#14243a; --ink-soft:#4a5d75; --ink-faint:#56687f;
   --blue:#2f6fa8; --blue-fill:#dce7f0;
   --redline:#b23a2e; --redline-fill:#f6e3e0;
   --dashline:#7c93ab;
