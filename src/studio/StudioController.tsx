@@ -916,7 +916,9 @@ export default function StudioController() {
   return (
     <div
       className={`fixed right-3 top-14 z-70 rounded-xl border border-slate-700 bg-[#0d1117]/95 text-slate-200 shadow-2xl backdrop-blur text-[13px] leading-5 ${
-        collapsed ? "py-2 pl-3 pr-2" : "w-96 max-h-[75vh] overflow-y-auto p-4"
+        collapsed
+          ? "py-2 pl-3 pr-2"
+          : "w-96 max-w-[calc(100vw-1.5rem)] max-h-[75vh] overflow-y-auto p-4"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
