@@ -10,7 +10,12 @@ export default function ToolConfirmationCard({
   onResolve: (approved: boolean) => void;
 }) {
   return (
-    <div className="mx-3 mb-3 rounded-lg border border-[#64a3ff]/25 bg-[#1a202a] p-3 shadow-[0_8px_20px_rgba(0,0,0,0.16)]">
+    // An alert, so the blocking request is announced when it appears; focus is
+    // left where the user put it.
+    <div
+      role="alert"
+      className="mx-3 mb-3 rounded-lg border border-[#64a3ff]/25 bg-[#1a202a] p-3 shadow-[0_8px_20px_rgba(0,0,0,0.16)]"
+    >
       <div className="flex items-start gap-2.5">
         <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[#64a3ff]/10 text-[#64a3ff]">
           <ShieldCheck size={15} />

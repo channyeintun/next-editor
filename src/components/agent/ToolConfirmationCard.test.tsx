@@ -13,6 +13,14 @@ describe("ToolConfirmationCard", () => {
     expect(document.querySelector("pre")?.textContent).toBe("npm install\nnpm test");
   });
 
+  it("is announced as an alert when it appears", () => {
+    render(<ToolConfirmationCard request={request} onResolve={() => {}} />);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Permission required");
+    expect(alert).toHaveTextContent("Allow run_command to run this command?");
+  });
+
   it("answers no on Deny and yes on Allow", () => {
     const onResolve = vi.fn<(approved: boolean) => void>();
     render(<ToolConfirmationCard request={request} onResolve={onResolve} />);

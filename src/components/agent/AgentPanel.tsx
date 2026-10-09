@@ -443,7 +443,11 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
           {activeConfirmation ? (
             <ToolConfirmationCard
               request={activeConfirmation.request}
-              onResolve={(approved) => resolveConfirmation(activeConfirmation.id, approved)}
+              onResolve={(approved) => {
+                resolveConfirmation(activeConfirmation.id, approved);
+                // The answered card unmounts with the focused Allow/Deny button.
+                messageInputRef.current?.focus();
+              }}
             />
           ) : null}
 

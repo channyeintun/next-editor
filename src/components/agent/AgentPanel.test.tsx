@@ -11,7 +11,7 @@ import {
 } from "vite-plus/test";
 import { getAgentStore } from "../../agent/agentStore";
 import { getAgentCredentialStore } from "../../agent/credentials";
-import { getAgentSessionStore } from "../../agent/agentSession";
+import { getAgentSessionStore, resolveConfirmation } from "../../agent/agentSession";
 import { WorkspaceStoreContext, type WorkspaceStoreInstance } from "../../stores/workspaceStore";
 import AgentPanel from "./AgentPanel";
 
@@ -51,6 +51,9 @@ vi.mock("../../agent/agentSession", async (importOriginal) => {
       actual.getAgentSessionStore().trigger.setRunning({ isRunning: true });
     }),
     stopAgentRun: vi.fn<typeof actual.stopAgentRun>(),
+    resolveConfirmation: vi.fn<typeof actual.resolveConfirmation>((id) => {
+      actual.getAgentSessionStore().trigger.remove({ id });
+    }),
   };
 });
 
@@ -176,6 +179,40 @@ describe("AgentPanel composer focus", () => {
 
     expect(isPasteLeftAlone).toBe(true);
     expect(getAgentStore().getSnapshot().context.draftImages).toHaveLength(0);
+  });
+});
+
+describe("AgentPanel tool permission", () => {
+  function askPermission() {
+    renderPanel();
+    fireEvent.change(composer(), { target: { value: "Run the tests" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    act(() =>
+      getAgentSessionStore().trigger.enqueue({
+        item: { id: 7, request: { toolName: "bash", summary: "npm test" } },
+      }),
+    );
+  }
+
+  it("announces the request as an alert", () => {
+    askPermission();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Allow bash to run this command?");
+  });
+
+  it.each([
+    ["Allow", true],
+    ["Deny", false],
+  ])("moves focus to the composer after %s", (name, approved) => {
+    askPermission();
+    const answer = screen.getByRole("button", { name });
+    answer.focus();
+
+    fireEvent.click(answer);
+
+    expect(resolveConfirmation).toHaveBeenCalledWith(7, approved);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(composer()).toHaveFocus();
   });
 });
 
