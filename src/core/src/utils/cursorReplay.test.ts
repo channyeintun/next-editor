@@ -375,3 +375,63 @@ describe("cursorReplay", () => {
     expect(held?.tween?.from.target).not.toBe(target);
   });
 });
+
+// Streaming playback hands Cursor a new Recording per chunk while appending to the
+// same track arrays; a new samples array restarts Cursor's rAF loop, so it must
+// change only when the samples can.
+describe("getCursorReplaySamples caching", () => {
+  const streamed = () => {
+    const recording = createRecording([createFrame(0, { x: 0, y: 0, visible: true })]);
+    recording.cursorEvents = [
+      { timestamp: 0, x: 10, y: 10, visible: true },
+      { timestamp: 100, x: 20, y: 20, visible: true },
+    ];
+    recording.slideEvents = [];
+    return recording;
+  };
+
+  it("returns the same samples for a new Recording over the same tracks", () => {
+    const recording = streamed();
+    const samples = getCursorReplaySamples(recording);
+
+    expect(getCursorReplaySamples({ ...recording, duration: 5_000 })).toBe(samples);
+  });
+
+  it("recomputes when a cursor event is appended", () => {
+    const recording = streamed();
+    const samples = getCursorReplaySamples(recording);
+
+    recording.cursorEvents!.push({ timestamp: 200, x: 30, y: 30, visible: true });
+    const next = getCursorReplaySamples({ ...recording });
+
+    expect(next).not.toBe(samples);
+    expect(next).toHaveLength(samples.length + 1);
+  });
+
+  it("recomputes when a slide opens, since an overlay span changes the cleanup", () => {
+    const recording = streamed();
+    recording.cursorEvents!.push(
+      // Hidden just after 1 s and back near the same spot much later: a stray leave
+      // to drop, unless a slide opened over the pointer then.
+      { timestamp: 1_033, x: 0, y: 0, visible: false },
+      { timestamp: 9_500, x: 22, y: 20, visible: true },
+    );
+    const samples = getCursorReplaySamples(recording);
+    expect(samples.some((sample) => !sample.visible)).toBe(false);
+
+    recording.slideEvents!.push({ timestamp: 1_000, type: "slide_open", slideId: "s1" });
+    const next = getCursorReplaySamples({ ...recording });
+
+    expect(next).not.toBe(samples);
+    expect(next.some((sample) => !sample.visible)).toBe(true);
+  });
+
+  it("caches the frames-only path until frames are appended", () => {
+    const recording = createRecording([createFrame(0, { x: 0, y: 0, visible: true })]);
+    const samples = getCursorReplaySamples(recording);
+    expect(getCursorReplaySamples({ ...recording })).toBe(samples);
+
+    recording.frames.push(...compressFrames([createFrame(50, { x: 5, y: 5, visible: true })]));
+    expect(getCursorReplaySamples({ ...recording })).not.toBe(samples);
+  });
+});

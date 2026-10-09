@@ -226,12 +226,44 @@ const deriveCursorSamplesFromFrames = (frames: DeltaFrame[]): CursorRecordingEve
   return samples;
 };
 
-export const getCursorReplaySamples = (recording: Recording): CursorRecordingEvent[] => {
-  if (recording.cursorEvents?.length) {
-    return normalizeCursorEvents(recording.cursorEvents, overlaySpansOf(recording));
-  }
+// Samples per source track (cursorEvents, or frames when there are none), with the
+// inputs they were computed from. A streamed chunk builds a new Recording but appends
+// to the same track arrays (appendRecordsInPlace), and Cursor restarts its rAF loop
+// whenever the samples change, so a new Recording alone must hand back the same array.
+const replaySampleCache = new WeakMap<
+  readonly unknown[],
+  { inputs: readonly unknown[]; samples: CursorRecordingEvent[] }
+>();
 
-  return deriveCursorSamplesFromFrames(recording.frames);
+const areInputsSame = (left: readonly unknown[], right: readonly unknown[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+/**
+ * The cursor samples playback replays, sorted and cleaned. Cached per source array:
+ * the same array comes back until a track it reads grows or is replaced. Callers
+ * must not mutate it.
+ */
+export const getCursorReplaySamples = (recording: Recording): CursorRecordingEvent[] => {
+  const { cursorEvents, slideEvents, whiteboardEvents, frames } = recording;
+  const source = cursorEvents?.length ? cursorEvents : frames;
+  // Overlay spans (slides, whiteboard) shape cursor-event cleanup, not the frames path.
+  const inputs = cursorEvents?.length
+    ? [
+        cursorEvents.length,
+        slideEvents,
+        slideEvents?.length ?? 0,
+        whiteboardEvents,
+        whiteboardEvents?.length ?? 0,
+      ]
+    : [frames.length];
+  const cached = replaySampleCache.get(source);
+  if (cached && areInputsSame(cached.inputs, inputs)) return cached.samples;
+
+  const samples = cursorEvents?.length
+    ? normalizeCursorEvents(cursorEvents, overlaySpansOf(recording))
+    : deriveCursorSamplesFromFrames(frames);
+  replaySampleCache.set(source, { inputs, samples });
+  return samples;
 };
 
 // `progress` of the way from `previous` to `next`, as a tween the renderer
