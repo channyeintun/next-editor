@@ -108,10 +108,13 @@ describe("TerminalPanel", () => {
     expect(screen.getByTestId("Console")).toBeInTheDocument();
     expect(screen.getByRole("status")).toBe(status);
 
+    const dockToggle = screen.getByRole("button", { name: "Runtime dock", expanded: true });
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Collapse runtime dock" }));
+      fireEvent.click(dockToggle);
     });
     expect(screen.queryByTestId("Console")).toBeNull();
+    // The toggle keeps its name and reports the collapse in aria-expanded.
+    expect(screen.getByRole("button", { name: "Runtime dock", expanded: false })).toBe(dockToggle);
     expect(screen.getByRole("status")).toBe(status);
     expect(status).toHaveTextContent("Runner is starting");
   });
@@ -134,7 +137,7 @@ describe("TerminalPanel", () => {
   it("hooks the tour's Runner step and its dock lookup on the collapse toggle", () => {
     render(dock("ready"));
 
-    const collapse = screen.getByRole("button", { name: "Collapse runtime dock" });
+    const collapse = screen.getByRole("button", { name: "Runtime dock" });
     expect(collapse).toHaveAttribute("data-tour", "runner");
     expect(collapse).toHaveAttribute("data-runtime-dock-toggle");
     expect(collapse).not.toHaveAttribute("data-studio-target");

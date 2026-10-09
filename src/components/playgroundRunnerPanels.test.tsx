@@ -519,7 +519,7 @@ describe("playground runner panels", () => {
     );
     // The studio and the tour find the collapse toggle; the tour's Runner step,
     // which is about the WebContainer dock, does not.
-    const collapse = screen.getByRole("button", { name: "Collapse runtime dock" });
+    const collapse = screen.getByRole("button", { name: "Runtime dock" });
     expect(collapse).toHaveAttribute("data-studio-target", STUDIO_DOCK_TOGGLE_TARGET_ID);
     expect(collapse).toHaveAttribute("data-runtime-dock-toggle");
     expect(collapse).not.toHaveAttribute("data-tour");
@@ -548,13 +548,33 @@ describe("playground runner panels", () => {
       // full-height toggle is clipped off the end of the header.
       const tabStrip = screen.getByRole("button", { name: panel.runnerTab }).parentElement;
       expect(tabStrip).toHaveClass("min-w-0", "overflow-x-auto");
-      for (const name of ["Expand runtime dock to full height", "Collapse runtime dock"]) {
+      for (const name of ["Full-height runtime dock", "Runtime dock"]) {
         const control = screen.getByRole("button", { name });
         expect(tabStrip).not.toContainElement(control);
         expect(control).toHaveClass("shrink-0", "size-10");
       }
     },
   );
+
+  it.each(CASES)("$kind: keeps the dock toggles' names and reports their state", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    await renderPanel(panel);
+    const fullHeight = screen.getByRole("button", {
+      name: "Full-height runtime dock",
+      pressed: false,
+    });
+    const dockToggle = screen.getByRole("button", { name: "Runtime dock", expanded: true });
+
+    await click(fullHeight);
+    expect(screen.getByRole("button", { name: "Full-height runtime dock", pressed: true })).toBe(
+      fullHeight,
+    );
+
+    await click(dockToggle);
+    expect(screen.getByRole("button", { name: "Runtime dock", expanded: false })).toBe(dockToggle);
+    // A collapsed dock has no height to choose.
+    expect(fullHeight).toBeDisabled();
+  });
 
   // Run needs no sign-in for any language: the proxied ones (Go, Rust, Zig,
   // Haskell, Kotlin) are rate-limited by IP when signed out, and Kite and
@@ -666,7 +686,7 @@ describe("playground runner panels", () => {
     await renderPanel(go);
     const status = screen.getByRole("status");
 
-    await click(screen.getByRole("button", { name: "Collapse runtime dock" }));
+    await click(screen.getByRole("button", { name: "Runtime dock", expanded: true }));
 
     expect(screen.queryByTestId("console")).toBeNull();
     expect(screen.getByRole("status")).toBe(status);
@@ -915,6 +935,11 @@ describe("playground runner panels", () => {
     expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
     expect(screen.getByRole("button", { name: panel.runnerTab })).toBeDisabled();
+    // The recorded height shows as pressed, and stays the viewer's to change.
+    expect(
+      screen.getByRole("button", { name: "Full-height runtime dock", pressed: true }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Runtime dock", expanded: true })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /^sign in/i })).toBeNull();
   });
 

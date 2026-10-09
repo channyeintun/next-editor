@@ -52,10 +52,10 @@ describe("product tour", () => {
       };
     };
 
-    async function advancePastAgentStep(dockToggleLabel: string) {
+    async function advancePastAgentStep(dockExpanded: boolean) {
       document.body.innerHTML = `
         <button data-tour="agent">Agent</button>
-        <button data-runtime-dock-toggle aria-label="${dockToggleLabel}"></button>
+        <button data-runtime-dock-toggle aria-label="Runtime dock" aria-expanded="${dockExpanded}"></button>
       `;
       const agentTab = document.querySelector<HTMLElement>('[data-tour="agent"]')!;
       const dockToggle = document.querySelector<HTMLElement>("[data-runtime-dock-toggle]")!;
@@ -71,11 +71,11 @@ describe("product tour", () => {
     }
 
     it("opens the Agent tab and expands a collapsed dock of either kind", async () => {
-      expect(await advancePastAgentStep("Expand runtime dock")).toEqual(["agent", "dock"]);
+      expect(await advancePastAgentStep(false)).toEqual(["agent", "dock"]);
     });
 
     it("leaves an open dock open", async () => {
-      expect(await advancePastAgentStep("Collapse runtime dock")).toEqual(["agent"]);
+      expect(await advancePastAgentStep(true)).toEqual(["agent"]);
     });
   });
 });

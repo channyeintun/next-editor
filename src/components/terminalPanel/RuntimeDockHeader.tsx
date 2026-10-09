@@ -41,6 +41,11 @@ interface RuntimeDockHeaderProps {
  * The header row both runtime docks share: the tab strip, then the full-height
  * and collapse toggles. The product tour finds the collapse toggle of either
  * dock by its data-runtime-dock-toggle attribute.
+ *
+ * Like the editor header's panel toggles, the two toggles keep one accessible
+ * name and carry their state: full height is a toggle (aria-pressed), and the
+ * collapse toggle shows and hides the dock's body (aria-expanded). The title
+ * keeps the action as a hover hint.
  */
 function RuntimeDockHeader({
   tabs,
@@ -87,9 +92,8 @@ function RuntimeDockHeader({
         disabled={displayIsCollapsed}
         onClick={toggleFullHeight}
         className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
-        aria-label={
-          displayIsFullHeight ? "Restore runtime dock height" : "Expand runtime dock to full height"
-        }
+        aria-label="Full-height runtime dock"
+        aria-pressed={displayIsFullHeight}
         title={
           displayIsFullHeight ? "Restore runtime dock height" : "Expand runtime dock to full height"
         }
@@ -104,7 +108,8 @@ function RuntimeDockHeader({
         disabled={disabled}
         onClick={toggleCollapsed}
         className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
-        aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
+        aria-label="Runtime dock"
+        aria-expanded={!displayIsCollapsed}
         title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
       >
         {displayIsCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
