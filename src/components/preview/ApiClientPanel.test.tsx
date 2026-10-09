@@ -4,7 +4,7 @@ import {
   ApiClientStoreProvider,
   useApiClientStoreInstance,
 } from "../../contexts/ApiClientStoreContext";
-import type { ApiClientStoreInstance } from "../../stores/apiClientStore";
+import type { ApiClientReplayPayload, ApiClientStoreInstance } from "../../stores/apiClientStore";
 import ApiClientPanel from "./ApiClientPanel";
 
 // The editors are irrelevant here and Monaco does not load under jsdom.
@@ -61,6 +61,63 @@ describe("ApiClientPanel response", () => {
 
     expect(screen.getByText("781.3 KB")).toBeInTheDocument();
     expect(screen.getByText("Truncated")).toBeInTheDocument();
+  });
+});
+
+describe("ApiClientPanel status announcements", () => {
+  function replayState(store: ApiClientStoreInstance, patch: Partial<ApiClientReplayPayload>) {
+    act(() => {
+      store.trigger.applyReplayState({
+        method: "GET",
+        path: "/api/items",
+        body: "",
+        headers: [],
+        sending: false,
+        history: [],
+        result: null,
+        ...patch,
+      });
+    });
+  }
+
+  it("announces the request lifecycle through one status region", () => {
+    const store = renderPanel();
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    replayState(store, { sending: true });
+    expect(screen.getByRole("status")).toHaveTextContent("Sending request");
+
+    replayState(store, {
+      result: {
+        ok: true,
+        response: {
+          status: 200,
+          statusText: "OK",
+          headers: [],
+          body: "{}",
+          durationMs: 12,
+          bodyBytes: 2,
+        },
+      },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Response 200 OK, 12 ms");
+
+    replayState(store, {
+      result: { ok: false, error: { error: "connect ECONNREFUSED", durationMs: 4 } },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Request failed: connect ECONNREFUSED");
+    expect(screen.getByRole("status")).toBe(status);
+  });
+
+  it("announces that the server is not ready yet", () => {
+    render(
+      <ApiClientStoreProvider>
+        <ApiClientPanel onSend={() => undefined} runtimeReady={false} />
+      </ApiClientStoreProvider>,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for the server to start");
   });
 });
 

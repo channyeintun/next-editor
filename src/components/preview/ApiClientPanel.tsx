@@ -129,6 +129,18 @@ export default function ApiClientPanel({
 
   const canSend = runtimeReady && !sending;
 
+  // Spoken summary of the request lifecycle for the persistent status region.
+  // The response body stays out of it; only the outcome is announced.
+  const statusMessage = !runtimeReady
+    ? "Waiting for the server to start"
+    : sending
+      ? "Sending request"
+      : result
+        ? result.ok
+          ? `Response ${result.response.status} ${result.response.statusText}, ${formatDuration(result.response.durationMs)}`
+          : `Request failed: ${result.error.error}`
+        : "";
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSend) {
       e.preventDefault();
@@ -138,6 +150,10 @@ export default function ApiClientPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#1a1e27] text-sm text-slate-200">
+      {/* Always mounted so assistive tech announces each change of the request state. */}
+      <div role="status" className="sr-only">
+        {statusMessage}
+      </div>
       {/* Waiting banner — the server isn't listening yet, so requests can't be sent. */}
       {!runtimeReady ? (
         <div className="flex items-center gap-2 border-b border-slate-800 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-300">
