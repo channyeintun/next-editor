@@ -484,7 +484,7 @@ function FileSidebarPanel() {
             aria-label={inputLabel}
             aria-invalid={inlineError ? true : undefined}
             aria-describedby={inlineError ? `${inlineErrorId} ${inlineHintId}` : inlineHintId}
-            className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500"
+            className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-400"
           />
         </div>
         {inlineError ? (
