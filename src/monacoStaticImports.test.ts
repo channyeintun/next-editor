@@ -104,7 +104,7 @@ describe("Monaco stays behind the lazy CodeEditor", () => {
 
   it("finds the Monaco imports CodeEditor does have", () => {
     expect(findMonacoImports("src/components/CodeEditor.tsx")).toContain(
-      "src/components/CodeEditor.tsx -> y-monaco",
+      "src/components/CodeEditor.tsx -> src/components/codeEditor/useYMonacoBinding.ts -> y-monaco",
     );
   });
 });

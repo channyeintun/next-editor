@@ -23,6 +23,9 @@ const NOT_COMPILED: Record<string, string> = {
   "src/components/CodeEditor.tsx":
     'opts out with "use no memo": Monaco models are reconciled during render, and the ' +
     "compiler's memoization once broke syntax highlighting",
+  "src/components/codeEditor/useYMonacoBinding.ts":
+    'opts out with "use no memo", like the CodeEditor it was extracted from, so its ' +
+    "effects keep their timing; setting up the binding also needs a try/finally",
   "src/contexts/CollaborationContext.tsx":
     "try/finally, and refs written during render; its useCallback/useMemo are load-bearing " +
     "(the room effect that owns the WebSocket depends on them)",

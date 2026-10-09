@@ -1,7 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { MonacoBinding } from "y-monaco";
-import * as Y from "yjs";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -12,8 +10,6 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
-import type { EditorSelection } from "../core/src/types";
-import type { CollaborationRoomProvider } from "../collaboration/roomProvider";
 import {
   executionKindForLessonType,
   isWorkspaceTextFile,
@@ -23,15 +19,6 @@ import {
   type WorkspaceLessonType,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
-import { collaborationTextForPath } from "../collaboration/collaborationTextForPath";
-import { canPublishCollaborationUpdate } from "../collaboration/protocol";
-import { trackCollaborationUndoOrigin } from "../collaboration/undo";
-import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
-import { collaborationParticipantKey } from "../collaboration/participantKey";
-import {
-  collaborationParticipantColorIndex,
-  resolveCollaborationCursor,
-} from "../collaboration/relativePosition";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
@@ -43,21 +30,12 @@ import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
 import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel from "./HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
-import {
-  CollaborationCursorLabelManager,
-  type CollaborationCursorLabel,
-} from "./collaborationCursorLabels";
-import { collaboratorDisplayName } from "./collaboratorAppearance";
-import {
-  collectRemoteEditorSelections,
-  participantCursorDecorations,
-  remoteSelectionDecorations,
-  remoteSelectionToEditorSelection,
-  resolveAwarenessText,
-  resolveRemoteSelection,
-  yMonacoBindsModel,
-  yMonacoSelectionStyleRules,
-} from "./remoteCursors";
+import { createMonacoTextEditEvent } from "./codeEditor/textEditEvent";
+import { useCollaborationPresence } from "./codeEditor/useCollaborationPresence";
+import { useFollowViewport } from "./codeEditor/useFollowViewport";
+import { useRemoteCursorDecorations } from "./codeEditor/useRemoteCursorDecorations";
+import { useRemoteSelectionRecording } from "./codeEditor/useRemoteSelectionRecording";
+import { useYMonacoBinding } from "./codeEditor/useYMonacoBinding";
 import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
@@ -74,20 +52,10 @@ import {
   workspacePathFromMonacoModelUri,
 } from "../monaco";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
-import {
-  createCollaborationEditorViewport,
-  resolveCollaborationEditorViewport,
-} from "../collaboration/editorViewport";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
-
-// y-monaco transactions carry their MonacoBinding as the origin. Registered
-// here, at module load and so before any binding exists, because undo.ts must
-// not import y-monaco itself: that would put Monaco in the static closure of
-// everything that reaches CollaborationContext.
-trackCollaborationUndoOrigin(MonacoBinding);
 
 const Preview = lazy(() => import("./Preview"));
 // The other runner panels are thin clients in front of a Worker proxy, but this
@@ -128,72 +96,12 @@ function RuntimeDock({ lessonType }: { lessonType: WorkspaceLessonType }) {
   );
 }
 
-const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
-
 interface CodeEditorProps {
   showImportExport?: boolean;
   breadcrumb?: ReactNode;
 }
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
-
-function publishYMonacoSelection(
-  provider: CollaborationRoomProvider,
-  editor: StandaloneEditor,
-  model: monaco.editor.ITextModel,
-  text: Y.Text,
-): void {
-  const selection = editor.getSelection();
-  if (!selection) return;
-  let anchorOffset = model.getOffsetAt(selection.getStartPosition());
-  let headOffset = model.getOffsetAt(selection.getEndPosition());
-  if (selection.getDirection() === monaco.SelectionDirection.RTL) {
-    [anchorOffset, headOffset] = [headOffset, anchorOffset];
-  }
-  provider.awareness.setLocalStateField("selection", {
-    anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
-    head: Y.createRelativePositionFromTypeIndex(text, headOffset),
-  });
-}
-
-function createMonacoTextEditEvent(
-  editor: StandaloneEditor,
-  changeEvent: monaco.editor.IModelContentChangedEvent,
-  beforeVersion: number,
-): TextEditEvent | null {
-  const model = editor.getModel();
-  const modelPath = model ? workspacePathFromMonacoModelUri(model.uri) : null;
-  if (!model || !modelPath) return null;
-
-  const changes: TextEditEvent["changes"] = changeEvent.changes.map((change) => ({
-    offset: change.rangeOffset,
-    deleteLength: change.rangeLength,
-    text: change.text,
-  }));
-  const afterLength = model.getValueLength();
-  const lengthDelta = changes.reduce(
-    (total, change) => total + change.text.length - change.deleteLength,
-    0,
-  );
-  return {
-    fileId: modelPath,
-    path: modelPath,
-    beforeVersion,
-    afterVersion: changeEvent.versionId,
-    beforeLength: afterLength - lengthDelta,
-    afterLength,
-    changes,
-  };
-}
-
-interface ActiveYMonacoBinding {
-  binding: MonacoBinding;
-  editor: StandaloneEditor;
-  model: monaco.editor.ITextModel;
-  provider: CollaborationRoomProvider;
-  text: Y.Text;
-  path: string;
-}
 
 /**
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
@@ -241,18 +149,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const isApplyingExternalModelValueRef = useRef(false);
   const pendingExternalModelCaptureRef = useRef(false);
   const modelVersionByUriRef = useRef(new Map<string, number>());
-  const remoteDecorationIdsRef = useRef<string[]>([]);
-  const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
-  const remoteAwarenessStyleRef = useRef<HTMLStyleElement | null>(null);
-  const appliedFollowViewportRef = useRef<string | null>(null);
-  const yMonacoBindingRef = useRef<ActiveYMonacoBinding | null>(null);
-  const isConfiguringYMonacoRef = useRef(false);
-  const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
-  const remoteCursorRecordingScopeRef = useRef<{
-    provider: CollaborationRoomProvider | null;
-    path: string;
-    isRecording: boolean;
-  }>({ provider: null, path: "", isRecording: false });
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -342,131 +238,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
-  const recordRemoteSelection = useEffectEvent((selection: EditorSelection) => {
-    if (usesPlaybackModel || !isRecording || !collaboration?.provider) return;
-    handleEditorChange(selection);
-  });
-
-  const disposeYMonacoBinding = useEffectEvent((clearAwareness = true) => {
-    const active = yMonacoBindingRef.current;
-    yMonacoBindingRef.current = null;
-    active?.binding.destroy();
-    if (clearAwareness && active) {
-      active.provider.awareness.setLocalStateField("selection", null);
-    }
-  });
-
-  const reconcileYMonacoBinding = useEffectEvent((editor: StandaloneEditor | null) => {
-    const provider = collaboration?.provider;
-    const model = editor?.getModel();
-    if (
-      !Y_MONACO_BINDING_ENABLED ||
-      !provider ||
-      !collaboration.canWrite ||
-      usesPlaybackModel ||
-      isBinaryActiveFile ||
-      !editor ||
-      !model ||
-      model !== activeModel
-    ) {
-      disposeYMonacoBinding();
-      return false;
-    }
-
-    const text = collaborationTextForPath(collaboration, provider.doc, activeFile.path);
-    if (!text) {
-      disposeYMonacoBinding();
-      return false;
-    }
-
-    const shouldPublishSelection = !isEditorCovered && !collaboration.followedParticipantKey;
-    const current = yMonacoBindingRef.current;
-    if (
-      current?.editor === editor &&
-      current.model === model &&
-      current.provider === provider &&
-      current.text === text &&
-      current.path === activeFile.path
-    ) {
-      if (shouldPublishSelection) {
-        publishYMonacoSelection(provider, editor, model, text);
-      }
-      return true;
-    }
-
-    disposeYMonacoBinding(false);
-    isConfiguringYMonacoRef.current = true;
-    try {
-      const binding = new MonacoBinding(text, model, new Set([editor]), provider.awareness);
-      yMonacoBindingRef.current = {
-        binding,
-        editor,
-        model,
-        provider,
-        text,
-        path: activeFile.path,
-      };
-      if (shouldPublishSelection) {
-        publishYMonacoSelection(provider, editor, model, text);
-      }
-      return true;
-    } catch {
-      yMonacoBindingRef.current = null;
-      provider.awareness.setLocalStateField("selection", null);
-      return false;
-    } finally {
-      isConfiguringYMonacoRef.current = false;
-    }
-  });
-
-  const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
-    if (!collaboration?.provider || usesPlaybackModel || !editor || isEditorCovered) {
-      return;
-    }
-    if (yMonacoBindingRef.current) return;
-    const model = editor.getModel();
-    const selection = editor.getSelection();
-    if (!model || !selection) return;
-    const modelPath = workspacePathFromMonacoModelUri(model.uri);
-    if (!modelPath) return;
-    collaboration.updateCursor(
-      modelPath,
-      model.getOffsetAt({
-        lineNumber: selection.selectionStartLineNumber,
-        column: selection.selectionStartColumn,
-      }),
-      model.getOffsetAt({
-        lineNumber: selection.positionLineNumber,
-        column: selection.positionColumn,
-      }),
-    );
-  });
-
-  const publishCollaborationViewport = useEffectEvent((editor: StandaloneEditor | null) => {
-    if (!collaboration?.provider || usesPlaybackModel || !editor || isEditorCovered) {
-      return;
-    }
-    const model = editor.getModel();
-    if (!model) return;
-    const path = workspacePathFromMonacoModelUri(model.uri);
-    const firstVisible = editor.getVisibleRanges()[0];
-    if (!path || !firstVisible) return;
-    const fileNodeId = collaboration.getNodeIdForPath(path);
-    if (!fileNodeId) return;
-    const topOffset = model.getOffsetAt({
-      lineNumber: firstVisible.startLineNumber,
-      column: 1,
-    });
-    const viewport = createCollaborationEditorViewport(
-      collaboration.provider.doc,
-      fileNodeId,
-      topOffset,
-      Math.max(0, editor.getScrollTop() - editor.getTopForLineNumber(firstVisible.startLineNumber)),
-      editor.getScrollLeft(),
-    );
-    collaboration.publishSurface({ kind: "editor", fileNodeId, viewport });
-  });
-
   const syncEditorContentToWorkspace = useEffectEvent((editor: StandaloneEditor | null) => {
     if (
       usesPlaybackModel ||
@@ -537,24 +308,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       await saveProject();
     }
   });
-
-  // The listeners handleEditorDidMount registers keep the closure of the
-  // render that mounted the editor, so they reach the room through these.
-  const flushCollaborationEdits = useEffectEvent(() => {
-    void collaboration?.provider?.flushNow();
-  });
-
-  const stopFollowingForLocalIntent = useEffectEvent(
-    (reason: "local-editor-input" | "local-scroll") => {
-      collaboration?.stopFollowing(reason);
-    },
-  );
-
-  const queueCollaborationTextEdit = useEffectEvent(
-    (editEvent: TextEditEvent, onProjected: (content: string | null) => void) => {
-      collaboration?.queueLocalTextEdit(editEvent, onProjected);
-    },
-  );
 
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
     const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
@@ -650,10 +403,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     // The view state was already saved by MonacoEditor's onWillDispose — its
     // cleanup runs before this one and the editor is disposed by now.
     disposeEditorListeners();
-    disposeYMonacoBinding();
-    remoteCursorLabelManagerRef.current?.clear();
-    remoteAwarenessStyleRef.current?.remove();
-    remoteAwarenessStyleRef.current = null;
+    yMonacoBinding.dispose();
+    remoteCursorDecorations.clear();
     const monaco = monacoRef.current;
 
     if (monaco) {
@@ -687,7 +438,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // one the editor shows and the one the collaboration binding holds are kept.
   useEffect(() => {
     const disposedUris = disposeRemovedWorkspaceModels(monaco, getProject().files, [
-      yMonacoBindingRef.current?.model,
+      yMonacoBinding.getActive()?.model,
     ]);
     for (const uri of disposedUris) {
       viewStatesRef.current.delete(uri);
@@ -729,6 +480,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     syncActivePlaybackModel(monaco);
   }, [syncActivePlaybackModel]);
 
+  const presence = useCollaborationPresence({
+    collaboration,
+    usesPlaybackModel,
+    isEditorCovered,
+    isBindingActive: () => yMonacoBinding.getActive() !== null,
+  });
+
   useEffect(() => {
     const editor = editorRef.current;
 
@@ -737,8 +495,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
 
     syncEditorRef(editor);
-    publishCollaborationCursor(editor);
-    publishCollaborationViewport(editor);
+    presence.publishCursor(editor);
+    presence.publishViewport(editor);
   }, [
     editorModelPath,
     editorRef,
@@ -747,316 +505,36 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     whiteboardContext.isOpen,
   ]);
 
-  useLayoutEffect(() => {
-    reconcileYMonacoBinding(editorRef.current);
-  }, [
-    activeFile.path,
+  // The room's side of the editor. These hooks sit here, after the playback
+  // layout effects above, so their effects keep their place in each commit;
+  // the code above reaches the binding and the decorations only from
+  // callbacks that run after render.
+  const yMonacoBinding = useYMonacoBinding({
+    editorRef,
+    collaboration,
+    activeFilePath: activeFile.path,
     activeModel,
-    collaboration?.canWrite,
-    collaboration?.connectionState,
-    collaboration?.followedParticipantKey,
-    collaboration?.provider,
+    usesPlaybackModel,
     isBinaryActiveFile,
-    slidesContext.previewState.isOpen,
-    usesPlaybackModel,
-    whiteboardContext.isOpen,
-  ]);
-
-  useLayoutEffect(() => {
-    const target = collaboration?.followedParticipant;
-    if (!target) {
-      appliedFollowViewportRef.current = null;
-      return;
-    }
-    const targetSurface = target.surface;
-    const editor = editorRef.current;
-    const model = editor?.getModel();
-    if (
-      !collaboration?.provider ||
-      collaboration.connectionState !== "live" ||
-      usesPlaybackModel ||
-      targetSurface.kind !== "editor" ||
-      !targetSurface.fileNodeId ||
-      !editor ||
-      !model ||
-      model !== activeModel ||
-      collaboration.getNodeIdForPath(activeFile.path) !== targetSurface.fileNodeId
-    ) {
-      return;
-    }
-    const targetFileNodeId = targetSurface.fileNodeId;
-    const targetViewport = targetSurface.viewport;
-    const targetCursor = target.cursor;
-    const applicationKey = `${collaborationParticipantKey(target)}:${target.revision}:${targetFileNodeId}:${model.getVersionId()}`;
-    if (appliedFollowViewportRef.current === applicationKey) return;
-
-    let applied = false;
-    collaboration.runFollowApplication(() => {
-      const resolved = targetViewport
-        ? resolveCollaborationEditorViewport(
-            collaboration.provider!.doc,
-            targetFileNodeId,
-            targetViewport,
-          )
-        : null;
-      if (resolved) {
-        const position = model.getPositionAt(resolved.topOffset);
-        editor.setScrollPosition(
-          {
-            scrollTop: editor.getTopForLineNumber(position.lineNumber) + resolved.topDeltaPx,
-            scrollLeft: resolved.scrollLeftPx,
-          },
-          monaco.editor.ScrollType.Immediate,
-        );
-        applied = true;
-        return;
-      }
-      if (targetCursor && targetCursor.fileNodeId === targetFileNodeId) {
-        const cursor = resolveCollaborationCursor(collaboration.provider!.doc, targetCursor);
-        if (cursor) {
-          editor.revealPositionInCenter(
-            model.getPositionAt(cursor.headOffset),
-            monaco.editor.ScrollType.Immediate,
-          );
-          applied = true;
-        }
-      } else if (!targetViewport) {
-        applied = true;
-      }
-    });
-    if (applied) appliedFollowViewportRef.current = applicationKey;
-  }, [
-    activeFile.content,
-    activeFile.path,
-    activeModel,
-    collaboration?.connectionState,
-    collaboration?.followedParticipant,
-    collaboration?.getNodeIdForPath,
-    collaboration?.provider,
-    collaboration?.runFollowApplication,
-    editorRef,
-    usesPlaybackModel,
-  ]);
-
-  const wasRecordingRef = useRef(isRecording);
-  useEffect(() => {
-    const stoppedRecording = wasRecordingRef.current && !isRecording;
-    wasRecordingRef.current = isRecording;
-    if (stoppedRecording) void collaboration?.provider?.flushNow();
-  }, [collaboration?.provider, isRecording]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    const model = editor?.getModel();
-    const cursorLabelManager =
-      remoteCursorLabelManagerRef.current ?? new CollaborationCursorLabelManager();
-    remoteCursorLabelManagerRef.current = cursorLabelManager;
-    if (!editor || !model || !collaboration?.provider || !collaboration.doc) {
-      cursorLabelManager.clear();
-      remoteAwarenessStyleRef.current?.remove();
-      remoteAwarenessStyleRef.current = null;
-      if (editor && remoteDecorationIdsRef.current.length > 0) {
-        remoteDecorationIdsRef.current = editor.deltaDecorations(
-          remoteDecorationIdsRef.current,
-          [],
-        );
-      }
-      return;
-    }
-    const collaborationDoc = collaboration.doc;
-    const { text: awarenessText, yMonacoRendersSelections } = resolveAwarenessText(
-      yMonacoBindingRef.current,
-      editor,
-      model,
-      () => collaborationTextForPath(collaboration, collaborationDoc, activeFile.path),
-    );
-    const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
-    const labels: CollaborationCursorLabel[] = [];
-    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
-    const styleRules: string[] = [];
-    for (const selection of collectRemoteEditorSelections({
-      awarenessSelections: awarenessText
-        ? resolveMonacoAwarenessSelections(collaboration.provider.awareness, awarenessText)
-        : [],
-      doc: collaborationDoc,
-      participants: collaboration.participants,
-      ownParticipantKey: collaboration.ownParticipantKey,
-      activeFileNodeId,
-    })) {
-      if (!selection.fromAwareness) {
-        const drawn = participantCursorDecorations(
-          model,
-          selection.key,
-          selection.participant,
-          selection,
-        );
-        decorations.push(...drawn.decorations);
-        labels.push(drawn.label);
-        continue;
-      }
-      const colorIndex = collaborationParticipantColorIndex(selection.participant);
-      const name = collaboratorDisplayName(selection.participant);
-      if (yMonacoRendersSelections) {
-        styleRules.push(...yMonacoSelectionStyleRules(selection.clientId, colorIndex));
-      } else {
-        decorations.push(
-          ...remoteSelectionDecorations(
-            resolveRemoteSelection(model, selection.anchorOffset, selection.headOffset),
-            colorIndex,
-            name,
-          ),
-        );
-      }
-      labels.push({
-        id: selection.key,
-        name,
-        colorIndex,
-        position: model.getPositionAt(selection.headOffset),
-      });
-    }
-    if (awarenessText) {
-      if (styleRules.length > 0) {
-        let style = remoteAwarenessStyleRef.current;
-        if (!style) {
-          style = document.createElement("style");
-          style.dataset.nextEditorCollaborationAwareness = "true";
-          document.head.append(style);
-          remoteAwarenessStyleRef.current = style;
-        }
-        // The rules follow client ids and colours, not anyone's cursor, so
-        // most runs leave them as they are.
-        const css = styleRules.join("\n");
-        if (style.textContent !== css) style.textContent = css;
-      } else {
-        remoteAwarenessStyleRef.current?.remove();
-        remoteAwarenessStyleRef.current = null;
-      }
-      cursorLabelManager.reconcile(editor, labels, [
-        monaco.editor.ContentWidgetPositionPreference.ABOVE,
-        monaco.editor.ContentWidgetPositionPreference.BELOW,
-      ]);
-      remoteDecorationIdsRef.current = editor.deltaDecorations(
-        remoteDecorationIdsRef.current,
-        decorations,
-      );
-      return;
-    }
-    remoteAwarenessStyleRef.current?.remove();
-    remoteAwarenessStyleRef.current = null;
-    if (!activeFileNodeId) {
-      cursorLabelManager.clear();
-      remoteDecorationIdsRef.current = editor.deltaDecorations(remoteDecorationIdsRef.current, []);
-      return;
-    }
-    cursorLabelManager.reconcile(editor, labels, [
-      monaco.editor.ContentWidgetPositionPreference.ABOVE,
-      monaco.editor.ContentWidgetPositionPreference.BELOW,
-    ]);
-    remoteDecorationIdsRef.current = editor.deltaDecorations(
-      remoteDecorationIdsRef.current,
-      decorations,
-    );
-    return () => {
-      if (editorRef.current === editor) {
-        remoteDecorationIdsRef.current = editor.deltaDecorations(
-          remoteDecorationIdsRef.current,
-          [],
-        );
-      }
-    };
-  }, [
-    activeFile.path,
-    collaboration?.canWrite,
-    collaboration?.connectionState,
-    collaboration?.doc,
-    collaboration?.getNodeIdForPath,
-    collaboration?.ownParticipantKey,
-    collaboration?.participants,
-    collaboration?.provider,
-  ]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    const model = editor?.getModel();
-    const provider = collaboration?.provider ?? null;
-    const collaborationDoc = collaboration?.doc ?? null;
-    const participants = collaboration?.participants ?? [];
-    const scope = remoteCursorRecordingScopeRef.current;
-    const scopeChanged =
-      scope.provider !== provider ||
-      scope.path !== activeFile.path ||
-      scope.isRecording !== isRecording;
-    // Outside a take nothing is recorded, and a take's first run finds its
-    // scope changed and starts from a fresh baseline, so there is nothing to
-    // resolve until then. The scope is still kept for that first run.
-    if (!isRecording) {
-      recordedRemoteCursorSignaturesRef.current = new Map();
-      remoteCursorRecordingScopeRef.current = { provider, path: activeFile.path, isRecording };
-      return;
-    }
-    const currentSignatures = new Map<string, string>();
-    const changedSelections: Array<{
-      key: string;
-      occurredAt: number;
-      selection: EditorSelection;
-    }> = [];
-
-    if (editor && model && collaboration && provider && collaborationDoc && !usesPlaybackModel) {
-      const { text: awarenessText } = resolveAwarenessText(
-        yMonacoBindingRef.current,
-        editor,
-        model,
-        () => collaborationTextForPath(collaboration, collaborationDoc, activeFile.path),
-      );
-      for (const { key, participant, anchorOffset, headOffset } of collectRemoteEditorSelections({
-        awarenessSelections: awarenessText
-          ? resolveMonacoAwarenessSelections(provider.awareness, awarenessText)
-          : [],
-        doc: collaborationDoc,
-        participants,
-        ownParticipantKey: collaboration.ownParticipantKey,
-        activeFileNodeId: collaboration.getNodeIdForPath(activeFile.path) ?? undefined,
-      })) {
-        // A viewer's selection is drawn, but never recorded.
-        if (!canPublishCollaborationUpdate(participant.role)) continue;
-        const signature = `${anchorOffset}:${headOffset}`;
-        currentSignatures.set(key, signature);
-        if (!scopeChanged && recordedRemoteCursorSignaturesRef.current.get(key) !== signature) {
-          changedSelections.push({
-            key,
-            occurredAt: participant.occurredAt,
-            selection: remoteSelectionToEditorSelection(
-              resolveRemoteSelection(model, anchorOffset, headOffset),
-            ),
-          });
-        }
-      }
-    }
-
-    recordedRemoteCursorSignaturesRef.current = currentSignatures;
-    remoteCursorRecordingScopeRef.current = {
-      provider,
-      path: activeFile.path,
-      isRecording,
-    };
-
-    if (scopeChanged || changedSelections.length === 0) return;
-    changedSelections.sort(
-      (left, right) => right.occurredAt - left.occurredAt || left.key.localeCompare(right.key),
-    );
-    recordRemoteSelection(changedSelections[0].selection);
-  }, [
-    activeFile.content,
-    activeFile.path,
-    collaboration?.doc,
-    collaboration?.getNodeIdForPath,
-    collaboration?.ownParticipantKey,
-    collaboration?.participants,
-    collaboration?.provider,
-    editorRef,
+    isEditorCovered,
     isRecording,
+  });
+  useFollowViewport({ editorRef, collaboration, activeFile, activeModel, usesPlaybackModel });
+  const remoteCursorDecorations = useRemoteCursorDecorations({
+    editorRef,
+    collaboration,
+    activeFilePath: activeFile.path,
+    getYMonacoBinding: yMonacoBinding.getActive,
+  });
+  useRemoteSelectionRecording({
+    editorRef,
+    collaboration,
+    activeFile,
     usesPlaybackModel,
-  ]);
+    isRecording,
+    handleEditorChange,
+    getYMonacoBinding: yMonacoBinding.getActive,
+  });
 
   // Also re-runs when an overlay closes mid-playback: going inert blurred the
   // editor, and Monaco hides its caret without focus.
@@ -1072,52 +550,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     if (isBinaryActiveFile) {
       disposeEditorListeners();
-      disposeYMonacoBinding();
+      yMonacoBinding.dispose();
       editorRef.current = null;
       syncEditorRef(null);
     }
   }, [editorRef, isBinaryActiveFile, syncEditorRef]);
-
-  /**
-   * Stops following someone as soon as this member works in the editor
-   * themselves: a key, a click, a paste or the start of IME composition counts
-   * as editor input, the wheel as a local scroll. Returns the disposable that
-   * removes those listeners again.
-   */
-  const listenForLocalIntent = (editor: StandaloneEditor): { dispose(): void } => {
-    const editorDomNode = editor.getDomNode();
-    const localIntentListeners: Array<{
-      type: "keydown" | "pointerdown" | "wheel" | "paste" | "compositionstart";
-      listener: EventListener;
-    }> = [];
-    if (editorDomNode) {
-      const addLocalIntentListener = (
-        type: (typeof localIntentListeners)[number]["type"],
-        reason: "local-editor-input" | "local-scroll",
-      ) => {
-        const listener: EventListener = () => stopFollowingForLocalIntent(reason);
-        editorDomNode.addEventListener(type, listener, {
-          capture: true,
-          passive: type === "wheel",
-        });
-        localIntentListeners.push({ type, listener });
-      };
-      addLocalIntentListener("keydown", "local-editor-input");
-      addLocalIntentListener("pointerdown", "local-editor-input");
-      addLocalIntentListener("wheel", "local-scroll");
-      addLocalIntentListener("paste", "local-editor-input");
-      addLocalIntentListener("compositionstart", "local-editor-input");
-    }
-
-    return {
-      dispose: () => {
-        if (!editorDomNode) return;
-        for (const { type, listener } of localIntentListeners) {
-          editorDomNode.removeEventListener(type, listener, true);
-        }
-      },
-    };
-  };
 
   /**
    * Routes one Monaco content change. A change CodeEditor itself writes into
@@ -1145,36 +582,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       endChangeSpan({ source: "external" });
       return;
     }
-    const yMonacoBinding = yMonacoBindingRef.current;
-    if (isConfiguringYMonacoRef.current) {
-      onEditorChange();
+    const yMonacoRoute = yMonacoBinding.routeLocalEdit(
+      editor,
+      changeEvent,
+      beforeVersion,
+      onEditorChange,
+    );
+    if (yMonacoRoute) {
       endChangeSpan({
         source: "y-monaco",
-        update_mode: "binding-setup",
-        change_count: changeEvent.changes.length,
-      });
-      return;
-    }
-    if (yMonacoBindsModel(yMonacoBinding, editor, editor.getModel())) {
-      const editEvent = changeEvent.isFlush
-        ? null
-        : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
-      if (editEvent) {
-        const editedModel = yMonacoBinding.model;
-        queueCollaborationTextEdit(editEvent, (projectedContent) => {
-          if (
-            projectedContent !== null &&
-            editor.getModel() === editedModel &&
-            editedModel.getVersionId() === editEvent.afterVersion
-          ) {
-            acknowledgeWorkspaceModelContent(editedModel, projectedContent);
-          }
-        });
-      }
-      onEditorChange(editEvent ?? undefined);
-      endChangeSpan({
-        source: "y-monaco",
-        update_mode: editEvent ? "incremental" : "direct-ytext",
+        update_mode: yMonacoRoute,
         change_count: changeEvent.changes.length,
       });
       return;
@@ -1198,7 +615,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * belongs to the render that mounted the editor. It may read directly only
    * what never changes after that render (refs, the stable editor actions);
    * anything that does, such as `collaboration`, it reads through a
-   * useEffectEvent callback.
+   * useEffectEvent callback, as the collaboration hooks' callbacks do.
    */
   const handleEditorDidMount = (editor: StandaloneEditor) => {
     disposeEditorListeners();
@@ -1213,11 +630,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
-      listenForLocalIntent(editor),
+      presence.listenForLocalIntent(editor),
       // Tab types a tab here; Escape, then Tab, leaves the editor.
       addEscapeThenTabExit(editor),
       editor.onDidChangeModel(() => {
-        disposeYMonacoBinding();
+        yMonacoBinding.dispose();
         const model = editor.getModel();
         if (model) {
           modelVersionByUriRef.current.set(model.uri.toString(), model.getVersionId());
@@ -1228,9 +645,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
         syncEditorRef(editor);
-        publishCollaborationCursor(editor);
-        publishCollaborationViewport(editor);
-        reconcileYMonacoBinding(editor);
+        presence.publishCursor(editor);
+        presence.publishViewport(editor);
+        yMonacoBinding.reconcile(editor);
       }),
       editor.onDidChangeModelContent((changeEvent) =>
         handleModelContentChange(editor, changeEvent),
@@ -1243,19 +660,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       editor.onDidChangeCursorSelection(() => {
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
-        publishCollaborationCursor(editor);
+        presence.publishCursor(editor);
       }),
       editor.onDidScrollChange((event) => {
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
         if (event.scrollTopChanged || event.scrollLeftChanged) {
-          publishCollaborationViewport(editor);
+          presence.publishViewport(editor);
         }
       }),
-      editor.onDidBlurEditorText(() => flushCollaborationEdits()),
+      editor.onDidBlurEditorText(() => presence.flushOnBlur()),
     ];
-    reconcileYMonacoBinding(editor);
-    publishCollaborationViewport(editor);
+    yMonacoBinding.reconcile(editor);
+    presence.publishViewport(editor);
   };
 
   // This component re-renders on every keystroke (the editor state carries the

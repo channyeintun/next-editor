@@ -2,9 +2,10 @@ import * as Y from "yjs";
 import { COLLABORATION_ORIGIN, getCollaborationTexts } from "./projectDocument";
 
 // Origins that modules this one must not import register themselves here.
-// CodeEditor registers y-monaco's MonacoBinding: importing it here would make
-// every chunk that reaches CollaborationContext (the /learn gallery, the lesson
-// shell) statically import all of Monaco instead of only the lazy CodeEditor.
+// CodeEditor's y-monaco binding (components/codeEditor/useYMonacoBinding.ts)
+// registers MonacoBinding: importing it here would make every chunk that
+// reaches CollaborationContext (the /learn gallery, the lesson shell)
+// statically import all of Monaco instead of only the lazy CodeEditor.
 const registeredOrigins = new Set<unknown>();
 const liveManagers = new Set<Y.UndoManager>();
 

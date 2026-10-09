@@ -10,7 +10,8 @@ import {
 } from "./projectDocument";
 import { createCollaborationUndoManager, trackCollaborationUndoOrigin } from "./undo";
 
-// CodeEditor registers this at module load; undo.ts itself stays Monaco-free.
+// CodeEditor's binding hook registers this at module load; undo.ts itself
+// stays Monaco-free.
 trackCollaborationUndoOrigin(MonacoBinding);
 
 function seedEntryText() {
