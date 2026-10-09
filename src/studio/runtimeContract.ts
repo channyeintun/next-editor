@@ -13,7 +13,9 @@ import type {
  * and which actions each runtime kind can perform. It lives here once so the
  * two schemas cannot drift apart. When each schema had its own copy, they did:
  * only the script's runtime-"none" list had runtime.collapseDock. It also holds
- * the per-action checks both schemas share (`actionContractIssues`).
+ * the per-action checks both schemas share (`actionContractIssues`) and the
+ * check that every file, slide and whiteboard asset an action names is pinned
+ * (`pinnedReferenceIssues`).
  */
 
 /**
@@ -190,6 +192,48 @@ export function actionContractIssues(actions: ReadonlyArray<ContractAction>): st
       issues.push(`Duplicate action id "${action.id}"`);
     }
     ids.add(action.id);
+  }
+  return issues;
+}
+
+/** What a lesson pins for its actions to name: workspace files, slides and whiteboard assets. */
+export interface LessonPins {
+  files: Readonly<Record<string, string>>;
+  slides: ReadonlyArray<{ id: string }>;
+  whiteboardAssets: ReadonlyArray<{ id: string }>;
+}
+
+/**
+ * One thing an action names that must be pinned. A file reference carries the
+ * verb its message uses ("opens", "types into", …), since a script action and
+ * the plan action compiled from it describe the same reference differently.
+ */
+export type PinnedReference =
+  | { id: string; kind: "file"; value: string; verb: string }
+  | { id: string; kind: "slide" | "whiteboard-asset"; value: string };
+
+/** Every reference that names something the lesson does not pin, in the order given. */
+export function pinnedReferenceIssues(
+  pins: LessonPins,
+  refs: ReadonlyArray<PinnedReference>,
+): string[] {
+  const issues: string[] = [];
+  for (const ref of refs) {
+    if (ref.kind === "file") {
+      if (!(ref.value in pins.files)) {
+        issues.push(
+          `Action "${ref.id}" ${ref.verb} "${ref.value}" which is not in the pinned workspace`,
+        );
+      }
+    } else if (ref.kind === "slide") {
+      if (!pins.slides.some((slide) => slide.id === ref.value)) {
+        issues.push(
+          `Action "${ref.id}" shows slide "${ref.value}" which is not a pinned slide asset`,
+        );
+      }
+    } else if (!pins.whiteboardAssets.some((asset) => asset.id === ref.value)) {
+      issues.push(`Action "${ref.id}" upserts whiteboard asset "${ref.value}" which is not pinned`);
+    }
   }
   return issues;
 }

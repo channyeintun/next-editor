@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { canonicalJson } from "../hash";
+import { parseStudioPlan } from "../plan";
 import { estimateAlignment, sceneStartMs } from "./alignment";
 import { CompileError, compileLessonScript, type CompileInput } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
@@ -768,6 +769,29 @@ describe("lessonScriptSchema", () => {
     expect(() => parseLessonScript(tour)).toThrow(
       /lesson\.slides\.0: Unrecognized key: "maximised"/,
     );
+  });
+
+  // Both schemas build an action's payload from the plan's shared field shapes;
+  // only the script passes strict nested schemas in, so a typo inside an
+  // authored preview target still fails here while the plan keeps zod's default.
+  it("keeps a nested preview target strict on the script side only", () => {
+    const previewPath = resolve(__dirname, "./__fixtures__/typescript-vite-preview.yaml");
+    const raw = YAML.parse(readFileSync(previewPath, "utf8"));
+    const index = raw.scenes[0].actions.findIndex(
+      (action: { id: string }) => action.id === "fill-name",
+    );
+    raw.scenes[0].actions[index].target.vaule = "name-input";
+    expect(() => parseLessonScript(raw)).toThrow(
+      new RegExp(`scenes\\.0\\.actions\\.${index}\\.target: Unrecognized key: "vaule"`),
+    );
+
+    const script = parseLessonScript(YAML.parse(readFileSync(previewPath, "utf8")));
+    const { plan } = compileLessonScript(scheduledInputFor(script));
+    const candidate = structuredClone(plan);
+    const fill = candidate.actions.find((action) => action.id === "fill-name");
+    if (fill?.type !== "preview.input") throw new Error("fixture lost its preview.input");
+    Object.assign(fill.target, { vaule: "name-input" });
+    expect(parseStudioPlan(candidate)).toEqual(plan);
   });
 
   // The plan schema already rejects an apply that does nothing; without the

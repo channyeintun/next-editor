@@ -8,7 +8,12 @@ import { parseKotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/type
 import { parseRustPlaygroundRunResult } from "../runtime/rustPlayground/types";
 import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { totalTypingDurationMs } from "./cadence";
-import { actionContractIssues, runtimeContractIssues } from "./runtimeContract";
+import {
+  actionContractIssues,
+  pinnedReferenceIssues,
+  runtimeContractIssues,
+  type PinnedReference,
+} from "./runtimeContract";
 import { whiteboardDrawDurationMs } from "./whiteboardAssets";
 
 /**
@@ -43,13 +48,15 @@ export const studioRetryPolicySchema = z.object({
 });
 export type StudioRetryPolicy = z.infer<typeof studioRetryPolicySchema>;
 
+/** Hard deadline for an action to acknowledge; the render fails closed past it. */
+export const studioActionTimeoutMsSchema = positiveMs.default(10_000);
+
 const planActionBase = z.object({
   /** Unique, stable action id — receipts and reports key off it. */
   id: z.string().min(1),
   /** Absolute planned start time on the recording clock (ms). */
   at: nonNegativeMs,
-  /** Hard deadline for the command to acknowledge; the render fails closed past it. */
-  timeoutMs: positiveMs.default(10_000),
+  timeoutMs: studioActionTimeoutMsSchema,
 });
 
 /** Durable UI target reference. Missing targets are render failures, never guesses. */
@@ -69,6 +76,12 @@ export const studioPreviewTargetSchema = z.object({
   value: z.string().min(1),
 });
 export type StudioPreviewTarget = z.infer<typeof studioPreviewTargetSchema>;
+
+/** An attribute an `expect.preview` checks on its target. */
+export const studioPreviewAttributeSchema = z.object({
+  name: z.string().min(1),
+  value: z.string(),
+});
 
 /**
  * Text anchor inside one workspace file. Resolution is exact-substring +
@@ -111,9 +124,130 @@ export const typingChunkSchema = z.object({
 });
 export type TypingChunk = z.infer<typeof typingChunkSchema>;
 
+/**
+ * The payload of every action a script author writes and the plan then carries
+ * as it is — its fields, defaults and bounds, declared once. The plan builds
+ * its action schemas from these shapes and the script schema builds its own,
+ * so a field added or a bound changed here reaches both; when each schema
+ * declared its own copy, every change had to be made twice.
+ *
+ * Only the nested objects come in: the script passes `.strict()` variants, so
+ * a typo inside an authored target still fails, while the plan keeps zod's
+ * default. `editor.type`, `editor.select` and `console.point` are not here —
+ * the author writes a target the compiler turns into a different plan payload.
+ */
+export function studioActionFieldShapes<
+  Retry extends z.ZodType<StudioRetryPolicy>,
+  PreviewTarget extends z.ZodType<StudioPreviewTarget>,
+  Attribute extends z.ZodType<z.infer<typeof studioPreviewAttributeSchema>>,
+>({
+  retry,
+  previewTarget,
+  attribute,
+}: {
+  retry: Retry;
+  previewTarget: PreviewTarget;
+  attribute: Attribute;
+}) {
+  return {
+    "workspace.openFile": { path: z.string().min(1) },
+    "runtime.run": {},
+    "runtime.start": { retry },
+    "runtime.waitForReady": { retry },
+    // `runtime.run` opens the runner dock and nothing closes it again, so it
+    // sits over the editor through the explanation that follows. This hands
+    // that back to the author: collapse it once the output has been read — or
+    // before a single line has been typed, so the dock costs a tab strip
+    // instead of 288px until there is finally something in it.
+    "runtime.collapseDock": {},
+    "preview.open": { mode: z.enum(["docked", "floating"]).default("docked"), retry },
+    "preview.click": { target: previewTarget, retry },
+    "preview.input": { target: previewTarget, value: z.string(), retry },
+    "preview.scroll": {
+      target: previewTarget.optional(),
+      top: z.number().finite(),
+      left: z.number().finite().default(0),
+      retry,
+    },
+    "preview.route": { route: z.string().startsWith("/").min(1), retry },
+    "slide.show": { slideId: z.string().min(1), maximized: z.boolean().default(true) },
+    "slide.close": {},
+    "whiteboard.apply": {
+      open: z.boolean().optional(),
+      maximized: z.boolean().optional(),
+      /** Ids from `plan.whiteboardAssets` to upsert onto the board. */
+      upsertIds: z.array(z.string().min(1)).default([]),
+      /**
+       * Wipe the board first — everything already on it is removed, then this
+       * action's upserts are drawn onto the empty canvas. Without this a second
+       * diagram authored over the same coordinates draws on top of the first,
+       * since an apply otherwise only ever adds.
+       */
+      clear: z.boolean().default(false),
+      /**
+       * Draw the upserts in over this budget instead of applying them in one
+       * frame: shapes grow, text types, strokes trace, and multiple assets are
+       * staggered in order. `0` (the default) keeps the single-frame apply.
+       */
+      drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
+    },
+    "expect.output": { contains: z.string().min(1) },
+    "expect.file": { path: z.string().min(1), contains: z.string().min(1) },
+    "expect.preview": {
+      target: previewTarget.optional(),
+      textContains: z.string().min(1).optional(),
+      value: z.string().optional(),
+      route: z.string().startsWith("/").min(1).optional(),
+      attribute: attribute.optional(),
+      retry,
+    },
+  };
+}
+
+/** The `whiteboard.apply` fields its two cross-field rules read. */
+interface WhiteboardApplyRuleFields {
+  open?: boolean;
+  maximized?: boolean;
+  upsertIds: readonly string[];
+  clear: boolean;
+  drawMs: number;
+  timeoutMs: number;
+}
+
+/**
+ * The cross-field rules of a `whiteboard.apply`, on both schemas: the script
+ * checks them so an apply that does nothing fails when the script is parsed,
+ * not at compile time after the narration is synthesized.
+ */
+export function withWhiteboardApplyRules<Schema extends z.ZodType<WhiteboardApplyRuleFields>>(
+  schema: Schema,
+): Schema {
+  return schema
+    .refine(
+      (action: WhiteboardApplyRuleFields) =>
+        action.open !== undefined ||
+        action.maximized !== undefined ||
+        action.upsertIds.length > 0 ||
+        action.clear,
+      {
+        message:
+          "whiteboard.apply must open/close, change maximize, clear the board, or upsert at least one asset",
+      },
+    )
+    .refine((action: WhiteboardApplyRuleFields) => action.drawMs < action.timeoutMs, {
+      message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
+    });
+}
+
+const fields = studioActionFieldShapes({
+  retry: studioRetryPolicySchema,
+  previewTarget: studioPreviewTargetSchema,
+  attribute: studioPreviewAttributeSchema,
+});
+
 const openFileActionSchema = planActionBase.extend({
   type: z.literal("workspace.openFile"),
-  path: z.string().min(1),
+  ...fields["workspace.openFile"],
 });
 
 const cursorMoveActionSchema = planActionBase.extend({
@@ -170,20 +304,22 @@ const editorSelectActionSchema = planActionBase.extend({
 
 const runtimeRunActionSchema = planActionBase.extend({
   type: z.literal("runtime.run"),
+  ...fields["runtime.run"],
 });
 
 const runtimeStartActionSchema = planActionBase.extend({
   type: z.literal("runtime.start"),
-  retry: studioRetryPolicySchema,
+  ...fields["runtime.start"],
 });
 
 const runtimeWaitForReadyActionSchema = planActionBase.extend({
   type: z.literal("runtime.waitForReady"),
-  retry: studioRetryPolicySchema,
+  ...fields["runtime.waitForReady"],
 });
 
 const runtimeCollapseDockActionSchema = planActionBase.extend({
   type: z.literal("runtime.collapseDock"),
+  ...fields["runtime.collapseDock"],
 });
 
 /**
@@ -197,102 +333,59 @@ const runtimeExpandDockActionSchema = planActionBase.extend({
 
 const previewOpenActionSchema = planActionBase.extend({
   type: z.literal("preview.open"),
-  mode: z.enum(["docked", "floating"]).default("docked"),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.open"],
 });
 
 const previewClickActionSchema = planActionBase.extend({
   type: z.literal("preview.click"),
-  target: studioPreviewTargetSchema,
-  retry: studioRetryPolicySchema,
+  ...fields["preview.click"],
 });
 
 const previewInputActionSchema = planActionBase.extend({
   type: z.literal("preview.input"),
-  target: studioPreviewTargetSchema,
-  value: z.string(),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.input"],
 });
 
 const previewScrollActionSchema = planActionBase.extend({
   type: z.literal("preview.scroll"),
-  target: studioPreviewTargetSchema.optional(),
-  top: z.number().finite(),
-  left: z.number().finite().default(0),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.scroll"],
 });
 
 const previewRouteActionSchema = planActionBase.extend({
   type: z.literal("preview.route"),
-  route: z.string().startsWith("/").min(1),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.route"],
 });
 
 const slideShowActionSchema = planActionBase.extend({
   type: z.literal("slide.show"),
-  slideId: z.string().min(1),
-  maximized: z.boolean().default(true),
+  ...fields["slide.show"],
 });
 
 const slideCloseActionSchema = planActionBase.extend({
   type: z.literal("slide.close"),
+  ...fields["slide.close"],
 });
 
-const whiteboardApplyActionSchema = planActionBase
-  .extend({
+const whiteboardApplyActionSchema = withWhiteboardApplyRules(
+  planActionBase.extend({
     type: z.literal("whiteboard.apply"),
-    open: z.boolean().optional(),
-    maximized: z.boolean().optional(),
-    /** Ids from `plan.whiteboardAssets` to upsert onto the board. */
-    upsertIds: z.array(z.string().min(1)).default([]),
-    /**
-     * Wipe the board first — everything already on it is removed, then this
-     * action's upserts are drawn onto the empty canvas. Without this a second
-     * diagram authored over the same coordinates draws on top of the first,
-     * since an apply otherwise only ever adds.
-     */
-    clear: z.boolean().default(false),
-    /**
-     * Draw the upserts in over this budget instead of applying them in one
-     * frame: shapes grow, text types, strokes trace, and multiple assets are
-     * staggered in order. `0` (the default) keeps the single-frame apply.
-     */
-    drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
-  })
-  .refine(
-    (action) =>
-      action.open !== undefined ||
-      action.maximized !== undefined ||
-      action.upsertIds.length > 0 ||
-      action.clear,
-    {
-      message:
-        "whiteboard.apply must open/close, change maximize, clear the board, or upsert at least one asset",
-    },
-  )
-  .refine((action) => action.drawMs < action.timeoutMs, {
-    message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
-  });
+    ...fields["whiteboard.apply"],
+  }),
+);
 
 const expectOutputActionSchema = planActionBase.extend({
   type: z.literal("expect.output"),
-  contains: z.string().min(1),
+  ...fields["expect.output"],
 });
 
 const expectFileActionSchema = planActionBase.extend({
   type: z.literal("expect.file"),
-  path: z.string().min(1),
-  contains: z.string().min(1),
+  ...fields["expect.file"],
 });
 
 const expectPreviewActionSchema = planActionBase.extend({
   type: z.literal("expect.preview"),
-  target: studioPreviewTargetSchema.optional(),
-  textContains: z.string().min(1).optional(),
-  value: z.string().optional(),
-  route: z.string().startsWith("/").min(1).optional(),
-  attribute: z.object({ name: z.string().min(1), value: z.string() }).optional(),
-  retry: studioRetryPolicySchema,
+  ...fields["expect.preview"],
 });
 
 export const studioPlanActionSchema = z.discriminatedUnion("type", [
@@ -943,6 +1036,29 @@ export function estimateNarrationMsForRenderWait(wordCount: number): number {
   return (Math.max(0, wordCount) / RENDER_WAIT_WORDS_PER_MINUTE) * 60_000;
 }
 
+/** The pinned files, slides and whiteboard assets a plan action names. */
+function planPinnedReferences(action: StudioPlanAction): PinnedReference[] {
+  switch (action.type) {
+    case "workspace.openFile":
+    case "expect.file":
+      return [{ id: action.id, kind: "file", value: action.path, verb: "references" }];
+    case "editor.type":
+      return [{ id: action.id, kind: "file", value: action.path, verb: "types into" }];
+    case "editor.select":
+      return [{ id: action.id, kind: "file", value: action.path, verb: "selects in" }];
+    case "slide.show":
+      return [{ id: action.id, kind: "slide", value: action.slideId }];
+    case "whiteboard.apply":
+      return action.upsertIds.map((assetId) => ({
+        id: action.id,
+        kind: "whiteboard-asset",
+        value: assetId,
+      }));
+    default:
+      return [];
+  }
+}
+
 export const studioPlanSchema = z
   .object({
     schemaVersion: z.literal(STUDIO_PLAN_SCHEMA_VERSION),
@@ -1023,26 +1139,14 @@ export const studioPlanSchema = z
       }
     }
 
+    const pins = {
+      files: plan.workspace.files,
+      slides: plan.slides,
+      whiteboardAssets: plan.whiteboardAssets,
+    };
     for (const action of plan.actions) {
-      if (action.type === "workspace.openFile" || action.type === "expect.file") {
-        if (!(action.path in plan.workspace.files)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" references "${action.path}" which is not in the pinned workspace`,
-          });
-        }
-      }
-      if (action.type === "editor.type" && !(action.path in plan.workspace.files)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `Action "${action.id}" types into "${action.path}" which is not in the pinned workspace`,
-        });
-      }
-      if (action.type === "editor.select" && !(action.path in plan.workspace.files)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `Action "${action.id}" selects in "${action.path}" which is not in the pinned workspace`,
-        });
+      for (const message of pinnedReferenceIssues(pins, planPinnedReferences(action))) {
+        ctx.addIssue({ code: "custom", message });
       }
       if (action.type === "cursor.moveTo" && action.target.kind === "file") {
         if (!(action.target.path in plan.workspace.files)) {
@@ -1050,24 +1154,6 @@ export const studioPlanSchema = z
             code: "custom",
             message: `Action "${action.id}" points the cursor at missing file "${action.target.path}"`,
           });
-        }
-      }
-      if (action.type === "slide.show") {
-        if (!plan.slides.some((slide) => slide.id === action.slideId)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" shows slide "${action.slideId}" which is not a pinned slide asset`,
-          });
-        }
-      }
-      if (action.type === "whiteboard.apply") {
-        for (const assetId of action.upsertIds) {
-          if (!plan.whiteboardAssets.some((asset) => asset.id === assetId)) {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" upserts whiteboard asset "${assetId}" which is not pinned`,
-            });
-          }
         }
       }
     }

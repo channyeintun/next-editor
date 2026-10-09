@@ -1,15 +1,23 @@
 import { z } from "zod";
 import {
-  WHITEBOARD_DRAW_MAX_MS,
   consoleLineTargetSchema as planConsoleLineTargetSchema,
+  studioActionFieldShapes,
+  studioActionTimeoutMsSchema,
+  studioPreviewAttributeSchema as planPreviewAttributeSchema,
   studioPreviewTargetSchema as planPreviewTargetSchema,
   studioRetryPolicySchema as planRetryPolicySchema,
   studioRuntimeSchema as planRuntimeSchema,
   studioSlideSchema as planSlideSchema,
   studioWhiteboardAssetSchema as planWhiteboardAssetSchema,
   studioWorkspacePinSchema as planWorkspacePinSchema,
+  withWhiteboardApplyRules,
 } from "../plan";
-import { actionContractIssues, runtimeContractIssues } from "../runtimeContract";
+import {
+  actionContractIssues,
+  pinnedReferenceIssues,
+  runtimeContractIssues,
+  type PinnedReference,
+} from "../runtimeContract";
 import { consolePointIssues } from "./consolePoints";
 import {
   MarkerError,
@@ -126,12 +134,20 @@ export const scriptSelectTargetSchema = z.strictObject({
 const scriptActionBase = z.strictObject({
   id: z.string().min(1),
   at: scriptAnchorSchema,
-  timeoutMs: z.number().finite().positive().default(10_000),
+  timeoutMs: studioActionTimeoutMsSchema,
+});
+
+// The payloads the plan carries unchanged come from the plan's own shapes, with
+// the strict nested schemas above passed in.
+const fields = studioActionFieldShapes({
+  retry: studioRetryPolicySchema,
+  previewTarget: studioPreviewTargetSchema,
+  attribute: planPreviewAttributeSchema.strict(),
 });
 
 const scriptOpenFileSchema = scriptActionBase.extend({
   type: z.literal("workspace.openFile"),
-  path: z.string().min(1),
+  ...fields["workspace.openFile"],
 });
 
 const scriptEditorTypeSchema = scriptActionBase.extend({
@@ -160,125 +176,79 @@ const scriptConsolePointSchema = scriptActionBase.extend({
 
 const scriptRuntimeRunSchema = scriptActionBase.extend({
   type: z.literal("runtime.run"),
+  ...fields["runtime.run"],
 });
 
 const scriptRuntimeStartSchema = scriptActionBase.extend({
   type: z.literal("runtime.start"),
-  retry: studioRetryPolicySchema,
+  ...fields["runtime.start"],
 });
 
 const scriptRuntimeWaitForReadySchema = scriptActionBase.extend({
   type: z.literal("runtime.waitForReady"),
-  retry: studioRetryPolicySchema,
+  ...fields["runtime.waitForReady"],
 });
 
-// `runtime.run` opens the runner dock and nothing closes it again, so it sits
-// over the editor through the explanation that follows. This hands that back to
-// the author: collapse it once the output has been read — or before a single
-// line has been typed, so the dock costs a tab strip instead of 288px until
-// there is finally something in it.
 const scriptRuntimeCollapseDockSchema = scriptActionBase.extend({
   type: z.literal("runtime.collapseDock"),
+  ...fields["runtime.collapseDock"],
 });
 
 const scriptPreviewOpenSchema = scriptActionBase.extend({
   type: z.literal("preview.open"),
-  mode: z.enum(["docked", "floating"]).default("docked"),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.open"],
 });
 
 const scriptPreviewClickSchema = scriptActionBase.extend({
   type: z.literal("preview.click"),
-  target: studioPreviewTargetSchema,
-  retry: studioRetryPolicySchema,
+  ...fields["preview.click"],
 });
 
 const scriptPreviewInputSchema = scriptActionBase.extend({
   type: z.literal("preview.input"),
-  target: studioPreviewTargetSchema,
-  value: z.string(),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.input"],
 });
 
 const scriptPreviewScrollSchema = scriptActionBase.extend({
   type: z.literal("preview.scroll"),
-  target: studioPreviewTargetSchema.optional(),
-  top: z.number().finite(),
-  left: z.number().finite().default(0),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.scroll"],
 });
 
 const scriptPreviewRouteSchema = scriptActionBase.extend({
   type: z.literal("preview.route"),
-  route: z.string().startsWith("/").min(1),
-  retry: studioRetryPolicySchema,
+  ...fields["preview.route"],
 });
 
 const scriptSlideShowSchema = scriptActionBase.extend({
   type: z.literal("slide.show"),
-  slideId: z.string().min(1),
-  maximized: z.boolean().default(true),
+  ...fields["slide.show"],
 });
 
 const scriptSlideCloseSchema = scriptActionBase.extend({
   type: z.literal("slide.close"),
+  ...fields["slide.close"],
 });
 
-const scriptWhiteboardApplySchema = scriptActionBase
-  .extend({
+const scriptWhiteboardApplySchema = withWhiteboardApplyRules(
+  scriptActionBase.extend({
     type: z.literal("whiteboard.apply"),
-    open: z.boolean().optional(),
-    maximized: z.boolean().optional(),
-    upsertIds: z.array(z.string().min(1)).default([]),
-    /**
-     * Wipe the board before drawing: an apply otherwise only adds, so a second
-     * diagram sharing the first one's coordinates would land on top of it.
-     */
-    clear: z.boolean().default(false),
-    /**
-     * Draw the upserts in over this budget instead of applying them in one
-     * frame. Shapes grow from their corner, text types, freedraw strokes
-     * trace, and several assets are drawn one after another. `0` (default)
-     * keeps the instant apply.
-     */
-    drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
-  })
-  // Mirrors the plan schema's rule, so an apply that does nothing fails when the
-  // script is parsed instead of at compile time, after narration is synthesized.
-  .refine(
-    (action) =>
-      action.open !== undefined ||
-      action.maximized !== undefined ||
-      action.upsertIds.length > 0 ||
-      action.clear,
-    {
-      message:
-        "whiteboard.apply must open/close, change maximize, clear the board, or upsert at least one asset",
-    },
-  )
-  .refine((action) => action.drawMs < action.timeoutMs, {
-    message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
-  });
+    ...fields["whiteboard.apply"],
+  }),
+);
 
 const scriptExpectOutputSchema = scriptActionBase.extend({
   type: z.literal("expect.output"),
-  contains: z.string().min(1),
+  ...fields["expect.output"],
 });
 
 const scriptExpectFileSchema = scriptActionBase.extend({
   type: z.literal("expect.file"),
-  path: z.string().min(1),
-  contains: z.string().min(1),
+  ...fields["expect.file"],
 });
 
 const scriptExpectPreviewSchema = scriptActionBase.extend({
   type: z.literal("expect.preview"),
-  target: studioPreviewTargetSchema.optional(),
-  textContains: z.string().min(1).optional(),
-  value: z.string().optional(),
-  route: z.string().startsWith("/").min(1).optional(),
-  attribute: z.strictObject({ name: z.string().min(1), value: z.string() }).optional(),
-  retry: studioRetryPolicySchema,
+  ...fields["expect.preview"],
 });
 
 export const scriptActionSchema = z.discriminatedUnion("type", [
@@ -303,6 +273,30 @@ export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptExpectPreviewSchema,
 ]);
 export type ScriptAction = z.infer<typeof scriptActionSchema>;
+
+/** The pinned files, slides and whiteboard assets a script action names. */
+function scriptPinnedReferences(action: ScriptAction): PinnedReference[] {
+  switch (action.type) {
+    case "workspace.openFile":
+      return [{ id: action.id, kind: "file", value: action.path, verb: "opens" }];
+    case "editor.type":
+      return [{ id: action.id, kind: "file", value: action.target.file, verb: "types into" }];
+    case "editor.select":
+      return [{ id: action.id, kind: "file", value: action.target.file, verb: "selects in" }];
+    case "expect.file":
+      return [{ id: action.id, kind: "file", value: action.path, verb: "checks" }];
+    case "slide.show":
+      return [{ id: action.id, kind: "slide", value: action.slideId }];
+    case "whiteboard.apply":
+      return action.upsertIds.map((assetId) => ({
+        id: action.id,
+        kind: "whiteboard-asset",
+        value: assetId,
+      }));
+    default:
+      return [];
+  }
+}
 
 /** A cited source backing the scene's claims (required by the editorial gate). */
 export const scriptSourceSchema = z.strictObject({
@@ -424,6 +418,11 @@ export const lessonScriptSchema = z
       sceneIds.add(scene.id);
     }
 
+    const pins = {
+      files: script.lesson.workspace.files,
+      slides: script.lesson.slides,
+      whiteboardAssets: script.lesson.whiteboardAssets,
+    };
     for (const scene of script.scenes) {
       for (const action of scene.actions) {
         if ("afterAction" in action.at && !actionIds.has(action.at.afterAction)) {
@@ -432,48 +431,8 @@ export const lessonScriptSchema = z
             message: `Action "${action.id}" anchors after unknown action "${action.at.afterAction}"`,
           });
         }
-        const workspaceFiles = script.lesson.workspace.files;
-        if (action.type === "workspace.openFile" && !(action.path in workspaceFiles)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" opens "${action.path}" which is not in the pinned workspace`,
-          });
-        }
-        if (action.type === "editor.type" && !(action.target.file in workspaceFiles)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" types into "${action.target.file}" which is not in the pinned workspace`,
-          });
-        }
-        if (action.type === "editor.select" && !(action.target.file in workspaceFiles)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" selects in "${action.target.file}" which is not in the pinned workspace`,
-          });
-        }
-        if (action.type === "expect.file" && !(action.path in workspaceFiles)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" checks "${action.path}" which is not in the pinned workspace`,
-          });
-        }
-        if (action.type === "slide.show") {
-          if (!script.lesson.slides.some((slide) => slide.id === action.slideId)) {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" shows slide "${action.slideId}" which is not a pinned slide asset`,
-            });
-          }
-        }
-        if (action.type === "whiteboard.apply") {
-          for (const assetId of action.upsertIds) {
-            if (!script.lesson.whiteboardAssets.some((asset) => asset.id === assetId)) {
-              ctx.addIssue({
-                code: "custom",
-                message: `Action "${action.id}" upserts whiteboard asset "${assetId}" which is not pinned`,
-              });
-            }
-          }
+        for (const message of pinnedReferenceIssues(pins, scriptPinnedReferences(action))) {
+          ctx.addIssue({ code: "custom", message });
         }
       }
     }
