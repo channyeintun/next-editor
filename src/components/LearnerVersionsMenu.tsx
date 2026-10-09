@@ -52,10 +52,15 @@ export default function LearnerVersionsMenu({
   );
   const [isOpen, setIsOpen] = useState(false);
   const [showSavedNotice, setShowSavedNotice] = useState(false);
+  /** The version whose Delete is waiting for "Delete" or "Keep". */
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  /** The version whose Delete button takes focus back after "Keep". */
+  const refocusDeleteOfRef = useRef<string | null>(null);
   const popupId = useId();
+  const confirmQuestionId = `${popupId}-confirm`;
 
   useEffect(() => {
     void openLearnerVersions(recordingId);
@@ -68,6 +73,11 @@ export default function LearnerVersionsMenu({
     return () => window.clearTimeout(timeout);
   }, [lastSavedAt]);
 
+  const closePopup = () => {
+    setIsOpen(false);
+    setConfirmingDeleteId(null);
+  };
+
   useDismissOnOutsideInteraction({
     isOpen,
     containerRef,
@@ -77,7 +87,7 @@ export default function LearnerVersionsMenu({
       if (popupRef.current?.contains(document.activeElement)) {
         triggerRef.current?.focus();
       }
-      setIsOpen(false);
+      closePopup();
     },
     dismissOnEscape: true,
     listenOn: "document",
@@ -87,8 +97,21 @@ export default function LearnerVersionsMenu({
 
   const restore = (version: LearnerWorkspaceVersion) => {
     restoreLearnerWorkspace(version.recordingTime, version.snapshot);
-    setIsOpen(false);
+    closePopup();
     triggerRef.current?.focus();
+  };
+
+  const confirmDelete = (version: LearnerWorkspaceVersion) => {
+    setConfirmingDeleteId(null);
+    // The last one takes the button with it; do not leave the list open for the next save.
+    if (versions.length === 1) setIsOpen(false);
+    void forgetLearnerVersion(version.id);
+    triggerRef.current?.focus();
+  };
+
+  const keepVersion = (version: LearnerWorkspaceVersion) => {
+    refocusDeleteOfRef.current = version.id;
+    setConfirmingDeleteId(null);
   };
 
   const now = Date.now();
@@ -115,7 +138,10 @@ export default function LearnerVersionsMenu({
         <button
           ref={triggerRef}
           type="button"
-          onClick={() => setIsOpen((current) => !current)}
+          onClick={() => {
+            setConfirmingDeleteId(null);
+            setIsOpen((current) => !current);
+          }}
           aria-label={`Your edits, ${versions.length} saved`}
           aria-expanded={isOpen}
           aria-controls={popupId}
@@ -145,28 +171,69 @@ export default function LearnerVersionsMenu({
             off.
           </p>
           {versions.map((version) => (
-            <div key={version.id} className="flex items-center hover:bg-slate-700">
-              <button
-                type="button"
-                onClick={() => restore(version)}
-                className="flex min-w-0 flex-1 flex-col items-start px-3 py-1.5 text-left"
-              >
-                <span className="text-sm text-white">
-                  Restore edits at {formatPlaybackTime(version.recordingTime)}
-                </span>
-                <span className="text-xs text-slate-400">
-                  Saved {formatSavedAgo(version.savedAt, now)}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void forgetLearnerVersion(version.id)}
-                aria-label={`Delete edits saved at ${formatPlaybackTime(version.recordingTime)}`}
-                title="Delete"
-                className="mr-2 flex shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-600 hover:text-white size-6"
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
+            <div
+              key={version.id}
+              className={
+                confirmingDeleteId === version.id
+                  ? "flex min-h-12 items-center"
+                  : "flex items-center hover:bg-slate-700"
+              }
+            >
+              {confirmingDeleteId === version.id ? (
+                // A saved version is the learner's own work: deleting it is checked first.
+                <>
+                  <span id={confirmQuestionId} className="mr-auto px-3 text-xs text-slate-300">
+                    Delete these edits?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => confirmDelete(version)}
+                    aria-describedby={confirmQuestionId}
+                    className="mr-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={() => keepVersion(version)}
+                    aria-describedby={confirmQuestionId}
+                    className="mr-2 rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white"
+                  >
+                    Keep
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => restore(version)}
+                    className="flex min-w-0 flex-1 flex-col items-start px-3 py-1.5 text-left"
+                  >
+                    <span className="text-sm text-white">
+                      Restore edits at {formatPlaybackTime(version.recordingTime)}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      Saved {formatSavedAgo(version.savedAt, now)}
+                    </span>
+                  </button>
+                  <button
+                    ref={(node) => {
+                      if (node && refocusDeleteOfRef.current === version.id) {
+                        refocusDeleteOfRef.current = null;
+                        node.focus();
+                      }
+                    }}
+                    type="button"
+                    onClick={() => setConfirmingDeleteId(version.id)}
+                    aria-label={`Delete edits saved at ${formatPlaybackTime(version.recordingTime)}`}
+                    title="Delete"
+                    className="mr-2 flex shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-600 hover:text-white size-6"
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>

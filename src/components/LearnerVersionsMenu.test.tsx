@@ -117,4 +117,56 @@ describe("LearnerVersionsMenu", () => {
     expect(liveRegion).toHaveTextContent("Your edits were saved");
     expect(screen.getByRole("button", { name: "Your edits, 1 saved" })).toBeInTheDocument();
   });
+
+  it("asks before deleting a saved version, and Keep leaves it in place", async () => {
+    renderMenu();
+    fireEvent.click(await screen.findByRole("button", { name: "Your edits, 2 saved" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete edits saved at 1:05" }));
+
+    expect(mocks.deleteLearnerWorkspaceVersion).not.toHaveBeenCalled();
+    expect(screen.getByText("Delete these edits?")).toBeInTheDocument();
+    const keep = screen.getByRole("button", { name: "Keep" });
+    expect(keep).toHaveFocus();
+    expect(keep).toHaveAccessibleDescription("Delete these edits?");
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveAccessibleDescription(
+      "Delete these edits?",
+    );
+
+    fireEvent.click(keep);
+
+    expect(mocks.deleteLearnerWorkspaceVersion).not.toHaveBeenCalled();
+    expect(screen.queryByText("Delete these edits?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete edits saved at 1:05" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Your edits, 2 saved" })).toBeInTheDocument();
+  });
+
+  it("deletes a saved version once confirmed and returns focus to the button", async () => {
+    renderMenu();
+    const trigger = await screen.findByRole("button", { name: "Your edits, 2 saved" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Delete edits saved at 1:05" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(mocks.deleteLearnerWorkspaceVersion).toHaveBeenCalledWith("late");
+    expect(trigger).toHaveAccessibleName("Your edits, 1 saved");
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /Restore edits at 1:05/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Restore edits at 0:05/ })).toBeInTheDocument();
+  });
+
+  it("drops an unanswered delete question when the list closes", async () => {
+    renderMenu();
+    const trigger = await screen.findByRole("button", { name: "Your edits, 2 saved" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Delete edits saved at 1:05" }));
+
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
+
+    expect(screen.queryByText("Delete these edits?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete edits saved at 1:05" })).toBeInTheDocument();
+    expect(mocks.deleteLearnerWorkspaceVersion).not.toHaveBeenCalled();
+  });
 });
