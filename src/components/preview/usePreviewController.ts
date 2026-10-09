@@ -38,16 +38,7 @@ import type {
   PreviewSize,
 } from "../../types/slides";
 import { lessonRunsInWebContainer } from "../../types/lessonTypes";
-import {
-  createReplayableRuntimePreview,
-  type PreviewScrollPosition,
-  RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
-} from "./previewIframeUtils";
-import {
-  incrementPerformanceCounter,
-  recordPerformanceMetric,
-  startPerformanceSpan,
-} from "../../utils/performanceMetrics";
+import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   buildHeaderRecord,
@@ -63,6 +54,7 @@ import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { requestStudioPreviewCommand } from "../../utils/iframeStudioCommandBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
 import { usePreviewResize } from "./usePreviewResize";
+import { useRuntimeSnapshotRequests } from "./useRuntimeSnapshotRequests";
 import {
   applyRouteToRuntimePreviewLocation,
   createRuntimePreviewLocationFromUrl,
@@ -111,24 +103,6 @@ export interface PreviewController {
   recordApiClientTab: (tab: ApiClientRequestTab) => void;
   recordApiClientInspect: (entry: ApiClientHistoryEntry) => void;
 }
-
-type RuntimeSnapshotRequestReason =
-  | "edit"
-  | "inspection"
-  | "load"
-  | "recording-finalize"
-  | "refresh"
-  | "route-change"
-  | "runtime-ready";
-
-interface PendingRuntimeSnapshotRequest {
-  requestId: string;
-  promise: Promise<string | null>;
-  resolve: (snapshot: string | null) => void;
-  timeoutId: number;
-}
-
-const RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 1_200;
 
 /**
  * Navigates the preview iframe's history. Falls back to a postMessage command when the
@@ -284,11 +258,6 @@ export function usePreviewController(): PreviewController {
   const replayContainerRef = useRef<HTMLDivElement>(null);
 
   const lastContentRef = useRef("");
-  const lastRuntimeSnapshotRef = useRef("");
-  const lastRuntimeSnapshotCapturedAtRef = useRef(0);
-  const lastRuntimeSnapshotUrlRef = useRef<string | null>(null);
-  const runtimeSnapshotRequestSequenceRef = useRef(0);
-  const pendingRuntimeSnapshotRequestRef = useRef<PendingRuntimeSnapshotRequest | null>(null);
   const scrollPositionRef = useRef<PreviewScrollPosition>({
     scrollTop: 0,
     scrollLeft: 0,
@@ -482,146 +451,18 @@ export function usePreviewController(): PreviewController {
     applyPreviewRoute(location?.route ?? "/");
   }, [applyPreviewRoute, effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl]);
 
-  const captureRuntimePreviewSnapshot = useCallback(() => {
-    if (!effectiveRuntimePreviewUrl) {
-      return null;
-    }
-
-    const iframe = iframeRef.current;
-
-    if (!iframe) {
-      return null;
-    }
-
-    const finishSpan = startPerformanceSpan("preview.snapshot_serialize", {
-      source: "same_origin",
-    });
-    const snapshot = createReplayableRuntimePreview(iframe, effectiveRuntimePreviewUrl);
-    finishSpan({ outcome: snapshot ? "success" : "unavailable" });
-
-    if (snapshot) {
-      lastRuntimeSnapshotRef.current = snapshot;
-      lastRuntimeSnapshotCapturedAtRef.current = Date.now();
-      lastContentRef.current = snapshot;
-      recordPerformanceMetric(
-        "preview.snapshot_bytes",
-        new TextEncoder().encode(snapshot).byteLength,
-        "bytes",
-        { source: "same_origin" },
-      );
-    }
-
-    return snapshot;
-  }, [effectiveRuntimePreviewUrl]);
-
-  const completeRuntimeSnapshotRequest = useCallback(
-    (snapshot: string, requestId: string | null) => {
-      lastRuntimeSnapshotCapturedAtRef.current = Date.now();
-      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
-      if (!pendingRequest || requestId !== pendingRequest.requestId) {
-        return;
-      }
-
-      window.clearTimeout(pendingRequest.timeoutId);
-      pendingRuntimeSnapshotRequestRef.current = null;
-      pendingRequest.resolve(snapshot);
-    },
-    [],
-  );
-
-  const shouldAcceptRuntimeSnapshot = useCallback((requestId: string | null) => {
-    const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
-    return Boolean(pendingRequest && requestId === pendingRequest.requestId);
-  }, []);
-
-  const requestRuntimePreviewSnapshot = useCallback(
-    (reason: RuntimeSnapshotRequestReason): Promise<string | null> => {
-      if (!effectiveRuntimePreviewUrl) {
-        return Promise.resolve(null);
-      }
-
-      const iframeWindow = iframeRef.current?.contentWindow;
-      if (!iframeWindow) {
-        return Promise.resolve(null);
-      }
-
-      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
-      if (pendingRequest) {
-        incrementPerformanceCounter("preview.snapshot_request_coalesced", 1, { reason });
-        return pendingRequest.promise;
-      }
-
-      incrementPerformanceCounter("preview.snapshot_request", 1, { reason });
-
-      const sameOriginSnapshot = captureRuntimePreviewSnapshot();
-      if (sameOriginSnapshot) {
-        return Promise.resolve(sameOriginSnapshot);
-      }
-
-      const requestId = `runtime-snapshot-${++runtimeSnapshotRequestSequenceRef.current}`;
-      let resolveRequest: (snapshot: string | null) => void = () => undefined;
-      const promise = new Promise<string | null>((resolve) => {
-        resolveRequest = resolve;
-      });
-      const timeoutId = window.setTimeout(() => {
-        const activeRequest = pendingRuntimeSnapshotRequestRef.current;
-        if (!activeRequest || activeRequest.requestId !== requestId) {
-          return;
-        }
-
-        pendingRuntimeSnapshotRequestRef.current = null;
-        incrementPerformanceCounter("preview.snapshot_request_timeout", 1, { reason });
-        activeRequest.resolve(lastRuntimeSnapshotRef.current || null);
-      }, RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS);
-
-      pendingRuntimeSnapshotRequestRef.current = {
-        requestId,
-        promise,
-        resolve: resolveRequest,
-        timeoutId,
-      };
-
-      try {
-        iframeWindow.postMessage(
-          {
-            type: RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
-            payload: { reason, requestId },
-          },
-          "*",
-        );
-      } catch {
-        window.clearTimeout(timeoutId);
-        pendingRuntimeSnapshotRequestRef.current = null;
-        resolveRequest(lastRuntimeSnapshotRef.current || null);
-      }
-
-      return promise;
-    },
-    [captureRuntimePreviewSnapshot, effectiveRuntimePreviewUrl],
-  );
-
-  useEffect(() => {
-    return () => {
-      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
-      if (!pendingRequest) {
-        return;
-      }
-
-      window.clearTimeout(pendingRequest.timeoutId);
-      pendingRuntimeSnapshotRequestRef.current = null;
-      pendingRequest.resolve(null);
-    };
-  }, [effectiveRuntimePreviewUrl]);
-
-  useEffect(() => {
-    const didUrlChange = lastRuntimeSnapshotUrlRef.current !== effectiveRuntimePreviewUrl;
-    lastRuntimeSnapshotUrlRef.current = effectiveRuntimePreviewUrl;
-
-    if (didUrlChange || !isRuntimePreviewActive) {
-      lastRuntimeSnapshotRef.current = "";
-      lastRuntimeSnapshotCapturedAtRef.current = 0;
-    }
-  }, [effectiveRuntimePreviewUrl, isRuntimePreviewActive]);
+  const {
+    requestRuntimePreviewSnapshot,
+    completeRuntimeSnapshotRequest,
+    shouldAcceptRuntimeSnapshot,
+    lastRuntimeSnapshotRef,
+    lastRuntimeSnapshotCapturedAtRef,
+  } = useRuntimeSnapshotRequests({
+    iframeRef,
+    effectiveRuntimePreviewUrl,
+    isRuntimePreviewActive,
+    lastContentRef,
+  });
 
   useEffect(() => {
     previewHandle.livePreviewInspectionGetter.current = async () => {
