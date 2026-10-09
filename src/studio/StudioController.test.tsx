@@ -81,8 +81,9 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
   listCustomVoices: () => Promise.resolve(studio.voices),
   deleteCustomVoice: () => Promise.resolve(),
 }));
-// One English plan that can start with the default English provider, and one
-// Burmese script that cannot.
+// One English plan that can start with the default English provider, one
+// Burmese script that cannot, and one imported-style script that no longer
+// parses against the schema.
 vi.mock("./plans", () => ({
   DEFAULT_STUDIO_PLAN_SLUG: "english-plan",
   STUDIO_SOURCES: {
@@ -101,11 +102,19 @@ vi.mock("./plans", () => ({
         scenes: [],
       }),
     },
+    "broken-script": {
+      kind: "script",
+      load: () => {
+        throw new Error('Unrecognized key: "legacyField"');
+      },
+    },
   },
   parseLessonScriptYaml: () => {
     throw new Error("unused");
   },
-  sourceRuntimeDefault: () => "fixture",
+  // Loads like the real one, so a source that fails to parse throws here too.
+  sourceRuntimeDefault: (source: { load: () => { runtime: { kind: string } } }) =>
+    source.load().runtime.kind === "none" ? "fixture" : "live",
   sourceTitle: (source: { load: () => { lesson: { title: string } } }) =>
     source.load().lesson.title,
 }));
@@ -183,6 +192,19 @@ describe("StudioController status messages", () => {
     expect(start).toHaveAccessibleDescription(/needs Burmese narration/);
     const reason = screen.getByText(/needs Burmese narration/);
     expect(reason.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+  });
+
+  it("keeps the console up for a script that no longer parses, and reports why on Start", async () => {
+    studio.searchParams = new URLSearchParams("plan=broken-script");
+    renderController();
+
+    expect(screen.getByText(/^runtime/).textContent).toMatch(/^runtime \? · run #/);
+    const start = startButton();
+    expect(start).toBeEnabled();
+
+    fireEvent.click(start);
+    expect(await screen.findByRole("alert")).toHaveTextContent('Unrecognized key: "legacyField"');
+    expect(studio.runRender).not.toHaveBeenCalled();
   });
 
   it("announces a voice task through the always-mounted voice status region", async () => {

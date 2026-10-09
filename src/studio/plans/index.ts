@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import type { StudioPlan } from "../plan";
+import { defaultRuntimeModeOf, type StudioPlan } from "../plan";
 import { parseLessonScript, type LessonScript } from "../script/schema";
 
 /**
@@ -41,10 +41,7 @@ export const STUDIO_SOURCES: Record<string, StudioLessonSource> = {
 export const DEFAULT_STUDIO_PLAN_SLUG = "rust-borrow";
 
 export function sourceRuntimeDefault(source: StudioLessonSource): "live" | "fixture" {
-  const runtime = source.load().runtime;
-  // Lessons without a runnable runtime execute fully locally; "fixture" is
-  // the honest label for that.
-  return runtime.kind === "none" ? "fixture" : runtime.defaultMode;
+  return defaultRuntimeModeOf(source.load().runtime);
 }
 
 export function sourceTitle(source: StudioLessonSource): string {

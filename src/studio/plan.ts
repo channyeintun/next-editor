@@ -753,6 +753,15 @@ export type StudioRuntimeKind = StudioRuntime["kind"];
 export type StudioRuntimeMode = "live" | "fixture";
 
 /**
+ * The mode a render uses when `?runtime=` does not choose one. Lessons without
+ * a runnable runtime execute fully locally; "fixture" is the honest label for
+ * that.
+ */
+export function defaultRuntimeModeOf(runtime: StudioRuntime): StudioRuntimeMode {
+  return runtime.kind === "none" ? "fixture" : runtime.defaultMode;
+}
+
+/**
  * The runtimes that execute code through a Playground engine rather than the
  * WebContainer: they have a Run button, a console, and a pinned run fixture.
  *

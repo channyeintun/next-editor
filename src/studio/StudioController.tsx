@@ -30,6 +30,7 @@ import { describeDraftDescription, describeDraftProvenance } from "./draftProven
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import {
+  defaultRuntimeModeOf,
   parseRuntimeModeParam,
   shouldAutostartRender,
   type StudioPlan,
@@ -41,7 +42,6 @@ import {
   STUDIO_SOURCES,
   parseLessonScriptYaml,
   sourceRuntimeDefault,
-  sourceTitle,
   type StudioLessonSource,
 } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
@@ -122,6 +122,15 @@ function narrationSetupErrorOf(
   if (source.kind === "plan") return provider === "pocket" ? null : BURMESE_SCRIPT_ONLY_ERROR;
   if (scriptLocale === null) return null;
   return validateNarrationLanguage(scriptLocale, narrationLanguageOf(provider));
+}
+
+/** A plan source's default runtime mode, or "?" when the plan fails to load. */
+function planRuntimeLabelOf(source: StudioLessonSource): string {
+  try {
+    return sourceRuntimeDefault(source);
+  } catch {
+    return "?";
+  }
 }
 
 function readImportedScripts(): Record<string, string> {
@@ -685,8 +694,7 @@ export default function StudioController() {
         renderOptions.narration = built.narration;
         setBuildWarnings(built.warnings);
       }
-      const mode: StudioRuntimeMode =
-        requestedMode ?? (plan.runtime.kind === "none" ? "fixture" : plan.runtime.defaultMode);
+      const mode: StudioRuntimeMode = requestedMode ?? defaultRuntimeModeOf(plan.runtime);
 
       const result = await runStudioRender(
         plan,
@@ -736,7 +744,7 @@ export default function StudioController() {
         mode,
         slug: plan.lesson.slug,
         sourceRevision: sourceRevisionOf(planSlug, importedScripts),
-        title: sourceTitle(source),
+        title: script?.lesson.title ?? plan.lesson.title,
         voiceName,
         voiceKind,
         narrationProvider,
@@ -819,21 +827,28 @@ export default function StudioController() {
   const activeRun = latestMatchesSelection ? latest : null;
   const report = activeRun?.result.report ?? null;
   const artifacts = activeRun?.result.artifacts ?? null;
-  // sourceRuntimeDefault parses + validates the whole YAML (5–14 ms per call);
-  // only a changed selection or import needs that again.
-  const effectiveModeLabel = useMemo(
-    () => requestedMode ?? (source ? sourceRuntimeDefault(source) : "?"),
-    [requestedMode, source],
-  );
-  // The selected script's locale, parsed once per selection for the same reason.
-  const selectedScriptLocale = useMemo(() => {
+  // Parsing validates the whole YAML (5–14 ms per call), so it runs once per
+  // selection or import, not on every receipt/phase re-render. An imported
+  // script re-parsed against a since-tightened schema can fail here: that
+  // yields null (the label reads "?") instead of a throw during render, which
+  // would drop the route into its error boundary; Start render parses again
+  // and reports the schema error.
+  const selectedScript = useMemo(() => {
     if (source?.kind !== "script") return null;
     try {
-      return source.load().lesson.locale;
+      return source.load();
     } catch {
       return null;
     }
   }, [source]);
+  const selectedScriptLocale = selectedScript?.lesson.locale ?? null;
+  const effectiveModeLabel =
+    requestedMode ??
+    (selectedScript
+      ? defaultRuntimeModeOf(selectedScript.runtime)
+      : source?.kind === "plan"
+        ? planRuntimeLabelOf(source)
+        : "?");
   // Disables Start render with its reason, so a locale/provider mismatch is
   // caught before the screen picker opens (runRender checks again).
   const narrationSetupError = narrationSetupErrorOf(source, selectedScriptLocale, provider);
