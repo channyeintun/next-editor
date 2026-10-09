@@ -20,9 +20,9 @@ type PlaygroundServiceErrorClass<ErrorKind extends string> = abstract new (
 export interface PlaygroundClientBinding<Client, ErrorKind extends string> {
   create: () => Client;
   /**
-   * Ends whatever the client is doing: aborts the service request of a proxied language, or
-   * disposes the in-page compiler of Kite and assembly (where cancelling is only a generation
-   * bump, since there is no request to abort).
+   * Ends whatever the client is doing: aborts the service request of a proxied language,
+   * terminates Kite's busy compiler worker, or abandons assembly's sliced run (a generation bump
+   * its machine checks between slices, since there is no request to abort).
    */
   stop: (client: Client) => void;
   /** Its errors carry their own kind; anything else it throws is reported as "unavailable". */

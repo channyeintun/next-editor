@@ -23,11 +23,12 @@ import { STUDIO_KITE_DOCK_TARGET_ID } from "../studio/targets";
 /**
  * Kite lessons, where **there is no service**. `kitec` is a Rust program,
  * normally a native binary, and Rust builds for WebAssembly too — so Run and
- * Format instantiate a Wasm build of that same compiler in this page (cached by
- * the client across runs, so only the first Run pays for the load) and answer
+ * Format instantiate a Wasm build of that same compiler in a worker of this page
+ * (kept between runs, so only the first Run pays for the load) and answer
  * without a network round trip: no proxy, no rate limit, and no lesson that
  * breaks because a public playground is down. That is also why cancelling
- * disposes of the pending run instead of aborting a request.
+ * terminates a busy compiler worker instead of aborting a request — the only way
+ * to stop a program that never returns.
  *
  * A Kite module is a directory, so every `.kite` file in the workspace is part
  * of the same program: Format touches all of them, and a run compiles

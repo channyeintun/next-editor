@@ -2,10 +2,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
-import { runKiteSource } from "./client";
+import { KitePlaygroundClient, type KiteEngine, type KiteEngineSource } from "./client";
 import { instantiateKiteCompiler, type KiteCompiler } from "./compiler";
 import { kiteRunResultToConsoleLines } from "./console";
-import { parseKitePlaygroundRunResult } from "./types";
+import { runKiteSource } from "./operations";
+import { parseKitePlaygroundRunResult, type KitePlaygroundRunResult } from "./types";
 
 // Vitest cannot import a bare `.wasm`, so the compiler is instantiated from
 // bytes — the same arrangement `src/core/dmp/dmpCodec.test.ts` uses.
@@ -86,6 +87,144 @@ describe("loadKiteCompiler", () => {
     const compiler = await second;
     expect(compiler.check("fn main() {\n    io.print(1)\n}\n")).toBe("");
     await expect(loadKiteCompiler()).resolves.toBe(compiler);
+  });
+});
+
+describe("KitePlaygroundClient", () => {
+  const files = [{ path: "main.kite", content: "fn main() {}\n" }];
+  const ok: KitePlaygroundRunResult = { status: "success", stdout: "hi\n", stderr: "" };
+  const never = () => new Promise<never>(() => {});
+
+  function fakeEngine(run: KiteEngine["run"]) {
+    return {
+      load: vi.fn<KiteEngine["load"]>(async () => {}),
+      run: vi.fn<KiteEngine["run"]>(run),
+      format: vi.fn<KiteEngine["format"]>(async (sources) =>
+        sources.map((source) => `${source.trim()}\n`),
+      ),
+      terminate: vi.fn<KiteEngine["terminate"]>(),
+    };
+  }
+
+  function engineSource(...engines: KiteEngine[]) {
+    const queue = [...engines];
+    return {
+      acquire: vi.fn<KiteEngineSource["acquire"]>(() => {
+        const engine = queue.shift();
+        if (!engine) throw new Error("no engine left");
+        return engine;
+      }),
+      release: vi.fn<KiteEngineSource["release"]>(),
+    };
+  }
+
+  // A program that never returns used to hang the page, because the compiler
+  // ran it in one synchronous call on the main thread that nothing could stop.
+  it("terminates the engine of a run that never returns when disposed", async () => {
+    const engine = fakeEngine(never);
+    const engines = engineSource(engine);
+    const client = new KitePlaygroundClient({ engines });
+
+    const pending = client.run({ files });
+    await vi.waitFor(() => expect(engine.run).toHaveBeenCalled());
+    client.dispose();
+
+    await expect(pending).rejects.toMatchObject({ kind: "aborted" });
+    expect(engine.terminate).toHaveBeenCalledTimes(1);
+    expect(engines.release).not.toHaveBeenCalled();
+  });
+
+  it("stops the run in flight when a newer one starts, on a fresh engine", async () => {
+    const stuck = fakeEngine(never);
+    const fresh = fakeEngine(async () => ok);
+    const client = new KitePlaygroundClient({ engines: engineSource(stuck, fresh) });
+
+    const first = client.run({ files });
+    await vi.waitFor(() => expect(stuck.run).toHaveBeenCalled());
+    const second = client.run({ files });
+
+    await expect(first).rejects.toMatchObject({ kind: "aborted" });
+    await expect(second).resolves.toEqual(ok);
+    expect(stuck.terminate).toHaveBeenCalledTimes(1);
+    expect(fresh.terminate).not.toHaveBeenCalled();
+  });
+
+  it("keeps an idle engine across runs, so the compiler loads once", async () => {
+    const engine = fakeEngine(async () => ok);
+    const engines = engineSource(engine);
+    const client = new KitePlaygroundClient({ engines });
+
+    await expect(client.run({ files })).resolves.toEqual(ok);
+    await expect(client.run({ files })).resolves.toEqual(ok);
+    expect(engines.acquire).toHaveBeenCalledTimes(1);
+    expect(engine.terminate).not.toHaveBeenCalled();
+  });
+
+  it("hands an idle engine back on dispose rather than terminating it", async () => {
+    const engine = fakeEngine(async () => ok);
+    const engines = engineSource(engine);
+    const client = new KitePlaygroundClient({ engines });
+
+    await client.run({ files });
+    client.dispose();
+    expect(engines.release).toHaveBeenCalledWith(engine);
+    expect(engine.terminate).not.toHaveBeenCalled();
+  });
+
+  it("reports a compiler that will not load as unavailable", async () => {
+    const engine = fakeEngine(async () => ok);
+    engine.load.mockRejectedValueOnce(new Error("chunk failed"));
+    const client = new KitePlaygroundClient({ engines: engineSource(engine) });
+
+    await expect(client.run({ files })).rejects.toMatchObject({
+      kind: "unavailable",
+      message: "The Kite compiler could not be loaded (chunk failed)",
+    });
+    expect(engine.run).not.toHaveBeenCalled();
+    await expect(client.run({ files })).resolves.toEqual(ok);
+  });
+
+  it("formats every file through the engine, keeping each path", async () => {
+    const engine = fakeEngine(async () => ok);
+    const client = new KitePlaygroundClient({ engines: engineSource(engine) });
+
+    await expect(
+      client.format({
+        files: [
+          { path: "main.kite", content: "fn main() {}  " },
+          { path: "shapes.kite", content: "fn area() {}  " },
+        ],
+      }),
+    ).resolves.toEqual({
+      files: [
+        { path: "main.kite", content: "fn main() {}\n" },
+        { path: "shapes.kite", content: "fn area() {}\n" },
+      ],
+    });
+    expect(engine.format).toHaveBeenCalledWith(["fn main() {}  ", "fn area() {}  "]);
+  });
+
+  describe("without a Worker", () => {
+    const WASM = "../../core/kite/build/kite-compiler.wasm";
+
+    afterEach(() => {
+      vi.doUnmock(WASM);
+      vi.resetModules();
+    });
+
+    it("runs the compiler in this page", async () => {
+      expect(typeof Worker).toBe("undefined");
+      vi.resetModules();
+      const exports = (await WebAssembly.instantiate(readFileSync(wasmPath))).instance.exports;
+      vi.doMock(WASM, () => ({ default: exports }));
+      const { KitePlaygroundClient: PageClient } = await import("./client");
+
+      await expect(
+        new PageClient().run({
+          files: [{ path: "main.kite", content: 'fn main() {\n    io.print("in page")\n}\n' }],
+        }),
+      ).resolves.toEqual({ status: "success", stdout: "in page\n", stderr: "" });
+    });
   });
 });
 
