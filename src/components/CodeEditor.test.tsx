@@ -124,9 +124,9 @@ function press(name: string) {
   });
 }
 
-// The first test pays for the lazy CodeEditor chunk's cold transform (see
-// renderWorkspace), which can outlast Vitest's 5 s default on a busy machine;
-// the test budget sits above that 20 s wait so the wait, not Vitest, decides.
+// beforeAll preloads the CodeEditor chunk, but on a busy machine mounting the
+// workspace can still outlast Vitest's 5 s default; the test budget sits above
+// renderWorkspace's 20 s wait so the wait, not Vitest, decides.
 describe("CodeEditor bypass block", { timeout: 30_000 }, () => {
   it("skips the header to the main editor region without navigating", async () => {
     await renderWorkspace();
