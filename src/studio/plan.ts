@@ -14,12 +14,13 @@ import { whiteboardDrawDurationMs } from "./whiteboardAssets";
  * Compiled lesson plan — the deterministic contract between the Director (asset
  * build) and the in-app Performer (docs/agent-lesson-production.md §4/§5).
  *
- * M0 scope: plans are authored as checked-in TypeScript modules and validated
- * with this schema at load time. The YAML `LessonScript` + marker compiler is
- * M1; nothing here may depend on narration markers or wall-clock times. Every
- * `at` is an absolute millisecond offset on the recording clock, and every
- * generated duration (typing chunk delays, cursor tween lengths) is already
- * materialized so performing the same plan twice never re-rolls them.
+ * Plans are never authored or checked in: the in-page Director compiles one
+ * from a LessonScript YAML at render time (inPageDirector → compileLessonScript)
+ * and validates it with this schema. Nothing here may depend on narration
+ * markers or wall-clock times. Every `at` is an absolute millisecond offset on
+ * the recording clock, and every generated duration (typing chunk delays,
+ * cursor tween lengths) is already materialized so performing the same plan
+ * twice never re-rolls them.
  */
 
 export const STUDIO_PLAN_SCHEMA_VERSION = 1;
@@ -439,7 +440,11 @@ export const studioCaptionTrackSchema = z.object({
 });
 
 export const studioNarrationSchema = z.object({
-  /** URL the studio route fetches the pre-generated narration from (same-origin asset). */
+  /**
+   * Opaque identity of the synthesized narration (`studio-tts://<narrationKey>`),
+   * covered by the plan hash. Never fetched: the in-page Director hands the
+   * stitched audio to the render directly.
+   */
   audioPath: z.string().min(1),
   mimeType: z.string().min(1),
   /** Expected narration length; the recorder still measures the real duration. */

@@ -33,7 +33,6 @@ import {
   defaultRuntimeModeOf,
   parseRuntimeModeParam,
   shouldAutostartRender,
-  type StudioPlan,
   type StudioRuntimeMode,
 } from "./plan";
 import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
@@ -41,7 +40,6 @@ import {
   DEFAULT_STUDIO_PLAN_SLUG,
   STUDIO_SOURCES,
   parseLessonScriptYaml,
-  sourceRuntimeDefault,
   type StudioLessonSource,
 } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
@@ -67,7 +65,7 @@ import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, type CritiqueNote } from "./script/critic";
 import { extractScriptNarration } from "./script/markers";
-import { runStudioRender, type StudioRenderOptions, type StudioRunResult } from "./runStudioRender";
+import { runStudioRender, type StudioRunResult } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
 import {
   isStudioNarrationProvider,
@@ -105,32 +103,17 @@ function storeNarrationProvider(provider: StudioNarrationProvider): void {
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
 const ATHANLAB_NOT_REPORTED = { ready: false, reason: "Checking your AthanLab setup…" };
 
-/** The non-script-source refusal, shared by the Start guard and runRender. */
-const BURMESE_SCRIPT_ONLY_ERROR = "Burmese narration is available for LessonScript sources only";
-
 /**
  * Why the selected lesson cannot be narrated by the selected provider, or null.
- * `scriptLocale` is null for a plan source, or a script that fails to parse
- * (runRender reports the schema error).
+ * Shared by the Start guard and runRender. `scriptLocale` is null when no
+ * script is selected or it fails to parse (runRender reports the schema error).
  */
 function narrationSetupErrorOf(
-  source: StudioLessonSource | undefined,
   scriptLocale: string | null,
   provider: StudioNarrationProvider,
 ): string | null {
-  if (!source) return null;
-  if (source.kind === "plan") return provider === "pocket" ? null : BURMESE_SCRIPT_ONLY_ERROR;
   if (scriptLocale === null) return null;
   return validateNarrationLanguage(scriptLocale, narrationLanguageOf(provider));
-}
-
-/** A plan source's default runtime mode, or "?" when the plan fails to load. */
-function planRuntimeLabelOf(source: StudioLessonSource): string {
-  try {
-    return sourceRuntimeDefault(source);
-  } catch {
-    return "?";
-  }
 }
 
 function readImportedScripts(): Record<string, string> {
@@ -611,56 +594,41 @@ export default function StudioController() {
       // Everything checkable without a network round trip — the script's
       // locale against the provider, the provider's own requirements — fails
       // here, before the screen picker below opens for a render that cannot run.
-      const script = source.kind === "script" ? source.load() : null;
-      if (!script && renderProvider !== "pocket") {
-        throw new Error(BURMESE_SCRIPT_ONLY_ERROR);
-      }
+      const script = source.load();
+      const setupError = narrationSetupErrorOf(script.lesson.locale, renderProvider);
+      if (setupError) throw new Error(setupError);
       const renderVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
       let voiceProfile: VoiceProfile | undefined;
       let voiceName: string | null = null;
       let voiceKind: StudioRunEntry["voiceKind"] = null;
-      if (script) {
-        const languageError = validateNarrationLanguage(
-          script.lesson.locale,
-          narrationLanguageOf(renderProvider),
-        );
-        if (languageError) throw new Error(languageError);
-
-        if (renderProvider === "voxcpm2") {
-          if (!studioCapabilities.burmeseVoxCpm2) {
-            throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
-          }
-          if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
-            throw new Error(
-              `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
-            );
-          }
-          voiceProfile = modalVoxCpm2BurmeseProfileOf(renderVoice);
-          voiceName = renderVoice.name;
-          voiceKind = "reference";
-        } else if (renderProvider === "athanlab") {
-          if (!studioCapabilities.athanlab) {
-            throw new Error("AthanLab narration is not available on this server yet");
-          }
-          if (!athanLabReadiness.ready || !athanLabVoice) {
-            throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
-          }
-          voiceProfile = athanLabProfileOf(athanLabVoice.id);
-          voiceName = athanLabVoice.name;
-          voiceKind = "athanlab";
-        } else if (renderVoice) {
-          voiceProfile = customVoiceProfileOf(renderVoice);
-          voiceName = renderVoice.name;
-          voiceKind = "cloned";
+      if (renderProvider === "voxcpm2") {
+        if (!studioCapabilities.burmeseVoxCpm2) {
+          throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
         }
+        if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
+          throw new Error(
+            `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
+          );
+        }
+        voiceProfile = modalVoxCpm2BurmeseProfileOf(renderVoice);
+        voiceName = renderVoice.name;
+        voiceKind = "reference";
+      } else if (renderProvider === "athanlab") {
+        if (!studioCapabilities.athanlab) {
+          throw new Error("AthanLab narration is not available on this server yet");
+        }
+        if (!athanLabReadiness.ready || !athanLabVoice) {
+          throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
+        }
+        voiceProfile = athanLabProfileOf(athanLabVoice.id);
+        voiceName = athanLabVoice.name;
+        voiceKind = "athanlab";
+      } else if (renderVoice) {
+        voiceProfile = customVoiceProfileOf(renderVoice);
+        voiceName = renderVoice.name;
+        voiceKind = "cloned";
       }
 
-      // Script sources run the in-page Director first: per-dialog synthesis
-      // (cached; seeded where the provider allows), joint scheduling,
-      // stitching, compilation.
-      let plan: StudioPlan;
-      let narrationProvider: string | null = null;
-      const renderOptions: StudioRenderOptions = { startedAt };
       setBuildWarnings([]);
 
       // Opt-in screen capture must be acquired here — the FIRST await in the
@@ -673,25 +641,17 @@ export default function StudioController() {
       if (screenRecordingEnabled && isScreenSupported) {
         try {
           acquiredScreenStream = await acquireDisplayStream(true);
-          renderOptions.screenStream = acquiredScreenStream;
         } catch (error) {
           console.warn("Studio screen capture not started; rendering without it:", error);
         }
       }
 
-      if (source.kind === "plan") {
-        plan = source.load();
-      } else {
-        // `script` is this source, already parsed and checked above.
-        const built = await buildPlanFromScript(script ?? source.load(), {
-          onPhase: setPhase,
-          voiceProfile,
-        });
-        narrationProvider = narrationProviderLabel(renderProvider);
-        plan = built.plan;
-        renderOptions.narration = built.narration;
-        setBuildWarnings(built.warnings);
-      }
+      // The in-page Director: per-dialog synthesis (cached; seeded where the
+      // provider allows), joint scheduling, stitching, compilation.
+      const built = await buildPlanFromScript(script, { onPhase: setPhase, voiceProfile });
+      const plan = built.plan;
+      const narrationProvider = narrationProviderLabel(renderProvider);
+      setBuildWarnings(built.warnings);
       const mode: StudioRuntimeMode = requestedMode ?? defaultRuntimeModeOf(plan.runtime);
 
       const result = await runStudioRender(
@@ -734,7 +694,7 @@ export default function StudioController() {
           onPhase: setPhase,
           onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
         },
-        renderOptions,
+        { startedAt, narration: built.narration, screenStream: acquiredScreenStream },
       );
 
       const entry: StudioRunEntry = {
@@ -742,7 +702,7 @@ export default function StudioController() {
         mode,
         slug: plan.lesson.slug,
         sourceRevision: sourceRevisionOf(planSlug, importedScripts),
-        title: script?.lesson.title ?? plan.lesson.title,
+        title: script.lesson.title,
         voiceName,
         voiceKind,
         narrationProvider,
@@ -832,7 +792,7 @@ export default function StudioController() {
   // would drop the route into its error boundary; Start render parses again
   // and reports the schema error.
   const selectedScript = useMemo(() => {
-    if (source?.kind !== "script") return null;
+    if (!source) return null;
     try {
       return source.load();
     } catch {
@@ -841,15 +801,10 @@ export default function StudioController() {
   }, [source]);
   const selectedScriptLocale = selectedScript?.lesson.locale ?? null;
   const effectiveModeLabel =
-    requestedMode ??
-    (selectedScript
-      ? defaultRuntimeModeOf(selectedScript.runtime)
-      : source?.kind === "plan"
-        ? planRuntimeLabelOf(source)
-        : "?");
+    requestedMode ?? (selectedScript ? defaultRuntimeModeOf(selectedScript.runtime) : "?");
   // Disables Start render with its reason, so a locale/provider mismatch is
   // caught before the screen picker opens (runRender checks again).
-  const narrationSetupError = narrationSetupErrorOf(source, selectedScriptLocale, provider);
+  const narrationSetupError = narrationSetupErrorOf(selectedScriptLocale, provider);
   const startBlockedReason =
     narrationSetupError ??
     (provider === "athanlab" && !athanLabReadiness.ready

@@ -1,21 +1,16 @@
 import YAML from "yaml";
-import { defaultRuntimeModeOf, type StudioPlan } from "../plan";
 import { parseLessonScript, type LessonScript } from "../script/schema";
 
 /**
- * Renderable lessons by slug. Two source kinds:
- * - "plan": a fully compiled plan with checked-in narration audio — rendered
- *   as-is. (None registered today.)
- * - "script": a LessonScript YAML. The checked-in scripts under
- *   `src/studio/scripts/*.yaml` auto-register by filename via the glob below
- *   — authoring a new lesson never edits this file — and users can import
- *   additional YAML at runtime in the studio UI (see StudioController).
- *   Parsing and validation happen here in the browser; the Director CLI is
- *   optional preflight, not a build step.
+ * Renderable lessons by slug, each a LessonScript YAML. The checked-in scripts
+ * under `src/studio/scripts/*.yaml` auto-register by filename via the glob
+ * below — authoring a new lesson never edits this file — and users can import
+ * additional YAML at runtime in the studio UI (see StudioController). Parsing
+ * and validation happen here in the browser, and the in-page Director compiles
+ * the plan and synthesizes its narration at render time; the Director CLI is
+ * optional preflight, not a build step.
  */
-export type StudioLessonSource =
-  | { kind: "plan"; load: () => StudioPlan }
-  | { kind: "script"; load: () => LessonScript };
+export type StudioLessonSource = { kind: "script"; load: () => LessonScript };
 
 const scriptYamls = import.meta.glob<string>("../scripts/*.yaml", {
   eager: true,
@@ -39,11 +34,3 @@ export const STUDIO_SOURCES: Record<string, StudioLessonSource> = {
 };
 
 export const DEFAULT_STUDIO_PLAN_SLUG = "rust-borrow";
-
-export function sourceRuntimeDefault(source: StudioLessonSource): "live" | "fixture" {
-  return defaultRuntimeModeOf(source.load().runtime);
-}
-
-export function sourceTitle(source: StudioLessonSource): string {
-  return source.load().lesson.title;
-}

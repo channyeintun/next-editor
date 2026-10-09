@@ -83,7 +83,11 @@ describe("runStudioRender report timing", () => {
       } as unknown as StudioPlan,
       "fixture",
       {} as StudioRunDeps,
-      { startedAt },
+      // Preflight fails before the narration is read.
+      {
+        startedAt,
+        narration: { blob: new Blob(), bytes: new Uint8Array(), audioSha256: "0".repeat(64) },
+      },
     );
 
     expect(result.report.outcome).toBe("failed");

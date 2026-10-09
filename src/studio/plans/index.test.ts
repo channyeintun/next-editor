@@ -34,8 +34,7 @@ describe("studio lesson registry", () => {
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
       const lesson = source.load();
       // Script slugs come from filenames; the parsed content must agree.
-      // (Plan-kind fixtures own their slug independently of the registry key.)
-      expect(source.kind === "script" ? lesson.lesson.slug : slug).toBe(slug);
+      expect(lesson.lesson.slug).toBe(slug);
       expect(lesson.lesson.title.length).toBeGreaterThan(0);
       expect(["live", "fixture"]).toContain(
         lesson.runtime.kind === "none" ? "fixture" : lesson.runtime.defaultMode,

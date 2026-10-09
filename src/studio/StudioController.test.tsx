@@ -68,8 +68,15 @@ vi.mock("../utils/displayCapture", () => ({
   acquireDisplayStream: () => Promise.reject(new Error("unsupported")),
   isScreenCaptureSupported: () => false,
 }));
+// The plan carries what the controller reads back: the slug and title it
+// records and the runtime its mode defaults from.
 vi.mock("./inPageDirector", () => ({
-  buildPlanFromScript: () => Promise.reject(new Error("unused")),
+  buildPlanFromScript: (script: { lesson: unknown; runtime: unknown }) =>
+    Promise.resolve({
+      plan: { lesson: script.lesson, runtime: script.runtime },
+      narration: { blob: new Blob(), bytes: new Uint8Array(), audioSha256: "0".repeat(64) },
+      warnings: [],
+    }),
 }));
 vi.mock("./runStudioRender", () => ({ runStudioRender: studio.runRender }));
 vi.mock("./tts/pocketSynth", () => ({ synthesizePocketWav: studio.synthesizePocket }));
@@ -81,17 +88,18 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
   listCustomVoices: () => Promise.resolve(studio.voices),
   deleteCustomVoice: () => Promise.resolve(),
 }));
-// One English plan that can start with the default English provider, one
+// One English script that can start with the default English provider, one
 // Burmese script that cannot, and one imported-style script that no longer
 // parses against the schema.
 vi.mock("./plans", () => ({
-  DEFAULT_STUDIO_PLAN_SLUG: "english-plan",
+  DEFAULT_STUDIO_PLAN_SLUG: "english-script",
   STUDIO_SOURCES: {
-    "english-plan": {
-      kind: "plan",
+    "english-script": {
+      kind: "script",
       load: () => ({
-        lesson: { slug: "english-plan", title: "English plan" },
+        lesson: { slug: "english-script", title: "English script", locale: "en-US" },
         runtime: { kind: "none" },
+        scenes: [],
       }),
     },
     "burmese-script": {
@@ -112,11 +120,6 @@ vi.mock("./plans", () => ({
   parseLessonScriptYaml: () => {
     throw new Error("unused");
   },
-  // Loads like the real one, so a source that fails to parse throws here too.
-  sourceRuntimeDefault: (source: { load: () => { runtime: { kind: string } } }) =>
-    source.load().runtime.kind === "none" ? "fixture" : "live",
-  sourceTitle: (source: { load: () => { lesson: { title: string } } }) =>
-    source.load().lesson.title,
 }));
 
 const { default: StudioController } = await import("./StudioController");
@@ -130,12 +133,37 @@ const narrator: SavedCustomVoice = {
   sampleSha256: "narrator-sha",
 };
 
-function renderController() {
+function renderController(Controller = StudioController) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <StudioController />
+      <Controller />
     </QueryClientProvider>,
   );
+}
+
+let freshInstances = 0;
+
+/**
+ * A fresh StudioController module for an autostart test: the unattended render
+ * is one-shot per module load. The query string makes a separate instance of
+ * this module only — React and React Query stay the shared ones.
+ */
+async function freshStudioController(): Promise<typeof StudioController> {
+  freshInstances += 1;
+  const module = (await import(
+    /* @vite-ignore */ `./StudioController.tsx?instance=${freshInstances}`
+  )) as typeof import("./StudioController");
+  return module.default;
+}
+
+/** Report an automation-controlled browser (navigator.webdriver) until restored. */
+function stubWebdriver(): () => void {
+  const own = Object.getOwnPropertyDescriptor(navigator, "webdriver");
+  Object.defineProperty(navigator, "webdriver", { configurable: true, get: () => true });
+  return () => {
+    if (own) Object.defineProperty(navigator, "webdriver", own);
+    else delete (navigator as { webdriver?: boolean }).webdriver;
+  };
 }
 
 /** The header badge: the status region whose text starts with its sr-only label. */
@@ -252,6 +280,33 @@ describe("StudioController preferences", () => {
   });
 });
 
+describe("StudioController unattended render", () => {
+  let restoreWebdriver: () => void = () => {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.voices = [];
+    restoreWebdriver = stubWebdriver();
+  });
+
+  afterEach(() => {
+    restoreWebdriver();
+  });
+
+  it("refuses a script the provider cannot narrate with the Start guard's own reason", async () => {
+    studio.searchParams = new URLSearchParams("plan=burmese-script&autostart=1");
+    renderController(await freshStudioController());
+
+    const alert = await screen.findByRole("alert");
+    const guardReason = screen.getByText(/needs Burmese narration/, {
+      selector: "#studio-start-blocked-reason",
+    });
+    expect(alert.textContent).toBe(guardReason.textContent);
+    expect(studio.runRender).not.toHaveBeenCalled();
+  });
+});
+
 describe("StudioController voice focus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -300,13 +355,13 @@ describe("StudioController draft upload focus", () => {
 
   it("returns focus to Create draft… when the draft upload closes", async () => {
     studio.runRender.mockResolvedValue({
-      report: { planSlug: "english-plan", outcome: "passed", checks: [], errors: [] },
-      manifest: { planSlug: "english-plan", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      report: { planSlug: "english-script", outcome: "passed", checks: [], errors: [] },
+      manifest: { planSlug: "english-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
       semantics: null,
       artifacts: {
         neBlob: new Blob(),
         audioBlob: new Blob(),
-        audioFileName: "lesson-english-plan.m4a",
+        audioFileName: "lesson-english-script.m4a",
         recording: {},
       },
     } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
