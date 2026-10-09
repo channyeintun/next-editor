@@ -234,6 +234,19 @@ describe("CollaborationPanel follow actions", () => {
     expect(mocks.stopFollowing).toHaveBeenCalledWith("user");
   });
 
+  it("names the panel by its level-2 title, above its level-3 sections", () => {
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const panel = screen.getByRole("dialog", { name: "Live collaboration" });
+    expect(within(panel).getByRole("heading", { level: 2 })).toHaveTextContent(
+      "Live collaboration",
+    );
+    expect(
+      within(panel).getByRole("heading", { level: 3, name: "Online now" }),
+    ).toBeInTheDocument();
+  });
+
   it("returns focus to the header button when the panel is closed", () => {
     render(<CollaborationPanel />);
     const trigger = screen.getByRole("button", { name: /^Live/ });
@@ -517,7 +530,8 @@ describe("CollaborationPanel invitation prompt", () => {
 
   it("asks before joining, and joins or declines only on request", () => {
     render(<CollaborationPanel />);
-    expect(screen.getByRole("dialog", { name: "Collaboration invitation" })).toHaveTextContent(
+    const prompt = screen.getByRole("dialog", { name: "Collaboration invitation" });
+    expect(within(prompt).getByRole("heading", { level: 2 })).toHaveTextContent(
       "Join this collaboration room?",
     );
     expect(acceptInvitation).not.toHaveBeenCalled();

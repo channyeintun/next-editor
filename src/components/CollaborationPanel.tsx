@@ -253,7 +253,7 @@ function InvitationPrompt({ isAccepting, error, onAccept, onDecline }: Invitatio
       aria-describedby={descriptionId}
       className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] p-4 text-left shadow-2xl"
     >
-      <p className="text-sm font-semibold text-white">Join this collaboration room?</p>
+      <h2 className="text-sm font-semibold text-white">Join this collaboration room?</h2>
       <p id={descriptionId} className="mt-2 text-xs leading-relaxed text-slate-400">
         Accepting replaces your current workspace with the room&apos;s files and runs that project.
         Your name and what you have open become visible to everyone in the room.
@@ -583,6 +583,7 @@ export default function CollaborationPanel() {
   const { isSignedIn } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const [isBusy, setIsBusy] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -702,12 +703,14 @@ export default function CollaborationPanel() {
       {isOpen ? (
         <div
           role="dialog"
-          aria-label="Live collaboration"
+          aria-labelledby={titleId}
           className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] text-left shadow-2xl"
         >
           <div className="flex items-center justify-between border-b border-slate-700/80 px-4 py-3">
             <div>
-              <p className="text-sm font-semibold text-white">Live collaboration</p>
+              <h2 id={titleId} className="text-sm font-semibold text-white">
+                Live collaboration
+              </h2>
               <p className="text-[11px] text-slate-400">
                 {isInRoom
                   ? `${status} · ${collaboration.role ?? "checking access"}`
