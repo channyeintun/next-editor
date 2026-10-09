@@ -52,6 +52,16 @@ async function renderUnavailable() {
   return screen.findByRole("button", { name: "Retry asset" });
 }
 
+describe("BinaryFilePreview download link", () => {
+  it("names the file it downloads, after the visible word", async () => {
+    assets.getBlob.mockResolvedValueOnce(new Blob(["png!"], { type: "image/png" }));
+    render(<BinaryFilePreview file={photo} />);
+
+    const link = await screen.findByRole("link", { name: "Download photo.png" });
+    expect(link).toHaveAttribute("download", "photo.png");
+  });
+});
+
 describe("BinaryFilePreview retry status", () => {
   it("stays silent until the reader presses Retry", async () => {
     await renderUnavailable();
@@ -72,7 +82,7 @@ describe("BinaryFilePreview retry status", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("photo.png loaded");
     expect(screen.queryByRole("button", { name: "Retry asset" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Download/ })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Download photo.png" })).toHaveFocus();
   });
 
   it("announces a retry that fails again", async () => {

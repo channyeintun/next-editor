@@ -189,8 +189,8 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
           download={file.name}
           className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
         >
-          <Download size={14} />
-          Download
+          <Download size={14} aria-hidden="true" />
+          Download <span className="sr-only">{file.name}</span>
         </a>
       ) : null}
     </div>
