@@ -47,7 +47,7 @@ interface ChatFoldCache {
 const chatFoldCache = new WeakMap<ChatRecordingEvent[], ChatFoldCache>();
 
 /** The transcript before the first chat event: the baseline `setRecording` applies at load. */
-const EMPTY_CHAT_CHECKPOINT: ChatCheckpoint = { items: [], status: "idle" };
+export const EMPTY_CHAT_CHECKPOINT: ChatCheckpoint = { items: [], status: "idle" };
 
 /**
  * Whether folding an event of each kind copies the item list (see `applyChatDelta`),

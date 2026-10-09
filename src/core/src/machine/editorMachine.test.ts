@@ -19,6 +19,7 @@ import type {
 import { getPlaybackAudioState } from "./playbackActors";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
+import type { ChatCheckpoint } from "../chat";
 import type { PreviewEvent } from "../preview";
 import type { WhiteboardSceneState } from "../whiteboard";
 import {
@@ -1209,6 +1210,26 @@ describe("editorMachine actor lifecycle", () => {
     actor.send({ type: "TICK", currentTime: 80 });
     expect(takeApplied()).toEqual({ deckOpen: [], transcriptLengths: [] });
 
+    actor.stop();
+  });
+
+  // A chat-less recording must not keep showing the previous replay's transcript, and the
+  // chat replay rewinds to this same baseline, so seeking and playing agree.
+  it("empties the chat transcript at load, even without a chat track", async () => {
+    const applied: ChatCheckpoint[] = [];
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyChatSnapshot: (snapshot) => {
+          applied.push(snapshot);
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording: createRecording() });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(applied).toEqual([{ items: [], status: "idle" }]);
     actor.stop();
   });
 

@@ -15,6 +15,6 @@ export { resolveReplayTime, isReplayResync } from "./cursor";
 export { getPreviewReplayResult } from "./preview";
 export { getWorkspaceReplayResult } from "./workspace";
 export { getRuntimeReplayResult } from "./runtime";
-export { getChatReplayResult } from "./chat";
+export { EMPTY_CHAT_CHECKPOINT, getChatReplayResult } from "./chat";
 export { getSlideReplayResult } from "./slide";
 export { getWhiteboardReplayResult } from "./whiteboard";

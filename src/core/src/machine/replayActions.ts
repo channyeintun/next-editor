@@ -15,6 +15,7 @@ import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
 import {
+  EMPTY_CHAT_CHECKPOINT,
   getChatReplayResult,
   getPreviewReplayResult,
   getRuntimeReplayResult,
@@ -29,7 +30,7 @@ import {
   normalizeTimelineDuration,
   normalizeTimelineTime,
 } from "./playbackValues";
-import { applyFrameAtTime } from "./frameReplay";
+import { applyFrameAtTime, RENDERED_FRAME_RESET } from "./frameReplay";
 import { reportMachineError, resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
 
 // ============================================================================
@@ -143,7 +144,7 @@ export const setRecording = (
   // recording that starts with an existing conversation carries it in its first
   // checkpoint; a chat-less recording must not show a previous replay's transcript.
   if (context.applyChatSnapshot) {
-    context.applyChatSnapshot({ items: [], status: "idle" });
+    context.applyChatSnapshot(EMPTY_CHAT_CHECKPOINT);
   }
 
   return {
@@ -473,8 +474,7 @@ export const clearPendingEditorSyncForPausedSeek = ({
 // dedicated preview/slide replay cursors stable so file switches do not
 // replay their full history.
 export const invalidateRenderedPlaybackState = (): EditorContextUpdate => ({
-  currentFrame: null,
-  lastAppliedFrameIndex: -1,
+  ...RENDERED_FRAME_RESET,
 });
 
 export const clearRecording = ({ context }: EditorActionArgs): EditorContextUpdate => ({
@@ -649,8 +649,7 @@ const applyWorkspaceEventsAtTime = ({ context, event }: EditorActionArgs): Edito
       // File switches change the Monaco model path on the React side.
       // Wait for that model sync before applying editor frame content.
       pendingPlaybackEditorSync: activeFileChanged || context.pendingPlaybackEditorSync,
-      currentFrame: null,
-      lastAppliedFrameIndex: -1,
+      ...RENDERED_FRAME_RESET,
     };
   }
 

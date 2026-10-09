@@ -25,6 +25,15 @@ import { reportMachineError, resolveBoundedReplayTime } from "./replayStep";
 // without those tracks ride along with it.
 // ============================================================================
 
+/**
+ * The Monaco-rendered frame no longer matches the editor (its model was swapped or its
+ * text replaced): the next apply re-derives it from the nearest keyframe.
+ */
+export const RENDERED_FRAME_RESET = {
+  currentFrame: null,
+  lastAppliedFrameIndex: -1,
+} as const satisfies EditorContextUpdate;
+
 /** Color of the playback caret's marks in the minimap and the overview ruler. */
 const PLAYBACK_CURSOR_COLOR = "#007ACC";
 
