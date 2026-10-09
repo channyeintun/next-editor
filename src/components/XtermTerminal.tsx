@@ -51,7 +51,9 @@ const TERMINAL_THEME = {
   magenta: "#f472b6",
   cyan: "#22d3ee",
   white: "#e2e8f0",
-  brightBlack: "#475569",
+  // ANSI 90: the dimmed text after every console [tag]. Slate-400, 6.71:1 on
+  // the background before minimumContrastRatio lifts it to 7:1.
+  brightBlack: "#90a1b9",
   brightRed: "#fb7185",
   brightGreen: "#86efac",
   brightYellow: "#fde047",
@@ -131,6 +133,9 @@ function XtermTerminal({
       // adds xterm's readable row list (and a live region, which index.css
       // silences on passive outputs).
       screenReaderMode: true,
+      // xterm lightens any cell below 7:1 against its background (WCAG AAA),
+      // including colours a program picks itself, such as ANSI black.
+      minimumContrastRatio: 7,
       theme: interactive ? TERMINAL_THEME : PASSIVE_TERMINAL_THEME,
     });
     const fitAddon = new FitAddon();

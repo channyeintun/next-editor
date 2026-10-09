@@ -155,6 +155,20 @@ describe("XtermTerminal", () => {
     expect(within(region).getByRole("textbox", { name: "Terminal input" })).toBeInTheDocument();
   });
 
+  it.each([false, true])(
+    "keeps text at 7:1 or better, the dimmed console text included (interactive: %s)",
+    (interactive) => {
+      render(
+        <XtermTerminal sessionId="shell-1" output="" interactive={interactive} label="Console" />,
+      );
+      const { options } = xterm.FakeTerminal.instances.at(-1)!;
+
+      expect(options.minimumContrastRatio).toBe(7);
+      // ANSI 90, which dims the text after every console [tag]: slate-400.
+      expect(options.theme).toMatchObject({ background: "#15191f", brightBlack: "#90a1b9" });
+    },
+  );
+
   it("drops the slid-off scrollback once scroll lines are recorded again", () => {
     const { update } = renderTerminal(windowAt(7000), true);
     update(windowAt(7300));
