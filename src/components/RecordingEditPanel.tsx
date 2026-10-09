@@ -87,7 +87,8 @@ function drawWaveform(
   if (!context) return;
   context.scale(ratio, ratio);
   context.clearRect(0, 0, width, height);
-  context.fillStyle = "#475569";
+  // slate-500: 3.9:1 on the waveform's #0f131a, so where speech is stays visible.
+  context.fillStyle = "#62748e";
   const middle = height / 2;
   if (!peaks || durationMs <= 0) {
     context.fillRect(0, middle, width, 1);
