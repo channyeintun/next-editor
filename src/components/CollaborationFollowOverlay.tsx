@@ -1,10 +1,13 @@
-import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import {
   useOptionalCollaboration,
   type CollaborationParticipant,
 } from "../contexts/CollaborationContext";
 import { useOptionalRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
-import { collaboratorColor, collaboratorDisplayName } from "./collaboratorAppearance";
+import {
+  collaboratorColor,
+  collaboratorColorIndex,
+  collaboratorDisplayName,
+} from "./collaboratorAppearance";
 
 function followedSurfaceLabel(
   target: CollaborationParticipant,
@@ -23,7 +26,7 @@ export default function CollaborationFollowOverlay() {
   const name = target ? collaboratorDisplayName(target) : "";
   const surface =
     collaboration && target ? followedSurfaceLabel(target, collaboration.getPathForNodeId) : "";
-  const color = target ? collaboratorColor(collaborationParticipantColorIndex(target)) : "";
+  const color = target ? collaboratorColor(collaboratorColorIndex(target)) : "";
 
   return (
     <>

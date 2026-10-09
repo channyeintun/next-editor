@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
-import {
-  collaborationParticipantColorIndex,
-  createCollaborationCursor,
-  resolveCollaborationCursor,
-} from "./relativePosition";
+import { createCollaborationCursor, resolveCollaborationCursor } from "./relativePosition";
 import { getCollaborationTexts } from "./projectDocument";
 
 const FILE_ID = "10000000-0000-4000-8000-000000000001";
@@ -61,17 +57,5 @@ describe("collaboration relative positions", () => {
       }),
     ).toBeNull();
     expect(new Set(doc.share.keys())).toEqual(rootsBefore);
-  });
-
-  it("derives a stable participant color from actor and tab identity", () => {
-    const participant = {
-      actorId: "20000000-0000-4000-8000-000000000001",
-      sessionId: "30000000-0000-4000-8000-000000000001",
-    };
-    expect(collaborationParticipantColorIndex(participant)).toBe(
-      collaborationParticipantColorIndex(participant),
-    );
-    expect(collaborationParticipantColorIndex(participant)).toBeGreaterThanOrEqual(0);
-    expect(collaborationParticipantColorIndex(participant)).toBeLessThan(8);
   });
 });

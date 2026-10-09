@@ -1,15 +1,19 @@
+import type { CollaborationAwarenessEvent } from "../collaboration/protocol";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
+
 // How a collaborator — a room member, or one of their live sessions — appears
 // to everyone else: the name shown for them and the colour their cursor,
 // selection, presence dot and follow frame are drawn in. Which colour a
-// participant gets is collaborationParticipantColorIndex's job, so every
-// surface that indexes these lists agrees on it.
+// participant gets is collaboratorColorIndex's job, so every surface that
+// indexes these lists agrees on it.
 
 /** A collaborator's account name, or their username when the name is blank. */
 export function collaboratorDisplayName(person: { name: string | null; username: string }): string {
   return person.name?.trim() || person.username;
 }
 
-// One entry per collaborationParticipantColorIndex value. App.css repeats the
+// One entry per collaboratorColorIndex value, and the three lists below are
+// the same length: the index runs over COLLABORATOR_COLORS. App.css repeats the
 // first two lists in its `.collaboration-color-N` rules (the cursors, selections
 // and name labels CodeEditor decorates Monaco with), so change them together.
 const COLLABORATOR_COLORS = [
@@ -49,6 +53,22 @@ export const COLLABORATOR_DOT_CLASSES = [
   "bg-violet-400",
   "bg-lime-400",
 ] as const;
+
+/**
+ * Which of the collaborator colours a participant is drawn in: a hash of their
+ * member and session, so it is the same in every tab and for every peer.
+ */
+export function collaboratorColorIndex(
+  participant: Pick<CollaborationAwarenessEvent, "actorId" | "sessionId">,
+): number {
+  let hash = 2166136261;
+  const identity = collaborationParticipantKey(participant);
+  for (let index = 0; index < identity.length; index += 1) {
+    hash ^= identity.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % COLLABORATOR_COLORS.length;
+}
 
 /** A collaborator's colour, or the first colour for an index outside the list. */
 export function collaboratorColor(colorIndex: number): string {

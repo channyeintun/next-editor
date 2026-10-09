@@ -1,7 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { collaborationTextForPath } from "../../collaboration/collaborationTextForPath";
 import { resolveMonacoAwarenessSelections } from "../../collaboration/monacoAwareness";
-import { collaborationParticipantColorIndex } from "../../collaboration/relativePosition";
 import type { useOptionalCollaboration } from "../../contexts/CollaborationContext";
 import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import { monaco } from "../../monaco";
@@ -9,7 +8,7 @@ import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
 } from "../collaborationCursorLabels";
-import { collaboratorDisplayName } from "../collaboratorAppearance";
+import { collaboratorColorIndex, collaboratorDisplayName } from "../collaboratorAppearance";
 import {
   collectRemoteEditorSelections,
   participantCursorDecorations,
@@ -96,7 +95,7 @@ export function useRemoteCursorDecorations({
         labels.push(drawn.label);
         continue;
       }
-      const colorIndex = collaborationParticipantColorIndex(selection.participant);
+      const colorIndex = collaboratorColorIndex(selection.participant);
       const name = collaboratorDisplayName(selection.participant);
       if (yMonacoRendersSelections) {
         styleRules.push(...yMonacoSelectionStyleRules(selection.clientId, colorIndex));

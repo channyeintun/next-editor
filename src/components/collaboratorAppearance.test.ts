@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import {
   COLLABORATOR_DOT_CLASSES,
   collaboratorColor,
+  collaboratorColorIndex,
   collaboratorDisplayName,
   collaboratorSelectionColor,
 } from "./collaboratorAppearance";
 
-// collaborationParticipantColorIndex hashes every participant into this many slots.
-const COLOR_COUNT = 8;
+// The palette's size, which the three colour lists share.
+const COLOR_COUNT = COLLABORATOR_DOT_CLASSES.length;
 const COLOR_INDEXES = Array.from({ length: COLOR_COUNT }, (_, index) => index);
 
 function escapeRegExp(value: string): string {
@@ -31,14 +31,35 @@ describe("collaboratorDisplayName", () => {
   });
 });
 
-describe("collaborator colours", () => {
-  it("has a distinct colour for every colour index a participant can get", () => {
-    const participant = {
-      actorId: "20000000-0000-4000-8000-000000000001",
-      sessionId: "30000000-0000-4000-8000-000000000001",
-    };
-    expect(collaborationParticipantColorIndex(participant)).toBeLessThan(COLOR_COUNT);
+describe("collaboratorColorIndex", () => {
+  const participant = {
+    actorId: "20000000-0000-4000-8000-000000000001",
+    sessionId: "30000000-0000-4000-8000-000000000001",
+  };
 
+  it("derives a stable colour from the member and their session", () => {
+    expect(collaboratorColorIndex(participant)).toBe(collaboratorColorIndex({ ...participant }));
+    // Pinned, so a change to the hash or the palette size, which would recolour
+    // everyone, is deliberate.
+    expect(collaboratorColorIndex(participant)).toBe(6);
+  });
+
+  it("indexes the palette for every participant", () => {
+    for (let session = 0; session < 64; session += 1) {
+      const index = collaboratorColorIndex({
+        actorId: participant.actorId,
+        sessionId: `30000000-0000-4000-8000-${String(session).padStart(12, "0")}`,
+      });
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(COLOR_COUNT);
+    }
+  });
+});
+
+describe("collaborator colours", () => {
+  // With the fallback test below, which shows both colour lists end at
+  // COLOR_COUNT, this shows all three lists have the same length.
+  it("has a distinct colour for every colour index a participant can get", () => {
     expect(new Set(COLOR_INDEXES.map(collaboratorColor)).size).toBe(COLOR_COUNT);
     expect(new Set(COLOR_INDEXES.map(collaboratorSelectionColor)).size).toBe(COLOR_COUNT);
     expect(new Set(COLLABORATOR_DOT_CLASSES).size).toBe(COLOR_COUNT);
@@ -46,6 +67,7 @@ describe("collaborator colours", () => {
 
   it("falls back to the first colour for an index outside the list", () => {
     expect(collaboratorColor(COLOR_COUNT)).toBe(collaboratorColor(0));
+    expect(collaboratorSelectionColor(COLOR_COUNT)).toBe(collaboratorSelectionColor(0));
     expect(collaboratorSelectionColor(-1)).toBe(collaboratorSelectionColor(0));
   });
 

@@ -24,10 +24,13 @@ import {
 } from "../contexts/CollaborationVoiceContext";
 import { messageFromError } from "../collaboration/errorMessage";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
-import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import type { CollaborationInviteRole, CollaborationSurface } from "../collaboration/protocol";
 import type { VoiceClientErrorCode } from "../voice/machine";
-import { COLLABORATOR_DOT_CLASSES, collaboratorDisplayName } from "./collaboratorAppearance";
+import {
+  COLLABORATOR_DOT_CLASSES,
+  collaboratorColorIndex,
+  collaboratorDisplayName,
+} from "./collaboratorAppearance";
 import { copyTextToClipboard } from "../utils/clipboard";
 
 const STATUS_LABELS = {
@@ -312,7 +315,7 @@ function ParticipantRow({
   onFollow,
   onStopFollowing,
 }: ParticipantRowProps) {
-  const colorIndex = collaborationParticipantColorIndex(participant);
+  const colorIndex = collaboratorColorIndex(participant);
   const name = collaboratorDisplayName(participant);
   return (
     <li className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2">

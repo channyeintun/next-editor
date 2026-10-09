@@ -3,11 +3,9 @@ import * as Y from "yjs";
 import type { CollaborationParticipant } from "../contexts/CollaborationContext";
 import type { ResolvedMonacoAwarenessSelection } from "../collaboration/monacoAwareness";
 import { getCollaborationTexts } from "../collaboration/projectDocument";
-import {
-  collaborationParticipantColorIndex,
-  createCollaborationCursor,
-} from "../collaboration/relativePosition";
+import { createCollaborationCursor } from "../collaboration/relativePosition";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
+import { collaboratorColorIndex } from "./collaboratorAppearance";
 
 // The real "../monaco" loads the whole editor. These helpers only construct
 // ranges, so a plain Range stands in for Monaco's.
@@ -168,7 +166,7 @@ describe("participantCursorDecorations", () => {
   it("draws the participant's cursor and labels its caret with their name", () => {
     const ada = participant(" Ada Lovelace ");
     const key = collaborationParticipantKey(ada);
-    const colorIndex = collaborationParticipantColorIndex(ada);
+    const colorIndex = collaboratorColorIndex(ada);
 
     const drawn = participantCursorDecorations(model, key, ada, {
       anchorOffset: 6,

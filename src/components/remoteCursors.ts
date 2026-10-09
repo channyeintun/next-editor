@@ -1,16 +1,14 @@
 import type * as Y from "yjs";
 import type { ResolvedMonacoAwarenessSelection } from "../collaboration/monacoAwareness";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
-import {
-  collaborationParticipantColorIndex,
-  resolveCollaborationCursor,
-} from "../collaboration/relativePosition";
+import { resolveCollaborationCursor } from "../collaboration/relativePosition";
 import type { CollaborationParticipant } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import { monaco } from "../monaco";
 import type { CollaborationCursorLabel } from "./collaborationCursorLabels";
 import {
   collaboratorColor,
+  collaboratorColorIndex,
   collaboratorDisplayName,
   collaboratorSelectionColor,
 } from "./collaboratorAppearance";
@@ -203,7 +201,7 @@ export function participantCursorDecorations(
   { anchorOffset, headOffset }: { anchorOffset: number; headOffset: number },
 ): { decorations: monaco.editor.IModelDeltaDecoration[]; label: CollaborationCursorLabel } {
   const selection = resolveRemoteSelection(model, anchorOffset, headOffset);
-  const colorIndex = collaborationParticipantColorIndex(participant);
+  const colorIndex = collaboratorColorIndex(participant);
   const participantName = collaboratorDisplayName(participant);
   return {
     decorations: remoteSelectionDecorations(selection, colorIndex, participantName),
