@@ -226,6 +226,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // surface is that overlay (see CollaborationSurfaceBridge); the editor's
   // selection, cursor and viewport are not published over it.
   const isEditorCovered = slidesContext.previewState.isOpen || whiteboardContext.isOpen;
+  // A maximized slide deck or the whiteboard is drawn over the whole workspace
+  // (a non-maximized deck is not drawn at all). While one is, the workspace is
+  // inert: keyboard focus and screen readers cannot reach controls hidden under
+  // the overlay's scrim, just as a pointer cannot. The player bar sits outside.
+  const isWorkspaceCovered =
+    (slidesContext.previewState.isOpen && slidesContext.previewState.isMaximized === true) ||
+    whiteboardContext.isOpen;
   const isRunnerDockFullHeight = displayIsFullHeight && !displayIsCollapsed;
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
@@ -1064,11 +1071,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     usesPlaybackModel,
   ]);
 
+  // Also re-runs when an overlay closes mid-playback: going inert blurred the
+  // editor, and Monaco hides its caret without focus.
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && !isWorkspaceCovered) {
       focusEditorIfNeeded(editorRef.current);
     }
-  }, [editorRef, isPlaying]);
+  }, [editorRef, isPlaying, isWorkspaceCovered]);
 
   // MonacoEditor unmounts while a binary asset is shown; drop the stale
   // editor reference so recording/save paths don't touch a disposed instance.
@@ -1281,7 +1290,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const runtimeDock = useMemo(() => <RuntimeDock lessonType={lessonType} />, [lessonType]);
 
   return (
-    <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
+    <div
+      className="h-full flex flex-col"
+      data-cursor-replay-target="workspace"
+      inert={isWorkspaceCovered}
+    >
       {workspaceEventRecorder}
       {editorHeader}
       <div
