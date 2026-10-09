@@ -645,6 +645,27 @@ describe("CollaborationPanel invitation prompt", () => {
     );
   });
 
+  it("shows the room's reason for a failed action, not the request's status line", async () => {
+    const initializeTeachingSurfaces = vi
+      .fn<CollaborationContextValue["initializeTeachingSurfaces"]>()
+      .mockRejectedValue(
+        Object.assign(new Error("Request failed with status code 409"), {
+          response: { status: 409, data: { error: "room is not active" } },
+        }),
+      );
+    collaborationState = {
+      ...makeCollaborationState(),
+      role: "owner",
+      teaching: { initialized: false, currentSlideId: null, slideOrder: [] },
+      initializeTeachingSurfaces,
+    };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Initialize room slides and whiteboard" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("room is not active");
+  });
+
   it("shows collaboration errors in the panel outside a room", () => {
     collaborationState = {
       ...collaborationState,

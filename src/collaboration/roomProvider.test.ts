@@ -542,6 +542,49 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(provider.connectionState).toBe("disconnected");
   });
 
+  // axios rejects with its own status line as the message; the room's reason
+  // is in the response body.
+  it("fails with the room's reason when the room request is refused", async () => {
+    const { sockets, factory } = socketRecorder();
+    const refusal = Object.assign(new Error("Request failed with status code 404"), {
+      response: { status: 404, data: { error: "not found" } },
+    });
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: { getRoom: () => Promise.reject(refusal) },
+      clientId: CLIENT_ID,
+      webSocketFactory: factory,
+    });
+
+    await provider.start();
+
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toBe("not found");
+    expect(sockets).toHaveLength(0);
+    provider.stop();
+  });
+
+  it("reconnects when the room request fails without a reason", async () => {
+    const { sockets, factory } = socketRecorder();
+    const outage = Object.assign(new Error("Request failed with status code 503"), {
+      response: { status: 503, data: "Service Unavailable" },
+    });
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: { getRoom: () => Promise.reject(outage) },
+      clientId: CLIENT_ID,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+
+    await provider.start();
+
+    expect(provider.connectionState).toBe("reconnecting");
+    expect(provider.actor.getSnapshot().context.error).toBe("Request failed with status code 503");
+    expect(sockets).toHaveLength(0);
+    provider.stop();
+  });
+
   it("applies server updates that arrive during synchronization after the snapshot", async () => {
     const { sockets, factory } = socketRecorder();
     const provider = new CollaborationRoomProvider({

@@ -12,13 +12,13 @@ import type { WhiteboardSceneState } from "../core/src/whiteboard";
 import { getWorkspaceAssetBytes } from "../storage/workspaceAssetStore";
 import type { Slide } from "../types/slides";
 import { isWorkspaceAssetFile, type WorkspaceProject } from "../types/workspace";
+import { requestErrorStatus } from "./errorMessage";
 import { seedCollaborationProject } from "./projectDocument";
 import {
   MAX_COLLABORATION_ROOM_ASSETS,
   MAX_COLLABORATION_ROOM_ASSET_BYTES,
   type CollaborationRoomSession,
 } from "./protocol";
-import { requestErrorStatus } from "./roomProvider";
 import {
   COLLABORATION_SLIDE_ASSET_MIME_TYPE,
   collaborationSlidePayloadAssetId,

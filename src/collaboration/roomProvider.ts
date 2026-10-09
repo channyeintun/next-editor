@@ -25,6 +25,7 @@ import {
   type CollaborationRoomSession,
   type CollaborationWebSocketServerMessage,
 } from "./protocol";
+import { messageFromError, requestErrorStatus } from "./errorMessage";
 import { COLLABORATION_ORIGIN } from "./projectDocument";
 import {
   collaborationConnectionState,
@@ -100,18 +101,6 @@ interface PendingLocalUpdate {
 
 function monotonicNow(): number {
   return globalThis.performance?.now() ?? Date.now();
-}
-
-/** The HTTP status of a failed room request (an axios-style `response.status`). */
-export function requestErrorStatus(error: unknown): number | null {
-  if (typeof error !== "object" || error === null) return null;
-  const response = (error as { response?: { status?: unknown } }).response;
-  return typeof response?.status === "number" ? response.status : null;
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
 }
 
 function isFatalRequestError(error: unknown): boolean {
@@ -566,10 +555,10 @@ export class CollaborationRoomProvider {
     } catch (error) {
       if (this.isStopped || attemptId !== this.attemptId) return;
       if (isFatalRequestError(error)) {
-        this.fatal(errorMessage(error, "This collaboration room is unavailable"), attemptId);
+        this.fatal(messageFromError(error, "This collaboration room is unavailable"), attemptId);
       } else {
         this.handleTransportFailure(
-          errorMessage(error, "The collaboration room could not be reached"),
+          messageFromError(error, "The collaboration room could not be reached"),
           attemptId,
         );
       }
@@ -789,10 +778,10 @@ export class CollaborationRoomProvider {
     } catch (error) {
       if (this.isStopped) return;
       if (isFatalRequestError(error)) {
-        this.fatal(errorMessage(error, "You no longer have access to this collaboration room"));
+        this.fatal(messageFromError(error, "You no longer have access to this collaboration room"));
       } else {
         this.handleTransportFailure(
-          errorMessage(error, "Room permissions could not be refreshed"),
+          messageFromError(error, "Room permissions could not be refreshed"),
           this.attemptId,
         );
       }
@@ -873,10 +862,13 @@ export class CollaborationRoomProvider {
       synchronizationOutcome = "failure";
       if (this.isStopped || attemptId !== this.attemptId) return;
       if (isFatalRequestError(error)) {
-        this.fatal(errorMessage(error, "Collaboration synchronization was rejected"), attemptId);
+        this.fatal(
+          messageFromError(error, "Collaboration synchronization was rejected"),
+          attemptId,
+        );
       } else {
         this.handleTransportFailure(
-          errorMessage(error, "Collaboration synchronization failed"),
+          messageFromError(error, "Collaboration synchronization failed"),
           attemptId,
         );
       }
@@ -947,10 +939,10 @@ export class CollaborationRoomProvider {
           if (requestErrorStatus(error) === 403) {
             await this.handleWriteRejection(error);
           } else if (isFatalRequestError(error)) {
-            this.fatal(errorMessage(error, "A collaboration update was rejected"));
+            this.fatal(messageFromError(error, "A collaboration update was rejected"));
           } else {
             this.handleTransportFailure(
-              errorMessage(error, "A collaboration update could not be delivered"),
+              messageFromError(error, "A collaboration update could not be delivered"),
               this.attemptId,
             );
           }
@@ -1015,7 +1007,7 @@ export class CollaborationRoomProvider {
     const message =
       "Your role changed before offline edits were accepted. Copy any local work before rejoining.";
     this.onRejectedLocalChanges?.(message);
-    this.fatal(errorMessage(error, message));
+    this.fatal(messageFromError(error, message));
   }
 
   /** Discards every unacknowledged local edit, including ones still batching. */

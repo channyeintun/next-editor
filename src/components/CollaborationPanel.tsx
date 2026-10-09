@@ -22,6 +22,7 @@ import {
   useCollaborationVoice,
   useCollaborationVoiceState,
 } from "../contexts/CollaborationVoiceContext";
+import { messageFromError } from "../collaboration/errorMessage";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import type { CollaborationInviteRole, CollaborationSurface } from "../collaboration/protocol";
@@ -632,7 +633,7 @@ export default function CollaborationPanel() {
     try {
       await operation();
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : "Collaboration action failed.");
+      setPanelError(messageFromError(error, "Collaboration action failed."));
     } finally {
       setIsBusy(false);
     }

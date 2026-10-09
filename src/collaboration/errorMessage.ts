@@ -1,3 +1,10 @@
+/** The HTTP status of a failed room request (an axios-style `response.status`). */
+export function requestErrorStatus(error: unknown): number | null {
+  if (typeof error !== "object" || error === null) return null;
+  const response = (error as { response?: { status?: unknown } }).response;
+  return typeof response?.status === "number" ? response.status : null;
+}
+
 /**
  * The message to show for a failed collaboration call: the error string of an
  * axios-style `response.data.error` body, else the error's own message, else
