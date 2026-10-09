@@ -72,6 +72,16 @@ describe("LandingPage demo embed", () => {
   });
 });
 
+describe("LandingPage decorative graphics", () => {
+  it("hides every inline SVG from assistive technology", () => {
+    const { container } = renderLandingPage();
+    const svgs = [...container.querySelectorAll("svg")];
+
+    expect(svgs.length).toBeGreaterThan(0);
+    expect(svgs.filter((svg) => svg.getAttribute("aria-hidden") !== "true")).toEqual([]);
+  });
+});
+
 describe("LandingPage framework rotation", () => {
   function worksWithHeading() {
     // One stable name for screen readers; the rotating word is aria-hidden.

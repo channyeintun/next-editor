@@ -335,6 +335,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                     <span className="relative inline-block whitespace-nowrap group-hover:text-slate-950 transition-colors">
                       built-in recording
                       <svg
+                        aria-hidden="true"
                         className="absolute -bottom-3 left-0 w-[105%] h-5 text-pinata-cyan overflow-visible px-1"
                         viewBox="0 0 200 20"
                         fill="none"
@@ -542,6 +543,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                         <span className="relative inline-block text-slate-950 font-bold whitespace-nowrap">
                           learn/introduction
                           <svg
+                            aria-hidden="true"
                             className="absolute -bottom-2.5 left-0 w-full h-4 text-pinata-cyan overflow-visible px-0.5"
                             viewBox="0 0 100 20"
                             fill="none"
