@@ -39,4 +39,43 @@ describe("product tour", () => {
     ]);
     expect(mocks.drive).toHaveBeenCalledOnce();
   });
+
+  describe("the Agent step", () => {
+    type AgentStep = {
+      element: string;
+      popover: {
+        onNextClick: (
+          element: Element | undefined,
+          step: unknown,
+          options: { driver: { moveNext: () => void } },
+        ) => void;
+      };
+    };
+
+    async function advancePastAgentStep(dockToggleLabel: string) {
+      document.body.innerHTML = `
+        <button data-tour="agent">Agent</button>
+        <button data-runtime-dock-toggle aria-label="${dockToggleLabel}"></button>
+      `;
+      const agentTab = document.querySelector<HTMLElement>('[data-tour="agent"]')!;
+      const dockToggle = document.querySelector<HTMLElement>("[data-runtime-dock-toggle]")!;
+      const clicks: string[] = [];
+      agentTab.addEventListener("click", () => clicks.push("agent"));
+      dockToggle.addEventListener("click", () => clicks.push("dock"));
+
+      await startTour({ force: true });
+      const { steps } = mocks.driver.mock.calls[0][0] as { steps: AgentStep[] };
+      const agentStep = steps.find((step) => step.element === '[data-tour="agent"]')!;
+      agentStep.popover.onNextClick(agentTab, agentStep, { driver: { moveNext: () => {} } });
+      return clicks;
+    }
+
+    it("opens the Agent tab and expands a collapsed dock of either kind", async () => {
+      expect(await advancePastAgentStep("Expand runtime dock")).toEqual(["agent", "dock"]);
+    });
+
+    it("leaves an open dock open", async () => {
+      expect(await advancePastAgentStep("Collapse runtime dock")).toEqual(["agent"]);
+    });
+  });
 });

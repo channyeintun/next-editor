@@ -1,13 +1,12 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
+import { Bot } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
+import RuntimeDockHeader, { type RuntimeDockTabConfig } from "./terminalPanel/RuntimeDockHeader";
 import {
-  DOCK_TAB_STRIP_CLASS,
   dockContentSizeClassName,
   dockRootSizeClassName,
-  dockTabStateClassName,
 } from "./terminalPanel/runtimeDockHelpers";
 import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
@@ -101,6 +100,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const { scrollSurface, dockTargetId, runnerTab, consoleTags, collectFiles, run, format } =
     language;
   const { store: runtimePanelStore } = useRuntimePanelStore();
+  const layout = useRuntimeDockLayout();
   const {
     activeTab,
     isCollapsed,
@@ -109,10 +109,8 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     isPlaybackSnapshotActive,
     displayActiveTab: rawActiveTab,
     displayIsCollapsed,
-    displayIsFullHeight,
     fillsColumn,
-    toggleFullHeight,
-  } = useRuntimeDockLayout();
+  } = layout;
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
   const terminalScrollLines = useSelector(runtimePanelStore, (s) =>
     selectTerminalScrollLines(s.context),
@@ -379,7 +377,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       label: "Agent",
       icon: <Bot size={14} />,
     },
-  ] as const satisfies readonly { id: RuntimeDockTab; label: string; icon: React.ReactNode }[];
+  ] as const satisfies readonly RuntimeDockTabConfig[];
 
   const runButton = (
     <button
@@ -403,69 +401,17 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       data-cursor-replay-target="runtime-dock"
       {...{ [STUDIO_TARGET_ATTRIBUTE]: dockTargetId }}
     >
-      <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
-        {/* The tabs scroll sideways inside their own strip so the height and
-            collapse controls after it stay on screen on a narrow phone dock. */}
-        <div className={DOCK_TAB_STRIP_CLASS}>
-          {dockTabs.map((tab) => {
-            const isActive = tab.id === displayActiveTab;
-
-            return (
-              <button
-                key={tab.id}
-                data-tour={tab.id === "agent" ? "agent" : undefined}
-                type="button"
-                aria-pressed={isActive}
-                disabled={isPlaybackSnapshotActive}
-                onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
-                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
-                  isActive,
-                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-300`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          // The one dock control a viewer keeps during playback; their choice stays
-          // on screen without reaching the recording (see useRuntimeDockLayout).
-          disabled={displayIsCollapsed}
-          onClick={toggleFullHeight}
-          className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
-          aria-label={
-            displayIsFullHeight
-              ? "Restore runtime dock height"
-              : "Expand runtime dock to full height"
-          }
-          title={
-            displayIsFullHeight
-              ? "Restore runtime dock height"
-              : "Expand runtime dock to full height"
-          }
-        >
-          {displayIsFullHeight ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        </button>
-
-        <button
-          type="button"
-          {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_DOCK_TOGGLE_TARGET_ID }}
-          disabled={isPlaybackSnapshotActive}
-          onClick={() => {
-            runtimePanelStore.trigger.setIsCollapsed({
-              collapsed: !runtimePanelStore.getSnapshot().context.isCollapsed,
-            });
-          }}
-          className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
-          aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
-          title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
-        >
-          {displayIsCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      </div>
+      {/* Unlike the WebContainer dock's, this collapse toggle carries no
+          data-tour="runner": the tour's Runner step describes the terminal and
+          dev-server output, which a Playground lesson does not have. */}
+      <RuntimeDockHeader
+        tabs={dockTabs}
+        activeTab={displayActiveTab}
+        disabled={isPlaybackSnapshotActive}
+        onSelectTab={(tab) => runtimePanelStore.trigger.setActiveTab({ tab })}
+        layout={layout}
+        collapseToggleAttributes={{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_DOCK_TOGGLE_TARGET_ID }}
+      />
 
       {!displayIsCollapsed && displayActiveTab === "agent" && (
         <AgentPanel isFullHeight={fillsColumn} />

@@ -35,6 +35,8 @@ export interface RuntimeDockLayout {
    * viewer's choice; otherwise (record mode, idle) it flips the live value.
    */
   toggleFullHeight: () => void;
+  /** The collapse toggle: it flips the live collapse, which recordings capture. */
+  toggleCollapsed: () => void;
 }
 
 /**
@@ -78,6 +80,12 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
     });
   };
 
+  const toggleCollapsed = () => {
+    runtimePanelStore.trigger.setIsCollapsed({
+      collapsed: !runtimePanelStore.getSnapshot().context.isCollapsed,
+    });
+  };
+
   return {
     activeTab,
     isCollapsed,
@@ -91,6 +99,7 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
     displayIsFullHeight,
     fillsColumn: displayIsFullHeight && !displayIsCollapsed,
     toggleFullHeight,
+    toggleCollapsed,
   };
 }
 

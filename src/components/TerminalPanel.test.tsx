@@ -131,6 +131,15 @@ describe("TerminalPanel", () => {
     expect(pressed()).toEqual(["false", "true", "false"]);
   });
 
+  it("hooks the tour's Runner step and its dock lookup on the collapse toggle", () => {
+    render(dock("ready"));
+
+    const collapse = screen.getByRole("button", { name: "Collapse runtime dock" });
+    expect(collapse).toHaveAttribute("data-tour", "runner");
+    expect(collapse).toHaveAttribute("data-runtime-dock-toggle");
+    expect(collapse).not.toHaveAttribute("data-studio-target");
+  });
+
   it("marks the terminal session on screen as pressed", () => {
     render(
       dock("ready", [

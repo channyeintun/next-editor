@@ -172,7 +172,11 @@ import {
 } from "../contexts/RuntimePanelStoreContext";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import type { StudioPlaygroundRuntimeKind } from "../studio/plan";
-import { dockTargetIdForRuntime, STUDIO_RUN_BUTTON_TARGET_ID } from "../studio/targets";
+import {
+  dockTargetIdForRuntime,
+  STUDIO_DOCK_TOGGLE_TARGET_ID,
+  STUDIO_RUN_BUTTON_TARGET_ID,
+} from "../studio/targets";
 import { GoPlaygroundServiceError } from "../runtime/goPlayground/client";
 import { HaskellPlaygroundServiceError } from "../runtime/haskellPlayground/client";
 import AsmPlaygroundRunnerPanel, { ASM_RUNNER } from "./AsmPlaygroundRunnerPanel";
@@ -513,6 +517,12 @@ describe("playground runner panels", () => {
       "data-studio-target",
       STUDIO_RUN_BUTTON_TARGET_ID,
     );
+    // The studio and the tour find the collapse toggle; the tour's Runner step,
+    // which is about the WebContainer dock, does not.
+    const collapse = screen.getByRole("button", { name: "Collapse runtime dock" });
+    expect(collapse).toHaveAttribute("data-studio-target", STUDIO_DOCK_TOGGLE_TARGET_ID);
+    expect(collapse).toHaveAttribute("data-runtime-dock-toggle");
+    expect(collapse).not.toHaveAttribute("data-tour");
   });
 
   it.each(CASES)("$kind: marks the Agent tab pressed once it is on screen", async (panel) => {

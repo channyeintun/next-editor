@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { selectIsFullHeight, selectViewerFullHeight } from "../stores/runtimePanelStore";
+import {
+  selectIsCollapsed,
+  selectIsFullHeight,
+  selectViewerFullHeight,
+} from "../stores/runtimePanelStore";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 
 const metadata = vi.hoisted(() => ({
@@ -73,6 +77,7 @@ describe("useRuntimeDockLayout", () => {
       displayIsFullHeight: true,
       fillsColumn: false,
       toggleFullHeight: expect.any(Function),
+      toggleCollapsed: expect.any(Function),
     });
   });
 
@@ -99,6 +104,7 @@ describe("useRuntimeDockLayout", () => {
       displayIsFullHeight: true,
       fillsColumn: false,
       toggleFullHeight: expect.any(Function),
+      toggleCollapsed: expect.any(Function),
     });
   });
 
@@ -174,6 +180,18 @@ describe("useRuntimeDockLayout", () => {
       expect(result.current.layout.isFullHeight).toBe(false);
       expect(result.current.layout.fillsColumn).toBe(true);
     });
+  });
+
+  it("flips the live collapse from the collapse toggle", () => {
+    const { result } = renderLayout();
+
+    act(() => result.current.layout.toggleCollapsed());
+    expect(selectIsCollapsed(result.current.store.getSnapshot().context)).toBe(true);
+    expect(result.current.layout.displayIsCollapsed).toBe(true);
+
+    act(() => result.current.layout.toggleCollapsed());
+    expect(selectIsCollapsed(result.current.store.getSnapshot().context)).toBe(false);
+    expect(result.current.layout.displayIsCollapsed).toBe(false);
   });
 
   describe("the viewer's full-height choice", () => {

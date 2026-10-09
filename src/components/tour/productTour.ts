@@ -100,7 +100,8 @@ const TOUR_STEPS: ProductTourStep[] = [
           element.click();
         }
 
-        const dockToggle = document.querySelector<HTMLElement>('[data-tour="runner"]');
+        // Either dock's collapse toggle: a Playground dock has no Runner step.
+        const dockToggle = document.querySelector<HTMLElement>("[data-runtime-dock-toggle]");
         if (dockToggle?.getAttribute("aria-label") === "Expand runtime dock") {
           dockToggle.click();
         }

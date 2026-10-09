@@ -40,16 +40,6 @@ export function dockTabStateClassName(isActive: boolean): string {
 }
 
 /**
- * The runtime dock's tab strip. It takes the header's spare width and scrolls
- * sideways (scrollbar hidden; touch and trackpad still scroll it) once the tabs
- * outgrow it, so the full-height and collapse controls after it keep their
- * place and their 40px touch target on a narrow phone dock instead of being
- * clipped off the end of the header.
- */
-export const DOCK_TAB_STRIP_CLASS =
-  "flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
-
-/**
  * The size classes of a dock tab's content: it grows into the column while the
  * dock fills it, and otherwise keeps the dock's fixed height.
  */
