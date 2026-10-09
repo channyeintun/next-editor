@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import Breadcrumb from "./Breadcrumb";
 import Editor from "./Editor";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { RecordingStorage } from "../storage/RecordingStorage";
 import type { Recording } from "../core/src";
 import {
@@ -38,6 +39,8 @@ async function consumeResumeIntent(intent: ResumeIntent): Promise<void> {
 // isRecording-edge trigger can't fire again on return. See
 // docs/upload-modal-ux-spec.md's "signed-out flow".
 export default function CodeRoute() {
+  useDocumentTitle("Editor | Next Editor");
+
   // Same readOnly derivation as Editor.tsx. Gates the resume-check below:
   // the landing page's embedded live-demo iframe also loads /code
   // (?readOnly=true) — that path can never trigger an upload (recording is

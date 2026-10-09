@@ -16,6 +16,7 @@ import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { runWhenIdleAfterLoad } from "../utils/idle";
+import { SITE_TITLE, useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
   DEMO_EMBED_READY_MESSAGE_TYPE,
@@ -156,6 +157,8 @@ const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&la
 const DEMO_MOUNT_IDLE_TIMEOUT_MS = 2500;
 
 const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) => {
+  useDocumentTitle(SITE_TITLE);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);

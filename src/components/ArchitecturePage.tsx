@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 const styles = `
 .arch-page{
@@ -876,13 +876,7 @@ const STORAGE_HEIGHT = layerHeight(storageChips.length);
 const VIEW_HEIGHT = WORKER_SERVICES_Y + workerServices.length * WORKER_SERVICES_STEP + 12;
 
 export default function ArchitecturePage() {
-  useEffect(() => {
-    const previousTitle = document.title;
-    document.title = "next-editor — system architecture";
-    return () => {
-      document.title = previousTitle;
-    };
-  }, []);
+  useDocumentTitle("next-editor — system architecture");
 
   return (
     <div className="arch-page">

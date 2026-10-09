@@ -1,8 +1,11 @@
 import Navbar from "@app/components/Navbar";
+import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import { AuthMenu } from "@next-editor/infra";
 import LessonGrid from "./components/LessonGrid";
 
 export default function LearnPage() {
+  useDocumentTitle("Lessons | Next Editor");
+
   return (
     <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white selection:bg-pinata-purple selection:text-white">
       <Navbar minimal actions={<AuthMenu />} />

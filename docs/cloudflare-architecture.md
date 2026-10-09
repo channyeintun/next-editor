@@ -194,7 +194,10 @@ reaches the detail route by whichever of these got there first:
   appends `Course` JSON-LD (`inLanguage` is `my` when the title or description
   contains Myanmar script, otherwise `en`), and parks a dehydrated React Query cache in a
   `<script type="application/json">`. `hydrateServerQueryState()` adopts it before
-  the first render (`src/queryClient.ts`).
+  the first render (`src/queryClient.ts`). After that the client owns the title:
+  every route view calls `useDocumentTitle` (`src/hooks/useDocumentTitle.ts`), and
+  `LessonDetailRoute` sets the same `<lesson title> | Next Editor`, so client-side
+  navigation never leaves the first lesson's title on another page.
 
 This is **data-only SSR**: `#root` ships empty, because the lesson page _is_ the
 editor (Monaco, WebContainers, the whole provider stack) and none of that renders

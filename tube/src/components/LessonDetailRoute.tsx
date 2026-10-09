@@ -6,6 +6,7 @@ import Breadcrumb from "@app/components/Breadcrumb";
 import EditorShellSkeleton from "@app/components/EditorShellSkeleton";
 import { lessonTitleFromSlug } from "@app/utils/lessonSlug";
 import { useEmbedded } from "@app/utils/embed";
+import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 
 // Route component for /learn/:slug. Resolves the slug to a lesson (so the detail
 // view is deep-linkable with a clean URL and no query params), then renders the
@@ -15,6 +16,17 @@ export default function LessonDetailRoute() {
   const { slug } = useParams();
   const { data: lesson, isPending, isError } = useLesson(slug);
   const embedded = useEmbedded();
+  // Here rather than in LessonDetail, so the pending and not-found states and a
+  // playlist's auto-advance to the next slug all retitle the page. Matches the
+  // edge renderer's `${lesson.title} | Next Editor`.
+  const pageName = isPending
+    ? (lessonTitleFromSlug(slug) ?? "Lesson")
+    : lesson
+      ? lesson.title
+      : isError
+        ? "Failed to load lesson"
+        : "Lesson not found";
+  useDocumentTitle(`${pageName} | Next Editor`);
 
   // The editor shell rather than a lone spinner: this gate is one of several on
   // the way to a playable lesson (route chunk → this lookup → CodeEditor/Monaco),

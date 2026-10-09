@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu } from "@next-editor/infra";
+import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import { usePlaylist } from "../hooks/usePlaylists";
 import PlaylistDetail from "./PlaylistDetail";
 import LessonCardSkeleton from "./LessonCardSkeleton";
@@ -13,6 +14,14 @@ import LessonCardSkeleton from "./LessonCardSkeleton";
 export default function PlaylistDetailRoute() {
   const { slug } = useParams();
   const { data: playlist, isPending, isError } = usePlaylist(slug);
+  const pageName = isPending
+    ? "Playlist"
+    : playlist
+      ? playlist.title
+      : isError
+        ? "Failed to load playlist"
+        : "Playlist not found";
+  useDocumentTitle(`${pageName} | Next Editor`);
 
   return (
     <Shell>

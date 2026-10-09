@@ -1,5 +1,6 @@
 import Breadcrumb from "../components/Breadcrumb";
 import Editor from "../components/Editor";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import StudioController from "./StudioController";
 
 /**
@@ -17,6 +18,8 @@ import StudioController from "./StudioController";
  * project, and a studio tab's Ctrl-S would otherwise overwrite it.
  */
 export default function StudioRoute() {
+  useDocumentTitle("Studio | Next Editor");
+
   return (
     <Editor
       breadcrumb={<Breadcrumb title="Studio" />}

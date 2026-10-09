@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-editor/infra";
 import Breadcrumb from "@app/components/Breadcrumb";
+import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
 import PlaylistSummaryCard from "./components/PlaylistSummaryCard";
@@ -15,6 +16,14 @@ import UsernameEditor from "./components/UsernameEditor";
 // signed-out visitor.
 export default function AuthorProfilePage({ username }: { username: string }) {
   const { user, isLoading: authLoading } = useAuth();
+  // A public profile is named by PublicAuthorProfile, which knows the author.
+  useDocumentTitle(
+    authLoading
+      ? `@${username} | Next Editor`
+      : user?.username === username
+        ? "My Library | Next Editor"
+        : null,
+  );
 
   if (authLoading) {
     return (
@@ -41,6 +50,14 @@ export default function AuthorProfilePage({ username }: { username: string }) {
 
 function PublicAuthorProfile({ username }: { username: string }) {
   const { data, isPending, isError, refetch } = useAuthorProfile(username);
+  const pageName = isPending
+    ? `@${username}`
+    : isError
+      ? "Profile unavailable"
+      : data
+        ? data.user.name || data.user.username
+        : "Author not found";
+  useDocumentTitle(`${pageName} | Next Editor`);
 
   if (isPending) {
     return (
