@@ -1,4 +1,4 @@
-import type { PreviewSize } from "../types/slides";
+import type { PreviewSize } from "../preview";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object") {

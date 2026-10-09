@@ -11,7 +11,7 @@ import {
 } from "../utils/frameDelta";
 import { findFrameIndexAtTime } from "../utils/timedIndex";
 import { isEditorReady, isValidEditorState } from "../utils/validation";
-import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
+import { arePreviewSizesEqual, areStructuredDataEqual } from "../utils/equality";
 import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";
 import { reportMachineError, resolveBoundedReplayTime } from "./replayStep";
 

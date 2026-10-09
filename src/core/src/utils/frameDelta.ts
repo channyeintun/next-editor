@@ -3,7 +3,7 @@ import type { PreviewState } from "../preview";
 import type { SlidePreviewState } from "../slides";
 import type { PositionDelta, SelectionDelta, FrameDelta, Keyframe, DeltaFrame } from "./deltaTypes";
 import { isKeyframe } from "./deltaTypes";
-import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
+import { arePreviewSizesEqual, areStructuredDataEqual } from "./equality";
 import {
   normalizeEditorFrame,
   normalizeEditorPosition,

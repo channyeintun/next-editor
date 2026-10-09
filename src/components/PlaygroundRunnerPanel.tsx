@@ -25,7 +25,7 @@ import {
   STUDIO_RUN_BUTTON_TARGET_ID,
 } from "../studio/targets";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
-import { areStructuredDataEqual } from "../utils/equality";
+import { areStructuredDataEqual } from "../core/src/utils/equality";
 
 /**
  * Focused Run console for Playground lessons — deliberately not a Terminal.

@@ -13,7 +13,7 @@ import type {
   PreviewSize,
   PreviewState,
 } from "../../types/slides";
-import { arePreviewSizesEqual } from "../../utils/equality";
+import { arePreviewSizesEqual } from "../../core/src/utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
 import { buildRrwebReplayEvents } from "./rrwebPreview";

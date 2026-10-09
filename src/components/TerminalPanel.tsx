@@ -38,7 +38,7 @@ import type {
   RuntimeRecordingSnapshot,
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
-import { areStructuredDataEqual } from "../utils/equality";
+import { areStructuredDataEqual } from "../core/src/utils/equality";
 import {
   DOCK_TAB_STRIP_CLASS,
   describeRunnerOutput,
