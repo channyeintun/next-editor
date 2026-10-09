@@ -1,9 +1,6 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import {
-  executionKindForLessonType,
-  type WorkspaceExecutionKind,
-  type WorkspaceLessonType,
-} from "../../types/workspace";
+import type { WorkspaceLessonType } from "../../types/workspace";
+import { executionKindForLessonType, type WorkspaceExecutionKind } from "../../types/lessonTypes";
 import GoPlaygroundRunnerPanel from "../GoPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel from "../HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "../KitePlaygroundRunnerPanel";

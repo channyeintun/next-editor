@@ -1,12 +1,9 @@
 import { createStore } from "@xstate/store-react";
 import {
   areWorkspaceProjectsEqual,
-  collectWorkspaceFolders,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
   isWorkspaceTextFile,
-  normalizeWorkspaceFolderPath,
-  normalizeWorkspacePath,
   type WorkspaceFile,
   type WorkspaceAssetDescriptor,
   type WorkspaceFileContent,
@@ -15,6 +12,11 @@ import {
   type WorkspaceProject,
   type WorkspaceTreeFile,
 } from "../types/workspace";
+import {
+  collectWorkspaceFolders,
+  normalizeWorkspaceFolderPath,
+  normalizeWorkspacePath,
+} from "../types/workspacePaths";
 import { createStarterWorkspaceProject } from "../starters/react";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,

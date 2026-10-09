@@ -3,7 +3,8 @@ import { WHISPER_SAMPLE_RATE } from "./whisper/melSpectrogram";
 import type { TranscribedSegment } from "./whisper/whisperTranscriber";
 import { proxy, transfer, wrap } from "comlink";
 import type { CaptionWorkerApi, CaptionWorkerProgress } from "./whisper/captionWorker";
-import { WORKSPACE_LESSON_TYPE_LABELS, isWorkspaceTextFile } from "../types/workspace";
+import { isWorkspaceTextFile } from "../types/workspace";
+import { WORKSPACE_LESSON_TYPE_LABELS } from "../types/lessonTypes";
 
 // ============================================================================
 // Captions for a human-recorded narration, generated on this device: the audio

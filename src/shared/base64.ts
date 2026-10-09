@@ -21,3 +21,10 @@ export function base64ToBytes(value: string): Uint8Array {
   }
   return bytes;
 }
+
+/** Estimate the decoded byte length of base64 content without decoding it. */
+export function approximateBase64ByteLength(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}

@@ -4,7 +4,7 @@ import {
   getParentWorkspacePath,
   getWorkspaceBaseName,
   joinWorkspacePath,
-} from "../types/workspace";
+} from "../types/workspacePaths";
 import {
   useWorkspaceActions,
   useWorkspaceSidebarCollapsed,

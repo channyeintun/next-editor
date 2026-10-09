@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
+import { getUniqueWorkspacePath } from "./workspacePaths";
 import {
-  approximateBase64ByteLength,
-  base64ToBytes,
-  bytesToBase64,
-  getUniqueWorkspacePath,
   getWorkspaceFileMimeType,
   getWorkspaceMediaKind,
   isBinaryWorkspacePath,
-} from "./workspace";
+} from "./workspaceFiles";
+import { approximateBase64ByteLength, base64ToBytes, bytesToBase64 } from "../shared/base64";
 
 describe("isBinaryWorkspacePath", () => {
   it("flags binary asset extensions", () => {

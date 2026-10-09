@@ -1,5 +1,5 @@
 import type { Monaco } from "./runtime";
-import { normalizeWorkspacePath } from "../types/workspace";
+import { normalizeWorkspacePath } from "../types/workspacePaths";
 
 // Workspace files are `file:///<path>` models. The editor's own scratch buffers
 // (playback models, API-client request/response bodies, …) live under Monaco's

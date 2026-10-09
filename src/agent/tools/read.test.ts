@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createWorkspaceStore, type StoredWorkspaceSnapshot } from "../../stores/workspaceStore";
-import {
-  collectWorkspaceFolders,
-  type WorkspaceAssetDescriptor,
-  type WorkspaceFile,
-  type WorkspaceProject,
+import type {
+  WorkspaceAssetDescriptor,
+  WorkspaceFile,
+  WorkspaceProject,
 } from "../../types/workspace";
+import { collectWorkspaceFolders } from "../../types/workspacePaths";
 import {
   registerWorkspaceAsset,
   resetWorkspaceAssetStoreForTests,

@@ -3,11 +3,8 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { instantiateKiteCompiler, type KiteCompiler } from "../runtime/kitePlayground/compiler";
-import {
-  isWorkspaceTextFile,
-  WORKSPACE_LESSON_TYPES,
-  type WorkspaceProject,
-} from "../types/workspace";
+import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
+import { WORKSPACE_LESSON_TYPES } from "../types/lessonTypes";
 import { createStarterWorkspaceForLessonType } from "./index";
 
 /**

@@ -5,18 +5,19 @@ import {
   type CollaborationAssetDescriptor,
 } from "./protocol";
 import {
-  DEFAULT_WORKSPACE_ENTRY_PATH,
-  collectWorkspaceFolders,
-  getWorkspaceFileMimeType,
-  inferLanguageFromPath,
   isWorkspaceAssetFile,
-  isWorkspaceLessonType,
   isWorkspaceTextFile,
-  parseWorkspacePath,
   type WorkspaceFile,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { isWorkspaceLessonType } from "../types/lessonTypes";
+import {
+  DEFAULT_WORKSPACE_ENTRY_PATH,
+  collectWorkspaceFolders,
+  parseWorkspacePath,
+} from "../types/workspacePaths";
+import { getWorkspaceFileMimeType, inferLanguageFromPath } from "../types/workspaceFiles";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { findCommonAffixLengths } from "../core/src/utils/stringAffix";
 

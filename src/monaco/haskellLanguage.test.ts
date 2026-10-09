@@ -4,7 +4,7 @@ import {
   haskellLanguageConfiguration,
   haskellMonarchLanguage,
 } from "./haskellLanguage";
-import { inferLanguageFromPath } from "../types/workspace";
+import { inferLanguageFromPath } from "../types/workspaceFiles";
 
 /**
  * The grammar exists because Monaco ships no Haskell basic-language at all —

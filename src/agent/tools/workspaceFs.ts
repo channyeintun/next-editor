@@ -1,12 +1,14 @@
 import {
-  getParentWorkspacePath,
-  normalizeWorkspaceFolderPath,
-  normalizeWorkspacePath,
-  parseWorkspacePath,
   isWorkspaceTextFile,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../../types/workspace";
+import {
+  getParentWorkspacePath,
+  normalizeWorkspaceFolderPath,
+  normalizeWorkspacePath,
+  parseWorkspacePath,
+} from "../../types/workspacePaths";
 import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
 
 /**

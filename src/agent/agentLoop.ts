@@ -12,7 +12,7 @@ import {
 import { codingToolNamesFor, createCodingTools } from "./tools/index";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getProject } from "./tools/workspaceFs";
-import { executionKindForLessonType } from "../types/workspace";
+import { executionKindForLessonType } from "../types/lessonTypes";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
 import { createAppendContentDelta, createContentDelta } from "../core/src/utils/contentDelta";

@@ -319,7 +319,7 @@ Acceptance:
 
 Primary files:
 
-- `src/types/workspace.ts`
+- `src/types/lessonTypes.ts` (lesson catalogue and execution selection; was `src/types/workspace.ts`)
 - `src/stores/workspaceProjectSupport.ts`
 - `src/collaboration/projectDocument.ts`
 - `src/starters/go.ts` (new)
@@ -443,7 +443,7 @@ Acceptance:
 
 | Concern                             | Expected files                                                                 |
 | ----------------------------------- | ------------------------------------------------------------------------------ |
-| Lesson type and execution selection | `src/types/workspace.ts`                                                       |
+| Lesson type and execution selection | `src/types/lessonTypes.ts`                                                     |
 | Canonical project validation        | `src/stores/workspaceProjectSupport.ts`                                        |
 | Collaboration projection            | `src/collaboration/projectDocument.ts`                                         |
 | Go starter                          | `src/starters/go.ts`, `src/starters/index.ts`                                  |

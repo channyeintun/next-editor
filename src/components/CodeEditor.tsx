@@ -11,7 +11,8 @@ import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRun
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useOptionalRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
-import { isWorkspaceTextFile, lessonSupportsPreview } from "../types/workspace";
+import { isWorkspaceTextFile } from "../types/workspace";
+import { lessonSupportsPreview } from "../types/lessonTypes";
 import type { TextEditEvent } from "../types/textEdit";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";

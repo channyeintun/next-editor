@@ -1,11 +1,7 @@
 import type { ReactElement } from "react";
-import {
-  getParentWorkspacePath,
-  getWorkspaceBaseName,
-  getWorkspaceMediaKind,
-  inferLanguageFromPath,
-  type WorkspaceTreeFile,
-} from "../types/workspace";
+import type { WorkspaceTreeFile } from "../types/workspace";
+import { getParentWorkspacePath, getWorkspaceBaseName } from "../types/workspacePaths";
+import { getWorkspaceMediaKind, inferLanguageFromPath } from "../types/workspaceFiles";
 import { isPathWithinFolder } from "../stores/workspaceProjectSupport";
 
 // ============================================================================

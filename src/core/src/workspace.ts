@@ -74,7 +74,7 @@ export interface WorkspaceTreeFile extends WorkspaceFileMetadata {
 
 /**
  * Every lesson type a project can carry. The picker labels and the execution and
- * capability rules for each live with the lesson catalog in src/types/workspace.ts.
+ * capability rules for each live with the lesson catalog in src/types/lessonTypes.ts.
  */
 export type WorkspaceLessonType =
   | "html-css"

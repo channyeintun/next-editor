@@ -1,7 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import type { Slide, SlidePreviewState } from "../types/slides";
-import { base64ToBytes, bytesToBase64 } from "../types/workspace";
+import { base64ToBytes, bytesToBase64 } from "../shared/base64";
 
 const SLIDES_STORAGE_KEY = "next-editor-slides";
 

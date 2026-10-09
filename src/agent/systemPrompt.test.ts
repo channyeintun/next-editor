@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { WorkspaceProject } from "../types/workspace";
 import {
   executionKindForLessonType,
   WORKSPACE_LESSON_TYPES,
   type WorkspaceExecutionKind,
-  type WorkspaceProject,
-} from "../types/workspace";
+} from "../types/lessonTypes";
 import {
   buildSystemPrompt,
   MAX_SESSION_MEMORY_FILE_CHARS,

@@ -1,8 +1,5 @@
-import {
-  collectWorkspaceFolders,
-  DEFAULT_WORKSPACE_ENTRY_PATH,
-  type WorkspaceProject,
-} from "../types/workspace";
+import type { WorkspaceProject } from "../types/workspace";
+import { collectWorkspaceFolders, DEFAULT_WORKSPACE_ENTRY_PATH } from "../types/workspacePaths";
 import { createHtmlCssLessonPackageJson, createWorkspaceFile } from "./shared";
 
 export function createStarterHtmlCssWorkspace(): WorkspaceProject {

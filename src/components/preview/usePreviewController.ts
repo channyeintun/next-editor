@@ -37,7 +37,7 @@ import type {
   PreviewPanelMode,
   PreviewSize,
 } from "../../types/slides";
-import { lessonRunsInWebContainer } from "../../types/workspace";
+import { lessonRunsInWebContainer } from "../../types/lessonTypes";
 import {
   createReplayableRuntimePreview,
   type PreviewScrollPosition,

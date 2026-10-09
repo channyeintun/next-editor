@@ -6,7 +6,7 @@ import {
   kiteMonarchLanguage,
 } from "./kiteLanguage";
 import { createStarterKiteWorkspace } from "../starters/kite";
-import { inferLanguageFromPath } from "../types/workspace";
+import { inferLanguageFromPath } from "../types/workspaceFiles";
 
 /**
  * Kite files were coloured with Monaco's Rust grammar, which is close enough

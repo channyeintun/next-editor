@@ -1,5 +1,5 @@
 import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
-import { getUniqueWorkspacePath, joinWorkspacePath } from "../../types/workspace";
+import { getUniqueWorkspacePath, joinWorkspacePath } from "../../types/workspacePaths";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import { useNextEditorActions } from "../../hooks/useNextEditorContext";
 import {

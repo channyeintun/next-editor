@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
 import { globToRegex, matchesWorkspaceGlob, normalizeFolderPrefix } from "./workspaceGlob";
-import { isBinaryWorkspacePath, isWorkspaceTextFile } from "../../types/workspace";
+import { isWorkspaceTextFile } from "../../types/workspace";
+import { isBinaryWorkspacePath } from "../../types/workspaceFiles";
 
 const inputSchema = z.object({
   pattern: z

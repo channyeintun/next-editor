@@ -3,20 +3,24 @@
 // project, and the read that turns the container's files back into a project.
 import type { FileSystemTree, WebContainer } from "@webcontainer/api";
 import {
-  base64ToBytes,
-  collectWorkspaceFolders,
-  getWorkspaceBaseName,
-  getWorkspaceFileMimeType,
-  inferLanguageFromPath,
-  isBinaryWorkspacePath,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
   isWorkspaceTextFile,
-  normalizeWorkspacePath,
-  parseWorkspacePath,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../../types/workspace";
+import {
+  collectWorkspaceFolders,
+  getWorkspaceBaseName,
+  normalizeWorkspacePath,
+  parseWorkspacePath,
+} from "../../types/workspacePaths";
+import {
+  getWorkspaceFileMimeType,
+  inferLanguageFromPath,
+  isBinaryWorkspacePath,
+} from "../../types/workspaceFiles";
+import { base64ToBytes } from "../../shared/base64";
 import { getWorkspaceAssetBytes, registerWorkspaceAsset } from "../../storage/workspaceAssetStore";
 
 const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);

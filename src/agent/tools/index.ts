@@ -1,5 +1,5 @@
 import type { Tool } from "@openrouter/agent";
-import type { WorkspaceExecutionKind } from "../../types/workspace";
+import type { WorkspaceExecutionKind } from "../../types/lessonTypes";
 import type { ToolContext } from "../types";
 import { makeReadTool } from "./read";
 import { makeWriteTool } from "./write";

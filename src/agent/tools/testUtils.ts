@@ -1,9 +1,6 @@
 import { createWorkspaceStore, type StoredWorkspaceSnapshot } from "../../stores/workspaceStore";
-import {
-  collectWorkspaceFolders,
-  type WorkspaceFile,
-  type WorkspaceProject,
-} from "../../types/workspace";
+import type { WorkspaceFile, WorkspaceProject } from "../../types/workspace";
+import { collectWorkspaceFolders } from "../../types/workspacePaths";
 import type { ToolContext } from "../types";
 
 /** Shared fixtures for the agent tool unit tests. */

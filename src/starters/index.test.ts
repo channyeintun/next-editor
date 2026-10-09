@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import type { WorkspaceLessonType } from "../types/workspace";
 import {
   isWorkspaceLessonType,
   lessonRunsInWebContainer,
   WORKSPACE_LESSON_TYPE_LABELS,
   WORKSPACE_LESSON_TYPES,
-  type WorkspaceLessonType,
-} from "../types/workspace";
+} from "../types/lessonTypes";
 import { createStarterWorkspaceForLessonType } from "./index";
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ASM_LANGUAGE_ID, asmLanguageConfiguration, asmMonarchLanguage } from "./asmLanguage";
-import { inferLanguageFromPath } from "../types/workspace";
+import { inferLanguageFromPath } from "../types/workspaceFiles";
 import { KNOWN_MNEMONICS } from "../core/x86/isa";
 import { lookupRegister } from "../core/x86/registers";
 import { parseIntegerLiteral } from "../core/x86/lexer";

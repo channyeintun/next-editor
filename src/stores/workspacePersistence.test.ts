@@ -16,12 +16,12 @@ import {
   WorkspaceAssetPersistenceError,
 } from "../storage/workspaceAssetStore";
 import {
-  collectWorkspaceFolders,
   isWorkspaceAssetFile,
   type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
+import { collectWorkspaceFolders } from "../types/workspacePaths";
 
 function makeFile(path: string, content: string, encoding?: "base64"): WorkspaceFile {
   const file = {

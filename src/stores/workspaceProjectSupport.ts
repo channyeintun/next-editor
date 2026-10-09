@@ -1,24 +1,26 @@
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
-  collectWorkspaceFolders,
-  DEFAULT_WORKSPACE_ENTRY_PATH,
-  getParentWorkspacePath,
-  getWorkspaceBaseName,
-  inferLanguageFromPath,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetDescriptor,
-  normalizeWorkspacePath,
-  parseWorkspacePath,
-  WorkspacePathError,
   type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
-  WORKSPACE_LESSON_TYPES,
   type WorkspaceLessonType,
   type WorkspaceProject,
   type WorkspaceTreeFile,
 } from "../types/workspace";
+import { WORKSPACE_LESSON_TYPES } from "../types/lessonTypes";
+import {
+  collectWorkspaceFolders,
+  DEFAULT_WORKSPACE_ENTRY_PATH,
+  getParentWorkspacePath,
+  getWorkspaceBaseName,
+  normalizeWorkspacePath,
+  parseWorkspacePath,
+  WorkspacePathError,
+} from "../types/workspacePaths";
+import { inferLanguageFromPath } from "../types/workspaceFiles";
 
 export function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);

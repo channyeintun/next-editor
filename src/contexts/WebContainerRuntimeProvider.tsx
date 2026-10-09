@@ -42,11 +42,8 @@ import type { WorkspaceSyncMutation } from "../stores/workspaceActions";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
-import {
-  areWorkspaceProjectsEqual,
-  lessonRunsInWebContainer,
-  type WorkspaceProject,
-} from "../types/workspace";
+import { areWorkspaceProjectsEqual, type WorkspaceProject } from "../types/workspace";
+import { lessonRunsInWebContainer } from "../types/lessonTypes";
 
 /**
  * Awaits `task` and hands a failure to `onError` instead of rejecting.

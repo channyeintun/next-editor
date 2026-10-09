@@ -2,13 +2,12 @@ import { Download, FileBox, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
-  approximateBase64ByteLength,
-  getWorkspaceFileMimeType,
-  getWorkspaceMediaKind,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
   type WorkspaceFile,
 } from "../types/workspace";
+import { getWorkspaceFileMimeType, getWorkspaceMediaKind } from "../types/workspaceFiles";
+import { approximateBase64ByteLength } from "../shared/base64";
 import {
   getWorkspaceAssetBlob,
   subscribeWorkspaceAssetAvailability,

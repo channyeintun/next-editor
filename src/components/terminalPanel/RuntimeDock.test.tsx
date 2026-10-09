@@ -1,11 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
+import type { WorkspaceLessonType } from "../../types/workspace";
 import {
   executionKindForLessonType,
   lessonSupportsTerminal,
   WORKSPACE_LESSON_TYPE_LABELS,
-  type WorkspaceLessonType,
-} from "../../types/workspace";
+} from "../../types/lessonTypes";
 
 // Each panel is a stand-in that names itself; the panels have their own tests.
 vi.mock("../TerminalPanel", () => ({ default: () => <p>Terminal</p> }));

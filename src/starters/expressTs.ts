@@ -1,4 +1,5 @@
-import { collectWorkspaceFolders, type WorkspaceProject } from "../types/workspace";
+import type { WorkspaceProject } from "../types/workspace";
+import { collectWorkspaceFolders } from "../types/workspacePaths";
 import { createMinimalLessonStyles, createWorkspaceFile } from "./shared";
 
 export function createStarterExpressTsWorkspace(): WorkspaceProject {

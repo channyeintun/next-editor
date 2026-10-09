@@ -7,11 +7,8 @@ import {
   syncWorkspaceProject,
 } from "../runtime/webcontainer/files";
 import { runSerializedWebContainerTask } from "../runtime/webcontainer/sharedContainer";
-import {
-  normalizeWorkspacePath,
-  type WorkspaceFile,
-  type WorkspaceProject,
-} from "../types/workspace";
+import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
+import { normalizeWorkspacePath } from "../types/workspacePaths";
 import { incrementPerformanceCounter, startPerformanceSpan } from "../utils/performanceMetrics";
 
 // How long a forward-sync write suppresses watch events for its path. The

@@ -1,21 +1,25 @@
 import { unzipSync, strFromU8 } from "fflate";
 import {
-  collectWorkspaceFolders,
-  getWorkspaceBaseName,
-  getWorkspaceFileMimeType,
-  inferLanguageFromPath,
-  isBinaryWorkspacePath,
   isWorkspaceAssetDescriptor,
   isWorkspaceTextFile,
-  normalizeWorkspacePath,
-  parseWorkspacePath,
-  WorkspacePathError,
   type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import {
+  collectWorkspaceFolders,
+  getWorkspaceBaseName,
+  normalizeWorkspacePath,
+  parseWorkspacePath,
+  WorkspacePathError,
+} from "../types/workspacePaths";
+import {
+  getWorkspaceFileMimeType,
+  inferLanguageFromPath,
+  isBinaryWorkspacePath,
+} from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 
 /**

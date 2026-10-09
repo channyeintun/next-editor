@@ -1,9 +1,5 @@
-import {
-  executionKindForLessonType,
-  isWorkspaceTextFile,
-  type WorkspaceExecutionKind,
-  type WorkspaceProject,
-} from "../types/workspace";
+import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
+import { executionKindForLessonType, type WorkspaceExecutionKind } from "../types/lessonTypes";
 import type { PlaygroundAgentStack } from "../runtime/playgroundAgentStack";
 import { ASM_AGENT_STACK } from "../runtime/asmPlayground/agentStack";
 import { GO_AGENT_STACK } from "../runtime/goPlayground/agentStack";

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { normalizeProject, WorkspaceProjectValidationError } from "../stores/workspaceStore";
-import {
-  normalizeWorkspacePath,
-  parseWorkspacePath,
-  WorkspacePathError,
-  type WorkspaceProject,
-} from "./workspace";
+import type { WorkspaceProject } from "./workspace";
+import { normalizeWorkspacePath, parseWorkspacePath, WorkspacePathError } from "./workspacePaths";
 
 function projectWithFiles(files: WorkspaceProject["files"]): WorkspaceProject {
   return {

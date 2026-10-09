@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
+import { isWorkspaceTextFile, type WorkspaceLessonType } from "./workspace";
 import {
   executionKindForLessonType,
-  isWorkspaceTextFile,
-  inferLanguageFromPath,
   isWorkspaceLessonType,
   lessonRunsInWebContainer,
   WORKSPACE_LESSON_TYPES,
   lessonSupportsPreview,
   lessonSupportsTerminal,
   type WorkspaceExecutionKind,
-  type WorkspaceLessonType,
-} from "./workspace";
+} from "./lessonTypes";
+import { inferLanguageFromPath } from "./workspaceFiles";
 import { normalizeProject } from "../stores/workspaceProjectSupport";
 import { createStarterGoWorkspace } from "../starters/go";
 import { createStarterKotlinWorkspace } from "../starters/kotlin";

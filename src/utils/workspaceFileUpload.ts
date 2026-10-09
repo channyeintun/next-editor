@@ -1,9 +1,5 @@
-import {
-  getWorkspaceFileMimeType,
-  isBinaryWorkspacePath,
-  type WorkspaceFileContent,
-  type WorkspaceFileEncoding,
-} from "../types/workspace";
+import type { WorkspaceFileContent, WorkspaceFileEncoding } from "../types/workspace";
+import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 
 /**

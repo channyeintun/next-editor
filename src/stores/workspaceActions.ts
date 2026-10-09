@@ -14,13 +14,13 @@ import {
 } from "../storage/workspaceAssetStore";
 import {
   isWorkspaceTextFile,
-  normalizeWorkspacePath,
   type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { normalizeWorkspacePath } from "../types/workspacePaths";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 

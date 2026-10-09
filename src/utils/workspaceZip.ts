@@ -1,11 +1,11 @@
 import { strToU8, Zip, ZipDeflate, ZipPassThrough } from "fflate";
 import {
-  base64ToBytes,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
-  normalizeWorkspaceFolderPath,
   type WorkspaceProject,
 } from "../types/workspace";
+import { normalizeWorkspaceFolderPath } from "../types/workspacePaths";
+import { base64ToBytes } from "../shared/base64";
 import { getWorkspaceAssetBlob } from "../storage/workspaceAssetStore";
 
 function getArchiveFileName(projectName: string): string {

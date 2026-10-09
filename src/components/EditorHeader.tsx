@@ -33,13 +33,13 @@ import {
   useWorkspaceSaveStatus,
   useWorkspaceSidebarCollapsed,
 } from "../hooks/useWorkspace";
+import type { WorkspaceLessonType } from "../types/workspace";
 import {
   lessonRunsInWebContainer,
   lessonSupportsPreview,
   WORKSPACE_LESSON_TYPE_LABELS,
   WORKSPACE_LESSON_TYPES,
-  type WorkspaceLessonType,
-} from "../types/workspace";
+} from "../types/lessonTypes";
 import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";

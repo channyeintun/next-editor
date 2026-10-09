@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { isWorkspaceTextFile, lessonRunsInWebContainer } from "../types/workspace";
+import { isWorkspaceTextFile } from "../types/workspace";
+import { lessonRunsInWebContainer } from "../types/lessonTypes";
 import { createStarterKiteWebWorkspace } from "./kiteWeb";
 
 /**

@@ -1,11 +1,11 @@
 import {
-  base64ToBytes,
-  getWorkspaceFileMimeType,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
   type WorkspaceAssetDescriptor,
   type WorkspaceProject,
 } from "../types/workspace";
+import { getWorkspaceFileMimeType } from "../types/workspaceFiles";
+import { base64ToBytes } from "../shared/base64";
 import { createDatabaseOpener, requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 /**

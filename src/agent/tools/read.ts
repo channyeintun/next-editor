@@ -1,13 +1,9 @@
 import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext, ToolOutputContent } from "../types";
-import {
-  bytesToBase64,
-  getWorkspaceFileMimeType,
-  isBinaryWorkspacePath,
-  isLegacyWorkspaceBinaryFile,
-  isWorkspaceAssetFile,
-} from "../../types/workspace";
+import { isLegacyWorkspaceBinaryFile, isWorkspaceAssetFile } from "../../types/workspace";
+import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../../types/workspaceFiles";
+import { bytesToBase64 } from "../../shared/base64";
 import { getWorkspaceAssetBytes } from "../../storage/workspaceAssetStore";
 import { toRichToolModelOutput } from "./modelOutput";
 import { readFile } from "./workspaceFs";
