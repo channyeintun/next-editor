@@ -11,13 +11,13 @@ export default function SearchResults({ query }: { query: string }) {
   const { data, isPending, isError, refetch } = useSearch(query);
 
   if (isPending) {
-    return <div className="flex justify-center py-20 text-slate-400">Searching…</div>;
+    return <div className="flex justify-center py-20 text-slate-300">Searching…</div>;
   }
 
   if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p role="alert" className="text-red-400">
+        <p role="alert" className="text-red-300">
           Search failed
         </p>
         <button
@@ -35,7 +35,7 @@ export default function SearchResults({ query }: { query: string }) {
 
   if (authors.length === 0 && lessons.length === 0) {
     return (
-      <div className="flex justify-center py-20 text-slate-400">
+      <div className="flex justify-center py-20 text-slate-300">
         No authors or lessons match your search.
       </div>
     );
@@ -45,7 +45,7 @@ export default function SearchResults({ query }: { query: string }) {
     <div>
       {authors.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-300">
             Authors
           </h2>
           <div className="flex flex-wrap gap-3">
@@ -63,7 +63,10 @@ export default function SearchResults({ query }: { query: string }) {
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <span className="flex size-7 items-center justify-center rounded-full bg-pinata-purple text-xs font-semibold uppercase">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-7 items-center justify-center rounded-full bg-pinata-purple text-xs font-semibold uppercase"
+                  >
                     {(author.name || author.username)[0]}
                   </span>
                 )}

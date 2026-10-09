@@ -143,7 +143,7 @@ export default function LessonGrid() {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
         {status}
-        <p role="alert" className="text-red-400">
+        <p role="alert" className="text-red-300">
           {error instanceof Error ? error.message : "Failed to load lessons"}
         </p>
         <button
@@ -184,7 +184,7 @@ export default function LessonGrid() {
           ))}
         </div>
       ) : lessons.length === 0 ? (
-        <div className="flex justify-center py-20 text-slate-400">No lessons yet.</div>
+        <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
       ) : (
         <>
           <div ref={listRef}>
@@ -216,7 +216,7 @@ export default function LessonGrid() {
 
           {isFetchNextPageError ? (
             <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
-              <p role="alert" className="text-sm text-red-400">
+              <p role="alert" className="text-sm text-red-300">
                 {error instanceof Error ? error.message : "Failed to load more lessons"}
               </p>
               <button
