@@ -184,10 +184,11 @@ reaches the detail route by whichever of these got there first:
 | Anything else                  | `findLessonBySlug` (seed manifest, then `/api/lessons/:slug`) | Yes           |
 
 - **Seeding** (`primeLessonDetails`, `infra/lessons/queryKeys.ts`, beside the
-  lesson and playlist query keys tube and infra share): the gallery and playlist
-  queries already download whole `Lesson` objects for every card they render, so
-  their query functions write each one to the detail key. Opening a card — or
-  auto-advancing through a playlist — then resolves from cache.
+  lesson and playlist query keys tube and infra share): the gallery, playlist,
+  search and author-profile queries already download whole `Lesson` objects for
+  every card they render, so their query functions write each one to the detail
+  key. Opening a card — or auto-advancing through a playlist — then resolves from
+  cache.
 - **Edge render** (`infra/worker/ssr/lessonDetail.ts`): `GET /learn/:slug` in the
   Worker resolves the slug through the same `findPublishedLessonBySlug` the JSON
   API uses (`infra/worker/lessonCatalog.ts`, so the two can't disagree), rewrites
