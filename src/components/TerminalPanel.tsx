@@ -35,7 +35,6 @@ import type {
   RuntimeRecordingSnapshot,
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
-import { areStructuredDataEqual } from "../core/src/utils/equality";
 import {
   DOCK_TAB_STRIP_CLASS,
   describeRunnerOutput,
@@ -43,6 +42,7 @@ import {
   dockRootSizeClassName,
   dockTabStateClassName,
 } from "./terminalPanel/runtimeDockHelpers";
+import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 
 const ANSI_RESET = "\u001b[0m";
 const DEFAULT_CONSOLE_LINES: string[] = [];
@@ -203,13 +203,6 @@ function TerminalPanel() {
     effectiveTerminalSessions.find((session) => session.id === effectiveActiveTerminalSessionId)
       ?.output ?? null;
   const previousPreviewMessageIdRef = useRef<number | null>(null);
-  const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
-
-  useEffect(() => {
-    if (!currentRecording) {
-      runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot: null });
-    }
-  }, [currentRecording, runtimePanelStore]);
 
   const appendConsoleLine = (message: string) => {
     const nextMessage = message.trim();
@@ -315,22 +308,13 @@ function TerminalPanel() {
     latestLifecycleEvent,
   };
 
-  useEffect(() => {
-    if (!isRecording || isPlaybackSnapshotActive) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      return;
-    }
-
-    if (previousRuntimeEventStateRef.current === null) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      return;
-    }
-
-    if (!areStructuredDataEqual(previousRuntimeEventStateRef.current, runtimeEventState)) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      handleRuntimeEvent();
-    }
-  }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, runtimeEventState]);
+  useRuntimeDockRecording(runtimeEventState, {
+    isRecording,
+    isPlaybackSnapshotActive,
+    currentRecording,
+    handleRuntimeEvent,
+    runtimePanelStore,
+  });
 
   // `startTerminalSession` comes from the runtime provider's actions object. Its
   // identity follows the values its closure captures (the lesson type among

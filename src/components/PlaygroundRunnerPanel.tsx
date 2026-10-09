@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
@@ -9,6 +9,7 @@ import {
   dockRootSizeClassName,
   dockTabStateClassName,
 } from "./terminalPanel/runtimeDockHelpers";
+import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
@@ -30,7 +31,6 @@ import {
   STUDIO_RUN_BUTTON_TARGET_ID,
 } from "../studio/targets";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
-import { areStructuredDataEqual } from "../core/src/utils/equality";
 
 /**
  * Focused Run console for Playground lessons — deliberately not a Terminal.
@@ -131,7 +131,6 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const isFormatting = activeOperation === "format";
   // The finished Run or Format, for the status region; the busy text replaces it.
   const [outcomeText, setOutcomeText] = useState("");
-  const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
 
   // The tab state is shared with the WebContainer dock's store; anything other
   // than "agent" (including a stale "terminal"/"console" from a previous lesson)
@@ -144,12 +143,6 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const effectiveScrollLines = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.terminalScrollLines ?? {})
     : terminalScrollLines;
-
-  useEffect(() => {
-    if (!currentRecording) {
-      runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot: null });
-    }
-  }, [currentRecording, runtimePanelStore]);
 
   useEffect(() => {
     // The runtime panel store is shared by the browser and playground
@@ -329,22 +322,13 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     terminalScrollLines,
   };
 
-  useEffect(() => {
-    if (!isRecording || isPlaybackSnapshotActive) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      return;
-    }
-
-    if (previousRuntimeEventStateRef.current === null) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      return;
-    }
-
-    if (!areStructuredDataEqual(previousRuntimeEventStateRef.current, runtimeEventState)) {
-      previousRuntimeEventStateRef.current = runtimeEventState;
-      handleRuntimeEvent();
-    }
-  }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, runtimeEventState]);
+  useRuntimeDockRecording(runtimeEventState, {
+    isRecording,
+    isPlaybackSnapshotActive,
+    currentRecording,
+    handleRuntimeEvent,
+    runtimePanelStore,
+  });
 
   const handleRun = async () => {
     if (isPlaybackSnapshotActive) {
