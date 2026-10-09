@@ -41,6 +41,12 @@ describe("ChaptersMenu", () => {
     render(<ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />);
     openMenu();
 
+    // The playhead is at 1:05, in "Routing": that chapter is the current one.
+    expect(screen.getByRole("button", { name: "Routing" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "1:00" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "Setup" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("button", { name: "0:00" })).not.toHaveAttribute("aria-current");
+
     fireEvent.click(screen.getByRole("button", { name: "Routing" }));
     expect(actions.seekTo).toHaveBeenCalledWith(60_000);
 

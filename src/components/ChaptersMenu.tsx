@@ -137,15 +137,18 @@ export default function ChaptersMenu({
           ) : (
             <ul className="max-h-64 overflow-y-auto">
               {chapters.map((chapter, index) => (
+                // The chapter playing now: a bar at its edge (the tint alone is faint) and
+                // aria-current on its buttons. Every row has the border, so none shifts.
                 <li
                   key={chapter.time}
-                  className={`group flex items-center gap-2 px-3 py-1 ${
-                    index === currentIndex ? "bg-slate-800/70" : ""
+                  className={`group flex items-center gap-2 border-l-2 py-1 pr-3 pl-2.5 ${
+                    index === currentIndex ? "border-sky-300 bg-slate-800/70" : "border-transparent"
                   }`}
                 >
                   <button
                     type="button"
                     onClick={() => seekTo(chapter.time)}
+                    aria-current={index === currentIndex ? "true" : undefined}
                     className="shrink-0 font-mono text-xs text-sky-300 hover:underline"
                   >
                     {formatPlaybackTime(chapter.time)}
@@ -171,6 +174,7 @@ export default function ChaptersMenu({
                     <button
                       type="button"
                       onClick={() => seekTo(chapter.time)}
+                      aria-current={index === currentIndex ? "true" : undefined}
                       className="min-w-0 flex-1 truncate text-left text-slate-200"
                     >
                       {chapter.title}
