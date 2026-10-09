@@ -48,7 +48,7 @@ function ModelSection({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search OpenRouter models"
           aria-label="Search OpenRouter models"
-          className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-slate-500"
+          className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-400 focus:border-slate-500"
         />
       </div>
       <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border border-slate-800 p-2">
@@ -66,7 +66,7 @@ function ModelSection({
             />
             <span className="min-w-0">
               <span className="block truncate">{option.label}</span>
-              <span className="block truncate font-mono text-[10px] text-slate-600">
+              <span className="block truncate font-mono text-[10px] text-slate-400">
                 {option.id}
                 {!option.supportsImages ? " · no image input" : ""}
               </span>
@@ -74,15 +74,15 @@ function ModelSection({
           </label>
         ))}
         {filteredModelOptions.length === 0 ? (
-          <p className="px-1.5 py-2 text-xs text-slate-500">No models match “{query.trim()}”.</p>
+          <p className="px-1.5 py-2 text-xs text-slate-400">No models match “{query.trim()}”.</p>
         ) : null}
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-400">
         {isModelCatalogLoading
           ? "Loading models from OpenRouter…"
           : (modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`)}
       </p>
-      <p className="mt-2 text-[11px] text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-400">
         Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.
       </p>
     </div>
@@ -185,7 +185,7 @@ function KeyStorageSection() {
             />
             <span>
               <span className="block">{option.label}</span>
-              <span className="block text-[11px] text-slate-500">{option.description}</span>
+              <span className="block text-[11px] text-slate-400">{option.description}</span>
             </span>
           </label>
         ))}
