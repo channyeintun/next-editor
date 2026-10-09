@@ -2,6 +2,7 @@ import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
+import { globToRegex, matchesWorkspaceGlob, normalizeFolderPrefix } from "./workspaceGlob";
 
 const inputSchema = z.object({
   pattern: z
@@ -17,42 +18,6 @@ const inputSchema = z.object({
   limit: z.number().optional().describe("Maximum number of results to return (default 200)"),
 });
 
-function globToRegex(pattern: string): RegExp {
-  let regex = "";
-  let i = 0;
-
-  while (i < pattern.length) {
-    const char = pattern[i];
-
-    if (char === "*") {
-      if (i + 1 < pattern.length && pattern[i + 1] === "*") {
-        if (i + 2 < pattern.length && pattern[i + 2] === "/") {
-          regex += "(?:.*/)?";
-          i += 3;
-          continue;
-        } else if (i + 2 === pattern.length) {
-          regex += ".*";
-          i += 2;
-          continue;
-        }
-      }
-      regex += "[^/]*";
-      i += 1;
-    } else if (char === "?") {
-      regex += "[^/]";
-      i += 1;
-    } else if ("\\^$+.()[]{}|".includes(char)) {
-      regex += "\\" + char;
-      i += 1;
-    } else {
-      regex += char;
-      i += 1;
-    }
-  }
-
-  return new RegExp("^" + regex + "$");
-}
-
 export function makeGlobTool(ctx: ToolContext) {
   return tool({
     name: "glob",
@@ -67,7 +32,7 @@ export function makeGlobTool(ctx: ToolContext) {
         return "No workspace loaded.";
       }
 
-      const baseFolder = input.path ? input.path.replace(/^\/+|\/+$/g, "") : "";
+      const baseFolder = input.path ? normalizeFolderPrefix(input.path) : "";
       const baseFolderPrefix = baseFolder ? baseFolder + "/" : "";
 
       let filePaths = Object.keys(project.files);
@@ -79,8 +44,7 @@ export function makeGlobTool(ctx: ToolContext) {
       const matches: string[] = [];
 
       for (const filePath of filePaths) {
-        const relativeToSearch = baseFolder ? filePath.slice(baseFolderPrefix.length) : filePath;
-        if (globRegex.test(relativeToSearch)) {
+        if (matchesWorkspaceGlob(globRegex, filePath, baseFolder)) {
           matches.push(filePath);
         }
       }

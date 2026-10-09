@@ -25,6 +25,18 @@ describe("glob tool", () => {
     expect(result).not.toContain("lib/b.ts");
   });
 
+  // The tool's schema promises ** matches across folders; a mid-segment ** used
+  // to match a single level only.
+  it("matches a mid-segment ** across directories", async () => {
+    const store = makeStore([
+      makeFile("src/App.tsx", ""),
+      makeFile("src/components/Button.tsx", ""),
+      makeFile("lib/Other.tsx", ""),
+    ]);
+    const result = await makeGlobTool(makeCtx(store)).function.execute({ pattern: "src/**.tsx" });
+    expect(result).toBe("src/App.tsx\nsrc/components/Button.tsx");
+  });
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "")]);
     const result = await makeGlobTool(makeCtx(store)).function.execute({ pattern: "*.py" });

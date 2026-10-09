@@ -2,6 +2,7 @@ import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
+import { globToRegex, matchesWorkspaceGlob, normalizeFolderPrefix } from "./workspaceGlob";
 import { isBinaryWorkspacePath, isWorkspaceTextFile } from "../../types/workspace";
 
 const inputSchema = z.object({
@@ -21,41 +22,6 @@ const inputSchema = z.object({
   context: z.number().optional().describe("Context lines before/after each match (default 0)"),
   limit: z.number().optional().describe("Maximum number of matching lines to return (default 200)"),
 });
-
-function globToRegex(globPattern: string): RegExp {
-  let regexStr = "";
-  let i = 0;
-
-  while (i < globPattern.length) {
-    const char = globPattern[i];
-
-    if (char === "*") {
-      if (i + 1 < globPattern.length && globPattern[i + 1] === "*") {
-        if (i + 2 < globPattern.length && globPattern[i + 2] === "/") {
-          regexStr += "(?:.*/)?";
-          i += 3;
-        } else {
-          regexStr += ".*";
-          i += 2;
-        }
-      } else {
-        regexStr += "[^/]*";
-        i++;
-      }
-    } else if (char === "?") {
-      regexStr += "[^/]";
-      i++;
-    } else if (".+^${}()|[\\]".includes(char)) {
-      regexStr += "\\" + char;
-      i++;
-    } else {
-      regexStr += char;
-      i++;
-    }
-  }
-
-  return new RegExp(`^${regexStr}$`);
-}
 
 export function makeGrepTool(ctx: ToolContext) {
   return tool({
@@ -92,7 +58,7 @@ export function makeGrepTool(ctx: ToolContext) {
       const globRegex = glob ? globToRegex(glob) : null;
 
       const matchLines: string[] = [];
-      const basePath = path?.replace(/^\/+|\/+$/g, "") ?? "";
+      const basePath = path ? normalizeFolderPrefix(path) : "";
       const sortedPaths = Object.keys(project.files).sort();
 
       for (const filePath of sortedPaths) {
@@ -104,7 +70,7 @@ export function makeGrepTool(ctx: ToolContext) {
           continue;
         }
 
-        // Normalized the same way glob.ts:70 does. Used verbatim, a natural
+        // Normalized by normalizeFolderPrefix, as glob does. Used verbatim, a natural
         // `"src/"` or `"/src"` became the prefix `"src//"` / `"/src/"`, which no
         // workspace path can start with — so every file was skipped and the tool
         // answered "No matches found.", indistinguishable from a real miss. Do
@@ -115,7 +81,7 @@ export function makeGrepTool(ctx: ToolContext) {
           continue;
         }
 
-        if (globRegex && !globRegex.test(filePath)) {
+        if (globRegex && !matchesWorkspaceGlob(globRegex, filePath, basePath)) {
           continue;
         }
 

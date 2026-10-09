@@ -45,6 +45,42 @@ describe("grep tool", () => {
     },
   );
 
+  // The glob used to be tested against the full path, so a relative glob under
+  // a scoped path ("*.ts" within "src") could never match and the tool
+  // answered "No matches found." like a real miss.
+  it("matches a glob relative to the scoped path", async () => {
+    const store = makeStore([
+      makeFile("src/a.ts", "needle"),
+      makeFile("src/sub/b.ts", "needle"),
+      makeFile("src/c.tsx", "needle"),
+    ]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      path: "src",
+      glob: "*.ts",
+    });
+    expect(result).toBe("src/a.ts:1:needle");
+  });
+
+  it("still matches a workspace-rooted glob under a scoped path", async () => {
+    const store = makeStore([makeFile("src/a.ts", "needle"), makeFile("src/sub/b.ts", "needle")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      path: "src",
+      glob: "src/*.ts",
+    });
+    expect(result).toBe("src/a.ts:1:needle");
+  });
+
+  it("filters by glob across the whole workspace without a path", async () => {
+    const store = makeStore([makeFile("src/a.ts", "needle"), makeFile("src/b.tsx", "needle")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      glob: "**/*.tsx",
+    });
+    expect(result).toBe("src/b.tsx:1:needle");
+  });
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "hello")]);
     const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "zzz" });
