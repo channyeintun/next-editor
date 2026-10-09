@@ -45,16 +45,10 @@ import {
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import {
-  deleteCustomVoice,
   isVoxCpm2ReferenceReady,
-  listCustomVoices,
   MAX_SAMPLE_SECONDS,
-  MIN_SAMPLE_SECONDS,
   MIN_VOXCPM2_REFERENCE_SECONDS,
-  prepareVoiceSample,
-  saveCustomVoice,
   type SavedCustomVoice,
-  voxCpm2ReferenceTooShort,
 } from "./tts/customVoices";
 import {
   athanLabProfileOf,
@@ -62,8 +56,6 @@ import {
   modalVoxCpm2BurmeseProfileOf,
   type VoiceProfile,
 } from "./tts/profiles";
-import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
-import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, type CritiqueNote } from "./script/critic";
 import { extractScriptNarration } from "./script/markers";
 import { runStudioRender, type StudioRunResult } from "./runStudioRender";
@@ -76,6 +68,7 @@ import {
   type StudioNarrationProvider,
 } from "./narrationLanguage";
 import AthanLabPanel from "./AthanLabPanel";
+import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
 
 /**
  * The studio render console: pick a lesson (checked-in scripts auto-register;
@@ -89,7 +82,6 @@ import AthanLabPanel from "./AthanLabPanel";
 // Imported-at-runtime scripts (YAML text by slug), surviving reloads within
 // the browsing session so an import → render → reload → re-render loop works.
 const IMPORTED_SCRIPTS_KEY = "next-editor:studio:imported-scripts";
-const VOICE_CHOICE_KEY = "next-editor:studio:voice-choice";
 const NARRATION_PROVIDER_KEY = "next-editor:studio:narration-provider";
 
 function readStoredNarrationProvider(): StudioNarrationProvider {
@@ -100,6 +92,9 @@ function readStoredNarrationProvider(): StudioNarrationProvider {
 function storeNarrationProvider(provider: StudioNarrationProvider): void {
   writeStoredPreference(NARRATION_PROVIDER_KEY, provider);
 }
+
+/** No voice task running in <NarratorVoicePanel>. */
+const NO_VOICE_TASK: NarratorVoiceTask = { busy: null, recording: false };
 
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
 const ATHANLAB_NOT_REPORTED = { ready: false, reason: "Checking your AthanLab setup…" };
@@ -321,39 +316,12 @@ export default function StudioController() {
     setIsScreenSupported(isScreenCaptureSupported());
   }, []);
 
-  // Narrator references live in this browser's IndexedDB. The selected sample
-  // either clones Pocket-TTS locally or conditions Burmese VoxCPM2 through the
-  // authenticated Worker at render time.
-  const [customVoices, setCustomVoices] = useState<SavedCustomVoice[]>([]);
-  const [voiceChoice, setVoiceChoice] = useState<string>(
-    () => readStoredPreference(VOICE_CHOICE_KEY) ?? "default",
-  );
-  const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
-  const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
-  const voiceSelectRef = useRef<HTMLSelectElement | null>(null);
-  const voiceRecorderRef = useRef<{
-    recorder: MediaRecorder;
-    stream: MediaStream;
-    stopTimer: number;
-  } | null>(null);
-  const voiceLibraryMountedRef = useRef(false);
-  const [voiceRecording, setVoiceRecording] = useState(false);
-
-  // Leaving the console mid-take stops the microphone at once and discards the
-  // take: once unmounted, nothing can show it or confirm saving it.
-  useEffect(() => {
-    voiceLibraryMountedRef.current = true;
-    return () => {
-      voiceLibraryMountedRef.current = false;
-      const active = voiceRecorderRef.current;
-      if (!active) return;
-      voiceRecorderRef.current = null;
-      window.clearTimeout(active.stopTimer);
-      active.recorder.onstop = null;
-      if (active.recorder.state !== "inactive") active.recorder.stop();
-      for (const track of active.stream.getTracks()) track.stop();
-    };
-  }, []);
+  // Reported by <NarratorVoicePanel>: the browser-local voice dialogs are
+  // synthesized with (null for the script default) once its library has been
+  // read, and the voice task it is running, which holds Start render.
+  const [narratorVoice, setNarratorVoice] = useState<SavedCustomVoice | null>(null);
+  const [narratorVoiceReported, setNarratorVoiceReported] = useState(false);
+  const [voiceTask, setVoiceTask] = useState<NarratorVoiceTask>(NO_VOICE_TASK);
 
   const chooseProvider = (next: StudioNarrationProvider) => {
     if (next === provider) return;
@@ -402,134 +370,19 @@ export default function StudioController() {
     );
   };
 
-  // Whether the voice library has been read (or failed to), so the unattended
-  // render never starts with the empty pre-load list.
-  const [customVoicesLoaded, setCustomVoicesLoaded] = useState(false);
-  useEffect(() => {
-    void listCustomVoices()
-      .then(setCustomVoices)
-      .catch((error: unknown) => console.warn("Narrator voices unavailable:", error))
-      .finally(() => setCustomVoicesLoaded(true));
-  }, []);
+  const reportNarratorVoice = (voice: SavedCustomVoice | null) => {
+    setNarratorVoice(voice);
+    setNarratorVoiceReported(true);
+  };
 
-  const selectedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
+  const reportVoiceTask = (task: NarratorVoiceTask) => {
+    setVoiceTask((current) =>
+      current.busy === task.busy && current.recording === task.recording ? current : task,
+    );
+  };
+
   const selectedVoiceIsBurmeseReady =
-    selectedVoice !== null && isVoxCpm2ReferenceReady(selectedVoice);
-  const requiredVoiceSeconds =
-    provider === "voxcpm2" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
-
-  const chooseVoice = (value: string) => {
-    setVoiceChoice(value);
-    writeStoredPreference(VOICE_CHOICE_KEY, value);
-  };
-
-  const saveVoiceFromAudio = async (bytes: ArrayBuffer, suggestedName: string) => {
-    setVoiceBusy("Preparing the sample (24 kHz mono)…");
-    try {
-      const samples = await prepareVoiceSample(bytes);
-      if (provider === "voxcpm2" && voxCpm2ReferenceTooShort(samples)) {
-        throw new Error(
-          `Burmese narration requires at least ${MIN_VOXCPM2_REFERENCE_SECONDS}s of clear reference speech`,
-        );
-      }
-      const voice = await saveCustomVoice(suggestedName, samples);
-      setCustomVoices(await listCustomVoices());
-      chooseVoice(voice.id);
-    } finally {
-      setVoiceBusy(null);
-    }
-  };
-
-  const handleVoiceFile = async (file: File) => {
-    try {
-      await saveVoiceFromAudio(await file.arrayBuffer(), file.name.replace(/\.[^.]+$/, ""));
-    } catch (error) {
-      setFatal(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const toggleVoiceRecording = async () => {
-    const active = voiceRecorderRef.current;
-    if (active) {
-      active.recorder.stop();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!voiceLibraryMountedRef.current) {
-        // The console unmounted while the permission prompt was open.
-        for (const track of stream.getTracks()) track.stop();
-        return;
-      }
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      let stopTimer = 0;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      recorder.onstop = () => {
-        window.clearTimeout(stopTimer);
-        voiceRecorderRef.current = null;
-        setVoiceRecording(false);
-        for (const track of stream.getTracks()) track.stop();
-        void new Blob(chunks, { type: recorder.mimeType })
-          .arrayBuffer()
-          .then((bytes) => saveVoiceFromAudio(bytes, "My voice"))
-          .catch((error: unknown) =>
-            setFatal(error instanceof Error ? error.message : String(error)),
-          );
-      };
-      setVoiceRecording(true);
-      recorder.start();
-      // The engine conditions on at most MAX_SAMPLE_SECONDS — stop the mic there.
-      stopTimer = window.setTimeout(() => {
-        if (voiceRecorderRef.current?.recorder === recorder && recorder.state === "recording") {
-          recorder.stop();
-        }
-      }, MAX_SAMPLE_SECONDS * 1000);
-      voiceRecorderRef.current = { recorder, stream, stopTimer };
-    } catch (error) {
-      setFatal(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const previewVoice = async () => {
-    if (!selectedVoice) return;
-    setVoiceBusy(`Synthesizing a preview with "${selectedVoice.name}"…`);
-    try {
-      const wav =
-        provider === "voxcpm2"
-          ? await synthesizeModalVoxCpm2Wav(
-              modalVoxCpm2BurmeseProfileOf(selectedVoice),
-              "မင်္ဂလာပါ။ ဒီအသံနဲ့ သင်ခန်းစာတစ်လျှောက် တစ်သမတ်တည်း ရှင်းပြပေးပါမယ်။",
-              1,
-            )
-          : await synthesizePocketWav(
-              customVoiceProfileOf(selectedVoice),
-              "Hi! This is my cloned voice, reading a quick preview.",
-              1,
-            );
-      const url = URL.createObjectURL(new Blob([wav.slice() as BlobPart], { type: "audio/wav" }));
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
-    } catch (error) {
-      setFatal(error instanceof Error ? error.message : String(error));
-    } finally {
-      setVoiceBusy(null);
-    }
-  };
-
-  const removeVoice = async () => {
-    if (!selectedVoice) return;
-    if (!window.confirm(`Delete cloned voice "${selectedVoice.name}"?`)) return;
-    await deleteCustomVoice(selectedVoice.id);
-    setCustomVoices(await listCustomVoices());
-    chooseVoice("default");
-    // The delete button unmounts with the voice; keep focus on the voice
-    // select, which stays mounted, instead of dropping it to the page.
-    voiceSelectRef.current?.focus();
-  };
+    narratorVoice !== null && isVoxCpm2ReferenceReady(narratorVoice);
 
   // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
   // identity across the per-receipt/phase/output-chunk re-renders, which lets
@@ -620,7 +473,7 @@ export default function StudioController() {
       const script = source.load();
       const setupError = narrationSetupErrorOf(script.lesson.locale, renderProvider);
       if (setupError) throw new Error(setupError);
-      const renderVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
+      const renderVoice = narratorVoice;
       let voiceProfile: VoiceProfile | undefined;
       let voiceName: string | null = null;
       let voiceKind: StudioRunEntry["voiceKind"] = null;
@@ -794,7 +647,7 @@ export default function StudioController() {
     !authLoading &&
     !studioCapabilitiesLoading &&
     (provider !== "voxcpm2" || studioCapabilities.burmeseVoxCpm2) &&
-    customVoicesLoaded &&
+    narratorVoiceReported &&
     (provider !== "athanlab" || athanLabReadiness.ready);
   useEffect(() => {
     if (!autostart || !autostartReady || autostartFired) {
@@ -992,7 +845,9 @@ export default function StudioController() {
         <div className="mt-2">
           <select
             value={provider}
-            disabled={running || studioCapabilitiesLoading || voiceBusy !== null || voiceRecording}
+            disabled={
+              running || studioCapabilitiesLoading || voiceTask.busy !== null || voiceTask.recording
+            }
             onChange={(event) => {
               if (isStudioNarrationProvider(event.target.value)) {
                 chooseProvider(event.target.value);
@@ -1014,127 +869,19 @@ export default function StudioController() {
             userId={userId}
             capabilityAvailable={studioCapabilities.athanlab}
             capabilitiesLoading={authLoading || studioCapabilitiesLoading}
-            disabled={running || voiceBusy !== null}
+            disabled={running || voiceTask.busy !== null}
             onVoiceChange={reportAthanLabVoice}
             onReadyChange={reportAthanLabReadiness}
           />
         ) : null}
 
-        {/* AthanLab voices come from the user's AthanLab account (the panel
-            above); the browser-local clone/reference voices are for the others. */}
-        {provider === "athanlab" ? null : (
-          <div className="mt-2 flex items-center gap-2">
-            <select
-              ref={voiceSelectRef}
-              value={selectedVoice ? selectedVoice.id : "default"}
-              disabled={running || voiceBusy !== null}
-              onChange={(event) => chooseVoice(event.target.value)}
-              aria-label="Narrator voice"
-              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-            >
-              <option value="default">
-                {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}
-              </option>
-              {customVoices.map((voice) => (
-                <option key={voice.id} value={voice.id}>
-                  voice: {voice.name} ({provider === "voxcpm2" ? "reference" : "cloned"})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={running || voiceBusy !== null || voiceRecording}
-              onClick={() => voiceFileInputRef.current?.click()}
-              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-              title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
-            >
-              {provider === "voxcpm2" ? "Reference…" : "Clone…"}
-            </button>
-            <button
-              type="button"
-              disabled={running || voiceBusy !== null}
-              onClick={() => {
-                void toggleVoiceRecording();
-              }}
-              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                voiceRecording
-                  ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
-                  : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
-              }`}
-              title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
-            >
-              {voiceRecording ? "Stop" : "Record"}
-            </button>
-            {selectedVoice ? (
-              <>
-                <button
-                  type="button"
-                  disabled={
-                    running ||
-                    voiceBusy !== null ||
-                    voiceRecording ||
-                    (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady)
-                  }
-                  onClick={() => {
-                    void previewVoice();
-                  }}
-                  className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Synthesize a short preview sentence with this voice"
-                >
-                  Preview
-                </button>
-                <button
-                  type="button"
-                  disabled={running || voiceBusy !== null || voiceRecording}
-                  onClick={() => {
-                    void removeVoice();
-                  }}
-                  aria-label="Delete voice"
-                  className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Delete this reference voice from the browser"
-                >
-                  <span aria-hidden="true">✕</span>
-                </button>
-              </>
-            ) : null}
-            <input
-              ref={voiceFileInputRef}
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) {
-                  void handleVoiceFile(file);
-                }
-              }}
-            />
-          </div>
-        )}
-        {/* Always mounted, so the voice-task notices it fills are announced. */}
-        <div role="status">
-          {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
-          {voiceRecording ? (
-            <p className="mt-1 text-[12px] text-amber-300">
-              Recording… speak naturally for at least {requiredVoiceSeconds}s; stops automatically
-              at {MAX_SAMPLE_SECONDS}s.
-            </p>
-          ) : null}
-        </div>
-        {provider === "voxcpm2" ? (
-          <p
-            className={`mt-1 text-[12px] ${
-              selectedVoiceIsBurmeseReady ? "text-slate-400" : "text-amber-300"
-            }`}
-          >
-            A {MIN_VOXCPM2_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required
-            so every dialog keeps the same character. The selected sample goes to your private Modal
-            deployment with each narration job, along with the fixed Burmese educator prompt. Modal
-            stores each job's input and keeps its audio for up to 7 days. The LessonScript must use{" "}
-            <span className="font-mono text-slate-300">locale: my-MM</span>.
-          </p>
-        ) : null}
+        <NarratorVoicePanel
+          provider={provider}
+          disabled={running}
+          onSelectedVoiceChange={reportNarratorVoice}
+          onTaskChange={reportVoiceTask}
+          onError={setFatal}
+        />
 
         <label
           className={`mt-2 flex items-center gap-2 text-[12px] ${
@@ -1183,8 +930,8 @@ export default function StudioController() {
             }}
             disabled={
               running ||
-              voiceBusy !== null ||
-              voiceRecording ||
+              voiceTask.busy !== null ||
+              voiceTask.recording ||
               (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
               startBlockedReason !== null
             }

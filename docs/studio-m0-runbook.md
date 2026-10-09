@@ -273,21 +273,22 @@ browser, as above).
 
 ## What exists (map)
 
-| Piece                                                                       | Where                                                             |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                              |
-| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                           |
-| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                            |
-| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                             |
-| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                         |
-| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                   |
-| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                                |
-| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                           |
-| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                            |
-| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                           |
-| Narration synthesis (pocket-tts in page; AthanLab or VoxCPM2 for Burmese)   | `src/studio/inPageDirector.ts`, `src/studio/tts/`                 |
-| AthanLab key panel (connect, voice, balance) and its Worker routes          | `src/studio/AthanLabPanel.tsx`, `infra/worker/routes/athanlab.ts` |
-| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx`   |
+| Piece                                                                       | Where                                                                 |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                                  |
+| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                               |
+| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                                |
+| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                                 |
+| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                             |
+| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                       |
+| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                                    |
+| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                               |
+| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                                |
+| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                               |
+| Narration synthesis (pocket-tts in page; AthanLab or VoxCPM2 for Burmese)   | `src/studio/inPageDirector.ts`, `src/studio/tts/`                     |
+| AthanLab key panel (connect, voice, balance) and its Worker routes          | `src/studio/AthanLabPanel.tsx`, `infra/worker/routes/athanlab.ts`     |
+| Narrator voice library (upload, record, preview, delete, choose)            | `src/studio/NarratorVoicePanel.tsx`, `src/studio/tts/customVoices.ts` |
+| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx`       |
 
 Key seams used (not bypassed): workspace store actions (`loadProject`,
 `setActiveFilePath`), live Monaco `executeEdits` (flows through the workspace bridge

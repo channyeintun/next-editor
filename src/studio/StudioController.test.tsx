@@ -11,7 +11,6 @@ const studio = vi.hoisted(() => ({
   runRender: vi.fn<typeof runStudioRender>(),
   voices: [] as SavedCustomVoice[],
   synthesizePocket: vi.fn<() => Promise<Uint8Array>>(),
-  saveVoice: vi.fn<(name: string, samples: Float32Array) => Promise<SavedCustomVoice>>(),
   /** When set, the voice library read waits on this instead of resolving `voices`. */
   voicesLoad: null as Promise<SavedCustomVoice[]> | null,
   capabilities: { athanlab: false, burmeseVoxCpm2: false },
@@ -103,8 +102,6 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tts/customVoices")>()),
   listCustomVoices: () => studio.voicesLoad ?? Promise.resolve(studio.voices),
   deleteCustomVoice: () => Promise.resolve(),
-  prepareVoiceSample: () => Promise.resolve(new Float32Array(24_000 * 6)),
-  saveCustomVoice: studio.saveVoice,
 }));
 // One English script that can start with the default English provider, one
 // Burmese script that cannot, and one imported-style script that no longer
@@ -252,18 +249,6 @@ describe("StudioController status messages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent('Unrecognized key: "legacyField"');
     expect(studio.runRender).not.toHaveBeenCalled();
   });
-
-  it("announces a voice task through the always-mounted voice status region", async () => {
-    studio.voices = [narrator];
-    localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
-    studio.synthesizePocket.mockReturnValue(new Promise(() => {}));
-    renderController();
-
-    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
-
-    const notice = await screen.findByText('Synthesizing a preview with "Narrator"…');
-    expect(notice.closest('[role="status"]')).not.toBeNull();
-  });
 });
 
 describe("StudioController preferences", () => {
@@ -384,7 +369,9 @@ describe("StudioController unattended render", () => {
   });
 });
 
-describe("StudioController voice focus", () => {
+// The library itself is NarratorVoicePanel's (NarratorVoicePanel.test.tsx);
+// these pin what the console does with what the panel reports.
+describe("StudioController narrator voice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -393,113 +380,32 @@ describe("StudioController voice focus", () => {
     localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("names the voice delete button by its action and hides the glyph", async () => {
+  it("renders with the voice the panel reports", async () => {
+    studio.runRender.mockReturnValue(new Promise(() => {}));
     renderController();
+    // The library has been read once the selected voice's controls appear; the
+    // panel reports from an effect of that commit.
+    await screen.findByRole("button", { name: "Preview" });
+    await act(() => Promise.resolve());
 
-    const remove = await screen.findByRole("button", { name: "Delete voice" });
-    expect(remove).toHaveTextContent("✕");
-    expect(remove.querySelector('[aria-hidden="true"]')).toHaveTextContent("✕");
+    fireEvent.click(startButton());
+
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.builtVoiceProfile).toMatchObject({ customVoiceId: narrator.id });
   });
 
-  it("keeps focus on the voice select after deleting the selected voice", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("holds Start render and the provider select while a voice task runs", async () => {
+    studio.synthesizePocket.mockReturnValue(new Promise(() => {}));
     renderController();
-    const remove = await screen.findByRole("button", { name: "Delete voice" });
+    expect(startButton()).toBeEnabled();
 
-    studio.voices = [];
-    remove.focus();
-    fireEvent.click(remove);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
-    );
-    expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
-  });
-});
-
-/** A MediaRecorder double: start records, stop ends the take and fires onstop. */
-class FakeMediaRecorder {
-  static instances: FakeMediaRecorder[] = [];
-  state: RecordingState = "inactive";
-  mimeType = "audio/webm";
-  ondataavailable: ((event: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  stop = vi.fn<() => void>(() => {
-    this.state = "inactive";
-    this.onstop?.();
-  });
-
-  constructor() {
-    FakeMediaRecorder.instances.push(this);
-  }
-
-  start() {
-    this.state = "recording";
-  }
-}
-
-describe("StudioController narrator recording", () => {
-  const track = { stop: vi.fn<() => void>() };
-  let ownMediaDevices: PropertyDescriptor | undefined;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    localStorage.clear();
-    studio.searchParams = new URLSearchParams();
-    studio.voices = [];
-    studio.saveVoice.mockResolvedValue(narrator);
-    FakeMediaRecorder.instances = [];
-    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
-    ownMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: {
-        getUserMedia: () => Promise.resolve({ getTracks: () => [track] } as unknown as MediaStream),
-      },
-    });
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-    if (ownMediaDevices) Object.defineProperty(navigator, "mediaDevices", ownMediaDevices);
-    else delete (navigator as { mediaDevices?: MediaDevices }).mediaDevices;
-  });
-
-  it("stops at the sample cap on its own and saves the take", async () => {
-    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
-    renderController();
-
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    await screen.findByRole("button", { name: "Stop" });
-    const autoStop = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 20_000)?.[0];
-    if (typeof autoStop !== "function") throw new Error("No 20 s auto-stop scheduled");
-    autoStop();
-
-    expect(FakeMediaRecorder.instances[0]?.stop).toHaveBeenCalledTimes(1);
-    expect(track.stop).toHaveBeenCalled();
-    await waitFor(() =>
-      expect(studio.saveVoice).toHaveBeenCalledWith("My voice", expect.any(Float32Array)),
-    );
-    expect(await screen.findByRole("button", { name: "Record" })).toBeInTheDocument();
-  });
-
-  it("stops the microphone and discards the take when the console unmounts mid-take", async () => {
-    const { unmount } = renderController();
-
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    await screen.findByRole("button", { name: "Stop" });
-    const recorder = FakeMediaRecorder.instances[0];
-    unmount();
-
-    expect(recorder?.stop).toHaveBeenCalledTimes(1);
-    expect(track.stop).toHaveBeenCalled();
-    await new Promise((resolve) => window.setTimeout(resolve, 20));
-    expect(studio.saveVoice).not.toHaveBeenCalled();
+    await waitFor(() => expect(startButton()).toBeDisabled());
+    expect(
+      screen.getByRole("combobox", { name: "Narration language and provider" }),
+    ).toBeDisabled();
+    expect(screen.getByText('Synthesizing a preview with "Narrator"…')).toBeInTheDocument();
   });
 });
 
