@@ -36,12 +36,7 @@ import {
   type StudioRuntimeMode,
 } from "./plan";
 import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
-import {
-  DEFAULT_STUDIO_PLAN_SLUG,
-  STUDIO_SOURCES,
-  parseLessonScriptYaml,
-  type StudioLessonSource,
-} from "./plans";
+import { DEFAULT_STUDIO_PLAN_SLUG, mergeStudioSources, parseLessonScriptYaml } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import {
@@ -132,24 +127,6 @@ function storeImportedScript(slug: string, yamlText: string): void {
   } catch {
     // Session storage unavailable — the import still works until reload.
   }
-}
-
-function allSources(imported: Record<string, string>): Record<string, StudioLessonSource> {
-  const importedSources = Object.fromEntries(
-    Object.entries(imported).map(([slug, yamlText]) => [
-      slug,
-      { kind: "script", load: () => parseLessonScriptYaml(yamlText) } satisfies StudioLessonSource,
-    ]),
-  );
-  // Imported scripts shadow checked-in ones of the same slug (iteration flow).
-  // Null-prototype so a `?plan=` of `constructor`/`toString`/`__proto__` misses
-  // instead of resolving to an inherited member: the callers' falsy guards let
-  // one through, and calling `.load()` on it threw during render — outside any
-  // try/catch — dropping the whole /studio route into its error boundary.
-  return Object.assign(Object.create(null) as Record<string, StudioLessonSource>, {
-    ...STUDIO_SOURCES,
-    ...importedSources,
-  });
 }
 
 interface StudioRunEntry {
@@ -387,7 +364,7 @@ export default function StudioController() {
   // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
   // identity across the per-receipt/phase/output-chunk re-renders, which lets
   // the runtime label below skip re-parsing the lesson YAML each time.
-  const sources = useMemo(() => allSources(importedScripts), [importedScripts]);
+  const sources = useMemo(() => mergeStudioSources(importedScripts), [importedScripts]);
 
   const selectLesson = (slug: string) => {
     if (slug !== planSlug) {

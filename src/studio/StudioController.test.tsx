@@ -106,11 +106,9 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
 // One English script that can start with the default English provider, one
 // Burmese script that cannot, and one imported-style script that no longer
 // parses against the schema.
-vi.mock("./plans", () => ({
-  DEFAULT_STUDIO_PLAN_SLUG: "english-script",
-  STUDIO_SOURCES: {
+vi.mock("./plans", () => {
+  const sources = {
     "english-script": {
-      kind: "script",
       load: () => ({
         lesson: { slug: "english-script", title: "English script", locale: "en-US" },
         runtime: { kind: "none" },
@@ -118,7 +116,6 @@ vi.mock("./plans", () => ({
       }),
     },
     "burmese-script": {
-      kind: "script",
       load: () => ({
         lesson: { slug: "burmese-script", title: "Burmese script", locale: "my-MM" },
         runtime: { kind: "none" },
@@ -126,16 +123,19 @@ vi.mock("./plans", () => ({
       }),
     },
     "broken-script": {
-      kind: "script",
       load: () => {
         throw new Error('Unrecognized key: "legacyField"');
       },
     },
-  },
-  parseLessonScriptYaml: () => {
-    throw new Error("unused");
-  },
-}));
+  };
+  return {
+    DEFAULT_STUDIO_PLAN_SLUG: "english-script",
+    mergeStudioSources: () => sources,
+    parseLessonScriptYaml: () => {
+      throw new Error("unused");
+    },
+  };
+});
 
 const { default: StudioController } = await import("./StudioController");
 

@@ -1,14 +1,15 @@
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { resolveAnchorOffset } from "../async";
-import type { StudioSlide } from "../plan";
+import { defaultRuntimeModeOf, type StudioSlide } from "../plan";
 import { compileLessonScript } from "../script/compile";
 import { splitIntoDialogs } from "../script/dialogs";
 import { LEXICON_V1 } from "../script/lexicon";
 import { extractScriptNarration } from "../script/markers";
 import { RECORDING_BUFFER_MS, scheduleDialogs } from "../script/schedule";
-import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
+import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES, mergeStudioSources } from "./index";
 
 describe("studio lesson registry", () => {
   it("registers exactly the checked-in scripts", () => {
@@ -21,7 +22,27 @@ describe("studio lesson registry", () => {
       .sort();
     expect(checkedIn.length).toBeGreaterThan(0);
     expect(Object.keys(STUDIO_SOURCES).sort()).toEqual(checkedIn);
-    expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
+    expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]).toBeDefined();
+  });
+
+  // `?plan=` indexes the merged record straight from the URL; an inherited
+  // member used to slip past the falsy guard and throw from `.load()`.
+  it("merges imported scripts over the checked-in ones without a prototype", () => {
+    const merged = mergeStudioSources({});
+    expect(Object.keys(merged).sort()).toEqual(Object.keys(STUDIO_SOURCES).sort());
+    for (const slug of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(merged[slug]).toBeUndefined();
+      expect(STUDIO_SOURCES[slug]).toBeUndefined();
+    }
+
+    const checkedIn = STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG].load();
+    const importedYaml = YAML.stringify({
+      ...checkedIn,
+      lesson: { ...checkedIn.lesson, title: "Imported edit" },
+    });
+    const shadowed = mergeStudioSources({ [DEFAULT_STUDIO_PLAN_SLUG]: importedYaml });
+    expect(Object.keys(shadowed)).toEqual(Object.keys(STUDIO_SOURCES));
+    expect(shadowed[DEFAULT_STUDIO_PLAN_SLUG].load().lesson.title).toBe("Imported edit");
   });
 
   it("never registers critic sidecars as lessons", () => {
@@ -36,9 +57,7 @@ describe("studio lesson registry", () => {
       // Script slugs come from filenames; the parsed content must agree.
       expect(lesson.lesson.slug).toBe(slug);
       expect(lesson.lesson.title.length).toBeGreaterThan(0);
-      expect(["live", "fixture"]).toContain(
-        lesson.runtime.kind === "none" ? "fixture" : lesson.runtime.defaultMode,
-      );
+      expect(["live", "fixture"]).toContain(defaultRuntimeModeOf(lesson.runtime));
     }
   });
 
@@ -48,7 +67,6 @@ describe("studio lesson registry", () => {
     const missingAnchors: string[] = [];
 
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
-      if (source.kind !== "script") continue;
       const script = source.load();
       const files = { ...script.lesson.workspace.files };
 
@@ -87,7 +105,6 @@ describe("studio lesson registry", () => {
     const rustScriptsWithoutGestures: string[] = [];
 
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
-      if (source.kind !== "script") continue;
       const script = source.load();
       const extracted = extractScriptNarration(script);
       const dialogs = splitIntoDialogs(extracted);
