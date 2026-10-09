@@ -150,7 +150,11 @@ export function areWorkspaceAssetDescriptorsEqual(
   );
 }
 
-/** One file's metadata, content and encoding; a missing encoding means "utf-8". */
+/**
+ * The strict rule: one file's metadata, content (asset descriptors field by
+ * field) and encoding; a missing encoding means "utf-8". Container sync uses the
+ * lenient assetId-only workspaceFileContentsEqual in the runtime instead.
+ */
 export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
   if (left === right) {
     return true;

@@ -22,10 +22,14 @@ vi.mock("../../runtime/webcontainer/sharedContainer", () => ({
   isWebContainerRuntimeSupported: support.isWebContainerRuntimeSupported,
   runSerializedWebContainerTask: support.runSerializedWebContainerTask,
 }));
-vi.mock("../../runtime/webcontainer/files", () => ({
+vi.mock("../../runtime/webcontainer/files", async (importOriginal) => ({
   createWorkspaceTree: support.createWorkspaceTree,
   readWorkspaceProject: support.readWorkspaceProject,
   syncWorkspaceProject: support.syncWorkspaceProject,
+  // The fold's content comparison stays real.
+  workspaceFileContentsEqual: (
+    await importOriginal<typeof import("../../runtime/webcontainer/files")>()
+  ).workspaceFileContentsEqual,
 }));
 
 const { makeBashTool } = await import("./bash");

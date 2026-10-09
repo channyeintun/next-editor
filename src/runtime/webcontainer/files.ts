@@ -210,7 +210,12 @@ export async function getWorkspaceRuntimeFileContents(
   return file.content;
 }
 
-function workspaceFileContentsEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
+/**
+ * The lenient content rule: text by value, assets by assetId only (the
+ * descriptor's mimeType and size derive from those bytes). Container sync and
+ * the bash tool's fold use it; core's areWorkspaceFilesEqual is the strict rule.
+ */
+export function workspaceFileContentsEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
   if (isWorkspaceAssetFile(left) && isWorkspaceAssetFile(right)) {
     return left.content.assetId === right.content.assetId;
   }
