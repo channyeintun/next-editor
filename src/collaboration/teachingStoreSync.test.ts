@@ -6,7 +6,8 @@ import {
   seedCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
 } from "./teachingDocument";
-import { isSameTeachingProjection } from "./teachingStoreSync";
+import { applyTeachingWhiteboard, isSameTeachingProjection } from "./teachingStoreSync";
+import { createWhiteboardStore } from "../stores/whiteboardStore";
 
 const ASSET = {
   id: "a".repeat(64),
@@ -87,5 +88,39 @@ describe("isSameTeachingProjection", () => {
       false,
     );
     doc.destroy();
+  });
+});
+
+describe("applyTeachingWhiteboard", () => {
+  it("shows a peer's board as an external update when this tab expects no echo", () => {
+    const store = createWhiteboardStore();
+    const elements = [element("shape")];
+
+    expect(applyTeachingWhiteboard(store, elements, null)).toBe(false);
+
+    const { scene, sceneUpdateSource } = store.getSnapshot().context;
+    expect(scene.elements).toEqual(elements);
+    expect(sceneUpdateSource).toBe("external");
+  });
+
+  it("takes the projection of this tab's own delta as a canvas update", () => {
+    const store = createWhiteboardStore();
+    const elements = [element("shape")];
+
+    expect(applyTeachingWhiteboard(store, elements, JSON.stringify(elements))).toBe(true);
+
+    const { scene, sceneUpdateSource } = store.getSnapshot().context;
+    expect(scene.elements).toEqual(elements);
+    expect(sceneUpdateSource).toBe("canvas");
+  });
+
+  it("does not take a different board for this tab's echo", () => {
+    const store = createWhiteboardStore();
+    const elements = [element("shape", 2)];
+
+    expect(applyTeachingWhiteboard(store, elements, JSON.stringify([element("shape")]))).toBe(
+      false,
+    );
+    expect(store.getSnapshot().context.sceneUpdateSource).toBe("external");
   });
 });

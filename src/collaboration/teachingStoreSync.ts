@@ -103,7 +103,11 @@ export function applyTeachingWhiteboard(
   localProjectionFingerprint: string | null,
 ): boolean {
   const currentScene = store.getSnapshot().context.scene;
-  const isLocalCanvasProjection = localProjectionFingerprint === JSON.stringify(whiteboardElements);
+  // Without a fingerprint (every peer, and after the echo) nothing can match,
+  // so the board is not serialized.
+  const isLocalCanvasProjection =
+    localProjectionFingerprint !== null &&
+    localProjectionFingerprint === JSON.stringify(whiteboardElements);
   const sameElements =
     currentScene.elements.length === whiteboardElements.length &&
     currentScene.elements.every((element, index) => {

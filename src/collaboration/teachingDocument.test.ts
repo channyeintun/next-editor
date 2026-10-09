@@ -387,6 +387,35 @@ describe("collaboration teaching document", () => {
     right.destroy();
   });
 
+  it("refuses a whiteboard delta before the room's teaching surfaces exist", () => {
+    const doc = new Y.Doc();
+
+    expect(() => applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape")] })).toThrow(
+      "The room teaching surfaces are not initialized",
+    );
+    doc.getMap("project").set("teaching", new Y.Map());
+    expect(() => applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape")] })).toThrow(
+      "The room teaching surfaces are not initialized",
+    );
+
+    doc.destroy();
+  });
+
+  it("returns the current winner when a delta's candidate loses", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, {
+      slides: [],
+      whiteboardElements: [element("shape", 3)],
+    });
+
+    const next = applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape", 2)] });
+
+    expect(next).toEqual([expect.objectContaining({ id: "shape", version: 3 })]);
+    expect(projectCollaborationTeachingDocument(doc).whiteboardElements).toEqual(next);
+
+    doc.destroy();
+  });
+
   it("keeps the longest progressive freehand snapshot at one Excalidraw version", () => {
     const doc = new Y.Doc();
     seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [] });

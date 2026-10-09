@@ -1220,8 +1220,9 @@ export function applyCollaborationWhiteboardDelta(
   event: Pick<WhiteboardEvent, "upserts" | "removedIds">,
   origin: CollaborationTransactionOrigin = COLLABORATION_ORIGIN.localWhiteboard,
 ): WhiteboardElementJSON[] {
-  const projection = projectCollaborationTeachingDocument(doc);
-  if (!projection.initialized) {
+  // The O(1) check, not a projection: this runs for every local delta while
+  // drawing, and the reads below reject a malformed or oversized board anyway.
+  if (!isCollaborationTeachingInitialized(doc)) {
     throw new CollaborationTeachingError("The room teaching surfaces are not initialized");
   }
   const whiteboard = getOrCreateChildMap<Y.Array<string>>(
