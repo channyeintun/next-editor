@@ -16,7 +16,7 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && value && onChange("")}
-        className="w-full rounded-full border border-white/10 bg-white/5 py-2.5 pl-11 pr-10 text-sm text-white placeholder-slate-400 outline-none transition-colors focus:border-pinata-purple/60 focus:bg-white/10"
+        className="w-full rounded-full border border-white/10 bg-white/5 py-2.5 pl-11 pr-10 text-sm text-white placeholder-slate-400 transition-colors focus:border-pinata-purple/60 focus:bg-white/10"
       />
       {value && (
         <button
