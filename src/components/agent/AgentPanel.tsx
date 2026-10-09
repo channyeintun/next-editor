@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, Plus, Send, Settings, Square } from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
@@ -192,6 +192,8 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [modelQuery, setModelQuery] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const keyHintId = useId();
   const wasRecordingRef = useRef(false);
   const runtimeMetadataRef = useRef(runtimeMetadata);
 
@@ -225,12 +227,26 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   // Called after the effects above so its fetch effect keeps its place in their order.
   const modelCatalog = useOpenRouterModelCatalog(isSettingsOpen);
 
-  // Reflects the actual live run (for Send/Stop + input disable); the status label/
+  // Reflects the actual live run (for Send/Stop + read-only input); the status label/
   // spinner below tracks the displayed status, which during replay is the recorded one.
   const isBusy = isRunning;
+
+  // When a run settles on its own, Stop is swapped back for Send. If Stop had focus
+  // it went to the body with it, so bring the keyboard user back to the composer.
+  // Only on the busy → idle edge, never on mount, and only when focus was lost.
+  const wasBusyRef = useRef(isBusy);
+  useEffect(() => {
+    const wasBusy = wasBusyRef.current;
+    wasBusyRef.current = isBusy;
+    if (wasBusy && !isBusy && document.activeElement === document.body) {
+      messageInputRef.current?.focus();
+    }
+  }, [isBusy]);
+
   const isActiveStatus =
     status === "streaming" || status === "running-tool" || status === "waiting-confirmation";
   const activeConfirmation = pending[0] ?? null;
+  const isKeyHintShown = !apiKey && !isReplayActive;
   const selectedModelOption = modelCatalog.modelOptions.find((option) => option.id === model);
   const selectedModelLabel = selectedModelOption?.label ?? model;
 
@@ -294,10 +310,14 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
         return capture();
       },
     });
+    // Starting the run swaps Send for Stop; keep focus in the (now read-only)
+    // composer instead of letting it fall to the body with the unmounted button.
+    messageInputRef.current?.focus();
   };
 
   const handleStop = () => {
     stopAgentRun();
+    messageInputRef.current?.focus();
   };
 
   const handleRetry = () => {
@@ -318,6 +338,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   };
 
   const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Paste still fires on a read-only field, so ignore it while a run is busy.
+    if (isBusy || isReplayActive) {
+      return;
+    }
     const files = getClipboardImageFiles(event.clipboardData);
     if (files.length === 0) {
       return;
@@ -430,18 +454,25 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 onRemove={(id) => agentStore.trigger.removeDraftImage({ id })}
               />
               <textarea
+                ref={messageInputRef}
                 value={promptInput}
                 onChange={(event) => applyDraft(event.target.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={(event) => void handlePaste(event)}
-                disabled={isBusy || isReplayActive}
+                disabled={isReplayActive}
+                readOnly={isBusy}
                 aria-label="Message the agent"
                 placeholder="Ask anything about this workspace"
                 rows={2}
-                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500 read-only:cursor-wait disabled:cursor-not-allowed disabled:opacity-60"
               />
               {attachmentError ? (
                 <p className="px-3 pb-2 text-[11px] text-amber-400">{attachmentError}</p>
+              ) : null}
+              {isKeyHintShown ? (
+                <p id={keyHintId} className="px-3 pb-2 text-[11px] text-slate-400">
+                  Add an OpenRouter API key in agent settings to send messages.
+                </p>
               ) : null}
               <div className="flex items-center justify-between gap-2 border-t border-slate-800/80 px-2 py-1.5">
                 <button
@@ -453,8 +484,11 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 >
                   {selectedModelLabel}
                 </button>
+                {/* Keyed so the swap really unmounts the focused button rather than
+                    turning a focused Stop into a disabled Send in place. */}
                 {isBusy && !isReplayActive ? (
                   <button
+                    key="stop"
                     type="button"
                     onClick={handleStop}
                     className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-red-900/80 text-red-200 transition-colors hover:bg-red-800"
@@ -465,6 +499,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   </button>
                 ) : (
                   <button
+                    key="send"
                     type="button"
                     onClick={() => void handleSubmit()}
                     disabled={
@@ -474,6 +509,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                     }
                     className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-[#58d88d] text-[#0b2416] transition-colors hover:bg-[#7ce5a5] disabled:cursor-not-allowed disabled:bg-[#27382f] disabled:text-slate-500"
                     aria-label="Send message"
+                    aria-describedby={isKeyHintShown ? keyHintId : undefined}
                     title="Send message"
                   >
                     <Send size={14} />
