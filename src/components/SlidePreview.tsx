@@ -16,6 +16,16 @@ interface SlidePreviewProps {
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
 }
 
+/** Controls that move with the arrow keys themselves: a field's caret, a slider's value. */
+const OWN_ARROW_TARGETS = "input, textarea, [role='slider']";
+
+/**
+ * Closing unmounts the focused overlay control, so focus goes back to the Slides
+ * button instead of dropping to the page (on the next frame, once the overlay is gone).
+ */
+const returnFocusToSlidesButton = () =>
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-tour="slides"]')?.focus());
+
 function SlidePreview({
   slides,
   currentSlideIndex,
@@ -34,6 +44,7 @@ function SlidePreview({
   const onSlideEventRef = useRef(onSlideEvent);
   onSlideEventRef.current = onSlideEvent;
   const slideContentRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const currentSlide = slides[currentSlideIndex];
 
@@ -52,16 +63,24 @@ function SlidePreview({
     });
   };
 
+  // Only when focus was inside the overlay: Escape pressed elsewhere (the Slides
+  // button, the media controls) leaves focus where it is.
+  const overlayHasFocus = () => overlayRef.current?.contains(document.activeElement) ?? false;
+
   const handleClose = () => {
+    const hadFocus = overlayHasFocus();
     collaboration?.stopFollowing("local-slide-input");
     onClose?.();
     onStopPlayback?.();
+    if (hadFocus) returnFocusToSlidesButton();
   };
 
   const handleMinimize = () => {
+    const hadFocus = overlayHasFocus();
     collaboration?.stopFollowing("local-slide-input");
     emitSlideEvent("slide_minimize", currentSlide?.id, false);
     onStopPlayback?.();
+    if (hadFocus) returnFocusToSlidesButton();
   };
 
   // Handle messages from slide frames that run the shared interaction-capture
@@ -168,12 +187,15 @@ function SlidePreview({
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case "ArrowLeft":
-          e.preventDefault();
-          goToPrevSlide();
-          break;
         case "ArrowRight":
+          // During playback the recording drives the slides, so the arrows stay the
+          // player's seek keys (it skips keys taken here); a field or a slider keeps
+          // its own arrows.
+          if (isPlaying) return;
+          if (e.target instanceof Element && e.target.closest(OWN_ARROW_TARGETS)) return;
           e.preventDefault();
-          goToNextSlide();
+          if (e.key === "ArrowLeft") goToPrevSlide();
+          else goToNextSlide();
           break;
         case "Escape":
           e.preventDefault();
@@ -184,7 +206,7 @@ function SlidePreview({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, goToPrevSlide, goToNextSlide, handleClose]);
+  }, [isOpen, isPlaying, goToPrevSlide, goToNextSlide, handleClose]);
 
   if (!isOpen) {
     return null;
@@ -195,7 +217,12 @@ function SlidePreview({
     return (
       <>
         <div className="fixed inset-0 z-90 bg-[#0b0d12]/90" onClick={handleClose} />
-        <div className="fixed inset-1/2 z-100 flex aspect-video w-full max-w-7xl -translate-1/2 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 shadow-2xl">
+        <div
+          ref={overlayRef}
+          role="region"
+          aria-label="Presentation slides"
+          className="fixed inset-1/2 z-100 flex aspect-video w-full max-w-7xl -translate-1/2 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 shadow-2xl"
+        >
           <div className="flex flex-col items-center gap-3 text-sm" role="status">
             <p>{loading ? "Loading shared slide…" : "Shared slide unavailable"}</p>
             <div className="flex items-center gap-2">
@@ -211,6 +238,7 @@ function SlidePreview({
               <button
                 type="button"
                 onClick={handleClose}
+                data-slides-initial-focus
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
               >
                 <X size={13} /> Close
@@ -231,7 +259,12 @@ function SlidePreview({
         onClick={handleClose}
       />
 
+      {/* A labelled, non-modal region: the media controls and captions stacked above
+          it stay operable, and [role=dialog] would switch off the player's keys. */}
       <div
+        ref={overlayRef}
+        role="region"
+        aria-label="Presentation slides"
         className={`${positioning} inset-1/2 -translate-1/2 z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow w-full max-w-7xl aspect-video`}
         data-cursor-replay-target="slide-preview"
         data-cursor-replay-scale="content"
@@ -266,6 +299,7 @@ function SlidePreview({
               type="button"
               onClick={handleClose}
               aria-label="Close slides"
+              data-slides-initial-focus
               className="flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
             >
               <X className="size-4" />

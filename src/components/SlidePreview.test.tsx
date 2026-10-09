@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 import type { Slide, SlideEvent } from "../types/slides";
 
@@ -7,6 +7,7 @@ type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const stopFollowing = vi.fn<CollaborationContextValue["stopFollowing"]>();
 const retryAssets = vi.fn<CollaborationContextValue["retryAssets"]>();
+let isPlaying = false;
 
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => ({
@@ -18,7 +19,7 @@ vi.mock("../contexts/CollaborationContext", () => ({
   }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ isPlaying: false }),
+  useNextEditorMetadata: () => ({ isPlaying }),
 }));
 vi.mock("./CustomSlideRenderer", () => ({
   default: () => (
@@ -44,6 +45,7 @@ describe("SlidePreview local follow intent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    isPlaying = false;
   });
 
   it("stops following before minimizing and records only local view state", () => {
@@ -218,5 +220,129 @@ describe("SlidePreview local follow intent", () => {
     expect(screen.queryByTestId("slide-renderer")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(retryAssets).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SlidePreview focus and keys", () => {
+  let frames: FrameRequestCallback[];
+  const flushFrames = () => frames.splice(0).forEach((frame) => frame(performance.now()));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    isPlaying = false;
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("is a named, non-modal region so the media controls above it stay reachable", () => {
+    render(<SlidePreview slides={slides} currentSlideIndex={0} isOpen />);
+
+    expect(screen.getByRole("region", { name: "Presentation slides" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each(["Close slides", "Minimize slides"])(
+    "returns focus to the Slides button after %s",
+    (name) => {
+      const view = render(
+        <>
+          <button type="button" data-tour="slides">
+            Slides
+          </button>
+          <SlidePreview
+            slides={slides}
+            currentSlideIndex={0}
+            isOpen
+            onClose={() => {}}
+            onSlideEvent={() => {}}
+          />
+        </>,
+      );
+      const control = screen.getByRole("button", { name });
+      control.focus();
+      fireEvent.click(control);
+      view.rerender(
+        <>
+          <button type="button" data-tour="slides">
+            Slides
+          </button>
+          <SlidePreview slides={slides} currentSlideIndex={0} isOpen={false} />
+        </>,
+      );
+      flushFrames();
+
+      expect(screen.getByRole("button", { name: "Slides" })).toHaveFocus();
+    },
+  );
+
+  it("leaves focus alone when Escape closes the deck from outside it", () => {
+    const onClose = vi.fn<() => void>();
+    render(
+      <>
+        <button type="button" data-tour="slides">
+          Slides
+        </button>
+        <button type="button">Play</button>
+        <SlidePreview slides={slides} currentSlideIndex={0} isOpen onClose={onClose} />
+      </>,
+    );
+    const play = screen.getByRole("button", { name: "Play" });
+    play.focus();
+    fireEvent.keyDown(play, { key: "Escape" });
+    flushFrames();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(play).toHaveFocus();
+  });
+
+  it("marks the Close button as where a user open puts focus", () => {
+    render(<SlidePreview slides={slides} currentSlideIndex={0} isOpen />);
+
+    expect(screen.getByRole("button", { name: "Close slides" })).toHaveAttribute(
+      "data-slides-initial-focus",
+    );
+  });
+
+  it("takes the arrow keys for slide navigation while paused", () => {
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    render(
+      <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
+    );
+
+    expect(fireEvent.keyDown(document.body, { key: "ArrowRight" })).toBe(false);
+    expect(onSlideEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "slide_change", slideId: "two" }),
+    );
+  });
+
+  it("leaves the arrow keys to the player's seek keys during playback", () => {
+    isPlaying = true;
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    render(
+      <SlidePreview slides={slides} currentSlideIndex={1} isOpen onSlideEvent={onSlideEvent} />,
+    );
+
+    expect(fireEvent.keyDown(document.body, { key: "ArrowLeft" })).toBe(true);
+    expect(fireEvent.keyDown(document.body, { key: "ArrowRight" })).toBe(true);
+    expect(onSlideEvent).not.toHaveBeenCalled();
+  });
+
+  it("leaves the arrow keys to a focused slider or field", () => {
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    render(
+      <>
+        <input type="range" aria-label="Volume" />
+        <input type="text" aria-label="Message" />
+        <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />
+      </>,
+    );
+
+    expect(fireEvent.keyDown(screen.getByRole("slider"), { key: "ArrowRight" })).toBe(true);
+    expect(fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowLeft" })).toBe(true);
+    expect(onSlideEvent).not.toHaveBeenCalled();
   });
 });

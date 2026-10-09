@@ -6,6 +6,16 @@ import SlidesManager from "./SlidesManager";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 
+/**
+ * After the user opens the presentation, focus moves into it (the next frame, once
+ * it is on screen) so the next Tab reaches its controls, not the page behind it.
+ * Opens driven by playback or by following a collaborator never move focus.
+ */
+const focusPresentation = () =>
+  requestAnimationFrame(() =>
+    document.querySelector<HTMLElement>("[data-slides-initial-focus]")?.focus(),
+  );
+
 export default function SlidesButton({
   presentationToggleOnly = false,
 }: {
@@ -63,6 +73,7 @@ export default function SlidesButton({
 
     if (whiteboard.isOpen) whiteboard.setOpen(false);
     openPresentation();
+    focusPresentation();
   };
 
   // Read-only/toggle-only mode is purely for showing an existing deck, so there's
@@ -145,6 +156,7 @@ export default function SlidesButton({
               onStartPresentation={() => {
                 startPresentation();
                 setShowManager(false);
+                focusPresentation();
               }}
               onClose={() => setShowManager(false)}
             />

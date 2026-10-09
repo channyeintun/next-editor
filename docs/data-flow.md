@@ -134,6 +134,9 @@ Current playback behavior:
   The "Single-key shortcuts" switch in the player's settings (`playbackSettingsStore`, stored as
   `playback-character-shortcuts`, on by default) turns off the letter, number and punctuation
   keys (WCAG 2.1.4); Space, the arrows, Home and End keep working.
+  The slide overlay (`SlidePreview`) takes ←/→ for slide navigation only while playback is paused
+  and focus is not in a field or on a slider, so the seek keys keep working while slides are shown
+  during playback.
 
 ## Storage Flow
 

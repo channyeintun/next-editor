@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { useSlidesContext } from "../contexts/SlidesContext";
@@ -39,7 +39,13 @@ vi.mock("../contexts/WhiteboardContext", () => ({
   useWhiteboardContext: () => ({ isOpen: whiteboardOpen, setOpen: mocks.setWhiteboardOpen }),
 }));
 vi.mock("./SlidesManager", () => ({
-  default: () => <div role="dialog" aria-label="Slide manager" />,
+  default: ({ onStartPresentation }: { onStartPresentation: () => void }) => (
+    <div role="dialog" aria-label="Slide manager">
+      <button type="button" onClick={onStartPresentation}>
+        Start presentation
+      </button>
+    </div>
+  ),
 }));
 
 import SlidesButton from "./SlidesButton";
@@ -88,5 +94,58 @@ describe("SlidesButton room presentation mode", () => {
     slidesState = { ...slidesState, slides: [] };
     const { container } = render(<SlidesButton />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("SlidesButton focus on a user open", () => {
+  let frames: FrameRequestCallback[];
+  const flushFrames = () => frames.splice(0).forEach((frame) => frame(performance.now()));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetState();
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Stands in for the overlay's Close button, which SlidePreview renders.
+  const overlayClose = (
+    <button type="button" data-slides-initial-focus>
+      Close slides
+    </button>
+  );
+
+  it("moves focus into the presentation after Show slides", () => {
+    render(
+      <>
+        <SlidesButton presentationToggleOnly />
+        {overlayClose}
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Show slides/i }));
+    expect(mocks.openPresentation).toHaveBeenCalledTimes(1);
+    flushFrames();
+
+    expect(screen.getByRole("button", { name: "Close slides" })).toHaveFocus();
+  });
+
+  it("moves focus into the presentation after starting it from the manager", () => {
+    render(
+      <>
+        <SlidesButton />
+        {overlayClose}
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Manage presentation slides/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Start presentation" }));
+    expect(slidesState.startPresentation).toHaveBeenCalledTimes(1);
+    flushFrames();
+
+    expect(screen.getByRole("button", { name: "Close slides" })).toHaveFocus();
   });
 });
