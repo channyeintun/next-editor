@@ -276,12 +276,12 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
   const user = c.get("user");
 
   const id = c.req.param("id");
-  const existing = await getOwnedLessonById(c.env.DB, id, user.id);
-  if (!existing) {
+  // deleteLesson only matches the caller's own row, so its answer is the owner
+  // check: an unknown id or someone else's lesson deletes nothing and gets a
+  // 404, and never reaches the media cleanup below.
+  if (!(await deleteLesson(c.env.DB, id, user.id))) {
     return c.json({ error: "not found" }, 404);
   }
-
-  await deleteLesson(c.env.DB, id, user.id);
 
   // The row goes first. If this cleanup fails the cost is orphaned R2 objects;
   // in the other order a failed row delete left a live lesson, possibly

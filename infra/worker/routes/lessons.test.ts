@@ -211,20 +211,18 @@ describe("lessonsRoute delete", () => {
     } as never);
   }
 
-  beforeEach(() => {
-    vi.mocked(getOwnedLessonById).mockResolvedValue(lessonRow(LESSON_ID));
-  });
-
-  it("answers 404 and deletes nothing for a lesson the caller does not own", async () => {
-    vi.mocked(getOwnedLessonById).mockResolvedValue(null);
+  // deleteLesson matches only the caller's own row, so a false answer is the
+  // 404, and another owner's media prefix must never be emptied.
+  it("answers 404 and deletes no media for a lesson the caller does not own", async () => {
+    vi.mocked(deleteLesson).mockResolvedValue(false);
     const bucket = createBucket();
 
     const response = await deleteRequest(bucket);
 
     expect(response.status).toBe(404);
-    expect(getOwnedLessonById).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
-    expect(deleteLesson).not.toHaveBeenCalled();
+    expect(deleteLesson).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
     expect(bucket.list).not.toHaveBeenCalled();
+    expect(bucket.delete).not.toHaveBeenCalled();
   });
 
   it("deletes the row and then the lesson's media", async () => {
@@ -234,7 +232,10 @@ describe("lessonsRoute delete", () => {
     const response = await deleteRequest(bucket);
 
     expect(response.status).toBe(200);
+    expect(deleteLesson).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
+    expect(bucket.list).toHaveBeenCalledWith({ prefix: `lessons/${LESSON_ID}/` });
     expect(bucket.delete).toHaveBeenCalledWith([`lessons/${LESSON_ID}/${LESSON_ID}.ne`]);
+    expect(getOwnedLessonById).not.toHaveBeenCalled();
   });
 
   // Media removed first and a row that then failed to delete left a lesson,
