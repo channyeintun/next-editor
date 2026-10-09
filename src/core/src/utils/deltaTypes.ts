@@ -132,6 +132,14 @@ export interface Keyframe extends EditorFrame {
 export type DeltaFrame = Keyframe | FrameDelta;
 
 /**
+ * The Recording schema version (`Recording.version`, and `version` in a stream's
+ * header metadata). Every check and type derives from this one number, so a
+ * schema bump cannot leave a codec refusing its own files. Unrelated to the
+ * stream's byte-layout version (STREAM_FORMAT_VERSION in the codec).
+ */
+export const RECORDING_SCHEMA_VERSION = 4 as const;
+
+/**
  * Configuration for delta compression
  */
 export const DELTA_CONFIG = {
@@ -141,7 +149,7 @@ export const DELTA_CONFIG = {
    */
   KEYFRAME_INTERVAL: 120,
   /** Format version identifier */
-  VERSION: 4 as const,
+  VERSION: RECORDING_SCHEMA_VERSION,
 } as const;
 
 /**

@@ -18,6 +18,7 @@ import {
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 import type { RecordingChapter } from "../../core/src/types";
+import { RECORDING_SCHEMA_VERSION } from "../../core/src/utils/deltaTypes";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -44,7 +45,8 @@ import type { RecordingChapter } from "../../core/src/types";
 //                                 splices changed files (workspaceEventDedup.ts).
 //                                 Versions 2–4 remain readable for existing files.
 //   * meta.version (4)          — the Recording *schema* version carried inside
-//                                 the metadata, unrelated to the byte layout.
+//                                 the metadata (RECORDING_SCHEMA_VERSION),
+//                                 unrelated to the byte layout.
 //
 // Layout:
 //   Header:  "SCR3" | formatVersion u16 | flags u16 | metaLen u32 | meta bytes
@@ -150,7 +152,7 @@ export const RECORDING_EVENT_SEGMENTS: ReadonlyArray<{
 );
 
 export interface RecordingStreamMeta {
-  version: 4;
+  version: typeof RECORDING_SCHEMA_VERSION;
   id: string;
   name: string;
   keyframeInterval: number;
@@ -553,7 +555,7 @@ function readRecordingStreamMeta(value: unknown, label: string): RecordingStream
   if (
     typeof meta !== "object" ||
     meta === null ||
-    meta.version !== 4 ||
+    meta.version !== RECORDING_SCHEMA_VERSION ||
     typeof meta.id !== "string" ||
     typeof meta.name !== "string" ||
     typeof meta.createdAt !== "number" ||

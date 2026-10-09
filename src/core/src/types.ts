@@ -10,6 +10,7 @@ import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime"
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "./workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "./chat";
+import type { RECORDING_SCHEMA_VERSION } from "./utils/deltaTypes";
 import type { MediaSpan } from "./utils/mediaSpans";
 import type { AudioEdit } from "./utils/audioEdit";
 
@@ -178,7 +179,7 @@ export interface EditorFrame {
  */
 export interface Recording {
   /** Recording schema version. Older versions are not decodable (no legacy support). */
-  version: 4;
+  version: typeof RECORDING_SCHEMA_VERSION;
   id: string;
   name: string;
   /** Delta compressed frames (keyframes + deltas) */

@@ -1,5 +1,6 @@
 import type { Recording, RecordingTrackKind } from "../core/src";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
+import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type { StudioPlan, StudioPlanAction } from "./plan";
@@ -204,7 +205,7 @@ export async function runArtifactChecks({
     decoded = await decompressBinaryToRecording(neBytes);
     results.push({
       id: "recording.decodes",
-      ok: decoded.version === 4 && decoded.streamFinalized === true,
+      ok: decoded.version === RECORDING_SCHEMA_VERSION && decoded.streamFinalized === true,
       detail: `SCR3 decodes; ${neBytes.byteLength} bytes, finalized=${String(decoded.streamFinalized)}`,
     });
   } catch (error) {

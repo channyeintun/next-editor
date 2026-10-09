@@ -59,7 +59,7 @@ The top-level storage format (`Recording` in `src/core/src/types.ts`).
 
 ```typescript
 interface Recording {
-  version: 4;
+  version: 4; // RECORDING_SCHEMA_VERSION (deltaTypes.ts): every check derives from it
   frames: (Keyframe | FrameDelta)[];
   keyframeInterval: 120;
   // ... metadata (audio, slides, duration)

@@ -1,4 +1,5 @@
 import type { Recording } from "../core/src";
+import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
 import {
   decodeRecordingStream,
@@ -10,7 +11,7 @@ import {
 export { encodeRecordingToStream };
 
 export function normalizeRecording(recording: Recording): Recording {
-  if (recording.version === 4) {
+  if (recording.version === RECORDING_SCHEMA_VERSION) {
     return normalizeRecordingData(recording);
   }
 
