@@ -125,6 +125,10 @@ export default function ChaptersMenu({
           >
             Chapters
           </p>
+          {/* The copy buttons' check mark is an icon; this says it for screen readers. */}
+          <span role="status" className="sr-only">
+            {copiedTime !== null ? "Link copied" : ""}
+          </span>
           {chapters.length === 0 ? (
             <p className="px-3 pb-2 text-xs text-slate-400">
               No chapters yet. Add one where the playhead is.

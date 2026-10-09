@@ -44,10 +44,13 @@ describe("ChaptersMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Routing" }));
     expect(actions.seekTo).toHaveBeenCalledWith(60_000);
 
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
     fireEvent.click(screen.getByRole("button", { name: "Copy a link to Routing" }));
     expect(clipboard.copyTextToClipboard).toHaveBeenCalledWith(
       `${window.location.origin}/learn/router-basics?t=60`,
     );
+    // Said, not only shown by the check mark.
+    expect(screen.getByRole("status")).toHaveTextContent("Link copied");
     // Only the author can change them.
     expect(screen.queryByRole("button", { name: /Delete/ })).not.toBeInTheDocument();
   });
