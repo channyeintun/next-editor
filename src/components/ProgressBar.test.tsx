@@ -42,6 +42,34 @@ describe("ProgressBar", () => {
     expect(thumb?.style.left).toBe("50%");
   });
 
+  // The click that ends a press on the bar must not seek a second time: every seek
+  // resyncs every track.
+  it("seeks once for a press and release on the bar", () => {
+    const onSeek = vi.fn<(time: number) => void>();
+    render(<ProgressBar progress={0} duration={60_000} currentTime={0} onSeek={onSeek} />);
+    const bar = screen.getByRole("slider");
+    bar.getBoundingClientRect = () => ({ left: 0, width: 200 }) as DOMRect;
+
+    fireEvent.mouseDown(bar, { clientX: 100 });
+    fireEvent.mouseUp(document, { clientX: 100 });
+    fireEvent.click(bar, { clientX: 100 });
+
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(30_000);
+  });
+
+  it("seeks once for a click with no press before it", () => {
+    const onSeek = vi.fn<(time: number) => void>();
+    render(<ProgressBar progress={0} duration={60_000} currentTime={0} onSeek={onSeek} />);
+    const bar = screen.getByRole("slider");
+    bar.getBoundingClientRect = () => ({ left: 0, width: 200 }) as DOMRect;
+
+    fireEvent.click(bar, { clientX: 50 });
+
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(15_000);
+  });
+
   it("is a slider a keyboard reaches and seeks with when it can seek", () => {
     const onSeek = vi.fn<(time: number) => void>();
     render(<ProgressBar progress={25} duration={60_000} currentTime={15_000} onSeek={onSeek} />);

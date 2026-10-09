@@ -97,25 +97,25 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   // Where the pointer hovers, as a fraction of the bar, for the time/chapter tooltip.
   const [hoverFraction, setHoverFraction] = useState<number | null>(null);
 
-  const calculateProgress = (clientX: number): number => {
-    if (!containerRef.current || !duration) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const percentage = Math.max(0, Math.min(x / rect.width, 1));
-    return percentage * 100;
+  // Set when a press-and-release has just seeked, so the click that follows it in the same
+  // input task does not seek a second time.
+  const seekedOnReleaseRef = useRef(false);
+
+  // How far along the bar a pointer is, from 0 to 1 (null while there is no bar or length).
+  const fractionAt = (clientX: number): number | null => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || !duration) return null;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   };
 
-  const calculateTime = (clientX: number): number => {
-    if (!containerRef.current || !duration) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const percentage = Math.max(0, Math.min(x / rect.width, 1));
-    return percentage * duration;
-  };
+  const calculateProgress = (clientX: number): number => (fractionAt(clientX) ?? 0) * 100;
+
+  const calculateTime = (clientX: number): number => (fractionAt(clientX) ?? 0) * duration;
 
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (!onSeek || !duration) return;
     e.preventDefault();
+    seekedOnReleaseRef.current = false;
     setIsDragging(true);
     setDragProgress(calculateProgress(e.clientX));
   };
@@ -129,8 +129,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
     const handleMouseUp = (e: globalThis.MouseEvent) => {
       if (onSeek && duration) {
-        const targetTime = calculateTime(e.clientX);
-        onSeek(Math.max(0, Math.min(targetTime, duration)));
+        onSeek(calculateTime(e.clientX));
+        // The browser dispatches the click in the same task as this mouseup, so the
+        // timeout only clears a flag no click consumed (the release was off the bar).
+        seekedOnReleaseRef.current = true;
+        window.setTimeout(() => {
+          seekedOnReleaseRef.current = false;
+        }, 0);
       }
       setIsDragging(false);
       setDragProgress(null);
@@ -146,16 +151,17 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   }, [isDragging, onSeek, duration, calculateProgress, calculateTime]);
 
   const handleClick = (e: MouseEvent<HTMLDivElement>) => {
-    // If we just finished dragging, don't also trigger click
-    if (isDragging) return;
-    if (!onSeek || !duration) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = clickX / rect.width;
-    const targetTime = percentage * duration;
-
-    onSeek(Math.max(0, Math.min(targetTime, duration)));
+    // A press-and-release already seeked on mouseup. isDragging cannot tell: the native
+    // mouseup's state update is flushed before the browser dispatches this click. A click
+    // with no press before it (one assistive technology sends) still seeks here.
+    if (seekedOnReleaseRef.current) {
+      seekedOnReleaseRef.current = false;
+      return;
+    }
+    if (!onSeek) return;
+    const fraction = fractionAt(e.clientX);
+    if (fraction === null) return;
+    onSeek(fraction * duration);
   };
 
   // The slider's own keys. preventDefault keeps the player's window shortcuts (which also
@@ -240,10 +246,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           e.currentTarget.style.height = hoverHeight;
         }}
         onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          if (rect.width > 0) {
-            setHoverFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
-          }
+          const fraction = fractionAt(e.clientX);
+          if (fraction !== null) setHoverFraction(fraction);
         }}
         onMouseLeave={(e) => {
           // Return to original height
