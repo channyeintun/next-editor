@@ -10,9 +10,15 @@ import {
   persistWorkspaceAssets,
   registerWorkspaceAsset,
   resetWorkspaceAssetStoreForTests,
+  subscribeWorkspaceAssetAvailability,
 } from "./workspaceAssetStore";
 
 const DATABASE = "next-editor-workspace-assets-db";
+
+async function assetIdOf(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function projectWithAsset(descriptor: WorkspaceAssetDescriptor): WorkspaceProject {
   return {
@@ -121,6 +127,8 @@ describe("getWorkspaceAssetBlob", () => {
       this: IDBObjectStore,
       ...args: Parameters<IDBObjectStore["put"]>
     ) {
+      // The write's own existence check has run; only the racing read counts.
+      get.mockClear();
       racing.read = getWorkspaceAssetBlob(descriptor);
       return put.apply(this, args);
     });
@@ -141,5 +149,68 @@ describe("getWorkspaceAssetBlob", () => {
     const blob = await getWorkspaceAssetBlob(descriptor);
 
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([65, 66, 67]));
+  });
+});
+
+describe("registerWorkspaceAsset", () => {
+  afterEach(() => {
+    resetWorkspaceAssetStoreForTests();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // Runtime reverse sync re-registers every binary file on every container change
+  // (each Enter in the terminal); a notification reloads open media from 0:00.
+  it("stores and notifies once when the same bytes are registered twice", async () => {
+    const fake = new FakeIndexedDB();
+    vi.stubGlobal("indexedDB", fake.indexedDB);
+    const listener = vi.fn<(assetId: string) => void>();
+    subscribeWorkspaceAssetAvailability(listener);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    const bytes = new Uint8Array([65, 66, 67]);
+
+    const first = await registerWorkspaceAsset(bytes, { mimeType: "video/mp4" });
+    const second = await registerWorkspaceAsset(bytes, { mimeType: "video/mp4" });
+
+    expect(second).toEqual(first);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(first.assetId);
+    expect(put).toHaveBeenCalledTimes(1);
+    const stored = (await fake.read(DATABASE, "assets")) as Blob[];
+    expect(stored).toHaveLength(1);
+    expect(new Uint8Array(await stored[0].arrayBuffer())).toEqual(bytes);
+  });
+
+  it("rewrites and notifies when the stored copy has the wrong size", async () => {
+    const fake = new FakeIndexedDB();
+    vi.stubGlobal("indexedDB", fake.indexedDB);
+    const bytes = new Uint8Array([65, 66, 67]);
+    const assetId = await assetIdOf(bytes);
+    await fake.seed(DATABASE, 2, {
+      assets: { records: [{ key: `asset:${assetId}`, value: new Blob([new Uint8Array([1])]) }] },
+    });
+    const listener = vi.fn<(assetId: string) => void>();
+    subscribeWorkspaceAssetAvailability(listener);
+
+    await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(assetId);
+    const stored = (await fake.read(DATABASE, "assets")) as Blob[];
+    expect(stored).toHaveLength(1);
+    expect(new Uint8Array(await stored[0].arrayBuffer())).toEqual(bytes);
+  });
+
+  it("notifies only the first in-memory registration when there is no IndexedDB", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    const listener = vi.fn<(assetId: string) => void>();
+    subscribeWorkspaceAssetAvailability(listener);
+    const bytes = new Uint8Array([65, 66, 67]);
+
+    await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
+    await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(await assetIdOf(bytes));
   });
 });

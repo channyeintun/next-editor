@@ -103,22 +103,45 @@ function asBlob(value: unknown, mimeType: string): Blob | null {
   return null;
 }
 
-/** Stores an asset; false when there is no IndexedDB to store it in. */
-async function writeAssetBlob(assetId: string, blob: Blob): Promise<boolean> {
+/**
+ * Stores an asset unless IndexedDB already holds a copy of the right size (the
+ * repair rule persistWorkspaceAssets uses; reading a stored Blob yields a handle,
+ * not its bytes). "written" when it stored the asset, "present" when the stored
+ * copy was kept, "unavailable" when there is no IndexedDB to store it in.
+ */
+async function writeAssetBlob(
+  assetId: string,
+  blob: Blob,
+): Promise<"written" | "present" | "unavailable"> {
   const databaseResult = getDatabase();
-  if (!databaseResult) return false;
+  if (!databaseResult) return "unavailable";
 
   const run = async () => {
     const database = await databaseResult;
     const transaction = database.transaction(ASSET_STORE, "readwrite");
     const complete = transactionToPromise(transaction);
-    transaction.objectStore(ASSET_STORE).put(blob, getAssetKey(assetId));
+    const store = transaction.objectStore(ASSET_STORE);
+    const key = getAssetKey(assetId);
+    let outcome: "written" | "present" = "written";
+    // The put is issued from the get's success callback, while the transaction is
+    // still active; awaiting the get would let it commit first.
+    const existing = store.get(key);
+    existing.onsuccess = () => {
+      if (asBlob(existing.result, blob.type)?.size === blob.size) {
+        outcome = "present";
+        return;
+      }
+      store.put(blob, key);
+    };
     await complete;
+    return outcome;
   };
   const result = assetWriteQueue.then(run, run);
-  assetWriteQueue = result.catch(() => undefined);
-  await result;
-  return true;
+  assetWriteQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
 /** Drops a memory-built Blob IndexedDB now holds; the next read gets the stored copy. */
@@ -132,6 +155,12 @@ export interface RegisterWorkspaceAssetOptions {
   expectedAssetId?: string;
 }
 
+/**
+ * Stores an asset's bytes under their SHA-256 id and tells availability listeners
+ * once it can be read. Re-registering bytes that are already stored (runtime
+ * reverse sync does this for every binary file on every container change) neither
+ * rewrites them nor notifies again, so open media does not reload.
+ */
 export async function registerWorkspaceAsset(
   bytes: Uint8Array,
   options: RegisterWorkspaceAssetOptions,
@@ -158,8 +187,13 @@ export async function registerWorkspaceAsset(
   const blob = cached ?? new Blob([buffer], { type: mimeType });
   // Cached while the write runs, so a read racing it still finds the asset.
   blobCache.set(assetId, blob);
-  if (await writeAssetBlob(assetId, blob)) releaseStoredBlob(assetId, blob);
-  notifyAssetAvailable(assetId);
+  const outcome = await writeAssetBlob(assetId, blob);
+  if (outcome !== "unavailable") releaseStoredBlob(assetId, blob);
+  // Without IndexedDB the memory cache is the only copy, so the asset became
+  // available only if this call put it there.
+  if (outcome === "written" || (outcome === "unavailable" && !cached)) {
+    notifyAssetAvailable(assetId);
+  }
   return descriptor;
 }
 
@@ -305,7 +339,7 @@ export async function persistWorkspaceAssets(project: WorkspaceProject): Promise
           `Workspace asset ${descriptor.assetId} is missing or corrupt`,
         );
       }
-      if (await writeAssetBlob(descriptor.assetId, cached)) {
+      if ((await writeAssetBlob(descriptor.assetId, cached)) !== "unavailable") {
         releaseStoredBlob(descriptor.assetId, cached);
       }
     }
