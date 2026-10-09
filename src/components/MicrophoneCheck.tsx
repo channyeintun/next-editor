@@ -151,9 +151,18 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
 /** The button beside the Mic source that opens the microphone check. */
 export default function MicrophoneCheck() {
   const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Closing unmounts the check, so focus inside it goes back to the button that opened
+  // it; focus anywhere else (the editor, when Escape closes it) is left where it is.
+  const close = () => {
+    if (wrapperRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
+    setOpen(false);
+  };
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
@@ -167,7 +176,7 @@ export default function MicrophoneCheck() {
       >
         <AudioLines size={13} aria-hidden="true" />
       </button>
-      {open ? <MicrophoneCheckPanel onClose={() => setOpen(false)} /> : null}
+      {open ? <MicrophoneCheckPanel onClose={close} /> : null}
     </div>
   );
 }

@@ -149,11 +149,43 @@ describe("MicrophoneCheck", () => {
 
     expect(await screen.findByText(/No sound yet/)).toBeTruthy();
 
+    screen.getByRole("combobox", { name: "Microphone to record from" }).focus();
     act(() => {
       fireEvent.keyDown(window, { key: "Escape" });
     });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(tracks.every((track) => track.stopped)).toBe(true);
+    // Focus was in the check it closed: it goes back to the button that opened it.
+    expect(screen.getByRole("button", { name: "Check the microphone" })).toHaveFocus();
+  });
+
+  it("returns focus from its close button, and leaves focus elsewhere alone", async () => {
+    stubAudio(0.3);
+    render(
+      <>
+        <MicrophoneCheck />
+        <textarea aria-label="Code" />
+      </>,
+    );
+    const trigger = screen.getByRole("button", { name: "Check the microphone" });
+    fireEvent.click(trigger);
+    await screen.findByText("Sounds good.");
+
+    const close = screen.getByRole("button", { name: "Close the microphone check" });
+    close.focus();
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(trigger);
+    await screen.findByText("Sounds good.");
+    const code = screen.getByRole("textbox", { name: "Code" });
+    code.focus();
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(code).toHaveFocus();
   });
 
   it("explains a blocked microphone", async () => {
