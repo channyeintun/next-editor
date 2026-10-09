@@ -7,7 +7,7 @@ const styles = `
   --ink:#14243a; --ink-soft:#4a5d75; --ink-faint:#56687f;
   --blue:#2f6fa8; --blue-fill:#dce7f0;
   --redline:#b23a2e; --redline-fill:#f6e3e0;
-  --dashline:#7c93ab;
+  --dashline:#5f7790;
   --font-mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
   --font-sans: -apple-system,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
 }
