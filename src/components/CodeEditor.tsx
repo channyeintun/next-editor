@@ -538,6 +538,24 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
   });
 
+  // The listeners handleEditorDidMount registers keep the closure of the
+  // render that mounted the editor, so they reach the room through these.
+  const flushCollaborationEdits = useEffectEvent(() => {
+    void collaboration?.provider?.flushNow();
+  });
+
+  const stopFollowingForLocalIntent = useEffectEvent(
+    (reason: "local-editor-input" | "local-scroll") => {
+      collaboration?.stopFollowing(reason);
+    },
+  );
+
+  const queueCollaborationTextEdit = useEffectEvent(
+    (editEvent: TextEditEvent, onProjected: (content: string | null) => void) => {
+      collaboration?.queueLocalTextEdit(editEvent, onProjected);
+    },
+  );
+
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
     const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
 
@@ -1113,7 +1131,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         type: (typeof localIntentListeners)[number]["type"],
         reason: "local-editor-input" | "local-scroll",
       ) => {
-        const listener: EventListener = () => collaboration?.stopFollowing(reason);
+        const listener: EventListener = () => stopFollowingForLocalIntent(reason);
         editorDomNode.addEventListener(type, listener, {
           capture: true,
           passive: type === "wheel",
@@ -1179,7 +1197,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
       if (editEvent) {
         const editedModel = yMonacoBinding.model;
-        collaboration?.queueLocalTextEdit(editEvent, (projectedContent) => {
+        queueCollaborationTextEdit(editEvent, (projectedContent) => {
           if (
             projectedContent !== null &&
             editor.getModel() === editedModel &&
@@ -1211,6 +1229,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
+   *
+   * MonacoEditor calls onMount once, so this closure, its listeners included,
+   * belongs to the render that mounted the editor. It may read directly only
+   * what never changes after that render (refs, the stable editor actions);
+   * anything that does, such as `collaboration`, it reads through a
+   * useEffectEvent callback.
    */
   const handleEditorDidMount = (editor: StandaloneEditor) => {
     disposeEditorListeners();
@@ -1264,9 +1288,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           publishCollaborationViewport(editor);
         }
       }),
-      editor.onDidBlurEditorText(() => {
-        void collaboration?.provider?.flushNow();
-      }),
+      editor.onDidBlurEditorText(() => flushCollaborationEdits()),
     ];
     reconcileYMonacoBinding(editor);
     publishCollaborationViewport(editor);
