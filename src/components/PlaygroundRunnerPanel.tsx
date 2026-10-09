@@ -431,7 +431,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                 onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
                 className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
                   isActive,
-                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-300`}
               >
                 {tab.icon}
                 {tab.label}
@@ -486,7 +486,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
         <div className={`flex ${dockContentSizeClass} flex-col bg-[#15191f]`}>
           <div className="flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
-              <p className="truncate font-mono text-[13px] font-semibold text-slate-400">
+              <p className="truncate font-mono text-[13px] font-semibold text-slate-300">
                 {toolLabel}
               </p>
               {isRunning || isFormatting ? (
@@ -503,7 +503,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                   clearRunnerConsole(runtimePanelStore, scrollSurface);
                 }}
                 disabled={isPlaybackSnapshotActive || effectiveConsoleLines.length === 0}
-                className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-400 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+                className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-300 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
                 title="Clear the console"
               >
                 Clear
@@ -516,7 +516,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                       void handleFormat();
                     }}
                     disabled={isPlaybackSnapshotActive || !canFormatWorkspace}
-                    className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] hover:text-[#b5d5ff] disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
+                    className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#b5d5ff] transition-colors hover:bg-[#2a3a4d] hover:text-white disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
                     title={format.buttonTitle}
                   >
                     Format

@@ -50,7 +50,7 @@ const DEFAULT_CONSOLE_LINES: string[] = [];
 const RUNTIME_PANEL_BG = "bg-[#15191f]";
 const RUNTIME_COMMAND_BAR_CLASS =
   "flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3";
-const RUNTIME_COMMAND_TEXT_CLASS = "truncate font-mono text-[13px] font-semibold text-slate-400";
+const RUNTIME_COMMAND_TEXT_CLASS = "truncate font-mono text-[13px] font-semibold text-slate-300";
 const ANSI_COLORS: Record<string, string> = {
   dim: "\u001b[90m",
   blue: "\u001b[94m",
@@ -422,7 +422,7 @@ function TerminalPanel() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
                     isActive,
-                  )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+                  )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-300`}
                 >
                   {tab.icon}
                   {tab.label}
@@ -558,7 +558,7 @@ function TerminalPanel() {
                         isPlaybackSnapshotActive ||
                         (!effectiveRunnerOutput && !effectiveErrorMessage)
                       }
-                      className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-400 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+                      className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-300 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
                       title="Clear the console"
                     >
                       Clear
@@ -650,7 +650,7 @@ function TerminalPanel() {
                     onClick={() => {
                       void sendTerminalInput("\u0003");
                     }}
-                    className="rounded-md border border-[#303746] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-default disabled:opacity-50 disabled:hover:border-[#303746] disabled:hover:text-slate-400"
+                    className="rounded-md border border-[#303746] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-default disabled:opacity-50 disabled:hover:border-[#303746] disabled:hover:text-slate-300"
                   >
                     Ctrl+C
                   </button>

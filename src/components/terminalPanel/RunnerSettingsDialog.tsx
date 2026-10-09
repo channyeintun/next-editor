@@ -23,7 +23,7 @@ function RunnerToggle({
       <div className="min-w-0">
         <p className="text-sm font-medium text-slate-100">{label}</p>
         {description ? (
-          <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-300">{description}</p>
         ) : null}
       </div>
       <button

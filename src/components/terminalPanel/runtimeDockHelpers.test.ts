@@ -52,6 +52,6 @@ describe("describeRunnerOutput", () => {
 describe("dockTabStateClassName", () => {
   it("underlines and lights the active tab, and dims the others until hovered", () => {
     expect(dockTabStateClassName(true)).toBe("border-b border-b-[#64a3ff] bg-[#171b22] text-white");
-    expect(dockTabStateClassName(false)).toBe("text-slate-400 hover:bg-[#171b22] hover:text-white");
+    expect(dockTabStateClassName(false)).toBe("text-slate-300 hover:bg-[#171b22] hover:text-white");
   });
 });

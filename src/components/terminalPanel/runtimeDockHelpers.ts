@@ -36,7 +36,7 @@ export function describeRunnerOutput({ output, errorMessage, status }: RunnerOut
 export function dockTabStateClassName(isActive: boolean): string {
   return isActive
     ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
-    : "text-slate-400 hover:bg-[#171b22] hover:text-white";
+    : "text-slate-300 hover:bg-[#171b22] hover:text-white";
 }
 
 /**
