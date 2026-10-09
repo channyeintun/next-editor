@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Move } from "lucide-react";
 import { useSelector } from "@xstate/store-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectRecording } from "../core/src/useNextEditor";
@@ -77,7 +77,8 @@ const CameraOverlay: React.FC = () => {
   // The hooks' effects run in this order, as when they were written out here: the preview's
   // stream is attached or detached before the recorded video takes the element over.
   const previewError = useCameraPreviewStream(videoRef, previewMode, isMinimized);
-  const { position, handlePointerDown, handlePointerMove } = useDraggableOverlayPosition();
+  const { position, handlePointerDown, handlePointerMove, moveToNextCorner } =
+    useDraggableOverlayPosition();
   useTimelineSyncedVideo(videoRef, videoUrl, {
     cameraCuts,
     cameraStartOffsetMs,
@@ -85,9 +86,10 @@ const CameraOverlay: React.FC = () => {
     isMinimized,
   });
 
-  // Minimize is a pure viewer-side convenience (independent of recording/playback): stop the
-  // pointer from starting a drag, then collapse to a side-docked handle.
-  const handleMinimizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+  // Minimize and move-to-corner are pure viewer-side conveniences (independent of
+  // recording/playback): a press on either control must not start a drag of the overlay.
+  // Minimize then collapses to a side-docked handle.
+  const handleControlPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
   const handleMinimize = () => cameraOverlayStore.trigger.setMinimized({ minimized: true });
@@ -152,7 +154,17 @@ const CameraOverlay: React.FC = () => {
       />
       <button
         type="button"
-        onPointerDown={handleMinimizePointerDown}
+        onPointerDown={handleControlPointerDown}
+        onClick={moveToNextCorner}
+        title="Move camera to next corner"
+        aria-label="Move camera to next corner"
+        className="absolute left-1/2 top-1.5 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950/60 text-white opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+      >
+        <Move size={16} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onPointerDown={handleControlPointerDown}
         onClick={handleMinimize}
         title="Minimize camera"
         aria-label="Minimize camera"

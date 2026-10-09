@@ -45,6 +45,29 @@ describe("CameraOverlay", () => {
     );
   });
 
+  it("moves to the next corner with a click instead of a drag, keeping focus on the button", () => {
+    render(<CameraOverlay />);
+
+    const move = screen.getByRole("button", { name: "Move camera to next corner" });
+    expect(move).toHaveClass(
+      "opacity-0",
+      "group-hover:opacity-100",
+      "focus-visible:opacity-100",
+      "pointer-coarse:opacity-100",
+    );
+    const overlay = move.parentElement as HTMLElement;
+    // jsdom's window is 1024 × 768; the overlay starts above the player bar's right end.
+    expect(overlay.style.transform).toBe("translate3d(824px, 504px, 0)");
+
+    move.focus();
+    fireEvent.click(move);
+    expect(overlay.style.transform).toBe("translate3d(24px, 504px, 0)");
+    expect(move).toHaveFocus();
+    // On the left half, minimize docks to the left edge.
+    fireEvent.click(screen.getByRole("button", { name: "Minimize camera" }));
+    expect(screen.getByRole("button", { name: "Show camera" })).toHaveClass("left-0");
+  });
+
   it("collapses to a Show camera handle when minimized", () => {
     render(<CameraOverlay />);
 

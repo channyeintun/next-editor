@@ -40,6 +40,38 @@ export function clampPosition(position: OverlayPosition): OverlayPosition {
   };
 }
 
+/**
+ * The corner after the one nearest `position`, going clockwise (top-left → top-right →
+ * bottom-right → bottom-left), inside the same bounds a drag is clamped to. Lets the overlay be
+ * moved with a single click or key press instead of a drag.
+ */
+export function nextCornerPosition(position: OverlayPosition): OverlayPosition {
+  if (typeof window === "undefined") return position;
+
+  const minX = EDGE_PADDING;
+  const maxX = window.innerWidth - OVERLAY_WIDTH - EDGE_PADDING;
+  const minY = EDGE_PADDING;
+  const maxY = window.innerHeight - OVERLAY_HEIGHT - MEDIA_CONTROLS_CLEARANCE;
+  const corners: OverlayPosition[] = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+
+  let nearest = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  corners.forEach((corner, index) => {
+    const distance = Math.hypot(corner.x - position.x, corner.y - position.y);
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  });
+
+  return corners[(nearest + 1) % corners.length];
+}
+
 /** The screen edge the minimized handle docks to, based on which half the overlay sits in. */
 export function getDockSide(position: OverlayPosition): "left" | "right" {
   if (typeof window === "undefined") return "right";

@@ -97,6 +97,20 @@ describe("useDraggableOverlayPosition", () => {
     expect(result.current.position).toEqual({ x: 24, y: 150 });
   });
 
+  it("moves to the next corner clockwise without a drag, storing each step", () => {
+    const { result } = renderHook(() => useDraggableOverlayPosition());
+
+    // From the default bottom-right spot, the next corner clockwise is bottom-left.
+    const bottomLeft = { x: 24, y: DEFAULT_POSITION.y };
+    act(() => result.current.moveToNextCorner());
+    expect(result.current.position).toEqual(bottomLeft);
+    expect(stored()).toEqual(bottomLeft);
+
+    act(() => result.current.moveToNextCorner());
+    expect(result.current.position).toEqual({ x: 24, y: 24 });
+    expect(stored()).toEqual({ x: 24, y: 24 });
+  });
+
   it("moves back inside the window when the window shrinks", () => {
     const { result } = renderHook(() => useDraggableOverlayPosition());
 
