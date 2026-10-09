@@ -11,7 +11,7 @@ import {
 } from "vite-plus/test";
 import { getAgentStore } from "../../agent/agentStore";
 import { getAgentCredentialStore } from "../../agent/credentials";
-import { getAgentSessionStore, resolveConfirmation } from "../../agent/agentSession";
+import { getAgentSessionStore, resolveConfirmation, startAgentRun } from "../../agent/agentSession";
 import { MAX_CHAT_IMAGES } from "../../agent/imageAttachments";
 import type { ChatStatus } from "../../types/chat";
 import { WorkspaceStoreContext, type WorkspaceStoreInstance } from "../../stores/workspaceStore";
@@ -124,6 +124,18 @@ describe("AgentPanel composer focus", () => {
 
     expect(composer()).toHaveFocus();
     expect(composer()).toHaveAttribute("readonly");
+  });
+
+  it("does not send on the Enter that commits an IME composition", () => {
+    renderPanel();
+    fireEvent.change(composer(), { target: { value: "Add a footer" } });
+
+    const isDefaultAllowed = fireEvent.keyDown(composer(), { key: "Enter", isComposing: true });
+
+    expect(isDefaultAllowed).toBe(true);
+    expect(startAgentRun).not.toHaveBeenCalled();
+    expect(composer()).toHaveValue("Add a footer");
+    expect(composer()).not.toHaveAttribute("readonly");
   });
 
   it("moves focus to the composer on Stop", () => {

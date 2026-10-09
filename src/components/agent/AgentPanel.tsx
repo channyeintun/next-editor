@@ -384,6 +384,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // The Enter that commits an IME candidate (Burmese, CJK) belongs to the
+    // composition, not the composer; sending on it would start a run with the
+    // half-composed prompt.
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();
