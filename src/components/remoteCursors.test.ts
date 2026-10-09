@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import * as Y from "yjs";
 import type { CollaborationParticipant } from "../contexts/CollaborationContext";
-import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
+import type { ResolvedMonacoAwarenessSelection } from "../collaboration/monacoAwareness";
+import { getCollaborationTexts } from "../collaboration/projectDocument";
+import {
+  collaborationParticipantColorIndex,
+  createCollaborationCursor,
+} from "../collaboration/relativePosition";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 
 // The real "../monaco" loads the whole editor. These helpers only construct
@@ -29,9 +35,11 @@ vi.mock("../monaco", () => {
 
 import { monaco } from "../monaco";
 import {
+  collectRemoteEditorSelections,
   participantCursorDecorations,
   remoteSelectionDecorations,
   remoteSelectionToEditorSelection,
+  resolveAwarenessText,
   resolveRemoteSelection,
   yMonacoSelectionStyleRules,
 } from "./remoteCursors";
@@ -58,12 +66,12 @@ function range(
   return { startLineNumber, startColumn, endLineNumber, endColumn };
 }
 
-function participant(name: string | null): CollaborationParticipant {
+function participant(name: string | null, sessionId = "2"): CollaborationParticipant {
   return {
     kind: "state",
     roomId: "20000000-0000-4000-8000-000000000001",
     actorId: "30000000-0000-4000-8000-000000000002",
-    sessionId: "40000000-0000-4000-8000-000000000002",
+    sessionId: `40000000-0000-4000-8000-00000000000${sessionId}`,
     revision: 1,
     role: "editor",
     username: "ada",
@@ -212,5 +220,153 @@ describe("yMonacoSelectionStyleRules", () => {
 
   it("uses the first colour for a colour index outside the palette", () => {
     expect(yMonacoSelectionStyleRules(7, 99)).toEqual(yMonacoSelectionStyleRules(7, 0));
+  });
+});
+
+describe("collectRemoteEditorSelections", () => {
+  // The open file is "file-1"; "file-2" is another file in the room.
+  const doc = new Y.Doc();
+  getCollaborationTexts(doc).set("file-1", new Y.Text("const a = 1;\nconst b = 2;"));
+  getCollaborationTexts(doc).set("file-2", new Y.Text("other"));
+
+  function withCursor(
+    person: CollaborationParticipant,
+    fileNodeId: string,
+    anchorOffset: number,
+    headOffset: number,
+  ): CollaborationParticipant {
+    return {
+      ...person,
+      cursor: createCollaborationCursor(doc, fileNodeId, anchorOffset, headOffset),
+    };
+  }
+
+  function awarenessSelection(
+    person: CollaborationParticipant,
+    clientId: number,
+    anchorOffset: number,
+    headOffset: number,
+  ): ResolvedMonacoAwarenessSelection {
+    return { clientId, participant: person, anchorOffset, headOffset };
+  }
+
+  const ada = participant("Ada", "2");
+  const grace = participant("Grace", "3");
+  const linus = participant("Linus", "4");
+
+  it("lists awareness selections first and skips a participant already among them", () => {
+    const selections = collectRemoteEditorSelections({
+      awarenessSelections: [awarenessSelection(ada, 7, 0, 5)],
+      doc,
+      participants: [withCursor(grace, "file-1", 13, 19), withCursor(ada, "file-1", 1, 1)],
+      ownParticipantKey: null,
+      activeFileNodeId: "file-1",
+    });
+
+    expect(selections).toEqual([
+      {
+        key: collaborationParticipantKey(ada),
+        participant: ada,
+        anchorOffset: 0,
+        headOffset: 5,
+        fromAwareness: true,
+        clientId: 7,
+      },
+      {
+        key: collaborationParticipantKey(grace),
+        participant: withCursor(grace, "file-1", 13, 19),
+        anchorOffset: 13,
+        headOffset: 19,
+        fromAwareness: false,
+      },
+    ]);
+  });
+
+  it("skips this tab's own cursor, a participant without one and one in another file", () => {
+    const selections = collectRemoteEditorSelections({
+      awarenessSelections: [],
+      doc,
+      participants: [withCursor(ada, "file-1", 2, 2), grace, withCursor(linus, "file-2", 1, 1)],
+      ownParticipantKey: collaborationParticipantKey(ada),
+      activeFileNodeId: "file-1",
+    });
+
+    expect(selections).toEqual([]);
+  });
+
+  it("lists only collaboration cursors when there are no awareness selections", () => {
+    const selections = collectRemoteEditorSelections({
+      awarenessSelections: [],
+      doc,
+      participants: [withCursor(ada, "file-1", 4, 4), withCursor(grace, "file-1", 13, 25)],
+      ownParticipantKey: null,
+      activeFileNodeId: "file-1",
+    });
+
+    expect(
+      selections.map(({ key, anchorOffset, headOffset, fromAwareness }) => ({
+        key,
+        anchorOffset,
+        headOffset,
+        fromAwareness,
+      })),
+    ).toEqual([
+      {
+        key: collaborationParticipantKey(ada),
+        anchorOffset: 4,
+        headOffset: 4,
+        fromAwareness: false,
+      },
+      {
+        key: collaborationParticipantKey(grace),
+        anchorOffset: 13,
+        headOffset: 25,
+        fromAwareness: false,
+      },
+    ]);
+  });
+
+  it("lists no collaboration cursor while the open file is not in the room", () => {
+    const selections = collectRemoteEditorSelections({
+      awarenessSelections: [],
+      doc,
+      participants: [withCursor(ada, "file-1", 4, 4)],
+      ownParticipantKey: null,
+      activeFileNodeId: undefined,
+    });
+
+    expect(selections).toEqual([]);
+  });
+});
+
+describe("resolveAwarenessText", () => {
+  const editor = {};
+  const model = {};
+  const boundText = new Y.Text();
+  const roomText = new Y.Text();
+
+  it("uses the text y-monaco binds to this editor and model, and lets y-monaco draw", () => {
+    const fallback = vi.fn<() => Y.Text | undefined>(() => roomText);
+    const resolved = resolveAwarenessText(
+      { editor, model, text: boundText },
+      editor,
+      model,
+      fallback,
+    );
+    expect(resolved.text).toBe(boundText);
+    expect(resolved.yMonacoRendersSelections).toBe(true);
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the room's text when y-monaco binds another editor or model", () => {
+    for (const binding of [
+      null,
+      { editor: {}, model, text: boundText },
+      { editor, model: {}, text: boundText },
+    ]) {
+      const resolved = resolveAwarenessText(binding, editor, model, () => roomText);
+      expect(resolved.text).toBe(roomText);
+      expect(resolved.yMonacoRendersSelections).toBe(false);
+    }
   });
 });

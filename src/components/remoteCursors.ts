@@ -1,4 +1,10 @@
-import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
+import type * as Y from "yjs";
+import type { ResolvedMonacoAwarenessSelection } from "../collaboration/monacoAwareness";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
+import {
+  collaborationParticipantColorIndex,
+  resolveCollaborationCursor,
+} from "../collaboration/relativePosition";
 import type { CollaborationParticipant } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import { monaco } from "../monaco";
@@ -22,6 +28,103 @@ import {
  */
 function escapeMarkdown(value: string): string {
   return value.replace(/[\\`*_{}[\]()#+\-.!<>|~]/g, "\\$&");
+}
+
+/** What these helpers need of CodeEditor's y-monaco binding. */
+export interface YMonacoBindingTarget {
+  editor: unknown;
+  model: unknown;
+  text: Y.Text;
+}
+
+/** Whether `binding` is y-monaco's binding of `model` in `editor`. */
+export function yMonacoBindsModel<Binding extends YMonacoBindingTarget>(
+  binding: Binding | null,
+  editor: unknown,
+  model: unknown,
+): binding is Binding {
+  return binding !== null && binding.editor === editor && binding.model === model;
+}
+
+/**
+ * The shared text the open file's awareness selections are resolved against:
+ * the one y-monaco binds to `model` in `editor`, which then draws those
+ * selections itself, or else the room's text for the file.
+ */
+export function resolveAwarenessText(
+  binding: YMonacoBindingTarget | null,
+  editor: unknown,
+  model: unknown,
+  roomText: () => Y.Text | undefined,
+): { text: Y.Text | undefined; yMonacoRendersSelections: boolean } {
+  if (yMonacoBindsModel(binding, editor, model)) {
+    return { text: binding.text, yMonacoRendersSelections: true };
+  }
+  return { text: roomText(), yMonacoRendersSelections: false };
+}
+
+/** Another participant's selection in the open file, as offsets into it. */
+export type RemoteEditorSelection = {
+  /** The participant's collaborationParticipantKey. */
+  key: string;
+  participant: CollaborationParticipant;
+  anchorOffset: number;
+  headOffset: number;
+} & (
+  | {
+      /** A standard y-monaco awareness selection, from this awareness client. */
+      fromAwareness: true;
+      clientId: number;
+    }
+  | {
+      /** The participant's collaboration cursor. */
+      fromAwareness: false;
+    }
+);
+
+/**
+ * Every other participant's selection in the open file, the one list
+ * CodeEditor both draws and records: the awareness selections first, then
+ * the collaboration cursor of each participant who has none of those, is not
+ * this tab's own and points into the file (`activeFileNodeId`).
+ */
+export function collectRemoteEditorSelections({
+  awarenessSelections,
+  doc,
+  participants,
+  ownParticipantKey,
+  activeFileNodeId,
+}: {
+  awarenessSelections: readonly ResolvedMonacoAwarenessSelection[];
+  doc: Y.Doc;
+  participants: readonly CollaborationParticipant[];
+  ownParticipantKey: string | null;
+  activeFileNodeId: string | undefined;
+}): RemoteEditorSelection[] {
+  const selections: RemoteEditorSelection[] = awarenessSelections.map((selection) => ({
+    key: collaborationParticipantKey(selection.participant),
+    participant: selection.participant,
+    anchorOffset: selection.anchorOffset,
+    headOffset: selection.headOffset,
+    fromAwareness: true,
+    clientId: selection.clientId,
+  }));
+  const awarenessKeys = new Set(selections.map((selection) => selection.key));
+  for (const participant of participants) {
+    const key = collaborationParticipantKey(participant);
+    if (
+      awarenessKeys.has(key) ||
+      key === ownParticipantKey ||
+      !participant.cursor ||
+      participant.cursor.fileNodeId !== activeFileNodeId
+    ) {
+      continue;
+    }
+    const cursor = resolveCollaborationCursor(doc, participant.cursor);
+    if (!cursor) continue;
+    selections.push({ key, participant, ...cursor, fromAwareness: false });
+  }
+  return selections;
 }
 
 /** All these helpers need of a Monaco text model. */

@@ -178,10 +178,12 @@ function fakeEditor(model: ReturnType<typeof fakeModel>) {
     restoreViewState: () => {},
     updateOptions: () => {},
     addAction: () => ({ dispose: () => {} }),
-    addContentWidget: () => {},
+    addContentWidget: vi.fn<(widget: { getId(): string }) => void>(),
     layoutContentWidget: () => {},
-    removeContentWidget: () => {},
-    deltaDecorations: (_old: string[], next: unknown[]) => next.map((_, index) => `d${index}`),
+    removeContentWidget: vi.fn<(widget: { getId(): string }) => void>(),
+    deltaDecorations: vi.fn<(old: string[], next: unknown[]) => string[]>((_old, next) =>
+      next.map((_, index) => `d${index}`),
+    ),
     onDidChangeModel: on("onDidChangeModel"),
     onDidChangeModelContent: on("onDidChangeModelContent"),
     onDidChangeCursorPosition: on("onDidChangeCursorPosition"),
@@ -317,6 +319,39 @@ describe("CodeEditor's Monaco listeners", () => {
     editor.fire("onDidChangeCursorSelection");
 
     expect(handleEditorChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CodeEditor's remote cursors", () => {
+  it("draws another participant's selection, caret and name label", () => {
+    harness.collaboration = roomWithAda()(2, 4);
+    render(<CodeEditor />);
+
+    const decorations = editor.deltaDecorations.mock.calls.at(-1)?.[1];
+    expect(decorations).toEqual([
+      expect.objectContaining({
+        range: { startLineNumber: 1, startColumn: 3, endLineNumber: 1, endColumn: 5 },
+        options: expect.objectContaining({ hoverMessage: { value: "Ada" } }),
+      }),
+      expect.objectContaining({
+        range: { startLineNumber: 1, startColumn: 5, endLineNumber: 1, endColumn: 5 },
+        options: expect.objectContaining({ hoverMessage: { value: "Ada" } }),
+      }),
+    ]);
+    expect(editor.addContentWidget.mock.calls.map(([widget]) => widget.getId())).toEqual([
+      "next-editor.collaboration-cursor-label:30000000-0000-4000-8000-000000000002:40000000-0000-4000-8000-000000000002",
+    ]);
+  });
+
+  it("clears them when the room goes away", () => {
+    harness.collaboration = roomWithAda()(2, 4);
+    const { rerender } = render(<CodeEditor />);
+
+    harness.collaboration = fakeCollaboration();
+    rerender(<CodeEditor />);
+
+    expect(editor.deltaDecorations.mock.calls.at(-1)?.[1]).toEqual([]);
+    expect(editor.removeContentWidget).toHaveBeenCalledTimes(1);
   });
 });
 

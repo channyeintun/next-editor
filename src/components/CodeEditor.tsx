@@ -11,10 +11,7 @@ import {
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
-import {
-  useOptionalCollaboration,
-  type CollaborationParticipant,
-} from "../contexts/CollaborationContext";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import type { CollaborationRoomProvider } from "../collaboration/roomProvider";
 import {
@@ -52,10 +49,13 @@ import {
 } from "./collaborationCursorLabels";
 import { collaboratorDisplayName } from "./collaboratorAppearance";
 import {
+  collectRemoteEditorSelections,
   participantCursorDecorations,
   remoteSelectionDecorations,
   remoteSelectionToEditorSelection,
+  resolveAwarenessText,
   resolveRemoteSelection,
+  yMonacoBindsModel,
   yMonacoSelectionStyleRules,
 } from "./remoteCursors";
 import {
@@ -863,60 +863,58 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }
       return;
     }
-    const yMonacoBinding = yMonacoBindingRef.current;
-    const yMonacoRendersSelections = Boolean(
-      yMonacoBinding?.editor === editor && yMonacoBinding.model === model,
+    const collaborationDoc = collaboration.doc;
+    const { text: awarenessText, yMonacoRendersSelections } = resolveAwarenessText(
+      yMonacoBindingRef.current,
+      editor,
+      model,
+      () => collaborationTextForPath(collaboration, collaborationDoc, activeFile.path),
     );
-    const awarenessText =
-      (yMonacoRendersSelections ? yMonacoBinding?.text : undefined) ??
-      collaborationTextForPath(collaboration, collaboration.doc, activeFile.path);
-    if (awarenessText) {
-      const selections = resolveMonacoAwarenessSelections(
-        collaboration.provider.awareness,
-        awarenessText,
-      );
-      const labels: CollaborationCursorLabel[] = [];
-      const awarenessDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-      const styleRules: string[] = [];
-      const standardParticipantKeys = new Set<string>();
-      for (const selection of selections) {
-        standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
-        const colorIndex = collaborationParticipantColorIndex(selection.participant);
-        if (yMonacoRendersSelections) {
-          styleRules.push(...yMonacoSelectionStyleRules(selection.clientId, colorIndex));
-        } else {
-          awarenessDecorations.push(
-            ...remoteSelectionDecorations(
-              resolveRemoteSelection(model, selection.anchorOffset, selection.headOffset),
-              colorIndex,
-              collaboratorDisplayName(selection.participant),
-            ),
-          );
-        }
-        labels.push({
-          id: collaborationParticipantKey(selection.participant),
-          name: collaboratorDisplayName(selection.participant),
-          colorIndex,
-          position: model.getPositionAt(selection.headOffset),
-        });
-      }
-      const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
-      for (const participant of collaboration.participants) {
-        const key = collaborationParticipantKey(participant);
-        if (
-          standardParticipantKeys.has(key) ||
-          key === collaboration.ownParticipantKey ||
-          !participant.cursor ||
-          participant.cursor.fileNodeId !== activeFileNodeId
-        ) {
-          continue;
-        }
-        const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
-        if (!cursor) continue;
-        const drawn = participantCursorDecorations(model, key, participant, cursor);
-        awarenessDecorations.push(...drawn.decorations);
+    const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
+    const labels: CollaborationCursorLabel[] = [];
+    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+    const styleRules: string[] = [];
+    for (const selection of collectRemoteEditorSelections({
+      awarenessSelections: awarenessText
+        ? resolveMonacoAwarenessSelections(collaboration.provider.awareness, awarenessText)
+        : [],
+      doc: collaborationDoc,
+      participants: collaboration.participants,
+      ownParticipantKey: collaboration.ownParticipantKey,
+      activeFileNodeId,
+    })) {
+      if (!selection.fromAwareness) {
+        const drawn = participantCursorDecorations(
+          model,
+          selection.key,
+          selection.participant,
+          selection,
+        );
+        decorations.push(...drawn.decorations);
         labels.push(drawn.label);
+        continue;
       }
+      const colorIndex = collaborationParticipantColorIndex(selection.participant);
+      const name = collaboratorDisplayName(selection.participant);
+      if (yMonacoRendersSelections) {
+        styleRules.push(...yMonacoSelectionStyleRules(selection.clientId, colorIndex));
+      } else {
+        decorations.push(
+          ...remoteSelectionDecorations(
+            resolveRemoteSelection(model, selection.anchorOffset, selection.headOffset),
+            colorIndex,
+            name,
+          ),
+        );
+      }
+      labels.push({
+        id: selection.key,
+        name,
+        colorIndex,
+        position: model.getPositionAt(selection.headOffset),
+      });
+    }
+    if (awarenessText) {
       if (styleRules.length > 0) {
         let style = remoteAwarenessStyleRef.current;
         if (!style) {
@@ -925,7 +923,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           document.head.append(style);
           remoteAwarenessStyleRef.current = style;
         }
-        style.textContent = styleRules.join("\n");
+        // The rules follow client ids and colours, not anyone's cursor, so
+        // most runs leave them as they are.
+        const css = styleRules.join("\n");
+        if (style.textContent !== css) style.textContent = css;
       } else {
         remoteAwarenessStyleRef.current?.remove();
         remoteAwarenessStyleRef.current = null;
@@ -936,36 +937,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       ]);
       remoteDecorationIdsRef.current = editor.deltaDecorations(
         remoteDecorationIdsRef.current,
-        awarenessDecorations,
+        decorations,
       );
       return;
     }
     remoteAwarenessStyleRef.current?.remove();
     remoteAwarenessStyleRef.current = null;
-    const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
     if (!activeFileNodeId) {
       cursorLabelManager.clear();
       remoteDecorationIdsRef.current = editor.deltaDecorations(remoteDecorationIdsRef.current, []);
       return;
     }
-    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
-    const cursorLabels: CollaborationCursorLabel[] = [];
-    for (const participant of collaboration.participants) {
-      const key = collaborationParticipantKey(participant);
-      if (
-        key === collaboration.ownParticipantKey ||
-        !participant.cursor ||
-        participant.cursor.fileNodeId !== activeFileNodeId
-      ) {
-        continue;
-      }
-      const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
-      if (!cursor) continue;
-      const drawn = participantCursorDecorations(model, key, participant, cursor);
-      decorations.push(...drawn.decorations);
-      cursorLabels.push(drawn.label);
-    }
-    cursorLabelManager.reconcile(editor, cursorLabels, [
+    cursorLabelManager.reconcile(editor, labels, [
       monaco.editor.ContentWidgetPositionPreference.ABOVE,
       monaco.editor.ContentWidgetPositionPreference.BELOW,
     ]);
@@ -1019,13 +1002,23 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }> = [];
 
     if (editor && model && collaboration && provider && collaborationDoc && !usesPlaybackModel) {
-      const captureSelection = (
-        participant: CollaborationParticipant,
-        anchorOffset: number,
-        headOffset: number,
-      ) => {
-        if (!canPublishCollaborationUpdate(participant.role)) return;
-        const key = collaborationParticipantKey(participant);
+      const { text: awarenessText } = resolveAwarenessText(
+        yMonacoBindingRef.current,
+        editor,
+        model,
+        () => collaborationTextForPath(collaboration, collaborationDoc, activeFile.path),
+      );
+      for (const { key, participant, anchorOffset, headOffset } of collectRemoteEditorSelections({
+        awarenessSelections: awarenessText
+          ? resolveMonacoAwarenessSelections(provider.awareness, awarenessText)
+          : [],
+        doc: collaborationDoc,
+        participants,
+        ownParticipantKey: collaboration.ownParticipantKey,
+        activeFileNodeId: collaboration.getNodeIdForPath(activeFile.path) ?? undefined,
+      })) {
+        // A viewer's selection is drawn, but never recorded.
+        if (!canPublishCollaborationUpdate(participant.role)) continue;
         const signature = `${anchorOffset}:${headOffset}`;
         currentSignatures.set(key, signature);
         if (!scopeChanged && recordedRemoteCursorSignaturesRef.current.get(key) !== signature) {
@@ -1037,39 +1030,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             ),
           });
         }
-      };
-
-      const yMonacoBinding = yMonacoBindingRef.current;
-      const standardParticipantKeys = new Set<string>();
-      const awarenessText =
-        (yMonacoBinding?.editor === editor && yMonacoBinding.model === model
-          ? yMonacoBinding.text
-          : undefined) ??
-        collaborationTextForPath(collaboration, collaborationDoc, activeFile.path);
-      if (awarenessText) {
-        for (const selection of resolveMonacoAwarenessSelections(
-          provider.awareness,
-          awarenessText,
-        )) {
-          standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
-          captureSelection(selection.participant, selection.anchorOffset, selection.headOffset);
-        }
-      }
-      const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
-
-      for (const participant of participants) {
-        const key = collaborationParticipantKey(participant);
-        if (
-          standardParticipantKeys.has(key) ||
-          key === collaboration.ownParticipantKey ||
-          !participant.cursor ||
-          participant.cursor.fileNodeId !== activeFileNodeId
-        ) {
-          continue;
-        }
-        const cursor = resolveCollaborationCursor(collaborationDoc, participant.cursor);
-        if (!cursor) continue;
-        captureSelection(participant, cursor.anchorOffset, cursor.headOffset);
       }
     }
 
@@ -1195,7 +1155,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       });
       return;
     }
-    if (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel()) {
+    if (yMonacoBindsModel(yMonacoBinding, editor, editor.getModel())) {
       const editEvent = changeEvent.isFlush
         ? null
         : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
