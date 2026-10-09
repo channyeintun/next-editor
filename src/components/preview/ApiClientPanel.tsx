@@ -173,7 +173,7 @@ export default function ApiClientPanel({
           aria-label="HTTP method"
           value={method}
           onChange={(e) => store.trigger.setMethod({ method: e.target.value as HttpMethod })}
-          className={`h-8 rounded-md border border-slate-700 bg-[#242938] px-2 font-mono text-xs font-bold ${METHOD_COLORS[method]} focus:outline-none focus:ring-1 focus:ring-sky-500`}
+          className={`h-8 rounded-md border border-slate-500 bg-[#242938] px-2 font-mono text-xs font-bold ${METHOD_COLORS[method]} focus:outline-none focus:ring-1 focus:ring-sky-500`}
         >
           {HTTP_METHODS.map((m) => (
             <option key={m} value={m}>
@@ -189,7 +189,7 @@ export default function ApiClientPanel({
           onKeyDown={handleKeyDown}
           placeholder="/api/endpoint"
           aria-label="Request path"
-          className="h-8 min-w-0 flex-1 rounded-md border border-slate-700 bg-[#242938] px-2.5 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          className="h-8 min-w-0 flex-1 rounded-md border border-slate-500 bg-[#242938] px-2.5 font-mono text-xs text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
         />
 
         <button
@@ -241,14 +241,14 @@ export default function ApiClientPanel({
       {/* Response */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {sending ? (
-          <div className="flex flex-1 items-center justify-center gap-2 text-slate-500">
+          <div className="flex flex-1 items-center justify-center gap-2 text-slate-300">
             <Loader2 size={16} className="animate-spin" />
             Sending request…
           </div>
         ) : result ? (
           <ResponseView result={result} />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-slate-600">
+          <div className="flex flex-1 items-center justify-center text-slate-300">
             Send a request to see the response
           </div>
         )}
@@ -258,13 +258,13 @@ export default function ApiClientPanel({
       {history.length > 0 ? (
         <div className="shrink-0 border-t border-slate-800">
           <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
               History
             </span>
             <button
               type="button"
               onClick={() => store.trigger.clearHistory()}
-              className="text-slate-600 transition-colors hover:text-slate-400"
+              className="text-slate-400 transition-colors hover:text-slate-200"
               title="Clear history"
             >
               <Trash2 size={12} />
@@ -324,7 +324,7 @@ function TabButton({
       className={`border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
         active
           ? "border-sky-400 text-sky-300"
-          : "border-transparent text-slate-500 hover:text-slate-300"
+          : "border-transparent text-slate-300 hover:text-white"
       }`}
     >
       {children}
@@ -360,7 +360,7 @@ function HeadersEditor({
             onChange={(e) => onUpdate(i, { key: e.target.value })}
             placeholder="Header"
             aria-label={`Header ${i + 1} name`}
-            className="h-7 w-1/3 rounded border border-slate-700 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="h-7 w-1/3 rounded border border-slate-500 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <input
             type="text"
@@ -368,14 +368,14 @@ function HeadersEditor({
             onChange={(e) => onUpdate(i, { value: e.target.value })}
             placeholder="Value"
             aria-label={`Header ${i + 1} value`}
-            className="h-7 min-w-0 flex-1 rounded border border-slate-700 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="h-7 min-w-0 flex-1 rounded border border-slate-500 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <button
             type="button"
             onClick={() => onRemove(i)}
             aria-label={`Remove header ${i + 1}`}
             title="Remove header"
-            className="text-slate-600 transition-colors hover:text-red-400"
+            className="text-slate-400 transition-colors hover:text-red-400"
           >
             <Minus size={14} />
           </button>
@@ -384,7 +384,7 @@ function HeadersEditor({
       <button
         type="button"
         onClick={onAdd}
-        className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+        className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
       >
         <Plus size={12} />
         Add header
@@ -401,7 +401,7 @@ function ResponseView({ result }: { result: NonNullable<ReturnType<typeof select
           Error
         </span>
         <span className="text-xs text-slate-400">{result.error.error}</span>
-        <span className="flex items-center gap-1 text-[11px] text-slate-600">
+        <span className="flex items-center gap-1 text-[11px] text-slate-300">
           <Clock size={11} />
           {formatDuration(result.error.durationMs)}
         </span>
@@ -437,11 +437,11 @@ function SuccessfulResponseView({
         <span className={`rounded px-2 py-0.5 text-xs font-bold ${statusColor(response.status)}`}>
           {response.status} {response.statusText}
         </span>
-        <span className="flex items-center gap-1 text-[11px] text-slate-500">
+        <span className="flex items-center gap-1 text-[11px] text-slate-300">
           <Clock size={11} />
           {formatDuration(response.durationMs)}
         </span>
-        <span className="text-[11px] text-slate-600">
+        <span className="text-[11px] text-slate-300">
           {/* bodyBytes counts the bytes received; a body kept in history or a
               recording may have been cut shorter. Results recorded before
               bodyBytes existed are measured instead. */}
@@ -461,7 +461,7 @@ function SuccessfulResponseView({
             onClick={() => setShowHeaders((v) => !v)}
             aria-expanded={showHeaders}
             aria-controls="api-response-headers"
-            className="ml-auto text-[11px] text-slate-500 transition-colors hover:text-slate-300"
+            className="ml-auto text-[11px] text-slate-300 transition-colors hover:text-white"
           >
             Headers ({response.headers.length})
           </button>
@@ -477,7 +477,7 @@ function SuccessfulResponseView({
           {response.headers.map(([key, value], i) => (
             <div key={i} className="flex gap-2 font-mono text-[11px]">
               <span className="shrink-0 font-semibold text-slate-400">{key}:</span>
-              <span className="min-w-0 break-all text-slate-500">{value}</span>
+              <span className="min-w-0 break-all text-slate-300">{value}</span>
             </div>
           ))}
         </div>
