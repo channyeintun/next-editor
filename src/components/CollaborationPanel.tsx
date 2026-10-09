@@ -329,10 +329,14 @@ function ParticipantRow({
       {participant.isHost ? <Crown size={13} className="text-amber-300" aria-label="Host" /> : null}
       <span className="text-[10px] capitalize text-slate-300">{participant.role}</span>
       {!isSelf ? (
+        // A toggle keeps one name and lets aria-pressed carry the state; the
+        // name holds both visible labels ("Follow", "Following"), and the
+        // title keeps the action as the hover hint.
         <button
           type="button"
-          aria-label={`${isFollowed ? "Stop following" : "Follow"} ${name}`}
+          aria-label={`Following ${name}`}
           aria-pressed={isFollowed}
+          title={isFollowed ? `Stop following ${name}` : `Follow ${name}`}
           onClick={() => (isFollowed ? onStopFollowing() : onFollow())}
           className={`rounded px-2 py-1 text-[10px] font-semibold ${
             isFollowed ? "bg-sky-400 text-slate-950" : "bg-white/5 text-slate-300 hover:bg-white/10"

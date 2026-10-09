@@ -179,16 +179,17 @@ describe("CollaborationPanel follow actions", () => {
     render(<CollaborationPanel />);
     fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
 
-    expect(screen.queryByRole("button", { name: "Follow Self" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Following Self" })).toBeNull();
     for (const name of ["Ada", "Grace", "Lin"]) {
-      const button = screen.getByRole("button", { name: `Follow ${name}` });
+      const button = screen.getByRole("button", { name: `Following ${name}` });
       expect(button).toHaveAttribute("aria-pressed", "false");
+      expect(button).toHaveAccessibleDescription(`Follow ${name}`);
     }
     expect(screen.getByText("index.ts")).toBeInTheDocument();
     expect(screen.getByText("Slides · 2/2")).toBeInTheDocument();
     expect(screen.getByText("Whiteboard")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Follow Grace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Following Grace" }));
     expect(mocks.followParticipant).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: "30000000-0000-4000-8000-000000000003",
@@ -212,7 +213,7 @@ describe("CollaborationPanel follow actions", () => {
 
     expect(screen.getByText("Self (you)")).toBeInTheDocument();
     expect(screen.getByText("Mallory")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Follow Mallory" }));
+    fireEvent.click(screen.getByRole("button", { name: "Following Mallory" }));
     expect(mocks.followParticipant).toHaveBeenCalledWith(reusingOwnSession);
   });
 
@@ -226,8 +227,9 @@ describe("CollaborationPanel follow actions", () => {
     render(<CollaborationPanel />);
     fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
 
-    const stop = screen.getByRole("button", { name: "Stop following Ada" });
+    const stop = screen.getByRole("button", { name: "Following Ada" });
     expect(stop).toHaveAttribute("aria-pressed", "true");
+    expect(stop).toHaveAccessibleDescription("Stop following Ada");
     stop.focus();
     fireEvent.keyDown(stop, { key: "Enter" });
     fireEvent.click(stop);
@@ -379,7 +381,7 @@ describe("CollaborationPanel lists", () => {
       expect.stringContaining("Grace"),
       expect.stringContaining("Lin"),
     ]);
-    expect(within(items[1]).getByRole("button", { name: "Follow Ada" })).toBeInTheDocument();
+    expect(within(items[1]).getByRole("button", { name: "Following Ada" })).toBeInTheDocument();
   });
 
   it("shows the waiting message instead of an empty online list", () => {
