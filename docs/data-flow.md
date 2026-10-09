@@ -190,7 +190,9 @@ studio renders) journals every take to its own IndexedDB database,
 ### Editing a recording
 
 `RecordingEditPanel` (the scissors in the player bar, for a recording in record mode) cuts and
-mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/src/recordingEdit.ts`):
+mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/src/recordingEdit.ts`).
+A stretch is selected by dragging across the narration's waveform, or without a pointer by seeking
+and pressing "Start at playhead" and "End at playhead"; the selected range is announced as a status.
 
 - A cut span is collapsed into `CUT_WINDOW_MS` at its start on every track, in order, and what
   follows moves earlier, so no change inside it is lost. The editor frames inside a cut are

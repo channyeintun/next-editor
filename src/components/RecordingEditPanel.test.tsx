@@ -135,6 +135,43 @@ describe("RecordingEditPanel", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("selects a stretch from the keyboard by marking its edges at the playhead", async () => {
+    const captured: { actions: NextEditorActions | null; current: Recording | null } = {
+      actions: null,
+      current: null,
+    };
+    function Capture() {
+      captured.actions = useNextEditorActions();
+      captured.current = useNextEditorMetadata().currentRecording;
+      return null;
+    }
+
+    render(
+      <Providers>
+        <Capture />
+        <RecordingEditPanel recording={take} onClose={() => {}} onApplied={() => {}} />
+      </Providers>,
+    );
+    act(() => captured.actions!.loadRecording(take));
+    await waitFor(() => expect(captured.current?.id).toBe("take"));
+    await screen.findByText(/No narration/);
+
+    const cut = screen.getByRole("button", { name: /Cut selection/ });
+    expect(cut).toBeDisabled();
+    act(() => captured.actions!.seekTo(2_000));
+    fireEvent.click(screen.getByRole("button", { name: "Start at playhead" }));
+    act(() => captured.actions!.seekTo(7_000));
+    fireEvent.click(screen.getByRole("button", { name: "End at playhead" }));
+    // Each edge is announced as it is set.
+    expect(screen.getByText("0:02–0:07")).toHaveRole("status");
+
+    fireEvent.click(cut);
+    expect(screen.getByText(/Removes 0:05/)).toBeInTheDocument();
+    // Cut is disabled again with no selection, so focus goes back to the start edge.
+    expect(cut).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start at playhead" })).toHaveFocus();
+  });
+
   it("says while it reads the narration, and when it cannot", async () => {
     const responses: ((response: Response) => void)[] = [];
     vi.stubGlobal(

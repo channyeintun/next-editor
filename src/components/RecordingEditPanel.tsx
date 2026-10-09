@@ -5,7 +5,9 @@ import {
   useLiveTime,
   useNextEditorActions,
   useNextEditorMetadata,
+  useNextEditorPlayback,
 } from "../hooks/useNextEditorContext";
+import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
 import { applyRecordingEdit } from "../core/src/recordingEdit";
 import {
@@ -160,6 +162,9 @@ export default function RecordingEditPanel({
 }) {
   const { seekTo, loadRecording } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
+  // The playhead is read when an edge is marked, not subscribed to: useLiveTime would
+  // re-render the whole panel on every frame.
+  const { editorActor } = useNextEditorPlayback();
   const [edits, setEdits] = useState<EditSpan[]>([]);
   const [selection, setSelection] = useState<MediaSpan | null>(null);
   const [narration, setNarration] = useState<{ blob: Blob; peaks: AudioPeaks } | null>(null);
@@ -168,6 +173,7 @@ export default function RecordingEditPanel({
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ startX: number; startTime: number } | null>(null);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
 
   const durationMs = recording.duration;
   const audioOffsetMs = recording.audioStartOffsetMs ?? 0;
@@ -241,10 +247,24 @@ export default function RecordingEditPanel({
     }
   };
 
+  // The keyboard (and single-pointer) way to select: seek, then mark each edge at the
+  // playhead. An edge past the other one moves both to it.
+  const markSelection = (edge: "start" | "end") => {
+    const time = Math.min(durationMs, Math.max(0, selectLiveTime(editorActor.getSnapshot())));
+    setSelection((current) =>
+      edge === "start"
+        ? { start: time, end: Math.max(time, current?.end ?? time) }
+        : { start: Math.min(time, current?.start ?? time), end: time },
+    );
+  };
+
   const addEdit = (kind: EditKind) => {
     if (!selection || selection.end - selection.start < 1) return;
     setEdits((current) => [...current, { kind, ...selection }]);
     setSelection(null);
+    // Cut and Mute are disabled once the selection clears, which would drop keyboard
+    // focus to the page; the next stretch starts from here.
+    startButtonRef.current?.focus();
   };
 
   const handleSuggest = () => {
@@ -296,7 +316,7 @@ export default function RecordingEditPanel({
         <Scissors size={14} className="text-slate-400" aria-hidden="true" />
         <span className="font-semibold text-slate-100">Edit recording</span>
         <span className="text-xs text-slate-500">
-          Drag across the waveform to select, click to jump there
+          Drag across the waveform, or set a start and end at the playhead; click to jump there
         </span>
         <button
           type="button"
@@ -345,6 +365,23 @@ export default function RecordingEditPanel({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <button
+          ref={startButtonRef}
+          type="button"
+          disabled={applying}
+          onClick={() => markSelection("start")}
+          className={EDIT_BUTTON_CLASS}
+        >
+          Start at playhead
+        </button>
+        <button
+          type="button"
+          disabled={applying}
+          onClick={() => markSelection("end")}
+          className={EDIT_BUTTON_CLASS}
+        >
+          End at playhead
+        </button>
+        <button
           type="button"
           disabled={!selection || applying}
           onClick={() => addEdit("cut")}
@@ -372,11 +409,12 @@ export default function RecordingEditPanel({
           <Sparkles size={12} aria-hidden="true" />
           Suggest dead-air cuts
         </button>
-        {selection ? (
-          <span className="text-xs text-slate-400">
-            {formatPlaybackTime(selection.start)}–{formatPlaybackTime(selection.end)}
-          </span>
-        ) : null}
+        {/* Always mounted, so each edge marked at the playhead is announced. */}
+        <span role="status" className="text-xs text-slate-400">
+          {selection
+            ? `${formatPlaybackTime(selection.start)}–${formatPlaybackTime(selection.end)}`
+            : ""}
+        </span>
       </div>
 
       {edits.length > 0 ? (
