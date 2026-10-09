@@ -436,8 +436,16 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
 
         <div className="flex min-h-0 flex-1 flex-col">
           {/* relative: the transcript's sr-only labels are absolutely positioned, so
-              they must scroll with it rather than stretch the page's overflow. */}
-          <div className="relative min-h-0 flex-1 overflow-y-auto p-3">
+              they must scroll with it rather than stretch the page's overflow.
+              Focusable so the keyboard can scroll it when no message has a control
+              (Safari does not focus scroll containers on its own); the ring is drawn
+              inside so the dock does not clip it. */}
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Agent conversation"
+            className="relative min-h-0 flex-1 overflow-y-auto p-3 focus-visible:outline-offset-[-2px]"
+          >
             {items.length === 0 ? (
               <p className="px-1 text-xs text-slate-300">
                 Ask the agent to build or fix something in this workspace.

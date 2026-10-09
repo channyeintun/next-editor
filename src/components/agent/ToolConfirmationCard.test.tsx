@@ -10,7 +10,18 @@ describe("ToolConfirmationCard", () => {
 
     expect(screen.getByText("Permission required")).toBeInTheDocument();
     expect(screen.getByText("Allow run_command to run this command?")).toBeInTheDocument();
-    expect(document.querySelector("pre")?.textContent).toBe("npm install\nnpm test");
+    expect(screen.getByRole("region", { name: "Command to approve" }).textContent).toBe(
+      "npm install\nnpm test",
+    );
+  });
+
+  it("lets the keyboard reach the command so a long one can be scrolled", () => {
+    render(<ToolConfirmationCard request={request} onResolve={() => {}} />);
+
+    const command = screen.getByRole("region", { name: "Command to approve" });
+    expect(command).toHaveAttribute("tabindex", "0");
+    command.focus();
+    expect(command).toHaveFocus();
   });
 
   it("is announced as an alert when it appears", () => {

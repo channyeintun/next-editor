@@ -321,6 +321,18 @@ describe("AgentPanel transcript", () => {
   });
 });
 
+describe("AgentPanel conversation region", () => {
+  it("is a named region the keyboard can focus to scroll the transcript", () => {
+    renderPanel();
+
+    const conversation = screen.getByRole("region", { name: "Agent conversation" });
+    expect(conversation).toHaveAttribute("tabindex", "0");
+    expect(conversation).toHaveTextContent("Ask the agent to build or fix something");
+    conversation.focus();
+    expect(conversation).toHaveFocus();
+  });
+});
+
 describe("AgentPanel API key hint", () => {
   it("explains why Send is disabled when there is no API key", () => {
     getAgentCredentialStore().trigger.clear();

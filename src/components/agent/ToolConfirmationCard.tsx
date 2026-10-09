@@ -29,7 +29,14 @@ export default function ToolConfirmationCard({
           </p>
         </div>
       </div>
-      <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-slate-800 bg-[#0f1319] px-3 py-2 font-mono text-xs leading-5 text-slate-300">
+      {/* Focusable so a keyboard user can scroll to the end of a long command
+          before deciding; Safari does not focus scroll containers on its own. */}
+      <pre
+        tabIndex={0}
+        role="region"
+        aria-label="Command to approve"
+        className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-slate-800 bg-[#0f1319] px-3 py-2 font-mono text-xs leading-5 text-slate-300"
+      >
         {request.summary}
       </pre>
       <div className="mt-3 flex justify-end gap-2">
