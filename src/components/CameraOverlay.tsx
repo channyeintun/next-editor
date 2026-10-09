@@ -156,7 +156,7 @@ const CameraOverlay: React.FC = () => {
         onClick={handleMinimize}
         title="Minimize camera"
         aria-label="Minimize camera"
-        className={`absolute top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950/60 text-white opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 ${
+        className={`absolute top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950/60 text-white opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 ${
           dockSide === "left" ? "left-1.5" : "right-1.5"
         }`}
       >
