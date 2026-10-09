@@ -1,3 +1,4 @@
+import { requestToPromise, transactionToPromise } from "../../storage/idb";
 import { sha256Hex } from "../hash";
 
 /**
@@ -59,13 +60,6 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-  });
-}
-
 /** Clamp a prepared sample to the supported bounds (trims the tail). */
 export function clampVoiceSamples(samples: Float32Array, sampleRate: number): Float32Array {
   const min = MIN_SAMPLE_SECONDS * sampleRate;
@@ -121,10 +115,7 @@ export async function saveCustomVoice(
   try {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(voice);
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB write failed"));
-    });
+    await transactionToPromise(tx);
   } finally {
     db.close();
   }
@@ -160,10 +151,7 @@ export async function deleteCustomVoice(id: string): Promise<void> {
   try {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).delete(id);
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB delete failed"));
-    });
+    await transactionToPromise(tx);
   } finally {
     db.close();
   }

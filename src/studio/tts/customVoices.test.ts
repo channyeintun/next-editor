@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { FakeIndexedDB } from "../../test/fakeIndexedDB";
 import {
   clampVoiceSamples,
+  deleteCustomVoice,
   isVoxCpm2ReferenceReady,
+  listCustomVoices,
   MAX_SAMPLE_SECONDS,
   MIN_SAMPLE_SECONDS,
+  saveCustomVoice,
   VOICE_SAMPLE_RATE,
   voxCpm2ReferenceTooShort,
 } from "./customVoices";
@@ -44,5 +48,47 @@ describe("VoxCPM2 reference length", () => {
   it("calls a prepared sample under 5 s too short", () => {
     expect(voxCpm2ReferenceTooShort(seconds(4.9))).toBe(true);
     expect(voxCpm2ReferenceTooShort(seconds(5))).toBe(false);
+  });
+});
+
+describe("custom voice store", () => {
+  let fake: FakeIndexedDB;
+  const samples = () => new Float32Array(VOICE_SAMPLE_RATE * MIN_SAMPLE_SECONDS);
+
+  beforeEach(() => {
+    fake = new FakeIndexedDB();
+    vi.stubGlobal("indexedDB", fake.indexedDB);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("saves, lists and deletes a voice", async () => {
+    const voice = await saveCustomVoice("  Narrator  ", samples());
+    expect(voice.name).toBe("Narrator");
+    await expect(listCustomVoices()).resolves.toEqual([
+      expect.objectContaining({ id: voice.id, name: "Narrator" }),
+    ]);
+
+    await deleteCustomVoice(voice.id);
+    await expect(listCustomVoices()).resolves.toEqual([]);
+  });
+
+  // A commit that runs over quota fires only `abort`, never `error`: waiting for
+  // `error` left the save pending forever.
+  it("rejects when the save aborts at commit", async () => {
+    const quota = new DOMException("The quota has been exceeded", "QuotaExceededError");
+    fake.failNextCommit(quota);
+
+    await expect(saveCustomVoice("Narrator", samples())).rejects.toBe(quota);
+  });
+
+  it("rejects when the delete aborts at commit", async () => {
+    const voice = await saveCustomVoice("Narrator", samples());
+    const quota = new DOMException("The quota has been exceeded", "QuotaExceededError");
+    fake.failNextCommit(quota);
+
+    await expect(deleteCustomVoice(voice.id)).rejects.toBe(quota);
   });
 });

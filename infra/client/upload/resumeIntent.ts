@@ -2,10 +2,10 @@
 // "signed-out flow"). Uses its own tiny IndexedDB store rather than
 // localStorage/sessionStorage — the upload modal stores the recording itself in
 // IndexedDB right before this pointer, so this keeps everything in one storage
-// system. Self-contained
-// rather than reusing src/storage/idb.ts (that's internal plumbing for the
-// recording/workspace stores specifically, not a general-purpose export) —
-// a single-key get/set/delete doesn't need shared infrastructure.
+// system. It opens and closes its own database per call, and shares
+// src/storage/idb.ts's request/transaction promise wrappers.
+
+import { requestToPromise, transactionToPromise } from "@app/storage/idb";
 
 export interface ResumeIntent {
   recordingId: string;
@@ -38,25 +38,12 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-/**
- * Settles with a readwrite transaction: resolves once it commits, rejects if it aborts.
- * Listening for `error` is not enough: a commit that fails on its own (the disk write
- * runs over quota) fires only `abort`, and a promise waiting for `error` would never
- * settle. A failed request aborts its transaction too, with that request's error.
- */
-function transactionCommitted(tx: IDBTransaction, failure: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error(failure));
-  });
-}
-
 export async function saveResumeIntent(intent: ResumeIntent): Promise<void> {
   const db = await openDb();
   try {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).put(intent, KEY);
-    await transactionCommitted(tx, "Failed to save resume intent");
+    await transactionToPromise(tx);
   } finally {
     db.close();
   }
@@ -65,12 +52,9 @@ export async function saveResumeIntent(intent: ResumeIntent): Promise<void> {
 export async function loadResumeIntent(): Promise<ResumeIntent | null> {
   const db = await openDb();
   try {
-    const result = await new Promise<ResumeIntent | undefined>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const request = tx.objectStore(STORE_NAME).get(KEY);
-      request.onsuccess = () => resolve(request.result as ResumeIntent | undefined);
-      request.onerror = () => reject(request.error ?? new Error("Failed to load resume intent"));
-    });
+    const result = await requestToPromise<ResumeIntent | undefined>(
+      db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(KEY),
+    );
     return result ?? null;
   } finally {
     db.close();
@@ -83,7 +67,7 @@ export async function clearResumeIntent(): Promise<void> {
   try {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).delete(KEY);
-    await transactionCommitted(tx, "Failed to clear resume intent");
+    await transactionToPromise(tx);
   } finally {
     db.close();
   }
