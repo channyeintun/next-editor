@@ -1,9 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { PLAYER_SHORTCUTS } from "../hooks/usePlayerShortcuts";
 
 /** The player's keyboard shortcuts, opened with "?" or from the settings. */
 export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -12,17 +15,33 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  // Focus moves into the help so its opening is heard and Tab starts here, and goes back to
+  // whatever opened it ("Keyboard shortcuts" hands focus to Settings before its menu closes).
+  // Non-modal: focus is not trapped, and the rest of the page stays reachable.
+  useEffect(() => {
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    closeRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
   return (
     <div
       role="dialog"
-      aria-label="Keyboard shortcuts"
+      aria-labelledby={titleId}
       className="absolute bottom-full left-1/2 z-46 mb-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-slate-700 bg-[#151821] p-3 text-sm text-slate-200 shadow-[0_18px_40px_rgba(2,6,23,0.45)] pointer-events-auto"
     >
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+        <p
+          id={titleId}
+          className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase"
+        >
           Keyboard shortcuts
         </p>
         <button
+          ref={closeRef}
           type="button"
           onClick={onClose}
           aria-label="Close keyboard shortcuts"

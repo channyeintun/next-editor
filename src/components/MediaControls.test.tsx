@@ -174,6 +174,21 @@ describe("MediaControls", () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 
+  it("opens the shortcuts help from Settings with focus in it, and returns focus to Settings", async () => {
+    await renderPlayer();
+    const settings = screen.getByRole("button", { name: "Settings" });
+    fireEvent.click(settings);
+    // The menu item unmounts with the menu; focus must not fall to <body>.
+    fireEvent.click(screen.getByRole("button", { name: /^Keyboard shortcuts/ }));
+
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close keyboard shortcuts" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close keyboard shortcuts" }));
+    expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).not.toBeInTheDocument();
+    expect(settings).toHaveFocus();
+  });
+
   it("announces a caption file it could not import", async () => {
     const { container } = await renderPlayer();
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));

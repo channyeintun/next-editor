@@ -261,6 +261,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [captionImportError, setCaptionImportError] = useState<string | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
   const captionFileInputRef = useRef<HTMLInputElement>(null);
+  // Where "Keyboard shortcuts" leaves focus before its menu closes, so the help has an opener.
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
@@ -688,6 +690,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
             <div className="relative pointer-events-auto">
               <button
+                ref={settingsButtonRef}
                 type="button"
                 onClick={() => setShowSettings((prev) => !prev)}
                 aria-label="Settings"
@@ -798,6 +801,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          // This button unmounts with the menu; without a hand-off focus
+                          // would fall to <body>. The help returns focus to Settings on close.
+                          settingsButtonRef.current?.focus();
                           setShowSettings(false);
                           playerShortcuts.openHelp();
                         }}
