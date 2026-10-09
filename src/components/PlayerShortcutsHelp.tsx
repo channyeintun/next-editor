@@ -52,6 +52,9 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
         Keys go to the player when you are not typing in the editor, terminal, or a field.
         Single-key shortcuts (letters, numbers and punctuation) can be turned off in Settings.
       </p>
+      <p className="mt-1 text-[11px] text-slate-300">
+        In the code editor, Tab types a tab. Press Esc, then Tab, to move on.
+      </p>
     </div>
   );
 }

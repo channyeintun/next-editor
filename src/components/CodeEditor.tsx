@@ -81,6 +81,7 @@ import {
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
+import { addEscapeThenTabExit } from "./editorTabFocus";
 
 // y-monaco transactions carry their MonacoBinding as the origin. Registered
 // here, at module load and so before any binding exists, because undo.ts must
@@ -1221,6 +1222,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
     editorDisposablesRef.current = [
       listenForLocalIntent(editor),
+      // Tab types a tab here; Escape, then Tab, leaves the editor.
+      addEscapeThenTabExit(editor),
       editor.onDidChangeModel(() => {
         disposeYMonacoBinding();
         const model = editor.getModel();

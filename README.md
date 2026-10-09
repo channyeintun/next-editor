@@ -39,6 +39,8 @@ header). Each runs in one of three places:
   requests from inside the preview frame (same origin, so no CORS), with a response viewer and a
   request history.
 - Monaco carries first-party grammars for Zig, Haskell, Kite, and x86-64 assembly.
+- In the code editor, Tab types a tab. Escape, then Tab (or Shift+Tab), moves focus out of it;
+  Tab indents again the next time the editor is entered.
 
 ### Recording
 
