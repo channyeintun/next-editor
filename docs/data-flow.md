@@ -137,6 +137,11 @@ Current playback behavior:
   The slide overlay (`SlidePreview`) takes ←/→ for slide navigation only while playback is paused
   and focus is not in a field or on a slider, so the seek keys keep working while slides are shown
   during playback.
+- The seek bar (`ProgressBar`, given `onSeek`) is a focusable `role="slider"` with its own keys:
+  ←/↓ and →/↑ move 5 s, Page Down/Page Up 10 s, Home and End go to the ends. It calls
+  `preventDefault` on them, and `usePlayerShortcuts` leaves `[role='slider']` targets alone, so
+  a key pressed on the bar seeks once. Without `onSeek` (or before the length is known) it stays a
+  read-only `role="progressbar"`.
 
 ## Storage Flow
 

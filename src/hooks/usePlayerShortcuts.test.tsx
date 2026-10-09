@@ -1,4 +1,4 @@
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
@@ -27,6 +27,7 @@ import type { Recording } from "../core/src/types";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { useCaptionStore } from "./useCaptionStore";
+import ProgressBar from "../components/ProgressBar";
 
 const key = (value: string, modifiers: Partial<KeyboardEvent> = {}) => ({
   key: value,
@@ -209,7 +210,18 @@ describe("usePlayerShortcuts", () => {
     seen.volume = playback.volume;
     seen.captions = useCaptionStore().enabled;
     seen.shortcuts = usePlayerShortcuts();
-    return <input aria-label="field" />;
+    return (
+      <>
+        <input aria-label="field" />
+        {/* The player bar's seek slider, which takes the arrows, Home and End itself. */}
+        <ProgressBar
+          progress={0}
+          duration={lesson.duration}
+          currentTime={seen.time}
+          onSeek={(time) => seen.actions!.seekTo(time)}
+        />
+      </>
+    );
   }
 
   const press = (value: string, target: Element = document.body) =>
@@ -343,6 +355,26 @@ describe("usePlayerShortcuts", () => {
   it("opens the shortcuts with ?", async () => {
     press("?");
     await waitFor(() => expect(seen.shortcuts?.helpOpen).toBe(true));
+  });
+
+  it("lets the focused seek bar take its own keys, so each press seeks once", async () => {
+    const bar = screen.getByRole("slider", { name: "Playback progress" });
+    bar.focus();
+
+    // Were the window shortcut to act as well, each arrow would move 10 s, not 5 s.
+    press("ArrowRight", bar);
+    await waitFor(() => expect(seen.time).toBe(5_000));
+    press("ArrowRight", bar);
+    await waitFor(() => expect(seen.time).toBe(10_000));
+    press("ArrowLeft", bar);
+    await waitFor(() => expect(seen.time).toBe(5_000));
+    press("End", bar);
+    await waitFor(() => expect(seen.time).toBe(60_000));
+    press("Home", bar);
+    await waitFor(() => expect(seen.time).toBe(0));
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen.time).toBe(0);
   });
 
   it("leaves keys typed in a field, and keys another handler took, alone", async () => {

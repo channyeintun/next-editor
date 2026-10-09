@@ -1,4 +1,4 @@
-import React, { type MouseEvent, useRef, useState, useEffect } from "react";
+import React, { type KeyboardEvent, type MouseEvent, useRef, useState, useEffect } from "react";
 import type { RecordingChapter } from "../core/src/types";
 import { findChapterIndexAt } from "../core/src/utils/chapters";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
@@ -61,6 +61,16 @@ export interface ProgressBarProps {
  */
 export const LIVE_PROGRESS_VARIABLE = "--next-editor-live-progress";
 
+/** How far each slider key moves a seekable bar, in milliseconds (as the player's ←/→). */
+const SEEK_KEY_STEPS: ReadonlyMap<string, number> = new Map([
+  ["ArrowLeft", -5_000],
+  ["ArrowDown", -5_000],
+  ["ArrowRight", 5_000],
+  ["ArrowUp", 5_000],
+  ["PageDown", -10_000],
+  ["PageUp", 10_000],
+]);
+
 /**
  * Custom progress bar component that matches the demo functionality
  * Replaces input type=range which has display issues
@@ -80,6 +90,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   chapters,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // A bar that sets the position is a slider a keyboard can reach; without onSeek it only reports.
+  const seekable = Boolean(onSeek) && duration > 0;
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState<number | null>(null);
   // Where the pointer hovers, as a fraction of the bar, for the time/chapter tooltip.
@@ -144,6 +156,20 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     const targetTime = percentage * duration;
 
     onSeek(Math.max(0, Math.min(targetTime, duration)));
+  };
+
+  // The slider's own keys. preventDefault keeps the player's window shortcuts (which also
+  // seek on the arrows, Home and End) from acting on the same key press a second time.
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!onSeek || !seekable || e.ctrlKey || e.metaKey || e.altKey) return;
+    const step = SEEK_KEY_STEPS.get(e.key);
+    let target: number | null = null;
+    if (step !== undefined) target = currentTime + step;
+    else if (e.key === "Home") target = 0;
+    else if (e.key === "End") target = duration;
+    if (target === null) return;
+    e.preventDefault();
+    onSeek(Math.max(0, Math.min(target, duration)));
   };
 
   // Use drag progress while dragging, otherwise use actual progress
@@ -224,9 +250,12 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           e.currentTarget.style.height = height;
           setHoverFraction(null);
         }}
-        // A progressbar, not a slider: it seeks by pointer only, and the player's own
-        // shortcuts are how a keyboard seeks. Whole seconds, read out as times.
-        role="progressbar"
+        // A slider when it seeks: focusable, with the arrows (5 s), Page Up/Down (10 s),
+        // Home and End. Without onSeek it only reports, as a progressbar. Whole seconds,
+        // read out as times.
+        role={seekable ? "slider" : "progressbar"}
+        tabIndex={seekable ? 0 : undefined}
+        onKeyDown={seekable ? handleKeyDown : undefined}
         aria-valuenow={Math.floor(Math.min(currentTime, duration) / 1000)}
         aria-valuemin={0}
         aria-valuemax={Math.floor(duration / 1000)}
