@@ -41,7 +41,7 @@ export function createReplayableRuntimePreviewFromHtml(
       return null;
     }
 
-    const html = iframeDocument.documentElement.cloneNode(true);
+    const html = iframeDocument.documentElement;
 
     if (!(html instanceof HTMLElement)) {
       return null;

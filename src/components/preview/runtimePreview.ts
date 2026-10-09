@@ -168,14 +168,12 @@ export function getRuntimePreviewState(
   errorMessage: string | null,
   isSupported: boolean,
 ): {
-  label: string;
   title: string;
   description: string;
   placeholderKind: "spinner" | "message";
 } {
   if (!isSupported) {
     return {
-      label: "Runtime preview unavailable",
       title: "Runtime preview unavailable",
       description:
         "The live runtime needs a desktop Chromium or Firefox browser with cross-origin isolation. It isn't available on mobile browsers.",
@@ -185,7 +183,6 @@ export function getRuntimePreviewState(
 
   if (status === "error") {
     return {
-      label: "Runtime preview error",
       title: "Runtime preview failed",
       description: errorMessage ?? "Check the runner output, fix the error, and rerun the preview.",
       placeholderKind: "message",
@@ -194,7 +191,6 @@ export function getRuntimePreviewState(
 
   if (status === "installing") {
     return {
-      label: "Installing runtime",
       title: "Installing dependencies",
       description: "The project is preparing packages before the live preview can start.",
       placeholderKind: "spinner",
@@ -203,7 +199,6 @@ export function getRuntimePreviewState(
 
   if (status === "starting") {
     return {
-      label: "Starting runtime",
       title: "Starting live preview",
       description: "The dev server is booting and will replace this placeholder when it is ready.",
       placeholderKind: "spinner",
@@ -212,7 +207,6 @@ export function getRuntimePreviewState(
 
   if (status === "mounting" || status === "booting") {
     return {
-      label: "Preparing runtime",
       title: "Preparing runtime preview",
       description: "The workspace is mounting into the WebContainer before the preview starts.",
       placeholderKind: "spinner",
@@ -220,7 +214,6 @@ export function getRuntimePreviewState(
   }
 
   return {
-    label: "Runtime preview",
     title: "Runtime preview is waiting",
     description: "Run or rerun the project to open the live app preview here.",
     placeholderKind: "spinner",

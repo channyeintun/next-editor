@@ -526,10 +526,6 @@ export function usePreviewController(): PreviewController {
       isOpen?: boolean;
       mode?: PreviewPanelMode;
       content?: string;
-      route?: string;
-      scrollTop?: number;
-      scrollLeft?: number;
-      interaction?: IframeInteractionEvent;
       activeMode?: PreviewActiveMode;
       requestTab?: ApiClientRequestTab;
       apiClientRequest?: ApiClientRecordedRequest;
@@ -544,10 +540,6 @@ export function usePreviewController(): PreviewController {
         isOpen: options?.isOpen ?? isOpenRef.current,
         mode: options?.mode ?? panelModeRef.current,
         content: options?.content,
-        route: options?.route,
-        scrollTop: options?.scrollTop,
-        scrollLeft: options?.scrollLeft,
-        interaction: options?.interaction,
         activeMode: options?.activeMode,
         requestTab: options?.requestTab,
         apiClientRequest: options?.apiClientRequest,
