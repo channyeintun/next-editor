@@ -7,9 +7,11 @@ import type {
 } from "@simplewebauthn/browser";
 import type { AuthUser, PasskeySummary } from "../../db/types";
 import { apiClient } from "../apiClient";
-import { ME_QUERY_KEY } from "./useAuth";
-
-const PASSKEY_LIST_QUERY_KEY = ["auth", "passkeys"] as const;
+import {
+  clearOwnerScopedQueriesIfAccountChanged,
+  ME_QUERY_KEY,
+  PASSKEY_LIST_QUERY_KEY,
+} from "./useAuth";
 
 export function browserSupportsPasskeys(): boolean {
   return typeof window !== "undefined" && !!window.PublicKeyCredential;
@@ -87,6 +89,7 @@ export function useSignInWithPasskey() {
       return res.data.user;
     },
     onSuccess: (user) => {
+      clearOwnerScopedQueriesIfAccountChanged(queryClient, user);
       queryClient.setQueryData(ME_QUERY_KEY, user);
     },
   });

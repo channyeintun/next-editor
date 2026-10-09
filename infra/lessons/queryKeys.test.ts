@@ -1,6 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vite-plus/test";
-import { lessonKeys, playlistKeys, primeLessonDetails } from "./queryKeys";
+import {
+  lessonKeys,
+  ownerScopedLessonQueryKeys,
+  playlistKeys,
+  primeLessonDetails,
+} from "./queryKeys";
 import type { Lesson } from "./types";
 
 // The SSR payload already dehydrated into served documents, and prefix
@@ -16,6 +21,7 @@ describe("lesson and playlist query keys", () => {
     expect(playlistKeys.all).toEqual(["playlists"]);
     expect(playlistKeys.mine).toEqual(["playlists", "mine"]);
     expect(playlistKeys.forLesson("l1")).toEqual(["playlists", "mine", "for-lesson", "l1"]);
+    expect(playlistKeys.allMembers).toEqual(["playlists", "members"]);
     expect(playlistKeys.members("p1")).toEqual(["playlists", "members", "p1"]);
     expect(playlistKeys.detail("intro")).toEqual(["playlists", "detail", "intro"]);
   });
@@ -26,11 +32,33 @@ describe("lesson and playlist query keys", () => {
     const keys = [
       playlistKeys.mine,
       playlistKeys.forLesson("l1"),
+      playlistKeys.allMembers,
       playlistKeys.members("p1"),
       playlistKeys.detail("intro"),
     ];
     for (const key of keys) {
       expect(key.slice(0, playlistKeys.all.length)).toEqual(playlistKeys.all);
+    }
+  });
+
+  // Signing out drops these by prefix, so each owner-only key must sit under
+  // one, and no public key may.
+  it("puts exactly the owner-only keys under an owner-scoped prefix", () => {
+    const isOwnerScoped = (key: readonly unknown[]) =>
+      ownerScopedLessonQueryKeys.some((prefix) =>
+        prefix.every((part, index) => key[index] === part),
+      );
+
+    for (const key of [
+      lessonKeys.mine,
+      playlistKeys.mine,
+      playlistKeys.forLesson("l1"),
+      playlistKeys.members("p1"),
+    ]) {
+      expect(isOwnerScoped(key)).toBe(true);
+    }
+    for (const key of [lessonKeys.infinite, lessonKeys.detail("a"), playlistKeys.detail("intro")]) {
+      expect(isOwnerScoped(key)).toBe(false);
     }
   });
 });

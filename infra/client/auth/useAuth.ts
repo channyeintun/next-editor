@@ -1,10 +1,37 @@
 import axios from "axios";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiClient } from "../apiClient";
 import type { AuthUser } from "../../db/types";
+import { ownerScopedLessonQueryKeys } from "../../lessons/queryKeys";
 import { disableGoogleAutoSelect } from "./googleIdentity";
 
 export const ME_QUERY_KEY = ["auth", "me"] as const;
+/** The signed-in user's passkeys (usePasskeyList). */
+export const PASSKEY_LIST_QUERY_KEY = ["auth", "passkeys"] as const;
+
+/**
+ * Drop the cached queries that hold the signed-in account's own data and carry
+ * no user id in their key: My Library's lessons and playlists, and the passkey
+ * list. With the app's staleTime: Infinity they never refetch on their own, so
+ * an account signing in later in the same tab (One Tap or a passkey, no reload)
+ * would otherwise be shown the previous account's drafts and passkeys.
+ */
+function clearOwnerScopedQueries(queryClient: QueryClient): void {
+  for (const queryKey of [...ownerScopedLessonQueryKeys, PASSKEY_LIST_QUERY_KEY]) {
+    queryClient.removeQueries({ queryKey });
+  }
+}
+
+/** Before an in-page sign-in lands: a different account must not inherit the last one's cache. */
+export function clearOwnerScopedQueriesIfAccountChanged(
+  queryClient: QueryClient,
+  user: AuthUser,
+): void {
+  const previous = queryClient.getQueryData<AuthUser | null>(ME_QUERY_KEY);
+  if (previous?.id !== user.id) {
+    clearOwnerScopedQueries(queryClient);
+  }
+}
 
 // null (not undefined — Query rejects undefined) when signed out, so callers
 // can tell "not signed in" from a real fetch failure.
@@ -43,6 +70,7 @@ export function useSignOut() {
     },
     onSuccess: () => {
       queryClient.setQueryData(ME_QUERY_KEY, null);
+      clearOwnerScopedQueries(queryClient);
       // Otherwise One Tap's automatic sign-in (GoogleOneTap.tsx) would put
       // the user straight back into a session on the next prompt.
       disableGoogleAutoSelect();
@@ -62,6 +90,7 @@ export function useGoogleCredentialSignIn() {
       return res.data.user;
     },
     onSuccess: (user) => {
+      clearOwnerScopedQueriesIfAccountChanged(queryClient, user);
       queryClient.setQueryData(ME_QUERY_KEY, user);
     },
   });

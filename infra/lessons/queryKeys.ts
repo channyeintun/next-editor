@@ -27,11 +27,26 @@ export const playlistKeys = {
   /** The owner's playlists, each marked with whether it holds this lesson. */
   forLesson: (lessonId: string | undefined) =>
     ["playlists", "mine", "for-lesson", lessonId] as const,
+  /** The prefix every playlistKeys.members key starts with. */
+  allMembers: ["playlists", "members"] as const,
   /** Every member of one of the owner's playlists, unpublished ones included. */
   members: (playlistId: string | undefined) => ["playlists", "members", playlistId] as const,
   /** One public playlist by slug (tube's usePlaylist). */
   detail: (slug: string | undefined) => ["playlists", "detail", slug] as const,
 };
+
+/**
+ * Prefixes of the lesson and playlist queries holding the signed-in owner's own
+ * data (drafts, private membership). Their keys carry no user id, so they are
+ * dropped when the session ends or changes hands (clearOwnerScopedQueries in
+ * infra/client/auth/useAuth.ts); playlistKeys.forLesson sits under
+ * playlistKeys.mine.
+ */
+export const ownerScopedLessonQueryKeys = [
+  lessonKeys.mine,
+  playlistKeys.mine,
+  playlistKeys.allMembers,
+] as const;
 
 /**
  * Seed the detail cache from a list that already carries whole Lesson objects.
