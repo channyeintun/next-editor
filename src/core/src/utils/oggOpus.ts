@@ -170,7 +170,7 @@ export function muxOggOpus({
   channelCount,
   totalSamples,
   vendor = DEFAULT_VENDOR,
-}: OggOpusStream): Uint8Array {
+}: OggOpusStream): Uint8Array<ArrayBuffer> {
   if (packets.length === 0) {
     throw new Error("An Ogg/Opus stream needs at least one audio packet");
   }
@@ -287,7 +287,7 @@ export interface MonoPcmSource {
 export async function encodeMonoPcmToOggOpus(
   source: MonoPcmSource,
   options: { bitrate?: number; signal?: AbortSignal; vendor?: string } = {},
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   if (typeof AudioEncoder === "undefined") {
     throw new Error(
       "This browser has no WebCodecs AudioEncoder, so audio cannot be encoded to Opus",

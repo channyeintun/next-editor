@@ -159,7 +159,7 @@ export function stitchWavSegments(
   segments: readonly StitchSegment[],
   totalDurationMs: number,
   sampleRate: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const totalSamples = Math.ceil((totalDurationMs / 1000) * sampleRate);
   const canvas = new Int16Array(totalSamples);
 

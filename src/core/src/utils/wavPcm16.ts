@@ -17,7 +17,7 @@ export function floatTo16BitPcm(samples: Float32Array): Int16Array {
   return pcm;
 }
 
-export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array {
+export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array<ArrayBuffer> {
   const dataBytes = pcm.length * 2;
   const buffer = new ArrayBuffer(44 + dataBytes);
   const view = new DataView(buffer);

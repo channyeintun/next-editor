@@ -19,7 +19,7 @@ import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
 import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
-import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
+import { runArtifactChecks } from "./qa";
 import { encodeWavToOggOpus, OGG_OPUS_MIME } from "./tts/opus";
 import {
   computeTimingStats,
@@ -146,6 +146,9 @@ export async function runStudioRender(
   const phase = (name: string) => deps.onPhase?.(name);
 
   let audioHash: string | null = null;
+  // Hashed once: the plan embeds slides and word-level captions, and both the
+  // manifest and the repeatability semantics carry this hash.
+  const planHash = await sha256HexOfJson(plan);
 
   // Ownership of an opt-in screen-capture stream passes to the recorder machine
   // at startRecording; until then, any early failure here must release it so the
@@ -178,7 +181,7 @@ export async function runStudioRender(
         checks: [],
         errors,
       },
-      manifest: await baseManifest(plan, runtimeMode, audioHash, null),
+      manifest: await baseManifest(plan, runtimeMode, audioHash, planHash, null),
       semantics: null,
       artifacts: null,
     };
@@ -245,7 +248,7 @@ export async function runStudioRender(
 
   const audioBytes = options.narration.bytes;
   const audioBlob = options.narration.blob;
-  audioHash = await sha256Hex(audioBytes);
+  audioHash = options.narration.audioSha256;
 
   // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");
@@ -476,10 +479,9 @@ export async function runStudioRender(
     // minute, which puts a lesson of any real length past the upload's request
     // body cap and makes every viewer download it. Encoding failing is fatal —
     // falling back to the WAV would just ship the unpublishable bundle.
-    const publishedAudioBlob = new Blob(
-      [(await encodeWavToOggOpus(audioBytes, { signal })).slice() as BlobPart],
-      { type: OGG_OPUS_MIME },
-    );
+    const publishedAudioBlob = new Blob([await encodeWavToOggOpus(audioBytes, { signal })], {
+      type: OGG_OPUS_MIME,
+    });
     const publishedRecording: Recording = { ...recording, audioBlob: publishedAudioBlob };
 
     const files = await buildRecordingFiles(publishedRecording, baseFilename);
@@ -497,31 +499,28 @@ export async function runStudioRender(
       capturePreviewScreenshot: deps.preview.captureScreenshot,
     });
     checks = artifactChecks;
+    const timing = computeTimingStats(receipts, plan.dependencies);
     if (plan.gates?.timingP95MaxMs !== undefined) {
-      checks.push(
-        timingGateCheck(computeTimingStats(receipts, plan.dependencies), plan.gates.timingP95MaxMs),
-      );
+      checks.push(timingGateCheck(timing, plan.gates.timingP95MaxMs));
     }
 
-    const semantics = await extractRenderSemantics(
-      artifactRecording,
-      receipts,
-      audioBytes,
-      await sha256HexOfJson(plan),
-    );
+    const semantics = await extractRenderSemantics(artifactRecording, receipts, {
+      audioSha256: audioHash,
+      planSha256: planHash,
+    });
     const allChecksOk = checks.every((check) => check.ok);
     const outcome = allChecksOk ? "passed" : "failed";
     if (!allChecksOk) {
       errors.push("One or more artifact checks failed");
     }
 
-    const manifest = await baseManifest(plan, runtimeMode, audioHash, {
+    const manifest = await baseManifest(plan, runtimeMode, audioHash, planHash, {
       neBytes: neBytes.byteLength,
       neHash: await sha256Hex(neBytes),
       audioFileName,
       audioMimeType: publishedAudioBlob.type,
       recordingDurationMs: artifactRecording.duration,
-      finalWorkspaceHash: await finalWorkspaceHashOf(artifactRecording),
+      finalWorkspaceHash: semantics.finalWorkspaceHash,
     });
 
     return {
@@ -533,7 +532,7 @@ export async function runStudioRender(
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: artifactRecording.duration,
         receipts,
-        timing: computeTimingStats(receipts, plan.dependencies),
+        timing,
         checks,
         errors,
       },
@@ -597,6 +596,7 @@ async function baseManifest(
   plan: StudioPlan,
   runtimeMode: StudioRuntimeMode,
   audioHash: string | null,
+  planHash: string,
   artifact: StudioBuildManifest["artifact"],
 ): Promise<StudioBuildManifest> {
   const runtimeContract =
@@ -624,7 +624,7 @@ async function baseManifest(
     manifestVersion: 2,
     planSlug: plan.lesson.slug,
     planTitle: plan.lesson.title,
-    planHash: await sha256HexOfJson(plan),
+    planHash,
     seed: plan.seed,
     workspaceHash: await hashWorkspaceFiles(plan.workspace.files),
     narrationAudioHash: audioHash ?? "unfetched",

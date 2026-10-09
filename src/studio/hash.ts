@@ -2,9 +2,12 @@
 
 export async function sha256Hex(data: Uint8Array | ArrayBuffer): Promise<string> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  // Copy into a fresh ArrayBuffer so SharedArrayBuffer-backed views (possible
-  // under cross-origin isolation) satisfy WebCrypto's BufferSource contract.
-  const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
+  // Only a SharedArrayBuffer-backed view (possible under cross-origin
+  // isolation) is copied, into a fresh ArrayBuffer, to satisfy WebCrypto's
+  // BufferSource contract; narration-sized views are digested in place.
+  const input =
+    bytes.buffer instanceof ArrayBuffer ? (bytes as Uint8Array<ArrayBuffer>) : bytes.slice();
+  const digest = await crypto.subtle.digest("SHA-256", input);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

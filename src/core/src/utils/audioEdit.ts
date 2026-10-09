@@ -127,13 +127,13 @@ async function encodeEditedAudio(
         },
         { vendor: "next-editor" },
       );
-      return new Blob([bytes as Uint8Array<ArrayBuffer>], { type: OGG_OPUS_MIME });
+      return new Blob([bytes], { type: OGG_OPUS_MIME });
     } catch (error) {
       console.warn("Could not encode the edited narration as Opus; saving it as WAV:", error);
     }
   }
   const wav = encodeWavPcm16(floatTo16BitPcm(samples), sampleRate);
-  return new Blob([wav as Uint8Array<ArrayBuffer>], { type: "audio/wav" });
+  return new Blob([wav], { type: "audio/wav" });
 }
 
 /**

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import {
   narrationTimelineOnRecordingClock,
@@ -72,15 +73,16 @@ describe("runStudioRender report timing", () => {
     };
     // A WebContainer render asked to replay a fixture fails at preflight,
     // before any dependency is touched.
+    const failingPlan = {
+      ...plan,
+      lesson: { slug: "react-counter", title: "Counter", locale: "en" },
+      seed: 1,
+      workspace: { files: {} },
+      runtime: { kind: "webcontainer" },
+      dependencies: {},
+    } as unknown as StudioPlan;
     const result = await runStudioRender(
-      {
-        ...plan,
-        lesson: { slug: "react-counter", title: "Counter", locale: "en" },
-        seed: 1,
-        workspace: { files: {} },
-        runtime: { kind: "webcontainer" },
-        dependencies: {},
-      } as unknown as StudioPlan,
+      failingPlan,
       "fixture",
       {} as StudioRunDeps,
       // Preflight fails before the narration is read.
@@ -96,5 +98,8 @@ describe("runStudioRender report timing", () => {
     ]);
     expect(result.report.startedAtIso).toBe(startedAt.iso);
     expect(result.report.wallDurationMs).toBeGreaterThanOrEqual(5_000);
+    // The narration is not taken up before preflight passes.
+    expect(result.manifest.planHash).toBe(await sha256HexOfJson(failingPlan));
+    expect(result.manifest.narrationAudioHash).toBe("unfetched");
   });
 });

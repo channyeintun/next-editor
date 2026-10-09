@@ -14,7 +14,7 @@ export { muxOggOpus, oggCrc32, OGG_OPUS_MIME } from "../../core/src/utils/oggOpu
 export async function encodeWavToOggOpus(
   wavBytes: Uint8Array,
   options: { bitrate?: number; signal?: AbortSignal } = {},
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const { pcm, sampleRate } = decodeWavPcm16(wavBytes);
   if (pcm.length === 0) {
     throw new Error("The narration track is empty");

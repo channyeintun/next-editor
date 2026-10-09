@@ -369,7 +369,7 @@ export async function buildPlanFromScript(
   return {
     plan,
     narration: {
-      blob: new Blob([stitched.slice() as BlobPart], { type: provider.mimeType }),
+      blob: new Blob([stitched], { type: provider.mimeType }),
       bytes: stitched,
       durationMs: schedule.totalDurationMs,
       audioSha256,

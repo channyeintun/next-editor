@@ -2,10 +2,9 @@ import type { Recording, RecordingTrackKind } from "../core/src";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
-import { isWorkspaceTextFile } from "../types/workspace";
 import type { StudioPlan, StudioPlanAction } from "./plan";
 import type { StudioCheckResult } from "./report";
-import { hashWorkspaceFiles } from "./hash";
+import { workspaceTextFilesOf } from "./recordingWorkspace";
 
 /**
  * Mechanical artifact gates (docs/agent-lesson-production.md §8): decode the
@@ -143,20 +142,6 @@ function previewCheckpointFailure(
     return `target attribute ${JSON.stringify(action.attribute.name)} is ${JSON.stringify(checkpoint.target?.attributes[action.attribute.name])}, expected ${JSON.stringify(action.attribute.value)}`;
   }
   return null;
-}
-
-export function workspaceTextFilesOf(recording: Recording): Record<string, string> {
-  const files: Record<string, string> = {};
-  const project = recording.workspaceSnapshot?.project;
-  if (!project) {
-    return files;
-  }
-  for (const [path, file] of Object.entries(project.files)) {
-    if (isWorkspaceTextFile(file)) {
-      files[path] = file.content;
-    }
-  }
-  return files;
 }
 
 export interface ArtifactCheckInput {
@@ -527,9 +512,4 @@ export async function runArtifactChecks({
   }
 
   return { checks: results, artifactRecording };
-}
-
-/** Hash of the recording's final workspace text files (repeatability + manifest). */
-export async function finalWorkspaceHashOf(recording: Recording): Promise<string> {
-  return hashWorkspaceFiles(workspaceTextFilesOf(recording));
 }

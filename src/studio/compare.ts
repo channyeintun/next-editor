@@ -1,8 +1,7 @@
 import type { Recording } from "../core/src";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import type { ActionReceipt, StudioCheckResult } from "./report";
-import { workspaceTextFilesOf } from "./qa";
-import { hashWorkspaceFiles, sha256Hex } from "./hash";
+import { finalWorkspaceHashOf } from "./recordingWorkspace";
 
 /**
  * Normalized repeatability comparison (docs/agent-lesson-production.md §8):
@@ -122,11 +121,14 @@ function normalizePreviewInteractions(
   );
 }
 
+/**
+ * The render's repeatability semantics. The audio and plan hashes come from the
+ * caller, which already hashed those exact inputs once for the manifest.
+ */
 export async function extractRenderSemantics(
   recording: Recording,
   receipts: readonly ActionReceipt[],
-  audioBytes: Uint8Array,
-  planSha256: string,
+  { audioSha256, planSha256 }: { audioSha256: string; planSha256: string },
 ): Promise<RenderSemantics> {
   const lastRuntimeSnapshot =
     recording.runtimeSnapshot ?? resolveLatestRuntimeSnapshot(recording.runtimeEvents);
@@ -141,11 +143,11 @@ export async function extractRenderSemantics(
     actionStartsMs: Object.fromEntries(
       receipts.map((receipt) => [receipt.actionId, receipt.startedAtMs]),
     ),
-    finalWorkspaceHash: await hashWorkspaceFiles(workspaceTextFilesOf(recording)),
+    finalWorkspaceHash: await finalWorkspaceHashOf(recording),
     captionText: (recording.captions ?? [])
       .flatMap((track) => track.cues.map((cue) => cue.text))
       .join("\n"),
-    audioSha256: await sha256Hex(audioBytes),
+    audioSha256,
     consoleLines: lastRuntimeSnapshot?.consoleLines ?? [],
     previewState: normalizePreviewState(recording),
     previewInteractionSequence: normalizePreviewInteractions(recording),
