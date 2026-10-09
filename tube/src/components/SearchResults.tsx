@@ -17,7 +17,9 @@ export default function SearchResults({ query }: { query: string }) {
   if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p className="text-red-400">Search failed</p>
+        <p role="alert" className="text-red-400">
+          Search failed
+        </p>
         <button
           type="button"
           onClick={() => refetch()}

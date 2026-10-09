@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { flattenLessonPages } from "../lib/lessons";
 import LessonCard from "./LessonCard";
@@ -60,6 +61,8 @@ export default function LessonGrid() {
     const id = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [query]);
+  // Same query key as SearchResults' call, so React Query dedupes the request.
+  const search = useSearch(debouncedQuery);
   const columns = useColumns();
 
   const lessons = flattenLessonPages(data?.pages);
@@ -106,6 +109,29 @@ export default function LessonGrid() {
     return () => io.disconnect();
   }, [canPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
 
+  // One status region shared by every branch below, always the root's first
+  // child, so React keeps the same live node across branch switches and screen
+  // readers announce its text changes (a region mounted together with its text
+  // is not reliably read). Errors are announced by their own role="alert".
+  let statusText = "";
+  if (debouncedQuery) {
+    if (search.isPending) statusText = "Searching…";
+    else if (search.data && !search.isError) {
+      const authorCount = search.data.authors.length;
+      const lessonCount = search.data.lessons.length;
+      statusText =
+        authorCount + lessonCount === 0
+          ? "No authors or lessons match your search."
+          : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"} and ${authorCount} ${authorCount === 1 ? "author" : "authors"} found`;
+    }
+  } else if (isPending) statusText = "Loading lessons…";
+  else if (isFetchingNextPage) statusText = "Loading more lessons…";
+  const status = (
+    <p role="status" className="sr-only">
+      {statusText}
+    </p>
+  );
+
   // `useInfiniteQuery` flips `status` to "error" for ANY failed fetch, including a
   // `fetchNextPage()` that fails with earlier pages already rendered. Gating the
   // whole component on bare `isError` therefore threw away every loaded card, the
@@ -116,7 +142,8 @@ export default function LessonGrid() {
   if (isError && lessons.length === 0 && !debouncedQuery) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p className="text-red-400">
+        {status}
+        <p role="alert" className="text-red-400">
           {error instanceof Error ? error.message : "Failed to load lessons"}
         </p>
         <button
@@ -135,6 +162,7 @@ export default function LessonGrid() {
   if (debouncedQuery) {
     return (
       <div>
+        {status}
         <SearchBar value={query} onChange={setQuery} />
         <SearchResults query={debouncedQuery} />
       </div>
@@ -143,6 +171,7 @@ export default function LessonGrid() {
 
   return (
     <div>
+      {status}
       {(lessons.length > 0 || isPending) && <SearchBar value={query} onChange={setQuery} />}
 
       {isPending ? (
@@ -187,7 +216,7 @@ export default function LessonGrid() {
 
           {isFetchNextPageError ? (
             <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
-              <p className="text-sm text-red-400">
+              <p role="alert" className="text-sm text-red-400">
                 {error instanceof Error ? error.message : "Failed to load more lessons"}
               </p>
               <button
