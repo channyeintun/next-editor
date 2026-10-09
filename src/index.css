@@ -123,6 +123,16 @@ body {
   display: none;
 }
 
+/* A passive terminal hides its cursor, xterm's only focus cue, and the
+   textarea that takes focus sits offscreen, so ring the visible box. The
+   ring goes on the viewport, which covers the .xterm box exactly and would
+   paint over an outline on .xterm itself; drawn inset, it stays clear of
+   the overflow-hidden dock wrappers. */
+.xterm-terminal.passive .xterm:has(.xterm-helper-textarea:focus-visible) .xterm-viewport {
+  outline: 2px solid var(--color-pinata-purple);
+  outline-offset: -2px;
+}
+
 @keyframes terminal-blink {
   0%,
   100% {
