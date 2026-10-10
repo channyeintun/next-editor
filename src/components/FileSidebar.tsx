@@ -21,13 +21,12 @@ import {
 import FileContextMenu from "./fileSidebar/FileContextMenu";
 import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
 import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
+import { FolderIcon, getFileIcon } from "./fileSidebar/fileIcons";
 import {
   buildWorkspaceTree,
   deletesEveryFile,
-  FolderIcon,
   getDefaultFileContent,
   getEditableSelectionEnd,
-  getFileIcon,
   getInlineNameError,
   getSidebarTreePaddingLeft,
   removeFolderFromCollapsedState,
@@ -35,7 +34,7 @@ import {
   type SidebarEditState,
   type SidebarEntryKind,
   type WorkspaceTreeNode,
-} from "./fileSidebarHelpers";
+} from "./fileSidebar/sidebarModel";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 
 function FileSidebarPanel() {

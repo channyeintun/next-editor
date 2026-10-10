@@ -10,12 +10,9 @@ import {
   writeStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import type { WorkspaceTreeFile } from "../types/workspace";
-import {
-  deletesEveryFile,
-  FolderIcon,
-  getInlineNameError,
-  getViewportClampedContextMenuPlacement,
-} from "./fileSidebarHelpers";
+import { getViewportClampedContextMenuPlacement } from "./fileSidebar/contextMenuPlacement";
+import { FolderIcon, getFileIcon } from "./fileSidebar/fileIcons";
+import { deletesEveryFile, getInlineNameError } from "./fileSidebar/sidebarModel";
 
 describe("FolderIcon", () => {
   const fills = (open: boolean) =>
@@ -27,6 +24,22 @@ describe("FolderIcon", () => {
   it("draws an open folder in two blues and a closed one in grey", () => {
     expect(fills(true)).toEqual(["#5c99d6", "#3d7ab5"]);
     expect(fills(false)).toEqual(["#78909c"]);
+  });
+});
+
+describe("getFileIcon", () => {
+  const iconMarkup = (file: WorkspaceTreeFile) => render(getFileIcon(file)).container.innerHTML;
+
+  it("draws tsconfig.json with the TypeScript icon", () => {
+    expect(iconMarkup({ path: "tsconfig.json", name: "tsconfig.json", language: "json" })).toBe(
+      iconMarkup({ path: "src/main.ts", name: "main.ts", language: "typescript" }),
+    );
+  });
+
+  it("draws an unrecognized binary file with the generic file icon", () => {
+    expect(
+      iconMarkup({ path: "data.bin", name: "data.bin", language: "plaintext", encoding: "base64" }),
+    ).toBe(iconMarkup({ path: "notes.txt", name: "notes.txt", language: "plaintext" }));
   });
 });
 

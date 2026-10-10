@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { SidebarContextMenuState, SidebarEntryKind } from "../fileSidebarHelpers";
+import type { SidebarContextMenuState, SidebarEntryKind } from "./sidebarModel";
 import FileContextMenu from "./FileContextMenu";
 
 const clipboard = vi.hoisted(() => ({

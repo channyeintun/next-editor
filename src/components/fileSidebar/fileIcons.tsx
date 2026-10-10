@@ -1,192 +1,10 @@
 import type { ReactElement } from "react";
-import type { WorkspaceTreeFile } from "../types/workspace";
-import { getParentWorkspacePath, getWorkspaceBaseName } from "../types/workspacePaths";
-import { getWorkspaceMediaKind, inferLanguageFromPath } from "../types/workspaceFiles";
-import { isPathWithinFolder } from "../stores/workspaceProjectSupport";
+import type { WorkspaceTreeFile } from "../../types/workspace";
+import { getWorkspaceBaseName } from "../../types/workspacePaths";
+import { getWorkspaceMediaKind } from "../../types/workspaceFiles";
 
-// ============================================================================
-// FileSidebar helpers
-//
-// Pure building blocks for the FileSidebar component: workspace tree
-// construction, file-type and folder icons, context-menu viewport placement
-// math, new-file templates, and a small selection utility. No React state or
-// hooks here, so the component file stays focused on interaction wiring.
-// ============================================================================
-
-export type WorkspaceTreeNode =
-  | {
-      kind: "file";
-      path: string;
-      name: string;
-      file: WorkspaceTreeFile;
-    }
-  | {
-      kind: "folder";
-      path: string;
-      name: string;
-      hasActiveFile: boolean;
-      children: WorkspaceTreeNode[];
-    };
-
-export type SidebarEntryKind = "file" | "folder";
-
-export type SidebarEditState =
-  | {
-      mode: "create";
-      kind: SidebarEntryKind;
-      parentPath: string;
-    }
-  | {
-      mode: "rename";
-      kind: SidebarEntryKind;
-      path: string;
-      parentPath: string;
-    }
-  | null;
-
-export interface SidebarContextMenuState {
-  x: number;
-  y: number;
-  kind: SidebarEntryKind;
-  path: string;
-  parentPath: string;
-}
-
-interface ContextMenuPlacementInput {
-  anchorX: number;
-  anchorY: number;
-  menuWidth: number;
-  menuHeight: number;
-  viewportWidth: number;
-  viewportHeight: number;
-  margin?: number;
-}
-
-interface ContextMenuPlacement {
-  left: number;
-  top: number;
-  maxHeight: number;
-}
-
-const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
-export const CONTEXT_MENU_FALLBACK_WIDTH = 224;
-export const CONTEXT_MENU_FALLBACK_HEIGHT = 320;
-const SIDEBAR_TREE_INDENT = 12;
-const SIDEBAR_TREE_OFFSET = 10;
-
-export function getSidebarTreePaddingLeft(depth: number): string {
-  return `${depth * SIDEBAR_TREE_INDENT + SIDEBAR_TREE_OFFSET}px`;
-}
-
-function clampViewportValue(value: number, min: number, max: number): number {
-  if (max < min) {
-    return min;
-  }
-
-  return Math.min(Math.max(value, min), max);
-}
-
-export function getViewportClampedContextMenuPlacement({
-  anchorX,
-  anchorY,
-  menuWidth,
-  menuHeight,
-  viewportWidth,
-  viewportHeight,
-  margin = CONTEXT_MENU_VIEWPORT_MARGIN,
-}: ContextMenuPlacementInput): ContextMenuPlacement {
-  const availableWidth = Math.max(viewportWidth - margin * 2, 0);
-  const availableHeight = Math.max(viewportHeight - margin * 2, 0);
-  const renderedWidth = Math.min(Math.max(menuWidth, 0), availableWidth);
-  const renderedHeight = Math.min(Math.max(menuHeight, 0), availableHeight);
-
-  return {
-    left: clampViewportValue(anchorX, margin, viewportWidth - renderedWidth - margin),
-    top: clampViewportValue(anchorY, margin, viewportHeight - renderedHeight - margin),
-    maxHeight: availableHeight,
-  };
-}
-
-const FILE_TEMPLATES: Record<string, string> = {
-  css: "body {\n  margin: 0;\n}\n",
-  // A signature and a definition, because an empty .hs file is a module with
-  // no `main`, and the first thing GHC would say about it is that `main` is
-  // missing rather than anything the lesson is about.
-  haskell: 'main :: IO ()\nmain = putStrLn "Hello, Haskell!"\n',
-  html: '<!doctype html>\n<html lang="en">\n  <body>\n  </body>\n</html>\n',
-  javascript: "export function main() {\n  return null;\n}\n",
-  json: "{}\n",
-  markdown: "# New file\n",
-  typescript: "export function main(): null {\n  return null;\n}\n",
-};
-
-export function getDefaultFileContent(path: string): string {
-  const language = inferLanguageFromPath(path);
-  return FILE_TEMPLATES[language] ?? "";
-}
-
-export function removeFolderFromCollapsedState(
-  current: Set<string>,
-  folderPath: string,
-): Set<string> {
-  if (!folderPath || !current.has(folderPath)) {
-    return current;
-  }
-
-  const next = new Set(current);
-  next.delete(folderPath);
-  return next;
-}
-
-/**
- * Whether deleting the entry at `path` (a file, or a folder with everything in
- * it) would remove every file. The sidebar disables that delete, and the local
- * workspace store also refuses it: a project always keeps at least one file.
- */
-export function deletesEveryFile(files: readonly WorkspaceTreeFile[], path: string): boolean {
-  return files.every((file) => isPathWithinFolder(file.path, path));
-}
-
-/**
- * Why the inline name field cannot take `nextPath`, or null when it can. The
- * workspace store refuses these same names without a word, so the field checks
- * first and says why; the store stays the authority. `currentPath` is the entry
- * being renamed, which never clashes with itself or anything inside it.
- */
-export function getInlineNameError(
-  files: readonly WorkspaceTreeFile[],
-  folders: readonly string[],
-  nextPath: string,
-  currentPath?: string,
-): string | null {
-  if (!nextPath) {
-    return "That name can't be used here.";
-  }
-
-  const isRenamedEntry = (path: string) =>
-    currentPath !== undefined && isPathWithinFolder(path, currentPath);
-  const otherFiles = files.filter((file) => !isRenamedEntry(file.path));
-  const clashes =
-    folders.some((folder) => folder === nextPath && folder !== currentPath) ||
-    otherFiles.some((file) => file.path === nextPath || file.path.startsWith(`${nextPath}/`));
-
-  if (clashes) {
-    return `"${getWorkspaceBaseName(nextPath)}" already exists here.`;
-  }
-
-  // A name with a slash can reach through a file, as in "index.html/page.html".
-  const enclosingFile = otherFiles.find((file) => nextPath.startsWith(`${file.path}/`));
-  if (enclosingFile) {
-    return `"${getWorkspaceBaseName(enclosingFile.path)}" is a file, not a folder.`;
-  }
-
-  // renameFolder refuses a folder moved into itself, such as "src" to "src/app".
-  if (currentPath && folders.includes(currentPath) && nextPath.startsWith(`${currentPath}/`)) {
-    return "A folder can't be moved inside itself.";
-  }
-
-  return null;
-}
+// The file tree's artwork: folder icons, and one icon per file type, picked by
+// file name, then encoding, then extension, then language.
 
 /** A folder in the tree: open (two-tone blue) or closed (grey). */
 export function FolderIcon({ open }: { open: boolean }) {
@@ -227,6 +45,27 @@ function langBadge(bg: string, fg: string, label: string): ReactElement {
   );
 }
 
+// Shared by two branches each: tsconfig*.json wears the TypeScript icon, and a
+// binary file that is not an image, video or audio wears the generic file icon
+// that also ends the language list.
+const TYPESCRIPT_ICON = (
+  <svg width={13} height={13} viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fill="#0288d1"
+      d="M2 2v12h12V2zm4 6h3v1H8v4H7V9H6zm5 0h2v1h-2v1h1a1.003 1.003 0 0 1 1 1v1a1.003 1.003 0 0 1-1 1h-2v-1h2v-1h-1a1.003 1.003 0 0 1-1-1V9a1.003 1.003 0 0 1 1-1"
+    />
+  </svg>
+);
+
+const GENERIC_FILE_ICON = (
+  <svg width={13} height={13} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fill="#42a5f5"
+      d="M8 16h8v2H8zm0-4h8v2H8zm6-10H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8zm4 18H6V4h7v5h5z"
+    />
+  </svg>
+);
+
 export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
   const name = getWorkspaceBaseName(file.path).toLowerCase();
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
@@ -256,14 +95,7 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
   }
 
   if (name.startsWith("tsconfig") && ext === ".json") {
-    return (
-      <svg width={13} height={13} viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-        <path
-          fill="#0288d1"
-          d="M2 2v12h12V2zm4 6h3v1H8v4H7V9H6zm5 0h2v1h-2v1h1a1.003 1.003 0 0 1 1 1v1a1.003 1.003 0 0 1-1 1h-2v-1h2v-1h-1a1.003 1.003 0 0 1-1-1V9a1.003 1.003 0 0 1 1-1"
-        />
-      </svg>
-    );
+    return TYPESCRIPT_ICON;
   }
 
   if (name === "dockerfile" || name.startsWith("dockerfile.")) {
@@ -314,14 +146,7 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
       );
     }
 
-    return (
-      <svg width={13} height={13} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path
-          fill="#42a5f5"
-          d="M8 16h8v2H8zm0-4h8v2H8zm6-10H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8zm4 18H6V4h7v5h5z"
-        />
-      </svg>
-    );
+    return GENERIC_FILE_ICON;
   }
 
   // ---- Extension-specific ----
@@ -380,14 +205,7 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
 
   // ---- Language-based ----
   if (file.language === "typescript") {
-    return (
-      <svg width={13} height={13} viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-        <path
-          fill="#0288d1"
-          d="M2 2v12h12V2zm4 6h3v1H8v4H7V9H6zm5 0h2v1h-2v1h1a1.003 1.003 0 0 1 1 1v1a1.003 1.003 0 0 1-1 1h-2v-1h2v-1h-1a1.003 1.003 0 0 1-1-1V9a1.003 1.003 0 0 1 1-1"
-        />
-      </svg>
-    );
+    return TYPESCRIPT_ICON;
   }
 
   if (file.language === "javascript") {
@@ -484,94 +302,5 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
     );
   }
 
-  return (
-    <svg width={13} height={13} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path
-        fill="#42a5f5"
-        d="M8 16h8v2H8zm0-4h8v2H8zm6-10H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8zm4 18H6V4h7v5h5z"
-      />
-    </svg>
-  );
-}
-
-export function getEditableSelectionEnd(name: string, kind: "file" | "folder") {
-  if (kind === "folder") {
-    return name.length;
-  }
-
-  const extensionIndex = name.lastIndexOf(".");
-  if (extensionIndex <= 0) {
-    return name.length;
-  }
-
-  return extensionIndex;
-}
-
-export function buildWorkspaceTree(
-  files: WorkspaceTreeFile[],
-  folders: string[],
-  activeFilePath: string,
-): WorkspaceTreeNode[] {
-  const root = {
-    kind: "folder" as const,
-    path: "",
-    name: "",
-    hasActiveFile: true,
-    children: [] as WorkspaceTreeNode[],
-  };
-  const folderMap = new Map<string, Extract<WorkspaceTreeNode, { kind: "folder" }>>([["", root]]);
-
-  const ensureFolderNode = (folderPath: string) => {
-    if (folderMap.has(folderPath)) {
-      return folderMap.get(folderPath)!;
-    }
-
-    const parentPath = getParentWorkspacePath(folderPath);
-    const parentNode = ensureFolderNode(parentPath);
-    const folderNode: Extract<WorkspaceTreeNode, { kind: "folder" }> = {
-      kind: "folder",
-      path: folderPath,
-      name: getWorkspaceBaseName(folderPath),
-      hasActiveFile: activeFilePath === folderPath || activeFilePath.startsWith(`${folderPath}/`),
-      children: [],
-    };
-
-    parentNode.children.push(folderNode);
-    folderMap.set(folderPath, folderNode);
-    return folderNode;
-  };
-
-  for (const folderPath of folders) {
-    ensureFolderNode(folderPath);
-  }
-
-  for (const file of files) {
-    const parentPath = getParentWorkspacePath(file.path);
-    const parentNode = ensureFolderNode(parentPath);
-    parentNode.children.push({
-      kind: "file",
-      path: file.path,
-      name: file.name,
-      file,
-    });
-  }
-
-  const sortNodes = (nodes: WorkspaceTreeNode[]) => {
-    nodes.sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind === "folder" ? -1 : 1;
-      }
-
-      return left.name.localeCompare(right.name);
-    });
-
-    for (const node of nodes) {
-      if (node.kind === "folder") {
-        sortNodes(node.children);
-      }
-    }
-  };
-
-  sortNodes(root.children);
-  return root.children;
+  return GENERIC_FILE_ICON;
 }
