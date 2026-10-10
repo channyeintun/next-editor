@@ -1,7 +1,8 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WorkspaceDirtyState, WorkspaceSaveStatus } from "../stores/workspaceStore";
+import type { WorkspaceSaveStatus } from "../stores/workspaceStore";
+import type { WorkspaceDirtyState } from "../stores/workspaceDirtyState";
 import type { WorkspaceActions, WorkspaceSyncMutation } from "../stores/workspaceActions";
 import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
 

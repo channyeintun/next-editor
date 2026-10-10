@@ -1,7 +1,6 @@
 import { createStore } from "@xstate/store-react";
 import {
   areStringArraysEqual,
-  areWorkspaceFilesEqual,
   areWorkspaceProjectsEqual,
   isWorkspaceAssetFile,
   isWorkspaceTextFile,
@@ -40,6 +39,13 @@ import {
   resolveActiveFilePath,
   withMigratedAssetDescriptors,
 } from "./workspaceProjectSupport";
+import {
+  areDirtyStatesEqual,
+  createDirtyState,
+  EMPTY_WORKSPACE_DIRTY_STATE,
+  refreshDirtyPath,
+  type WorkspaceDirtyState,
+} from "./workspaceDirtyState";
 
 export { normalizeProject, WorkspaceProjectValidationError } from "./workspaceProjectSupport";
 
@@ -65,16 +71,6 @@ export interface WorkspaceSidebarState {
   sidebarWidth: number;
   lessonType: WorkspaceLessonType;
   previewFilePath: string;
-}
-
-export interface WorkspaceDirtyState {
-  dirtyFilePaths: string[];
-  addedFilePaths: string[];
-  modifiedFilePaths: string[];
-  deletedFilePaths: string[];
-  projectMetadataChanged: boolean;
-  folderStructureChanged: boolean;
-  hasUnsavedChanges: boolean;
 }
 
 export interface WorkspaceSaveStatus {
@@ -113,48 +109,6 @@ export type WorkspaceState =
     });
 
 export type InitializedWorkspaceState = Extract<WorkspaceState, { isInitialized: true }>;
-
-function createDirtyState(
-  currentProject: WorkspaceProject,
-  savedProject: WorkspaceProject,
-): WorkspaceDirtyState {
-  const currentPaths = new Set(Object.keys(currentProject.files));
-  const savedPaths = new Set(Object.keys(savedProject.files));
-  const addedFilePaths = Array.from(currentPaths)
-    .filter((path) => !savedPaths.has(path))
-    .sort((left, right) => left.localeCompare(right));
-  const deletedFilePaths = Array.from(savedPaths)
-    .filter((path) => !currentPaths.has(path))
-    .sort((left, right) => left.localeCompare(right));
-  const modifiedFilePaths = Array.from(currentPaths)
-    .filter((path) => {
-      const savedFile = savedProject.files[path];
-      return savedFile ? !areWorkspaceFilesEqual(currentProject.files[path], savedFile) : false;
-    })
-    .sort((left, right) => left.localeCompare(right));
-  const dirtyFilePaths = Array.from(
-    new Set([...addedFilePaths, ...modifiedFilePaths, ...deletedFilePaths]),
-  ).sort((left, right) => left.localeCompare(right));
-  const folderStructureChanged =
-    currentProject.folders.length !== savedProject.folders.length ||
-    currentProject.folders.some((folder, index) => folder !== savedProject.folders[index]);
-  const projectMetadataChanged =
-    currentProject.id !== savedProject.id ||
-    currentProject.name !== savedProject.name ||
-    currentProject.lessonType !== savedProject.lessonType ||
-    currentProject.entryFilePath !== savedProject.entryFilePath;
-
-  return {
-    dirtyFilePaths,
-    addedFilePaths,
-    modifiedFilePaths,
-    deletedFilePaths,
-    projectMetadataChanged,
-    folderStructureChanged,
-    hasUnsavedChanges:
-      dirtyFilePaths.length > 0 || projectMetadataChanged || folderStructureChanged,
-  };
-}
 
 function createEditorState(
   project: WorkspaceProject,
@@ -269,18 +223,6 @@ function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSide
   );
 }
 
-function areDirtyStatesEqual(left: WorkspaceDirtyState, right: WorkspaceDirtyState): boolean {
-  return (
-    left.hasUnsavedChanges === right.hasUnsavedChanges &&
-    left.projectMetadataChanged === right.projectMetadataChanged &&
-    left.folderStructureChanged === right.folderStructureChanged &&
-    areStringArraysEqual(left.dirtyFilePaths, right.dirtyFilePaths) &&
-    areStringArraysEqual(left.addedFilePaths, right.addedFilePaths) &&
-    areStringArraysEqual(left.modifiedFilePaths, right.modifiedFilePaths) &&
-    areStringArraysEqual(left.deletedFilePaths, right.deletedFilePaths)
-  );
-}
-
 function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
   if (!state.isInitialized) {
     return state;
@@ -374,70 +316,15 @@ function whenInitialized<TEvent>(
   return (context, event) => (context.isInitialized ? transition(context, event) : context);
 }
 
-function updateSortedPathMembership(paths: string[], path: string, included: boolean): string[] {
-  let low = 0;
-  let high = paths.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    if (paths[middle].localeCompare(path) < 0) low = middle + 1;
-    else high = middle;
-  }
-
-  const currentlyIncluded = paths[low] === path;
-  if (currentlyIncluded === included) return paths;
-  return included
-    ? [...paths.slice(0, low), path, ...paths.slice(low)]
-    : [...paths.slice(0, low), ...paths.slice(low + 1)];
-}
-
 function withRefreshedDirtyPath(
   state: InitializedWorkspaceState,
   path: string,
 ): InitializedWorkspaceState {
-  const currentFile = state.project.files[path];
-  const savedFile = state.savedSnapshot.project.files[path];
-  const isAdded = Boolean(currentFile && !savedFile);
-  const isDeleted = Boolean(!currentFile && savedFile);
-  const isModified = Boolean(
-    currentFile && savedFile && !areWorkspaceFilesEqual(currentFile, savedFile),
-  );
-  const isDirty = isAdded || isDeleted || isModified;
-  const addedFilePaths = updateSortedPathMembership(state.dirtyState.addedFilePaths, path, isAdded);
-  const deletedFilePaths = updateSortedPathMembership(
-    state.dirtyState.deletedFilePaths,
-    path,
-    isDeleted,
-  );
-  const modifiedFilePaths = updateSortedPathMembership(
-    state.dirtyState.modifiedFilePaths,
-    path,
-    isModified,
-  );
-  const dirtyFilePaths = updateSortedPathMembership(state.dirtyState.dirtyFilePaths, path, isDirty);
-
-  if (
-    addedFilePaths === state.dirtyState.addedFilePaths &&
-    deletedFilePaths === state.dirtyState.deletedFilePaths &&
-    modifiedFilePaths === state.dirtyState.modifiedFilePaths &&
-    dirtyFilePaths === state.dirtyState.dirtyFilePaths
-  ) {
-    return state;
-  }
-
-  return {
-    ...state,
-    dirtyState: {
-      ...state.dirtyState,
-      addedFilePaths,
-      deletedFilePaths,
-      modifiedFilePaths,
-      dirtyFilePaths,
-      hasUnsavedChanges:
-        dirtyFilePaths.length > 0 ||
-        state.dirtyState.projectMetadataChanged ||
-        state.dirtyState.folderStructureChanged,
-    },
-  };
+  const dirtyState = refreshDirtyPath(state.dirtyState, path, {
+    currentFile: state.project.files[path],
+    savedFile: state.savedSnapshot.project.files[path],
+  });
+  return dirtyState === state.dirtyState ? state : { ...state, dirtyState };
 }
 
 function withUpdatedFileContent(
@@ -1144,16 +1031,6 @@ const emptySidebarState: WorkspaceSidebarState = {
   previewFilePath: "",
 };
 
-const emptyDirtyState: WorkspaceDirtyState = {
-  dirtyFilePaths: [],
-  addedFilePaths: [],
-  modifiedFilePaths: [],
-  deletedFilePaths: [],
-  projectMetadataChanged: false,
-  folderStructureChanged: false,
-  hasUnsavedChanges: false,
-};
-
 export const selectWorkspaceEditorState = (context: WorkspaceState): WorkspaceEditorState =>
   context.isInitialized ? context.editorState : emptyEditorState;
 
@@ -1191,7 +1068,7 @@ export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
   context.isInitialized ? context.fileCount : 0;
 
 export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDirtyState =>
-  context.isInitialized ? context.dirtyState : emptyDirtyState;
+  context.isInitialized ? context.dirtyState : EMPTY_WORKSPACE_DIRTY_STATE;
 
 export const selectWorkspaceSaveVersion = (context: WorkspaceState): number => context.saveVersion;
 

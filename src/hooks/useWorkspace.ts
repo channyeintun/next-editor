@@ -20,11 +20,11 @@ import {
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
   selectWorkspaceTreeVersion,
-  type WorkspaceDirtyState,
   type WorkspaceEditorState,
   type WorkspaceSaveStatus,
   type WorkspaceSidebarState,
 } from "../stores/workspaceStore";
+import type { WorkspaceDirtyState } from "../stores/workspaceDirtyState";
 import type { WorkspaceLessonType } from "../types/workspace";
 
 function useWorkspaceStore(hookName: string) {

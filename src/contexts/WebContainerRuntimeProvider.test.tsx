@@ -12,7 +12,7 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
 import { createWorkspaceFile } from "../starters/shared";
-import type { WorkspaceDirtyState } from "../stores/workspaceStore";
+import type { WorkspaceDirtyState } from "../stores/workspaceDirtyState";
 import {
   isWorkspaceTextFile,
   type WorkspaceLessonType,
