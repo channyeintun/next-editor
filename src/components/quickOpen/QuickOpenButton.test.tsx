@@ -100,6 +100,12 @@ function flushFrames() {
 
 describe("QuickOpenButton", () => {
   it("opens on Ctrl+P, pausing a playing lesson, and never lets the browser print", () => {
+    // The pause stops the lesson, so the re-pause effect sees it stopped once
+    // the picker is up and sends no second pause.
+    mocks.isPlaying = true;
+    mocks.pause.mockImplementation(() => {
+      mocks.isPlaying = false;
+    });
     renderButton();
     const bubbleListener = vi.fn<(event: KeyboardEvent) => void>();
     document.addEventListener("keydown", bubbleListener);
