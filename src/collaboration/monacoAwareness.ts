@@ -2,15 +2,13 @@ import type * as awarenessProtocol from "y-protocols/awareness";
 import * as Y from "yjs";
 import {
   collaborationAwarenessServerStateSchema,
-  type CollaborationAwarenessEvent,
+  type CollaborationPresenceState,
 } from "./protocol";
 import { isSafeForeignRelativePosition } from "./relativePosition";
 
-type CollaborationPresence = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
-
 export interface ResolvedMonacoAwarenessSelection {
   clientId: number;
-  participant: CollaborationPresence;
+  participant: CollaborationPresenceState;
   anchorOffset: number;
   headOffset: number;
 }

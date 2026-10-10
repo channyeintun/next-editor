@@ -1,11 +1,6 @@
 import type { CollaborationConnectionState } from "./collaborationMachine";
 import { collaborationParticipantKey } from "./participantKey";
-import type { CollaborationAwarenessEvent } from "./protocol";
-
-export type CollaborationPresenceParticipant = Extract<
-  CollaborationAwarenessEvent,
-  { kind: "state" }
->;
+import type { CollaborationAwarenessEvent, CollaborationPresenceState } from "./protocol";
 
 export type CollaborationFollowAvailability = "none" | "active" | "suspended" | "missing";
 
@@ -28,10 +23,10 @@ export function scheduleCollaborationAwarenessFlush(
 }
 
 export function applyCollaborationParticipantEvent(
-  current: Map<string, CollaborationPresenceParticipant>,
+  current: Map<string, CollaborationPresenceState>,
   event: CollaborationAwarenessEvent,
   now = Date.now(),
-): Map<string, CollaborationPresenceParticipant> {
+): Map<string, CollaborationPresenceState> {
   const key = collaborationParticipantKey(event);
   const previous = current.get(key);
   if (

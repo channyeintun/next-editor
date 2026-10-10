@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
-import type { CollaborationAwarenessEvent } from "../../collaboration/protocol";
+import type { CollaborationPresenceState } from "../../collaboration/protocol";
 
-export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
+export type CollaborationParticipant = CollaborationPresenceState;
 
 /**
  * Who is in the room and whom this tab follows. Every awareness event and

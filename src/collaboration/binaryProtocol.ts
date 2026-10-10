@@ -2,7 +2,7 @@ import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
-import { collaborationIdSchema } from "./protocol";
+import { collaborationIdSchema, collaborationStreamIdSchema } from "./protocol";
 
 // The only supported room wire version carries document sync/update and
 // authenticated standard-awareness frames in one binary envelope.
@@ -66,7 +66,9 @@ function parseId(value: string): string {
 }
 
 function parseStreamId(value: string): string {
-  if (!/^\d+-\d+$/.test(value)) throw new CollaborationBinaryProtocolError();
+  if (!collaborationStreamIdSchema.safeParse(value).success) {
+    throw new CollaborationBinaryProtocolError();
+  }
   return value;
 }
 
@@ -138,7 +140,7 @@ export function encodeCollaborationServerUpdate(input: {
   update: Uint8Array;
 }): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_SERVER_UPDATE);
-  if (!/^\d+-\d+$/.test(input.streamId)) {
+  if (!collaborationStreamIdSchema.safeParse(input.streamId).success) {
     throw new CollaborationBinaryProtocolError("invalid collaboration stream ID");
   }
   encoding.writeVarString(encoder, input.streamId);

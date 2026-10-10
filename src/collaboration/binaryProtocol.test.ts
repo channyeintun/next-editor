@@ -1,8 +1,10 @@
+import * as encoding from "lib0/encoding";
 import * as awarenessProtocol from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import {
+  COLLABORATION_BINARY_PROTOCOL_VERSION,
   CollaborationBinaryProtocolError,
   decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,
@@ -147,6 +149,33 @@ describe("collaboration binary protocol", () => {
     expect(frame.byteLength).toBeLessThan(16 * 1024);
     awareness.destroy();
     doc.destroy();
+  });
+
+  it("rejects a malformed stream ID when encoding and decoding a server update", () => {
+    const update = Uint8Array.of(0, 0);
+    // The frame encodeCollaborationServerUpdate writes, without its check.
+    const serverFrame = (streamId: string) => {
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, COLLABORATION_BINARY_PROTOCOL_VERSION);
+      encoding.writeVarUint(encoder, 2);
+      encoding.writeVarString(encoder, streamId);
+      encoding.writeVarString(encoder, UPDATE_ID);
+      syncProtocol.writeUpdate(encoder, update);
+      return encoding.toUint8Array(encoder);
+    };
+    expect(decodeCollaborationBinaryFrame(serverFrame("42-0"))).toMatchObject({
+      kind: "server-update",
+      streamId: "42-0",
+    });
+
+    for (const streamId of ["42", "42-", "-0", "a-0", "42-0 ", "42_0"]) {
+      expect(() =>
+        encodeCollaborationServerUpdate({ streamId, updateId: UPDATE_ID, update }),
+      ).toThrow(CollaborationBinaryProtocolError);
+      expect(() => decodeCollaborationBinaryFrame(serverFrame(streamId))).toThrow(
+        CollaborationBinaryProtocolError,
+      );
+    }
   });
 
   it("rejects unknown versions and trailing bytes", () => {

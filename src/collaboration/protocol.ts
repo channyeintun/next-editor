@@ -23,6 +23,8 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
 
 export const collaborationIdSchema = z.string().regex(UUID_PATTERN, "expected a UUID");
+/** A room update's server-assigned position in the stream, `<sequence>-<n>`. */
+export const collaborationStreamIdSchema = z.string().regex(/^\d+-\d+$/);
 export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export const collaborationInviteRoleSchema = z.enum(["editor", "viewer"]);
 export const collaborationRoomStatusSchema = z.enum(["provisioning", "active", "closed", "failed"]);
@@ -385,6 +387,8 @@ export const collaborationAwarenessEventSchema = z.union([
 
 export type CollaborationAwarenessInput = z.infer<typeof collaborationAwarenessInputSchema>;
 export type CollaborationAwarenessEvent = z.infer<typeof collaborationAwarenessEventSchema>;
+/** A participant's live presence: an awareness event that is not a departure. */
+export type CollaborationPresenceState = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
 
 function validateAwarenessSelectionSurface(
   value: {
@@ -489,7 +493,7 @@ export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("t
     .object({
       type: z.literal("document.ack"),
       updateId: collaborationIdSchema,
-      streamId: z.string().regex(/^\d+-\d+$/),
+      streamId: collaborationStreamIdSchema,
       duplicate: z.boolean(),
     })
     .strict(),

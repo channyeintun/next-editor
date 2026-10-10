@@ -1,8 +1,8 @@
 import type * as Y from "yjs";
 import type { ResolvedMonacoAwarenessSelection } from "../collaboration/monacoAwareness";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
+import type { CollaborationPresenceState } from "../collaboration/protocol";
 import { resolveCollaborationCursor } from "../collaboration/relativePosition";
-import type { CollaborationParticipant } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import { monaco } from "../monaco";
 import type { CollaborationCursorLabel } from "./collaborationCursorLabels";
@@ -65,7 +65,7 @@ export function resolveAwarenessText(
 export type RemoteEditorSelection = {
   /** The participant's collaborationParticipantKey. */
   key: string;
-  participant: CollaborationParticipant;
+  participant: CollaborationPresenceState;
   anchorOffset: number;
   headOffset: number;
 } & (
@@ -95,7 +95,7 @@ export function collectRemoteEditorSelections({
 }: {
   awarenessSelections: readonly ResolvedMonacoAwarenessSelection[];
   doc: Y.Doc;
-  participants: readonly CollaborationParticipant[];
+  participants: readonly CollaborationPresenceState[];
   ownParticipantKey: string | null;
   activeFileNodeId: string | undefined;
 }): RemoteEditorSelection[] {
@@ -197,7 +197,7 @@ export function remoteSelectionDecorations(
 export function participantCursorDecorations(
   model: PositionedModel,
   participantKey: string,
-  participant: CollaborationParticipant,
+  participant: CollaborationPresenceState,
   { anchorOffset, headOffset }: { anchorOffset: number; headOffset: number },
 ): { decorations: monaco.editor.IModelDeltaDecoration[]; label: CollaborationCursorLabel } {
   const selection = resolveRemoteSelection(model, anchorOffset, headOffset);

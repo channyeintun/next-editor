@@ -4,9 +4,9 @@ import {
   getCollaborationFollowAvailability,
   isCollaborationFollowSuspendedConnectionState,
   scheduleCollaborationAwarenessFlush,
-  type CollaborationPresenceParticipant,
 } from "./followLifecycle";
 import { collaborationParticipantKey } from "./participantKey";
+import type { CollaborationPresenceState } from "./protocol";
 
 const OWN_SESSION = "10000000-0000-4000-8000-000000000001";
 const TARGET_SESSION = "20000000-0000-4000-8000-000000000002";
@@ -15,7 +15,7 @@ const OWN_ACTOR_ID = "30000000-0000-4000-8000-000000000004";
 const OWN_KEY = collaborationParticipantKey({ actorId: OWN_ACTOR_ID, sessionId: OWN_SESSION });
 const TARGET_KEY = collaborationParticipantKey({ actorId: ACTOR_ID, sessionId: TARGET_SESSION });
 
-function participant(revision: number, expiresAt = 10_000): CollaborationPresenceParticipant {
+function participant(revision: number, expiresAt = 10_000): CollaborationPresenceState {
   return {
     kind: "state",
     roomId: "40000000-0000-4000-8000-000000000004",
@@ -176,7 +176,7 @@ describe("collaboration follow lifecycle", () => {
   });
 
   it("does not admit already expired presence", () => {
-    const current = new Map<string, CollaborationPresenceParticipant>();
+    const current = new Map<string, CollaborationPresenceState>();
     const next = applyCollaborationParticipantEvent(current, participant(1, 5), 5);
     expect(next.size).toBe(0);
   });
