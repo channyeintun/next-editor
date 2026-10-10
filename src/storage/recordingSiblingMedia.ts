@@ -257,6 +257,19 @@ export async function findWorkingAudioBlob(
 }
 
 /**
+ * The recording's narration as a Blob: a take holds it in memory, an imported lesson may only
+ * link it by `audioUrl`. Null when it has neither; a failed download throws with its status.
+ * The edit panel draws its waveform from this and caption generation transcribes it.
+ */
+export async function loadRecordingNarration(recording: Recording): Promise<Blob | null> {
+  if (recording.audioBlob instanceof Blob) return recording.audioBlob;
+  if (!recording.audioUrl) return null;
+  const response = await fetch(recording.audioUrl);
+  if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
+  return response.blob();
+}
+
+/**
  * Finds a working camera URL — playback consumes `cameraUrl` directly via a `<video src>`,
  * which fails silently on a bad URL rather than throwing, so the happy-path guess from
  * `withResolvedMediaUrls` is verified with a cheap probe before falling back through the

@@ -17,6 +17,7 @@ import {
 } from "../core/src/utils/audioPeaks";
 import { normalizeMediaSpans, type MediaSpan } from "../core/src/utils/mediaSpans";
 import { relinkRecordingDraft } from "../storage/recordingDrafts/recordingDraftJournal";
+import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 
 type EditKind = "cut" | "mute";
@@ -61,15 +62,6 @@ function activityTimes(recording: Recording): number[] {
   add(recording.chatEvents);
   for (const batch of recording.previewPatchBatches ?? []) times.push(batch.time);
   return times;
-}
-
-/** The recording's narration as a Blob: a take has one, an imported lesson may only link it. */
-async function loadNarration(recording: Recording): Promise<Blob | null> {
-  if (recording.audioBlob instanceof Blob) return recording.audioBlob;
-  if (!recording.audioUrl) return null;
-  const response = await fetch(recording.audioUrl);
-  if (!response.ok) throw new Error(`The narration could not be loaded (${response.status})`);
-  return response.blob();
 }
 
 function drawWaveform(
@@ -199,7 +191,7 @@ export default function RecordingEditPanel({
 
   useEffect(() => {
     let cancelled = false;
-    loadNarration(recording)
+    loadRecordingNarration(recording)
       .then(async (blob) => {
         if (!blob) {
           if (!cancelled) setNarrationState("none");

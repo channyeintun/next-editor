@@ -3,20 +3,12 @@ import type { CaptionCue, Recording } from "../core/src";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { useCaptionStoreTrigger } from "./useCaptionStore";
 import type { CaptionGenerationProgress } from "../captions/generateCaptions";
+import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 
 export type CaptionGenerationState =
   | { status: "idle" }
   | { status: "running"; progress: CaptionGenerationProgress | null }
   | { status: "failed"; message: string };
-
-/** The narration to transcribe: a take has it in memory, an imported lesson may only link it. */
-async function narrationOf(recording: Recording): Promise<Blob> {
-  if (recording.audioBlob instanceof Blob) return recording.audioBlob;
-  if (!recording.audioUrl) throw new Error("This recording has no narration to caption.");
-  const response = await fetch(recording.audioUrl);
-  if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
-  return response.blob();
-}
 
 /**
  * One captioning job: transcribes the narration, reports each state it goes through to
@@ -36,7 +28,9 @@ async function runCaptionJob(
   try {
     // Loaded on demand: the model code is only paid for by authors who caption.
     const { generateCaptions } = await import("../captions/generateCaptions");
-    const { language, cues } = await generateCaptions(recording, await narrationOf(recording), {
+    const narration = await loadRecordingNarration(recording);
+    if (!narration) throw new Error("This recording has no narration to caption.");
+    const { language, cues } = await generateCaptions(recording, narration, {
       signal: controller.signal,
       onProgress: (progress) => {
         if (!controller.signal.aborted) job.update({ status: "running", progress });
