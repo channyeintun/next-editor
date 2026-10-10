@@ -116,10 +116,27 @@ export interface AthanLabErrorDetails {
   jobId?: string;
 }
 
+declare const upstreamCodeBrand: unique symbol;
+
+/**
+ * An error code AthanLab itself sent, which the routes relay to the page as it
+ * came. Branded apart from plain strings so every code the routes write
+ * themselves stays checked against AthanLabErrorCode
+ * (src/studio/tts/athanlab/protocol.ts).
+ */
+export type AthanLabUpstreamCode = string & { readonly [upstreamCodeBrand]: true };
+
+/** A well-formed AthanLab error code, or null. */
+function upstreamCodeOf(code: unknown): AthanLabUpstreamCode | null {
+  return typeof code === "string" && ERROR_CODE_PATTERN.test(code)
+    ? (code as AthanLabUpstreamCode)
+    : null;
+}
+
 export interface AthanLabError {
   status: number;
   /** AthanLab's machine-readable code, when it sent a well-formed one. */
-  code: string | null;
+  code: AthanLabUpstreamCode | null;
   /** Its message, safe to show and log: key redacted, flattened, bounded. */
   message: string | null;
   /** The body was AthanLab's JSON error envelope. */
@@ -202,7 +219,7 @@ export async function readAthanLabError(
   } = envelope as Record<string, unknown>;
   result.parsed = true;
   result.retryable = retryable === true;
-  if (typeof code === "string" && ERROR_CODE_PATTERN.test(code)) result.code = code;
+  result.code = upstreamCodeOf(code);
   if (typeof message === "string") result.message = sanitizeAthanLabText(message, apiKey);
   if (typeof requestId === "string" && REQUEST_ID_PATTERN.test(requestId)) {
     result.requestId = requestId;
@@ -380,7 +397,7 @@ export interface SpeechJob {
   id: string;
   status: SpeechJobStatus;
   /** Why a failed job failed; null otherwise. */
-  error: { code: string | null; message: string | null; retryable: boolean } | null;
+  error: { code: AthanLabUpstreamCode | null; message: string | null; retryable: boolean } | null;
 }
 
 const SPEECH_JOB_STATUSES = new Set<string>(["processing", "succeeded", "failed", "cancelled"]);
@@ -400,7 +417,7 @@ export function speechJobOf(payload: unknown, apiKey: string): SpeechJob | null 
   if (typeof error === "object" && error !== null) {
     const { code, message, retryable } = error as Record<string, unknown>;
     jobError = {
-      code: typeof code === "string" && ERROR_CODE_PATTERN.test(code) ? code : null,
+      code: upstreamCodeOf(code),
       message: typeof message === "string" ? sanitizeAthanLabText(message, apiKey) : null,
       retryable: retryable === true,
     };

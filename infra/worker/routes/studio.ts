@@ -5,6 +5,12 @@ import { isJsonObject, readBodyWithLimit, readJsonWithLimit } from "../httpBody"
 import { sanitizeUpstreamText } from "../upstreamText";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
 import { keyVaultOf } from "../athanlab/keyVault";
+import {
+  VOXCPM2_MAX_REFERENCE_SECONDS,
+  VOXCPM2_MAX_SEED,
+  VOXCPM2_MIN_REFERENCE_SECONDS,
+  VOXCPM2_REFERENCE_SAMPLE_RATE,
+} from "../../../src/studio/tts/voxcpm2Protocol";
 
 // Mounted at /api/studio in worker/index.ts. The capability response controls
 // discovery only; POST /tts/voxcpm2 repeats authentication and the D1 check so
@@ -15,13 +21,9 @@ export const studioRoute = new Hono<{ Bindings: Env }>();
 
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_CHARS = 2_000;
-const MAX_SEED = 0x7fffffff;
-const REFERENCE_SAMPLE_RATE = 24_000;
-const MIN_REFERENCE_SECONDS = 5;
-const MAX_REFERENCE_SECONDS = 20;
 const WAV_HEADER_BYTES = 44;
 const MAX_REFERENCE_WAV_BYTES =
-  WAV_HEADER_BYTES + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2;
+  WAV_HEADER_BYTES + VOXCPM2_REFERENCE_SAMPLE_RATE * VOXCPM2_MAX_REFERENCE_SECONDS * 2;
 const RIFF = 0x46464952;
 const WAVE = 0x45564157;
 const FMT_ = 0x20746d66;
@@ -192,7 +194,8 @@ function validateReferenceAudioBase64(
   }
 
   const byteLength = binary.length;
-  const minBytes = WAV_HEADER_BYTES + REFERENCE_SAMPLE_RATE * MIN_REFERENCE_SECONDS * 2;
+  const minBytes =
+    WAV_HEADER_BYTES + VOXCPM2_REFERENCE_SAMPLE_RATE * VOXCPM2_MIN_REFERENCE_SECONDS * 2;
   if (byteLength < minBytes || byteLength > MAX_REFERENCE_WAV_BYTES) {
     return { ok: false, error: "reference audio must contain 5–20 seconds of speech" };
   }
@@ -211,8 +214,8 @@ function validateReferenceAudioBase64(
     view.getUint32(16, true) !== 16 ||
     view.getUint16(20, true) !== 1 ||
     view.getUint16(22, true) !== 1 ||
-    view.getUint32(24, true) !== REFERENCE_SAMPLE_RATE ||
-    view.getUint32(28, true) !== REFERENCE_SAMPLE_RATE * 2 ||
+    view.getUint32(24, true) !== VOXCPM2_REFERENCE_SAMPLE_RATE ||
+    view.getUint32(28, true) !== VOXCPM2_REFERENCE_SAMPLE_RATE * 2 ||
     view.getUint16(32, true) !== 2 ||
     view.getUint16(34, true) !== 16 ||
     view.getUint32(36, true) !== DATA ||
@@ -263,11 +266,11 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
       error: `'text' must contain 1-${MAX_TEXT_CHARS} characters`,
     };
   }
-  if (!Number.isSafeInteger(seed) || (seed as number) < 0 || (seed as number) > MAX_SEED) {
+  if (!Number.isSafeInteger(seed) || (seed as number) < 0 || (seed as number) > VOXCPM2_MAX_SEED) {
     return {
       ok: false,
       status: 400,
-      error: `'seed' must be an integer between 0 and ${MAX_SEED}`,
+      error: `'seed' must be an integer between 0 and ${VOXCPM2_MAX_SEED}`,
     };
   }
 

@@ -42,12 +42,19 @@ import {
   speechJobOf,
   type AthanLabError,
   type AthanLabFetched,
+  type AthanLabUpstreamCode,
   type AthanLabRequestInit,
   type PhaseOutcome,
   type RetryContext,
   type SpeechJob,
 } from "../athanlab/client";
 import { keyVaultOf, openApiKey, sealApiKey, type KeyVault } from "../athanlab/keyVault";
+import {
+  ATHANLAB_MAX_TEXT_CHARS,
+  ATHANLAB_RETRY_LATER,
+  type AthanLabErrorCode,
+  type AthanLabRetryLaterCode,
+} from "../../../src/studio/tts/athanlab/protocol";
 
 // Burmese Studio narration with each user's own AthanLab API key.
 //
@@ -68,8 +75,6 @@ const PROVIDER: CredentialProvider = "athanlab";
 
 const MAX_KEY_REQUEST_BYTES = 1024;
 const MAX_TTS_REQUEST_BYTES = 64 * 1024;
-// AthanLab counts UTF-16 code units (String.length), as this check does.
-const MAX_TEXT_CHARS = 5_000;
 const MAX_VOICES = 200;
 const MAX_VOICE_NAME_CHARS = 120;
 const MAX_VOICE_CATEGORY_CHARS = 60;
@@ -134,18 +139,31 @@ const TEMPORARILY_UNAVAILABLE = "AthanLab narration is temporarily unavailable �
 
 type ErrorStatus = 400 | 409 | 413 | 429 | 502 | 503;
 
+/** A code the page reads: one of the Worker's own, or AthanLab's as it came. */
+type ErrorCode = AthanLabErrorCode | AthanLabUpstreamCode;
+
 /** Every JSON error here: `{error, code?, retryAfterSeconds?}`. */
 function failure(
   c: Context,
   status: ErrorStatus,
   error: string,
-  code?: string | null,
+  code?: ErrorCode | null,
   retryAfterSeconds?: number,
 ) {
   const body: { error: string; code?: string; retryAfterSeconds?: number } = { error };
   if (code) body.code = code;
   if (retryAfterSeconds !== undefined) body.retryAfterSeconds = retryAfterSeconds;
   return c.json(body, status);
+}
+
+/** A "same request, ask again later" answer, at the status the page retries it with. */
+function retryLater(
+  c: Context,
+  code: AthanLabRetryLaterCode,
+  error: string,
+  retryAfterSeconds: number,
+) {
+  return failure(c, ATHANLAB_RETRY_LATER[code].status, error, code, retryAfterSeconds);
 }
 
 function notConfigured(c: Context) {
@@ -169,11 +187,10 @@ function keyChecksPaused(c: Context) {
 }
 
 function stillProcessing(c: Context) {
-  return failure(
+  return retryLater(
     c,
-    503,
-    "AthanLab is still generating this dialog",
     "still_processing",
+    "AthanLab is still generating this dialog",
     STILL_PROCESSING_RETRY_SECONDS,
   );
 }
@@ -217,11 +234,10 @@ async function chargeRateLimit(
   }
   return success
     ? null
-    : failure(
+    : retryLater(
         c,
-        429,
-        "Too many AthanLab requests — wait a minute",
         "rate_limited",
+        "Too many AthanLab requests — wait a minute",
         RATE_LIMIT_RETRY_SECONDS,
       );
 }
@@ -303,11 +319,11 @@ async function acquireFirstContact(
       // Checked before invalidation: the key this request decrypted may be the
       // revoked one the user just replaced, and the new one is not invalid.
       if (row.iv !== key.iv) {
-        return failure(c, 503, KEY_REPLACED, "key_busy", KEY_BUSY_RETRY_SECONDS);
+        return retryLater(c, "key_busy", KEY_REPLACED, KEY_BUSY_RETRY_SECONDS);
       }
       if (row.invalidated_at !== null) return failure(c, 409, KEY_INVALID, "key_invalid");
       if (Date.now() >= giveUpAt) {
-        return failure(c, 503, KEY_BUSY, "key_busy", KEY_BUSY_RETRY_SECONDS);
+        return retryLater(c, "key_busy", KEY_BUSY, KEY_BUSY_RETRY_SECONDS);
       }
       await sleep(FIRST_CONTACT_POLL_MS);
     }
@@ -907,7 +923,7 @@ athanlabRoute.get("/usage", requireUser, async (c) => {
 
 type TtsRequest =
   | { ok: true; text: string; voiceId: string }
-  | { ok: false; status: 400 | 413; error: string; code: string };
+  | { ok: false; status: 400 | 413; error: string; code: AthanLabErrorCode };
 
 async function readTtsRequest(request: Request): Promise<TtsRequest> {
   const requestBody = await readJsonWithLimit(request, MAX_TTS_REQUEST_BYTES);
@@ -937,11 +953,11 @@ async function readTtsRequest(request: Request): Promise<TtsRequest> {
   }
   const { text: rawText, voiceId } = body;
   const text = typeof rawText === "string" ? rawText.trim() : "";
-  if (!text || text.length > MAX_TEXT_CHARS) {
+  if (!text || text.length > ATHANLAB_MAX_TEXT_CHARS) {
     return {
       ok: false,
       status: 400,
-      error: `'text' must contain 1-${MAX_TEXT_CHARS} characters`,
+      error: `'text' must contain 1-${ATHANLAB_MAX_TEXT_CHARS} characters`,
       code: "invalid_text",
     };
   }
@@ -1218,7 +1234,10 @@ async function synthesize(
 
   let freshJobs = 0;
   let advancedOnConflict = false;
-  let lastFailure = { message: "AthanLab did not finish this dialog", code: "generation_failed" };
+  let lastFailure: { message: string; code: ErrorCode } = {
+    message: "AthanLab did not finish this dialog",
+    code: "generation_failed",
+  };
   for (let attempt = 0; attempt <= MAX_RETRY_KEY; attempt++) {
     const submit = () =>
       requestJsonWithRetries(

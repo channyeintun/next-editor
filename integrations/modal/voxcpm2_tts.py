@@ -36,6 +36,8 @@ SAMPLE_RATE = 48_000
 CFG_VALUE = 2.0
 INFERENCE_TIMESTEPS = 10
 MAX_TEXT_CHARS = 2_000
+# The page and the Worker share these four in src/studio/tts/voxcpm2Protocol.ts;
+# change them there and here together.
 MAX_SEED = 0x7FFFFFFF
 REFERENCE_SAMPLE_RATE = 24_000
 MIN_REFERENCE_SECONDS = 5

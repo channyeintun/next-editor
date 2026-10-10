@@ -1,4 +1,11 @@
 import { normalizeAthanLabWav } from "./athanlab/normalizeWav";
+import {
+  ATHANLAB_MAX_TEXT_CHARS,
+  ATHANLAB_RETRY_LATER,
+  isOwnCodeOf,
+  type AthanLabReconnectCode,
+  type AthanLabRetryLaterCode,
+} from "./athanlab/protocol";
 import { prepareAthanLabText } from "./athanlab/textPrep";
 import type { AthanLabVoiceProfile } from "./profiles";
 import type { DialogSynthProvider } from "./synthProvider";
@@ -14,36 +21,21 @@ import { DROPPED_CONNECTION_ATTEMPTS, postStudioTtsWav, retryDroppedConnection }
  * which is what makes the retries below safe.
  */
 
-/**
- * Worker answers that the same request succeeds if asked again later, with the
- * status each comes with and how many more POSTs each allows per dialog:
- * the job is still running when the Worker's own time ran out
- * (`still_processing`), this user's per-minute AthanLab budget is spent
- * (`rate_limited` — a replay of already-bought takes can outrun it), or another
- * request of this user is first checking the saved key (`key_busy`).
- */
-const RETRY_LATER: Partial<Record<string, { status: number; retries: number }>> = {
-  still_processing: { status: 503, retries: 4 },
-  rate_limited: { status: 429, retries: 3 },
-  key_busy: { status: 503, retries: 3 },
-};
 const DEFAULT_RETRY_AFTER_SECONDS = 5;
 const MAX_RETRY_AFTER_SECONDS = 60;
-/** AthanLab's per-request text limit, in UTF-16 code units (`String.length`). */
-const MAX_TEXT_LENGTH = 5000;
 
 /** Appended to every failure a later render can recover from. */
 const CONTINUE_HINT =
   " — dialogs already synthesized are kept, so rendering again continues where this stopped.";
 
-/** Worker codes that mean the saved key cannot be used until it is connected again. */
-const RECONNECT_MESSAGES: Partial<Record<string, string>> = {
+/** The message for each Worker code meaning the saved key needs connecting again. */
+const RECONNECT_MESSAGES = {
   key_missing: "AthanLab: no AthanLab API key is connected — connect your key, then render again.",
   key_invalid:
     "AthanLab: AthanLab rejected your saved API key — it may have expired or been revoked. Connect a new key, then render again.",
   key_stale:
     "AthanLab: your saved AthanLab API key can no longer be read — connect it again, then render again.",
-};
+} as const satisfies Record<AthanLabReconnectCode, string>;
 
 /** A failed AthanLab synthesis; `code` is the Worker's error code when it sent one. */
 export class AthanLabSynthesisError extends Error {
@@ -58,7 +50,12 @@ export class AthanLabSynthesisError extends Error {
 
 type SynthesisResponse =
   | { kind: "audio"; bytes: Uint8Array }
-  | { kind: "retry-later"; code: string; message: string; retryAfterSeconds: number };
+  | {
+      kind: "retry-later";
+      code: AthanLabRetryLaterCode;
+      message: string;
+      retryAfterSeconds: number;
+    };
 
 /** `AthanLab: <detail>`, unless the Worker's message already names AthanLab first. */
 function athanLabMessageOf(detail: string): string {
@@ -66,10 +63,8 @@ function athanLabMessageOf(detail: string): string {
 }
 
 function failure(detail: string, code: string | null, options?: ErrorOptions): Error {
-  // Own keys only: a code naming an Object.prototype member ("constructor")
-  // must not resolve to an inherited value.
   const reconnect =
-    code !== null && Object.hasOwn(RECONNECT_MESSAGES, code) ? RECONNECT_MESSAGES[code] : undefined;
+    code !== null && isOwnCodeOf(RECONNECT_MESSAGES, code) ? RECONNECT_MESSAGES[code] : undefined;
   return new AthanLabSynthesisError(
     reconnect ?? `${athanLabMessageOf(detail)}${CONTINUE_HINT}`,
     code,
@@ -102,9 +97,9 @@ export async function synthesizeAthanLabWav(
   if (!text) {
     throw new Error("AthanLab: this dialog has nothing to speak");
   }
-  if (text.length > MAX_TEXT_LENGTH) {
+  if (text.length > ATHANLAB_MAX_TEXT_CHARS) {
     throw new Error(
-      `AthanLab: this dialog is ${text.length} characters long, and AthanLab speaks at most ${MAX_TEXT_LENGTH} per request — split it with a [[mark:…]]`,
+      `AthanLab: this dialog is ${text.length} characters long, and AthanLab speaks at most ${ATHANLAB_MAX_TEXT_CHARS} per request — split it with a [[mark:…]]`,
     );
   }
   const body = JSON.stringify({ text, voiceId: profile.voiceId });
@@ -114,7 +109,7 @@ export async function synthesizeAthanLabWav(
   // (retryDroppedConnection, its count starting over at every answer), and
   // the RETRY_LATER answers. Any other Worker error carries its own message
   // and is never retried.
-  const retriesUsed = new Map<string, number>();
+  const retriesUsed = new Map<AthanLabRetryLaterCode, number>();
   for (;;) {
     const response = await retryDroppedConnection(
       () => requestSynthesis(body),
@@ -131,7 +126,7 @@ export async function synthesizeAthanLabWav(
       return normalizeTake(response.bytes, profile.sampleRate);
     }
     const used = retriesUsed.get(response.code) ?? 0;
-    if (used >= (RETRY_LATER[response.code]?.retries ?? 0)) {
+    if (used >= ATHANLAB_RETRY_LATER[response.code].retries) {
       throw failure(response.message, response.code);
     }
     retriesUsed.set(response.code, used + 1);
@@ -178,9 +173,11 @@ async function requestSynthesis(body: string): Promise<SynthesisResponse> {
   }
   if (result.kind === "error") {
     const { code, detail, status } = result;
-    const retryLater =
-      code !== null && Object.hasOwn(RETRY_LATER, code) ? RETRY_LATER[code] : undefined;
-    if (code !== null && retryLater?.status === status) {
+    if (
+      code !== null &&
+      isOwnCodeOf(ATHANLAB_RETRY_LATER, code) &&
+      ATHANLAB_RETRY_LATER[code].status === status
+    ) {
       return {
         kind: "retry-later",
         code,

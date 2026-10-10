@@ -18,6 +18,7 @@ import {
   runtimeContractIssues,
   type PinnedReference,
 } from "../runtimeContract";
+import { VOXCPM2_MAX_SEED } from "../tts/voxcpm2Protocol";
 import { consolePointIssues } from "./consolePoints";
 import {
   MarkerError,
@@ -41,7 +42,7 @@ export const LESSON_SCRIPT_SCHEMA_VERSION = 1;
  * The Worker's TTS route and the Modal synthesizer both reject seeds above a
  * signed 32-bit int, so a larger one would pass here and fail only at render.
  */
-export const LESSON_SCRIPT_MAX_SEED = 0x7fffffff;
+export const LESSON_SCRIPT_MAX_SEED = VOXCPM2_MAX_SEED;
 
 /*
  * Every object a script author writes is strict: zod's default mode strips

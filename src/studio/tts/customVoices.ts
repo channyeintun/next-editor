@@ -1,5 +1,10 @@
 import { requestToPromise, transactionToPromise } from "../../storage/idb";
 import { sha256Hex } from "../hash";
+import {
+  VOXCPM2_MAX_REFERENCE_SECONDS,
+  VOXCPM2_MIN_REFERENCE_SECONDS,
+  VOXCPM2_REFERENCE_SAMPLE_RATE,
+} from "./voxcpm2Protocol";
 
 /**
  * User reference voices, stored locally in IndexedDB as prepared 24 kHz mono
@@ -10,12 +15,14 @@ import { sha256Hex } from "../hash";
  * job's input and keeps the job's audio for up to 7 days.
  */
 
-export const VOICE_SAMPLE_RATE = 24_000;
+/** Stored samples are 24 kHz: what Pocket-TTS conditions on, and what VoxCPM2's Worker requires. */
+export const VOICE_SAMPLE_RATE = VOXCPM2_REFERENCE_SAMPLE_RATE;
 /** Reference sample bounds: enough voice to condition on, small enough to store. */
 export const MIN_SAMPLE_SECONDS = 2;
 /** VoxCPM2 needs a longer reference to preserve one speaker reliably. */
-export const MIN_VOXCPM2_REFERENCE_SECONDS = 5;
-export const MAX_SAMPLE_SECONDS = 20;
+export const MIN_VOXCPM2_REFERENCE_SECONDS = VOXCPM2_MIN_REFERENCE_SECONDS;
+/** A stored sample is sent as it is as a VoxCPM2 reference, so it keeps to the Worker's limit. */
+export const MAX_SAMPLE_SECONDS = VOXCPM2_MAX_REFERENCE_SECONDS;
 
 /**
  * Whether a narrator reference can condition Burmese VoxCPM2 narration: long

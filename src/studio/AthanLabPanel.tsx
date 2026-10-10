@@ -17,6 +17,7 @@ import {
   type AthanLabVoiceList,
 } from "@next-editor/infra";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
+import { ATHANLAB_RECONNECT_CODES } from "./tts/athanlab/protocol";
 
 /**
  * AthanLab narration setup inside the Studio render panel: connect the user's
@@ -32,7 +33,7 @@ import { readStoredPreference, writeStoredPreference } from "../stores/preferenc
 const ATHANLAB_VOICE_KEY = "next-editor:studio:athanlab-voice";
 const ATHANLAB_DASHBOARD_URL = "https://athanlab.com/dashboard/api";
 /** Worker codes meaning the saved key itself is unusable — the key status is out of date. */
-const UNUSABLE_KEY_CODES = new Set(["key_invalid", "key_stale", "key_missing"]);
+const UNUSABLE_KEY_CODES = new Set<string>(ATHANLAB_RECONNECT_CODES);
 
 function readStoredVoiceId(): string | null {
   return readStoredPreference(ATHANLAB_VOICE_KEY);
