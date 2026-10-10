@@ -2244,6 +2244,40 @@ describe("editorMachine actor lifecycle", () => {
       actor.stop();
     });
 
+    it("keeps what the replay showed in a file the viewer leaves after pausing", async () => {
+      const editor = new MockEditor(new MockTextModel("outside"));
+      const workspace = {
+        current: createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b"),
+      };
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          getWorkspaceSnapshot: () => workspace.current,
+          applyWorkspaceSnapshot: (snapshot) => {
+            workspace.current = snapshot;
+          },
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording: recordingOnOneFile() });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "TICK", currentTime: 150 });
+
+      // Opening another file pauses first (useOpenWorkspaceFile): the pause copies the
+      // frame on screen into a.ts while it is still the active file. A WORKSPACE_EVENT
+      // straight from `playing` detaches before that copy, and a.ts would keep "a".
+      actor.send({ type: "PAUSE" });
+      workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+      actor.send({ type: "WORKSPACE_EVENT" });
+
+      expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+      expect(workspace.current.activeFilePath).toBe("b.ts");
+      expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+      expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+
+      actor.stop();
+    });
+
     it("leaves a file the viewer opened while paused untouched", async () => {
       const { actor, editor, workspace } = await startPausedAt50(recordingOnOneFile());
 

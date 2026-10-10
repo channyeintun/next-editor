@@ -65,6 +65,12 @@ const actions = vi.hoisted(() => ({
   setSidebarWidth: vi.fn<WorkspaceActions["setSidebarWidth"]>(),
   setPreviewFilePath: vi.fn<WorkspaceActions["setPreviewFilePath"]>(),
   getProject: vi.fn<WorkspaceActions["getProject"]>(),
+  getActiveFilePath: vi.fn<WorkspaceActions["getActiveFilePath"]>(),
+  getFile: vi.fn<WorkspaceActions["getFile"]>(),
+}));
+const editorActions = vi.hoisted(() => ({
+  pause: vi.fn<NextEditorActions["pause"]>(),
+  handleWorkspaceEvent: vi.fn<NextEditorActions["handleWorkspaceEvent"]>(),
 }));
 
 vi.mock("../hooks/useWorkspace", async () => {
@@ -80,8 +86,7 @@ vi.mock("../hooks/useWorkspace", async () => {
   };
 });
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorActions: () =>
-    ({ handleWorkspaceEvent: () => undefined }) as unknown as NextEditorActions,
+  useNextEditorActions: () => editorActions as unknown as NextEditorActions,
 }));
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => null,
@@ -105,6 +110,12 @@ beforeEach(() => {
   actions.setActiveFilePath.mockImplementation((path) =>
     workspace.update({ activeFilePath: path }),
   );
+  actions.getActiveFilePath.mockImplementation(() => workspace.store.state.activeFilePath);
+  actions.getFile.mockImplementation((path) =>
+    workspace.store.state.files.some((file) => file.path === path)
+      ? createWorkspaceFile(path, "")
+      : null,
+  );
   actions.createFile.mockImplementation((path) =>
     workspace.update({ files: [...workspace.store.state.files, treeFile(path)] }),
   );
@@ -120,6 +131,9 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   for (const action of Object.values(actions)) {
+    action.mockReset();
+  }
+  for (const action of Object.values(editorActions)) {
     action.mockReset();
   }
 });
@@ -390,5 +404,48 @@ describe("FileSidebar tree structure", () => {
     const field = screen.getByRole("textbox");
     expect(itemOf(row("lib"))).toContainElement(field);
     expect(field.closest("li")?.parentElement?.closest("li")).toBe(itemOf(row("lib")));
+  });
+});
+
+describe("FileSidebar opening a file", () => {
+  const calls = () =>
+    [
+      ...editorActions.pause.mock.invocationCallOrder.map((order) => ({ order, call: "pause" })),
+      ...actions.setActiveFilePath.mock.invocationCallOrder.map((order) => ({
+        order,
+        call: "setActiveFilePath",
+      })),
+      ...editorActions.handleWorkspaceEvent.mock.invocationCallOrder.map((order) => ({
+        order,
+        call: "handleWorkspaceEvent",
+      })),
+    ]
+      .sort((left, right) => left.order - right.order)
+      .map(({ call }) => call);
+
+  it("pauses a playing lesson before it switches, then records the switch", () => {
+    render(<FileSidebar />);
+
+    fireEvent.click(row("app.ts"));
+
+    expect(calls()).toEqual(["pause", "setActiveFilePath", "handleWorkspaceEvent"]);
+    expect(actions.setActiveFilePath).toHaveBeenCalledWith("src/app.ts");
+  });
+
+  it("leaves the open file's row alone: no pause and no workspace event", () => {
+    render(<FileSidebar />);
+
+    fireEvent.click(row("index.html"));
+
+    expect(calls()).toEqual([]);
+  });
+
+  it("opens a right-clicked file before showing its menu", () => {
+    render(<FileSidebar />);
+
+    fireEvent.contextMenu(row("app.ts"));
+
+    expect(calls()).toEqual(["pause", "setActiveFilePath", "handleWorkspaceEvent"]);
+    expect(screen.getByRole("group", { name: "File actions" })).toBeInTheDocument();
   });
 });

@@ -12,7 +12,7 @@ import {
   useWorkspaceSidebarWidth,
 } from "../hooks/useWorkspace";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
-import { useNextEditorActions } from "../hooks/useNextEditorContext";
+import { useOpenWorkspaceFile } from "../hooks/useOpenWorkspaceFile";
 import {
   STUDIO_TARGET_AIM_ATTRIBUTE,
   STUDIO_TARGET_ATTRIBUTE,
@@ -35,10 +35,8 @@ import {
   type SidebarEntryKind,
   type WorkspaceTreeNode,
 } from "./fileSidebar/sidebarModel";
-import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 
 function FileSidebarPanel() {
-  const collaboration = useOptionalCollaboration();
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
@@ -77,13 +75,12 @@ function FileSidebarPanel() {
     renameFile,
     renameFolder,
     saveProject,
-    setActiveFilePath,
     setCollapsedFolders,
     setSidebarScrollTop,
     setSidebarWidth,
     setPreviewFilePath,
   } = useWorkspaceActions();
-  const { handleWorkspaceEvent } = useNextEditorActions();
+  const openFile = useOpenWorkspaceFile();
   const {
     activeFilePath,
     collapsedFolders: collapsedFolderPaths,
@@ -342,12 +339,6 @@ function FileSidebarPanel() {
       };
       clearInlineEdit();
     }
-  };
-
-  const openFile = (path: string) => {
-    collaboration?.stopFollowing("local-file-navigation");
-    setActiveFilePath(path);
-    handleWorkspaceEvent();
   };
 
   const handleSidebarScroll = (event: UIEvent<HTMLDivElement>) => {
