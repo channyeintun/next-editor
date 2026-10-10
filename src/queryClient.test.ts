@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { injectGalleryDocument } from "../infra/worker/ssr/learnGallery";
 import { injectLessonDocument } from "../infra/worker/ssr/lessonDetail";
 import type { Lesson } from "../infra/lessons/types";
 import { hydrateServerQueryState, queryClient } from "./queryClient";
@@ -32,6 +33,20 @@ describe("hydrateServerQueryState", () => {
 
     hydrateServerQueryState();
 
+    expect(queryClient.getQueryData(["lessons", "detail", "rust-ownership"])).toEqual(LESSON);
+  });
+
+  it("adopts the gallery's first page and its lessons the edge already read", () => {
+    const page = { lessons: [LESSON], nextPage: "d1:1" };
+    const rendered = injectGalleryDocument(SHELL, page);
+    document.head.innerHTML = /<head>([\s\S]*)<\/head>/.exec(rendered)![1];
+
+    hydrateServerQueryState();
+
+    expect(queryClient.getQueryData(["lessons", "infinite"])).toEqual({
+      pages: [page],
+      pageParams: ["d1:0"],
+    });
     expect(queryClient.getQueryData(["lessons", "detail", "rust-ownership"])).toEqual(LESSON);
   });
 

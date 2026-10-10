@@ -1,9 +1,12 @@
 import { dehydrate, QueryClient } from "@tanstack/react-query";
 import type { Lesson } from "../../lessons/types";
+import { lessonDetailQueryKey } from "../../../src/shared/serverQueryState";
 import {
-  lessonDetailQueryKey,
-  SERVER_QUERY_STATE_ELEMENT_ID,
-} from "../../../src/shared/serverQueryState";
+  appendToHead,
+  escapeAttribute,
+  serializeForScript,
+  serverQueryStateScript,
+} from "./documentHtml";
 import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 
 // Data-only SSR. The lesson *page* is the editor — Monaco, WebContainers, the
@@ -11,18 +14,9 @@ import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 // deliberately left empty for the browser to mount into. What the edge can do
 // is resolve the row: the document ships with real per-lesson metadata for
 // crawlers, and with the same row dehydrated into React Query's cache so the
-// browser never re-fetches what the server already looked up.
-//
-// Keep this string-based rather than HTMLRewriter: it has to be unit-testable
-// in the worker suite's plain node environment.
-
-function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// browser never re-fetches what the server already looked up. String-based,
+// with documentHtml.ts's helpers; every replacement below is a function, for
+// the reason given at appendToHead.
 
 function escapeText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -30,32 +24,6 @@ function escapeText(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// `</script>` anywhere inside a JSON payload would close the tag early and turn
-// the rest of the lesson into markup. Escaping "<" (plus the two line
-// separators older parsers choke on) keeps the payload inert and still-valid
-// JSON.
-function serializeForScript(value: unknown): string {
-  return JSON.stringify(value)
-    .replace(/</g, "\\u003c")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
-
-// Every String.replace below passes its replacement as a FUNCTION, never as a
-// string. A replacement string honours `$&`, `` $` ``, `$'` and `$1` as
-// substitution patterns, and the values spliced in here (lesson title and
-// description) are attacker-authored: the HTML escapers deliberately leave `$`
-// alone, so a title of `$'$'$'$'` made each pass re-insert the rest of the
-// document, and injectLessonDocument runs eight such passes over each other's
-// output. A 12-character title reached gigabytes, which is not a throw the
-// caller's try/catch can catch — the isolate is killed and takes co-resident
-// requests with it. The function form has no substitution semantics at all.
-function appendToHead(document: string, html: string): string {
-  return document.includes("</head>")
-    ? document.replace("</head>", () => `${html}\n  </head>`)
-    : document;
 }
 
 // The static index.html writes its meta tags across several lines, so match on
@@ -189,8 +157,7 @@ export function dehydrateLessonDetail(slug: string, lesson: Lesson | null) {
 }
 
 function queryStateScript(slug: string, lesson: Lesson | null): string {
-  const payload = serializeForScript(dehydrateLessonDetail(slug, lesson));
-  return `<script type="application/json" id="${SERVER_QUERY_STATE_ELEMENT_ID}">${payload}</script>`;
+  return serverQueryStateScript(dehydrateLessonDetail(slug, lesson));
 }
 
 export interface LessonDocumentContext {

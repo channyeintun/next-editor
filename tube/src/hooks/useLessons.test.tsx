@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { hydrate, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { lessonDetailQueryKey } from "@app/shared/serverQueryState";
+import { dehydrateGalleryFirstPage } from "../../../infra/worker/ssr/learnGallery";
 import type { Lesson } from "../types";
 
 const fetchLessonsPage = vi.fn<(cursor: string) => Promise<unknown>>();
@@ -62,6 +63,28 @@ describe("lesson gallery", () => {
     expect(gallery.result.current.data?.pages[0].lessons).toEqual([lesson("newest")]);
     // Primed like a fetch the grid made itself.
     expect(queryClient.getQueryData(lessonDetailQueryKey("newest"))).toEqual(lesson("newest"));
+  });
+});
+
+describe("lesson gallery on a direct visit", () => {
+  it("reads page 0 from the state the edge dehydrated, without fetching it", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = { lessons: [lesson("newest")], nextPage: "d1:1" };
+    // What hydrateServerQueryState() adopts from the /learn document.
+    hydrate(queryClient, JSON.parse(JSON.stringify(dehydrateGalleryFirstPage(page))));
+
+    // The route loader's prefetch, then the grid mounting.
+    await queryClient.prefetchInfiniteQuery(lessonsInfiniteQueryOptions(queryClient));
+    const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
+
+    expect(gallery.result.current.isSuccess).toBe(true);
+    expect(gallery.result.current.data?.pages).toEqual([page]);
+    expect(gallery.result.current.hasNextPage).toBe(true);
+    expect(fetchLessonsPage).not.toHaveBeenCalled();
+    // A card click resolves from cache, as after a fetch of its own.
+    const detail = renderHook(() => useLesson("newest"), { wrapper: wrapper(queryClient) });
+    expect(detail.result.current.data).toEqual(lesson("newest"));
+    expect(findLessonBySlug).not.toHaveBeenCalled();
   });
 });
 

@@ -24,6 +24,7 @@ import { studioRoute } from "./routes/studio";
 import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
 import { LANDING_DOCUMENT_URLS, serveAppShell, serveLandingDocument } from "./ssr/staticDocuments";
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
+import { serveLearnGalleryDocument } from "./ssr/learnGalleryRoute";
 import { serveStaticFile } from "./staticAssets";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -124,6 +125,11 @@ app.route("/api/slide-images", slideImagesRoute);
 // has URLs of its own, which keep answering like any path with no file.
 app.get("/", (c) => serveLandingDocument(c.env.ASSETS, c.req.raw));
 app.on(["GET", "HEAD"], LANDING_DOCUMENT_URLS, (c) => serveAppShell(c.env.ASSETS, c.req.raw));
+
+// Data-only SSR for the gallery (ssr/learnGalleryRoute.ts): page 0 dehydrated
+// into React Query's cache and the first row's thumbnails preloaded, on top of
+// the SPA shell.
+app.get("/learn", (c) => serveLearnGalleryDocument(c.env, c.req.raw));
 
 // Data-only SSR for lesson detail (ssr/lessonDetailRoute.ts): per-lesson
 // metadata for crawlers and the row dehydrated into React Query's cache, on

@@ -6,7 +6,6 @@ import {
   getOwnedLessonById,
   insertDraftLesson,
   listOwnedLessons,
-  listPublishedLessons,
   publishLesson,
   unpublishLesson,
   updateLesson,
@@ -19,15 +18,14 @@ import {
   slugifyTitle,
 } from "../../db/slug";
 import { isUniqueViolation } from "../../db/uniqueViolation";
-import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
+import { lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { metadataTextError } from "../../lessons/metadataLimits";
-import { findPublishedLessonBySlug } from "../lessonCatalog";
+import { findPublishedLessonBySlug, readPublishedLessonsPage } from "../lessonCatalog";
 import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
 
-const DEFAULT_PAGE_SIZE = 12;
 // Well above the largest lesson metadata metadataLimits.ts allows (a
 // 10,000-character description is at most ~60 KB of JSON).
 const MAX_LESSON_REQUEST_BYTES = 128 * 1024;
@@ -83,8 +81,7 @@ lessonsRoute.get("/", async (c) => {
 
   // Read from D1 on every request, like the other public catalog reads (see
   // cache.ts), so a publish or unpublish shows up in the gallery immediately.
-  const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
-  return c.json({ lessons: rows.map(lessonRowToLesson), nextPage });
+  return c.json(await readPublishedLessonsPage(c.env, page));
 });
 
 interface CreateLessonBody {

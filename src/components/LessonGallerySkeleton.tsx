@@ -7,7 +7,7 @@ import LessonCardSkeleton from "./LessonCardSkeleton";
 // route hands over to LessonGrid's own card skeletons only after the chunk
 // lands. Draws LearnPage's GalleryShell and the LessonCardSkeleton LessonGrid
 // uses, in LessonGrid's grid (grid-cols-1 sm:2 lg:3 xl:4, matching
-// COLUMN_QUERIES), so the handover doesn't move anything.
+// GALLERY_COLUMN_QUERIES), so the handover doesn't move anything.
 //
 // Eager-bundle-safe: GalleryShell brings only Navbar, which is already there
 // (LandingPage renders it), and the card skeleton has no dependencies.

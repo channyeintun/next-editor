@@ -1,32 +1,16 @@
 import type { Lesson } from "../types";
 import lessonsData from "../../data/lessons.json";
+import {
+  lessonsPageIndex,
+  toLessonsPage,
+  type LessonsPage,
+  type RawLessonsPage,
+} from "../../../infra/lessons/lessonsPages";
 import { findCatalogItem, getCatalogJson } from "./catalogRequest";
 
-export interface LessonsPage {
-  lessons: Lesson[];
-  /**
-   * Opaque cursor for the next page, or null once exhausted: "d1:<n>" for the
-   * n-th D1-backed page of user-published lessons, newest first. The bundled
-   * seed (introduction, etc.) has no page of its own; it rides on the last D1
-   * page (see fetchLessonsPage and docs/cloudflare-architecture.md "Catalog
-   * resolution").
-   */
-  nextPage: string | null;
-}
-
-interface RawLessonsPage {
-  lessons: Lesson[];
-  nextPage: number | null;
-}
+export type { LessonsPage } from "../../../infra/lessons/lessonsPages";
 
 const SEED_LESSONS = lessonsData.lessons as Lesson[];
-
-// The D1 page a cursor names. Anything that isn't a "d1:<n>" cursor starts
-// from the first page.
-function d1PageIndex(cursor: string): number {
-  const [source, indexStr] = cursor.split(":");
-  return source === "d1" ? Number(indexStr) || 0 : 0;
-}
 
 // The Worker always answers /api/lessons* with JSON. A host without it (a
 // static preview of the build) would answer with the SPA's index.html instead,
@@ -39,19 +23,11 @@ async function fetchD1Page(index: number): Promise<RawLessonsPage> {
   return page ?? { lessons: [], nextPage: null };
 }
 
-// Pages through user-published D1 lessons, newest first. The bundled seed
-// (introduction) is appended to the last D1 page, so it appears only once the
-// gallery has loaded its oldest lessons. That normally takes scrolling to the
-// end; but the grid's sentinel loads ahead by 400px, so a catalog of one or two
-// pages on a tall window can reach its last page, and the seed, without any
-// scroll. An empty catalog's only page is that last page, so the seed still
-// shows there.
+// Pages through user-published D1 lessons, newest first, shaped by the rule
+// the /learn edge render shares (toLessonsPage): the bundled seed rides on the
+// last page.
 export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
-  const page = await fetchD1Page(d1PageIndex(cursor));
-  if (page.nextPage !== null) {
-    return { lessons: page.lessons, nextPage: `d1:${page.nextPage}` };
-  }
-  return { lessons: [...page.lessons, ...SEED_LESSONS], nextPage: null };
+  return toLessonsPage(await fetchD1Page(lessonsPageIndex(cursor)), SEED_LESSONS);
 }
 
 /**

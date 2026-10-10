@@ -3,6 +3,7 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
+import { GALLERY_COLUMN_QUERIES } from "../lib/galleryColumns";
 import { flattenLessonPages } from "../lib/lessons";
 import {
   observeFirstRowThumbnails,
@@ -18,23 +19,15 @@ import SearchResults from "./SearchResults";
 // request — avoids a request per keystroke while still feeling responsive.
 const SEARCH_DEBOUNCE_MS = 300;
 
-// Card columns per breakpoint — mirrors the Tailwind grid the cards used to live
-// in (grid-cols-1 sm:2 lg:3 xl:4) so the virtualized layout looks identical.
-const COLUMN_QUERIES = [
-  { query: "(min-width: 1280px)", columns: 4 },
-  { query: "(min-width: 1024px)", columns: 3 },
-  { query: "(min-width: 640px)", columns: 2 },
-];
-
 function readColumns(): number {
   if (typeof window === "undefined") return 1;
-  return COLUMN_QUERIES.find((c) => window.matchMedia(c.query).matches)?.columns ?? 1;
+  return GALLERY_COLUMN_QUERIES.find((c) => window.matchMedia(c.query).matches)?.columns ?? 1;
 }
 
 function useColumns(): number {
   const [columns, setColumns] = useState(readColumns);
   useEffect(() => {
-    const mqls = COLUMN_QUERIES.map((c) => window.matchMedia(c.query));
+    const mqls = GALLERY_COLUMN_QUERIES.map((c) => window.matchMedia(c.query));
     const update = () => setColumns(readColumns());
     mqls.forEach((m) => m.addEventListener("change", update));
     return () => mqls.forEach((m) => m.removeEventListener("change", update));

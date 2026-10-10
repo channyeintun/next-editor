@@ -208,6 +208,17 @@ with the lesson already in hand. An unknown slug gets a `noindex` 404 shell with
 the miss dehydrated too, so the client can render "Lesson not found" without
 repeating the lookup, and any edge failure degrades to the untouched SPA shell.
 
+The gallery gets the same treatment (`infra/worker/ssr/learnGallery.ts`):
+`GET /learn` reads page 0 from D1 while it fetches the shell, dehydrates it as
+the gallery's infinite query (with each lesson under its detail key, as the
+client's own fetch would prime it), and preloads the first row's thumbnails,
+each gated by the media query that puts its card in that row. Both sides build
+the page with one rule (`infra/lessons/lessonsPages.ts`: the `d1:<n>` cursor,
+the seed on the last page), so the hydrated page is exactly what the client
+would have fetched, and neither the route loader nor the grid fetches page 0
+again. A failed read serves the plain shell, and the client fetches page 0 as
+before.
+
 ## Caching — Cloudflare Workers KV
 
 `infra/worker/cache.ts` exposes the `CACHE` Workers KV binding. Its one user is
