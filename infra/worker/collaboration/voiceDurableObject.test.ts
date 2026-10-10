@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { CollaborationRole } from "../../../src/collaboration/protocol";
-import { COLLABORATION_VOICE_PROTOCOL_VERSION } from "../../../src/voice/protocol";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
+import {
+  COLLABORATION_VOICE_PROTOCOL_VERSION,
+  VOICE_CAPABILITY_HEADER,
+} from "../../../src/voice/protocol";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { CollaborationVoiceRoomDurableObject } from "./voiceDurableObject";
@@ -101,7 +105,41 @@ function createVoiceRoom(env: Env = {} as Env) {
     return room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify(body));
   }
 
-  return { join, control, message };
+  /** An SFU request as the Worker forwards it for `socket`'s session. */
+  function sfu(
+    socket: FakeWebSocket,
+    capability: string,
+    method: string,
+    subpath: string,
+    body?: unknown,
+  ) {
+    const attachment = socket.deserializeAttachment() as Record<string, unknown>;
+    const session = Object.fromEntries(
+      [
+        "roomId",
+        "userId",
+        "displayName",
+        "role",
+        "roleVersion",
+        "collaborationSessionId",
+        "maxMembers",
+      ].map((key) => [key, attachment[key]]),
+    );
+    return room.fetch(
+      new Request(`${VOICE_ORIGIN}/sfu${subpath}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Collaboration-Voice-Session": encodeURIComponent(JSON.stringify(session)),
+          [VOICE_CAPABILITY_HEADER]: capability,
+          "X-Voice-Connection": String(attachment.voiceConnectionId),
+        },
+        body: body === undefined ? null : JSON.stringify(body),
+      }),
+    );
+  }
+
+  return { join, control, message, sfu };
 }
 
 describe("CollaborationVoiceRoomDurableObject membership control", () => {
@@ -260,5 +298,72 @@ describe("CollaborationVoiceRoomDurableObject hibernated attachments", () => {
 
     // 1008: the attachment no longer parses as a voice session.
     expect(member.closeCode).toBe(1008);
+  });
+});
+
+describe("CollaborationVoiceRoomDurableObject SFU requests", () => {
+  const CAPABILITY = "c".repeat(43);
+  const AUDIO_SDP =
+    "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:0\r\n";
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("registers a new session, then a publication the room hears about", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const upstream = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ sessionId: "session-new" }))
+      .mockResolvedValueOnce(
+        Response.json({
+          sessionDescription: { type: "answer", sdp: AUDIO_SDP },
+          tracks: [{ trackName: "mic", mid: "0" }],
+        }),
+      );
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = room.join(MEMBER_ID, 1, { capabilityDigest: await sha256Hex(CAPABILITY) });
+    const peer = room.join(PEER_ID);
+
+    const created = await room.sfu(member, CAPABILITY, "POST", "/sessions/new");
+
+    expect(created.status).toBe(200);
+    expect(await created.json()).toEqual({ sessionId: "session-new" });
+    expect(upstream.mock.calls[0][0]).toBe(
+      "https://rtc.live.cloudflare.com/v1/apps/app/sessions/new",
+    );
+    expect(member.deserializeAttachment()).toMatchObject({ sfuSessionId: "session-new" });
+
+    const pushed = await room.sfu(member, CAPABILITY, "POST", "/sessions/session-new/tracks/new", {
+      sessionDescription: { type: "offer", sdp: AUDIO_SDP },
+      tracks: [{ location: "local", trackName: "mic", mid: "0" }],
+    });
+
+    expect(pushed.status).toBe(200);
+    expect(member.deserializeAttachment()).toMatchObject({
+      publishedTrackName: "mic",
+      publishedMid: "0",
+    });
+    expect(peer.messages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.participant-upsert",
+        participant: expect.objectContaining({
+          publishedTrack: { sessionId: "session-new", trackName: "mic", location: "remote" },
+        }),
+      }),
+    );
+  });
+
+  it("refuses a capability that does not match the connection", async () => {
+    const upstream = vi.spyOn(globalThis, "fetch");
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = room.join(MEMBER_ID, 1, { capabilityDigest: await sha256Hex(CAPABILITY) });
+
+    const response = await room.sfu(member, "d".repeat(43), "POST", "/sessions/new");
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
+    expect(upstream).not.toHaveBeenCalled();
+    expect(member.deserializeAttachment()).toMatchObject({ sfuSessionId: null });
   });
 });

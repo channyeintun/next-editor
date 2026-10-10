@@ -23,26 +23,21 @@ import {
 import {
   MAX_VOICE_TRACKS_PER_CONNECTION,
   VOICE_STUN_ICE_SERVERS,
-  authorizeCloseTracks,
-  authorizePullTracks,
-  authorizePushTracks,
-  authorizeSessionScoped,
-  closeTracksRequestSchema,
   parseVoiceSfuOperation,
-  pullTracksRequestSchema,
-  pushTracksRequestSchema,
   RealtimeSfuUpstream,
-  receivingTrackKey,
   receivingTrackSchema,
-  renegotiateRequestSchema,
-  upstreamNewSessionResponseSchema,
-  upstreamRenegotiateResponseSchema,
-  upstreamTracksResponseSchema,
   type ActivePublication,
-  type ReceivingTrack,
-  type VoiceConnectionSfuState,
   VoiceSfuRequestQueue,
 } from "./realtimeSfuGateway";
+import {
+  closeTracks,
+  createSession,
+  noStoreJson,
+  pushOrPullTracks,
+  renegotiate,
+  unauthorized,
+  type VoiceSfuConnection,
+} from "./voiceSfuOperations";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
@@ -201,13 +196,6 @@ export async function notifyCollaborationVoiceRoomControl(
     body: JSON.stringify(collaborationRoomControlCommandSchema.parse(command)),
   });
   return response.ok;
-}
-
-function noStoreJson(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-  });
 }
 
 // Ephemeral per-room voice coordinator. All durable knowledge lives in the
@@ -749,7 +737,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       !capability.success ||
       !voiceConnectionId.success
     ) {
-      return noStoreJson({ error: "unauthorized" }, 403);
+      return unauthorized();
     }
 
     const capabilityDigest = await sha256Hex(capability.data);
@@ -763,7 +751,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       preflightAttachment.collaborationSessionId !== session.collaborationSessionId ||
       preflightAttachment.capabilityDigest !== capabilityDigest
     ) {
-      return noStoreJson({ error: "unauthorized" }, 403);
+      return unauthorized();
     }
     // A valid participant must not be able to retain an unbounded chain of
     // request bodies while an upstream call is slow. PartyTracks retries 429
@@ -791,11 +779,11 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
         attachment.collaborationSessionId !== session.collaborationSessionId ||
         attachment.capabilityDigest !== capabilityDigest
       ) {
-        return noStoreJson({ error: "unauthorized" }, 403);
+        return unauthorized();
       }
 
       if (session.roleVersion < attachment.roleVersion) {
-        return noStoreJson({ error: "unauthorized" }, 403);
+        return unauthorized();
       }
       let authorizedAttachment = attachment;
       if (session.roleVersion > attachment.roleVersion || session.role !== attachment.role) {
@@ -866,364 +854,46 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       };
 
       const refreshed = readLiveAttachment();
-      if (!refreshed) return noStoreJson({ error: "unauthorized" }, 403);
+      if (!refreshed) return unauthorized();
       current = refreshed;
 
-      const stateFor = (attachment: VoiceSocketAttachment): VoiceConnectionSfuState => ({
-        sfuSessionId: attachment.sfuSessionId,
-        publishedTrackName: attachment.publishedTrackName,
-        publishedMid: attachment.publishedMid,
-        receivingMids: attachment.receivingMids,
-        receivingTracks: attachment.receivingTracks,
-      });
-      let state = stateFor(current);
-
-      const persist = (
-        build: (latest: VoiceSocketAttachment) => VoiceSocketAttachment,
-      ): VoiceSocketAttachment | null => {
-        const latest = readLiveAttachment();
-        if (!latest) return null;
-        current = this.serializeAttachment(socket, build(latest));
-        state = stateFor(current);
-        return current;
+      const connection: VoiceSfuConnection = {
+        upstream: sfuUpstream,
+        subpath,
+        method: request.method,
+        current: () => current,
+        readLive: readLiveAttachment,
+        persist: (update) => {
+          const latest = readLiveAttachment();
+          if (!latest) return null;
+          current = this.serializeAttachment(socket, { ...latest, ...update(latest) });
+          return current;
+        },
+        activePublications: () => this.activePublications(),
+        nextRevision: () => this.nextRevision(),
+        broadcastUpsert: () => this.broadcastUpsert(current),
+        logOutcome: (kind, status) => {
+          console.log("collaboration_voice_sfu", {
+            roomId: current.roomId,
+            kind,
+            status,
+            durationMs: Date.now() - startedAt,
+          });
+        },
       };
 
-      const logOutcome = (kind: string, status: number) => {
-        console.log("collaboration_voice_sfu", {
-          roomId: current.roomId,
-          kind,
-          status,
-          durationMs: Date.now() - startedAt,
-        });
-      };
-
-      const upstream = (upstreamBody: unknown) =>
-        sfuUpstream.request(subpath, request.method, upstreamBody);
-
-      const closeRegisteredTracks = (
-        attachment: VoiceSocketAttachment,
-        additionalMids: readonly string[] = [],
-      ): Promise<boolean> => {
-        if (attachment.sfuSessionId === null) return Promise.resolve(true);
-        return sfuUpstream.closeTracks(attachment.sfuSessionId, [
-          ...(attachment.publishedMid === null ? [] : [attachment.publishedMid]),
-          ...attachment.receivingMids,
-          ...additionalMids,
-        ]);
-      };
-
-      const upstreamFailure = (kind: string, status?: number) => {
-        // Upstream bodies are never logged or forwarded (§6.3).
-        console.error("collaboration_voice_sfu_upstream_failed", {
-          roomId: current.roomId,
-          kind,
-          upstreamStatus: status ?? null,
-        });
-        return noStoreJson({ error: "sfu-unavailable" }, 502);
-      };
-
-      if (operation.kind === "create-session") {
-        // Any live connection may create a session: PartyTracks creates a
-        // replacement PeerConnection/SFU session after terminal media failure.
-        // Close every registered track first, then clear the old ownership
-        // registry before creating the new session. This keeps one active
-        // session per connection without breaking library recovery.
-        if (current.sfuSessionId !== null) {
-          const hadPublication = current.publishedTrackName !== null;
-          if (!(await closeRegisteredTracks(current))) {
-            return upstreamFailure("replace-session");
-          }
-          const cleared = persist((latest) => ({
-            ...latest,
-            sfuSessionId: null,
-            publishedTrackName: null,
-            publishedMid: null,
-            receivingMids: [],
-            receivingTracks: [],
-            ...(hadPublication ? { participantRevision: this.nextRevision() } : {}),
-          }));
-          if (!cleared) return noStoreJson({ error: "unauthorized" }, 403);
-          if (hadPublication) this.broadcastUpsert(cleared);
-        }
-        const response = await upstream(null);
-        if (!response || !response.ok) {
-          return upstreamFailure(operation.kind, response?.status);
-        }
-        const parsed = upstreamNewSessionResponseSchema.safeParse(
-          await response.json().catch(() => null),
-        );
-        if (!parsed.success) return upstreamFailure(operation.kind, response.status);
-        const next = persist((latest) => ({ ...latest, sfuSessionId: parsed.data.sessionId }));
-        if (!next) return noStoreJson({ error: "unauthorized" }, 403);
-        logOutcome(operation.kind, 200);
-        return noStoreJson({ sessionId: parsed.data.sessionId });
+      switch (operation.kind) {
+        case "create-session":
+          return createSession(connection);
+        case "push-tracks":
+          return pushOrPullTracks(connection, operation.sessionId, body);
+        case "renegotiate":
+          return renegotiate(connection, operation.sessionId, body);
+        default:
+          // close-tracks: parseVoiceSfuOperation never yields pull-tracks,
+          // which tracks/new carries and pushOrPullTracks tells apart.
+          return closeTracks(connection, operation.sessionId, body);
       }
-
-      if (operation.kind === "push-tracks") {
-        // tracks/new carries either a push (with an SDP offer) or a pull
-        // (remote track list); disambiguate by shape, then authorize.
-        const push = pushTracksRequestSchema.safeParse(body);
-        const pull = push.success ? null : pullTracksRequestSchema.safeParse(body);
-        if (push.success) {
-          const requested = push.data.tracks[0];
-          const authorized = authorizePushTracks(state, operation.sessionId, push.data);
-          if (!authorized.ok) {
-            logOutcome("push-tracks", authorized.status);
-            return noStoreJson({ error: authorized.error }, authorized.status);
-          }
-          // A PartyTracks network retry can repeat tracks/new after Cloudflare
-          // accepted the first request but before the browser received its
-          // response. Replace that same stable track atomically within this
-          // connection's queue; a differently named second publication was
-          // rejected above.
-          if (current.publishedTrackName === requested.trackName && current.publishedMid !== null) {
-            const replacedMid = current.publishedMid;
-            if (!(await sfuUpstream.closeTracks(operation.sessionId, [replacedMid]))) {
-              return upstreamFailure("replace-published-track");
-            }
-            const cleared = persist((latest) => ({
-              ...latest,
-              publishedTrackName: null,
-              publishedMid: null,
-              participantRevision: this.nextRevision(),
-            }));
-            if (!cleared) return noStoreJson({ error: "unauthorized" }, 403);
-            this.broadcastUpsert(cleared);
-          }
-          const response = await upstream(push.data);
-          if (!response || !response.ok) return upstreamFailure("push-tracks", response?.status);
-          const parsed = upstreamTracksResponseSchema.safeParse(
-            await response.json().catch(() => null),
-          );
-          if (!parsed.success) return upstreamFailure("push-tracks", response.status);
-          if (parsed.data.errorCode === undefined && parsed.data.sessionDescription === undefined) {
-            return upstreamFailure("push-tracks", response.status);
-          }
-          const accepted =
-            parsed.data.errorCode === undefined
-              ? parsed.data.tracks.find(
-                  (track) => track.errorCode === undefined && track.mid === requested.mid,
-                )
-              : undefined;
-          if (
-            parsed.data.errorCode === undefined &&
-            (parsed.data.tracks.length !== 1 ||
-              (parsed.data.tracks[0]?.errorCode === undefined && !accepted))
-          ) {
-            await sfuUpstream.closeTracks(
-              operation.sessionId,
-              parsed.data.tracks.flatMap((track) =>
-                track.errorCode === undefined && track.mid != null ? [track.mid] : [],
-              ),
-            );
-            return upstreamFailure("push-tracks", response.status);
-          }
-          if (accepted) {
-            const acceptedMid = accepted.mid as string;
-            const next = persist((latest) => ({
-              ...latest,
-              publishedTrackName: requested.trackName,
-              publishedMid: acceptedMid,
-              participantRevision: this.nextRevision(),
-            }));
-            if (!next) {
-              await sfuUpstream.closeTracks(operation.sessionId, [acceptedMid]);
-              return noStoreJson({ error: "unauthorized" }, 403);
-            }
-            this.broadcastUpsert(next);
-          }
-          logOutcome("push-tracks", 200);
-          return noStoreJson(parsed.data);
-        }
-        if (pull && pull.success) {
-          const authorized = authorizePullTracks(
-            state,
-            operation.sessionId,
-            pull.data,
-            current.voiceConnectionId,
-            this.activePublications(),
-          );
-          if (!authorized.ok) {
-            logOutcome("pull-tracks", authorized.status);
-            return noStoreJson({ error: authorized.error }, authorized.status);
-          }
-          // Retry replacement mirrors the publication path: close only the
-          // registered mids for requested stable remote track identities,
-          // update the ownership registry, then forward the replacement pull.
-          const requestedKeys = new Set(pull.data.tracks.map(receivingTrackKey));
-          const replacedTracks = current.receivingTracks.filter((track) =>
-            requestedKeys.has(receivingTrackKey(track)),
-          );
-          if (replacedTracks.length > 0) {
-            const replacedMids = new Set(replacedTracks.map((track) => track.mid));
-            if (!(await sfuUpstream.closeTracks(operation.sessionId, [...replacedMids]))) {
-              return upstreamFailure("replace-pulled-tracks");
-            }
-            const cleared = persist((latest) => ({
-              ...latest,
-              receivingMids: latest.receivingMids.filter((mid) => !replacedMids.has(mid)),
-              receivingTracks: latest.receivingTracks.filter(
-                (track) => !replacedMids.has(track.mid),
-              ),
-            }));
-            if (!cleared) return noStoreJson({ error: "unauthorized" }, 403);
-          }
-          const response = await upstream(pull.data);
-          if (!response || !response.ok) return upstreamFailure("pull-tracks", response?.status);
-          const parsed = upstreamTracksResponseSchema.safeParse(
-            await response.json().catch(() => null),
-          );
-          if (!parsed.success) return upstreamFailure("pull-tracks", response.status);
-          const additions: ReceivingTrack[] = [];
-          const successfulTracks = parsed.data.errorCode === undefined ? parsed.data.tracks : [];
-          const acceptedKeys = new Set<string>();
-          let malformedSuccess = false;
-          for (const track of successfulTracks) {
-            if (track.errorCode !== undefined) continue;
-            if (
-              track.mid == null ||
-              track.sessionId === undefined ||
-              track.trackName === undefined
-            ) {
-              malformedSuccess = true;
-              continue;
-            }
-            const key = receivingTrackKey({
-              sessionId: track.sessionId,
-              trackName: track.trackName,
-            });
-            const requested = pull.data.tracks.find(
-              (candidate) =>
-                candidate.sessionId === track.sessionId && candidate.trackName === track.trackName,
-            );
-            if (!requested || acceptedKeys.has(key)) {
-              malformedSuccess = true;
-              continue;
-            }
-            acceptedKeys.add(key);
-            additions.push({
-              sessionId: requested.sessionId,
-              trackName: requested.trackName,
-              mid: track.mid,
-            });
-          }
-          if (
-            parsed.data.errorCode === undefined &&
-            (malformedSuccess ||
-              parsed.data.tracks.length === 0 ||
-              (parsed.data.requiresImmediateRenegotiation === true &&
-                parsed.data.sessionDescription === undefined))
-          ) {
-            await sfuUpstream.closeTracks(
-              operation.sessionId,
-              successfulTracks.flatMap((track) =>
-                track.errorCode === undefined && track.mid != null ? [track.mid] : [],
-              ),
-            );
-            return upstreamFailure("pull-tracks", response.status);
-          }
-          if (additions.length > 0) {
-            const next = persist((latest) => {
-              const byTrack = new Map(
-                latest.receivingTracks.map((track) => [receivingTrackKey(track), track]),
-              );
-              for (const addition of additions) {
-                byTrack.set(receivingTrackKey(addition), addition);
-              }
-              const receivingTracks = [...byTrack.values()].slice(
-                0,
-                MAX_VOICE_TRACKS_PER_CONNECTION,
-              );
-              // Preserve legacy owned mids that predate receivingTracks; they
-              // must remain closable and count toward the per-session limit.
-              const receivingMids = [
-                ...new Set([...latest.receivingMids, ...additions.map((addition) => addition.mid)]),
-              ].slice(0, MAX_VOICE_TRACKS_PER_CONNECTION);
-              return {
-                ...latest,
-                receivingMids,
-                receivingTracks,
-              };
-            });
-            if (!next) {
-              await sfuUpstream.closeTracks(
-                operation.sessionId,
-                additions.map((track) => track.mid),
-              );
-              return noStoreJson({ error: "unauthorized" }, 403);
-            }
-          }
-          logOutcome("pull-tracks", 200);
-          return noStoreJson(parsed.data);
-        }
-        logOutcome("push-tracks", 400);
-        return noStoreJson({ error: "invalid request" }, 400);
-      }
-
-      if (operation.kind === "renegotiate") {
-        const parsedBody = renegotiateRequestSchema.safeParse(body);
-        if (!parsedBody.success) return noStoreJson({ error: "invalid request" }, 400);
-        const authorized = authorizeSessionScoped(state, operation.sessionId);
-        if (!authorized.ok) {
-          logOutcome(operation.kind, authorized.status);
-          return noStoreJson({ error: authorized.error }, authorized.status);
-        }
-        const response = await upstream(parsedBody.data);
-        if (!response || !response.ok) return upstreamFailure(operation.kind, response?.status);
-        const parsed = upstreamRenegotiateResponseSchema.safeParse(
-          await response.json().catch(() => ({})),
-        );
-        if (!parsed.success) return upstreamFailure(operation.kind, response.status);
-        if (!readLiveAttachment()) return noStoreJson({ error: "unauthorized" }, 403);
-        logOutcome(operation.kind, 200);
-        return noStoreJson(parsed.data);
-      }
-
-      // close-tracks
-      const parsedBody = closeTracksRequestSchema.safeParse(body);
-      if (!parsedBody.success) return noStoreJson({ error: "invalid request" }, 400);
-      const authorized = authorizeCloseTracks(state, operation.sessionId, parsedBody.data);
-      if (!authorized.ok) {
-        logOutcome(operation.kind, authorized.status);
-        return noStoreJson({ error: authorized.error }, authorized.status);
-      }
-      const response = await upstream(parsedBody.data);
-      if (!response || !response.ok) return upstreamFailure(operation.kind, response?.status);
-      const parsed = upstreamTracksResponseSchema.safeParse(
-        await response.json().catch(() => ({})),
-      );
-      if (!parsed.success) return upstreamFailure(operation.kind, response.status);
-      if (
-        parsed.data.errorCode === undefined &&
-        parsedBody.data.force !== true &&
-        parsed.data.sessionDescription === undefined
-      ) {
-        return upstreamFailure(operation.kind, response.status);
-      }
-      const reportedTracks = parsed.data.tracks.filter((track) => track.mid != null);
-      const closedMids = new Set(
-        parsed.data.errorCode !== undefined
-          ? []
-          : reportedTracks
-              .filter((track) => track.errorCode === undefined)
-              .map((track) => track.mid as string),
-      );
-      let wasPublishing = false;
-      const next = persist((latest) => {
-        wasPublishing = latest.publishedMid !== null && closedMids.has(latest.publishedMid);
-        return {
-          ...latest,
-          publishedMid: wasPublishing ? null : latest.publishedMid,
-          publishedTrackName: wasPublishing ? null : latest.publishedTrackName,
-          receivingMids: latest.receivingMids.filter((mid) => !closedMids.has(mid)),
-          receivingTracks: latest.receivingTracks.filter((track) => !closedMids.has(track.mid)),
-          ...(wasPublishing ? { participantRevision: this.nextRevision() } : {}),
-        };
-      });
-      if (!next) return noStoreJson({ error: "unauthorized" }, 403);
-      if (wasPublishing) this.broadcastUpsert(next);
-      logOutcome("close-tracks", 200);
-      return noStoreJson(parsed.data);
     });
   }
 }

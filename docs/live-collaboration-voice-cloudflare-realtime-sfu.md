@@ -478,6 +478,7 @@ infra/
   worker/
     collaboration/
       voiceDurableObject.ts                 # ephemeral roster and ownership registry
+      voiceSfuOperations.ts                 # one function per proxied SFU operation
       realtimeSfuGateway.ts                 # secured PartyTracks/SFU proxy wrapper
     routes/
       collaboration.ts                     # room-scoped voice routes
@@ -1009,8 +1010,10 @@ reads fail closed.
   replacement, socket lifecycle): at the time the DO's `cloudflare:workers` import had no test
   stand-in. `infra/worker/vitest.config.ts` now aliases it to `infra/worker/testing/`, and
   `roomDurableObject.test.ts` drives the room Durable Object with fake sockets that way;
-  `voiceDurableObject.test.ts` covers only the voice DO's membership control so far. The pure
-  authorization matrix is covered by
+  `voiceDurableObject.test.ts` covers the voice DO's membership control, roster upserts and SFU
+  request wiring, and `voiceSfuOperations.test.ts` drives each SFU operation (session
+  replacement, publish retry, pull limits, track close, a connection lost mid-request) against
+  a fake connection and upstream. The pure authorization matrix is covered by
   `realtimeSfuGateway.test.ts`; behaviors that need workerd itself (real hibernation, the 101
   upgrade) must still be exercised by the staging smoke test in
   `deployment-operations-collaboration.md` (and a `@cloudflare/vitest-pool-workers` suite is a
