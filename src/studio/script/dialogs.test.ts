@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { dialogDisplayText, splitIntoDialogs } from "./dialogs";
+import { splitIntoDialogs } from "./dialogs";
 import { extractNarration } from "./markers";
 
 describe("splitIntoDialogs", () => {
@@ -11,9 +11,11 @@ describe("splitIntoDialogs", () => {
     const dialogs = splitIntoDialogs(extracted);
 
     expect(dialogs.map((dialog) => dialog.id)).toEqual(["a.0", "a.1", "b.0"]);
-    expect(dialogDisplayText(dialogs[0])).toBe("Intro words here.");
-    expect(dialogDisplayText(dialogs[1])).toBe("After the first mark.");
-    expect(dialogDisplayText(dialogs[2])).toBe("Second scene speaks.");
+    expect(dialogs.map((dialog) => dialog.tokens.join(" "))).toEqual([
+      "Intro words here.",
+      "After the first mark.",
+      "Second scene speaks.",
+    ]);
 
     // Full coverage, in order.
     const rejoined = dialogs.flatMap((dialog) => dialog.tokens);
@@ -41,7 +43,7 @@ describe("splitIntoDialogs", () => {
       { sceneId: "a", narration: "Before. [[mark:x]] [[mark:y]] After." },
     ]);
     const dialogs = splitIntoDialogs(extracted);
-    expect(dialogs.map((dialog) => dialogDisplayText(dialog))).toEqual(["Before.", "After."]);
+    expect(dialogs.map((dialog) => dialog.tokens.join(" "))).toEqual(["Before.", "After."]);
     // Both markers bind to the same boundary.
     expect(extracted.markers.get("x")!.beforeTokenIndex).toBe(
       extracted.markers.get("y")!.beforeTokenIndex,

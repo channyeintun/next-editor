@@ -7,7 +7,6 @@ import {
   trimSilence,
   trimSilencePcm16,
   validateDialogWav,
-  wavDurationMs,
 } from "./wav";
 
 const RATE = 24_000;
@@ -27,7 +26,7 @@ describe("wav codec", () => {
     expect(decoded.sampleRate).toBe(RATE);
     expect(decoded.pcm.length).toBe(36_000);
     expect(decoded.pcm[0]).toBe(1234);
-    expect(wavDurationMs(bytes)).toBe(1_500);
+    expect(validateDialogWav(bytes, RATE).durationMs).toBe(1_500);
   });
 
   it("clamps float samples into 16-bit range", () => {

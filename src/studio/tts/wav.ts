@@ -141,11 +141,6 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
   return { pcm, sampleRate };
 }
 
-export function wavDurationMs(bytes: Uint8Array): number {
-  const { pcm, sampleRate } = decodeWavPcm16(bytes);
-  return Math.round((pcm.length / sampleRate) * 1000);
-}
-
 export interface ValidatedDialogWav {
   durationMs: number;
   /** The decoded samples, so the caller levels them without decoding again. */

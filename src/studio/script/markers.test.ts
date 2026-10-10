@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  MarkerError,
-  displayTextOf,
-  extractNarration,
-  extractScriptNarration,
-  requireMarker,
-} from "./markers";
+import { MarkerError, extractNarration, extractScriptNarration, requireMarker } from "./markers";
 import type { LessonScript } from "./schema";
 
 describe("extractNarration", () => {
@@ -15,7 +9,7 @@ describe("extractNarration", () => {
     ]);
     expect(extracted.tokens).toEqual(["Hello", "there.", "General", "Kenobi."]);
     expect(requireMarker(extracted, "mid").beforeTokenIndex).toBe(2);
-    expect(displayTextOf(extracted)).toBe("Hello there. General Kenobi.");
+    expect(extracted.tokens.join(" ")).toBe("Hello there. General Kenobi.");
   });
 
   it("binds a trailing marker to the narration end", () => {

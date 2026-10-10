@@ -5,7 +5,6 @@ import {
   measureIntegratedLoudness,
   NARRATION_LOUDNESS_FLOOR_LUFS,
   NARRATION_LOUDNESS_TARGET_LUFS,
-  normalizeDialogLoudness,
 } from "./loudness";
 
 const PEAK_CEILING = 10 ** (-1 / 20);
@@ -92,56 +91,6 @@ describe("measureIntegratedLoudness", () => {
   });
 });
 
-describe("normalizeDialogLoudness", () => {
-  const sampleRate = 24_000;
-
-  it("brings two clips 9 dB apart to the same target", () => {
-    const quiet = toPcm(sine(0.05, 3, sampleRate));
-    const loud = toPcm(sine(0.05 * 10 ** (9 / 20), 3, sampleRate));
-    expect(loudnessOf(loud, sampleRate)! - loudnessOf(quiet, sampleRate)!).toBeCloseTo(9, 1);
-
-    for (const clip of [quiet, loud]) {
-      const leveled = normalizeDialogLoudness(clip, sampleRate);
-      expect(leveled).toHaveLength(clip.length);
-      expect(
-        offBy(loudnessOf(leveled, sampleRate), NARRATION_LOUDNESS_TARGET_LUFS),
-      ).toBeLessThanOrEqual(0.2);
-    }
-  });
-
-  it("keeps a peaky clip under the ceiling instead of clipping it", () => {
-    const peaky = peakyPcm(0.02, 0.9, sampleRate);
-    const leveled = normalizeDialogLoudness(peaky, sampleRate);
-    expect(peakOf(leveled)).toBeLessThanOrEqual(PEAK_CEILING);
-    expect(loudnessOf(leveled, sampleRate)!).toBeLessThan(NARRATION_LOUDNESS_TARGET_LUFS - 1);
-  });
-
-  it("limits the gain to 12 dB either way", () => {
-    // About −49 and −3 LUFS: 31 dB under and 15 dB over the target.
-    const veryQuiet = toPcm(sine(0.005, 3, sampleRate));
-    const veryLoud = toPcm(sine(1, 3, sampleRate));
-    for (const [clip, gainDb] of [
-      [veryQuiet, 12],
-      [veryLoud, -12],
-    ] as const) {
-      const leveled = loudnessOf(normalizeDialogLoudness(clip, sampleRate), sampleRate);
-      expect(offBy(leveled, loudnessOf(clip, sampleRate)! + gainDb)).toBeLessThanOrEqual(0.05);
-    }
-  });
-
-  it("returns silence unchanged", () => {
-    const silence = new Int16Array(sampleRate);
-    expect(normalizeDialogLoudness(silence, sampleRate)).toEqual(silence);
-  });
-
-  it("gives the same samples for the same input", () => {
-    const clip = peakyPcm(0.05, 0.4, sampleRate);
-    expect(normalizeDialogLoudness(clip, sampleRate)).toEqual(
-      normalizeDialogLoudness(clip.slice(), sampleRate),
-    );
-  });
-});
-
 describe("levelNarrationDialogs", () => {
   const sampleRate = 48_000;
 
@@ -200,6 +149,32 @@ describe("levelNarrationDialogs", () => {
     expect(peakOf(dialogs[1].pcm)).toBeLessThanOrEqual(PEAK_CEILING);
     expect(dialogs[1].leveledLufs!).toBeLessThan(levelLufs - 1);
     expect(dialogs[2].leveledLufs! - dialogs[2].measuredLufs!).toBeCloseTo(12, 6);
+  });
+
+  it("cuts a very loud dialog by 12 dB at most", () => {
+    // About −3 LUFS, 15 dB over the target: the cut stops at the gain limit,
+    // so it ends 3 dB over the shared level (the Director warns about it).
+    const veryLoud = toPcm(sine(1, 2, sampleRate));
+    const { levelLufs, dialogs } = levelNarrationDialogs(
+      [toPcm(sine(0.1, 2, sampleRate)), veryLoud],
+      sampleRate,
+    );
+
+    expect(levelLufs).toBe(NARRATION_LOUDNESS_TARGET_LUFS);
+    expect(dialogs[1].leveledLufs! - dialogs[1].measuredLufs!).toBeCloseTo(-12, 6);
+    expect(
+      offBy(loudnessOf(dialogs[1].pcm, sampleRate), loudnessOf(veryLoud, sampleRate)! - 12),
+    ).toBeLessThanOrEqual(0.05);
+  });
+
+  it("keeps a peaky dialog under the ceiling and silence unchanged", () => {
+    const peaky = peakyPcm(0.02, 0.9, sampleRate);
+    const silence = new Int16Array(sampleRate);
+    const { dialogs } = levelNarrationDialogs([peaky, silence], sampleRate);
+
+    expect(peakOf(dialogs[0].pcm)).toBeLessThanOrEqual(PEAK_CEILING);
+    expect(dialogs[0].leveledLufs!).toBeLessThan(NARRATION_LOUDNESS_TARGET_LUFS - 1);
+    expect(dialogs[1].pcm).toEqual(silence);
   });
 
   it("leaves silent dialogs alone and is repeatable", () => {

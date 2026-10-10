@@ -51,8 +51,3 @@ export function splitIntoDialogs(extracted: ExtractedNarration): NarrationDialog
 
   return dialogs;
 }
-
-/** Display text of one dialog (what the captions show for its span). */
-export function dialogDisplayText(dialog: NarrationDialog): string {
-  return dialog.tokens.join(" ");
-}

@@ -186,12 +186,6 @@ export function measureIntegratedLoudness(
   return loudnessOf(meanOf(gated));
 }
 
-export interface LoudnessLevelingOptions {
-  targetLufs?: number;
-  maxGainDb?: number;
-  peakCeilingDbfs?: number;
-}
-
 /** One take's loudness and sample peak, measured once. */
 interface TakeLevel {
   /** Integrated loudness in LUFS; null for silence. */
@@ -244,27 +238,11 @@ function applyGain(pcm: Int16Array, gain: number): Int16Array {
   return scaled;
 }
 
-/**
- * Bring one take to the target loudness with a single static gain. A peaky
- * take ends a little under the target rather than clipping, and silence comes
- * back unchanged. The output always has the input's length, and the same
- * input gives the same samples.
- */
-export function normalizeDialogLoudness(
-  pcm: Int16Array,
-  sampleRate: number,
-  {
-    targetLufs = NARRATION_LOUDNESS_TARGET_LUFS,
-    maxGainDb = NARRATION_MAX_GAIN_DB,
-    peakCeilingDbfs = NARRATION_PEAK_CEILING_DBFS,
-  }: LoudnessLevelingOptions = {},
-): Int16Array {
-  const gain = gainFor(measureTake(pcm, sampleRate), targetLufs, maxGainDb, peakCeilingDbfs);
-  return applyGain(pcm, gain);
-}
-
-export interface NarrationLevelingOptions extends LoudnessLevelingOptions {
+export interface NarrationLevelingOptions {
+  targetLufs?: number;
   floorLufs?: number;
+  maxGainDb?: number;
+  peakCeilingDbfs?: number;
 }
 
 export interface LeveledDialog {

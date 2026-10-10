@@ -35,8 +35,8 @@ export class AlignmentError extends Error {
 
 /**
  * Silence the synthesizer adds around an utterance; excluded from token spans.
- * The defaults suit a whole-narration `say` file; per-dialog estimation passes
- * smaller margins since each span is only a sentence or two.
+ * The defaults suit a whole-narration estimate (tests); the scheduler passes
+ * per-dialog margins.
  */
 const LEAD_SILENCE_MS = 150;
 const TAIL_SILENCE_MS = 300;

@@ -406,11 +406,7 @@ export class PocketTtsEngine {
   }
 
   /** Synthesize one dialog; deterministic for a given (text, seed). */
-  async synthesize(
-    text: string,
-    seed: number,
-    onProgress?: (frames: number) => void,
-  ): Promise<PocketSynthesisResult> {
+  async synthesize(text: string, seed: number): Promise<PocketSynthesisResult> {
     const meta = this.metadata;
     const prepOptions = {
       removeSemicolons: meta.remove_semicolons,
@@ -443,7 +439,6 @@ export class PocketTtsEngine {
     });
 
     const audioParts: Float32Array[] = [];
-    let totalFrames = 0;
     let cappedChunkCount = 0;
 
     for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
@@ -545,8 +540,6 @@ export class PocketTtsEngine {
         chunkLatents.push(new Float32Array(latentData));
         currentLatent = new ort.Tensor("float32", latentData, [1, 1, latentDim]);
         updateStateFromManifestOutputs(flowLmState, arResult, meta.flow_lm_state_manifest);
-        totalFrames += 1;
-        onProgress?.(totalFrames);
 
         const pending = chunkLatents.length - chunkDecodedFrames;
         if (shouldStop || pending >= 48) {

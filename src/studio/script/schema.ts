@@ -92,7 +92,7 @@ function anchorErrorMessage(input: unknown): string {
 }
 
 /** Narration-relative anchor. Absolute times are forbidden in source scripts. */
-export const scriptAnchorSchema = z.union(
+const scriptAnchorSchema = z.union(
   [
     z.strictObject({ scene: z.literal("start"), offsetMs: offsetMs.default(0) }),
     z.strictObject({ mark: z.string().min(1), offsetMs: offsetMs.default(0) }),
@@ -107,7 +107,6 @@ export const scriptAnchorSchema = z.union(
   ],
   { error: (issue) => anchorErrorMessage(issue.input) },
 );
-export type ScriptAnchor = z.infer<typeof scriptAnchorSchema>;
 
 /**
  * Text targets name file + anchor + occurrence. `occurrence` defaults to 1 and
@@ -115,7 +114,7 @@ export type ScriptAnchor = z.infer<typeof scriptAnchorSchema>;
  * once is not an error — add context to `after` or set `occurrence` to pick a
  * later match.
  */
-export const scriptTextTargetSchema = z.strictObject({
+const scriptTextTargetSchema = z.strictObject({
   file: z.string().min(1),
   after: z.string(),
   occurrence: z.number().int().min(1).default(1),
@@ -126,7 +125,7 @@ export const scriptTextTargetSchema = z.strictObject({
  * byte-for-byte match of `text` in the file's current content becomes the
  * selected range (same exact-substring rule as `editor.type`'s `after`).
  */
-export const scriptSelectTargetSchema = z.strictObject({
+const scriptSelectTargetSchema = z.strictObject({
   file: z.string().min(1),
   text: z.string().min(1),
   occurrence: z.number().int().min(1).default(1),
@@ -252,7 +251,7 @@ const scriptExpectPreviewSchema = scriptActionBase.extend({
   ...fields["expect.preview"],
 });
 
-export const scriptActionSchema = z.discriminatedUnion("type", [
+const scriptActionSchema = z.discriminatedUnion("type", [
   scriptOpenFileSchema,
   scriptEditorTypeSchema,
   scriptEditorSelectSchema,
@@ -300,12 +299,12 @@ function scriptPinnedReferences(action: ScriptAction): PinnedReference[] {
 }
 
 /** A cited source backing the scene's claims (required by the editorial gate). */
-export const scriptSourceSchema = z.strictObject({
+const scriptSourceSchema = z.strictObject({
   title: z.string().min(1),
   url: z.string().url(),
 });
 
-export const scriptSceneSchema = z.strictObject({
+const scriptSceneSchema = z.strictObject({
   id: z.string().min(1),
   /**
    * Titles the chapter this scene starts. The rendered lesson lists its chapters and marks
@@ -317,7 +316,6 @@ export const scriptSceneSchema = z.strictObject({
   sources: z.array(scriptSourceSchema).default([]),
   actions: z.array(scriptActionSchema).default([]),
 });
-export type ScriptScene = z.infer<typeof scriptSceneSchema>;
 
 /**
  * Per-script QA thresholds. Only checks that a script can actually configure
@@ -325,7 +323,7 @@ export type ScriptScene = z.infer<typeof scriptSceneSchema>;
  * run on every render regardless, so declaring them was decorative — the value
  * never reached the plan, and omitting them switched nothing off.
  */
-export const scriptCheckSchema = z.discriminatedUnion("type", [
+const scriptCheckSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("timing.p95Ms"),
     max: z.number().finite().positive(),
@@ -337,16 +335,15 @@ export const scriptCheckSchema = z.discriminatedUnion("type", [
  * (File → Share → Publish to web). The Director fetches the deck once at
  * compile time and pins the page's normalized SVG into the plan.
  */
-export const googleSlideRefSchema = z.strictObject({
+const googleSlideRefSchema = z.strictObject({
   id: z.string().min(1),
   contentType: z.literal("google"),
   deckUrl: z.string().url(),
   pageId: z.string().min(1),
   name: z.string().optional(),
 });
-export type GoogleSlideRef = z.infer<typeof googleSlideRefSchema>;
 
-export const scriptSlideSchema = z.discriminatedUnion("contentType", [
+const scriptSlideSchema = z.discriminatedUnion("contentType", [
   studioSlideSchema,
   googleSlideRefSchema,
 ]);

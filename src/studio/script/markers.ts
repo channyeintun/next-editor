@@ -109,11 +109,6 @@ export function extractScriptNarration(script: Pick<LessonScript, "scenes">): Ex
   );
 }
 
-/** The display text (markers removed) — the caption source of truth. */
-export function displayTextOf(extracted: ExtractedNarration): string {
-  return extracted.tokens.join(" ");
-}
-
 export function requireMarker(extracted: ExtractedNarration, name: string): NarrationMarker {
   const marker = extracted.markers.get(name);
   if (!marker) {
