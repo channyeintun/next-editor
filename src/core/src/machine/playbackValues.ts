@@ -1,5 +1,5 @@
-const DEFAULT_PLAYBACK_SPEED = 1;
-const DEFAULT_PLAYBACK_VOLUME = 1;
+export const DEFAULT_PLAYBACK_SPEED = 1;
+export const DEFAULT_PLAYBACK_VOLUME = 1;
 export const MIN_PLAYBACK_SPEED = 0.5;
 export const MAX_PLAYBACK_SPEED = 2;
 

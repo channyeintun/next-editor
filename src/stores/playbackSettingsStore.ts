@@ -1,19 +1,17 @@
 import { createStore } from "@xstate/store-react";
 import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
+import {
+  DEFAULT_PLAYBACK_SPEED,
+  DEFAULT_PLAYBACK_VOLUME,
+  normalizePlaybackSpeed,
+  normalizePlaybackVolume,
+} from "../core/src/machine/playbackValues";
 
 const AUTOPLAY_KEY = "playback-autoplay";
 const CONTINUE_TO_NEXT_KEY = "playback-continue-to-next";
 const SPEED_KEY = "playback-speed";
 const VOLUME_KEY = "playback-volume";
 const CHARACTER_SHORTCUTS_KEY = "playback-character-shortcuts";
-
-// Match the MediaControls slider ranges — clamping (rather than rejecting)
-// keeps a hand-edited or stale localStorage value usable instead of silently
-// falling back to defaults.
-const SPEED_MIN = 0.5;
-const SPEED_MAX = 2;
-const VOLUME_MIN = 0;
-const VOLUME_MAX = 1;
 
 export interface PlaybackSettingsContext {
   autoplay: boolean;
@@ -29,22 +27,27 @@ export interface PlaybackSettingsContext {
   characterShortcuts: boolean;
 }
 
-const clampSpeed = (speed: number): number => Math.min(SPEED_MAX, Math.max(SPEED_MIN, speed));
-const clampVolume = (volume: number): number => Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, volume));
-
-function readStoredNumber(key: string, fallback: number, clamp: (value: number) => number): number {
+/**
+ * A stored speed or volume through the player's own normalizer: clamping
+ * (rather than rejecting) keeps a hand-edited or stale value usable, and a
+ * missing or non-numeric one falls back to the default.
+ */
+function readStoredNumber(
+  key: string,
+  fallback: number,
+  normalize: (value: number, fallback: number) => number,
+): number {
   const raw = readStoredPreference(key);
   if (raw === null) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? clamp(parsed) : fallback;
+  return normalize(Number(raw), fallback);
 }
 
 function readInitialContext(): PlaybackSettingsContext {
   return {
     autoplay: readStoredPreference(AUTOPLAY_KEY) === "true",
     continueToNext: readStoredPreference(CONTINUE_TO_NEXT_KEY) === "true",
-    speed: readStoredNumber(SPEED_KEY, 1, clampSpeed),
-    volume: readStoredNumber(VOLUME_KEY, 1, clampVolume),
+    speed: readStoredNumber(SPEED_KEY, DEFAULT_PLAYBACK_SPEED, normalizePlaybackSpeed),
+    volume: readStoredNumber(VOLUME_KEY, DEFAULT_PLAYBACK_VOLUME, normalizePlaybackVolume),
     characterShortcuts: readStoredPreference(CHARACTER_SHORTCUTS_KEY) !== "false",
   };
 }
@@ -60,11 +63,11 @@ export function createPlaybackSettingsStore() {
           ? context
           : { ...context, continueToNext: event.continueToNext },
       setSpeed: (context, event: { speed: number }) => {
-        const speed = Number.isFinite(event.speed) ? clampSpeed(event.speed) : context.speed;
+        const speed = normalizePlaybackSpeed(event.speed, context.speed);
         return speed === context.speed ? context : { ...context, speed };
       },
       setVolume: (context, event: { volume: number }) => {
-        const volume = Number.isFinite(event.volume) ? clampVolume(event.volume) : context.volume;
+        const volume = normalizePlaybackVolume(event.volume, context.volume);
         return volume === context.volume ? context : { ...context, volume };
       },
       setCharacterShortcuts: (context, event: { enabled: boolean }) =>
