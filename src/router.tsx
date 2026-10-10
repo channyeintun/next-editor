@@ -1,4 +1,4 @@
-import { useEffect, type ComponentType } from "react";
+import { useEffect } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useParams, useRouteError } from "react-router";
 import Breadcrumb from "./components/Breadcrumb";
 import EditorShellSkeleton from "./components/EditorShellSkeleton";
@@ -6,86 +6,15 @@ import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
 import { queryClient } from "./queryClient";
+import {
+  clearAllRouteReloads,
+  isDynamicImportError,
+  lazyRoute,
+  reloadWithRecoveryParam,
+} from "./routeRecovery";
 import { analytics } from "./utils/analytics";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
 import { useEmbedded } from "./utils/embed";
-
-const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
-const DYNAMIC_IMPORT_ERROR_PATTERN =
-  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
-const ROUTE_RELOAD_STORAGE_PREFIX = "next-editor:route-reload:";
-
-function normalizeRoutePath(routePath: string) {
-  if (routePath === "/") {
-    return routePath;
-  }
-
-  return routePath.replace(/\/+$/, "");
-}
-
-// Keyed by the route's pattern ("/learn/:slug"), not the URL, so each route gets
-// one automatic reload however many lessons fail to load behind it.
-function getRouteReloadStorageKey(routePath: string) {
-  return `${ROUTE_RELOAD_STORAGE_PREFIX}${normalizeRoutePath(routePath)}`;
-}
-
-function hasRouteReloaded(routePath: string) {
-  return sessionStorage.getItem(getRouteReloadStorageKey(routePath)) === "1";
-}
-
-function markRouteReloaded(routePath: string) {
-  sessionStorage.setItem(getRouteReloadStorageKey(routePath), "1");
-}
-
-function clearRouteReload(routePath: string) {
-  sessionStorage.removeItem(getRouteReloadStorageKey(routePath));
-}
-
-// The error boundary knows the URL but not the pattern it matched, so a manual
-// reload re-arms the automatic one for every route.
-function clearAllRouteReloads() {
-  for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
-    const key = sessionStorage.key(index);
-    if (key?.startsWith(ROUTE_RELOAD_STORAGE_PREFIX)) {
-      sessionStorage.removeItem(key);
-    }
-  }
-}
-
-// A fresh query string makes the browser refetch the HTML, and with it the
-// current chunk names.
-function reloadWithRecoveryParam() {
-  const nextUrl = new URL(window.location.href);
-  nextUrl.searchParams.set(DYNAMIC_IMPORT_RECOVERY_PARAM, Date.now().toString());
-  window.location.replace(nextUrl.toString());
-}
-
-function clearRecoverySearchParam() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const nextUrl = new URL(window.location.href);
-
-  if (!nextUrl.searchParams.has(DYNAMIC_IMPORT_RECOVERY_PARAM)) {
-    return;
-  }
-
-  nextUrl.searchParams.delete(DYNAMIC_IMPORT_RECOVERY_PARAM);
-  window.history.replaceState(window.history.state, "", nextUrl.toString());
-}
-
-function isDynamicImportError(error: unknown) {
-  if (error instanceof Error) {
-    return DYNAMIC_IMPORT_ERROR_PATTERN.test(error.message);
-  }
-
-  if (typeof error === "string") {
-    return DYNAMIC_IMPORT_ERROR_PATTERN.test(error);
-  }
-
-  return false;
-}
 
 function getRouteErrorMessage(error: unknown) {
   if (isRouteErrorResponse(error)) {
@@ -97,30 +26,6 @@ function getRouteErrorMessage(error: unknown) {
   }
 
   return "The route could not be loaded.";
-}
-
-function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePath: string) {
-  return async () => {
-    try {
-      const module = await importer();
-      clearRouteReload(routePath);
-      clearRecoverySearchParam();
-      return { Component: module.default };
-    } catch (error) {
-      if (
-        typeof window !== "undefined" &&
-        isDynamicImportError(error) &&
-        !hasRouteReloaded(routePath)
-      ) {
-        markRouteReloaded(routePath);
-        reloadWithRecoveryParam();
-
-        return new Promise<never>(() => {});
-      }
-
-      throw error;
-    }
-  };
 }
 
 // Editor lazy-loads CodeEditor, and Monaco with it, so the shell can paint and
