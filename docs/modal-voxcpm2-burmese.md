@@ -181,7 +181,9 @@ dialog cache, which lives in Cache Storage (`next-editor-studio-tts-v1`,
 `src/studio/tts/dialogCache.ts`), not IndexedDB. Every take is validated before
 it is cached, and a cache hit is validated again: a bad entry is evicted with a
 warning and synthesized afresh, so clearing the cache is not needed to recover
-from one. Delete that cache (or the site's data) only when intentionally
+from one. If Cache Storage is blocked or full, the render still completes, with
+a "Narration cache unavailable" warning, and the next render synthesizes those
+takes again. Delete that cache (or the site's data) only when intentionally
 forcing fresh Modal synthesis.
 
 The cache keeps each take as Modal returned it. Studio trims the lead-in and

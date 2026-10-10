@@ -22,8 +22,14 @@ type PcmSegment = { pcm: Int16Array; startMs: number };
 
 const tts = vi.hoisted(() => ({
   getCachedDialogWav:
-    vi.fn<(requestHash: string) => Promise<{ wav: Uint8Array; hitFrameCap: boolean } | null>>(),
-  deleteCachedDialogWav: vi.fn<(requestHash: string) => Promise<void>>(),
+    vi.fn<
+      (
+        requestHash: string,
+        onUnavailable?: (reason: string) => void,
+      ) => Promise<{ wav: Uint8Array; hitFrameCap: boolean } | null>
+    >(),
+  deleteCachedDialogWav:
+    vi.fn<(requestHash: string, onUnavailable?: (reason: string) => void) => Promise<void>>(),
   preloadPocket: vi.fn<(...args: unknown[]) => Promise<void>>(),
   putCachedDialogWav: vi.fn<(...args: unknown[]) => Promise<void>>(),
   synthesizePocketDialog:
@@ -495,7 +501,10 @@ describe("buildPlanFromScript narration", () => {
     const result = await buildPlanFromScript(script);
 
     const firstHash = tts.getCachedDialogWav.mock.calls[0][0];
-    expect(tts.deleteCachedDialogWav).toHaveBeenCalledExactlyOnceWith(firstHash);
+    expect(tts.deleteCachedDialogWav).toHaveBeenCalledExactlyOnceWith(
+      firstHash,
+      expect.any(Function),
+    );
     expect(tts.synthesizePocketDialog).toHaveBeenCalledOnce();
     expect(tts.putCachedDialogWav).toHaveBeenCalledOnce();
     expect(tts.putCachedDialogWav.mock.calls[0][0]).toBe(firstHash);
@@ -503,6 +512,25 @@ describe("buildPlanFromScript narration", () => {
     expect(result.warnings[0]).toMatch(
       /^Cached audio for dialog 1\/\d+ .* was unusable \(WAV data chunk is truncated.*\) and was synthesized again$/,
     );
+  });
+
+  it("renders on when the narration cache fails, with one warning", async () => {
+    // dialogCache treats a storage failure as a miss or a no-op and reports it.
+    tts.getCachedDialogWav.mockImplementation(async (_, onUnavailable) => {
+      onUnavailable?.("The operation is insecure.");
+      return null;
+    });
+    tts.putCachedDialogWav.mockImplementation(async (_, __, onUnavailable) => {
+      (onUnavailable as (reason: string) => void)("Quota exceeded.");
+    });
+
+    const result = await buildPlanFromScript(loadPilot());
+
+    expect(result.synthesizedCount).toBe(result.dialogCount);
+    expect(tts.putCachedDialogWav).toHaveBeenCalledTimes(result.dialogCount);
+    expect(result.warnings.filter((warning) => warning.startsWith("Narration cache"))).toEqual([
+      "Narration cache unavailable: The operation is insecure. — takes are synthesized again next render",
+    ]);
   });
 
   it("warns about a frame-capped take, caches it with the flag, and warns again on a hit", async () => {

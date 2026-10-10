@@ -4,6 +4,10 @@
  * dialog whose text/profile/lexicon is unchanged is never re-synthesized —
  * across renders and across page reloads. Storage is per-origin and private;
  * clearing site data resets it (the next render just re-synthesizes).
+ *
+ * The cache is an optimization only, so it never fails a render: a storage
+ * error (quota exceeded, Cache storage blocked) is a miss or a no-op, reported
+ * through the optional `onUnavailable` so the caller can warn about it.
  */
 
 const CACHE_NAME = "next-editor-studio-tts-v1";
@@ -22,46 +26,78 @@ function cacheAvailable(): boolean {
   return typeof caches !== "undefined";
 }
 
+/** Told why Cache storage failed; the operation was treated as a miss or a no-op. */
+export type OnDialogCacheUnavailable = (reason: string) => void;
+
+function reasonOf(error: unknown): string {
+  // Cache storage rejects with DOMExceptions, which not every environment
+  // makes Errors; a QuotaExceededError may come without a message.
+  if (error instanceof Error || error instanceof DOMException) {
+    return error.message || error.name;
+  }
+  return String(error);
+}
+
 export interface CachedDialogWav {
   wav: Uint8Array;
   hitFrameCap: boolean;
 }
 
-export async function getCachedDialogWav(requestHash: string): Promise<CachedDialogWav | null> {
+export async function getCachedDialogWav(
+  requestHash: string,
+  onUnavailable?: OnDialogCacheUnavailable,
+): Promise<CachedDialogWav | null> {
   if (!cacheAvailable()) {
     return null;
   }
-  const cache = await caches.open(CACHE_NAME);
-  const hit = await cache.match(cacheUrlFor(requestHash));
-  if (!hit) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const hit = await cache.match(cacheUrlFor(requestHash));
+    if (!hit) {
+      return null;
+    }
+    return {
+      wav: new Uint8Array(await hit.arrayBuffer()),
+      hitFrameCap: hit.headers.get(FRAME_CAP_HEADER) === "1",
+    };
+  } catch (error) {
+    onUnavailable?.(reasonOf(error));
     return null;
   }
-  return {
-    wav: new Uint8Array(await hit.arrayBuffer()),
-    hitFrameCap: hit.headers.get(FRAME_CAP_HEADER) === "1",
-  };
 }
 
 export async function putCachedDialogWav(
   requestHash: string,
   { wav, hitFrameCap }: CachedDialogWav,
+  onUnavailable?: OnDialogCacheUnavailable,
 ): Promise<void> {
   if (!cacheAvailable()) {
     return;
   }
-  const cache = await caches.open(CACHE_NAME);
   const headers: Record<string, string> = { "Content-Type": "audio/wav" };
   if (hitFrameCap) {
     headers[FRAME_CAP_HEADER] = "1";
   }
-  await cache.put(cacheUrlFor(requestHash), new Response(wav.slice() as BlobPart, { headers }));
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(cacheUrlFor(requestHash), new Response(wav.slice() as BlobPart, { headers }));
+  } catch (error) {
+    onUnavailable?.(reasonOf(error));
+  }
 }
 
 /** Drop one entry, e.g. a cached take that no longer passes validation. */
-export async function deleteCachedDialogWav(requestHash: string): Promise<void> {
+export async function deleteCachedDialogWav(
+  requestHash: string,
+  onUnavailable?: OnDialogCacheUnavailable,
+): Promise<void> {
   if (!cacheAvailable()) {
     return;
   }
-  const cache = await caches.open(CACHE_NAME);
-  await cache.delete(cacheUrlFor(requestHash));
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.delete(cacheUrlFor(requestHash));
+  } catch (error) {
+    onUnavailable?.(reasonOf(error));
+  }
 }

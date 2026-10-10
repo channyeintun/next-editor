@@ -13,6 +13,7 @@ import {
   getCachedDialogWav,
   putCachedDialogWav,
   type CachedDialogWav,
+  type OnDialogCacheUnavailable,
 } from "./tts/dialogCache";
 import { pocketSynthProvider } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
@@ -127,15 +128,16 @@ async function readCachedTake(
   requestHash: string,
   provider: DialogSynthProvider,
   onInvalid: (reason: string) => void,
+  onCacheUnavailable: OnDialogCacheUnavailable,
 ): Promise<DialogTake | null> {
-  const cached = await getCachedDialogWav(requestHash);
+  const cached = await getCachedDialogWav(requestHash, onCacheUnavailable);
   if (!cached) {
     return null;
   }
   try {
     return preparedTakeOf(provider, cached);
   } catch (error) {
-    await deleteCachedDialogWav(requestHash);
+    await deleteCachedDialogWav(requestHash, onCacheUnavailable);
     onInvalid(errorMessageOf(error));
     return null;
   }
@@ -193,6 +195,18 @@ export async function buildPlanFromScript(
   const durationsMs: number[] = [];
   const dialogHashes: string[] = [];
   const synthesisWarnings: string[] = [];
+  // The cache only saves synthesis, so a storage failure is a miss: the render
+  // goes on, and one warning says the takes are not kept for the next render.
+  let cacheUnavailable = false;
+  const onCacheUnavailable: OnDialogCacheUnavailable = (reason) => {
+    if (cacheUnavailable) {
+      return;
+    }
+    cacheUnavailable = true;
+    synthesisWarnings.push(
+      `Narration cache unavailable: ${reason} — takes are synthesized again next render`,
+    );
+  };
   let synthesizedCount = 0;
   // The request hashes never need the engine, so it loads on the first cache
   // miss: Pocket builds four ONNX sessions from a ~125 MB bundle on the main
@@ -217,10 +231,14 @@ export async function buildPlanFromScript(
 
     const label = dialogLabelOf(dialogs[i], i, dialogs.length);
     labels.push(label);
-    let take = await readCachedTake(requestHash, provider, (reason) =>
-      synthesisWarnings.push(
-        `Cached audio for ${label} was unusable (${reason}) and was synthesized again`,
-      ),
+    let take = await readCachedTake(
+      requestHash,
+      provider,
+      (reason) =>
+        synthesisWarnings.push(
+          `Cached audio for ${label} was unusable (${reason}) and was synthesized again`,
+        ),
+      onCacheUnavailable,
     );
     if (!take) {
       if (!providerLoaded) {
@@ -238,7 +256,7 @@ export async function buildPlanFromScript(
       // synthesizing the same request again reproduces the same audio and
       // would only cost time. The flag travels with the entry, so the warning
       // repeats on every render until the dialog's text changes.
-      await putCachedDialogWav(requestHash, synthesized.raw);
+      await putCachedDialogWav(requestHash, synthesized.raw, onCacheUnavailable);
       take = synthesized.take;
       synthesizedCount += 1;
     }
