@@ -218,11 +218,17 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return;
     }
 
-    setOutcomeText("");
-    beginRunnerOperation(runtimePanelStore, run.startedLines(files));
-    const outcome = await request("run", (client) => run.execute(client, files));
+    // A repeat click on unchanged sources joins the Run in flight rather than
+    // replacing it, so it prints no second header and spends no second request.
+    const outcome = await request("run", (client) => run.execute(client, files), {
+      files,
+      onStart: () => {
+        setOutcomeText("");
+        beginRunnerOperation(runtimePanelStore, run.startedLines(files));
+      },
+    });
 
-    // A newer Run owns the console from here on.
+    // A newer Run, or a repeat that joined this one, owns the console from here on.
     if (outcome.kind === "superseded") {
       return;
     }

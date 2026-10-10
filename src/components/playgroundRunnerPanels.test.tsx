@@ -720,6 +720,75 @@ describe("playground runner panels", () => {
     expect(consoleLines()).toEqual(["[haskell-run] runghc Main.hs"]);
   });
 
+  // The Worker charges a proxied Run's rate limit and calls upstream as soon as
+  // the request arrives, so replacing it with the same files spends both twice.
+  it.each(CASES)("$kind: keeps the Run in flight when Run is pressed again", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    let finishRun: (result: unknown) => void = () => {};
+    harness.client.run.mockReturnValue(new Promise((resolve) => (finishRun = resolve)));
+    await renderPanel(panel);
+    const runButton = screen.getByRole("button", { name: "Run" });
+
+    await click(runButton);
+    await click(runButton);
+    expect(harness.client.run).toHaveBeenCalledTimes(1);
+    expect(consoleLines()).toEqual(panel.run.lines.slice(0, 1));
+    expect(screen.getByRole("status")).toHaveTextContent("Program is running");
+
+    await act(async () => {
+      finishRun(panel.run.result);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(harness.client.stop).not.toHaveBeenCalled();
+    expect(consoleLines()).toEqual(panel.run.lines);
+    expect(screen.getByRole("status").textContent).toBe(
+      panel.run.lines.at(-1)!.replace(/^\[[^\]]+\] /, ""),
+    );
+  });
+
+  it.each(CASES)("$kind: replaces the Run in flight once its files change", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    let finishStale: (result: unknown) => void = () => {};
+    let finishRun: (result: unknown) => void = () => {};
+    harness.client.run
+      .mockReturnValueOnce(new Promise((resolve) => (finishStale = resolve)))
+      .mockReturnValueOnce(new Promise((resolve) => (finishRun = resolve)));
+    await renderPanel(panel);
+    const runButton = screen.getByRole("button", { name: "Run" });
+
+    await click(runButton);
+    setFiles({ [panel.entry]: FORMATTED });
+    await click(runButton);
+    expect(harness.client.run).toHaveBeenCalledTimes(2);
+    const [, request] = harness.client.run.mock.calls[1];
+    const files = Array.isArray(request) ? request : (request as { files: unknown }).files;
+    expect(files).toEqual([{ path: panel.entry, content: FORMATTED }]);
+
+    await act(async () => {
+      finishStale(panel.run.result);
+      finishRun(panel.run.result);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Only the newer Run prints how it ended.
+    const [header] = panel.run.lines;
+    expect(consoleLines()).toEqual([header, "", ...panel.run.lines]);
+  });
+
+  it.each(CASES)("$kind: runs unchanged files again once the last Run ended", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    harness.client.run.mockResolvedValue(panel.run.result);
+    await renderPanel(panel);
+    const runButton = screen.getByRole("button", { name: "Run" });
+
+    await click(runButton);
+    await click(runButton);
+
+    expect(harness.client.run).toHaveBeenCalledTimes(2);
+    expect(consoleLines()).toEqual([...panel.run.lines, "", ...panel.run.lines]);
+  });
+
   it.each(CASES)("$kind: colours only the tags its own console emits", async (panel) => {
     setFiles({ [panel.entry]: SOURCE });
     await renderPanel(panel);
