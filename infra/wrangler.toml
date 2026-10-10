@@ -242,8 +242,11 @@ new_sqlite_classes = ["CollaborationVoiceRoomDurableObject"]
 # output plus auto-spans for handler lifecycle, D1/R2 binding calls, and
 # outbound fetches. Free-plan quota is 200k events/day with 3-day retention,
 # and run_worker_first means every static-asset request also emits events —
-# watch the dashboard usage meter and see
-# docs/observability-integration-plan.md §8 for the volume levers.
+# watch the dashboard usage meter. Volume levers, in order: scope
+# run_worker_first to route patterns (only if COEP/COOP can reach static files
+# another way); `invocation_logs = false` under [observability.logs];
+# `head_sampling_rate` last, since it is per Worker and thins the API's logs
+# and traces too.
 [observability]
 enabled = true
 
