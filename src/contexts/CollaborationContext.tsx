@@ -38,10 +38,7 @@ import {
   projectCollaborationDocument,
   type CollaborationProjectProjection,
 } from "../collaboration/projectDocument";
-import {
-  createCollaborationRoomFromWorkspace,
-  publishCollaborationTeachingInitialization,
-} from "../collaboration/roomSetup";
+import { createCollaborationRoomFromWorkspace } from "../collaboration/roomSetup";
 import {
   CollaborationRoomProvider,
   type CollaborationRoomApi,
@@ -72,6 +69,7 @@ import {
 import { WorkspaceActionsContext } from "./WorkspaceContext";
 import { useCollaborationInvitation } from "./collaboration/useCollaborationInvitation";
 import { useCollaborationRoster } from "./collaboration/useCollaborationRoster";
+import { useCollaborationTeaching } from "./collaboration/useCollaborationTeaching";
 import { useCollaborativeWorkspaceActions } from "./collaboration/useCollaborativeWorkspaceActions";
 import {
   RoomPresenceContext,
@@ -89,21 +87,10 @@ import { createCollaborationUndoManager } from "../collaboration/undo";
 import {
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
-  projectCollaborationTeachingDocument,
-  setCollaborationCurrentSlide,
-  UNINITIALIZED_TEACHING_PROJECTION,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
-import { isCollaborationTeachingInitialized } from "../collaboration/teachingRoot";
-import { hydrateCollaborationSlideManifest } from "../collaboration/teachingSlides";
-import { applyCollaborationWhiteboardDelta } from "../collaboration/teachingWhiteboard";
 import {
-  applyTeachingSlides,
-  applyTeachingWhiteboard,
   borrowStandaloneTeachingStores,
-  isSameTeachingProjection,
-  recordCanonicalTeachingChange,
-  teachingHydrationKey,
   type StandaloneTeachingStores,
 } from "../collaboration/teachingStoreSync";
 import { useSlidesStore } from "./SlidesStoreContext";
@@ -253,18 +240,31 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const applyingFollowReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppedDuringFollowApplicationRef = useRef(false);
   const [surfaceRepublishVersion, setSurfaceRepublishVersion] = useState(0);
-  const [teaching, setTeaching] = useState<CollaborationTeachingProjection>(
-    UNINITIALIZED_TEACHING_PROJECTION,
-  );
-  const [teachingSlides, setTeachingSlides] = useState<Slide[] | null>(null);
-  const [isTeachingLoading, setIsTeachingLoading] = useState(false);
-  const teachingProjectionRef = useRef<CollaborationTeachingProjection | null>(null);
-  const localWhiteboardProjectionFingerprintRef = useRef<string | null>(null);
-  const appliedPresentationRevisionRef = useRef<number | null>(null);
-  const teachingHydrationGenerationRef = useRef(0);
-  const teachingHydrationKeyRef = useRef<string | null>(null);
-  const teachingSlideCacheRef = useRef(new Map<string, Promise<Uint8Array>>());
   const standaloneStoresRef = useRef<({ roomId: string } & StandaloneTeachingStores) | null>(null);
+  const {
+    teaching,
+    teachingSlides,
+    isTeachingLoading,
+    projectTeachingState,
+    resetTeaching,
+    beginTeachingLoad,
+    invalidateTeachingHydration,
+    retryTeachingHydration,
+    applyTeachingToStores,
+    initializeTeachingSurfaces,
+    publishCurrentSlide: publishTeachingSlide,
+    publishWhiteboardDelta: publishTeachingWhiteboardDelta,
+  } = useCollaborationTeaching({
+    providerRef,
+    userRef,
+    isRecordingRef,
+    playbackRef,
+    standaloneStoresRef,
+    handleSlideEvent,
+    handleWhiteboardEvent,
+    setError: setLocalError,
+    setRetryableAssetError,
+  });
   const awarenessRevisionRef = useRef(0);
   const awarenessCursorRef = useRef<CollaborationCursor | null>(null);
   const awarenessSurfaceRef = useRef<CollaborationSurface>(INITIAL_EDITOR_SURFACE);
@@ -365,83 +365,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const projectTeachingState = useCallback(
-    (doc: Y.Doc, targetRoomId: string) => {
-      let projection: CollaborationTeachingProjection;
-      try {
-        projection = projectCollaborationTeachingDocument(doc);
-      } catch (error) {
-        setLocalError(
-          messageFromError(error, "The shared teaching surfaces could not be projected."),
-        );
-        return;
-      }
-
-      const previous = teachingProjectionRef.current;
-      teachingProjectionRef.current = projection;
-      // A teaching transaction that changes nothing shown (a peer's candidate
-      // that loses, a re-projection) must not replace the context value and
-      // re-render every collaboration consumer.
-      if (!previous || !isSameTeachingProjection(previous, projection)) setTeaching(projection);
-
-      const currentProvider = providerRef.current;
-      const currentUser = userRef.current;
-      recordCanonicalTeachingChange(
-        previous,
-        projection,
-        Boolean(
-          isRecordingRef.current &&
-          currentProvider?.session &&
-          currentUser &&
-          currentProvider.session.room.hostUserId === currentUser.id,
-        ),
-        { handleSlideEvent, handleWhiteboardEvent },
-      );
-
-      const hydrationKey = teachingHydrationKey(targetRoomId, projection);
-      if (teachingHydrationKeyRef.current === hydrationKey) return;
-      teachingHydrationKeyRef.current = hydrationKey;
-
-      const generation = ++teachingHydrationGenerationRef.current;
-      if (!projection.initialized || projection.slideOrder.length === 0) {
-        setTeachingSlides([]);
-        setIsTeachingLoading(false);
-        return;
-      }
-      setTeachingSlides(null);
-      setIsTeachingLoading(true);
-      const loads = projection.slideOrder.map((slideId) => {
-        const manifest = projection.slides.get(slideId);
-        if (!manifest) return Promise.reject(new Error("A shared slide manifest is missing."));
-        return hydrateCollaborationSlideManifest(manifest, teachingSlideCacheRef.current, () =>
-          downloadCollaborationAsset(targetRoomId, manifest.asset.id),
-        );
-      });
-      void Promise.all(loads)
-        .then((slides) => {
-          if (
-            generation !== teachingHydrationGenerationRef.current ||
-            providerRef.current?.session?.room.id !== targetRoomId
-          ) {
-            return;
-          }
-          setTeachingSlides(slides.map((slide, index) => ({ ...slide, order: index })));
-          setIsTeachingLoading(false);
-        })
-        .catch((error: unknown) => {
-          if (generation !== teachingHydrationGenerationRef.current) return;
-          setTeachingSlides(null);
-          setIsTeachingLoading(false);
-          const message = messageFromError(
-            error,
-            "The shared presentation could not be downloaded.",
-          );
-          setRetryableAssetError(message);
-          setLocalError(message);
-        });
-    },
-    [handleSlideEvent, handleWhiteboardEvent],
-  );
   // The provider's callbacks and the projection effect below read the latest
   // projector through an Effect Event, so a new recorder callback identity does
   // not re-run the effect that owns the room's WebSocket.
@@ -514,22 +437,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     pendingLocalTextEditRef.current = null;
     assetHydrationGenerationRef.current += 1;
     assetFetchesRef.current.clear();
-    teachingProjectionRef.current = null;
-    localWhiteboardProjectionFingerprintRef.current = null;
-    appliedPresentationRevisionRef.current = null;
-    teachingHydrationGenerationRef.current += 1;
-    teachingHydrationKeyRef.current = null;
-    teachingSlideCacheRef.current.clear();
-    setTeaching(UNINITIALIZED_TEACHING_PROJECTION);
-    setTeachingSlides(null);
+    resetTeaching();
     setRetryableAssetError(null);
-  }, [resetRoster, stopFollowing]);
+  }, [resetRoster, resetTeaching, stopFollowing]);
 
   useEffect(() => {
     if (!roomId || inviteToken) {
       providerGenerationRef.current += 1;
       resetRoomScopedState();
-      setIsTeachingLoading(false);
       setProvider(null);
       return;
     }
@@ -629,7 +544,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     });
     resetRoomScopedState();
     providerRef.current = nextProvider;
-    setIsTeachingLoading(true);
+    beginTeachingLoad();
     setProvider(nextProvider);
     setLocalError(null);
     const subscription = nextProvider.subscribe(() => {
@@ -645,7 +560,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       stopProviderAfterBestEffortFlush(nextProvider);
       if (providerRef.current === nextProvider) providerRef.current = null;
       assetHydrationGenerationRef.current += 1;
-      teachingHydrationGenerationRef.current += 1;
+      invalidateTeachingHydration();
       discardPendingWhiteboardChange(whiteboardStore);
       if (standaloneStoresRef.current === standalone) {
         borrowedStores.restore();
@@ -654,7 +569,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
   }, [
     applyAwarenessEvent,
+    beginTeachingLoad,
     hydrateProjectionAssets,
+    invalidateTeachingHydration,
     inviteToken,
     providerEpoch,
     refreshRoomDataFor,
@@ -715,25 +632,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
   }, [hydrateProjectionAssets, provider, roomId, usesPlaybackModel]);
 
+  // Keyed on the projection and its slides, which applyTeachingToStores shows.
   useEffect(() => {
-    if (!provider || usesPlaybackModel || !teaching.initialized) return;
-    if (teachingSlides) {
-      const presentationRevisionChanged =
-        appliedPresentationRevisionRef.current !== teaching.presentationRevision;
-      appliedPresentationRevisionRef.current = teaching.presentationRevision;
-      applyTeachingSlides(
-        slidesStore,
-        teachingSlides,
-        teaching.currentSlideId,
-        presentationRevisionChanged,
-      );
-    }
-    const isLocalCanvasProjection = applyTeachingWhiteboard(
-      whiteboardStore,
-      teaching.whiteboardElements,
-      localWhiteboardProjectionFingerprintRef.current,
-    );
-    if (isLocalCanvasProjection) localWhiteboardProjectionFingerprintRef.current = null;
+    if (!provider || usesPlaybackModel) return;
+    applyTeachingToStores(slidesStore, whiteboardStore);
   }, [provider, slidesStore, teaching, teachingSlides, usesPlaybackModel, whiteboardStore]);
 
   // runtimeVersion intentionally makes actor snapshots reactive without
@@ -814,28 +716,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
   }, [performCreateRoom]);
 
-  const initializeTeachingSurfaces = useCallback(async () => {
-    const current = providerRef.current;
-    const currentSession = current?.session;
-    const standalone = standaloneStoresRef.current;
-    if (!current || !currentSession || currentSession.membership.role !== "owner") {
-      throw new Error("Only the room owner can initialize teaching surfaces.");
-    }
-    if (!standalone || standalone.roomId !== currentSession.room.id) {
-      throw new Error("The standalone teaching surfaces are unavailable.");
-    }
-    if (isCollaborationTeachingInitialized(current.doc)) {
-      throw new Error("The room teaching surfaces are already initialized.");
-    }
-    await publishCollaborationTeachingInitialization(
-      currentSession.room.id,
-      current.doc,
-      standalone.slides.slides,
-      standalone.whiteboard,
-      current.clientId,
-    );
-  }, []);
-
   const leaveRoom = useCallback(async () => {
     flushPendingWhiteboardChange(whiteboardStore);
     stopFollowing("room-changed");
@@ -876,10 +756,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setRetryableAssetError(null);
     setLocalError(null);
     hydrateProjectionAssets(projection, targetRoomId);
-    teachingSlideCacheRef.current.clear();
-    teachingHydrationKeyRef.current = null;
-    projectTeachingState(current.doc, targetRoomId);
-  }, [hydrateProjectionAssets, projectTeachingState]);
+    retryTeachingHydration(current.doc, targetRoomId);
+  }, [hydrateProjectionAssets, retryTeachingHydration]);
 
   const undo = useCallback(() => {
     if (!canWriteRef.current) return;
@@ -1206,45 +1084,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [getNodeIdForPath, scheduleAwarenessPublish],
   );
 
-  const publishCurrentSlide = useCallback((slideId: string) => {
-    const current = providerRef.current;
-    if (!current || !canWriteRef.current || playbackRef.current) return false;
-    try {
-      // Throws unless the slide is in the room presentation, so returning means
-      // the shared current slide is now `slideId`.
-      setCollaborationCurrentSlide(current.doc, slideId);
-      setLocalError(null);
-      return true;
-    } catch (error) {
-      setLocalError(messageFromError(error, "The shared slide could not be changed."));
-      return false;
-    }
-  }, []);
+  const publishCurrentSlide = useCallback(
+    (slideId: string) => publishTeachingSlide(slideId, canWriteRef.current),
+    [canWriteRef, publishTeachingSlide],
+  );
 
   const publishWhiteboardDelta = useCallback(
-    (event: Pick<WhiteboardEvent, "upserts" | "removedIds">) => {
-      const current = providerRef.current;
-      if (!current || !canWriteRef.current || playbackRef.current) return false;
-      if (!(event.upserts?.length || event.removedIds?.length)) return true;
-      try {
-        const { elements: next, accepted } = applyCollaborationWhiteboardDelta(current.doc, event);
-        // The teaching projection of these transactions runs in a microtask and
-        // React applies it to the stores in an effect, both after this callback.
-        // Tag that exact authoritative result so normalization cannot make this
-        // local canvas echo look like a remote scene update. Only an accepted
-        // delta is an echo: when another client's version won, the canvas does
-        // not show the result and the projection must reach it.
-        if (accepted) {
-          localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
-        }
-        setLocalError(null);
-        return accepted;
-      } catch (error) {
-        setLocalError(messageFromError(error, "The whiteboard change could not be shared."));
-        return false;
-      }
-    },
-    [],
+    (event: Pick<WhiteboardEvent, "upserts" | "removedIds">) =>
+      publishTeachingWhiteboardDelta(event, canWriteRef.current),
+    [canWriteRef, publishTeachingWhiteboardDelta],
   );
 
   const value = useMemo<CollaborationContextValue>(
