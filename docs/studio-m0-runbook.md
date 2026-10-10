@@ -278,7 +278,7 @@ browser, as above).
 | --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                                  |
 | Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                               |
-| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                                |
+| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver/` (hub `index.ts` + one module per domain)         |
 | Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                                 |
 | Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                             |
 | End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                       |

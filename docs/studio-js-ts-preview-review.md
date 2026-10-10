@@ -38,12 +38,12 @@ file/output assertion actions. The compiled union and `StudioDriver` have the sa
 has a preview command or preview expectation
 ([script/schema.ts](../src/studio/script/schema.ts#L43-L107),
 [plan.ts](../src/studio/plan.ts#L66-L135),
-[driver.ts](../src/studio/driver.ts#L57-L78)).
+[driver/index.ts](../src/studio/driver/index.ts)).
 
 Both JS and TS are forced to `runtime.kind: none`, which the source explicitly describes as a
 pending WebContainer/preview adapter. `runtime.run` is rejected at schema time and would fail in the
 driver as well ([plan.ts](../src/studio/plan.ts#L276-L318),
-[driver.ts](../src/studio/driver.ts#L282-L286)).
+[driver/console.ts](../src/studio/driver/console.ts)).
 
 A probe adding `type: preview.open` failed with the expected discriminator error. The same applies
 to possible `preview.click`, `preview.input`, `preview.scroll`, or `expect.preview` actions because

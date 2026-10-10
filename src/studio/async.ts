@@ -2,7 +2,7 @@ import type { TextAnchor } from "./plan";
 
 /**
  * Monaco-free primitives shared by the driver, Performer, and controller.
- * Kept out of driver.ts so unit tests (and the Performer) never pull the
+ * Kept out of driver/ so unit tests (and the Performer) never pull the
  * Monaco runtime into their module graph.
  */
 
