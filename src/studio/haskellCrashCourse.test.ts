@@ -110,7 +110,7 @@ describe("haskell crash course", () => {
   });
 
   it("pins a fixture no console line of which can fail runtime.noErrors", () => {
-    // qa.ts fails runtime.noErrors on ANY console line containing "error]",
+    // qaRuntime.ts fails runtime.noErrors on ANY console line containing "error]",
     // and driver/console.ts aborts waitForOutput on the same prefix — the console is
     // never cleared between actions. A success fixture whose own program text
     // happened to contain that substring would fail the render at QA time

@@ -113,7 +113,7 @@ describe("formatPreviewConsoleLine", () => {
   });
 
   it("opens an error line with the [preview:error] tag studio QA fails a render on", () => {
-    // src/studio/qa.ts keys preview.noErrors and RUNNER_ERROR_LINE on this prefix.
+    // src/studio/qaPreview.ts keys PREVIEW_ERROR_LINE (preview.noErrors, runtime.noErrors) on it.
     expect(formatPreviewConsoleLine("error", undefined, "x")).toMatch(/^\[preview:error\] x$/);
   });
 });

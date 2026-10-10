@@ -16,7 +16,7 @@ export function isIframeConsoleMethod(value: unknown): value is IframeConsoleMet
 
 /**
  * The console line a preview message becomes: `[preview:<kind>] <pathname> <text>`.
- * The preview bridge and the terminal both write it, and studio/qa.ts fails a
+ * The preview bridge and the terminal both write it, and studio/qaPreview.ts fails a
  * render on a line that opens with `[preview:error]`, so the shape lives here.
  */
 export function formatPreviewConsoleLine(

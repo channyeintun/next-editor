@@ -282,7 +282,7 @@ browser, as above).
 | Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                                 |
 | Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                             |
 | End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                       |
-| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                                    |
+| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts` (+ `qaPreview.ts`, `qaRuntime.ts` gate groups)     |
 | Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                               |
 | Receipts / render report / build manifest types                             | `src/studio/report.ts`                                                |
 | Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                               |

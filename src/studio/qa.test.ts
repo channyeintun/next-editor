@@ -360,6 +360,45 @@ describe("runArtifactChecks", () => {
     expect(failedIds(checks)).toContain("tracks.required");
   });
 
+  it("reports every gate in one fixed order", async () => {
+    const plan = makePlan();
+    expect((await checksFor(makeRecording(plan), plan)).map((check) => check.id)).toEqual([
+      "recording.decodes",
+      "duration.finite",
+      "frames.monotonic",
+      "cursor.monotonic",
+      "workspace.monotonic",
+      "runtime.monotonic",
+      "preview.events.monotonic",
+      "preview.documents.monotonic",
+      "preview.patches.monotonic",
+      "tracks.required",
+      "audio.external",
+      "captions.attached",
+      "preview.records.required",
+      "preview.replayData",
+      "preview.roundTrip",
+      "preview.interactions.authored",
+      "preview.noErrors",
+      "runtime.noErrors",
+      "checkpoint.output.out",
+      "checkpoint.file.file",
+    ]);
+    const previewPlan = makePreviewPlan();
+    const previewIds = (await checksFor(makePreviewRecording(previewPlan), previewPlan)).map(
+      (check) => check.id,
+    );
+    expect(previewIds.slice(previewIds.indexOf("preview.records.required"))).toEqual([
+      "preview.records.required",
+      "preview.replayData",
+      "preview.roundTrip",
+      "preview.interactions.authored",
+      "checkpoint.preview.assert-result",
+      "preview.noErrors",
+      "runtime.noErrors",
+    ]);
+  });
+
   it("fails when the recorded console carries an error line", async () => {
     const plan = makePlan();
     const recording = makeRecording(plan);
@@ -404,6 +443,21 @@ describe("runArtifactChecks", () => {
       }
     }
     expect(missed).toEqual([]);
+  });
+
+  it("matches a preview error tag in any case, at both gates, and runner tags only as written", async () => {
+    const plan = makePlan();
+    const previewError = makeRecording(plan);
+    previewError.runtimeSnapshot!.consoleLines = ["3 cubed is 27", "[Preview:Error] / boom"];
+    const failed = failedIds(await checksFor(previewError, plan));
+    expect(failed).toContain("preview.noErrors");
+    expect(failed).toContain("runtime.noErrors");
+
+    // The runners write their tags lowercase; a program printing the same
+    // words in another case is program output.
+    const programOutput = makeRecording(plan);
+    programOutput.runtimeSnapshot!.consoleLines = ["3 cubed is 27", "[Go-Run Error] not ours"];
+    expect(failedIds(await checksFor(programOutput, plan))).not.toContain("runtime.noErrors");
   });
 
   it("fails when a semantic file checkpoint is missing", async () => {

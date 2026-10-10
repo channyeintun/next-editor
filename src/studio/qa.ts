@@ -2,17 +2,19 @@ import type { Recording, RecordingTrackKind } from "../core/src";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
-import type { StudioPlan, StudioPlanAction } from "./plan";
-import { previewExpectationMismatches } from "./previewExpectation";
+import type { StudioPlan } from "./plan";
+import { planUsesPreview, previewGateChecks, type PreviewScreenshotCapture } from "./qaPreview";
+import { runtimeGateChecks } from "./qaRuntime";
 import type { StudioCheckResult } from "./report";
-import { workspaceTextFilesOf } from "./recordingWorkspace";
 
 /**
  * Mechanical artifact gates (docs/agent-lesson-production.md §8): decode the
  * encoded stream back, assert structural invariants (finite duration,
  * monotonic in-bounds event times, required tracks), then assert the semantic
  * checkpoints the plan declares. Every check is report-friendly — id, ok,
- * human-readable detail — and any failed check rejects the build.
+ * human-readable detail — and any failed check rejects the build. The
+ * structural gates live here; the preview gates (qaPreview.ts) and the runtime
+ * gates (qaRuntime.ts) follow them, in that order.
  */
 
 function isMonotonicNonDecreasing(timestamps: readonly number[]): boolean {
@@ -53,99 +55,13 @@ function checkEventTrack(
   });
 }
 
-type RecordedPreviewEvent = NonNullable<Recording["previewEvents"]>[number];
-type PreviewCommandAction = Extract<
-  StudioPlanAction,
-  {
-    type: "preview.open" | "preview.click" | "preview.input" | "preview.scroll" | "preview.route";
-  }
->;
-type PreviewExpectationAction = Extract<StudioPlanAction, { type: "expect.preview" }>;
-
-function planUsesPreview(plan: StudioPlan): boolean {
-  return plan.actions.some(
-    (action) => action.type.startsWith("preview.") || action.type === "expect.preview",
-  );
-}
-
-function isPreviewCommandAction(action: StudioPlanAction): action is PreviewCommandAction {
-  return (
-    action.type === "preview.open" ||
-    action.type === "preview.click" ||
-    action.type === "preview.input" ||
-    action.type === "preview.scroll" ||
-    action.type === "preview.route"
-  );
-}
-
-function previewEventMatchesAction(
-  event: RecordedPreviewEvent,
-  action: PreviewCommandAction,
-): boolean {
-  if (event.timestamp + 1_000 < action.at) {
-    return false;
-  }
-  switch (action.type) {
-    case "preview.open":
-      return event.type === "preview_open" && event.isOpen === true && event.mode === action.mode;
-    case "preview.click":
-      return (
-        event.type === "preview_interaction" &&
-        event.interaction?.type === "click" &&
-        event.interaction.target.testId === action.target.value
-      );
-    case "preview.input":
-      return (
-        event.type === "preview_interaction" &&
-        event.interaction?.type === "input" &&
-        event.interaction.target.testId === action.target.value &&
-        event.interaction.data?.value === action.value
-      );
-    case "preview.scroll":
-      return action.target
-        ? event.type === "preview_interaction" &&
-            event.interaction?.type === "scroll" &&
-            event.interaction.target.testId === action.target.value &&
-            event.interaction.data?.scrollTop === action.top &&
-            event.interaction.data?.scrollLeft === action.left
-        : event.type === "preview_scroll" &&
-            event.scrollTop === action.top &&
-            event.scrollLeft === action.left;
-    case "preview.route":
-      return event.type === "preview_route_change" && event.route === action.route;
-  }
-}
-
-function previewCheckpointFailure(
-  action: PreviewExpectationAction,
-  event: RecordedPreviewEvent | undefined,
-): string | null {
-  const checkpoint = event?.checkpoint;
-  if (event?.type !== "preview_checkpoint" || !checkpoint) {
-    return "recorded checkpoint missing";
-  }
-  // The same comparison the driver ran live, plus the element check the live
-  // inspection never needs; the first mismatch is the detail.
-  const [mismatch] = previewExpectationMismatches(
-    {
-      route: action.route,
-      testId: action.target?.value,
-      textContains: action.textContains,
-      value: action.value,
-      attribute: action.attribute,
-    },
-    checkpoint,
-  );
-  return mismatch ?? null;
-}
-
 export interface ArtifactCheckInput {
   recording: Recording;
   /** The encoded `.ne` stream, decoded again to prove the artifact round-trips. */
   neBytes: Uint8Array;
   plan: StudioPlan;
   /** Captured lazily only when an artifact-level preview checkpoint fails. */
-  capturePreviewScreenshot?: () => Promise<{ dataUrl: string; height: number; width: number }>;
+  capturePreviewScreenshot?: PreviewScreenshotCapture;
 }
 
 export interface ArtifactCheckOutput {
@@ -160,16 +76,6 @@ export interface ArtifactCheckOutput {
    */
   artifactRecording: Recording;
 }
-
-/**
- * A console line the runner, a formatter or the preview wrote to report a
- * failure: `[<lang>-run error]`, `[<lang>-fmt error]`, `[rustfmt error]`, …,
- * or `[preview:error]`. Program output is recorded unprefixed, so the tag has
- * to open the line and be one of those shapes — a bare "error]" anywhere also
- * matched a program's own output, since fmt.Println of an []error prints
- * `[not found error]`.
- */
-const RUNNER_ERROR_LINE = /^\[(?:[a-z0-9]+-(?:run|fmt)|[a-z0-9]+fmt) error\]|^\[preview:error\]/;
 
 export async function runArtifactChecks({
   recording,
@@ -198,26 +104,6 @@ export async function runArtifactChecks({
 
   const artifactRecording = decoded ?? recording;
   const usesPreview = planUsesPreview(plan);
-  let previewDiagnosticPromise: Promise<NonNullable<StudioCheckResult["diagnostic"]>> | undefined;
-  const previewDiagnostic = () => {
-    if (!previewDiagnosticPromise) {
-      previewDiagnosticPromise = (async () => {
-        if (!capturePreviewScreenshot) {
-          return { previewScreenshot: { error: "preview screenshot capture is unavailable" } };
-        }
-        try {
-          return { previewScreenshot: await capturePreviewScreenshot() };
-        } catch (error) {
-          return {
-            previewScreenshot: {
-              error: error instanceof Error ? error.message : String(error),
-            },
-          };
-        }
-      })();
-    }
-    return previewDiagnosticPromise;
-  };
 
   // Every structural and semantic gate below inspects the decoded artifact, not
   // the in-memory recording: the entire point of round-tripping is to prove the
@@ -340,171 +226,23 @@ export async function runArtifactChecks({
     });
   }
 
-  // Preview records are required only when the compiled plan declares preview use.
-  const previewEvents = artifactRecording.previewEvents ?? [];
-  const previewDocuments = artifactRecording.previewInitialDocuments ?? [];
-  const previewPatches = artifactRecording.previewPatchBatches ?? [];
-  const interactionActions = plan.actions.filter(isPreviewCommandAction);
-  const needsPatchData = interactionActions.some(
-    (action) =>
-      action.type === "preview.click" ||
-      action.type === "preview.input" ||
-      action.type === "preview.scroll" ||
-      action.type === "preview.route",
-  );
-  const recordsPresent =
-    !usesPreview ||
-    (previewEvents.length > 0 &&
-      previewDocuments.length > 0 &&
-      (!needsPatchData || previewPatches.length > 0));
-  results.push({
-    id: "preview.records.required",
-    ok: recordsPresent,
-    detail: usesPreview
-      ? `${previewEvents.length} events, ${previewDocuments.length} documents, ${previewPatches.length} patch batches`
-      : "plan does not declare preview use",
-  });
-
-  const hasReplaySeed = previewDocuments.some((document) => {
-    const eventTypes = new Set((document.events ?? []).map((event) => event.type));
-    return document.version === 2 && eventTypes.has(4) && eventTypes.has(2);
-  });
-  const hasReplayPatches = previewPatches.some(
-    (batch) => batch.version === 2 && (batch.events?.length ?? 0) > 0,
-  );
-  results.push({
-    id: "preview.replayData",
-    ok: !usesPreview || (hasReplaySeed && (!needsPatchData || hasReplayPatches)),
-    detail: !usesPreview
-      ? "plan does not declare preview use"
-      : `rrweb seed=${String(hasReplaySeed)}, patches=${String(hasReplayPatches)}`,
-  });
-
-  const previewEnvelope = (candidate: Recording) => ({
-    events: (candidate.previewEvents ?? []).map((event) => ({
-      type: event.type,
-      route: event.route,
-      interactionType: event.interaction?.type,
-      testId: event.interaction?.target.testId,
-      checkpointActionId: event.checkpoint?.actionId,
-    })),
-    documents: (candidate.previewInitialDocuments ?? []).map((document) => ({
-      version: document.version,
-      documentId: document.documentId,
-      route: document.route,
-      eventTypes: (document.events ?? []).map((event) => event.type),
-    })),
-    patches: (candidate.previewPatchBatches ?? []).map((batch) => ({
-      version: batch.version,
-      source: batch.source,
-      documentId: batch.documentId,
-      route: batch.route,
-      eventTypes: (batch.events ?? []).map((event) => event.type),
-    })),
-  });
-  const previewRoundTrips =
-    !usesPreview ||
-    (decoded !== null &&
-      JSON.stringify(previewEnvelope(recording)) === JSON.stringify(previewEnvelope(decoded)));
-  results.push({
-    id: "preview.roundTrip",
-    ok: previewRoundTrips,
-    detail: previewRoundTrips
-      ? "preview event/document/patch envelopes survive SCR3 encode/decode"
-      : "preview records changed or disappeared after SCR3 encode/decode",
-  });
-
-  let nextPreviewEventIndex = 0;
-  const missingInteractions: string[] = [];
-  for (const action of interactionActions) {
-    const relativeIndex = previewEvents
-      .slice(nextPreviewEventIndex)
-      .findIndex((event) => previewEventMatchesAction(event, action));
-    if (relativeIndex === -1) {
-      missingInteractions.push(`${action.id} (${action.type})`);
-      continue;
-    }
-    nextPreviewEventIndex += relativeIndex + 1;
-  }
-  results.push({
-    id: "preview.interactions.authored",
-    ok: !usesPreview || missingInteractions.length === 0,
-    detail:
-      missingInteractions.length === 0
-        ? `${interactionActions.length} authored preview commands recorded in order`
-        : `missing recorded commands: ${missingInteractions.join(", ")}`,
-  });
-
-  for (const action of plan.actions) {
-    if (action.type !== "expect.preview") continue;
-    const checkpointEvent = previewEvents.find(
-      (event) => event.type === "preview_checkpoint" && event.checkpoint?.actionId === action.id,
-    );
-    const failure = previewCheckpointFailure(action, checkpointEvent);
-    results.push({
-      id: `checkpoint.preview.${action.id}`,
-      ok: failure === null,
-      detail: failure ?? "recorded DOM/route checkpoint matches the authored expectation",
-      ...(failure === null ? {} : { diagnostic: await previewDiagnostic() }),
-    });
-  }
-
-  // runtime.noErrors + expect.output re-checked against the *encoded* console
+  // The console both gate groups read, from the *encoded* artifact.
   const lastRuntimeSnapshot =
     artifactRecording.runtimeSnapshot ??
     resolveLatestRuntimeSnapshot(artifactRecording.runtimeEvents);
   const consoleLines = lastRuntimeSnapshot?.consoleLines ?? [];
-  const previewErrorLines = consoleLines.filter((line) => /^\[preview:error\]/i.test(line));
-  const previewRuntimeError = lastRuntimeSnapshot?.latestPreviewMessage;
-  results.push({
-    id: "preview.noErrors",
-    ok: !previewRuntimeError && previewErrorLines.length === 0,
-    detail: previewRuntimeError
-      ? `${previewRuntimeError.kind}: ${previewRuntimeError.text}`
-      : previewErrorLines.length > 0
-        ? previewErrorLines.join(" | ")
-        : "no preview console errors or exceptions",
-  });
-  const errorLines = consoleLines.filter((line) => RUNNER_ERROR_LINE.test(line));
-  const runtimeError =
-    lastRuntimeSnapshot?.errorMessage ??
-    (lastRuntimeSnapshot?.latestLifecycleEvent?.kind === "internal-error"
-      ? lastRuntimeSnapshot.latestLifecycleEvent.text
-      : null);
-  results.push({
-    id: "runtime.noErrors",
-    ok: errorLines.length === 0 && !runtimeError,
-    detail:
-      runtimeError ??
-      (errorLines.length === 0
-        ? "no runtime or error-prefixed console failures"
-        : errorLines.join(" | ")),
-  });
-
-  for (const action of plan.actions) {
-    if (action.type === "expect.output") {
-      const matched = consoleLines.some((line) => line.includes(action.contains));
-      results.push({
-        id: `checkpoint.output.${action.id}`,
-        ok: matched,
-        detail: matched
-          ? `recorded console contains ${JSON.stringify(action.contains)}`
-          : `recorded console never contains ${JSON.stringify(action.contains)}`,
-      });
-    }
-    if (action.type === "expect.file") {
-      const files = workspaceTextFilesOf(artifactRecording);
-      const content = files[action.path];
-      const matched = typeof content === "string" && content.includes(action.contains);
-      results.push({
-        id: `checkpoint.file.${action.id}`,
-        ok: matched,
-        detail: matched
-          ? `final "${action.path}" contains ${JSON.stringify(action.contains)}`
-          : `final "${action.path}" missing ${JSON.stringify(action.contains)}`,
-      });
-    }
-  }
+  results.push(
+    ...(await previewGateChecks({
+      recording,
+      decoded,
+      artifactRecording,
+      plan,
+      lastRuntimeSnapshot,
+      consoleLines,
+      capturePreviewScreenshot,
+    })),
+    ...runtimeGateChecks({ artifactRecording, plan, lastRuntimeSnapshot, consoleLines }),
+  );
 
   return { checks: results, artifactRecording };
 }
