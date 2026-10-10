@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { ListMusic } from "lucide-react";
 import { useMyLessons, useMyPlaylists } from "@next-editor/infra";
 import MyLessonCard from "./MyLessonCard";
-import LessonCardSkeleton from "./LessonCardSkeleton";
+import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import PlaylistsSection from "./PlaylistsSection";
 
 export default function MyLibraryGrid() {

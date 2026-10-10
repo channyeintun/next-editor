@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
-import Navbar from "@app/components/Navbar";
+import GalleryShell from "@app/components/GalleryShell";
+import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import { AuthMenu } from "@next-editor/infra";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import { usePlaylist } from "../hooks/usePlaylists";
 import PlaylistDetail from "./PlaylistDetail";
-import LessonCardSkeleton from "./LessonCardSkeleton";
 
 // Route component for /learn/playlist/:slug. Unlike LessonDetailRoute (which
 // renders the embedded Editor — a lesson IS playable content), a playlist is
@@ -69,10 +69,5 @@ function PlaylistDetailSkeleton() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white selection:bg-pinata-purple selection:text-white">
-      <Navbar minimal actions={<AuthMenu />} />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">{children}</main>
-    </div>
-  );
+  return <GalleryShell actions={<AuthMenu />}>{children}</GalleryShell>;
 }

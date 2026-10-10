@@ -4,7 +4,7 @@ import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { flattenLessonPages } from "../lib/lessons";
 import LessonCard from "./LessonCard";
-import LessonCardSkeleton from "./LessonCardSkeleton";
+import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
 import SearchResults from "./SearchResults";
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import Navbar from "@app/components/Navbar";
+import GalleryShell from "@app/components/GalleryShell";
 import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-editor/infra";
 import Breadcrumb from "@app/components/Breadcrumb";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
@@ -26,11 +26,7 @@ export default function AuthorProfilePage({ username }: { username: string }) {
   );
 
   if (authLoading) {
-    return (
-      <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white">
-        <Navbar minimal actions={<AuthMenu />} />
-      </div>
-    );
+    return <Shell />;
   }
 
   if (user?.username === username) {
@@ -166,11 +162,6 @@ function PublicAuthorProfile({ username }: { username: string }) {
   );
 }
 
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white selection:bg-pinata-purple selection:text-white">
-      <Navbar minimal actions={<AuthMenu />} />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">{children}</main>
-    </div>
-  );
+function Shell({ children }: { children?: ReactNode }) {
+  return <GalleryShell actions={<AuthMenu />}>{children}</GalleryShell>;
 }

@@ -1,3 +1,6 @@
+// A lesson card's loading placeholder. Lives in the app (not tube) so the
+// eager LessonGallerySkeleton draws exactly the card tube's grids draw once
+// their chunk lands.
 export default function LessonCardSkeleton() {
   return (
     <div className="animate-pulse">
