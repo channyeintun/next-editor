@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import type { Env } from "../env";
-import { isJsonObject, readBodyWithLimit, readJsonWithLimit, type LimitedBody } from "../httpBody";
+import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import {
   acquireCredentialProbe,
   deleteProviderCredential,
@@ -26,14 +26,13 @@ import {
   POLL_TIMEOUT_MS,
   READ_TIMEOUT_MS,
   SUBMIT_TIMEOUT_MS,
-  athanLabFetch,
   contentLengthOf,
   describeAthanLabError,
   guardStream,
   isTransientError,
   mediaTypeOf,
-  readAthanLabError,
   readJsonBody,
+  requestJsonWithRetries,
   requestOnce,
   requestWithRetries,
   retryAfterSecondsOf,
@@ -41,7 +40,6 @@ import {
   sleep,
   speechJobOf,
   type AthanLabError,
-  type AthanLabFetched,
   type AthanLabUpstreamCode,
   type AthanLabRequestInit,
   type PhaseOutcome,
@@ -972,98 +970,6 @@ async function readTtsRequest(request: Request): Promise<TtsRequest> {
   return { ok: true, text, voiceId };
 }
 
-// The retry rule of requestWithRetries (athanlab/client.ts), restated here
-// because that function returns at the response headers and so cannot count a
-// body that fails afterwards.
-const MAX_TRANSIENT_FAILURES = 3;
-const MIN_RETRY_WAIT_MS = 1_000;
-const MAX_RETRY_WAIT_MS = 30_000;
-
-type JsonPhaseOutcome =
-  | {
-      kind: "ok";
-      /** Headers only: the body has been read. */
-      response: Response;
-      /** Undefined when a body that arrived whole is not JSON or is too large. */
-      payload: unknown;
-    }
-  | Exclude<PhaseOutcome, { kind: "ok" }>;
-
-/**
- * requestWithRetries for submit and poll, with the JSON body read as part of
- * each attempt: a body that breaks off after the headers (a timeout, an
- * abort, a truncated stream) is a transient failure like a failed fetch, and
- * is asked for again under the same rule — safe, since a submit repeats its
- * idempotency key and a poll only reads. A body that arrives whole but is too
- * large or not JSON is final. The phase timeout covers the body too.
- */
-async function requestJsonWithRetries(
-  context: RetryContext,
-  init: AthanLabRequestInit,
-  reserve: number,
-): Promise<JsonPhaseOutcome> {
-  for (let failures = 1; ; failures++) {
-    if (context.budget.used + reserve >= context.budget.limit) return { kind: "out_of_budget" };
-    context.budget.used++;
-
-    let fetched: AthanLabFetched | null;
-    try {
-      fetched = await athanLabFetch(context.apiKey, init);
-    } catch {
-      fetched = null;
-    }
-
-    let error: AthanLabError | null = null;
-    if (fetched?.response.ok) {
-      const { response } = fetched;
-      let body: LimitedBody;
-      try {
-        body = await readBodyWithLimit(response, MAX_JSON_BYTES);
-      } finally {
-        fetched.done();
-      }
-      if (body.status === "ok") {
-        return { kind: "ok", response, payload: parseJsonOrUndefined(body.text) };
-      }
-      if (body.status === "too-large") {
-        await response.body?.cancel().catch(() => undefined);
-        return { kind: "ok", response, payload: undefined };
-      }
-      // "read-error": transient, with no AthanLab error to quote.
-    } else if (fetched) {
-      try {
-        error = await readAthanLabError(fetched.response, context.apiKey);
-      } finally {
-        fetched.done();
-      }
-      if (error.code === "auth_blocked" || !isTransientError(error)) {
-        return { kind: "rejected", error };
-      }
-    }
-
-    const waitMs =
-      error?.retryAfterSeconds != null
-        ? Math.max(MIN_RETRY_WAIT_MS, error.retryAfterSeconds * 1000)
-        : MIN_RETRY_WAIT_MS * 2 ** (failures - 1);
-    if (
-      failures >= MAX_TRANSIENT_FAILURES ||
-      waitMs > MAX_RETRY_WAIT_MS ||
-      Date.now() + waitMs > context.deadline
-    ) {
-      return { kind: "unavailable", error, retryAfterSeconds: Math.ceil(waitMs / 1000) };
-    }
-    await sleep(waitMs);
-  }
-}
-
-function parseJsonOrUndefined(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
 /** How long to wait before the next poll, by how long the job has been followed. */
 function pollIntervalMs(elapsedMs: number): number {
   if (elapsedMs < 30_000) return 3_000;
@@ -1107,6 +1013,7 @@ async function pollJob(
         timeoutMs: POLL_TIMEOUT_MS,
       },
       DOWNLOAD_RESERVE,
+      MAX_JSON_BYTES,
     );
     if (outcome.kind === "out_of_budget") return { kind: "still_processing" };
     if (outcome.kind !== "ok") return outcome;
@@ -1251,6 +1158,7 @@ async function synthesize(
           timeoutMs: SUBMIT_TIMEOUT_MS,
         },
         DOWNLOAD_RESERVE,
+        MAX_JSON_BYTES,
       );
     // The first submit, transient retries included, is this request's first
     // contact; later submits, polls and downloads follow an answer.

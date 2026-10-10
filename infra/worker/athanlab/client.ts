@@ -1,4 +1,4 @@
-import { readBodyWithLimit } from "../httpBody";
+import { readBodyWithLimit, type LimitedBody } from "../httpBody";
 import { sanitizeUpstreamText } from "../upstreamText";
 
 /**
@@ -25,7 +25,7 @@ export const DOWNLOAD_HEADERS_TIMEOUT_MS = 30_000;
 /** Key checks, voices, usage: interactive reads that answer at once or not at all. */
 export const READ_TIMEOUT_MS = 15_000;
 
-// The retry rule shared by submit, poll, and download.
+// The retry rule shared by submit, poll, and download (see retryPhase).
 const MAX_TRANSIENT_FAILURES = 3;
 const MIN_RETRY_WAIT_MS = 1_000;
 const MAX_RETRY_WAIT_MS = 30_000;
@@ -102,8 +102,12 @@ export async function readJsonBody(response: Response, maxBytes: number): Promis
     await response.body?.cancel().catch(() => undefined);
     return undefined;
   }
+  return parseJsonOrUndefined(body.text);
+}
+
+function parseJsonOrUndefined(text: string): unknown {
   try {
-    return JSON.parse(body.text) as unknown;
+    return JSON.parse(text) as unknown;
   } catch {
     return undefined;
   }
@@ -298,6 +302,43 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** How one attempt at a phase ended. */
+type AttemptResult<T> =
+  | { kind: "ok"; value: T }
+  /** Worth asking again; `error` is null when AthanLab never answered. */
+  | { kind: "transient"; error: AthanLabError | null }
+  /** A final answer for this phase, including 401 and `auth_blocked`. */
+  | { kind: "rejected"; error: AthanLabError };
+
+/**
+ * Send one AthanLab request and sort its failure: a failed fetch or a
+ * retryable error is transient, `auth_blocked` and every other error are
+ * final. A failed response's error envelope is read here; an ok response is
+ * handed back with its body unread and its timeout still running.
+ */
+async function fetchAttempt(
+  apiKey: string,
+  init: AthanLabRequestInit,
+): Promise<AttemptResult<AthanLabFetched>> {
+  let fetched: AthanLabFetched;
+  try {
+    fetched = await athanLabFetch(apiKey, init);
+  } catch {
+    return { kind: "transient", error: null };
+  }
+  if (fetched.response.ok) return { kind: "ok", value: fetched };
+
+  let error: AthanLabError;
+  try {
+    error = await readAthanLabError(fetched.response, apiKey);
+  } finally {
+    fetched.done();
+  }
+  return error.code !== "auth_blocked" && isTransientError(error)
+    ? { kind: "transient", error }
+    : { kind: "rejected", error };
+}
+
 // Suggested wait when a single-attempt request fails without a Retry-After.
 const DEFAULT_RETRY_AFTER_SECONDS = 5;
 
@@ -311,28 +352,14 @@ export async function requestOnce(
   apiKey: string,
   init: AthanLabRequestInit,
 ): Promise<Exclude<PhaseOutcome, { kind: "out_of_budget" }>> {
-  let fetched: AthanLabFetched;
-  try {
-    fetched = await athanLabFetch(apiKey, init);
-  } catch {
-    return { kind: "unavailable", error: null, retryAfterSeconds: DEFAULT_RETRY_AFTER_SECONDS };
-  }
-  if (fetched.response.ok) return { kind: "ok", ...fetched };
-
-  let error: AthanLabError;
-  try {
-    error = await readAthanLabError(fetched.response, apiKey);
-  } finally {
-    fetched.done();
-  }
-  if (error.code !== "auth_blocked" && isTransientError(error)) {
-    return {
-      kind: "unavailable",
-      error,
-      retryAfterSeconds: Math.max(1, error.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS),
-    };
-  }
-  return { kind: "rejected", error };
+  const attempt = await fetchAttempt(apiKey, init);
+  if (attempt.kind === "ok") return { kind: "ok", ...attempt.value };
+  if (attempt.kind === "rejected") return attempt;
+  return {
+    kind: "unavailable",
+    error: attempt.error,
+    retryAfterSeconds: Math.max(1, attempt.error?.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS),
+  };
 }
 
 function retryWaitMs(error: AthanLabError | null, failures: number): number {
@@ -343,52 +370,105 @@ function retryWaitMs(error: AthanLabError | null, failures: number): number {
 }
 
 /**
- * Send one AthanLab request under the retry rule shared by submit, poll and
+ * Run a phase's attempts under the retry rule shared by submit, poll and
  * download. A transient failure is retried after `max(1 s, Retry-After)` — no
  * upper clamp on AthanLab's own number — or 1 s, 2 s, 4 s without one; the
  * third failure in a row ends the phase, and so does a wait that would pass
- * the deadline or exceed 30 s. `auth_blocked` is never retried. Each attempt
- * spends one subrequest, and `reserve` of them are left for a later phase.
+ * the deadline or exceed 30 s. Each attempt spends one subrequest, and
+ * `reserve` of them are left for a later phase.
+ */
+async function retryPhase<T>(
+  context: RetryContext,
+  reserve: number,
+  attempt: () => Promise<AttemptResult<T>>,
+): Promise<{ kind: "ok"; value: T } | Exclude<PhaseOutcome, { kind: "ok" }>> {
+  for (let failures = 1; ; failures++) {
+    if (context.budget.used + reserve >= context.budget.limit) return { kind: "out_of_budget" };
+    context.budget.used++;
+
+    const result = await attempt();
+    if (result.kind !== "transient") return result;
+
+    const waitMs = retryWaitMs(result.error, failures);
+    if (
+      failures >= MAX_TRANSIENT_FAILURES ||
+      waitMs > MAX_RETRY_WAIT_MS ||
+      Date.now() + waitMs > context.deadline
+    ) {
+      return {
+        kind: "unavailable",
+        error: result.error,
+        retryAfterSeconds: Math.ceil(waitMs / 1000),
+      };
+    }
+    await sleep(waitMs);
+  }
+}
+
+/**
+ * Send one AthanLab request under the shared retry rule (retryPhase), handing
+ * back an ok response at its headers. `auth_blocked` is never retried.
  */
 export async function requestWithRetries(
   context: RetryContext,
   init: AthanLabRequestInit,
   reserve = 0,
 ): Promise<PhaseOutcome> {
-  for (let failures = 1; ; failures++) {
-    if (context.budget.used + reserve >= context.budget.limit) return { kind: "out_of_budget" };
-    context.budget.used++;
+  const outcome = await retryPhase(context, reserve, () => fetchAttempt(context.apiKey, init));
+  return outcome.kind === "ok" ? { kind: "ok", ...outcome.value } : outcome;
+}
 
-    let fetched: AthanLabFetched | null = null;
-    try {
-      fetched = await athanLabFetch(context.apiKey, init);
-    } catch {
-      fetched = null;
+export type JsonPhaseOutcome =
+  | {
+      kind: "ok";
+      /** Headers only: the body has been read. */
+      response: Response;
+      /** Undefined when a body that arrived whole is not JSON or is too large. */
+      payload: unknown;
     }
+  | Exclude<PhaseOutcome, { kind: "ok" }>;
 
-    let error: AthanLabError | null = null;
-    if (fetched) {
-      if (fetched.response.ok) return { kind: "ok", ...fetched };
+/**
+ * requestWithRetries for submit and poll, with the JSON body read under
+ * `maxBytes` as part of each attempt: a body that breaks off after the
+ * headers (a timeout, an abort, a truncated stream) is a transient failure
+ * like a failed fetch, and is asked for again under the same rule — safe,
+ * since a submit repeats its idempotency key and a poll only reads. A body
+ * that arrives whole but is too large or not JSON is final. The phase timeout
+ * covers the body too.
+ */
+export async function requestJsonWithRetries(
+  context: RetryContext,
+  init: AthanLabRequestInit,
+  reserve: number,
+  maxBytes: number,
+): Promise<JsonPhaseOutcome> {
+  const outcome = await retryPhase(
+    context,
+    reserve,
+    async (): Promise<AttemptResult<{ response: Response; payload: unknown }>> => {
+      const attempt = await fetchAttempt(context.apiKey, init);
+      if (attempt.kind !== "ok") return attempt;
+
+      const { response } = attempt.value;
+      let body: LimitedBody;
       try {
-        error = await readAthanLabError(fetched.response, context.apiKey);
+        body = await readBodyWithLimit(response, maxBytes);
       } finally {
-        fetched.done();
+        attempt.value.done();
       }
-      if (error.code === "auth_blocked" || !isTransientError(error)) {
-        return { kind: "rejected", error };
+      if (body.status === "ok") {
+        return { kind: "ok", value: { response, payload: parseJsonOrUndefined(body.text) } };
       }
-    }
-
-    const waitMs = retryWaitMs(error, failures);
-    if (
-      failures >= MAX_TRANSIENT_FAILURES ||
-      waitMs > MAX_RETRY_WAIT_MS ||
-      Date.now() + waitMs > context.deadline
-    ) {
-      return { kind: "unavailable", error, retryAfterSeconds: Math.ceil(waitMs / 1000) };
-    }
-    await sleep(waitMs);
-  }
+      if (body.status === "too-large") {
+        await response.body?.cancel().catch(() => undefined);
+        return { kind: "ok", value: { response, payload: undefined } };
+      }
+      // "read-error": transient, with no AthanLab error to quote.
+      return { kind: "transient", error: null };
+    },
+  );
+  return outcome.kind === "ok" ? { kind: "ok", ...outcome.value } : outcome;
 }
 
 export type SpeechJobStatus = "processing" | "succeeded" | "failed" | "cancelled";

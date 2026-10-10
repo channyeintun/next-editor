@@ -6,6 +6,7 @@ import {
   guardStream,
   isTransientError,
   readAthanLabError,
+  requestJsonWithRetries,
   requestOnce,
   requestWithRetries,
   speechJobOf,
@@ -329,6 +330,90 @@ describe("requestWithRetries", () => {
   });
 });
 
+describe("requestJsonWithRetries", () => {
+  /** An ok response whose body breaks off after its first chunk. */
+  function brokenBody(): Response {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"id":'));
+        controller.error(new TypeError("connection reset"));
+      },
+    });
+    return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  it("reads the JSON body as part of the attempt", async () => {
+    const fetchSpy = stubFetch([() => okJson({ id: JOB_ID, status: "processing" })]);
+
+    const outcome = await requestJsonWithRetries(contextOf(), POLL, 0, 1024);
+
+    expect(outcome).toMatchObject({
+      kind: "ok",
+      payload: { id: JOB_ID, status: "processing" },
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again, after the shared backoff, when the body breaks off", async () => {
+    const fetchSpy = stubFetch([brokenBody, () => okJson({ id: JOB_ID })]);
+    const context = contextOf();
+
+    const { result, elapsedMs } = await timed(() => requestJsonWithRetries(context, POLL, 0, 1024));
+
+    expect(result).toMatchObject({ kind: "ok", payload: { id: JOB_ID } });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(context.budget.used).toBe(2);
+    expect(elapsedMs).toBeGreaterThanOrEqual(1_000);
+    expect(elapsedMs).toBeLessThan(2_000);
+  });
+
+  it("stops at the third broken body", async () => {
+    const fetchSpy = stubFetch([brokenBody, brokenBody, brokenBody]);
+
+    const { result } = await timed(() => requestJsonWithRetries(contextOf(), POLL, 0, 1024));
+
+    expect(result).toEqual({ kind: "unavailable", error: null, retryAfterSeconds: 4 });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("answers a whole body that is too large or not JSON without asking again", async () => {
+    const tooLarge = stubFetch([() => okJson({ id: JOB_ID, padding: "x".repeat(2048) })]);
+    expect(await requestJsonWithRetries(contextOf(), POLL, 0, 1024)).toMatchObject({
+      kind: "ok",
+      payload: undefined,
+    });
+    expect(tooLarge).toHaveBeenCalledTimes(1);
+
+    const notJson = stubFetch([() => new Response("<html>", { status: 200 })]);
+    expect(await requestJsonWithRetries(contextOf(), POLL, 0, 1024)).toMatchObject({
+      kind: "ok",
+      payload: undefined,
+    });
+    expect(notJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("follows the shared rule for errors, the deadline and the reserve", async () => {
+    stubFetch([
+      () => errorResponse(429, { code: "auth_blocked", retryable: true }, { "Retry-After": "600" }),
+    ]);
+    const blocked = await requestJsonWithRetries(contextOf(), POLL, 0, 1024);
+    expect(blocked.kind === "rejected" && blocked.error.code).toBe("auth_blocked");
+
+    const pastDeadline = stubFetch([
+      () => errorResponse(503, { code: "server_busy", retryable: true }, { "Retry-After": "5" }),
+    ]);
+    expect(
+      await requestJsonWithRetries(contextOf({ deadline: Date.now() + 4_000 }), POLL, 0, 1024),
+    ).toMatchObject({ kind: "unavailable", retryAfterSeconds: 5 });
+    expect(pastDeadline).toHaveBeenCalledTimes(1);
+
+    const untouched = stubFetch([]);
+    const context = contextOf({ budget: { used: 42, limit: 45 } });
+    expect(await requestJsonWithRetries(context, POLL, 3, 1024)).toEqual({ kind: "out_of_budget" });
+    expect(untouched).not.toHaveBeenCalled();
+  });
+});
+
 describe("requestOnce", () => {
   it("reports a transient failure with the wait AthanLab asked for, without retrying", async () => {
     const fetchSpy = stubFetch([
@@ -339,6 +424,25 @@ describe("requestOnce", () => {
 
     expect(outcome).toMatchObject({ kind: "unavailable", retryAfterSeconds: 60 });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("suggests 5 s after a failed fetch, and rejects auth_blocked", async () => {
+    stubFetch([
+      () => {
+        throw new TypeError("network connection lost");
+      },
+    ]);
+    expect(await requestOnce(API_KEY, POLL)).toEqual({
+      kind: "unavailable",
+      error: null,
+      retryAfterSeconds: 5,
+    });
+
+    stubFetch([
+      () => errorResponse(429, { code: "auth_blocked", retryable: true }, { "Retry-After": "600" }),
+    ]);
+    const blocked = await requestOnce(API_KEY, POLL);
+    expect(blocked.kind === "rejected" && blocked.error.code).toBe("auth_blocked");
   });
 });
 
