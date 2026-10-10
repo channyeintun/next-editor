@@ -32,7 +32,7 @@ import { DEFAULT_FILE_SIDEBAR_WIDTH, readStoredFileSidebarCollapsed } from "../u
 // assume any provider is mounted.
 
 const HEADER_ICON_CLASS =
-  "inline-flex size-8 items-center justify-center rounded-lg text-slate-400";
+  "inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-400";
 
 export interface EditorShellSkeletonProps {
   /** Real breadcrumb when the caller already knows the lesson title; the
