@@ -1,6 +1,5 @@
 import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
@@ -26,14 +25,23 @@ export function isPasskeyCancel(error: unknown): boolean {
 
 // excludeCredentials doing its job: the authenticator already holds a
 // passkey for this account and refuses to mint a duplicate
-// (InvalidStateError). A statement of fact, not a failure.
+// (InvalidStateError). A statement of fact, not a failure. Reads the `code`
+// @simplewebauthn/browser's WebAuthnError carries rather than checking the
+// class, so this module never has to load the library just to classify.
 export function isPasskeyAlreadyRegistered(error: unknown): boolean {
   return (
-    (error instanceof WebAuthnError &&
-      error.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") ||
+    (typeof error === "object" &&
+      error !== null &&
+      (error as { code?: unknown }).code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") ||
     (error instanceof Error && error.name === "InvalidStateError")
   );
 }
+
+// The WebAuthn client is only needed once someone starts a passkey ceremony,
+// so it stays out of the bundle every page loads. It is fetched alongside the
+// ceremony's options request, so the ceremony starts no later than it did when
+// the library was bundled.
+const loadWebAuthn = () => import("@simplewebauthn/browser");
 
 // Prefers the server's {error} body (which says *why* — expired challenge,
 // unknown passkey, …) over axios's generic status text.
@@ -62,11 +70,10 @@ export function useRegisterPasskey() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const options = (
-        await apiClient.post<PublicKeyCredentialCreationOptionsJSON>(
-          "/auth/passkey/register/options",
-        )
-      ).data;
+      const [{ startRegistration }, { data: options }] = await Promise.all([
+        loadWebAuthn(),
+        apiClient.post<PublicKeyCredentialCreationOptionsJSON>("/auth/passkey/register/options"),
+      ]);
       const response = await startRegistration({ optionsJSON: options });
       await apiClient.post("/auth/passkey/register/verify", response);
     },
@@ -81,9 +88,10 @@ export function useSignInWithPasskey() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const options = (
-        await apiClient.post<PublicKeyCredentialRequestOptionsJSON>("/auth/passkey/login/options")
-      ).data;
+      const [{ startAuthentication }, { data: options }] = await Promise.all([
+        loadWebAuthn(),
+        apiClient.post<PublicKeyCredentialRequestOptionsJSON>("/auth/passkey/login/options"),
+      ]);
       const response = await startAuthentication({ optionsJSON: options });
       const res = await apiClient.post<{ user: AuthUser }>("/auth/passkey/login/verify", response);
       return res.data.user;

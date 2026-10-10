@@ -10,6 +10,7 @@ const recovery = vi.hoisted(() => ({
   loadRecording: vi.fn<(id: string) => Promise<Recording | null>>(),
   deleteRecording: vi.fn<(id: string) => Promise<void>>(),
   uploadModal: vi.fn<() => null>(() => null),
+  preloadUploadModal: vi.fn<() => void>(),
 }));
 
 vi.mock("react-router", () => ({
@@ -20,6 +21,7 @@ vi.mock("./Editor", () => ({ default: () => null }));
 
 vi.mock("@next-editor/infra", () => ({
   UploadLessonModal: recovery.uploadModal,
+  preloadUploadLessonModal: recovery.preloadUploadModal,
   clearResumeIntent: recovery.clearIntent,
   loadResumeIntent: recovery.loadIntent,
   useAuth: () => recovery.auth,
@@ -177,5 +179,13 @@ describe("CodeRoute upload recovery", () => {
 
     expect(recovery.uploadModal).not.toHaveBeenCalled();
     expect(recovery.clearIntent).not.toHaveBeenCalled();
+  });
+
+  // The modal is its own chunk; /code fetches it ahead of the first share.
+  it("prefetches the upload modal once the page is idle", async () => {
+    recovery.loadIntent.mockResolvedValue(null);
+    render(<CodeRoute />);
+
+    await waitFor(() => expect(recovery.preloadUploadModal).toHaveBeenCalledTimes(1));
   });
 });

@@ -7,12 +7,14 @@ import { getRecordingStorage } from "../storage/RecordingStorage";
 import type { Recording } from "../core/src";
 import {
   UploadLessonModal,
+  preloadUploadLessonModal,
   useAuth,
   loadResumeIntent,
   clearResumeIntent,
   type ResumeIntent,
 } from "@next-editor/infra";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
+import { runWhenIdleAfterLoad } from "../utils/idle";
 import {
   claimRecordingDraftFor,
   discardRecordingDraftFor,
@@ -31,6 +33,8 @@ async function consumeResumeIntent(intent: ResumeIntent): Promise<void> {
     console.warn("Failed to delete the recording kept across sign-in:", error);
   }
 }
+
+const UPLOAD_MODAL_PRELOAD_IDLE_TIMEOUT_MS = 5000;
 
 // Composition root for /code: this is the one place that wires infra's
 // upload modal into the editor (renderPostRecordingModal), plus a second,
@@ -57,6 +61,14 @@ export default function CodeRoute() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumeAttempt, setResumeAttempt] = useState(0);
   const resumeCompletedRef = useRef(false);
+
+  // The upload modal is its own chunk, kept out of what lesson viewers load.
+  // Fetch it once this page is idle, so a finished take opens it from cache
+  // instead of waiting on (or, after a deploy, failing) a request right then.
+  useEffect(() => {
+    if (readOnly) return;
+    return runWhenIdleAfterLoad(preloadUploadLessonModal, UPLOAD_MODAL_PRELOAD_IDLE_TIMEOUT_MS);
+  }, [readOnly]);
 
   useEffect(() => {
     if (readOnly) return;
