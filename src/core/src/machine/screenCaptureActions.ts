@@ -1,4 +1,6 @@
-import { createIdleScreenState, type EditorActionArgs, type EditorContextUpdate } from "./types";
+import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
+import type { ScreenRecordingInput } from "./screenActor";
+import type { RecorderControlEvent } from "./recorderControl";
 import { normalizeNonNegativeTime } from "./playbackValues";
 
 // ============================================================================
@@ -13,6 +15,30 @@ import { normalizeNonNegativeTime } from "./playbackValues";
 // "Screen recording actor" in docs/state-machines.md describes the actor. Nothing here
 // writes a `screen*` field onto the finalized recording.
 // ============================================================================
+
+/**
+ * Local screen-recording state (opt-in, captured in parallel with the session).
+ *
+ * Deliberately minimal and fully separate from `CameraState`: the screen video is a
+ * keep-forever local artifact. There is no `blob`/`source` field here: the blob never enters
+ * the `Recording`, the `.ne` codec, storage or any upload path, and is never retained on
+ * context. `onScreenRecordingReady` is its only exit (the app saves it with
+ * `saveScreenRecordingLocally`). The editorMachine.test.ts guardrail ("the finalized recording
+ * carries no screen fields") enforces this; see "Screen recording actor" in
+ * docs/state-machines.md.
+ */
+export interface ScreenState {
+  /** Unique XState child id for this capture; late events use it to retire only their origin. */
+  actorId: string | null;
+  /** Whether a screen recording is active (its actor has been spawned and started). */
+  isRecording: boolean;
+}
+
+/** The idle screen slice. A factory, so no two contexts or takes alias one slice. */
+export const createIdleScreenState = (): ScreenState => ({
+  actorId: null,
+  isRecording: false,
+});
 
 const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
 
@@ -32,6 +58,51 @@ export const setScreenStream = ({ context, event }: EditorActionArgs): EditorCon
         }
       : createIdleScreenState(),
   };
+};
+
+/**
+ * The subset of xstate's `enqueue` object the screen recorder's start uses. Kept
+ * structural so this body doesn't need to thread the machine's full setup() type
+ * parameters; the recorder's id is per capture, so it is a plain string.
+ */
+interface ScreenRecorderEnqueue {
+  spawnChild: (
+    src: "screenRecording",
+    options: { id: string; input: ScreenRecordingInput },
+  ) => void;
+  sendTo: (actor: string, event: RecorderControlEvent) => void;
+  assign: (updater: Partial<EditorMachineContext>) => void;
+}
+
+export const startScreenRecorder = ({
+  context,
+  enqueue,
+}: EditorActionArgs & { enqueue: ScreenRecorderEnqueue }): void => {
+  if (!context.screenStream) return;
+
+  // Spawn the screen recorder with the pre-acquired display stream (it owns it now) plus a
+  // *clone* of the live microphone track so narration is muxed into a standalone video. The
+  // clone is essential: the actor stops its tracks on teardown, and stopping the original
+  // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
+  const actorId = context.screen.actorId;
+  if (!actorId || !context.session) return;
+
+  const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
+  enqueue.spawnChild("screenRecording", {
+    id: actorId,
+    input: {
+      stream: context.screenStream,
+      micTrack,
+      sessionStartedAtPerf: context.session.startedAtPerf,
+    },
+  });
+  enqueue.sendTo(actorId, { type: "START" });
+  enqueue.assign({
+    screen: {
+      ...context.screen,
+      isRecording: true,
+    },
+  });
 };
 
 export const notifyScreenRecordingReady = ({ context, event }: EditorActionArgs): void => {

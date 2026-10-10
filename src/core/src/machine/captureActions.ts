@@ -1,13 +1,13 @@
 import type { PreviewEvent } from "../preview";
 import type { SlideEvent } from "../slides";
-import {
-  createIdleCameraState,
-  type EditorActionArgs,
-  type EditorContextUpdate,
-  type EditorMachineContext,
-  type RecordingSession,
+import type {
+  EditorActionArgs,
+  EditorContextUpdate,
+  EditorMachineContext,
+  RecordingSession,
 } from "./types";
 import { createIdleAudioState } from "./audioCaptureActions";
+import { createIdleCameraState } from "./cameraCaptureActions";
 import type { MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../runtime";
 import type { WhiteboardEvent } from "../whiteboard";
@@ -23,7 +23,6 @@ import {
   appendSlideRecordingEvent,
   appendWhiteboardRecordingEvent,
   appendWorkspaceRecordingEvent,
-  getRecorderStartOffsetMs,
   getRecordingTimestamp,
 } from "./recordingSession";
 import {
@@ -42,30 +41,17 @@ import { getRunningRecorders } from "./runningRecorders";
 // Recording-capture action bodies
 //
 // Plain functions with the exact shape XState's `assign`/`enqueueActions`
-// callbacks expect, specific to the recording/capture side (camera capture,
-// the recording-state tracks, session lifecycle, session finalize). Editor
-// frame and cursor capture live in frameCapture.ts, the microphone and
-// narration file in audioCaptureActions.ts, and the local screen recorder in
-// screenCaptureActions.ts. editorMachine.ts wires each of these
+// callbacks expect, specific to the recording/capture side (the
+// recording-state tracks, session lifecycle, session finalize). Editor frame
+// and cursor capture live in frameCapture.ts, the microphone and narration
+// file in audioCaptureActions.ts, the camera in cameraCaptureActions.ts, and
+// the local screen recorder in screenCaptureActions.ts. editorMachine.ts wires each of these
 // into `actions: {}` via `assign(fn)` / `enqueueActions(fn)` — kept there
 // (rather than wrapped here) so XState's `setup()` can still infer the
 // machine's exact context/event/actor types for the wrapped action, which
 // isn't independently nameable outside `setup()`. The bodies that return
 // void only mutate the session in place and are registered as plain actions.
 // ============================================================================
-
-export const setCameraRecordingEnabled = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "START_RECORDING") return {};
-  // The choice is per take. Falling back to the previous take's value let one manual
-  // camera take turn the camera on for every later start that does not say, such as a
-  // studio render on the same page.
-  return {
-    enableCameraRecording: event.enableCamera ?? context.defaultEnableCameraRecording,
-  };
-};
 
 export const initRecordingSession = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const startedAt =
@@ -359,48 +345,4 @@ export const notifyRecordingStop = ({ context }: EditorActionArgs): void => {
   if (context.recording) {
     context.onRecordingStop?.(context.recording);
   }
-};
-
-export const storeCameraBlob = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "CAMERA_STOPPED") return {};
-  return {
-    camera: {
-      ...context.camera,
-      blob: event.blob,
-      isRecording: false,
-      mediaRecorder: null,
-      mimeType: event.blob.type,
-      source: "camera" as const,
-    },
-  };
-};
-
-export const storeCameraStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "CAMERA_STARTED") return {};
-  // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
-  // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
-  // offset so playback can shift the video back into sync; otherwise the face video runs
-  // ahead of audio. Both sides must be the same (monotonic) clock: performance.now(), the
-  // clock session.startedAtPerf was read from. Read through the take's clock: a camera
-  // that finished warming up during a pause starts recording when the take resumes,
-  // which is the moment the pause holds.
-  const startOffsetMs = getRecorderStartOffsetMs(context.session, event.startedAtPerf);
-  return {
-    camera: {
-      ...context.camera,
-      mimeType: event.mimeType,
-      mediaRecorder: event.mediaRecorder,
-      startOffsetMs,
-    },
-  };
-};
-
-export const clearCameraRecording = (): EditorContextUpdate => ({
-  camera: createIdleCameraState(),
-});
-
-export const handleCameraError = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "CAMERA_ERROR") return {};
-  console.warn("Camera recording disabled:", event.error);
-  return clearCameraRecording();
 };

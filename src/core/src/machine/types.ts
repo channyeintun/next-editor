@@ -14,7 +14,6 @@ import type {
   Recording,
   RecordingStreamDelta,
   EditorSelection,
-  RecordingCameraSource,
   PreviewPatchReplayInput,
   ScreenRecordingReadyPayload,
 } from "../types";
@@ -33,6 +32,8 @@ import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
 import type { CapturedContentRef, CapturedViewStateRef } from "./frameCapture";
 import { createIdleAudioState, type AudioState } from "./audioCaptureActions";
+import { createIdleCameraState, type CameraState } from "./cameraCaptureActions";
+import { createIdleScreenState, type ScreenState } from "./screenCaptureActions";
 import { normalizePlaybackSpeed } from "./playbackValues";
 
 // ============================================================================
@@ -152,47 +153,6 @@ export interface RecordingSession extends RecordingTracks {
    * model's content.
    */
   lastCapturedContent?: CapturedContentRef;
-}
-
-/**
- * Camera state for instructor-face recording
- */
-export interface CameraState {
-  /** Camera blob from recording */
-  blob: Blob | null;
-  /** Whether camera recording is active */
-  isRecording: boolean;
-  /** Detected MIME type */
-  mimeType: string;
-  /** The running camera MediaRecorder, for hosts that journal its chunks. */
-  mediaRecorder: MediaRecorder | null;
-  /** Source used for the active or finalized camera video */
-  source: RecordingCameraSource | null;
-  /**
-   * Recorded time at which the camera actually started capturing: its start read from
-   * `session.startedAtPerf` through the take's clock (`getRecorderStartOffsetMs`). The camera
-   * spawns after `getUserMedia` resolves, so its first frame lags the timeline origin by this
-   * warmup; playback subtracts it to stay in sync.
-   */
-  startOffsetMs: number;
-}
-
-/**
- * Local screen-recording state (opt-in, captured in parallel with the session).
- *
- * Deliberately minimal and fully separate from `CameraState`: the screen video is a
- * keep-forever local artifact. There is no `blob`/`source` field here: the blob never enters
- * the `Recording`, the `.ne` codec, storage or any upload path, and is never retained on
- * context. `onScreenRecordingReady` is its only exit (the app saves it with
- * `saveScreenRecordingLocally`). The editorMachine.test.ts guardrail ("the finalized recording
- * carries no screen fields") enforces this; see "Screen recording actor" in
- * docs/state-machines.md.
- */
-export interface ScreenState {
-  /** Unique XState child id for this capture; late events use it to retire only their origin. */
-  actorId: string | null;
-  /** Whether a screen recording is active (its actor has been spawned and started). */
-  isRecording: boolean;
 }
 
 /**
@@ -698,23 +658,6 @@ export interface EditorMachineInput extends EditorMachineHostHooks {
 // ============================================================================
 // Context Factories
 // ============================================================================
-
-// Idle media slices. Factories rather than shared constants: each call returns a new
-// object, so no two contexts or takes alias one slice.
-
-export const createIdleCameraState = (): CameraState => ({
-  blob: null,
-  isRecording: false,
-  mimeType: "",
-  mediaRecorder: null,
-  source: null,
-  startOffsetMs: 0,
-});
-
-export const createIdleScreenState = (): ScreenState => ({
-  actorId: null,
-  isRecording: false,
-});
 
 /**
  * Initial context factory

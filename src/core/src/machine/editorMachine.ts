@@ -1,6 +1,6 @@
 import { setup, assign, raise, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
-import { createIdleCameraState, createInitialContext } from "./types";
+import { createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
@@ -9,7 +9,6 @@ import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
-  setCameraRecordingEnabled,
   initRecordingSession,
   captureSlideEvent,
   capturePreviewEvent,
@@ -22,10 +21,6 @@ import {
   finalizeRecording,
   notifyRecordingStart,
   notifyRecordingStop,
-  storeCameraBlob,
-  storeCameraStarted,
-  handleCameraError,
-  clearCameraRecording,
   pauseRecordingSession,
   resumeRecordingSession,
   addChapterMarker,
@@ -45,9 +40,18 @@ import {
   handleAudioRecordingError,
   handleExternalAudioError,
 } from "./audioCaptureActions";
+import {
+  setCameraRecordingEnabled,
+  startCameraRecorder,
+  storeCameraBlob,
+  storeCameraStarted,
+  handleCameraError,
+  clearCameraRecording,
+} from "./cameraCaptureActions";
 import { captureInitialFrame, captureFrame, capturePreviewRefreshFrame } from "./frameCapture";
 import {
   setScreenStream,
+  startScreenRecorder,
   notifyScreenRecordingReady,
   clearScreenRecording,
   handleScreenError,
@@ -307,13 +311,12 @@ export const editorMachine = setup({
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts,
-    // audioCaptureActions.ts, frameCapture.ts and screenCaptureActions.ts, wrapped
-    // here so `setup()` can infer this machine's exact context/event/actor types. The
-    // ones that only append to the session in place are plain actions: they replace
-    // nothing in the context, so an assign would only copy it on every captured event.
-    // The pause, resume and stop of the recorders have their bodies in
-    // runningRecorders.ts; the camera and screen recorder starts and retakeRecording
-    // keep theirs inline.
+    // audioCaptureActions.ts, cameraCaptureActions.ts, screenCaptureActions.ts and
+    // frameCapture.ts, wrapped here so `setup()` can infer this machine's exact
+    // context/event/actor types. The ones that only append to the session in place are
+    // plain actions: they replace nothing in the context, so an assign would only copy
+    // it on every captured event. The pause, resume and stop of the recorders have
+    // their bodies in runningRecorders.ts; retakeRecording keeps its body inline.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
@@ -338,46 +341,8 @@ export const editorMachine = setup({
     pauseRecordingSession,
     resumeRecordingSession,
     startMicrophoneRecorder: enqueueActions(startMicrophoneRecorder),
-    startCameraRecorder: enqueueActions(({ context, enqueue }) => {
-      if (!context.enableCameraRecording) return;
-
-      // Spawn, not invoke: conditional on enableCameraRecording.
-      enqueue.spawnChild("cameraRecording", {
-        id: "cameraRecorder",
-        input: {},
-      });
-      enqueue.sendTo("cameraRecorder", { type: "START" });
-      enqueue.assign({
-        camera: { ...createIdleCameraState(), isRecording: true, source: "camera" as const },
-      });
-    }),
-    startScreenRecorder: enqueueActions(({ context, enqueue }) => {
-      if (!context.screenStream) return;
-
-      // Spawn the screen recorder with the pre-acquired display stream (it owns it now) plus a
-      // *clone* of the live microphone track so narration is muxed into a standalone video. The
-      // clone is essential: the actor stops its tracks on teardown, and stopping the original
-      // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
-      const actorId = context.screen.actorId;
-      if (!actorId || !context.session) return;
-
-      const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
-      enqueue.spawnChild("screenRecording", {
-        id: actorId,
-        input: {
-          stream: context.screenStream,
-          micTrack,
-          sessionStartedAtPerf: context.session.startedAtPerf,
-        },
-      });
-      enqueue.sendTo(actorId, { type: "START" });
-      enqueue.assign({
-        screen: {
-          ...context.screen,
-          isRecording: true,
-        },
-      });
-    }),
+    startCameraRecorder: enqueueActions(startCameraRecorder),
+    startScreenRecorder: enqueueActions(startScreenRecorder),
     // Pause, resume and stop the running recorders, through the one fan-out in
     // runningRecorders.ts.
     pauseRecordingMedia: enqueueActions(pauseRecordingMedia),
