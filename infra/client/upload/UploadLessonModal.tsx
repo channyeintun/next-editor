@@ -1,20 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import axios from "axios";
-import { Captions, ImagePlus, X } from "lucide-react";
-import type { CaptionCue, Recording } from "@app/core/src";
+import type { Recording } from "@app/core/src";
 import ModalShell from "@app/components/ModalShell";
 import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
 import { getRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { usePublishFromLibrary } from "../library/useMyLessons";
-import { useUploadLesson, formatDuration } from "./useUploadLesson";
+import { useUploadLesson, formatDuration, type UploadLessonInput } from "./useUploadLesson";
 import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
-import { THUMBNAIL_ACCEPT } from "./thumbnailConstraints";
-import { CAPTION_ACCEPT } from "./captionConstraints";
-import { MAX_CAPTION_BYTES } from "../../lessons/uploadLimits";
-import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
-import { prepareThumbnail } from "./prepareThumbnail";
+import UploadThumbnailField, { type ThumbnailSelection } from "./UploadThumbnailField";
+import UploadCaptionsField, { type SelectedCaption } from "./UploadCaptionsField";
 import {
   MAX_DESCRIPTION_CHARS,
   MAX_TITLE_CHARS,
@@ -54,13 +50,6 @@ function parseTags(input: string): string[] {
     .filter(Boolean);
 }
 
-interface SelectedCaption {
-  /** Lowercase tag inferred from the filename (`subs.es.vtt` → "es"), "en" otherwise. */
-  language: string;
-  fileName: string;
-  cues: CaptionCue[];
-}
-
 // NOTE (deviation from the approved UX spec's stated default): "auto-generate
 // a thumbnail from a recording frame" isn't straightforward here — a
 // recording is code-diff/cursor state, not a video, so there's no simple
@@ -91,26 +80,12 @@ export default function UploadLessonModal({
   } | null>(null);
   const [copied, setCopied] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null);
-  const [useDefaultThumbnail, setUseDefaultThumbnail] = useState(false);
-  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
-  const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
+  const [thumbnail, setThumbnail] = useState<ThumbnailSelection>({ kind: "none" });
   const [captionTracks, setCaptionTracks] = useState<SelectedCaption[]>([]);
-  const [captionError, setCaptionError] = useState<string | null>(null);
-  const captionInputRef = useRef<HTMLInputElement | null>(null);
   const [signInError, setSignInError] = useState<string | null>(null);
 
   const { upload, cancel, progress, isUploading, error, reset } = useUploadLesson();
   const publish = usePublishFromLibrary();
-
-  // Revoke the preview's object URL whenever it's replaced/cleared or the modal unmounts,
-  // so a large image doesn't linger in memory past the form that offered it.
-  useEffect(() => {
-    return () => {
-      if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
-    };
-  }, [thumbnailPreviewUrl]);
 
   // Reset the "Copied" indicator after 2 seconds, with proper cleanup on unmount.
   useEffect(() => {
@@ -145,107 +120,6 @@ export default function UploadLessonModal({
     await redirectToSignIn();
   };
 
-  const handleSelectThumbnail = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const file = input.files?.[0];
-    // Clear the value so re-selecting the same file fires another change event.
-    input.value = "";
-
-    if (!file) return;
-
-    const prepared = await prepareThumbnail(file);
-    if ("error" in prepared) {
-      setThumbnailError(prepared.error);
-      return;
-    }
-    const optimized = prepared.file;
-    setThumbnailError(null);
-    setThumbnailFile(optimized);
-    setUseDefaultThumbnail(false);
-    setThumbnailPreviewUrl((previous) => {
-      if (previous) URL.revokeObjectURL(previous);
-      return URL.createObjectURL(optimized);
-    });
-  };
-
-  const handleUseDefaultThumbnail = () => {
-    setThumbnailError(null);
-    setThumbnailFile(null);
-    setThumbnailPreviewUrl((previous) => {
-      if (previous) URL.revokeObjectURL(previous);
-      return null;
-    });
-    setUseDefaultThumbnail(true);
-  };
-
-  const handleRemoveThumbnail = () => {
-    setThumbnailFile(null);
-    setThumbnailPreviewUrl((previous) => {
-      if (previous) URL.revokeObjectURL(previous);
-      return null;
-    });
-    setUseDefaultThumbnail(false);
-    setThumbnailError(null);
-  };
-
-  // Applies the whole selection or none of it — a multi-file pick where one file
-  // fails should not silently attach the rest.
-  const handleSelectCaptions = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const files = Array.from(input.files ?? []);
-    // Clear the value so re-selecting the same file fires another change event.
-    input.value = "";
-    if (files.length === 0) return;
-
-    // Every other failure in this handler reports through `captionError`; these
-    // two awaits did not. The lazy chunk 404s after a deploy or offline, and the
-    // blob read fails when the file moved or its volume unmounted between the
-    // picker returning and the read — either one left the picker silently dead.
-    let parseCaptions: typeof import("@app/captions/parseCaptions");
-    try {
-      parseCaptions = await import("@app/captions/parseCaptions");
-    } catch {
-      setCaptionError("Couldn't load the caption reader — check your connection and try again.");
-      return;
-    }
-
-    const next = [...captionTracks];
-    for (const file of files) {
-      if (file.size > MAX_CAPTION_BYTES) {
-        setCaptionError(`"${file.name}" is too large — 2MB max.`);
-        return;
-      }
-      let text: string;
-      try {
-        text = await file.text();
-      } catch {
-        setCaptionError(`Couldn't read "${file.name}" — try selecting it again.`);
-        return;
-      }
-      const cues = parseCaptions.detectAndParse(file.name, text);
-      if (cues.length === 0) {
-        setCaptionError(`No caption cues found in "${file.name}" — expected .vtt or .srt.`);
-        return;
-      }
-      const language = parseCaptions.inferLanguageFromFilename(file.name) ?? "en";
-      if (next.some((track) => track.language === language)) {
-        setCaptionError(
-          `A "${language}" track is already attached — name files like lesson.<lang>.vtt to set their language.`,
-        );
-        return;
-      }
-      next.push({ language, fileName: file.name, cues });
-    }
-
-    setCaptionError(null);
-    setCaptionTracks(next);
-  };
-
-  const handleRemoveCaption = (language: string) => {
-    setCaptionTracks((tracks) => tracks.filter((track) => track.language !== language));
-    setCaptionError(null);
-  };
-
   const handleUpload = async () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -266,26 +140,26 @@ export default function UploadLessonModal({
     }
     setLimitError(null);
 
+    // Built before the try: the React Compiler can't compile a conditional or
+    // optional call inside a try block, and would skip this whole component.
+    const input: UploadLessonInput = {
+      recording,
+      title: trimmedTitle,
+      description,
+      tags,
+      thumbnail: thumbnail.kind === "file" ? thumbnail.file : undefined,
+      useDefaultThumbnail: thumbnail.kind === "default",
+      captions:
+        captionTracks.length > 0
+          ? captionTracks.map(({ language, cues }) => ({ language, cues }))
+          : undefined,
+    };
     try {
-      const result = await upload({
-        lessonId,
-        input: {
-          recording,
-          title: trimmedTitle,
-          description,
-          tags,
-          thumbnail: thumbnailFile ?? undefined,
-          useDefaultThumbnail,
-          captions:
-            captionTracks.length > 0
-              ? captionTracks.map(({ language, cues }) => ({ language, cues }))
-              : undefined,
-        },
-      });
+      const result = await upload({ lessonId, input });
       setUploadResult(result);
-      onUploaded?.();
+      if (onUploaded) onUploaded();
       analytics.capture("lesson_uploaded", {
-        has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
+        has_thumbnail: thumbnail.kind !== "none",
         has_description: !!description.trim(),
         tag_count: tags.length,
         caption_count: captionTracks.length,
@@ -518,116 +392,13 @@ export default function UploadLessonModal({
             />
           </label>
 
-          <div className="space-y-1">
-            <span className="text-xs font-medium text-slate-400">Thumbnail (optional)</span>
-            <div className="flex items-center gap-3">
-              {thumbnailPreviewUrl || useDefaultThumbnail ? (
-                <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-[#11141c]">
-                  <img
-                    src={thumbnailPreviewUrl ?? `/${DEFAULT_THUMBNAIL_PATH}`}
-                    alt="Thumbnail preview"
-                    className="size-full object-cover"
-                  />
-                  {useDefaultThumbnail ? (
-                    <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
-                      Default
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={handleRemoveThumbnail}
-                    disabled={isUploading}
-                    aria-label="Remove thumbnail"
-                    className="absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-start gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => thumbnailInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="flex aspect-video w-32 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <ImagePlus size={18} />
-                    <span className="text-[11px] font-medium">Select image</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUseDefaultThumbnail}
-                    disabled={isUploading}
-                    className="text-[11px] font-medium text-slate-400 underline-offset-2 transition-colors hover:text-slate-200 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Use default thumbnail
-                  </button>
-                </div>
-              )}
-            </div>
-            {thumbnailError ? (
-              <p role="alert" className="text-xs text-rose-300">
-                {thumbnailError}
-              </p>
-            ) : null}
-            <input
-              ref={thumbnailInputRef}
-              type="file"
-              accept={THUMBNAIL_ACCEPT}
-              className="hidden"
-              onChange={handleSelectThumbnail}
-            />
-          </div>
+          <UploadThumbnailField value={thumbnail} onChange={setThumbnail} disabled={isUploading} />
 
-          <div className="space-y-1.5">
-            <span className="text-xs font-medium text-slate-400">Captions (optional)</span>
-            {captionTracks.length > 0 ? (
-              <ul className="space-y-1">
-                {captionTracks.map((track) => (
-                  <li
-                    key={track.language}
-                    className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#11141c] px-3 py-1.5"
-                  >
-                    <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
-                      {track.language}
-                    </span>
-                    <span className="flex-1 truncate text-xs text-slate-300">{track.fileName}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCaption(track.language)}
-                      disabled={isUploading}
-                      aria-label={`Remove ${track.language} captions`}
-                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <X size={12} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => captionInputRef.current?.click()}
-              disabled={isUploading}
-              className="flex items-center gap-2 text-[11px] font-medium text-slate-400 underline-offset-2 transition-colors hover:text-slate-200 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Captions size={14} aria-hidden="true" />
-              Add caption file (.vtt / .srt)
-            </button>
-            {captionError ? (
-              <p role="alert" className="text-xs text-rose-300">
-                {captionError}
-              </p>
-            ) : null}
-            <input
-              ref={captionInputRef}
-              type="file"
-              accept={CAPTION_ACCEPT}
-              multiple
-              className="hidden"
-              onChange={handleSelectCaptions}
-            />
-          </div>
+          <UploadCaptionsField
+            value={captionTracks}
+            onChange={setCaptionTracks}
+            disabled={isUploading}
+          />
 
           {limitError ? (
             <p role="alert" className="text-sm text-rose-300">

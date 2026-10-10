@@ -47,7 +47,7 @@ const NOT_COMPILED: Record<string, string> = {
   "src/studio/StudioController.tsx": "try/finally, and throws inside try blocks",
   "src/components/RecordingDraftRecovery.tsx": "try/finally",
   "src/components/LandingPage.tsx": "reads refs during render",
-  "infra/client/upload/UploadLessonModal.tsx": "an await import() inside the component",
+  "infra/client/upload/UploadCaptionsField.tsx": "an await import() inside the component",
 };
 
 // A module defines a component or a hook when it is .tsx or declares a use* function.
