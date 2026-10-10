@@ -27,25 +27,56 @@ export function projectSizeBucket(fileCount: number): "small" | "medium" | "larg
   return "large";
 }
 
-export function hasFilePathConflict(
-  project: WorkspaceProject,
-  path: string,
-  ignoredPath?: string,
-): boolean {
-  if (project.folders.includes(path)) return true;
-  return Object.keys(project.files).some(
-    (existingPath) =>
-      existingPath !== ignoredPath &&
-      (existingPath === path ||
-        existingPath.startsWith(`${path}/`) ||
-        path.startsWith(`${existingPath}/`)),
-  );
-}
+/**
+ * Why the workspace will not put an entry at a path: something already has it,
+ * it would sit inside the file at `filePath`, or a folder would move inside
+ * itself.
+ */
+export type WorkspacePathRefusal =
+  | { kind: "exists" }
+  | { kind: "inside-file"; filePath: string }
+  | { kind: "inside-itself" };
 
-export function hasFolderPathConflict(project: WorkspaceProject, path: string): boolean {
-  return Object.keys(project.files).some(
-    (existingPath) => existingPath === path || path.startsWith(`${existingPath}/`),
-  );
+/**
+ * Why a file or folder cannot be created at, or renamed to, the normalized
+ * `nextPath`, or null when it can. `currentPath` is the entry being renamed,
+ * which never clashes with itself or with anything that moves with it. This is
+ * the one home of the rule: the store refuses whenever it answers, and the file
+ * sidebar explains its answer to the user.
+ */
+export function describeWorkspacePathConflict(
+  project: Pick<WorkspaceProject, "files" | "folders">,
+  nextPath: string,
+  { kind, currentPath }: { kind: "file" | "folder"; currentPath?: string },
+): WorkspacePathRefusal | null {
+  if (nextPath === currentPath) return null;
+
+  // A renamed file leaves its own path; a renamed folder takes its contents along.
+  const movesWithRename = (path: string) =>
+    currentPath !== undefined &&
+    (kind === "folder" ? isPathWithinFolder(path, currentPath) : path === currentPath);
+  const otherFilePaths = Object.keys(project.files).filter((path) => !movesWithRename(path));
+
+  // A file also cannot take a path that other files sit under: that is a folder.
+  if (
+    project.folders.includes(nextPath) ||
+    otherFilePaths.some(
+      (path) => path === nextPath || (kind === "file" && path.startsWith(`${nextPath}/`)),
+    )
+  ) {
+    return { kind: "exists" };
+  }
+
+  // A path with a slash can reach through a file, as in "index.html/page.html".
+  const enclosingFile = otherFilePaths.find((path) => nextPath.startsWith(`${path}/`));
+  if (enclosingFile) return { kind: "inside-file", filePath: enclosingFile };
+
+  // A folder cannot move inside itself, as "src" to "src/app" would.
+  if (kind === "folder" && currentPath !== undefined && nextPath.startsWith(`${currentPath}/`)) {
+    return { kind: "inside-itself" };
+  }
+
+  return null;
 }
 
 export function getDefaultFile(project: WorkspaceProject): WorkspaceFile {

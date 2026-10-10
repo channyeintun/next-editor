@@ -1,7 +1,10 @@
-import type { WorkspaceTreeFile } from "../../types/workspace";
+import type { WorkspaceProject, WorkspaceTreeFile } from "../../types/workspace";
 import { getParentWorkspacePath, getWorkspaceBaseName } from "../../types/workspacePaths";
 import { inferLanguageFromPath } from "../../types/workspaceFiles";
-import { isPathWithinFolder } from "../../stores/workspaceProjectSupport";
+import {
+  describeWorkspacePathConflict,
+  isPathWithinFolder,
+} from "../../stores/workspaceProjectSupport";
 
 // ============================================================================
 // FileSidebar model
@@ -100,44 +103,34 @@ export function deletesEveryFile(files: readonly WorkspaceTreeFile[], path: stri
 }
 
 /**
- * Why the inline name field cannot take `nextPath`, or null when it can. The
- * workspace store refuses these same names without a word, so the field checks
- * first and says why; the store stays the authority. `currentPath` is the entry
- * being renamed, which never clashes with itself or anything inside it.
+ * Why the inline name field cannot take `nextPath` for a new or renamed
+ * (`currentPath`) entry of `kind`, or null when it can. The workspace store
+ * refuses these names without a word; the field asks the same rule first
+ * (describeWorkspacePathConflict) and says why, so it refuses exactly what the
+ * store would.
  */
 export function getInlineNameError(
-  files: readonly WorkspaceTreeFile[],
-  folders: readonly string[],
+  project: Pick<WorkspaceProject, "files" | "folders">,
   nextPath: string,
-  currentPath?: string,
+  options: { kind: SidebarEntryKind; currentPath?: string },
 ): string | null {
   if (!nextPath) {
     return "That name can't be used here.";
   }
 
-  const isRenamedEntry = (path: string) =>
-    currentPath !== undefined && isPathWithinFolder(path, currentPath);
-  const otherFiles = files.filter((file) => !isRenamedEntry(file.path));
-  const clashes =
-    folders.some((folder) => folder === nextPath && folder !== currentPath) ||
-    otherFiles.some((file) => file.path === nextPath || file.path.startsWith(`${nextPath}/`));
-
-  if (clashes) {
-    return `"${getWorkspaceBaseName(nextPath)}" already exists here.`;
+  const refusal = describeWorkspacePathConflict(project, nextPath, options);
+  if (!refusal) {
+    return null;
   }
 
-  // A name with a slash can reach through a file, as in "index.html/page.html".
-  const enclosingFile = otherFiles.find((file) => nextPath.startsWith(`${file.path}/`));
-  if (enclosingFile) {
-    return `"${getWorkspaceBaseName(enclosingFile.path)}" is a file, not a folder.`;
+  switch (refusal.kind) {
+    case "exists":
+      return `"${getWorkspaceBaseName(nextPath)}" already exists here.`;
+    case "inside-file":
+      return `"${getWorkspaceBaseName(refusal.filePath)}" is a file, not a folder.`;
+    case "inside-itself":
+      return "A folder can't be moved inside itself.";
   }
-
-  // renameFolder refuses a folder moved into itself, such as "src" to "src/app".
-  if (currentPath && folders.includes(currentPath) && nextPath.startsWith(`${currentPath}/`)) {
-    return "A folder can't be moved inside itself.";
-  }
-
-  return null;
 }
 
 export function getEditableSelectionEnd(name: string, kind: "file" | "folder") {

@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { WorkspaceSidebarState } from "../stores/workspaceStore";
 import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
-import type { WorkspaceTreeFile } from "../types/workspace";
+import type { WorkspaceProject, WorkspaceTreeFile } from "../types/workspace";
+import { createWorkspaceFile } from "../types/workspaceFiles";
 import FileSidebar from "./FileSidebar";
 
 function treeFile(path: string): WorkspaceTreeFile {
@@ -88,6 +89,16 @@ vi.mock("../contexts/CollaborationContext", () => ({
 
 beforeEach(() => {
   workspace.store.state = { ...INITIAL_STATE };
+  // The name field checks a name against the project the store holds.
+  actions.getProject.mockImplementation(() => {
+    const { files, folders } = workspace.store.state;
+    return {
+      files: Object.fromEntries(
+        files.map((file) => [file.path, createWorkspaceFile(file.path, "")]),
+      ),
+      folders,
+    } as unknown as WorkspaceProject;
+  });
   actions.setCollapsedFolders.mockImplementation((paths) =>
     workspace.update({ collapsedFolders: paths }),
   );

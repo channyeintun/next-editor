@@ -26,9 +26,8 @@ import {
 import { startPerformanceSpan } from "../utils/performanceMetrics";
 import {
   areWorkspaceTopologiesEqual,
+  describeWorkspacePathConflict,
   getDefaultFile,
-  hasFilePathConflict,
-  hasFolderPathConflict,
   isPathWithinFolder,
   listProjectTreeFiles,
   normalizeProject,
@@ -527,7 +526,10 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         ) => {
           const normalizedPath = normalizeWorkspacePath(event.path);
 
-          if (!normalizedPath || hasFilePathConflict(context.project, normalizedPath)) {
+          if (
+            !normalizedPath ||
+            describeWorkspacePathConflict(context.project, normalizedPath, { kind: "file" })
+          ) {
             return context;
           }
 
@@ -556,8 +558,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
 
         if (
           !normalizedPath ||
-          hasFolderPathConflict(context.project, normalizedPath) ||
-          context.project.folders.includes(normalizedPath)
+          describeWorkspacePathConflict(context.project, normalizedPath, { kind: "folder" })
         ) {
           return context;
         }
@@ -592,7 +593,10 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             !existingFile ||
             !normalizedNextPath ||
             normalizedCurrentPath === normalizedNextPath ||
-            hasFilePathConflict(context.project, normalizedNextPath, normalizedCurrentPath)
+            describeWorkspacePathConflict(context.project, normalizedNextPath, {
+              kind: "file",
+              currentPath: normalizedCurrentPath,
+            })
           ) {
             return context;
           }
@@ -645,9 +649,10 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             !normalizedNextPath ||
             normalizedCurrentPath === normalizedNextPath ||
             !context.project.folders.includes(normalizedCurrentPath) ||
-            hasFolderPathConflict(context.project, normalizedNextPath) ||
-            context.project.folders.includes(normalizedNextPath) ||
-            isPathWithinFolder(normalizedNextPath, normalizedCurrentPath)
+            describeWorkspacePathConflict(context.project, normalizedNextPath, {
+              kind: "folder",
+              currentPath: normalizedCurrentPath,
+            })
           ) {
             return context;
           }

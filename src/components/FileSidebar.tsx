@@ -73,6 +73,7 @@ function FileSidebarPanel() {
     createFolder,
     deleteFile,
     deleteFolder,
+    getProject,
     renameFile,
     renameFolder,
     saveProject,
@@ -269,12 +270,10 @@ function FileSidebarPanel() {
     }
 
     const nextPath = joinWorkspacePath(editState.parentPath, normalizedName);
-    const nameError = getInlineNameError(
-      files,
-      folders,
-      nextPath,
-      editState.mode === "rename" ? editState.path : undefined,
-    );
+    const nameError = getInlineNameError(getProject(), nextPath, {
+      kind: editState.kind,
+      currentPath: editState.mode === "rename" ? editState.path : undefined,
+    });
 
     if (nameError) {
       setInlineError(nameError);

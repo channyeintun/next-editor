@@ -10,6 +10,7 @@ import {
   writeStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import type { WorkspaceTreeFile } from "../types/workspace";
+import { createWorkspaceFile } from "../types/workspaceFiles";
 import { getViewportClampedContextMenuPlacement } from "./fileSidebar/contextMenuPlacement";
 import { FolderIcon, getFileIcon } from "./fileSidebar/fileIcons";
 import { deletesEveryFile, getInlineNameError } from "./fileSidebar/sidebarModel";
@@ -111,20 +112,29 @@ describe("deletesEveryFile", () => {
 });
 
 describe("getInlineNameError", () => {
-  function treeFile(path: string): WorkspaceTreeFile {
-    return { path, name: path.split("/").at(-1) ?? path, language: "typescript" };
-  }
-
-  const files = [treeFile("index.html"), treeFile("src/app.ts"), treeFile("src/lib/util.ts")];
-  const folders = ["src", "src/lib"];
+  const project = {
+    files: Object.fromEntries(
+      ["index.html", "src/app.ts", "src/lib/util.ts"].map((path) => [
+        path,
+        createWorkspaceFile(path, ""),
+      ]),
+    ),
+    folders: ["src", "src/lib"],
+  };
+  const newFile = { kind: "file" } as const;
+  const newFolder = { kind: "folder" } as const;
+  const renamedFile = (currentPath: string) => ({ kind: "file" as const, currentPath });
+  const renamedFolder = (currentPath: string) => ({ kind: "folder" as const, currentPath });
 
   it("refuses a name the workspace cannot hold", () => {
-    expect(getInlineNameError(files, folders, "")).toBe("That name can't be used here.");
+    expect(getInlineNameError(project, "", newFile)).toBe("That name can't be used here.");
   });
 
   it("refuses a file that already exists", () => {
-    expect(getInlineNameError(files, folders, "src/app.ts")).toBe('"app.ts" already exists here.');
-    expect(getInlineNameError(files, folders, "src/app.ts", "src/main.ts")).toBe(
+    expect(getInlineNameError(project, "src/app.ts", newFile)).toBe(
+      '"app.ts" already exists here.',
+    );
+    expect(getInlineNameError(project, "src/app.ts", renamedFile("src/main.ts"))).toBe(
       '"app.ts" already exists here.',
     );
   });
@@ -132,27 +142,27 @@ describe("getInlineNameError", () => {
   it("refuses a file and a folder that would share a path", () => {
     // A new file named like a folder, a folder named like a file, and a path
     // that would put an entry inside a file.
-    expect(getInlineNameError(files, folders, "src/lib")).toBe('"lib" already exists here.');
-    expect(getInlineNameError(files, folders, "index.html")).toBe(
+    expect(getInlineNameError(project, "src/lib", newFile)).toBe('"lib" already exists here.');
+    expect(getInlineNameError(project, "index.html", newFolder)).toBe(
       '"index.html" already exists here.',
     );
-    expect(getInlineNameError(files, folders, "index.html/page.html")).toBe(
+    expect(getInlineNameError(project, "index.html/page.html", newFile)).toBe(
       '"index.html" is a file, not a folder.',
     );
   });
 
   it("accepts renaming an entry to its own path, or a folder past its own contents", () => {
-    expect(getInlineNameError(files, folders, "src/app.ts", "src/app.ts")).toBeNull();
-    expect(getInlineNameError(files, folders, "src/lib", "src/lib")).toBeNull();
-    expect(getInlineNameError(files, folders, "src/shared", "src/lib")).toBeNull();
-    expect(getInlineNameError(files, folders, "src/main.ts")).toBeNull();
+    expect(getInlineNameError(project, "src/app.ts", renamedFile("src/app.ts"))).toBeNull();
+    expect(getInlineNameError(project, "src/lib", renamedFolder("src/lib"))).toBeNull();
+    expect(getInlineNameError(project, "src/shared", renamedFolder("src/lib"))).toBeNull();
+    expect(getInlineNameError(project, "src/main.ts", newFile)).toBeNull();
   });
 
   it("refuses a folder moved inside itself, but not a file made into a folder", () => {
-    expect(getInlineNameError(files, folders, "src/lib/inner", "src/lib")).toBe(
+    expect(getInlineNameError(project, "src/lib/inner", renamedFolder("src/lib"))).toBe(
       "A folder can't be moved inside itself.",
     );
-    expect(getInlineNameError(files, folders, "src/app.ts/main.ts", "src/app.ts")).toBeNull();
+    expect(getInlineNameError(project, "src/app.ts/main.ts", renamedFile("src/app.ts"))).toBeNull();
   });
 });
 
