@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import type { WorkspaceActions } from "../stores/workspaceActions";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const mocks = vi.hoisted(() => ({
   closeRoom: vi.fn(),
@@ -79,7 +80,8 @@ vi.mock("../hooks/useWorkspace", () => ({
 }));
 let usesPlaybackModel = false;
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel, isRecording: false }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ usesPlaybackModel, isRecording: false }, select),
   useNextEditorActions: () => ({
     handleSlideEvent: mocks.handleSlideEvent,
     handleWhiteboardEvent: mocks.handleWhiteboardEvent,

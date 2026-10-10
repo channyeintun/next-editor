@@ -109,7 +109,7 @@ function EditPlayhead({
   mutes: readonly MediaSpan[];
 }) {
   const currentTime = useLiveTime();
-  const { isPlaying } = useNextEditorMetadata();
+  const isPlaying = useNextEditorMetadata((m) => m.isPlaying);
   const { seekTo, setVolume } = useNextEditorActions();
   const { volume } = usePlaybackSettings();
 

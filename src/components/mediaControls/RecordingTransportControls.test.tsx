@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import RecordingTransportControls from "./RecordingTransportControls";
+import { selectMetadata, type MetadataSelector } from "../../test/selectMetadata";
 
 const actions = vi.hoisted(() => ({
   pauseRecording: vi.fn<() => void>(),
@@ -17,7 +18,8 @@ const take = vi.hoisted(() => ({
 
 vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => actions,
-  useNextEditorMetadata: () => ({ isRecordingPaused: take.isRecordingPaused }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ isRecordingPaused: take.isRecordingPaused }, select),
   useRecordingChapterCount: () => take.chapterCount,
   useRecordingElapsedMs: () => take.elapsedMs,
   useRetakeTargetTime: () => take.retakeTarget,

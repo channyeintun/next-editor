@@ -192,6 +192,8 @@ function Controls() {
 </NextEditorProvider>;
 ```
 
+`currentRecording` is a new object on every streamed delta of a downloading lesson, so a component that reads only flags passes a selector and re-renders only when what it picks changes: `const isPlaying = useNextEditorMetadata((m) => m.isPlaying);`.
+
 `useNextEditorPlayback` gives the playback speed, volume, duration and the editor actor itself.
 
 ## Related Docs

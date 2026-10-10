@@ -75,7 +75,10 @@ export default function WhiteboardPanel() {
     handleExcalidrawChange,
     markCanvasSynced,
   } = useWhiteboardContext();
-  const { usesPlaybackModel, isInPlaybackSession } = useNextEditorMetadata();
+  const { usesPlaybackModel, isInPlaybackSession } = useNextEditorMetadata((m) => ({
+    usesPlaybackModel: m.usesPlaybackModel,
+    isInPlaybackSession: m.isInPlaybackSession,
+  }));
   const collaboration = useOptionalCollaboration();
   // The viewer's playback view is read without subscribing: a pan fires onChange every frame,
   // and nothing needs to re-render when it is taken over. It is released only when the

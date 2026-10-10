@@ -4,6 +4,7 @@ import type { MockInstance } from "vite-plus/test";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const mocks = vi.hoisted(() => {
   // The order the workspace swap's steps ran in, across all four spies.
@@ -70,7 +71,8 @@ vi.mock("../contexts/CollaborationContext", async (importOriginal) => ({
 vi.mock("../hooks/useNextEditorContext", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useNextEditorContext")>()),
   useNextEditorActions: () => ({}),
-  useNextEditorMetadata: () => ({ currentRecording: null }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ currentRecording: null }, select),
 }));
 vi.mock("../hooks/useWebContainerRuntime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useWebContainerRuntime")>()),

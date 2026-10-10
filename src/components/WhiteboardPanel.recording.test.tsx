@@ -8,6 +8,7 @@ import {
   type WhiteboardSceneState,
 } from "../core/src/whiteboard";
 import { createWhiteboardStore, type WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 let store: WhiteboardStoreInstance;
 // Every whiteboard event the recorder receives, in arrival order.
@@ -83,11 +84,11 @@ vi.mock("../contexts/WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({
-    usesPlaybackModel: false,
-    isInPlaybackSession: false,
-    currentRecording: null,
-  }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata(
+      { usesPlaybackModel: false, isInPlaybackSession: false, currentRecording: null },
+      select,
+    ),
   useNextEditorActions: () => ({
     handleWhiteboardEvent: (event: WhiteboardEvent) => recorded.push(event),
   }),

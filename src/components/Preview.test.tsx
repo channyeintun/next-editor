@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import Preview from "./Preview";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const previewState = vi.hoisted(() => ({
   isOpen: false,
@@ -10,7 +11,8 @@ const previewState = vi.hoisted(() => ({
 }));
 
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ isPlaying: false }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ isPlaying: false }, select),
 }));
 
 vi.mock("./preview/ApiClientPanel", () => ({

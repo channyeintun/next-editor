@@ -11,6 +11,7 @@ import {
   type WhiteboardSceneUpdateSource,
   type WhiteboardStoreInstance,
 } from "../stores/whiteboardStore";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const updateScene = vi.fn();
 // What the canvas holds after updateScene, as Excalidraw tidied it.
@@ -79,7 +80,8 @@ vi.mock("../contexts/WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store: whiteboardStore }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel, isInPlaybackSession }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ usesPlaybackModel, isInPlaybackSession }, select),
 }));
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => ({

@@ -17,12 +17,13 @@ import type { ChatStatus } from "../../types/chat";
 import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
 import { WorkspaceStoreContext } from "../../contexts/WorkspaceContext";
 import AgentPanel from "./AgentPanel";
+import { selectMetadata, type MetadataSelector } from "../../test/selectMetadata";
 
 const metadata = vi.hoisted(() => ({ isPlaying: false, isRecording: false }));
 
 vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({ handleChatEvent: () => {} }),
-  useNextEditorMetadata: () => metadata,
+  useNextEditorMetadata: (select?: MetadataSelector) => selectMetadata(metadata, select),
 }));
 vi.mock("../../hooks/useWorkspace", () => ({ useWorkspaceLoadVersion: () => 0 }));
 vi.mock("../../contexts/PreviewAdapterHandleContext", () => ({

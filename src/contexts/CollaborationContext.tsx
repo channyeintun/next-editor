@@ -199,7 +199,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const activeFilePath = useWorkspaceActiveFilePath();
   const baseActionsRef = useRef(baseActions);
   baseActionsRef.current = baseActions;
-  const { usesPlaybackModel, isRecording } = useNextEditorMetadata();
+  const { usesPlaybackModel, isRecording } = useNextEditorMetadata((m) => ({
+    usesPlaybackModel: m.usesPlaybackModel,
+    isRecording: m.isRecording,
+  }));
   const { handleSlideEvent, handleWhiteboardEvent } = useNextEditorActions();
   const playbackRef = useRef(usesPlaybackModel);
   playbackRef.current = usesPlaybackModel;

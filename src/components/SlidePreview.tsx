@@ -37,7 +37,7 @@ function SlidePreview({
   verticalIndex = 0,
   positioning = "fixed",
 }: SlidePreviewProps) {
-  const { isPlaying } = useNextEditorMetadata();
+  const isPlaying = useNextEditorMetadata((m) => m.isPlaying);
   const collaboration = useOptionalCollaboration();
 
   const slideContentRef = useRef<HTMLDivElement>(null);

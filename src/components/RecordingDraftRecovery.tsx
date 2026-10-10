@@ -43,7 +43,7 @@ export default function RecordingDraftRecovery({
 }: {
   onRecovered: (recording: Recording) => void;
 }) {
-  const { isRecording } = useNextEditorMetadata();
+  const isRecording = useNextEditorMetadata((m) => m.isRecording);
   const [draft, setDraft] = useState<RecordingDraftMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);

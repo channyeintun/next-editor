@@ -36,9 +36,21 @@ export const useNextEditorActions = (): NextEditorActions => {
 /**
  * Hook to access metadata/flags (isRecording, isPlaying, etc.).
  * Component using this will re-render when recording/playback state transitions.
+ *
+ * The whole shape includes currentRecording, which is a new object on every streamed
+ * delta of a downloading lesson (up to four a second) and on every edit. A component that
+ * reads only flags passes `select`, e.g. `useNextEditorMetadata((m) => m.isPlaying)`, and
+ * re-renders only when what it picks changes (compared one level deep, so an object of
+ * flags works too).
  */
-export const useNextEditorMetadata = (): NextEditorMetadata =>
-  NextEditorActorContext.useSelector(selectNextEditorMetadata, shallowEqual);
+export function useNextEditorMetadata(): NextEditorMetadata;
+export function useNextEditorMetadata<T>(select: (metadata: NextEditorMetadata) => T): T;
+export function useNextEditorMetadata<T>(select?: (metadata: NextEditorMetadata) => T) {
+  return NextEditorActorContext.useSelector((state) => {
+    const metadata = selectNextEditorMetadata(state);
+    return select ? select(metadata) : metadata;
+  }, shallowEqual);
+}
 
 /**
  * Hook to access the editor actor and the playback settings (speed, volume, timeline length).

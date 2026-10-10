@@ -7,6 +7,7 @@ import {
   selectViewerFullHeight,
 } from "../stores/runtimePanelStore";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const metadata = vi.hoisted(() => ({
   current: {
@@ -18,7 +19,7 @@ const metadata = vi.hoisted(() => ({
 }));
 
 vi.mock("./useNextEditorContext", () => ({
-  useNextEditorMetadata: () => metadata.current,
+  useNextEditorMetadata: (select?: MetadataSelector) => selectMetadata(metadata.current, select),
 }));
 
 import {

@@ -3,6 +3,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { useContext, type ReactNode } from "react";
 import { MemoryRouter, useSearchParams, type SetURLSearchParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const controls = vi.hoisted(() => ({
   handleSlideEvent: vi.fn() as (...args: unknown[]) => void,
@@ -188,7 +189,8 @@ vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActiveFilePath: () => "index.html",
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel, isRecording }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ usesPlaybackModel, isRecording }, select),
   useNextEditorActions: () => ({
     handleSlideEvent: controls.handleSlideEvent,
     handleWhiteboardEvent: controls.handleWhiteboardEvent,

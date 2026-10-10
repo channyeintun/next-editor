@@ -67,7 +67,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const credentialStore = getAgentCredentialStore();
   const sessionStore = getAgentSessionStore();
   const { handleChatEvent } = useNextEditorActions();
-  const { isPlaying, isRecording } = useNextEditorMetadata();
+  const { isPlaying, isRecording } = useNextEditorMetadata((m) => ({
+    isPlaying: m.isPlaying,
+    isRecording: m.isRecording,
+  }));
   const workspaceLoadVersion = useWorkspaceLoadVersion();
 
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));

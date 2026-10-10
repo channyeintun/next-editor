@@ -17,7 +17,7 @@ export default function CollaborationSurfaceBridge() {
   const presence = useRoomPresence();
   const slides = useSlidesContext();
   const whiteboard = useWhiteboardContext();
-  const { usesPlaybackModel } = useNextEditorMetadata();
+  const usesPlaybackModel = useNextEditorMetadata((m) => m.usesPlaybackModel);
   const activeFilePath = useWorkspaceActiveFilePath();
   const workspaceTreeVersion = useWorkspaceTreeVersion();
   const { setActiveFilePath } = useWorkspaceActions();

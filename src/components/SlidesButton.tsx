@@ -24,7 +24,11 @@ export default function SlidesButton({
   presentationToggleOnly?: boolean;
 }) {
   const { pause } = useNextEditorActions();
-  const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata();
+  const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata((m) => ({
+    isRecording: m.isRecording,
+    isPlaying: m.isPlaying,
+    usesPlaybackModel: m.usesPlaybackModel,
+  }));
   const [showManager, setShowManager] = useState(false);
   const managerId = useId();
   const collaboration = useOptionalCollaboration();

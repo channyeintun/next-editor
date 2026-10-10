@@ -54,7 +54,10 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const viewerFullHeight = useSelector(runtimePanelStore, (s) => selectViewerFullHeight(s.context));
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
-  const { isRecording, isReplayLoaded } = useNextEditorMetadata();
+  const { isRecording, isReplayLoaded } = useNextEditorMetadata((m) => ({
+    isRecording: m.isRecording,
+    isReplayLoaded: m.isReplayLoaded,
+  }));
 
   // A take always shows (and records) the live height, whatever a replay left behind.
   const hasViewerFullHeight = viewerFullHeight !== null && !isRecording;

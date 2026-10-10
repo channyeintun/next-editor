@@ -4,6 +4,7 @@ import type { useCollaboration } from "../contexts/CollaborationContext";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { useSlidesContext } from "../contexts/SlidesContext";
 import type { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 type SlidesContextValue = ReturnType<typeof useSlidesContext>;
@@ -23,11 +24,8 @@ let whiteboardOpen = false;
 
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({ pause: mocks.pause }),
-  useNextEditorMetadata: () => ({
-    isRecording: false,
-    isPlaying: false,
-    usesPlaybackModel: false,
-  }),
+  useNextEditorMetadata: (select?: MetadataSelector) =>
+    selectMetadata({ isRecording: false, isPlaying: false, usesPlaybackModel: false }, select),
 }));
 vi.mock("../contexts/SlidesContext", () => ({
   useSlidesContext: () => slidesState,

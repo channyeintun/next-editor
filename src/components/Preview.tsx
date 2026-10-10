@@ -9,7 +9,7 @@ const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
 
 function Preview() {
   const controller = usePreviewController();
-  const { isPlaying } = useNextEditorMetadata();
+  const isPlaying = useNextEditorMetadata((m) => m.isPlaying);
   const isDocked = controller.panelMode === "docked";
 
   // Slide the docked panel open/closed. Floating is fixed (out of layout flow),

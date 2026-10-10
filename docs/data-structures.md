@@ -294,7 +294,7 @@ type RecordingCameraSource = "camera";
 The app splits editor access into a few focused surfaces:
 
 - `NextEditorActionsContext` (`useNextEditorActions`): stable imperative controls and storage helpers.
-- `useNextEditorMetadata()`: coarse recording and playback flags.
+- `useNextEditorMetadata()`: coarse recording and playback flags plus the loaded recording; `useNextEditorMetadata(select)` subscribes to only the picked flags.
 - `useNextEditorPlayback()`: editor actor, playback speed, volume, and duration.
 - `useLiveTime()`: the high-frequency playhead selector for tick-driven UI.
 

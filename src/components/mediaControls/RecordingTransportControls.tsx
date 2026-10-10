@@ -95,7 +95,7 @@ const RecordingTransportControls = ({
   className: string;
 }) => {
   const { pauseRecording, resumeRecording } = useNextEditorActions();
-  const { isRecordingPaused } = useNextEditorMetadata();
+  const isRecordingPaused = useNextEditorMetadata((m) => m.isRecordingPaused);
   return (
     <>
       <button

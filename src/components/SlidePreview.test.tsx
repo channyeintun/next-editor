@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 import type { Slide, SlideEvent } from "../types/slides";
+import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
@@ -19,7 +20,7 @@ vi.mock("../contexts/CollaborationContext", () => ({
   }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ isPlaying }),
+  useNextEditorMetadata: (select?: MetadataSelector) => selectMetadata({ isPlaying }, select),
 }));
 vi.mock("./CustomSlideRenderer", () => ({
   default: () => (
