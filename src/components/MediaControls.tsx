@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   Scissors,
   FileMusic,
@@ -57,13 +57,16 @@ import { applyVoiceRecordingPolicy, isVoiceJoinedForRecording } from "../voice/r
 import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
-import RecordingEditPanel from "./RecordingEditPanel";
 import MicrophoneCheck, { RecordingMicrophoneLevel } from "./MicrophoneCheck";
 import PlayerShortcutsHelp, { PlayerShortcutFeedback } from "./PlayerShortcutsHelp";
 import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { selectCaptionTrack } from "../captions/captionTracks";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
+
+// Opened only by the author, from a finished take in record mode, so a learner's player
+// does not load it (or the edit and waveform code behind it).
+const RecordingEditPanel = lazy(() => import("./RecordingEditPanel"));
 
 interface MediaControlsProps {
   recordMode?: boolean;
@@ -411,11 +414,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         <PlayerShortcutsHelp onClose={playerShortcuts.closeHelp} />
       ) : null}
       {showEditPanel && currentRecording && !isRecording && effectiveRecordMode ? (
-        <RecordingEditPanel
-          recording={currentRecording}
-          onClose={() => setShowEditPanel(false)}
-          onApplied={(edited) => onRecordingEdited?.(edited)}
-        />
+        <Suspense fallback={null}>
+          <RecordingEditPanel
+            recording={currentRecording}
+            onClose={() => setShowEditPanel(false)}
+            onApplied={(edited) => onRecordingEdited?.(edited)}
+          />
+        </Suspense>
       ) : null}
       <div className={`flex items-center w-full ${rowSizing}`}>
         {effectiveRecordMode && (

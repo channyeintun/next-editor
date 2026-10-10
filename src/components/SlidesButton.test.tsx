@@ -74,7 +74,8 @@ describe("SlidesButton room presentation mode", () => {
     expect(manage).not.toHaveAttribute("aria-pressed");
     fireEvent.click(manage);
     expect(manage).toHaveAttribute("aria-expanded", "true");
-    const manager = screen.getByRole("dialog", { name: "Slide manager" });
+    // The manager loads on first open.
+    const manager = await screen.findByRole("dialog", { name: "Slide manager" });
     expect(document.getElementById(manage.getAttribute("aria-controls")!)).toContainElement(
       manager,
     );
@@ -155,7 +156,7 @@ describe("SlidesButton focus on a user open", () => {
     expect(screen.getByRole("button", { name: "Close slides" })).toHaveFocus();
   });
 
-  it("moves focus into the presentation after starting it from the manager", () => {
+  it("moves focus into the presentation after starting it from the manager", async () => {
     render(
       <>
         <SlidesButton />
@@ -164,7 +165,7 @@ describe("SlidesButton focus on a user open", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Manage presentation slides/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Start presentation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Start presentation" }));
     expect(slidesState.startPresentation).toHaveBeenCalledTimes(1);
     flushFrames();
 

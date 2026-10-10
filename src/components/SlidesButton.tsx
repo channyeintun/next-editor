@@ -1,10 +1,13 @@
-import { useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { Presentation, Circle } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
-import SlidesManager from "./SlidesManager";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+
+// Only an author opens the deck manager (never in playback, a take or a room), so a
+// learner's editor does not load it, or the Google Slides import behind it.
+const SlidesManager = lazy(() => import("./SlidesManager"));
 
 /**
  * After the user opens the presentation, focus moves into it (the next frame, once
@@ -158,16 +161,18 @@ export default function SlidesButton({
             id={managerId}
             className="fixed inset-x-4 top-20 z-104 animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:w-auto sm:origin-top-right"
           >
-            <SlidesManager
-              slides={slides}
-              onSlidesChange={setSlides}
-              onStartPresentation={() => {
-                startPresentation();
-                setShowManager(false);
-                focusPresentation();
-              }}
-              onClose={() => setShowManager(false)}
-            />
+            <Suspense fallback={null}>
+              <SlidesManager
+                slides={slides}
+                onSlidesChange={setSlides}
+                onStartPresentation={() => {
+                  startPresentation();
+                  setShowManager(false);
+                  focusPresentation();
+                }}
+                onClose={() => setShowManager(false)}
+              />
+            </Suspense>
           </div>
         </>
       )}
