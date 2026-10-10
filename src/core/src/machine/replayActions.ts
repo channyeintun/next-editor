@@ -1,16 +1,7 @@
-import type {
-  EditorActionArgs,
-  EditorContextUpdate,
-  EditorMachineContext,
-  LearnerWorkspaceSave,
-} from "./types";
+import type { EditorActionArgs, EditorContextUpdate } from "./types";
 import type { Recording, RecordingStreamDelta } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
-import {
-  areWorkspaceProjectsEqual,
-  areWorkspaceSnapshotsEqual,
-  isWorkspaceTextFile,
-} from "../workspace";
+import { areWorkspaceProjectsEqual, areWorkspaceSnapshotsEqual } from "../workspace";
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
@@ -51,8 +42,9 @@ import {
 // isn't independently nameable outside `setup()`.
 //
 // Siblings: the editor frame replay and Monaco rendering are in frameReplay.ts,
-// the narration player's driver in playbackActors.ts, what the replay steps
-// share (the bounded replay time, ReplayStep) in replayStep.ts, and
+// the narration player's driver in playbackActors.ts, keeping the viewer's own
+// edits across the workspace hand-over in learnerWorkspace.ts, what the replay
+// steps share (the bounded replay time, ReplayStep) in replayStep.ts, and
 // reportMachineError in machineError.ts.
 // ============================================================================
 
@@ -355,77 +347,6 @@ export const setVolume = ({ context, event }: EditorActionArgs): EditorContextUp
       volume: normalizePlaybackVolume(event.volume, context.timeline.volume),
     },
   };
-};
-
-export const adoptPlaybackWorkspaceAtPause = ({ context }: EditorActionArgs): void => {
-  const currentSnapshot = context.getWorkspaceSnapshot?.();
-  const activeFilePath = currentSnapshot?.activeFilePath;
-  const currentFile = activeFilePath ? currentSnapshot?.project.files[activeFilePath] : undefined;
-  const pausedContent = context.currentFrame?.state?.content;
-
-  if (
-    !currentSnapshot ||
-    !context.applyWorkspaceSnapshot ||
-    !activeFilePath ||
-    !currentFile ||
-    pausedContent === undefined
-  ) {
-    return;
-  }
-
-  if (!isWorkspaceTextFile(currentFile) || currentFile.content === pausedContent) {
-    context.applyWorkspaceSnapshot(currentSnapshot);
-    return;
-  }
-
-  context.applyWorkspaceSnapshot({
-    ...currentSnapshot,
-    project: {
-      ...currentSnapshot.project,
-      files: {
-        ...currentSnapshot.project.files,
-        [activeFilePath]: {
-          ...currentFile,
-          content: pausedContent,
-        },
-      },
-    },
-  });
-};
-
-/**
- * Hands the workspace to the viewer (pause, end): remembers it as the recording left
- * it, so `getLearnerWorkspaceSave` can tell the viewer's own edits from the lesson's.
- */
-export const captureLearnerWorkspaceBaseline = ({
-  context,
-}: EditorActionArgs): EditorContextUpdate => ({
-  learnerWorkspaceBaseline: context.getWorkspaceSnapshot?.() ?? null,
-});
-
-/**
- * The viewer's edits, if the workspace differs from the baseline it was handed, or
- * null. Only the file and folder tree and file contents count: opening a file,
- * collapsing a folder or scrolling is looking around the lesson, not changing it.
- */
-export const getLearnerWorkspaceSave = (
-  context: EditorMachineContext,
-): LearnerWorkspaceSave | null => {
-  const baseline = context.learnerWorkspaceBaseline;
-  if (!baseline || !context.recording) return null;
-  const current = context.getWorkspaceSnapshot?.();
-  if (!current || areWorkspaceProjectsEqual(baseline.project, current.project)) return null;
-  return {
-    recordingId: context.recording.id,
-    recordingTime: context.timeline.currentTime,
-    snapshot: current,
-  };
-};
-
-/** Second step of a restore: the paused seek has landed, so lay the saved edits over it. */
-export const applyLearnerWorkspace = ({ context, event }: EditorActionArgs): void => {
-  if (event.type !== "APPLY_LEARNER_WORKSPACE") return;
-  context.applyWorkspaceSnapshot?.(event.snapshot);
 };
 
 export const resetPlayback = ({ context }: EditorActionArgs): EditorContextUpdate => ({

@@ -32,6 +32,12 @@ import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
 import type { CapturedContentRef, CapturedViewStateRef } from "./frameCapture";
+import type {
+  ApplyLearnerWorkspaceEvent,
+  LearnerWorkspaceSave,
+  PreserveLearnerWorkspaceEvent,
+  RestoreLearnerWorkspaceEvent,
+} from "./learnerWorkspace";
 import { createIdleAudioState, type AudioState } from "./audioCaptureActions";
 import { createIdleCameraState, type CameraState } from "./cameraCaptureActions";
 import { createIdleScreenState, type ScreenState } from "./screenCaptureActions";
@@ -437,33 +443,6 @@ type FinishedEvent = { type: "FINISHED" };
 
 /** User interaction during playback */
 type UserInteractionEvent = { type: "USER_INTERACTION" };
-
-/**
- * The viewer's edits to a lesson, saved before the recording took the workspace back
- * (resume, seek, stop, leaving the page). `recordingTime` is where in the lesson they
- * were made.
- */
-export interface LearnerWorkspaceSave {
-  recordingId: string;
-  recordingTime: number;
-  snapshot: WorkspaceRecordingSnapshot;
-}
-
-/** Save the viewer's edits now, if they have any (e.g. the page is being hidden). */
-type PreserveLearnerWorkspaceEvent = { type: "PRESERVE_LEARNER_WORKSPACE" };
-
-/** Bring back a saved version of the viewer's edits, at the point in the lesson it was made. */
-type RestoreLearnerWorkspaceEvent = {
-  type: "RESTORE_LEARNER_WORKSPACE";
-  recordingTime: number;
-  snapshot: WorkspaceRecordingSnapshot;
-};
-
-/** Internal second step of RESTORE_LEARNER_WORKSPACE, once the paused seek has landed. */
-type ApplyLearnerWorkspaceEvent = {
-  type: "APPLY_LEARNER_WORKSPACE";
-  snapshot: WorkspaceRecordingSnapshot;
-};
 
 /** Update editor reference */
 type SetEditorRefEvent = {

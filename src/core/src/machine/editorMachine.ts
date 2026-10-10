@@ -80,10 +80,6 @@ import {
   clearPlaybackAudioSpawned,
   setPlaybackSpeed,
   setVolume,
-  adoptPlaybackWorkspaceAtPause,
-  captureLearnerWorkspaceBaseline,
-  getLearnerWorkspaceSave,
-  applyLearnerWorkspace,
   resetPlayback,
   invalidateAppliedPlaybackState,
   detachPlaybackWorkspace,
@@ -96,6 +92,12 @@ import {
   setEditorRef,
 } from "./replayActions";
 import { clearCursorDecorations } from "./frameReplay";
+import {
+  adoptPlaybackWorkspaceAtPause,
+  captureLearnerWorkspaceBaseline,
+  preserveLearnerWorkspace,
+  applyLearnerWorkspace,
+} from "./learnerWorkspace";
 import {
   syncPlaybackAudio,
   seekPlaybackActors,
@@ -316,10 +318,10 @@ export const editorMachine = setup({
       event.type === "SCREEN_STOPPED" || event.type === "SCREEN_ERROR" ? event.actorId : "",
     ),
 
-    // Playback (replay-side) actions — bodies live in replayActions.ts and
-    // frameReplay.ts, wrapped here so `setup()` can infer this machine's exact
-    // context/event/actor types. preserveLearnerWorkspace and
-    // syncStreamedRecordingGrowth keep their bodies inline.
+    // Playback (replay-side) actions — bodies live in replayActions.ts,
+    // frameReplay.ts and learnerWorkspace.ts, wrapped here so `setup()` can infer
+    // this machine's exact context/event/actor types. syncStreamedRecordingGrowth
+    // keeps its body inline.
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
@@ -337,15 +339,7 @@ export const editorMachine = setup({
     clearCursorDecorations: assign(clearCursorDecorations),
     adoptPlaybackWorkspaceAtPause,
     captureLearnerWorkspaceBaseline: assign(captureLearnerWorkspaceBaseline),
-    // Before the recording takes the workspace back, hand the viewer's own edits (if
-    // any) to the app to keep, and treat what was saved as the new baseline so the
-    // same edits are not saved twice.
-    preserveLearnerWorkspace: enqueueActions(({ context, enqueue }) => {
-      const save = getLearnerWorkspaceSave(context);
-      if (!save) return;
-      enqueue(() => context.onLearnerWorkspaceSaved?.(save));
-      enqueue.assign({ learnerWorkspaceBaseline: save.snapshot });
-    }),
+    preserveLearnerWorkspace: enqueueActions(preserveLearnerWorkspace),
     applyLearnerWorkspace,
     resetPlayback: assign(resetPlayback),
     invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),

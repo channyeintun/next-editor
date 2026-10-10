@@ -37,7 +37,7 @@ import {
   type DmpCodec,
 } from "../../dmp/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
-import type { LearnerWorkspaceSave } from "./types";
+import type { LearnerWorkspaceSave } from "./learnerWorkspace";
 
 const selection = {
   startLineNumber: 1,

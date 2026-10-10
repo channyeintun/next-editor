@@ -1,4 +1,4 @@
-import type { LearnerWorkspaceSave } from "../core/src/machine/types";
+import type { LearnerWorkspaceSave } from "../core/src/machine/learnerWorkspace";
 import { areWorkspaceProjectsEqual, type WorkspaceRecordingSnapshot } from "../types/workspace";
 import { createDatabaseOpener, requestToPromise, transactionToPromise } from "./idb";
 

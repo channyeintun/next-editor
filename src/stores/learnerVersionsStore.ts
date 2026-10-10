@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import type { LearnerWorkspaceSave } from "../core/src/machine/types";
+import type { LearnerWorkspaceSave } from "../core/src/machine/learnerWorkspace";
 import {
   deleteLearnerWorkspaceVersion,
   listLearnerWorkspaceVersions,
