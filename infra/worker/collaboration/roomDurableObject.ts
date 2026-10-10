@@ -65,6 +65,7 @@ import { AwarenessClientOwners } from "./awarenessClientOwners";
 import { exactArrayBuffer } from "./bytes";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
 import {
+  ACCESS_REVALIDATION_INTERVAL_MS,
   ConnectionQuota,
   decodeHeaderJson,
   encodeHeaderJson,
@@ -82,7 +83,6 @@ const MAX_SOCKET_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
 const MAX_USER_CONNECTIONS_PER_MINUTE = 30;
-const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
 
 const canonicalSocketSessionSchema = z
   .object({

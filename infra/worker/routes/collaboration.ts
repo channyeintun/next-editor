@@ -73,7 +73,6 @@ import {
 } from "../collaboration/roomDurableObject";
 import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
 import {
-  VOICE_CAPABILITY_HEADER,
   forwardCollaborationVoiceSfuRequest,
   forwardCollaborationVoiceWebSocket,
   isVoiceChatEnabled,
@@ -82,6 +81,7 @@ import {
 } from "../collaboration/voiceDurableObject";
 import {
   MAX_VOICE_SFU_REQUEST_BYTES,
+  VOICE_CAPABILITY_HEADER,
   voiceCapabilitySchema,
 } from "../../../src/collaboration/voiceProtocol";
 

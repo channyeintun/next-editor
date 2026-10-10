@@ -72,6 +72,7 @@ export async function listCollaborationInvitations(
   return response.data.invitations;
 }
 
+/** An omitted expiresInHours or maxUses takes the server schema's default. */
 export async function createCollaborationInvitation(
   roomId: string,
   input: { role: CollaborationInviteRole; expiresInHours?: number; maxUses?: number },
@@ -80,8 +81,8 @@ export async function createCollaborationInvitation(
     `/collaboration/rooms/${encodeURIComponent(roomId)}/invitations`,
     {
       role: input.role,
-      expiresInHours: input.expiresInHours ?? 24,
-      maxUses: input.maxUses ?? 10,
+      ...(input.expiresInHours !== undefined ? { expiresInHours: input.expiresInHours } : {}),
+      ...(input.maxUses !== undefined ? { maxUses: input.maxUses } : {}),
     },
   );
   return response.data;

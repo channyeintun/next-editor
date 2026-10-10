@@ -970,17 +970,20 @@ export function seedCollaborationTeachingDocument(
   }, origin);
 }
 
+/** The projection of a room whose teaching surfaces the owner has not initialized. */
+export const UNINITIALIZED_TEACHING_PROJECTION: CollaborationTeachingProjection = Object.freeze({
+  initialized: false,
+  slideOrder: Object.freeze([]),
+  slides: new Map(),
+  currentSlideId: null,
+  presentationRevision: 0,
+  whiteboardElements: Object.freeze([]),
+});
+
 export function projectCollaborationTeachingDocument(doc: Y.Doc): CollaborationTeachingProjection {
   const teaching = optionalTeachingRoot(doc);
   if (!teaching || teaching.get("initialized") !== true) {
-    return {
-      initialized: false,
-      slideOrder: [],
-      slides: new Map(),
-      currentSlideId: null,
-      presentationRevision: 0,
-      whiteboardElements: [],
-    };
+    return UNINITIALIZED_TEACHING_PROJECTION;
   }
   const orderValue = teaching.get(COLLABORATION_TEACHING_SLIDE_ORDER);
   const slidesValue = teaching.get(COLLABORATION_TEACHING_SLIDES);

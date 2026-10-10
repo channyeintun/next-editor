@@ -5,6 +5,7 @@ import {
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
 } from "../../../src/collaboration/protocol";
 import {
+  createCollaborationInvitation,
   getCollaborationRoomAccess,
   recordCollaborationAuditEvent,
   setCollaborationRoomStatus,
@@ -23,6 +24,7 @@ vi.mock("../auth/session", () => ({
 
 vi.mock("../../db/collaborationQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/collaborationQueries")>()),
+  createCollaborationInvitation: vi.fn<typeof createCollaborationInvitation>(),
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
   setCollaborationRoomStatus: vi.fn<typeof setCollaborationRoomStatus>(),
   recordCollaborationAuditEvent: vi.fn<typeof recordCollaborationAuditEvent>(async () => {}),
@@ -141,6 +143,49 @@ describe("POST /rooms/:roomId/close", () => {
 
     expect((await closeRoom()).status).toBe(200);
     expect(publishCollaborationMaintenanceJob).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /rooms/:roomId/invitations", () => {
+  it("applies the schema's 24-hour and 10-use defaults to a role-only request", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(ownerAccess());
+    vi.mocked(createCollaborationInvitation).mockImplementation(async (_db, params) => ({
+      id: "30000000-0000-4000-8000-000000000001",
+      room_id: params.roomId,
+      created_by: params.createdBy,
+      token_hash: params.tokenHash,
+      role: params.role,
+      max_uses: params.maxUses,
+      use_count: 0,
+      expires_at: params.expiresAt,
+      revoked_at: null,
+      created_at: 1,
+      updated_at: 1,
+    }));
+    const executionContext = {
+      waitUntil: () => undefined,
+      passThroughOnException: () => undefined,
+      props: {},
+    };
+    const before = Date.now();
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/invitations`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "viewer" }),
+      },
+      { DB: {} } as Env,
+      executionContext as unknown as ExecutionContext,
+    );
+
+    expect(response.status).toBe(201);
+    const params = vi.mocked(createCollaborationInvitation).mock.calls[0]?.[1];
+    expect(params).toMatchObject({ roomId: ROOM_ID, role: "viewer", maxUses: 10 });
+    const dayMs = 24 * 60 * 60 * 1000;
+    expect(params?.expiresAt).toBeGreaterThanOrEqual(before + dayMs);
+    expect(params?.expiresAt).toBeLessThanOrEqual(Date.now() + dayMs);
   });
 });
 

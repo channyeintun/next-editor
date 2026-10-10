@@ -183,9 +183,19 @@ export const collaborationMachine = setup({
   },
 });
 
+// Keyed by the union, so a new connection state that is not listed here fails
+// to compile instead of silently reading as "disconnected".
+const CONNECTION_STATES = {
+  disconnected: true,
+  connecting: true,
+  syncing: true,
+  live: true,
+  reconnecting: true,
+  failed: true,
+} satisfies Record<CollaborationConnectionState, true>;
+
 export function collaborationConnectionState(value: unknown): CollaborationConnectionState {
-  return typeof value === "string" &&
-    ["disconnected", "connecting", "syncing", "live", "reconnecting", "failed"].includes(value)
+  return typeof value === "string" && Object.hasOwn(CONNECTION_STATES, value)
     ? (value as CollaborationConnectionState)
     : "disconnected";
 }

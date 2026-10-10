@@ -6,6 +6,12 @@ import type { z } from "zod";
 
 const WEBSOCKET_OPEN = 1;
 
+/**
+ * How long a socket's last D1 access check stays fresh; a message after that
+ * re-reads the member's room access from D1 before it is handled.
+ */
+export const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
+
 export function isOpen(socket: WebSocket): boolean {
   return socket.readyState === WEBSOCKET_OPEN;
 }

@@ -48,6 +48,7 @@ import { readBodyWithLimit } from "../httpBody";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { randomToken } from "./bytes";
 import {
+  ACCESS_REVALIDATION_INTERVAL_MS,
   ConnectionQuota,
   decodeHeaderJson,
   encodeHeaderJson,
@@ -57,7 +58,6 @@ import {
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
 const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
-export { VOICE_CAPABILITY_HEADER };
 const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
 /**
@@ -69,7 +69,6 @@ const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
  */
 const MAX_VOICE_SOCKETS_PER_USER = 4;
 const MAX_PENDING_SFU_REQUESTS_PER_CONNECTION = 4;
-const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
 const UPSTREAM_TIMEOUT_MS = 15_000;
 
 // WebSocket close codes for the voice coordination socket.

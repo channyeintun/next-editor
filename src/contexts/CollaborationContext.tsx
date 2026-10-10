@@ -58,7 +58,11 @@ import {
 } from "../collaboration/followLifecycle";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { analytics } from "../utils/analytics";
-import { areCollaborationSurfacesEqual, editorSurfaceOn } from "../collaboration/awarenessSurface";
+import {
+  INITIAL_EDITOR_SURFACE,
+  areCollaborationSurfacesEqual,
+  editorSurfaceOn,
+} from "../collaboration/awarenessSurface";
 import { messageFromError } from "../collaboration/errorMessage";
 import { stopProviderAfterBestEffortFlush } from "../collaboration/providerShutdown";
 import {
@@ -90,6 +94,7 @@ import {
   isCollaborationTeachingInitialized,
   projectCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
+  UNINITIALIZED_TEACHING_PROJECTION,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
 import {
@@ -185,15 +190,6 @@ const collaborationApi: CollaborationRoomApi = {
   getRoom: getCollaborationRoom,
 };
 
-const EMPTY_TEACHING_PROJECTION: CollaborationTeachingProjection = {
-  initialized: false,
-  slideOrder: [],
-  slides: new Map(),
-  currentSlideId: null,
-  presentationRevision: 0,
-  whiteboardElements: [],
-};
-
 export function CollaborationProvider({ children }: { children: ReactNode }) {
   const baseActions = useWorkspaceActions();
   // Null where no runtime is mounted, as in tests of this provider alone.
@@ -254,8 +250,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const applyingFollowReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppedDuringFollowApplicationRef = useRef(false);
   const [surfaceRepublishVersion, setSurfaceRepublishVersion] = useState(0);
-  const [teaching, setTeaching] =
-    useState<CollaborationTeachingProjection>(EMPTY_TEACHING_PROJECTION);
+  const [teaching, setTeaching] = useState<CollaborationTeachingProjection>(
+    UNINITIALIZED_TEACHING_PROJECTION,
+  );
   const [teachingSlides, setTeachingSlides] = useState<Slide[] | null>(null);
   const [isTeachingLoading, setIsTeachingLoading] = useState(false);
   const teachingProjectionRef = useRef<CollaborationTeachingProjection | null>(null);
@@ -267,11 +264,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const standaloneStoresRef = useRef<({ roomId: string } & StandaloneTeachingStores) | null>(null);
   const awarenessRevisionRef = useRef(0);
   const awarenessCursorRef = useRef<CollaborationCursor | null>(null);
-  const awarenessSurfaceRef = useRef<CollaborationSurface>({
-    kind: "editor",
-    fileNodeId: null,
-    viewport: null,
-  });
+  const awarenessSurfaceRef = useRef<CollaborationSurface>(INITIAL_EDITOR_SURFACE);
   const awarenessPublishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeFilePathRef = useRef(activeFilePath);
   activeFilePathRef.current = activeFilePath;
@@ -512,7 +505,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setParticipantsBySession(new Map());
     resetRoster();
     awarenessCursorRef.current = null;
-    awarenessSurfaceRef.current = { kind: "editor", fileNodeId: null, viewport: null };
+    awarenessSurfaceRef.current = INITIAL_EDITOR_SURFACE;
     awarenessRevisionRef.current = 0;
     projectionRef.current = null;
     pendingLocalTextEditRef.current = null;
@@ -524,7 +517,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     teachingHydrationGenerationRef.current += 1;
     teachingHydrationKeyRef.current = null;
     teachingSlideCacheRef.current.clear();
-    setTeaching(EMPTY_TEACHING_PROJECTION);
+    setTeaching(UNINITIALIZED_TEACHING_PROJECTION);
     setTeachingSlides(null);
     setRetryableAssetError(null);
   }, [resetRoster, stopFollowing]);

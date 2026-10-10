@@ -2,6 +2,13 @@ import type { CollaborationSurface } from "./protocol";
 
 type EditorSurface = Extract<CollaborationSurface, { kind: "editor" }>;
 
+/** Where a member's awareness starts and returns to on leaving a room: the editor, no file. */
+export const INITIAL_EDITOR_SURFACE: CollaborationSurface = {
+  kind: "editor",
+  fileNodeId: null,
+  viewport: null,
+};
+
 export function areCollaborationSurfacesEqual(
   left: CollaborationSurface,
   right: CollaborationSurface,
