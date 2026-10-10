@@ -220,7 +220,8 @@ describe("NarratorVoicePanel recording", () => {
     expect(
       screen.getByText(/Recording… speak naturally/).closest('[role="status"]'),
     ).not.toBeNull();
-    expect(lastTask()).toEqual({ busy: null, recording: true });
+    // Reported from a passive effect, which can run after Stop is on screen.
+    await waitFor(() => expect(lastTask()).toEqual({ busy: null, recording: true }));
 
     // What the library holds once the take is saved.
     library.voices = [narrator];
