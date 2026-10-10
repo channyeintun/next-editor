@@ -134,7 +134,7 @@ export default function EnvironmentVariablesDialog({
             aria-invalid={errorMessage ? true : undefined}
             aria-describedby={errorMessage ? errorId : undefined}
             className="min-h-64 w-full rounded-lg border border-slate-500 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-300 p-3"
-            placeholder="API_URL=https://example.com\nNODE_ENV=development"
+            placeholder={"API_URL=https://example.com\nNODE_ENV=development"}
           />
         </label>
 

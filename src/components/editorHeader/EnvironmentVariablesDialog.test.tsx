@@ -148,6 +148,16 @@ describe("EnvironmentVariablesDialog", () => {
     expect(textarea()).not.toHaveAttribute("aria-describedby");
   });
 
+  it("shows a two-line example as the placeholder", () => {
+    const { textarea } = renderDialog({ environmentVariables: {} });
+
+    expect(textarea()).toHaveAttribute(
+      "placeholder",
+      "API_URL=https://example.com\nNODE_ENV=development",
+    );
+    expect(textarea().getAttribute("placeholder")).not.toContain("\\n");
+  });
+
   it("is a modal dialog titled Edit Environment that starts in the text area", () => {
     const { textarea } = renderDialog();
 
