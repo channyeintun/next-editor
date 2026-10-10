@@ -9,14 +9,44 @@ import type { WaitUntil } from "./waitUntil";
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
 //
 // Only the parts that are genuinely identical across upstreams live here: the
-// rate-limit key (charged through rateLimit.ts's checkRateLimit), the
-// content-addressed cache key, the KV result cache, the output bound, and
-// reading the `{ files: [...] }` request body (whole for single-file
-// upstreams, up to the per-language policy for Go and Kotlin). Everything that encodes a particular service's behaviour — its file
+// shared limits below, the rate-limit key (charged through rateLimit.ts's
+// checkRateLimit), the content-addressed cache key, the KV result cache, the
+// output bound, the lesson-file order, and reading the `{ files: [...] }`
+// request body (whole for single-file upstreams, up to the per-language
+// policy for Go and Kotlin). Everything that encodes a particular service's behaviour — its file
 // path and source policy, its request encoding, its non-ok status policy, its
 // response normalization, its telemetry channel — stays in the route, because
 // those are the parts that differ and the reasons they differ are documented
 // there.
+
+// The limits every playground route applies. A route whose upstream gives a
+// bound a particular reason to fit says so next to its own settings.
+
+// Shorter than the application request ceiling so a hung upstream surfaces as
+// a bounded 504 instead of an opaque Worker timeout.
+export const PLAYGROUND_UPSTREAM_TIMEOUT_MS = 20_000;
+/** The largest lesson program, in UTF-8 bytes, a route sends upstream. */
+export const PLAYGROUND_MAX_SOURCE_BYTES = 64 * 1024;
+// JSON escaping can expand one source byte to six bytes (for example, a
+// control character encoded as \u0000). Leave bounded room for the file path
+// and object syntax while allowing every valid program. Go and Kotlin, which
+// take several files, size their own ceilings from PLAYGROUND_MAX_SOURCE_BYTES.
+export const PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES = PLAYGROUND_MAX_SOURCE_BYTES * 6 + 4096;
+// Defensive bound on normalized program output (see truncateOutput). Most
+// upstreams apply their own output limits well below this; zig-play.dev
+// applies none, so there it is where a runaway program's output is cut.
+export const PLAYGROUND_MAX_OUTPUT_CHARS = 256 * 1024;
+// Bound an upstream body before decoding it. JSON escaping can expand each
+// output character to six bytes; the remainder leaves room for
+// diagnostics/metadata.
+export const PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES = PLAYGROUND_MAX_OUTPUT_CHARS * 6 + 64 * 1024;
+// A formatter diagnostic is a few lines. A longer error body is the service
+// (or something in front of it) talking, not the learner's program.
+export const PLAYGROUND_MAX_FORMAT_ERROR_CHARS = 16 * 1024;
+/** How much of an exit or signal detail a run result quotes. */
+export const PLAYGROUND_MAX_EXIT_DETAIL_CHARS = 256;
+/** How long a run or format result stays in the KV cache. */
+export const PLAYGROUND_CACHE_TTL_SECONDS = 60 * 60;
 
 /**
  * Bound normalized program output. The upstreams apply their own limits well
@@ -155,6 +185,22 @@ export async function writeCachedValue(
   } else {
     await write;
   }
+}
+
+/**
+ * Deterministic lesson-file order: `firstPath` (the entry file) first, then
+ * the rest lexicographically. Routes that send several files use it for both
+ * the upstream payload and the cache key.
+ */
+export function sortLessonFiles<T extends { path: string }>(
+  files: readonly T[],
+  firstPath: string,
+): T[] {
+  return [...files].sort((left, right) => {
+    if (left.path === firstPath) return right.path === firstPath ? 0 : -1;
+    if (right.path === firstPath) return 1;
+    return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+  });
 }
 
 /** A lesson request refused before it reaches the upstream. */

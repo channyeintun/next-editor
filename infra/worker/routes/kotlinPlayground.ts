@@ -3,10 +3,16 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  PLAYGROUND_CACHE_TTL_SECONDS,
+  PLAYGROUND_MAX_OUTPUT_CHARS,
+  PLAYGROUND_MAX_SOURCE_BYTES,
+  PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  PLAYGROUND_UPSTREAM_TIMEOUT_MS,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
   readMultiFileLessonRequest,
+  sortLessonFiles,
   truncateOutput,
   writeCachedValue,
 } from "../playgroundProxy";
@@ -45,29 +51,19 @@ const UPSTREAM_CONF_TYPE = "java";
 // Identifies Next Editor traffic to the upstream service, matching the Go
 // route's third-party client etiquette.
 const UPSTREAM_USER_AGENT = "NextEditor-KotlinPlayground/1.0 (+https://nexteditor.dev)";
-// Shorter than the application request ceiling so a hung upstream surfaces as
-// a bounded 504 instead of an opaque Worker timeout. The upstream itself
-// kills programs after ~10s of execution, well inside this bound.
-const UPSTREAM_TIMEOUT_MS = 20_000;
+// The upstream itself kills programs after ~10s of execution, well inside the
+// shared PLAYGROUND_UPSTREAM_TIMEOUT_MS (../playgroundProxy.ts).
 const MAX_KT_FILES = 20;
 const MAX_FILE_PATH_BYTES = 200;
-const MAX_SOURCE_BYTES = 64 * 1024;
 // JSON escaping can expand one source byte to six bytes (for example, a
 // control character encoded as a \uXXXX sequence). Leave bounded room for the structured
 // file paths and object syntax while allowing every valid serialized program.
 const MAX_REQUEST_BYTES =
-  MAX_SOURCE_BYTES * 6 + MAX_KT_FILES * (MAX_FILE_PATH_BYTES * 6 + 64) + 1024;
-// Defensive bound on normalized program output; the Playground applies its
-// own output limits well below this.
-const MAX_OUTPUT_CHARS = 256 * 1024;
-// Bound upstream JSON before decoding it. JSON escaping can expand each output
-// character to six bytes; the remainder leaves room for diagnostics/metadata.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
+  PLAYGROUND_MAX_SOURCE_BYTES * 6 + MAX_KT_FILES * (MAX_FILE_PATH_BYTES * 6 + 64) + 1024;
 const MAX_DIAGNOSTIC_CHARS = 16 * 1024;
 const MAX_EXCEPTION_CHARS = 16 * 1024;
 const MAX_STACK_FRAMES = 20;
 const MAX_CAUSE_DEPTH = 4;
-const CACHE_TTL_SECONDS = 60 * 60;
 
 const KT_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.kt$/;
 
@@ -79,15 +75,6 @@ function validateKotlinLessonFilePath(filePath: string): string | null {
     return "Kotlin lessons support top-level .kt files with simple ASCII names only";
   }
   return null;
-}
-
-/** Deterministic order: Main.kt first, then lexicographic. Shared by the upstream payload and cache key. */
-function sortKotlinLessonFiles(files: readonly KotlinPlaygroundFile[]): KotlinPlaygroundFile[] {
-  return [...files].sort((left, right) => {
-    if (left.path === "Main.kt") return right.path === "Main.kt" ? 0 : -1;
-    if (right.path === "Main.kt") return 1;
-    return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
-  });
 }
 
 type KotlinLessonRequestValidation =
@@ -124,15 +111,16 @@ async function validateKotlinLessonRequest(
     seenPaths.add(file.path);
   }
 
-  if (sourceBytes > MAX_SOURCE_BYTES) {
+  if (sourceBytes > PLAYGROUND_MAX_SOURCE_BYTES) {
     return {
       ok: false,
       status: 413,
-      error: `Kotlin program exceeds ${MAX_SOURCE_BYTES} bytes`,
+      error: `Kotlin program exceeds ${PLAYGROUND_MAX_SOURCE_BYTES} bytes`,
     };
   }
 
-  return { ok: true, files: sortKotlinLessonFiles(files), sourceBytes };
+  // Main.kt first, then lexicographic: shared by the upstream payload and cache key.
+  return { ok: true, files: sortLessonFiles(files, "Main.kt"), sourceBytes };
 }
 
 interface KotlinStreamSegment {
@@ -349,7 +337,10 @@ export function normalizeUpstreamRunResponse(payload: unknown): KotlinPlayground
     }
   }
 
-  const output = truncateOutput(segments.map((segment) => segment.text).join(""), MAX_OUTPUT_CHARS);
+  const output = truncateOutput(
+    segments.map((segment) => segment.text).join(""),
+    PLAYGROUND_MAX_OUTPUT_CHARS,
+  );
 
   const result: KotlinPlaygroundRunResult = diagnostics.compileErrors
     ? { status: "compile-error", output, compileErrors: diagnostics.compileErrors }
@@ -443,7 +434,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Kotlin Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_RUN_URL, {
@@ -475,7 +466,10 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
 
   let result: KotlinPlaygroundRunResult | null = null;
   if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+    );
     if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
       logRun({
         outcome: "upstream-timeout",
@@ -511,7 +505,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
       cache,
       cacheKey,
       result,
-      CACHE_TTL_SECONDS,
+      PLAYGROUND_CACHE_TTL_SECONDS,
       LOG_LABEL,
       requestWaitUntil(c),
     );

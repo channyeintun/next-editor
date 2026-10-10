@@ -3,6 +3,13 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  PLAYGROUND_CACHE_TTL_SECONDS,
+  PLAYGROUND_MAX_EXIT_DETAIL_CHARS,
+  PLAYGROUND_MAX_OUTPUT_CHARS,
+  PLAYGROUND_MAX_SOURCE_BYTES,
+  PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
+  PLAYGROUND_UPSTREAM_TIMEOUT_MS,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -65,26 +72,14 @@ const UPSTREAM_OUTPUT = "run";
 // Identifies Next Editor traffic to the upstream service, matching the other
 // playground routes' third-party client etiquette.
 const UPSTREAM_USER_AGENT = "NextEditor-HaskellPlayground/1.0 (+https://nexteditor.dev)";
-// The upstream deadlines a running program at 5s and reports that itself, so
-// this bound only has to cover queueing plus GHC's compile time; keep the same
-// 20s ceiling the other playground routes use.
-const UPSTREAM_TIMEOUT_MS = 20_000;
-// Also has to stay clear of the upstream's own limit: it rejects a request
-// body over 1,000,000 bytes with "Program too large". 64 KiB of source can
-// only ever serialize to a fraction of that, so a lesson program that passes
-// this check can never trip theirs.
-const MAX_SOURCE_BYTES = 64 * 1024;
-// JSON escaping can expand one source byte to six bytes. Leave bounded room
-// for the file path and object syntax while allowing every valid program.
-const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES * 6 + 4096;
-// Defensive bound on normalized program output; the Playground truncates each
-// of its three streams at 100,000 bytes, well below this.
-const MAX_OUTPUT_CHARS = 256 * 1024;
-// Bound upstream JSON before decoding it. JSON escaping can expand each output
-// character to six bytes; the remainder leaves room for diagnostics/metadata.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
-const MAX_EXIT_DETAIL_CHARS = 256;
-const CACHE_TTL_SECONDS = 60 * 60;
+// The limits are the shared PLAYGROUND_* ones (../playgroundProxy.ts), and
+// each fits this upstream. It deadlines a running program at 5s and reports
+// that itself, so the 20s upstream timeout only has to cover queueing plus
+// GHC's compile time. It rejects a request body over 1,000,000 bytes with
+// "Program too large"; 64 KiB of source can only ever serialize to a fraction
+// of that, so a lesson program that passes the source check can never trip
+// theirs. And it truncates each of its three streams at 100,000 bytes, well
+// below the output bound.
 
 // The upstream compiles one module from a single source string, so lessons
 // submit exactly one file with this fixed name. Capital M: GHC names the
@@ -156,9 +151,9 @@ export function normalizeUpstreamRunResponse(
     return null;
   }
 
-  const stdout = truncateOutput(sout, MAX_OUTPUT_CHARS);
-  const stderr = truncateOutput(serr, MAX_OUTPUT_CHARS);
-  const diagnostics = truncateOutput(ghcout, MAX_OUTPUT_CHARS);
+  const stdout = truncateOutput(sout, PLAYGROUND_MAX_OUTPUT_CHARS);
+  const stderr = truncateOutput(serr, PLAYGROUND_MAX_OUTPUT_CHARS);
+  const diagnostics = truncateOutput(ghcout, PLAYGROUND_MAX_OUTPUT_CHARS);
   const hasDiagnostics = diagnostics.trim().length > 0;
 
   if (ec !== 0 && GHC_ERROR_DIAGNOSTIC.test(ghcout)) {
@@ -182,7 +177,7 @@ export function normalizeUpstreamRunResponse(
           // `ec` is already a safe integer, so this cannot truncate today; the
           // bound matches the sibling routes so the field stays bounded if the
           // upstream ever reports a signal name here instead.
-          exitDetail: `Exited with status ${ec}`.slice(0, MAX_EXIT_DETAIL_CHARS),
+          exitDetail: `Exited with status ${ec}`.slice(0, PLAYGROUND_MAX_EXIT_DETAIL_CHARS),
         };
 
   // The program compiled, so anything in ghcout is a warning — a separate
@@ -229,8 +224,8 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Haskell",
-    maxSourceBytes: MAX_SOURCE_BYTES,
-    maxRequestBytes: MAX_REQUEST_BYTES,
+    maxSourceBytes: PLAYGROUND_MAX_SOURCE_BYTES,
+    maxRequestBytes: PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -275,7 +270,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Haskell Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_URL, {
@@ -325,7 +320,10 @@ haskellPlaygroundRoute.post("/run", async (c) => {
 
   let normalized: ReturnType<typeof normalizeUpstreamRunResponse> = null;
   if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+    );
     if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
       logRun({
         outcome: "upstream-timeout",
@@ -373,7 +371,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
       cache,
       cacheKey,
       result,
-      CACHE_TTL_SECONDS,
+      PLAYGROUND_CACHE_TTL_SECONDS,
       LOG_LABEL,
       requestWaitUntil(c),
     );

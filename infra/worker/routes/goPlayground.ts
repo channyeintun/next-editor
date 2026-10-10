@@ -3,10 +3,17 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  PLAYGROUND_CACHE_TTL_SECONDS,
+  PLAYGROUND_MAX_FORMAT_ERROR_CHARS,
+  PLAYGROUND_MAX_OUTPUT_CHARS,
+  PLAYGROUND_MAX_SOURCE_BYTES,
+  PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  PLAYGROUND_UPSTREAM_TIMEOUT_MS,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
   readMultiFileLessonRequest,
+  sortLessonFiles,
   truncateOutput,
   writeCachedValue,
 } from "../playgroundProxy";
@@ -40,26 +47,14 @@ const UPSTREAM_FORMAT_URL = "https://play.golang.org/fmt";
 // clients. Confirm this string with the Playground maintainers before public
 // production rollout (plan §8 Phase 0).
 const UPSTREAM_USER_AGENT = "NextEditor-GoPlayground/1.0 (+https://nexteditor.dev)";
-// Shorter than the application request ceiling so a hung upstream surfaces as
-// a bounded 504 instead of an opaque Worker timeout.
-const UPSTREAM_TIMEOUT_MS = 20_000;
 const MAX_GO_FILES = 20;
 const MAX_FILE_PATH_BYTES = 200;
-const MAX_SOURCE_BYTES = 64 * 1024;
 // JSON escaping can expand one source byte to six bytes (for example, a
 // control character encoded as \u0000). Leave bounded room for the structured
 // file paths and object syntax while allowing every valid serialized program.
 const MAX_REQUEST_BYTES =
-  MAX_SOURCE_BYTES * 6 + MAX_GO_FILES * (MAX_FILE_PATH_BYTES * 6 + 64) + 1024;
-// Defensive bound on concatenated event output; the Playground applies its
-// own output limits well below this.
-const MAX_OUTPUT_CHARS = 256 * 1024;
-// Bound upstream JSON before decoding it. JSON escaping can expand each output
-// character to six bytes; the remainder leaves room for diagnostics/metadata.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
-const MAX_UPSTREAM_FORMAT_RESPONSE_BYTES = MAX_SOURCE_BYTES * 6 + 64 * 1024;
-const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
-const CACHE_TTL_SECONDS = 60 * 60;
+  PLAYGROUND_MAX_SOURCE_BYTES * 6 + MAX_GO_FILES * (MAX_FILE_PATH_BYTES * 6 + 64) + 1024;
+const MAX_UPSTREAM_FORMAT_RESPONSE_BYTES = PLAYGROUND_MAX_SOURCE_BYTES * 6 + 64 * 1024;
 
 interface GoSourceToken {
   kind: "identifier" | "string" | "symbol";
@@ -231,11 +226,7 @@ function validateGoLessonFilePath(filePath: string): string | null {
 
 /** Deterministic archive order: main.go first, then lexicographic. */
 function sortGoLessonFiles(files: readonly GoPlaygroundFile[]): GoPlaygroundFile[] {
-  return [...files].sort((left, right) => {
-    if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
-    if (right.path === "main.go") return 1;
-    return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
-  });
+  return sortLessonFiles(files, "main.go");
 }
 
 /** Serialize validated lesson files into the txtar body understood by the Playground. */
@@ -292,11 +283,11 @@ async function validateGoLessonRequest(request: Request): Promise<GoLessonReques
 
   const source = serializeGoLessonFiles(files);
   const sourceBytes = new TextEncoder().encode(source).byteLength;
-  if (sourceBytes > MAX_SOURCE_BYTES) {
+  if (sourceBytes > PLAYGROUND_MAX_SOURCE_BYTES) {
     return {
       ok: false,
       status: 413,
-      error: `serialized Go program exceeds ${MAX_SOURCE_BYTES} bytes`,
+      error: `serialized Go program exceeds ${PLAYGROUND_MAX_SOURCE_BYTES} bytes`,
     };
   }
 
@@ -309,7 +300,7 @@ function parseFormattedGoLessonFiles(
   source: string,
   submittedFiles: readonly GoPlaygroundFile[],
 ): GoPlaygroundFile[] | null {
-  if (new TextEncoder().encode(source).byteLength > MAX_SOURCE_BYTES) {
+  if (new TextEncoder().encode(source).byteLength > PLAYGROUND_MAX_SOURCE_BYTES) {
     return null;
   }
 
@@ -365,7 +356,7 @@ export function normalizeUpstreamFormatResponse(
   }
 
   if (body.Error.trim()) {
-    if (body.Body !== "" || body.Error.length > MAX_FORMAT_ERROR_CHARS) {
+    if (body.Body !== "" || body.Error.length > PLAYGROUND_MAX_FORMAT_ERROR_CHARS) {
       return null;
     }
     return { kind: "source-error", error: body.Error };
@@ -437,7 +428,7 @@ export function normalizeUpstreamCompileResponse(payload: unknown): GoPlayground
     }
     output += message;
   }
-  output = truncateOutput(output, MAX_OUTPUT_CHARS);
+  output = truncateOutput(output, PLAYGROUND_MAX_OUTPUT_CHARS);
 
   const result: GoPlaygroundRunResult = compileErrors.trim()
     ? { status: "compile-error", output, compileErrors }
@@ -540,7 +531,7 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Go Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_COMPILE_URL, {
@@ -568,7 +559,10 @@ goPlaygroundRoute.post("/run", async (c) => {
 
   let result: GoPlaygroundRunResult | null = null;
   if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+    );
     if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
       logRun({
         outcome: "upstream-timeout",
@@ -604,7 +598,7 @@ goPlaygroundRoute.post("/run", async (c) => {
       cache,
       cacheKey,
       result,
-      CACHE_TTL_SECONDS,
+      PLAYGROUND_CACHE_TTL_SECONDS,
       LOG_LABEL,
       requestWaitUntil(c),
     );
@@ -642,7 +636,7 @@ goPlaygroundRoute.post("/format", async (c) => {
   }
 
   const startedAt = Date.now();
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_FORMAT_URL, {

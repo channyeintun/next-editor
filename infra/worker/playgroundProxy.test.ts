@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { UserRow } from "../db/types";
 import type { Env } from "./env";
-import { playgroundRateLimitKey, writeCachedValue } from "./playgroundProxy";
+import { playgroundRateLimitKey, sortLessonFiles, writeCachedValue } from "./playgroundProxy";
 
 describe("playgroundRateLimitKey", () => {
   const USER: UserRow = {
@@ -119,5 +119,30 @@ describe("writeCachedValue", () => {
 
     await expect(pending[0]).resolves.toBeUndefined();
     expect(console.error).toHaveBeenCalledWith("Test cache write failed");
+  });
+});
+
+describe("sortLessonFiles", () => {
+  it("puts the entry file first, then the rest lexicographically, without mutating", () => {
+    const files = [
+      { path: "util.go", content: "u" },
+      { path: "Zed.go", content: "z" },
+      { path: "main.go", content: "m" },
+      { path: "a.go", content: "a" },
+    ];
+
+    expect(sortLessonFiles(files, "main.go").map((file) => file.path)).toEqual([
+      "main.go",
+      "Zed.go",
+      "a.go",
+      "util.go",
+    ]);
+    expect(files[0]?.path).toBe("util.go");
+  });
+
+  it("orders lexicographically when the entry file is absent", () => {
+    expect(
+      sortLessonFiles([{ path: "b.kt" }, { path: "A.kt" }], "Main.kt").map((file) => file.path),
+    ).toEqual(["A.kt", "b.kt"]);
   });
 });

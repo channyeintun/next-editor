@@ -3,6 +3,14 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  PLAYGROUND_CACHE_TTL_SECONDS,
+  PLAYGROUND_MAX_EXIT_DETAIL_CHARS,
+  PLAYGROUND_MAX_FORMAT_ERROR_CHARS,
+  PLAYGROUND_MAX_OUTPUT_CHARS,
+  PLAYGROUND_MAX_SOURCE_BYTES,
+  PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
+  PLAYGROUND_UPSTREAM_TIMEOUT_MS,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -63,27 +71,16 @@ const UPSTREAM_ZIG_VERSION = "0.16.0";
 // Identifies Next Editor traffic to the upstream service, matching the other
 // playground routes' third-party client etiquette.
 const UPSTREAM_USER_AGENT = "NextEditor-ZigPlayground/1.0 (+https://nexteditor.dev)";
-// Zig compiles fast, but a cold cache on the upstream plus a slow program can
-// still take a while; keep the same 20s bound the other playground routes use.
-const UPSTREAM_TIMEOUT_MS = 20_000;
-const MAX_SOURCE_BYTES = 64 * 1024;
-// JSON escaping can expand one source byte to six bytes. Leave bounded room
-// for the file path and object syntax while allowing every valid program.
-const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES * 6 + 4096;
-// Where a runaway program's output is cut, with a marker appended.
-const MAX_OUTPUT_CHARS = 256 * 1024;
-// A `zig fmt` diagnostic is a few lines. A longer 400 body is the service (or
-// something in front of it) talking, not the learner's program.
-const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
-// The upstream answers in text/plain, so its body needs no JSON headroom — but
-// this ceiling still has to sit well clear of MAX_OUTPUT_CHARS, because a body
-// that overflows it is discarded rather than truncated. zig-play.dev applies
-// no output limit of its own (a print loop really does return megabytes), so
-// sizing this at the output cap turned "you printed too much" into a service
-// failure; the sibling routes' headroom keeps that on the truncation path.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
-const MAX_EXIT_DETAIL_CHARS = 256;
-const CACHE_TTL_SECONDS = 60 * 60;
+// The limits are the shared PLAYGROUND_* ones (../playgroundProxy.ts). Zig
+// compiles fast, but a cold cache on the upstream plus a slow program can
+// still take a while, so it keeps the full 20s upstream timeout. The upstream
+// answers in text/plain, so its body needs no JSON headroom — but the
+// upstream response ceiling still has to sit well clear of the output bound,
+// because a body that overflows it is discarded rather than truncated.
+// zig-play.dev applies no output limit of its own (a print loop really does
+// return megabytes), so sizing the ceiling at the output cap turned "you
+// printed too much" into a service failure; the shared headroom keeps that on
+// the truncation path.
 
 // The upstream compiles one root source file from a single text body, so
 // lessons submit exactly one file with this fixed name.
@@ -186,7 +183,7 @@ export function normalizeUpstreamRunResponse(
   const scrubbed = scrubUpstreamPaths(body);
 
   if (httpStatus === 200) {
-    return { status: "success", output: truncateOutput(scrubbed, MAX_OUTPUT_CHARS) };
+    return { status: "success", output: truncateOutput(scrubbed, PLAYGROUND_MAX_OUTPUT_CHARS) };
   }
 
   if (httpStatus !== 400) {
@@ -198,14 +195,14 @@ export function normalizeUpstreamRunResponse(
     return {
       status: "compile-error",
       output: "",
-      compileErrors: truncateOutput(scrubbed, MAX_OUTPUT_CHARS),
+      compileErrors: truncateOutput(scrubbed, PLAYGROUND_MAX_OUTPUT_CHARS),
     };
   }
 
   return {
     status: "runtime-error",
-    output: truncateOutput(scrubbed, MAX_OUTPUT_CHARS),
-    exitDetail: classified.exitDetail.slice(0, MAX_EXIT_DETAIL_CHARS),
+    output: truncateOutput(scrubbed, PLAYGROUND_MAX_OUTPUT_CHARS),
+    exitDetail: classified.exitDetail.slice(0, PLAYGROUND_MAX_EXIT_DETAIL_CHARS),
   };
 }
 
@@ -226,7 +223,7 @@ export function normalizeUpstreamFormatResponse(
     const scrubbed = scrubUpstreamPaths(body).replace(/^<stdin>/gm, REQUIRED_FILE_PATH);
     // Anything past the diagnostic cap is the service talking, and relaying it
     // would show the learner a foreign page as an error in their own program.
-    if (!scrubbed.trim() || scrubbed.length > MAX_FORMAT_ERROR_CHARS) {
+    if (!scrubbed.trim() || scrubbed.length > PLAYGROUND_MAX_FORMAT_ERROR_CHARS) {
       return null;
     }
     return { kind: "source-error", error: scrubbed };
@@ -236,7 +233,7 @@ export function normalizeUpstreamFormatResponse(
     return null;
   }
 
-  if (new TextEncoder().encode(body).byteLength > MAX_SOURCE_BYTES) {
+  if (new TextEncoder().encode(body).byteLength > PLAYGROUND_MAX_SOURCE_BYTES) {
     return null;
   }
 
@@ -312,8 +309,8 @@ zigPlaygroundRoute.post("/run", async (c) => {
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Zig",
-    maxSourceBytes: MAX_SOURCE_BYTES,
-    maxRequestBytes: MAX_REQUEST_BYTES,
+    maxSourceBytes: PLAYGROUND_MAX_SOURCE_BYTES,
+    maxRequestBytes: PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -353,7 +350,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Zig Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetchUpstream(UPSTREAM_RUN_URL, code, upstreamSignal);
@@ -386,7 +383,10 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
-  const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+  const upstreamBody = await readBodyWithLimit(
+    upstreamResponse,
+    PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  );
   if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
     logRun({
       outcome: "upstream-timeout",
@@ -419,7 +419,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
       cache,
       cacheKey,
       result,
-      CACHE_TTL_SECONDS,
+      PLAYGROUND_CACHE_TTL_SECONDS,
       LOG_LABEL,
       requestWaitUntil(c),
     );
@@ -442,8 +442,8 @@ zigPlaygroundRoute.post("/format", async (c) => {
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Zig",
-    maxSourceBytes: MAX_SOURCE_BYTES,
-    maxRequestBytes: MAX_REQUEST_BYTES,
+    maxSourceBytes: PLAYGROUND_MAX_SOURCE_BYTES,
+    maxRequestBytes: PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -484,7 +484,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "Zig Playground formatting policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetchUpstream(UPSTREAM_FORMAT_URL, request.code, upstreamSignal);
@@ -514,7 +514,10 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
-  const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+  const upstreamBody = await readBodyWithLimit(
+    upstreamResponse,
+    PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  );
   if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
     logFormat({
       outcome: "upstream-timeout",
@@ -554,7 +557,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
     cache,
     cacheKey,
     normalized.result,
-    CACHE_TTL_SECONDS,
+    PLAYGROUND_CACHE_TTL_SECONDS,
     LOG_LABEL,
     requestWaitUntil(c),
   );

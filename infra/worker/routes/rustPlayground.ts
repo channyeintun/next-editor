@@ -3,6 +3,14 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  PLAYGROUND_CACHE_TTL_SECONDS,
+  PLAYGROUND_MAX_EXIT_DETAIL_CHARS,
+  PLAYGROUND_MAX_FORMAT_ERROR_CHARS,
+  PLAYGROUND_MAX_OUTPUT_CHARS,
+  PLAYGROUND_MAX_SOURCE_BYTES,
+  PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+  PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
+  PLAYGROUND_UPSTREAM_TIMEOUT_MS,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -44,23 +52,10 @@ const UPSTREAM_EDITION = "2024";
 // Identifies Next Editor traffic to the upstream service, matching the other
 // playground routes' third-party client etiquette.
 const UPSTREAM_USER_AGENT = "NextEditor-RustPlayground/1.0 (+https://nexteditor.dev)";
-// The upstream itself deadlines runaway programs at ~10s (returning HTTP 500
-// with a timeout error); Rust compilation can take a few seconds on top, so
-// keep the same 20s bound the other playground routes use.
-const UPSTREAM_TIMEOUT_MS = 20_000;
-const MAX_SOURCE_BYTES = 64 * 1024;
-// JSON escaping can expand one source byte to six bytes. Leave bounded room
-// for the file path and object syntax while allowing every valid program.
-const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES * 6 + 4096;
-// Defensive bound on normalized program output; the Playground applies its
-// own output limits well below this.
-const MAX_OUTPUT_CHARS = 256 * 1024;
-// Bound upstream JSON before decoding it. JSON escaping can expand each output
-// character to six bytes; the remainder leaves room for diagnostics/metadata.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
-const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
-const MAX_EXIT_DETAIL_CHARS = 256;
-const CACHE_TTL_SECONDS = 60 * 60;
+// The limits are the shared PLAYGROUND_* ones (../playgroundProxy.ts). The
+// upstream itself deadlines runaway programs at ~10s (returning HTTP 500 with
+// a timeout error), and Rust compilation can take a few seconds on top, which
+// the shared 20s upstream timeout leaves room for.
 
 // The upstream compiles one crate from a single source string, so lessons
 // submit exactly one file with this fixed name.
@@ -110,8 +105,11 @@ export function normalizeUpstreamExecuteResponse(payload: unknown): RustPlaygrou
     return null;
   }
 
-  const cleanedStderr = truncateOutput(stripCargoStatusLines(body.stderr), MAX_OUTPUT_CHARS);
-  const stdout = truncateOutput(body.stdout, MAX_OUTPUT_CHARS);
+  const cleanedStderr = truncateOutput(
+    stripCargoStatusLines(body.stderr),
+    PLAYGROUND_MAX_OUTPUT_CHARS,
+  );
+  const stdout = truncateOutput(body.stdout, PLAYGROUND_MAX_OUTPUT_CHARS);
 
   if (body.success) {
     return { status: "success", stdout, stderr: cleanedStderr };
@@ -128,7 +126,9 @@ export function normalizeUpstreamExecuteResponse(payload: unknown): RustPlaygrou
     status: "runtime-error",
     stdout,
     stderr: cleanedStderr,
-    exitDetail: exitDetail.trim().slice(0, MAX_EXIT_DETAIL_CHARS) || "Program exited with an error",
+    exitDetail:
+      exitDetail.trim().slice(0, PLAYGROUND_MAX_EXIT_DETAIL_CHARS) ||
+      "Program exited with an error",
   };
 }
 
@@ -149,14 +149,21 @@ export function normalizeUpstreamFormatResponse(
 
   if (!body.success) {
     const stderr = body.stderr;
-    if (typeof stderr !== "string" || !stderr.trim() || stderr.length > MAX_FORMAT_ERROR_CHARS) {
+    if (
+      typeof stderr !== "string" ||
+      !stderr.trim() ||
+      stderr.length > PLAYGROUND_MAX_FORMAT_ERROR_CHARS
+    ) {
       return null;
     }
     return { kind: "source-error", error: stderr };
   }
 
   const code = body.code;
-  if (typeof code !== "string" || new TextEncoder().encode(code).byteLength > MAX_SOURCE_BYTES) {
+  if (
+    typeof code !== "string" ||
+    new TextEncoder().encode(code).byteLength > PLAYGROUND_MAX_SOURCE_BYTES
+  ) {
     return null;
   }
 
@@ -223,8 +230,8 @@ rustPlaygroundRoute.post("/run", async (c) => {
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Rust",
-    maxSourceBytes: MAX_SOURCE_BYTES,
-    maxRequestBytes: MAX_REQUEST_BYTES,
+    maxSourceBytes: PLAYGROUND_MAX_SOURCE_BYTES,
+    maxRequestBytes: PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -268,7 +275,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Rust Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_EXECUTE_URL, {
@@ -304,7 +311,10 @@ rustPlaygroundRoute.post("/run", async (c) => {
 
   let result: RustPlaygroundRunResult | null = null;
   if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+    );
     if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
       logRun({
         outcome: "upstream-timeout",
@@ -348,7 +358,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
       cache,
       cacheKey,
       result,
-      CACHE_TTL_SECONDS,
+      PLAYGROUND_CACHE_TTL_SECONDS,
       LOG_LABEL,
       requestWaitUntil(c),
     );
@@ -371,8 +381,8 @@ rustPlaygroundRoute.post("/format", async (c) => {
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Rust",
-    maxSourceBytes: MAX_SOURCE_BYTES,
-    maxRequestBytes: MAX_REQUEST_BYTES,
+    maxSourceBytes: PLAYGROUND_MAX_SOURCE_BYTES,
+    maxRequestBytes: PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -391,7 +401,7 @@ rustPlaygroundRoute.post("/format", async (c) => {
   }
 
   const startedAt = Date.now();
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
     upstreamResponse = await fetch(UPSTREAM_FORMAT_URL, {
@@ -422,7 +432,10 @@ rustPlaygroundRoute.post("/format", async (c) => {
 
   let normalized: ReturnType<typeof normalizeUpstreamFormatResponse> = null;
   if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
+    );
     if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
       logFormat({
         outcome: "upstream-timeout",
