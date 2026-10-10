@@ -1,6 +1,6 @@
-import axios from "axios";
 import type { Lesson } from "../types";
 import lessonsData from "../../data/lessons.json";
+import { findCatalogItem, getCatalogJson } from "./catalogRequest";
 
 export interface LessonsPage {
   lessons: Lesson[];
@@ -19,33 +19,6 @@ interface RawLessonsPage {
   nextPage: number | null;
 }
 
-function is404(err: unknown): boolean {
-  return axios.isAxiosError(err) && err.response?.status === 404;
-}
-
-// axios has no timeout by default and nothing in tube configures one, so a
-// request that is accepted and then never answered (a stalled mobile
-// connection, a proxy holding the socket) never settles: Query's retry never
-// fires and the grid sits in isFetchingNextPage forever, showing a trailing
-// row of skeletons with no "Load more" and no error row to retry from. Failing
-// after a bounded wait puts the stall back into the retry/error UI that
-// already exists. Generous, since these are cache-backed JSON reads and a slow
-// answer is still better than a spurious failure.
-const REQUEST_TIMEOUT_MS = 15_000;
-
-// The Worker's SPA fallback (not_found_handling = "single-page-application",
-// see infra/wrangler.toml) means an unmatched path is NEVER a real 404 — it's
-// always a 200 carrying index.html. A seed shard that doesn't exist (any slug
-// beyond what's in the static manifest) hits exactly this: is404() never
-// fires because there's no error at all, so the raw HTML would otherwise be
-// trusted as real JSON. Same fix src/storage/recordingFetch.ts already uses for the
-// equivalent problem on the recording-proxy path — check Content-Type instead
-// of trusting the status code alone.
-function isHtmlFallback(res: { headers: Record<string, unknown> }): boolean {
-  const contentType = res.headers["content-type"];
-  return typeof contentType === "string" && contentType.includes("text/html");
-}
-
 const SEED_LESSONS = lessonsData.lessons as Lesson[];
 
 // The D1 page a cursor names. Anything that isn't a "d1:<n>" cursor starts
@@ -62,11 +35,8 @@ function d1PageIndex(cursor: string): number {
 // :8787 (vite.config.ts), so without `dev:worker` page 0 fails with a 502 and
 // the gallery shows its error and a retry button.
 async function fetchD1Page(index: number): Promise<RawLessonsPage> {
-  const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`, {
-    timeout: REQUEST_TIMEOUT_MS,
-  });
-  if (isHtmlFallback(res)) return { lessons: [], nextPage: null };
-  return res.data;
+  const page = await getCatalogJson<RawLessonsPage>(`/api/lessons?page=${index}`);
+  return page ?? { lessons: [], nextPage: null };
 }
 
 // Pages through user-published D1 lessons, newest first. The bundled seed
@@ -125,15 +95,6 @@ export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
     return seedLesson as Lesson;
   }
 
-  try {
-    const res = await axios.get<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`, {
-      timeout: REQUEST_TIMEOUT_MS,
-    });
-    // Same dev-without-worker fallback as fetchD1Page above: no real match.
-    if (isHtmlFallback(res)) return null;
-    return res.data;
-  } catch (err) {
-    if (is404(err)) return null;
-    throw err;
-  }
+  // A 404, or the dev-without-worker fallback fetchD1Page describes, is a miss.
+  return findCatalogItem<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`);
 }

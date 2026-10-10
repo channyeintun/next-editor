@@ -1,5 +1,4 @@
-import axios from "axios";
-import { apiClient } from "../apiClient";
+import { apiClient, isNotFoundError } from "../apiClient";
 import type { AuthorSummary, PlaylistSummary } from "../../db/types";
 import type { Lesson } from "../../lessons/types";
 
@@ -16,7 +15,7 @@ export async function fetchAuthorProfile(username: string): Promise<AuthorProfil
     const res = await apiClient.get<AuthorProfile>(`/authors/${encodeURIComponent(username)}`);
     return res.data;
   } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    if (isNotFoundError(err)) return null;
     throw err;
   }
 }

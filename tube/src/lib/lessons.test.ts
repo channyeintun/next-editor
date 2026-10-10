@@ -13,6 +13,8 @@ vi.mock("axios", () => {
   return {
     default: {
       get,
+      // apiClient (which owns the 404 rule) builds its instance at import.
+      create: () => ({}),
       isAxiosError: (err: unknown): boolean =>
         typeof err === "object" && err !== null && "isAxiosError" in err,
     },
