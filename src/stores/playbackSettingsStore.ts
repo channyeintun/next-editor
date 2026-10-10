@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
+import { persistPreferences, readStoredPreference } from "./preferenceStorage";
 import {
   DEFAULT_PLAYBACK_SPEED,
   DEFAULT_PLAYBACK_VOLUME,
@@ -77,13 +77,12 @@ export function createPlaybackSettingsStore() {
     },
   });
 
-  store.subscribe((snapshot) => {
-    const { autoplay, continueToNext, speed, volume, characterShortcuts } = snapshot.context;
-    writeStoredPreference(AUTOPLAY_KEY, String(autoplay));
-    writeStoredPreference(CONTINUE_TO_NEXT_KEY, String(continueToNext));
-    writeStoredPreference(SPEED_KEY, String(speed));
-    writeStoredPreference(VOLUME_KEY, String(volume));
-    writeStoredPreference(CHARACTER_SHORTCUTS_KEY, String(characterShortcuts));
+  persistPreferences(store, {
+    [AUTOPLAY_KEY]: (context) => String(context.autoplay),
+    [CONTINUE_TO_NEXT_KEY]: (context) => String(context.continueToNext),
+    [SPEED_KEY]: (context) => String(context.speed),
+    [VOLUME_KEY]: (context) => String(context.volume),
+    [CHARACTER_SHORTCUTS_KEY]: (context) => String(context.characterShortcuts),
   });
 
   return store;

@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
+import { persistPreferences, readStoredPreference } from "./preferenceStorage";
 
 const ENABLED_KEY = "caption-enabled";
 const TRACK_KEY = "caption-track";
@@ -36,11 +36,10 @@ export function createCaptionStore() {
     },
   });
 
-  store.subscribe((snapshot) => {
-    const { enabled, trackId, language } = snapshot.context;
-    writeStoredPreference(ENABLED_KEY, String(enabled));
-    writeStoredPreference(TRACK_KEY, trackId || null);
-    writeStoredPreference(LANGUAGE_KEY, language || null);
+  persistPreferences(store, {
+    [ENABLED_KEY]: (context) => String(context.enabled),
+    [TRACK_KEY]: (context) => context.trackId || null,
+    [LANGUAGE_KEY]: (context) => context.language || null,
   });
 
   return store;

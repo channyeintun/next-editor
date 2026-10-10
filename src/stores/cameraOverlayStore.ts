@@ -1,6 +1,6 @@
 import { createStore } from "@xstate/store-react";
 import type { AnyActorRef } from "xstate";
-import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
+import { persistPreferences, readStoredPreference } from "./preferenceStorage";
 
 const VISIBLE_KEY = "next-editor-camera-overlay-visible";
 const MINIMIZED_KEY = "next-editor-camera-overlay-minimized";
@@ -50,16 +50,10 @@ export function createCameraOverlayStore() {
   });
 
   // Each preference is written when it changes, as the player bar and the overlay did
-  // when they kept it themselves.
-  let written = store.getSnapshot().context;
-  store.subscribe(({ context }) => {
-    if (context.visible !== written.visible) {
-      writeStoredPreference(VISIBLE_KEY, String(context.visible));
-    }
-    if (context.minimized !== written.minimized) {
-      writeStoredPreference(MINIMIZED_KEY, String(context.minimized));
-    }
-    written = context;
+  // when they kept it themselves. The live preview is never stored.
+  persistPreferences(store, {
+    [VISIBLE_KEY]: (context) => String(context.visible),
+    [MINIMIZED_KEY]: (context) => String(context.minimized),
   });
 
   return store;

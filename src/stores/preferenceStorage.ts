@@ -25,3 +25,34 @@ export function writeStoredPreference(key: string, value: string | null): void {
     // Unavailable or full: see above.
   }
 }
+
+/**
+ * Keeps a store's preferences in storage, one key per serializer. On each
+ * emission a key is written only when its serialized value differs from the
+ * one last seen (null removes the key), so a slider dragged through many
+ * values writes one key per step, and a change in one tab never overwrites
+ * another tab's newer value for a key this tab did not change. A key whose
+ * value never changes from the one the store started with is never written;
+ * it reads back as that same value. Returns the unsubscribe.
+ */
+export function persistPreferences<TContext>(
+  store: {
+    getSnapshot(): { context: TContext };
+    subscribe(listener: (snapshot: { context: TContext }) => void): { unsubscribe(): void };
+  },
+  serializers: Record<string, (context: TContext) => string | null>,
+): () => void {
+  const entries = Object.entries(serializers);
+  const initial = store.getSnapshot().context;
+  const last = new Map(entries.map(([key, serialize]) => [key, serialize(initial)]));
+
+  const subscription = store.subscribe(({ context }) => {
+    for (const [key, serialize] of entries) {
+      const value = serialize(context);
+      if (value === last.get(key)) continue;
+      writeStoredPreference(key, value);
+      last.set(key, value);
+    }
+  });
+  return () => subscription.unsubscribe();
+}

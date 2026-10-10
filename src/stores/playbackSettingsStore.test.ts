@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createPlaybackSettingsStore,
   selectAutoplay,
@@ -15,6 +15,10 @@ function ctx(store: ReturnType<typeof createPlaybackSettingsStore>) {
 describe("playbackSettingsStore", () => {
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("defaults toggles to off and speed/volume to 1", () => {
@@ -77,6 +81,29 @@ describe("playbackSettingsStore", () => {
     expect(selectContinueToNext(ctx(rehydrated))).toBe(true);
     expect(selectSpeed(ctx(rehydrated))).toBe(1.5);
     expect(selectVolume(ctx(rehydrated))).toBe(0.4);
+  });
+
+  it("writes only the key that changed", () => {
+    const store = createPlaybackSettingsStore();
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    store.trigger.setVolume({ volume: 0.5 });
+    store.trigger.setVolume({ volume: 0.25 });
+
+    expect(setItem.mock.calls).toEqual([
+      ["playback-volume", "0.5"],
+      ["playback-volume", "0.25"],
+    ]);
+  });
+
+  it("leaves another tab's newer value alone for a key it did not change", () => {
+    const store = createPlaybackSettingsStore();
+    window.localStorage.setItem("playback-speed", "1.5");
+
+    store.trigger.setVolume({ volume: 0.5 });
+
+    expect(window.localStorage.getItem("playback-speed")).toBe("1.5");
+    expect(window.localStorage.getItem("playback-volume")).toBe("0.5");
   });
 
   it("clamps speed/volume to the slider ranges on set", () => {

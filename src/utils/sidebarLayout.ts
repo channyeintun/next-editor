@@ -1,3 +1,5 @@
+import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
+
 export const DEFAULT_FILE_SIDEBAR_WIDTH = 248;
 export const MIN_FILE_SIDEBAR_WIDTH = 200;
 export const MAX_FILE_SIDEBAR_WIDTH = 520;
@@ -33,25 +35,9 @@ export function getClampedFileSidebarWidth(width: number, viewportWidth?: number
 // offsets (deltas) rather than absolute widths so playback adapts to the viewer's
 // own layout. Only the collapsed/expanded preference below is remembered.
 export function readStoredFileSidebarCollapsed(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  try {
-    return window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return readStoredPreference(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
 }
 
 export function writeStoredFileSidebarCollapsed(collapsed: boolean): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? "true" : "false");
-  } catch {
-    // Storage can be unavailable in restricted browser contexts.
-  }
+  writeStoredPreference(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? "true" : "false");
 }

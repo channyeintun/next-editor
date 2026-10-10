@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
+import { persistPreferences, readStoredPreference } from "./preferenceStorage";
 
 const SCREEN_RECORDING_KEY = "recording-screen-capture";
 const MICROPHONE_KEY = "recording-microphone-device";
@@ -37,10 +37,9 @@ export function createRecordingSettingsStore() {
     },
   });
 
-  store.subscribe((snapshot) => {
-    const { screenRecordingEnabled, microphoneDeviceId } = snapshot.context;
-    writeStoredPreference(SCREEN_RECORDING_KEY, String(screenRecordingEnabled));
-    writeStoredPreference(MICROPHONE_KEY, microphoneDeviceId);
+  persistPreferences(store, {
+    [SCREEN_RECORDING_KEY]: (context) => String(context.screenRecordingEnabled),
+    [MICROPHONE_KEY]: (context) => context.microphoneDeviceId,
   });
 
   return store;
