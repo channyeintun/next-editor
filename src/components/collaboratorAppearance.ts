@@ -13,9 +13,10 @@ export function collaboratorDisplayName(person: { name: string | null; username:
 }
 
 // One entry per collaboratorColorIndex value, and the three lists below are
-// the same length: the index runs over COLLABORATOR_COLORS. App.css repeats the
-// first two lists in its `.collaboration-color-N` rules (the cursors, selections
-// and name labels CodeEditor decorates Monaco with), so change them together.
+// the same length: the index runs over COLLABORATOR_COLORS. remoteCursors.css
+// repeats the first two lists in its `.collaboration-color-N` rules (the cursors,
+// selections and name labels CodeEditor decorates Monaco with), so change them
+// together.
 const COLLABORATOR_COLORS = [
   "#38bdf8",
   "#34d399",

@@ -12,6 +12,7 @@ import {
   collaboratorDisplayName,
   collaboratorSelectionColor,
 } from "./collaboratorAppearance";
+import "./remoteCursors.css";
 
 // Pure helpers behind how CodeEditor shows other participants' cursors in
 // Monaco, and how it records them.

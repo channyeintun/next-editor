@@ -1,0 +1,24 @@
+/* Floating Play Button */
+.floating-play-button {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 110;
+}
+
+.floating-play-button:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.3));
+}
+
+.floating-play-button:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}

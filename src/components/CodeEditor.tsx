@@ -45,6 +45,7 @@ import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
+import "./editorCursors.css";
 
 const Preview = lazy(() => import("./Preview"));
 interface CodeEditorProps {

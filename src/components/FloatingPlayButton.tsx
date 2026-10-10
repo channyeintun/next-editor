@@ -5,7 +5,7 @@ import {
   useLiveTimeValue,
 } from "../hooks/useNextEditorContext";
 import { parseTimeParameter } from "../core/src/utils/chapters";
-import "../App.css";
+import "./FloatingPlayButton.css";
 
 /**
  * Floating play button that appears in the center of the screen

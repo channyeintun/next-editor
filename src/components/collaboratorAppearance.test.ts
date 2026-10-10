@@ -80,8 +80,8 @@ describe("collaborator colours", () => {
     }
   });
 
-  it("matches the colours App.css gives the cursors CodeEditor draws", () => {
-    const css = readFileSync(resolve("src/App.css"), "utf8");
+  it("matches the colours remoteCursors.css gives the cursors CodeEditor draws", () => {
+    const css = readFileSync(resolve("src/components/remoteCursors.css"), "utf8");
     const rule = (selector: string, declaration: string) =>
       new RegExp(`${escapeRegExp(selector)}\\s*\\{\\s*${escapeRegExp(declaration)};\\s*\\}`);
 

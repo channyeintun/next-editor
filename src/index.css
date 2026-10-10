@@ -19,22 +19,6 @@
   font-weight: 400;
 }
 
-@font-face {
-  font-family: "PP Telegraf Semibold";
-  src: url("/fonts/pp-telegraf-semibold.woff2") format("woff2");
-  font-display: block;
-  font-style: normal;
-  font-weight: 600;
-}
-
-@font-face {
-  font-family: "PP Telegraf Medium";
-  src: url("/fonts/pp-telegraf-medium.woff2") format("woff2");
-  font-display: block;
-  font-style: normal;
-  font-weight: 500;
-}
-
 @theme {
   --font-machina: "PP Neue Machina Inktrap Ultrabold", sans-serif;
   --font-telegraf: "PP Telegraf Regular", sans-serif;
@@ -131,17 +115,6 @@ body {
 .xterm-terminal.passive .xterm:has(.xterm-helper-textarea:focus-visible) .xterm-viewport {
   outline: 2px solid var(--color-pinata-purple);
   outline-offset: -2px;
-}
-
-@keyframes terminal-blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
 }
 
 @keyframes fade-up {
@@ -241,13 +214,6 @@ body {
   margin: 0 0 0.8em;
   padding-left: 1em;
   opacity: 0.85;
-}
-
-.terminal-caret {
-  animation: terminal-blink 1s step-end infinite;
-  display: inline-block;
-  vertical-align: baseline;
-  margin-left: 1px;
 }
 
 .editor-scrollbar {

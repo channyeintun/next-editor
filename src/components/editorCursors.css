@@ -1,0 +1,60 @@
+/* CodeEditor's Monaco cursors and paint layer: the local cursors and the
+   playback cursor decoration (frameReplay) are drawn in the app's yellow, and
+   .editor-paint-layer keeps Monaco on its own compositor layer. */
+
+/* Monaco Editor cursor decoration for playback - match native animation */
+.playback-cursor-decoration {
+  background-color: #ffed4f !important;
+  border: none !important;
+  width: 2px !important;
+  animation: nb-cursor-blink 1s step-end infinite !important;
+}
+
+/* Override other cursors' color only - keep their native animation */
+.monaco-editor .cursor {
+  background-color: #ffed4f !important;
+  border: none !important;
+  width: 2px !important;
+}
+
+.monaco-editor .cursors-layer .cursor {
+  background-color: #ffed4f !important;
+  border: none !important;
+  width: 2px !important;
+}
+
+.playback-mode .monaco-editor .cursor,
+.playback-mode .monaco-editor .cursors-layer .cursor {
+  animation: nb-cursor-blink 1s step-end infinite !important;
+}
+
+.editor-paint-layer {
+  contain: paint;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.editor-paint-layer .monaco-editor,
+.editor-paint-layer .monaco-editor .overflow-guard {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.editor-paint-layer .monaco-editor .monaco-hover {
+  pointer-events: none;
+}
+
+@keyframes nb-cursor-blink {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
