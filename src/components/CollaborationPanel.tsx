@@ -296,8 +296,9 @@ type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 interface ParticipantRowProps {
   participant: CollaborationParticipant;
   /**
-   * What the participant has open. The panel works it out on every render
-   * (describeParticipantSurface) rather than this row, which is memoized.
+   * What the participant has open. The panel (not compiled) works it out on
+   * every render with describeParticipantSurface, because a file's name must
+   * come from the room's current projection; this row is not memoized.
    */
   surfaceLabel: string;
   isSelf: boolean;

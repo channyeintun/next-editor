@@ -28,7 +28,6 @@ export {
   initializeCollaborationTeachingSurfaces,
   listCollaborationInvitations,
   listCollaborationMembers,
-  listCollaborationRooms,
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,

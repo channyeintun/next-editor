@@ -47,13 +47,6 @@ export async function initializeCollaborationTeachingSurfaces(
   );
 }
 
-export async function listCollaborationRooms(): Promise<CollaborationRoomSession[]> {
-  const response = await apiClient.get<{ rooms: CollaborationRoomSession[] }>(
-    "/collaboration/rooms",
-  );
-  return response.data.rooms;
-}
-
 export async function listCollaborationMembers(
   roomId: string,
 ): Promise<{ members: CollaborationMember[]; roleVersion: number }> {
