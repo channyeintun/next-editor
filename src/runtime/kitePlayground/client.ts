@@ -38,9 +38,10 @@ export class KitePlaygroundServiceError extends Error {
  * part of the same program — but the compiler running here is handed one
  * source, so a lesson with siblings would compile only part of itself. Rather
  * than compile the wrong thing quietly, a workspace with more than one file
- * and none named `main.kite` says so.
+ * and none named `main.kite` says so. Exported as the language's `pickEntry`
+ * (runner.ts), so the studio's fixture run refuses the same workspaces.
  */
-function entryOf(files: readonly KitePlaygroundFile[]): KitePlaygroundFile {
+export function pickKiteRunEntry(files: readonly KitePlaygroundFile[]): KitePlaygroundFile {
   const { entryPath } = PLAYGROUND_SOURCE_RULES.kite;
   const entry = pickPlaygroundEntry(files, entryPath);
   if (entry === "empty") {
@@ -256,7 +257,7 @@ export class KitePlaygroundClient {
     // Superseding comes first, so even a Run the client refuses replaces the
     // one before it.
     this.#supersedeInFlight();
-    const entry = entryOf(request.files);
+    const entry = pickKiteRunEntry(request.files);
     const result = await this.#exclusive((engine) => engine.run(entry.content));
 
     const parsed = parseKitePlaygroundRunResult(result);

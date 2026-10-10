@@ -1,59 +1,5 @@
-import { GoPlaygroundClient, GoPlaygroundServiceError } from "../runtime/goPlayground/client";
-import {
-  goRunResultToConsoleLines,
-  goRunServiceErrorToConsoleLines,
-  goRunStartedConsoleLines,
-} from "../runtime/goPlayground/console";
-import { collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import {
-  KotlinPlaygroundClient,
-  KotlinPlaygroundServiceError,
-} from "../runtime/kotlinPlayground/client";
-import {
-  kotlinRunResultToConsoleLines,
-  kotlinRunServiceErrorToConsoleLines,
-  kotlinRunStartedConsoleLines,
-} from "../runtime/kotlinPlayground/console";
-import { collectKotlinPlaygroundFiles } from "../runtime/kotlinPlayground/files";
-import { KitePlaygroundClient, KitePlaygroundServiceError } from "../runtime/kitePlayground/client";
-import {
-  kiteRunResultToConsoleLines,
-  kiteRunServiceErrorToConsoleLines,
-  kiteRunStartedConsoleLines,
-} from "../runtime/kitePlayground/console";
-import { collectKitePlaygroundFiles } from "../runtime/kitePlayground/files";
-import { RustPlaygroundClient, RustPlaygroundServiceError } from "../runtime/rustPlayground/client";
-import {
-  rustRunResultToConsoleLines,
-  rustRunServiceErrorToConsoleLines,
-  rustRunStartedConsoleLines,
-} from "../runtime/rustPlayground/console";
-import { collectRustPlaygroundFiles } from "../runtime/rustPlayground/files";
-import { ZigPlaygroundClient, ZigPlaygroundServiceError } from "../runtime/zigPlayground/client";
-import {
-  zigRunResultToConsoleLines,
-  zigRunServiceErrorToConsoleLines,
-  zigRunStartedConsoleLines,
-} from "../runtime/zigPlayground/console";
-import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
-import {
-  HaskellPlaygroundClient,
-  HaskellPlaygroundServiceError,
-} from "../runtime/haskellPlayground/client";
-import {
-  haskellRunResultToConsoleLines,
-  haskellRunServiceErrorToConsoleLines,
-  haskellRunStartedConsoleLines,
-} from "../runtime/haskellPlayground/console";
-import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
-import { AsmPlaygroundClient, AsmPlaygroundServiceError } from "../runtime/asmPlayground/client";
-import {
-  asmRunConsoleLines,
-  asmRunServiceErrorToConsoleLines,
-  asmRunStartedConsoleLines,
-} from "../runtime/asmPlayground/console";
-import { collectAsmPlaygroundFiles, ASM_ENTRY_PATH } from "../runtime/asmPlayground/files";
-import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
+import type { PlaygroundFile } from "../runtime/playgroundFiles";
+import { PLAYGROUND_LANGUAGES } from "../runtime/playgroundLanguages";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep, cancelledError } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
@@ -67,8 +13,8 @@ import {
  * Execution-kind adapters for `runtime.run` (docs/agent-lesson-production.md
  * §2/§8), one per selective-Playground lesson type — Go, Kotlin, Rust, Zig,
  * and Haskell share a protocol (collect sources → proxy run → normalized
- * result → prefixed console lines), so one retry engine drives kind-specific
- * configs.
+ * result → prefixed console lines), so one retry engine drives each kind's
+ * `PlaygroundLanguage` (runtime/playgroundLanguages.ts), the runner panel's own.
  * Kite and asm follow the same protocol with the network removed: their
  * compiler and machine run in the page, so their "live" path calls nothing.
  * Runs have no local side effects, making a declared-idempotent retry safe
@@ -114,12 +60,18 @@ export interface PlaygroundRunOutcome {
 interface PlaygroundEngine {
   /** e.g. "go" — console error lines are `[<label>-run error] …`. */
   label: string;
-  collectFiles(project: Pick<WorkspaceProject, "files">): { path: string; content: string }[];
-  /** Human message when the workspace shape can't run, else null. */
-  validateFiles(files: { path: string }[]): string | null;
-  startedLines(files: { path: string }[]): string[];
+  collectFiles(project: Pick<WorkspaceProject, "files">): PlaygroundFile[];
+  /** The runner panel's refusal line when the workspace shape can't run, else null. */
+  validateFiles(files: PlaygroundFile[]): string | null;
+  /**
+   * Throws a `ServiceFailure` carrying the client's own error for a workspace
+   * whose entry it cannot resolve — the check a live client makes before
+   * anything else, which a fixture run makes itself because it never reaches one.
+   */
+  checkEntry(files: PlaygroundFile[]): void;
+  startedLines(files: PlaygroundFile[]): string[];
   runLive(
-    files: { path: string; content: string }[],
+    files: PlaygroundFile[],
     timeoutMs: number,
     signal: AbortSignal,
   ): Promise<{ resultLines: string[]; ok: boolean; status: string }>;
@@ -197,274 +149,53 @@ class ServiceFailure extends Error {
   }
 }
 
+/**
+ * The engine for one prepared run, built from the kind's `PlaygroundLanguage`
+ * — the same client binding, refusal line and console builders the runner
+ * panel uses, so a recorded run prints what a learner's Run prints. The client
+ * is created on the first live attempt and reused by its retry.
+ */
 function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
-  switch (kind) {
-    case "go-playground": {
-      let client: GoPlaygroundClient | null = null;
+  const language = PLAYGROUND_LANGUAGES[kind];
+  const serviceErrorOf = (error: unknown) =>
+    error instanceof language.client.ServiceError
+      ? { kind: error.kind, message: error.message }
+      : null;
+  let client: unknown = null;
+  return {
+    label: language.label,
+    collectFiles: language.collectFiles,
+    // Kite and asm have no refusal line: their client picks the entry, and
+    // `checkEntry` asks it the same question.
+    validateFiles: (files) => language.run.rejectFiles?.(files) ?? null,
+    checkEntry: (files) => {
+      try {
+        language.run.pickEntry?.(files);
+      } catch (error) {
+        const service = serviceErrorOf(error);
+        if (service) throw new ServiceFailure(service.kind, service.message);
+        throw error;
+      }
+    },
+    startedLines: language.run.startedLines,
+    runLive: async (files, timeoutMs, signal) => {
+      client ??= language.client.create();
+      const activeClient = client;
+      const result: { status: string } = await liveAttempt(
+        () => language.run.execute(activeClient, files),
+        () => language.client.stop(activeClient),
+        serviceErrorOf,
+        timeoutMs,
+        signal,
+      );
       return {
-        label: "go",
-        collectFiles: collectGoPlaygroundFiles,
-        validateFiles: (files) =>
-          files.length === 0 ? "Add at least one .go file to run this lesson" : null,
-        startedLines: (files) => goRunStartedConsoleLines(files.map((file) => file.path)),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new GoPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run(files),
-            () => activeClient.abort(),
-            (error) =>
-              error instanceof GoPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: goRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          goRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof goRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
+        resultLines: language.run.resultLines(result),
+        ok: result.status === "success",
+        status: result.status,
       };
-    }
-    case "kotlin-playground": {
-      let client: KotlinPlaygroundClient | null = null;
-      return {
-        label: "kotlin",
-        collectFiles: collectKotlinPlaygroundFiles,
-        validateFiles: (files) =>
-          files.length === 0 ? "Add at least one .kt file to run this lesson" : null,
-        startedLines: (files) => kotlinRunStartedConsoleLines(files.map((file) => file.path)),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new KotlinPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run(files),
-            () => activeClient.abort(),
-            (error) =>
-              error instanceof KotlinPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: kotlinRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          kotlinRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof kotlinRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-    case "rust-playground": {
-      let client: RustPlaygroundClient | null = null;
-      return {
-        label: "rust",
-        collectFiles: collectRustPlaygroundFiles,
-        // The upstream Playground compiles one crate from one source string.
-        validateFiles: (files) =>
-          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.rust.entryPath)
-            ? null
-            : "Rust lessons run exactly one main.rs",
-        startedLines: () => rustRunStartedConsoleLines(),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new RustPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run(files),
-            () => activeClient.abort(),
-            (error) =>
-              error instanceof RustPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: rustRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          rustRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof rustRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-
-    case "zig-playground": {
-      let client: ZigPlaygroundClient | null = null;
-      return {
-        label: "zig",
-        collectFiles: collectZigPlaygroundFiles,
-        // The upstream compiles one root source file from one text body.
-        validateFiles: (files) =>
-          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.zig.entryPath)
-            ? null
-            : "Zig lessons run exactly one main.zig",
-        startedLines: () => zigRunStartedConsoleLines(),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new ZigPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run(files),
-            () => activeClient.abort(),
-            (error) =>
-              error instanceof ZigPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: zigRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          zigRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof zigRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-
-    case "haskell-playground": {
-      let client: HaskellPlaygroundClient | null = null;
-      return {
-        label: "haskell",
-        collectFiles: collectHaskellPlaygroundFiles,
-        // play.haskell.org compiles one module, named Main, from one source
-        // string: there is no cabal file to name a second, and no package
-        // manager behind it.
-        validateFiles: (files) =>
-          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.haskell.entryPath)
-            ? null
-            : "Haskell lessons run exactly one Main.hs",
-        startedLines: () => haskellRunStartedConsoleLines(),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new HaskellPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run(files),
-            () => activeClient.abort(),
-            (error) =>
-              error instanceof HaskellPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: haskellRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          haskellRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof haskellRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-
-    case "kite-playground": {
-      let client: KitePlaygroundClient | null = null;
-      return {
-        label: "kite",
-        collectFiles: collectKitePlaygroundFiles,
-        // A Kite module is a directory, so siblings are part of the same
-        // program — but a run compiles the entry, so one has to be named.
-        validateFiles: (files) =>
-          files.length === 0
-            ? "Add a .kite file to run this lesson"
-            : files.length === 1 ||
-                files.some((file) => file.path === PLAYGROUND_SOURCE_RULES.kite.entryPath)
-              ? null
-              : "Name the file this lesson runs main.kite",
-        startedLines: () => kiteRunStartedConsoleLines(),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new KitePlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run({ files }),
-            () => activeClient.dispose(),
-            (error) =>
-              error instanceof KitePlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: kiteRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          kiteRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof kiteRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-    case "asm-playground": {
-      let client: AsmPlaygroundClient | null = null;
-      return {
-        label: "asm",
-        collectFiles: collectAsmPlaygroundFiles,
-        // There is no linker here, so siblings are never part of the same
-        // program — a run assembles the entry, and one has to be named.
-        validateFiles: (files) =>
-          files.length === 0
-            ? `Add a ${ASM_ENTRY_PATH} file to run this lesson`
-            : files.length === 1 || files.some((file) => file.path === ASM_ENTRY_PATH)
-              ? null
-              : `Name the file this lesson runs ${ASM_ENTRY_PATH}`,
-        startedLines: () => asmRunStartedConsoleLines(),
-        runLive: async (files, timeoutMs, signal) => {
-          client ??= new AsmPlaygroundClient();
-          const activeClient = client;
-          const result = await liveAttempt(
-            () => activeClient.run({ files }),
-            () => activeClient.dispose(),
-            (error) =>
-              error instanceof AsmPlaygroundServiceError
-                ? { kind: error.kind, message: error.message }
-                : null,
-            timeoutMs,
-            signal,
-          );
-          return {
-            resultLines: asmRunConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        serviceErrorLines: (errorKind, message) =>
-          asmRunServiceErrorToConsoleLines(
-            errorKind as Parameters<typeof asmRunServiceErrorToConsoleLines>[0],
-            message,
-          ),
-      };
-    }
-  }
+    },
+    serviceErrorLines: language.run.serviceErrorLines,
+  };
 }
 
 export interface PlaygroundRunInput {
@@ -482,7 +213,7 @@ export interface PlaygroundRunPrepared {
 
 /** `[<label>-run error]` prefix for the runtime's console error lines. */
 export function runErrorPrefixFor(kind: StudioPlaygroundRuntimeKind): string {
-  return `[${engineFor(kind).label}-run error]`;
+  return `[${PLAYGROUND_LANGUAGES[kind].label}-run error]`;
 }
 
 /**
@@ -504,6 +235,7 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
     for (let attempt = 1; attempt <= MAX_RUN_ATTEMPTS; attempt++) {
       try {
         if (input.mode === "fixture") {
+          engine.checkEntry(files);
           const fixture = input.runtime.fixture;
           await abortableSleep(fixture.latencyMs, input.signal);
           const transientKind = fixture.transientErrorKinds[attempt - 1];

@@ -2,6 +2,7 @@ import type { PlaygroundLanguage } from "../playgroundLanguage";
 import {
   AsmPlaygroundClient,
   AsmPlaygroundServiceError,
+  pickAsmRunEntry,
   type AsmPlaygroundServiceErrorKind,
 } from "./client";
 import {
@@ -46,6 +47,7 @@ export const ASM_PLAYGROUND: PlaygroundLanguage<
     // No rejectFiles: which file is the program is the client's call, so a
     // workspace it cannot resolve comes back as its own message rather than a
     // guess here.
+    pickEntry: pickAsmRunEntry,
     execute: (client, files) => client.run({ files }),
     startedLines: asmRunStartedConsoleLines,
     resultLines: asmRunConsoleLines,

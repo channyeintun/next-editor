@@ -150,10 +150,13 @@ describe("preparePlaygroundRun", () => {
     expect(outcome.ok).toBe(true);
     expect(outcome.resultLines).toEqual(["hello rust", "[rust-run] Program exited"]);
 
+    // The runner panel's refusal line, word for word: one rule, one message.
     expect(() => prepare(rustRuntime(), projectWith("main.rs", "lib.rs"))).toThrow(
-      /exactly one main.rs/,
+      "[rust-run error] Rust lessons run a single main.rs file",
     );
-    expect(() => prepare(rustRuntime(), projectWith("other.rs"))).toThrow(/exactly one main.rs/);
+    expect(() => prepare(rustRuntime(), projectWith("other.rs"))).toThrow(
+      /run a single main\.rs file/,
+    );
   });
 
   it("runs a Haskell fixture and enforces the single-Main.hs shape", async () => {
@@ -166,10 +169,10 @@ describe("preparePlaygroundRun", () => {
     // One module named Main, so a sibling source and a differently named entry
     // are both unrunnable — the playground has no cabal file to describe them.
     expect(() => prepare(haskellRuntime(), projectWith("Main.hs", "Lib.hs"))).toThrow(
-      /exactly one Main\.hs/,
+      /run a single Main\.hs file/,
     );
     expect(() => prepare(haskellRuntime(), projectWith("Other.hs"))).toThrow(
-      /exactly one Main\.hs/,
+      /run a single Main\.hs file/,
     );
   });
 
@@ -188,14 +191,48 @@ describe("preparePlaygroundRun", () => {
       "[asm-run] Program exited with status 0",
       "[asm-run] rax=0x1",
     ]);
+  });
 
+  it("lets the asm and Kite clients pick the entry, refusing what they would refuse", async () => {
     // No linker in the page, so siblings are never one program: a lone file
-    // runs, several only run when one of them is the named entry.
-    expect(() => prepare(asmRuntime(), projectWith("notes.md"))).toThrow(/Add a main\.asm file/);
-    expect(() => prepare(asmRuntime(), projectWith("only.asm"))).not.toThrow();
-    expect(() => prepare(asmRuntime(), projectWith("a.asm", "b.asm"))).toThrow(
-      /Name the file this lesson runs main\.asm/,
-    );
+    // runs, several only run when one of them is the named entry — at the root
+    // or in a folder, the client's rule. A fixture run never reaches the
+    // client, so it asks the client's own pick and fails the way the learner's
+    // dock does: the started line, then the client's refusal as a terminal error.
+    await expect(prepare(asmRuntime(), projectWith("only.asm")).run()).resolves.toMatchObject({
+      ok: true,
+    });
+    await expect(
+      prepare(asmRuntime(), projectWith("src/main.asm", "b.asm")).run(),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      prepare(kiteRuntime(), projectWith("src/main.kite", "src/util.kite")).run(),
+    ).resolves.toMatchObject({ ok: true });
+
+    const refusal = async (runtime: StudioRuntime, ...paths: string[]) => {
+      const failure = await prepare(runtime, projectWith(...paths))
+        .run()
+        .catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(PlaygroundTerminalError);
+      const terminal = failure as PlaygroundTerminalError;
+      expect(terminal.attempts).toBe(1);
+      return terminal.consoleLines;
+    };
+
+    expect(await refusal(asmRuntime(), "notes.md")).toEqual([
+      "[asm-run error] This program can't run in an assembly lesson",
+      "Add a main.asm file to run this lesson",
+    ]);
+    const ambiguousAsm = await refusal(asmRuntime(), "a.asm", "b.asm");
+    expect(ambiguousAsm[0]).toBe("[asm-run error] This program can't run in an assembly lesson");
+    expect(ambiguousAsm[1]).toMatch(/^Name the file this lesson runs `main\.asm`/);
+    expect(await refusal(kiteRuntime(), "notes.md")).toEqual([
+      "[kite-run error] This program can't run in a Kite lesson",
+      "Add a .kite file to run this lesson",
+    ]);
+    const ambiguousKite = await refusal(kiteRuntime(), "a.kite", "b.kite");
+    expect(ambiguousKite[0]).toBe("[kite-run error] This program can't run in a Kite lesson");
+    expect(ambiguousKite[1]).toMatch(/^Name the file this lesson runs `main\.kite`/);
   });
 
   it("still writes an error line for a kind the language's own table lacks", async () => {
@@ -213,8 +250,12 @@ describe("preparePlaygroundRun", () => {
   });
 
   it("rejects empty workspaces per kind", () => {
-    expect(() => prepare(goRuntime(), projectWith("notes.md"))).toThrow(/at least one .go/);
-    expect(() => prepare(kotlinRuntime(), projectWith("notes.md"))).toThrow(/at least one .kt/);
+    expect(() => prepare(goRuntime(), projectWith("notes.md"))).toThrow(
+      "[go-run error] Add at least one .go file to run this lesson",
+    );
+    expect(() => prepare(kotlinRuntime(), projectWith("notes.md"))).toThrow(
+      "[kotlin-run error] Add at least one .kt file to run this lesson",
+    );
   });
 
   it("survives one transient failure with a silent retry", async () => {

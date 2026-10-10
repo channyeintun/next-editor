@@ -2,6 +2,7 @@ import type { PlaygroundLanguage } from "../playgroundLanguage";
 import {
   KitePlaygroundClient,
   KitePlaygroundServiceError,
+  pickKiteRunEntry,
   type KitePlaygroundServiceErrorKind,
 } from "./client";
 import {
@@ -48,6 +49,7 @@ export const KITE_PLAYGROUND: PlaygroundLanguage<
     // No rejectFiles: which file is the program is the client's call, so a
     // workspace the compiler cannot resolve comes back as its own message
     // rather than a guess here.
+    pickEntry: pickKiteRunEntry,
     execute: (client, files) => client.run({ files }),
     startedLines: kiteRunStartedConsoleLines,
     resultLines: kiteRunResultToConsoleLines,

@@ -130,8 +130,10 @@ It follows the same shape as every other language:
   that language plus the dock's names, tab and console colours, which the
   shared `PlaygroundRunnerPanel` renders)
 - `src/monaco/asmLanguage.ts`, `src/starters/asm.ts`
-- `src/studio/plan.ts` (`asm-playground` runtime kind) and
-  `src/studio/playgroundRuntime.ts` (the run adapter)
+- `src/studio/plan.ts` (`asm-playground` runtime kind) and its row in
+  `PLAYGROUND_LANGUAGES` (`src/runtime/playgroundLanguages.ts`), the table the
+  studio's run adapter (`src/studio/playgroundRuntime.ts`) drives every language
+  through
 
 Two details differ from the others and both are deliberate:
 

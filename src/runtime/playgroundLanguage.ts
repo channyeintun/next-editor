@@ -45,6 +45,14 @@ export interface PlaygroundRun<Client, ErrorKind extends string, RunResult> {
   commandLabel: string;
   /** The console line refusing sources the lesson cannot run, or null to run them. */
   rejectFiles?: (files: readonly PlaygroundFile[]) => string | null;
+  /**
+   * The file a run starts from, for a language whose client picks it instead of
+   * a `rejectFiles` refusing up front: it throws the client's own "invalid-source"
+   * error for sources it cannot resolve. The client calls it on every run; the
+   * studio's fixture run, which never reaches a client, calls it so a workspace
+   * the client would refuse fails there the same way.
+   */
+  pickEntry?: (files: readonly PlaygroundFile[]) => PlaygroundFile;
   execute: (client: Client, files: PlaygroundFile[]) => Promise<RunResult>;
   startedLines: (files: readonly PlaygroundFile[]) => string[];
   resultLines: (result: RunResult) => string[];

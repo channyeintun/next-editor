@@ -48,8 +48,11 @@ const yieldToBrowser = (): Promise<void> =>
     setTimeout(resolve, 0);
   });
 
-/** Pick the file to assemble. */
-function entryOf(files: readonly AsmPlaygroundFile[]): AsmPlaygroundFile {
+/**
+ * Pick the file to assemble. Exported as the language's `pickEntry`
+ * (runner.ts), so the studio's fixture run refuses the same workspaces.
+ */
+export function pickAsmRunEntry(files: readonly AsmPlaygroundFile[]): AsmPlaygroundFile {
   const entry = pickPlaygroundEntry(files, ASM_ENTRY_PATH);
   if (entry === "empty") {
     throw new AsmPlaygroundServiceError(
@@ -88,7 +91,7 @@ export class AsmPlaygroundClient {
     this.#generation += 1;
     const generation = this.#generation;
 
-    const entry = entryOf(request.files);
+    const entry = pickAsmRunEntry(request.files);
 
     let program;
     try {
