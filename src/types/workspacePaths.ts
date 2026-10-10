@@ -2,7 +2,6 @@
 // canonical, safe workspace-relative form, and building paths from it.
 
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
-export const DEFAULT_WORKSPACE_APP_PATH = "src/App.tsx";
 
 const RESERVED_WORKSPACE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
 

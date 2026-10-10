@@ -55,7 +55,7 @@ import { normalizeChapters } from "../../core/src/utils/chapters";
 // `decodeRecordingStream` decodes a whole buffer in one shot.
 // `createStreamingRecordingReader` decodes incrementally as bytes arrive, decoding
 // only newly-completed segments per push. Both walk their bytes with
-// `ingestSegmentRegion` and build the result with `assembleRecording`, so a
+// `ingestSegmentRegion` and build the result with `buildDecodedRecording`, so a
 // progressively-decoded prefix and a one-shot decode of the same bytes match.
 // ============================================================================
 
@@ -391,7 +391,7 @@ function ingestSegmentRegion(
  * Builds a {@link DecodedRecording} from a decoded stream. `records` are passed separately
  * so the streaming reader can hand in a copy and keep its own arrays private.
  */
-function assembleRecording(
+function buildDecodedRecording(
   stream: DecodedStream,
   records: RecordingTracks,
   streamFinalized: boolean,
@@ -492,7 +492,7 @@ export function decodeRecordingStream(bytes: Uint8Array): DecodedRecording {
   const { records } = stream;
   sortRecordingTracksByTime(records);
 
-  return assembleRecording(stream, records, progress.finalized);
+  return buildDecodedRecording(stream, records, progress.finalized);
 }
 
 // ============================================================================
@@ -705,7 +705,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       if (!stream) return null;
       const endSnapshotSpan = startPerformanceSpan("recording.reader_snapshot");
       try {
-        return assembleRecording(stream, copyDecodedRecords(stream.records), finalized);
+        return buildDecodedRecording(stream, copyDecodedRecords(stream.records), finalized);
       } finally {
         endSnapshotSpan();
       }

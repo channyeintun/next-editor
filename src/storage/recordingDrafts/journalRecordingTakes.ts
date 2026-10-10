@@ -52,12 +52,9 @@ export function journalRecordingTakes(actorRef: EditorActorRef): () => void {
   let take: JournaledTake | null = null;
   const attachedRecorders = new Map<MediaRecorder, () => void>();
 
-  const flushTake = (overrides?: Partial<RecordingDraftFlush>) => {
+  const flushTake = () => {
     if (!take) return;
-    void take.journal.flush({
-      ...describeTake(actorRef.getSnapshot(), take.session),
-      ...overrides,
-    });
+    void take.journal.flush(describeTake(actorRef.getSnapshot(), take.session));
   };
 
   // The recorders hand their chunks to every listener, so the journal keeps its own

@@ -11,7 +11,6 @@ import {
   WORKSPACE_STORAGE_KEY,
 } from "./workspacePersistence";
 import {
-  collectBinaryAssetPaths,
   persistWorkspaceAssets,
   registerWorkspaceAsset,
   resetWorkspaceAssetStoreForTests,
@@ -91,18 +90,6 @@ describe("toPersistedSnapshot", () => {
     };
 
     expect(toPersistedSnapshot(snapshot)).toBe(snapshot);
-  });
-});
-
-describe("collectBinaryAssetPaths", () => {
-  it("lists descriptor and legacy binary files", () => {
-    const project = makeProject([
-      makeFile("index.html", "<html></html>"),
-      makeFile("public/logo.png", "QUJD", "base64"),
-      makeAssetFile("assets/clip.mp4"),
-    ]);
-
-    expect(collectBinaryAssetPaths(project).sort()).toEqual(["assets/clip.mp4", "public/logo.png"]);
   });
 });
 

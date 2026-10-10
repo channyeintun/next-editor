@@ -235,12 +235,6 @@ export async function getWorkspaceAssetBytes(
   return new Uint8Array(await (await getWorkspaceAssetBlob(descriptor)).arrayBuffer());
 }
 
-export function collectBinaryAssetPaths(project: WorkspaceProject): string[] {
-  return Object.values(project.files)
-    .filter((file) => isWorkspaceAssetFile(file) || isLegacyWorkspaceBinaryFile(file))
-    .map((file) => file.path);
-}
-
 /**
  * Convert v1 generation/path assets (and older inline base64 projects) to v2
  * descriptors. This is the sole remaining base64 decode boundary.
