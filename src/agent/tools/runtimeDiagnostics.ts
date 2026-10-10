@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { ToolContext } from "../types";
 
 export function makeRuntimeDiagnosticsTool(ctx: ToolContext) {

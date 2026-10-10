@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { ToolContext } from "../types";
 
 const DEFAULT_HTML_LIMIT = 30_000;

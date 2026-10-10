@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
-import { z } from "zod";
+import * as z from "zod";
 import {
   decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,

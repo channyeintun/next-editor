@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { z } from "zod";
+import * as z from "zod";
 import {
   collaborationIdSchema,
   collaborationRoleSchema,

@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { ToolContext, ToolOutputContent } from "../types";
 import { isLegacyWorkspaceBinaryFile, isWorkspaceAssetFile } from "../../types/workspace";
 import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../../types/workspaceFiles";

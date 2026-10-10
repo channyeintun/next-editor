@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { WebContainer } from "@webcontainer/api";
 import type { ToolContext } from "../types";
 import {

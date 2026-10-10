@@ -1,5 +1,5 @@
 import { Client, Receiver, type PublishRequest } from "@upstash/qstash";
-import { z } from "zod";
+import * as z from "zod";
 import { collaborationIdSchema } from "../../../src/collaboration/protocol";
 import type { Env } from "../env";
 

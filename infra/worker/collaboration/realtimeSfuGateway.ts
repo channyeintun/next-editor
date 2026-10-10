@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import {
   MAX_VOICE_ROSTER_SIZE,
   MAX_VOICE_SFU_REQUEST_BYTES,

@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { ToolContext } from "../types";
 import { readFile, writeFile } from "./workspaceFs";
 import { applyEdits, EditApplyError } from "./editDiff";

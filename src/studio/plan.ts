@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { parseAsmPlaygroundRunResult } from "../runtime/asmPlayground/types";
 import { parseGoPlaygroundRunResult } from "../runtime/goPlayground/types";
 import { parseHaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";

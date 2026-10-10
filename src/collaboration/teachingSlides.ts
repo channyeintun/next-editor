@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { z } from "zod";
+import * as z from "zod";
 import { sha256Hex } from "../shared/sha256Hex";
 import type { Slide } from "../types/slides";
 import {

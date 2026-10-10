@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 export const COLLABORATION_PROTOCOL_VERSION = 2 as const;
 export const COLLABORATION_DOCUMENT_SCHEMA_VERSION = 1 as const;

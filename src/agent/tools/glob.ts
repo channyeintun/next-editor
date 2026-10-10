@@ -1,5 +1,5 @@
 import { tool } from "@openrouter/agent";
-import { z } from "zod";
+import * as z from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
 import { globToRegex, matchesWorkspaceGlob, normalizeFolderPrefix } from "./workspaceGlob";

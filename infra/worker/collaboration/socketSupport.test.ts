@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { z } from "zod";
+import * as z from "zod";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { randomToken } from "./bytes";
 import {
