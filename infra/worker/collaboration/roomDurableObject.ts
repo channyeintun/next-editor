@@ -31,7 +31,6 @@ import {
   type CollaborationAwarenessInput,
   type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
-  type CollaborationDocumentUpdateEvent,
   type CollaborationTeachingInitializationInput,
   type CollaborationRole,
   type CollaborationRoomControlCommand,
@@ -51,16 +50,13 @@ import {
   assertCollaborationProjectStructure,
   projectCollaborationDocument,
 } from "../../../src/collaboration/projectDocument";
-import {
-  decodeYjsSnapshot,
-  decodeYjsUpdate,
-  encodeYjsUpdate,
-} from "../../../src/collaboration/yjsUpdates";
+import { decodeYjsSnapshot, decodeYjsUpdate } from "../../../src/collaboration/yjsUpdates";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import { getCollaborationAsset } from "../../db/collaborationQueries";
 import {
   CollaborationRoomSqliteQuotaError,
   RoomSqliteDocumentStore,
+  type CollaborationDocumentUpdateMetadata,
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
@@ -911,19 +907,18 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
 
-    const event: CollaborationDocumentUpdateEvent = {
+    const event: CollaborationDocumentUpdateMetadata = {
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
       clientId: frame.clientId,
       updateId: frame.updateId,
-      update: encodeYjsUpdate(frame.update),
       roomId: attachment.roomId,
       actorId: attachment.userId,
       receivedAt: Date.now(),
     };
     try {
       const persistenceStartedAt = performance.now();
-      const result = this.appendSqliteDocument(event);
+      const result = this.appendSqliteDocument(event, frame.update);
       const persistedAt = performance.now();
       sendMessage(socket, {
         type: "document.ack",
@@ -978,9 +973,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   }
 
   private appendSqliteDocument(
-    event: CollaborationDocumentUpdateEvent,
+    event: CollaborationDocumentUpdateMetadata,
+    update: Uint8Array,
   ): StoredAppendRoomSqliteUpdateResult {
-    const result = this.sqliteDocument.append(event);
+    const result = this.sqliteDocument.appendDecoded(event, update);
     // Validation applied the submitted bytes to the shadow document, which is
     // right for a new update. A retry with an already-used update ID may carry
     // different bytes, so rematerialize from the authoritative SQLite state.

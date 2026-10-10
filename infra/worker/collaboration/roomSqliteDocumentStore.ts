@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  MAX_YJS_UPDATE_BYTES,
   collaborationDocumentUpdateEventSchema,
   type CollaborationBootstrapResponse,
   type CollaborationDocumentUpdateEvent,
@@ -36,6 +37,13 @@ const LEGACY_SNAPSHOT_MAX_LENGTH = 1_900_000;
 const COMPACTION_EVERY_UPDATES = 200;
 const DEDUPLICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_COLLABORATION_ROOM_ACCEPTED_BYTES = 64 * 1024 * 1024;
+
+const documentUpdateMetadataSchema = collaborationDocumentUpdateEventSchema.omit({
+  update: true,
+});
+
+/** An update event without its base64 payload, for appendDecoded. */
+export type CollaborationDocumentUpdateMetadata = Omit<CollaborationDocumentUpdateEvent, "update">;
 
 interface SqlCursor<Row> {
   toArray(): Row[];
@@ -217,8 +225,44 @@ export class RoomSqliteDocumentStore {
     // Reject malformed binary before reserving quota or assigning a durable
     // sequence. Missing dependencies are valid Yjs updates and still decode.
     Y.decodeUpdate(decodedUpdate);
-    const acceptedBytes = decodedUpdate.byteLength;
+    return this.appendParsed(parsed, decodedUpdate.byteLength, now);
+  }
 
+  /**
+   * append for bytes the caller already holds decoded, such as a binary frame:
+   * the update is base64-encoded once for storage instead of encoded,
+   * re-validated and decoded again. The stored event is identical.
+   */
+  appendDecoded(
+    event: CollaborationDocumentUpdateMetadata,
+    update: Uint8Array,
+    now = Date.now(),
+  ): StoredAppendRoomSqliteUpdateResult {
+    const metadata = documentUpdateMetadataSchema.parse(event);
+    if (update.byteLength === 0 || update.byteLength > MAX_YJS_UPDATE_BYTES) {
+      throw new Error(`Yjs update must be 1 to ${MAX_YJS_UPDATE_BYTES} bytes`);
+    }
+    // As in append: malformed binary never reserves quota or a sequence.
+    Y.decodeUpdate(update);
+    // Built in the schema's key order, so event_json matches append's.
+    const parsed: CollaborationDocumentUpdateEvent = {
+      protocolVersion: metadata.protocolVersion,
+      documentSchemaVersion: metadata.documentSchemaVersion,
+      clientId: metadata.clientId,
+      updateId: metadata.updateId,
+      update: bytesToBase64(update),
+      roomId: metadata.roomId,
+      actorId: metadata.actorId,
+      receivedAt: metadata.receivedAt,
+    };
+    return this.appendParsed(parsed, update.byteLength, now);
+  }
+
+  private appendParsed(
+    parsed: CollaborationDocumentUpdateEvent,
+    acceptedBytes: number,
+    now: number,
+  ): StoredAppendRoomSqliteUpdateResult {
     return this.storage.transactionSync(() => {
       const duplicate = this.storage.sql
         .exec<DeduplicationRow>(

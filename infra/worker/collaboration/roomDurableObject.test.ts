@@ -466,7 +466,7 @@ describe("CollaborationRoomDurableObject document updates", () => {
     const { room, connect, edit } = await createRoom();
     const editor = connect(MEMBER_ID, "editor");
     const updateId = uuid();
-    vi.spyOn(RoomSqliteDocumentStore.prototype, "append").mockImplementationOnce(() => {
+    vi.spyOn(RoomSqliteDocumentStore.prototype, "appendDecoded").mockImplementationOnce(() => {
       throw new CollaborationRoomSqliteQuotaError();
     });
 
@@ -482,7 +482,7 @@ describe("CollaborationRoomDurableObject document updates", () => {
     const { room, connect, edit } = await createRoom();
     const editor = connect(MEMBER_ID, "editor");
     const updateId = uuid();
-    vi.spyOn(RoomSqliteDocumentStore.prototype, "append").mockImplementationOnce(() => {
+    vi.spyOn(RoomSqliteDocumentStore.prototype, "appendDecoded").mockImplementationOnce(() => {
       throw new Error("disk full");
     });
 

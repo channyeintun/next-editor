@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  MAX_YJS_UPDATE_BYTES,
   type CollaborationDocumentUpdateEvent,
 } from "../../../src/collaboration/protocol";
 import {
@@ -202,6 +203,86 @@ describe("RoomSqliteDocumentStore", () => {
     restored.destroy();
     replacement.destroy();
     source.destroy();
+  });
+});
+
+describe("RoomSqliteDocumentStore appendDecoded", () => {
+  function storedRows(storage: SqliteTestStorage) {
+    return {
+      updates: storage.sql
+        .exec<{ sequence: number; event_json: string; byte_length: number }>(
+          "SELECT sequence, event_json, byte_length FROM collaboration_updates ORDER BY sequence",
+        )
+        .toArray(),
+      document: storage.sql
+        .exec<{ accepted_bytes: number; update_count: number }>(
+          "SELECT accepted_bytes, update_count FROM collaboration_document",
+        )
+        .toArray(),
+    };
+  }
+
+  /** One snapshot and the update that follows it, so two stores can be compared. */
+  function seed() {
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "a");
+    const snapshot = encodeYjsDocument(source);
+    const stateVector = Y.encodeStateVector(source);
+    source.getText("content").insert(1, "b");
+    const update = Y.encodeStateAsUpdate(source, stateVector);
+    source.destroy();
+    return { snapshot, update };
+  }
+
+  function seededStore(snapshot: string) {
+    const created = createStore();
+    created.store.initialize(snapshot, 100);
+    return created;
+  }
+
+  it("stores exactly what append stores for the encoded update", () => {
+    const { snapshot, update } = seed();
+    const encoded = seededStore(snapshot);
+    const decoded = seededStore(snapshot);
+    const { update: _encoded, ...metadata } = updateEvent(update);
+
+    const viaAppend = encoded.store.append(updateEvent(update), 200);
+    const viaDecoded = decoded.store.appendDecoded(metadata, update, 200);
+
+    expect(viaDecoded).toEqual(viaAppend);
+    expect(storedRows(decoded.storage)).toEqual(storedRows(encoded.storage));
+    expect(materializedText(decoded.store)).toBe("ab");
+  });
+
+  it("deduplicates a retry of the same update ID", () => {
+    const { snapshot, update } = seed();
+    const { store } = seededStore(snapshot);
+    const { update: _encoded, ...metadata } = updateEvent(update);
+
+    store.appendDecoded(metadata, update, 200);
+    expect(store.appendDecoded(metadata, update, 300)).toMatchObject({
+      streamId: "1-0",
+      updateCount: 1,
+      duplicate: true,
+      event: updateEvent(update),
+    });
+  });
+
+  it("refuses an oversized or malformed update before writing a row", () => {
+    const { storage, store } = seededStore(seed().snapshot);
+    const { update: _encoded, ...metadata } = updateEvent(new Uint8Array([0]));
+    const before = storedRows(storage);
+
+    expect(() =>
+      store.appendDecoded(metadata, new Uint8Array(MAX_YJS_UPDATE_BYTES + 1), 200),
+    ).toThrow(/Yjs update must be/);
+    expect(() => store.appendDecoded(metadata, new Uint8Array(0), 200)).toThrow(
+      /Yjs update must be/,
+    );
+    expect(() => store.appendDecoded(metadata, new Uint8Array([0xff, 0xff, 0xff]), 200)).toThrow(
+      /Unexpected end of array/,
+    );
+    expect(storedRows(storage)).toEqual(before);
   });
 });
 
