@@ -70,6 +70,7 @@ import {
   encodeHeaderJson,
   isCurrentRoom,
   isOpen,
+  rateWindowCount,
 } from "./socketSupport";
 import type { Env } from "../env";
 
@@ -488,10 +489,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         continue;
       }
       this.broadcastLeave(existing);
-      existing.serializeAttachment({
-        ...attachment,
-        awarenessState: undefined,
-      } satisfies SocketAttachment);
+      this.writeAttachment(existing, { ...attachment, awarenessState: undefined });
       existing.close(4000, "replaced by reconnect");
     }
 
@@ -499,7 +497,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
     const attachment: SocketAttachment = { ...session, accessCheckedAt: Date.now() };
     this.ctx.acceptWebSocket(server, [`room:${session.roomId}`, `user:${session.userId}`]);
-    server.serializeAttachment(attachment);
+    this.writeAttachment(server, attachment);
     sendMessage(server, {
       type: "session.ready",
       sessionId: session.sessionId,
@@ -588,7 +586,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         access.member_role,
         access.role_version,
       );
-      socket.serializeAttachment(next);
+      this.writeAttachment(socket, next);
       sendMessage(socket, {
         type: "control.room",
         data: controlEvent(access.id, access.role_version, "membership-changed", latest.userId),
@@ -596,8 +594,13 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return next;
     }
     const checkedAttachment = { ...latest, accessCheckedAt: Date.now() };
-    socket.serializeAttachment(checkedAttachment);
+    this.writeAttachment(socket, checkedAttachment);
     return checkedAttachment;
+  }
+
+  /** Stores `attachment` on `socket`: the one place this object writes an attachment. */
+  private writeAttachment(socket: WebSocket, attachment: SocketAttachment): void {
+    socket.serializeAttachment(attachment);
   }
 
   private withRole(
@@ -677,12 +680,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (entry.state === null) {
       const current = attachment.awarenessState?.collaboration;
       if (current?.kind !== "state") {
-        socket.serializeAttachment({
+        this.writeAttachment(socket, {
           ...attachment,
           awarenessClientId: entry.clientId,
           awarenessClock: entry.clock,
           awarenessState: undefined,
-        } satisfies SocketAttachment);
+        });
         return;
       }
       this.acceptAwareness(
@@ -720,8 +723,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
     const second = Math.floor(Date.now() / 1000);
-    const count =
-      attachment.awarenessWindowSecond === second ? (attachment.awarenessWindowCount ?? 0) + 1 : 1;
+    const count = rateWindowCount(
+      attachment.awarenessWindowSecond,
+      attachment.awarenessWindowCount,
+      second,
+    );
     if (count > MAX_AWARENESS_UPDATES_PER_SECOND) {
       this.rejectSocket(socket, "rate-limited", "Awareness rate limit exceeded", false);
       return;
@@ -730,13 +736,13 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     const previous = stored?.kind === "state" ? stored : null;
     if (previous) {
       if (input.revision < previous.revision) {
-        socket.serializeAttachment({
+        this.writeAttachment(socket, {
           ...attachment,
           awarenessWindowSecond: second,
           awarenessWindowCount: count,
           awarenessClientId: binaryEntry.clientId,
           awarenessClock: binaryEntry.clock,
-        } satisfies SocketAttachment);
+        });
         return;
       }
       if (
@@ -786,14 +792,14 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             ...(selection === undefined ? {} : { selection }),
           })
         : undefined;
-    socket.serializeAttachment({
+    this.writeAttachment(socket, {
       ...attachment,
       awarenessWindowSecond: second,
       awarenessWindowCount: count,
       awarenessClientId,
       awarenessClock,
       awarenessState,
-    } satisfies SocketAttachment);
+    });
     this.broadcastAwareness(
       {
         clientId: awarenessClientId,
@@ -822,8 +828,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
     const second = Math.floor(Date.now() / 1000);
-    const socketCount =
-      attachment.updateWindowSecond === second ? (attachment.updateWindowCount ?? 0) + 1 : 1;
+    const socketCount = rateWindowCount(
+      attachment.updateWindowSecond,
+      attachment.updateWindowCount,
+      second,
+    );
     if (this.roomUpdateWindowSecond !== second) {
       this.roomUpdateWindowSecond = second;
       this.roomUpdateWindowCount = 0;
@@ -845,11 +854,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
     this.roomUpdateWindowCount += 1;
-    socket.serializeAttachment({
+    this.writeAttachment(socket, {
       ...attachment,
       updateWindowSecond: second,
       updateWindowCount: socketCount,
-    } satisfies SocketAttachment);
+    });
 
     const validationDocument = this.getBinaryDocument();
     try {
@@ -1220,10 +1229,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       // skipped one is corrected by the next access recheck.)
       if (event.roleVersion <= attachment.roleVersion) continue;
       if (isTarget && command.targetRole) {
-        const next = this.withRole(attachment, command.targetRole, event.roleVersion);
-        socket.serializeAttachment(next);
+        this.writeAttachment(
+          socket,
+          this.withRole(attachment, command.targetRole, event.roleVersion),
+        );
       } else {
-        socket.serializeAttachment({ ...attachment, roleVersion: event.roleVersion });
+        this.writeAttachment(socket, { ...attachment, roleVersion: event.roleVersion });
       }
       sendMessage(socket, { type: "control.room", data: event });
     }
@@ -1235,39 +1246,31 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     update: Uint8Array,
     except?: WebSocket,
   ): void {
-    const binary = exactArrayBuffer(
-      encodeCollaborationServerUpdate({ streamId, updateId, update }),
+    this.fanOut(
+      exactArrayBuffer(encodeCollaborationServerUpdate({ streamId, updateId, update })),
+      except,
     );
-    for (const socket of this.ctx.getWebSockets()) {
-      if (socket === except || !isOpen(socket)) continue;
-      try {
-        socket.send(binary);
-      } catch {
-        socket.close(1011, "broadcast failed");
-      }
-    }
   }
 
   private broadcastAwareness(entry: CollaborationAwarenessProtocolEntry, except?: WebSocket): void {
-    const binary = exactArrayBuffer(
-      encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
+    this.fanOut(
+      exactArrayBuffer(
+        encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
+      ),
+      except,
     );
-    for (const socket of this.ctx.getWebSockets()) {
-      if (socket === except || !isOpen(socket)) continue;
-      try {
-        socket.send(binary);
-      } catch {
-        socket.close(1011, "broadcast failed");
-      }
-    }
   }
 
   private broadcast(message: CollaborationWebSocketServerMessage, except?: WebSocket): void {
-    const encoded = JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message));
+    this.fanOut(JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message)), except);
+  }
+
+  /** Sends `payload` to every open socket but `except`; a socket that fails to take it is closed. */
+  private fanOut(payload: string | ArrayBuffer, except?: WebSocket): void {
     for (const socket of this.ctx.getWebSockets()) {
       if (socket === except || !isOpen(socket)) continue;
       try {
-        socket.send(encoded);
+        socket.send(payload);
       } catch {
         socket.close(1011, "broadcast failed");
       }

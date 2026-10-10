@@ -1,8 +1,8 @@
 import type { z } from "zod";
 
 // Plumbing the room and voice Durable Objects share: their hibernatable
-// sockets, the canonical session the Worker hands them in a header, and a
-// per-user connection budget.
+// sockets, the canonical session the Worker hands them in a header, their
+// per-second message windows and a per-user connection budget.
 
 const WEBSOCKET_OPEN = 1;
 
@@ -44,6 +44,19 @@ export function decodeHeaderJson<Schema extends z.ZodType>(
   } catch {
     return null;
   }
+}
+
+/**
+ * The count a per-second rate window holds after one more message in
+ * `second`: the stored count plus one while the window is still that second,
+ * otherwise a new window starting at one.
+ */
+export function rateWindowCount(
+  windowSecond: number | undefined,
+  windowCount: number | undefined,
+  second: number,
+): number {
+  return windowSecond === second ? (windowCount ?? 0) + 1 : 1;
 }
 
 /**

@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { randomToken } from "./bytes";
-import { ConnectionQuota, decodeHeaderJson, encodeHeaderJson } from "./socketSupport";
+import {
+  ConnectionQuota,
+  decodeHeaderJson,
+  encodeHeaderJson,
+  rateWindowCount,
+} from "./socketSupport";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,6 +32,15 @@ describe("canonical session headers", () => {
     expect(
       decodeHeaderJson(schema, withHeader(encodeURIComponent('{"userId":"u1"}')), "X-Session"),
     ).toBeNull();
+  });
+});
+
+describe("rateWindowCount", () => {
+  it("starts a new window at one and counts on within the same second", () => {
+    expect(rateWindowCount(undefined, undefined, 5)).toBe(1);
+    expect(rateWindowCount(4, 9, 5)).toBe(1);
+    expect(rateWindowCount(5, 1, 5)).toBe(2);
+    expect(rateWindowCount(5, undefined, 5)).toBe(1);
   });
 });
 

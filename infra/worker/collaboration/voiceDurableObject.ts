@@ -55,6 +55,7 @@ import {
   encodeHeaderJson,
   isCurrentRoom,
   isOpen,
+  rateWindowCount,
 } from "./socketSupport";
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
@@ -556,8 +557,11 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     }
 
     const second = Math.floor(Date.now() / 1000);
-    const count =
-      attachment.messageWindowSecond === second ? (attachment.messageWindowCount ?? 0) + 1 : 1;
+    const count = rateWindowCount(
+      attachment.messageWindowSecond,
+      attachment.messageWindowCount,
+      second,
+    );
     if (count > MAX_VOICE_MESSAGES_PER_SECOND) {
       sendVoiceMessage(socket, {
         type: "voice.error",
@@ -814,10 +818,11 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       }
 
       const second = Math.floor(Date.now() / 1000);
-      const count =
-        authorizedAttachment.sfuWindowSecond === second
-          ? (authorizedAttachment.sfuWindowCount ?? 0) + 1
-          : 1;
+      const count = rateWindowCount(
+        authorizedAttachment.sfuWindowSecond,
+        authorizedAttachment.sfuWindowCount,
+        second,
+      );
       if (count > MAX_VOICE_SFU_REQUESTS_PER_SECOND) {
         return noStoreJson({ error: "rate-limited" }, 429);
       }
