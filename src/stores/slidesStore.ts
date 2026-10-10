@@ -78,12 +78,21 @@ export interface SlidesContext {
   deckBorrowed: boolean;
 }
 
+/** A closed slide panel. Spread it (`{ ...DEFAULT_PREVIEW_STATE }`) for a fresh closed state. */
 export const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   isOpen: false,
   isMaximized: false,
   currentSlideId: null,
   indexv: 0,
 };
+
+/** The panel showing `slideId`: maximized and on its first build step unless told otherwise. */
+export function openedSlidePreviewState(
+  slideId: string,
+  { isMaximized = true, indexv = 0 }: { isMaximized?: boolean; indexv?: number } = {},
+): SlidePreviewState {
+  return { isOpen: true, isMaximized, currentSlideId: slideId, indexv };
+}
 
 /** The whole store state, including whether the deck was borrowed. */
 export type SlidesStoreSnapshot = SlidesContext;

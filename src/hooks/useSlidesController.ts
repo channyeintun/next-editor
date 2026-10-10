@@ -1,7 +1,12 @@
 import { useRef, useEffect } from "react";
 import { useSelector } from "@xstate/store-react";
 import type { Slide, SlideEvent, SlidePreviewState } from "../types/slides";
-import { selectPreviewState, selectSlides, type SlidesStoreInstance } from "../stores/slidesStore";
+import {
+  openedSlidePreviewState,
+  selectPreviewState,
+  selectSlides,
+  type SlidesStoreInstance,
+} from "../stores/slidesStore";
 
 interface UseSlidesControllerConfig {
   store: SlidesStoreInstance;
@@ -151,12 +156,7 @@ export const useSlidesController = ({
   // Opens a slide maximized. The state is set here rather than left to the
   // slide_open event, so the slide opens even when onSlideEvent declines it.
   const openAt = (slideId: string, indexv: number) => {
-    setPreviewState({
-      isOpen: true,
-      isMaximized: true,
-      currentSlideId: slideId,
-      indexv,
-    });
+    setPreviewState(openedSlidePreviewState(slideId, { indexv }));
 
     handleSlideEvent({
       type: "slide_open",

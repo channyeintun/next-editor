@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   createSlidesStore,
+  DEFAULT_PREVIEW_STATE,
   isSlide,
   loadSlidesFromStorage,
+  openedSlidePreviewState,
   restoreSlidesStore,
   saveSlidesToStorage,
   setSlidesStoreDeckBorrowed,
@@ -50,6 +52,39 @@ describe("isSlide", () => {
     expect(
       isSlide({ id: "e", content: "x", contentType: "google-svg", order: 0, steps: "nope" }),
     ).toBe(false);
+  });
+});
+
+describe("slide preview states", () => {
+  it("opens a slide maximized on its first build step by default", () => {
+    expect(openedSlidePreviewState("intro")).toEqual({
+      isOpen: true,
+      isMaximized: true,
+      currentSlideId: "intro",
+      indexv: 0,
+    });
+  });
+
+  it("opens a slide docked or on a later build step when asked", () => {
+    expect(openedSlidePreviewState("intro", { isMaximized: false, indexv: 2 })).toEqual({
+      isOpen: true,
+      isMaximized: false,
+      currentSlideId: "intro",
+      indexv: 2,
+    });
+  });
+
+  it("hands out a fresh object every time, so the store always takes it", () => {
+    expect(openedSlidePreviewState("intro")).not.toBe(openedSlidePreviewState("intro"));
+  });
+
+  it("keeps the closed state the studio driver and render spread", () => {
+    expect(DEFAULT_PREVIEW_STATE).toEqual({
+      isOpen: false,
+      isMaximized: false,
+      currentSlideId: null,
+      indexv: 0,
+    });
   });
 });
 

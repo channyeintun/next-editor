@@ -1,5 +1,9 @@
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../../core/src/whiteboard";
-import { selectPreviewState } from "../../stores/slidesStore";
+import {
+  DEFAULT_PREVIEW_STATE,
+  openedSlidePreviewState,
+  selectPreviewState,
+} from "../../stores/slidesStore";
 import { StudioActionError, abortableSleep, waitUntil } from "../async";
 import {
   WHITEBOARD_DRAW_FRAME_MS,
@@ -49,12 +53,7 @@ export function stageCommands(
         indexv: 0,
       });
       deps.slidesStore.trigger.setPreviewState({
-        previewState: {
-          isOpen: true,
-          isMaximized: maximized,
-          currentSlideId: slideId,
-          indexv: 0,
-        },
+        previewState: openedSlidePreviewState(slideId, { isMaximized: maximized }),
       });
 
       await waitUntil(
@@ -69,13 +68,16 @@ export function stageCommands(
 
     async closeSlide() {
       const previewState = selectPreviewState(deps.slidesStore.getSnapshot().context);
+      // Unlike the slides controller's closePresentation, this records
+      // slide_close even when no slide is open — a known difference, kept on
+      // purpose.
       deps.notifySlideEvent({
         type: "slide_close",
         timestamp: RECORDER_ASSIGNS_TIMESTAMP,
         slideId: previewState.currentSlideId ?? undefined,
       });
       deps.slidesStore.trigger.setPreviewState({
-        previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+        previewState: { ...DEFAULT_PREVIEW_STATE },
       });
 
       await waitUntil(() => !selectPreviewState(deps.slidesStore.getSnapshot().context).isOpen, {

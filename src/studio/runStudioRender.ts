@@ -3,7 +3,11 @@ import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
-import type { SlidesStoreInstance } from "../stores/slidesStore";
+import {
+  DEFAULT_PREVIEW_STATE,
+  openedSlidePreviewState,
+  type SlidesStoreInstance,
+} from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { EMPTY_WHITEBOARD_SCENE } from "../core/src/whiteboard";
 import { loadWhiteboardPanel } from "../components/whiteboardPanelLoader";
@@ -283,12 +287,12 @@ export async function runStudioRender(
   for (const slide of plan.slides) {
     if (slide.contentType !== "google-svg") continue;
     deps.slidesStore.trigger.setPreviewState({
-      previewState: { isOpen: true, isMaximized: true, currentSlideId: slide.id, indexv: 0 },
+      previewState: openedSlidePreviewState(slide.id),
     });
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   deps.slidesStore.trigger.setPreviewState({
-    previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+    previewState: { ...DEFAULT_PREVIEW_STATE },
   });
   deps.whiteboardStore.trigger.setScene({ scene: EMPTY_WHITEBOARD_SCENE });
   // The runner dock is stage furniture too. Pinning it here rather than with a
