@@ -7,6 +7,7 @@ import {
 import { normalizeWorkspaceFolderPath } from "../types/workspacePaths";
 import { base64ToBytes } from "../shared/base64";
 import { getWorkspaceAssetBlob } from "../storage/workspaceAssetStore";
+import { downloadBlob } from "./downloadBlob";
 
 function getArchiveFileName(projectName: string): string {
   const normalizedName = projectName
@@ -33,12 +34,6 @@ async function streamBlobIntoEntry(blob: Blob, entry: ZipPassThrough): Promise<v
   }
 }
 
-function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-}
-
 export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): Promise<void> {
   const chunks: Uint8Array[] = [];
   let resolveArchive!: (blob: Blob) => void;
@@ -54,7 +49,9 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
     }
     chunks.push(chunk);
     if (final) {
-      resolveArchive(new Blob(chunks.map(copyToArrayBuffer), { type: "application/zip" }));
+      // A Blob reads each view's own byte range, so fflate's chunks go in as
+      // they are instead of being copied into standalone buffers first.
+      resolveArchive(new Blob(chunks as BlobPart[], { type: "application/zip" }));
     }
   });
 
@@ -92,19 +89,5 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
   }
 
   zip.end();
-  const blob = await archive;
-  const downloadUrl = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `${getArchiveFileName(project.name)}.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } finally {
-    window.setTimeout(() => {
-      URL.revokeObjectURL(downloadUrl);
-    }, 1000);
-  }
+  downloadBlob(await archive, `${getArchiveFileName(project.name)}.zip`);
 }
