@@ -1,4 +1,5 @@
 import type { CaptionCue } from "../core/src/types";
+import { normalizeCues } from "./cues";
 
 function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
@@ -21,9 +22,7 @@ function formatTimestamp(ms: number): string {
  * cue text are flattened — a blank line would otherwise terminate the cue early.
  */
 export function serializeCuesToVtt(cues: CaptionCue[]): string {
-  const body = cues
-    .filter((cue) => cue.start >= 0 && cue.end > cue.start && cue.text.trim().length > 0)
-    .sort((a, b) => a.start - b.start)
+  const body = normalizeCues(cues)
     .map((cue) => {
       const text = cue.text.replace(/\n\s*\n/g, "\n").trim();
       return `${formatTimestamp(cue.start)} --> ${formatTimestamp(cue.end)}\n${text}`;

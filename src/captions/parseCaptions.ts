@@ -1,4 +1,5 @@
 import type { CaptionCue } from "../core/src/types";
+import { normalizeCues } from "./cues";
 
 function parseTimestampMs(raw: string): number {
   const parts = raw.trim().split(":");
@@ -29,12 +30,6 @@ const TIMESTAMP_LINE =
 
 function stripVttTags(text: string): string {
   return text.replace(/<[^>]+>/g, "");
-}
-
-function normalizeCues(cues: CaptionCue[]): CaptionCue[] {
-  return cues
-    .filter((c) => c.start >= 0 && c.end > c.start && c.text.trim().length > 0)
-    .sort((a, b) => a.start - b.start);
 }
 
 export function parseVtt(text: string): CaptionCue[] {

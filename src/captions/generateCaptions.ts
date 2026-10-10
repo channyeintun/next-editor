@@ -1,4 +1,5 @@
 import type { CaptionCue, Recording } from "../core/src/types";
+import { decodeAudioBlob } from "../core/src/utils/audioDecode";
 import { WHISPER_SAMPLE_RATE } from "./whisper/melSpectrogram";
 import type { TranscribedSegment } from "./whisper/whisperTranscriber";
 import { proxy, transfer, wrap } from "comlink";
@@ -25,8 +26,7 @@ export type CaptionGenerationProgress =
 
 /** The narration as 16 kHz mono samples: every channel averaged. */
 async function decodeNarration(audio: Blob): Promise<Float32Array<ArrayBuffer>> {
-  const context = new OfflineAudioContext(1, 1, WHISPER_SAMPLE_RATE);
-  const buffer = await context.decodeAudioData(await audio.arrayBuffer());
+  const buffer = await decodeAudioBlob(audio, WHISPER_SAMPLE_RATE);
   if (buffer.numberOfChannels === 1) return buffer.getChannelData(0).slice();
   const mono = new Float32Array(buffer.length);
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
