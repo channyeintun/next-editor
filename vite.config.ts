@@ -1,12 +1,12 @@
 import { defineConfig, lazyPlugins, loadEnv } from "vite-plus";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
-import posthog from "@posthog/rollup-plugin";
 import { fileURLToPath } from "node:url";
 
 import { proxyPlugin } from "./tube/vite/proxyPlugin";
 import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
+import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -55,7 +55,9 @@ export default ({ mode }: { mode: string }) => {
       // Worker serves in production (see src/shared/openrouterProxy.ts).
       openrouterProxyPlugin(),
       wasm(),
-      posthog({
+      // Source-map upload. Chunks carry a constant release so their names
+      // survive deploys; index.html carries the deploy's own release.
+      ...posthogReleasePlugins({
         personalApiKey: process.env.POSTHOG_API_KEY!,
         projectId: process.env.POSTHOG_PROJECT_ID,
         host: process.env.POSTHOG_HOST,
