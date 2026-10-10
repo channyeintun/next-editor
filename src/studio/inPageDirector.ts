@@ -21,7 +21,7 @@ import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
 import { voxCpm2SynthProvider } from "./tts/modalVoxCpm2Synth";
 import { athanLabSynthProvider } from "./tts/athanlabSynth";
 import type { DialogSynthProvider } from "./tts/synthProvider";
-import { decodeWavPcm16, stitchPcmSegments, validateDialogWav } from "./tts/wav";
+import { stitchPcmSegments, validateDialogWav } from "./tts/wav";
 
 /**
  * The in-page Director stage (narration + compile at render time): split the
@@ -106,6 +106,8 @@ function errorMessageOf(error: unknown): string {
 
 interface DialogTake extends CachedDialogWav {
   durationMs: number;
+  /** The prepared take's samples, decoded once by its validation. */
+  pcm: Int16Array;
 }
 
 /**
@@ -115,7 +117,7 @@ interface DialogTake extends CachedDialogWav {
  */
 function preparedTakeOf(provider: DialogSynthProvider, raw: CachedDialogWav): DialogTake {
   const wav = provider.prepareTake(raw.wav);
-  return { ...raw, wav, durationMs: validateDialogWav(wav, provider.sampleRate) };
+  return { ...raw, wav, ...validateDialogWav(wav, provider.sampleRate) };
 }
 
 /**
@@ -190,7 +192,7 @@ export async function buildPlanFromScript(
   const lexicon = narrationLexiconFor(script.lesson.locale);
 
   // ---- Per-dialog synthesis through the content-addressed cache -----------
-  const takes: Uint8Array[] = [];
+  const takes: Int16Array[] = [];
   const labels: string[] = [];
   const durationsMs: number[] = [];
   const dialogHashes: string[] = [];
@@ -265,7 +267,7 @@ export async function buildPlanFromScript(
         `${capitalize(label)} ran to the speech engine's length limit without the model ending the sentence — listen for run-on or cut-off audio, and reword or split that sentence if it sounds wrong`,
       );
     }
-    takes.push(take.wav);
+    takes.push(take.pcm);
     durationsMs.push(take.durationMs);
   }
 
@@ -273,10 +275,7 @@ export async function buildPlanFromScript(
   // The cache keeps each raw take; leveling happens on every build, so a
   // change to the leveling never invalidates paid or slow synthesis. The gain
   // is per dialog and static, so durations (and the schedule) do not change.
-  const leveled = levelNarrationDialogs(
-    takes.map((wav) => decodeWavPcm16(wav).pcm),
-    provider.sampleRate,
-  );
+  const leveled = levelNarrationDialogs(takes, provider.sampleRate);
   const levelingWarnings = leveled.dialogs.flatMap(({ leveledLufs }, index) => {
     const offLu = leveledLufs === null ? 0 : leveledLufs - leveled.levelLufs;
     if (Math.abs(offLu) <= MAX_LEVEL_DEVIATION_LU) {
@@ -298,8 +297,9 @@ export async function buildPlanFromScript(
     lexicon,
   });
 
-  // The leveled samples go straight onto the canvas: every take was validated
-  // at the provider's rate, so there is nothing to re-encode or re-check.
+  // The leveled samples go straight into the narration WAV: every take was
+  // validated at the provider's rate, so there is nothing to re-encode or
+  // re-check.
   const stitched = stitchPcmSegments(
     schedule.timeline.map((entry, index) => ({
       pcm: leveled.dialogs[index].pcm,

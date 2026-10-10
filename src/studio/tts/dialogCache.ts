@@ -80,7 +80,10 @@ export async function putCachedDialogWav(
   }
   try {
     const cache = await caches.open(CACHE_NAME);
-    await cache.put(cacheUrlFor(requestHash), new Response(wav.slice() as BlobPart, { headers }));
+    // Response copies the bytes it is given; only a view on a SharedArrayBuffer,
+    // which a body cannot be, is copied into a plain buffer first.
+    const body = wav.buffer instanceof ArrayBuffer ? (wav as Uint8Array<ArrayBuffer>) : wav.slice();
+    await cache.put(cacheUrlFor(requestHash), new Response(body, { headers }));
   } catch (error) {
     onUnavailable?.(reasonOf(error));
   }

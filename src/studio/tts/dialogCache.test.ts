@@ -30,6 +30,20 @@ describe("dialogCache", () => {
     expect(await getCachedDialogWav("abc")).toBeNull();
   });
 
+  it("keeps only a take's own bytes, from a window or a shared buffer", async () => {
+    vi.stubGlobal("caches", memoryCaches());
+    const take = [82, 73, 70, 70, 1, 2];
+    const windowed = new Uint8Array([9, ...take, 9]).subarray(1, 1 + take.length);
+    const shared = new Uint8Array(new SharedArrayBuffer(take.length));
+    shared.set(take);
+
+    await putCachedDialogWav("windowed", { wav: windowed, hitFrameCap: false });
+    await putCachedDialogWav("shared", { wav: shared, hitFrameCap: false });
+
+    expect((await getCachedDialogWav("windowed"))?.wav).toEqual(new Uint8Array(take));
+    expect((await getCachedDialogWav("shared"))?.wav).toEqual(new Uint8Array(take));
+  });
+
   it("treats a storage failure as a miss or a no-op, and reports it", async () => {
     vi.stubGlobal("caches", {
       open: async () => {

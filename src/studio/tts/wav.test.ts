@@ -38,6 +38,27 @@ describe("wav codec", () => {
     expect(pcm[4]).toBe(-0x8000);
   });
 
+  it("decodes a data chunk after an odd-sized chunk, from any byte offset", () => {
+    const pcm = Int16Array.from([1, -2, 300, -32768, 32767]);
+    const plain = encodeWavPcm16(pcm, RATE);
+    // A 3-byte LIST chunk plus its pad byte between fmt and data.
+    const extra = [0x4c, 0x49, 0x53, 0x54, 3, 0, 0, 0, 7, 8, 9, 0];
+    const withChunk = new Uint8Array(plain.length + extra.length);
+    withChunk.set(plain.subarray(0, 36));
+    withChunk.set(extra, 36);
+    withChunk.set(plain.subarray(36), 36 + extra.length);
+    new DataView(withChunk.buffer).setUint32(4, withChunk.length - 8, true);
+    // The same file one byte into a larger buffer: its data chunk is odd-aligned.
+    const shifted = new Uint8Array(withChunk.length + 1);
+    shifted.set(withChunk, 1);
+
+    for (const bytes of [withChunk, shifted.subarray(1)]) {
+      const decoded = decodeWavPcm16(bytes);
+      expect(decoded.sampleRate).toBe(RATE);
+      expect(decoded.pcm).toEqual(pcm);
+    }
+  });
+
   it("rejects a data chunk cut short", () => {
     expect(() => decodeWavPcm16(toneWav(100, 1).slice(0, 100))).toThrow(
       /data chunk is truncated: declares 4800 bytes, 56 present/,
@@ -174,8 +195,10 @@ describe("stitchPcmSegments", () => {
 });
 
 describe("validateDialogWav", () => {
-  it("returns the duration of voiced audio at the expected rate", () => {
-    expect(validateDialogWav(toneWav(1_500, 1_000), RATE)).toBe(1_500);
+  it("returns the duration and samples of voiced audio at the expected rate", () => {
+    const { durationMs, pcm } = validateDialogWav(toneWav(1_500, 1_000), RATE);
+    expect(durationMs).toBe(1_500);
+    expect(pcm).toEqual(tonePcm(1_500, 1_000));
   });
 
   it("rejects a wrong rate, no samples, silence, and malformed bytes", () => {

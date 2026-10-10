@@ -7,7 +7,7 @@
  */
 
 // The 16-bit PCM mono writer is shared with recorded narration, so it lives in core.
-import { encodeWavPcm16, floatTo16BitPcm } from "../../core/src/utils/wavPcm16";
+import { allocateWavPcm16, encodeWavPcm16, floatTo16BitPcm } from "../../core/src/utils/wavPcm16";
 
 const RIFF = 0x46464952; // "RIFF" LE
 const WAVE = 0x45564157; // "WAVE" LE
@@ -133,12 +133,10 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
         );
       }
       const sampleCount = Math.floor(chunkSize / 2);
-      // Copy: the data chunk may start on an odd byte offset, and Int16Array
-      // views require 2-byte alignment.
-      pcm = new Int16Array(sampleCount);
-      for (let i = 0; i < sampleCount; i++) {
-        pcm[i] = view.getInt16(body + i * 2, true);
-      }
+      // Copy into a fresh buffer: the data chunk may start on an odd byte
+      // offset, and Int16Array views require 2-byte alignment. The samples are
+      // little-endian, as the writer (and every supported host) assumes.
+      pcm = new Int16Array(bytes.slice(body, body + sampleCount * 2).buffer);
     }
     offset = body + chunkSize + (chunkSize % 2);
   }
@@ -154,13 +152,22 @@ export function wavDurationMs(bytes: Uint8Array): number {
   return Math.round((pcm.length / sampleRate) * 1000);
 }
 
+export interface ValidatedDialogWav {
+  durationMs: number;
+  /** The decoded samples, so the caller levels them without decoding again. */
+  pcm: Int16Array;
+}
+
 /**
  * Check that synthesized dialog audio is usable before it is cached or
  * scheduled: PCM16 mono at the expected rate, with samples, and not silent
  * throughout (no sample reaches the voiced threshold trimSilence uses).
- * Returns the duration; throws with the reason otherwise.
+ * Returns the duration and samples; throws with the reason otherwise.
  */
-export function validateDialogWav(bytes: Uint8Array, expectedSampleRate: number): number {
+export function validateDialogWav(
+  bytes: Uint8Array,
+  expectedSampleRate: number,
+): ValidatedDialogWav {
   const { pcm, sampleRate } = decodeWavPcm16(bytes);
   if (sampleRate !== expectedSampleRate) {
     throw new Error(`audio is ${sampleRate}Hz, expected ${expectedSampleRate}Hz`);
@@ -172,15 +179,15 @@ export function validateDialogWav(bytes: Uint8Array, expectedSampleRate: number)
   if (!pcm.some((sample) => Math.abs(sample) > voicedFloor)) {
     throw new Error("audio is silent");
   }
-  return Math.round((pcm.length / sampleRate) * 1000);
+  return { durationMs: Math.round((pcm.length / sampleRate) * 1000), pcm };
 }
 
 /**
- * Place each segment's samples at its scheduled offset in one silent canvas
- * and write it as a WAV. Overlaps are a scheduling bug and fail loudly rather
- * than mixing audio. Every segment must already be at `sampleRate`: the
- * narration builder validates each take at the provider's rate before it
- * levels and stitches them.
+ * Place each segment's samples at its scheduled offset in one silent WAV,
+ * writing them straight into its data chunk. Overlaps are a scheduling bug
+ * and fail loudly rather than mixing audio. Every segment must already be at
+ * `sampleRate`: the narration builder validates each take at the provider's
+ * rate before it levels and stitches them.
  */
 export function stitchPcmSegments(
   segments: readonly { pcm: Int16Array; startMs: number }[],
@@ -188,7 +195,7 @@ export function stitchPcmSegments(
   sampleRate: number,
 ): Uint8Array<ArrayBuffer> {
   const totalSamples = Math.ceil((totalDurationMs / 1000) * sampleRate);
-  const canvas = new Int16Array(totalSamples);
+  const wav = allocateWavPcm16(totalSamples, sampleRate);
 
   const placed = [...segments].sort((left, right) => left.startMs - right.startMs);
   let previousEndSample = 0;
@@ -200,9 +207,9 @@ export function stitchPcmSegments(
     if (startSample + segment.pcm.length > totalSamples) {
       throw new Error(`Segment at ${segment.startMs}ms runs past the stitched duration`);
     }
-    canvas.set(segment.pcm, startSample);
+    wav.pcm.set(segment.pcm, startSample);
     previousEndSample = startSample + segment.pcm.length;
   }
 
-  return encodeWavPcm16(canvas, sampleRate);
+  return wav.bytes;
 }

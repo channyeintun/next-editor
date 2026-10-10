@@ -17,8 +17,16 @@ export function floatTo16BitPcm(samples: Float32Array): Int16Array {
   return pcm;
 }
 
-export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array<ArrayBuffer> {
-  const dataBytes = pcm.length * 2;
+/**
+ * A zeroed 16-bit PCM mono WAV of `sampleCount` samples, with `pcm` viewing
+ * its data chunk, so a writer can place samples straight into the file
+ * instead of building them in a separate buffer and copying it in.
+ */
+export function allocateWavPcm16(
+  sampleCount: number,
+  sampleRate: number,
+): { bytes: Uint8Array<ArrayBuffer>; pcm: Int16Array<ArrayBuffer> } {
+  const dataBytes = sampleCount * 2;
   const buffer = new ArrayBuffer(44 + dataBytes);
   const view = new DataView(buffer);
 
@@ -35,7 +43,12 @@ export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array<
   view.setUint16(34, 16, true); // bits per sample
   view.setUint32(36, DATA, true);
   view.setUint32(40, dataBytes, true);
-  new Int16Array(buffer, 44).set(pcm);
 
-  return new Uint8Array(buffer);
+  return { bytes: new Uint8Array(buffer), pcm: new Int16Array(buffer, 44, sampleCount) };
+}
+
+export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array<ArrayBuffer> {
+  const wav = allocateWavPcm16(pcm.length, sampleRate);
+  wav.pcm.set(pcm);
+  return wav.bytes;
 }
