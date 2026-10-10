@@ -1,7 +1,8 @@
 import type { WebContainerRuntimeRecordingSnapshot } from "../../contexts/WebContainerRuntimeContext";
 import type { StudioPreviewCommandResult } from "../../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, throwIfAborted, waitUntil } from "../async";
-import type { StudioPreviewTarget, StudioRuntime } from "../plan";
+import type { StudioRuntime } from "../plan";
+import { previewCommandTarget, previewExpectationMismatches } from "../previewExpectation";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 
@@ -21,10 +22,6 @@ const PREVIEW_HANDSHAKE_PING_TIMEOUT_MS = 500;
 const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
 
 type StudioWebContainerRuntime = Extract<StudioRuntime, { kind: "webcontainer" }>;
-
-function previewCommandTarget(target: StudioPreviewTarget | undefined) {
-  return target ? { testId: target.value } : undefined;
-}
 
 function webContainerDiagnostic(snapshot: WebContainerRuntimeRecordingSnapshot) {
   return {
@@ -281,28 +278,10 @@ export function webContainerCommands(
           { type: "inspect", target: previewCommandTarget(target) },
           { timeoutMs, signal },
         );
-        const mismatches: string[] = [];
-        if (route !== undefined && inspection.route !== route) {
-          mismatches.push(
-            `route is ${JSON.stringify(inspection.route)}, expected ${JSON.stringify(route)}`,
-          );
-        }
-        if (textContains !== undefined && !inspection.target?.text.includes(textContains)) {
-          mismatches.push(`target text does not contain ${JSON.stringify(textContains)}`);
-        }
-        if (value !== undefined && inspection.target?.value !== value) {
-          mismatches.push(
-            `target value is ${JSON.stringify(inspection.target?.value)}, expected ${JSON.stringify(value)}`,
-          );
-        }
-        if (
-          attribute !== undefined &&
-          inspection.target?.attributes[attribute.name] !== attribute.value
-        ) {
-          mismatches.push(
-            `target attribute ${JSON.stringify(attribute.name)} is ${JSON.stringify(inspection.target?.attributes[attribute.name])}, expected ${JSON.stringify(attribute.value)}`,
-          );
-        }
+        const mismatches = previewExpectationMismatches(
+          { route, textContains, value, attribute },
+          inspection,
+        );
         if (mismatches.length > 0) {
           throw new StudioActionError(`Preview expectation failed: ${mismatches.join("; ")}`, {
             inspection,

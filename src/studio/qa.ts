@@ -3,6 +3,7 @@ import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import { RECORDING_SCHEMA_VERSION } from "../core/src/utils/deltaTypes";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
 import type { StudioPlan, StudioPlanAction } from "./plan";
+import { previewExpectationMismatches } from "./previewExpectation";
 import type { StudioCheckResult } from "./report";
 import { workspaceTextFilesOf } from "./recordingWorkspace";
 
@@ -123,25 +124,19 @@ function previewCheckpointFailure(
   if (event?.type !== "preview_checkpoint" || !checkpoint) {
     return "recorded checkpoint missing";
   }
-  if (action.route !== undefined && checkpoint.route !== action.route) {
-    return `route is ${JSON.stringify(checkpoint.route)}, expected ${JSON.stringify(action.route)}`;
-  }
-  if (action.target && checkpoint.target?.testId !== action.target.value) {
-    return `target data-testid is ${JSON.stringify(checkpoint.target?.testId)}, expected ${JSON.stringify(action.target.value)}`;
-  }
-  if (action.textContains !== undefined && !checkpoint.target?.text.includes(action.textContains)) {
-    return `target text does not contain ${JSON.stringify(action.textContains)}`;
-  }
-  if (action.value !== undefined && checkpoint.target?.value !== action.value) {
-    return `target value is ${JSON.stringify(checkpoint.target?.value)}, expected ${JSON.stringify(action.value)}`;
-  }
-  if (
-    action.attribute !== undefined &&
-    checkpoint.target?.attributes[action.attribute.name] !== action.attribute.value
-  ) {
-    return `target attribute ${JSON.stringify(action.attribute.name)} is ${JSON.stringify(checkpoint.target?.attributes[action.attribute.name])}, expected ${JSON.stringify(action.attribute.value)}`;
-  }
-  return null;
+  // The same comparison the driver ran live, plus the element check the live
+  // inspection never needs; the first mismatch is the detail.
+  const [mismatch] = previewExpectationMismatches(
+    {
+      route: action.route,
+      testId: action.target?.value,
+      textContains: action.textContains,
+      value: action.value,
+      attribute: action.attribute,
+    },
+    checkpoint,
+  );
+  return mismatch ?? null;
 }
 
 export interface ArtifactCheckInput {

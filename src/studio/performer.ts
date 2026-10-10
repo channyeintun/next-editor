@@ -1,6 +1,7 @@
 import { planActionBusyMs, type StudioPlan, type StudioPlanAction } from "./plan";
 import type { StudioDriver } from "./driver";
 import { RENDER_CANCELLED_MESSAGE, StudioActionError, abortableSleep } from "./async";
+import { previewCommandTarget } from "./previewExpectation";
 import type { ActionReceipt } from "./report";
 
 /**
@@ -73,14 +74,14 @@ async function invokeAction(
       return driver.openPreview({ mode: action.mode, timeoutMs: action.timeoutMs });
     case "preview.click":
       return driver.executePreviewCommand({
-        command: { type: "click", target: { testId: action.target.value } },
+        command: { type: "click", target: previewCommandTarget(action.target) },
         timeoutMs: action.timeoutMs,
       });
     case "preview.input":
       return driver.executePreviewCommand({
         command: {
           type: "input",
-          target: { testId: action.target.value },
+          target: previewCommandTarget(action.target),
           value: action.value,
         },
         timeoutMs: action.timeoutMs,
@@ -89,7 +90,7 @@ async function invokeAction(
       return driver.executePreviewCommand({
         command: {
           type: "scroll",
-          target: action.target ? { testId: action.target.value } : undefined,
+          target: previewCommandTarget(action.target),
           top: action.top,
           left: action.left,
         },
