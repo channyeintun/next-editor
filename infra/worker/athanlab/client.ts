@@ -22,6 +22,8 @@ export const ATHANLAB_VOICE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 export const SUBMIT_TIMEOUT_MS = 30_000;
 export const POLL_TIMEOUT_MS = 15_000;
 export const DOWNLOAD_HEADERS_TIMEOUT_MS = 30_000;
+/** A streamed body (finished audio, a voice sample) errors after this long without a chunk. */
+export const DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
 /** Key checks, voices, usage: interactive reads that answer at once or not at all. */
 export const READ_TIMEOUT_MS = 15_000;
 
@@ -60,6 +62,11 @@ export interface AthanLabFetched {
    * the headers are in when the body is streamed on under its own guard.
    */
   done(): void;
+}
+
+/** A GET for a JSON answer under READ_TIMEOUT_MS: key checks, voices, usage. */
+export function readJsonGet(path: string): AthanLabRequestInit {
+  return { method: "GET", path, accept: "application/json", timeoutMs: READ_TIMEOUT_MS };
 }
 
 /**

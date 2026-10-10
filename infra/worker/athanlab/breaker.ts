@@ -23,7 +23,7 @@
  *   while it runs (at most four calls of up to 15 s each), so it can land up
  *   to about a minute after the window it was counted in.
  * - A 401 for a stored key (recordAuthFailure) counts in the same window and
- *   pauses key checks sooner, but is not gated here: routes/athanlab.ts sends
+ *   pauses key checks sooner, but is not gated here: storedKey.ts sends
  *   each stored key under a per-user first-contact lease tied to that sealed
  *   key, so a revoked key costs one failure however many requests carry it at
  *   once, even if the user replaces it meanwhile.
