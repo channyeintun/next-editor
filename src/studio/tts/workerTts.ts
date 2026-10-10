@@ -68,8 +68,9 @@ const DROPPED_CONNECTION_RETRY_DELAYS_MS = [2_000, 5_000];
  * Run `run`, asking again after a dropped connection. A connection dropped
  * between the browser and the Worker rejects with a TypeError ("Failed to
  * fetch") and no response, even when the provider finished the take. A
- * synthesis request is safe to repeat — it changes nothing server-side, or
- * re-attaches to the job already bought — so it is tried
+ * synthesis request is safe to repeat: an AthanLab retry re-attaches to the
+ * job already bought, and a VoxCPM2 retry starts a new Modal job (the Worker
+ * cancels the old one once it sees the browser leave). So it is tried
  * DROPPED_CONNECTION_ATTEMPTS times before `onExhausted` names the failure.
  * Any other rejection (a Worker error carries its own message) is never
  * retried.

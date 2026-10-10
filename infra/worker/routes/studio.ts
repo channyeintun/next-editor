@@ -1,8 +1,10 @@
 import { Hono, type Context } from "hono";
 import { requireUser } from "../auth/requireUser";
+import { clientClosedResponse } from "../clientClosed";
 import type { Env } from "../env";
 import { isJsonObject, readBodyWithLimit, readJsonWithLimit } from "../httpBody";
 import { sanitizeUpstreamText } from "../upstreamText";
+import { requestWaitUntil } from "../waitUntil";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
 import { keyVaultOf } from "../athanlab/keyVault";
 import { DATA, FMT_, RIFF, WAVE } from "../../../src/core/src/utils/wavPcm16";
@@ -311,6 +313,11 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
     return c.json({ error: request.error }, request.status);
   }
 
+  // A browser that has already left would never read the take, so no job is
+  // bought for it.
+  const clientGone = c.req.raw.signal;
+  if (clientGone.aborted) return clientClosedResponse();
+
   let submitted: Response;
   try {
     submitted = await fetch(new URL("/jobs", modal.jobsUrl), {
@@ -339,20 +346,49 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
     return c.json({ error: "Burmese narration service returned no synthesis job" }, 502);
   }
 
-  const result = await pollJob(c, modal, callId);
-  if (!result.ok) {
-    // Whatever ended the wait, the job may still hold the single GPU container;
-    // its result is not wanted any more, and a cancel that fails changes nothing.
-    await fetch(jobUrl(modal, callId), {
-      method: "DELETE",
-      headers: modalAuthHeaders(modal),
-      signal: AbortSignal.timeout(CANCEL_TIMEOUT_MS),
-    })
-      .then((response) => response.body?.cancel())
-      .catch(() => undefined);
+  // A browser that leaves mid-wait (a closed tab, or a dropped connection its
+  // retry replaces with a new job) fires the request signal
+  // (enable_request_signal, wrangler.toml). The job would otherwise keep the
+  // single GPU container for a take nobody reads, so it is cancelled, under
+  // waitUntil because the invocation ends with the client. `settled` keeps
+  // that to one cancel, and none once this request has its answer.
+  let settled = false;
+  const cancelForGoneClient = () => {
+    if (settled) return;
+    settled = true;
+    requestWaitUntil(c)?.(cancelJob(modal, callId));
+  };
+  // Gone while the job was being submitted.
+  if (clientGone.aborted) {
+    cancelForGoneClient();
+    return clientClosedResponse();
   }
+  clientGone.addEventListener("abort", cancelForGoneClient, { once: true });
+
+  let result: Response;
+  try {
+    result = await pollJob(c, modal, callId);
+  } finally {
+    clientGone.removeEventListener("abort", cancelForGoneClient);
+  }
+  if (settled) return result;
+  settled = true;
+  // Whatever ended the wait, the job may still hold the single GPU container;
+  // its result is not wanted any more.
+  if (!result.ok) await cancelJob(modal, callId);
   return result;
 });
+
+/** Cancel a job; a cancel that fails changes nothing, so it never throws. */
+async function cancelJob(modal: ModalConfig, callId: string): Promise<void> {
+  await fetch(jobUrl(modal, callId), {
+    method: "DELETE",
+    headers: modalAuthHeaders(modal),
+    signal: AbortSignal.timeout(CANCEL_TIMEOUT_MS),
+  })
+    .then((response) => response.body?.cancel())
+    .catch(() => undefined);
+}
 
 /** Poll a submitted job until its audio arrives or the wait has to end. */
 async function pollJob(c: Context, modal: ModalConfig, callId: string): Promise<Response> {
@@ -360,6 +396,8 @@ async function pollJob(c: Context, modal: ModalConfig, callId: string): Promise<
   const deadline = startedAt + SYNTHESIS_DEADLINE_MS;
   let consecutiveFailures = 0;
   for (let polls = 1; polls <= MAX_POLLS && Date.now() < deadline; polls++) {
+    // The route cancelled the job when the browser left; nothing to wait for.
+    if (c.req.raw.signal.aborted) return clientClosedResponse();
     const pollStartedAt = Date.now();
     let upstream: Response | null = null;
     try {

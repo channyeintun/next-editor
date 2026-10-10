@@ -54,10 +54,16 @@ function request(
   init: RequestInit = {
     method: "GET",
   },
+  executionCtx?: ExecutionContext,
 ) {
   const headers = new Headers(init.headers);
   headers.set("Cookie", "ne_session=session-1");
-  return studioRoute.request(`https://nexteditor.dev${path}`, { ...init, headers }, env);
+  return studioRoute.request(
+    `https://nexteditor.dev${path}`,
+    { ...init, headers },
+    env,
+    executionCtx,
+  );
 }
 
 function synthesisBody(overrides: Record<string, unknown> = {}): string {
@@ -75,6 +81,31 @@ function postSynthesis(env: Env, body: BodyInit = synthesisBody()) {
     headers: { "Content-Type": "application/json" },
     body,
   });
+}
+
+/**
+ * POST a synthesis whose browser leaves when `browser` is aborted, on a runtime
+ * whose waitUntil is recorded.
+ */
+function postLeavableSynthesis(env: Env, browser: AbortController) {
+  const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+  const executionCtx = {
+    waitUntil,
+    passThroughOnException: () => undefined,
+    props: {},
+  } as unknown as ExecutionContext;
+  const response = request(
+    "/tts/voxcpm2",
+    env,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: synthesisBody(),
+      signal: browser.signal,
+    },
+    executionCtx,
+  );
+  return { response, waitUntil };
 }
 
 type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -377,6 +408,83 @@ describe("studioRoute VoxCPM2 proxy", () => {
     expect(cancels[0][1]?.headers).toMatchObject({ "Modal-Key": "wk-test" });
     // Workers Free allows 50 external subrequests per invocation.
     expect(fetchSpy.mock.calls.length).toBeLessThanOrEqual(50);
+  });
+
+  it("cancels the job once, under waitUntil, when the browser leaves mid-wait", async () => {
+    const browser = new AbortController();
+    const fetchSpy = stubModal({
+      polls: [
+        () => {
+          browser.abort();
+          return pendingResponse();
+        },
+        wavResponse,
+      ],
+    });
+
+    const { response, waitUntil } = postLeavableSynthesis(makeEnv(), browser);
+    const answered = await withFakeTimers(() => response);
+
+    // No further poll for the cancelled job; the 499 is never delivered.
+    expect(answered.status).toBe(499);
+    expect(fetchSpy.mock.calls.map(([, init]) => init?.method)).toEqual(["POST", "GET", "DELETE"]);
+    const [cancelUrl, cancelInit] = callsWith(fetchSpy, "DELETE")[0];
+    expect(String(cancelUrl)).toBe(`${JOBS_URL}/jobs/${CALL_ID}`);
+    expect(cancelInit?.headers).toMatchObject({
+      "Modal-Key": "wk-test",
+      "Modal-Secret": "ws-test",
+    });
+    expect(cancelInit?.signal).toBeInstanceOf(AbortSignal);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
+  });
+
+  it("cancels a job whose browser left while it was being submitted", async () => {
+    const browser = new AbortController();
+    const fetchSpy = stubModal({
+      submit: () => {
+        browser.abort();
+        return jsonResponse({ call_id: CALL_ID }, 202);
+      },
+    });
+
+    const { response, waitUntil } = postLeavableSynthesis(makeEnv(), browser);
+
+    expect((await response).status).toBe(499);
+    expect(fetchSpy.mock.calls.map(([, init]) => init?.method)).toEqual(["POST", "DELETE"]);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+  });
+
+  it("buys no job for a browser that left before the submit", async () => {
+    const browser = new AbortController();
+    const fetchSpy = stubModal();
+    browser.abort();
+
+    const { response, waitUntil } = postLeavableSynthesis(makeEnv(), browser);
+
+    expect((await response).status).toBe(499);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("never cancels for the browser once a request has its answer", async () => {
+    const delivered = new AbortController();
+    const fetchSpy = stubModal();
+    const success = postLeavableSynthesis(makeEnv(), delivered);
+    expect((await success.response).status).toBe(200);
+    // Leaving while the take streams, or after, cancels nothing.
+    delivered.abort();
+    expect(callsWith(fetchSpy, "DELETE")).toHaveLength(0);
+    expect(success.waitUntil).not.toHaveBeenCalled();
+
+    const failedThenLeft = new AbortController();
+    const failingSpy = stubModal({ polls: [() => jsonResponse({ detail: "boom" }, 500)] });
+    const failure = postLeavableSynthesis(makeEnv(), failedThenLeft);
+    expect((await failure.response).status).toBe(502);
+    failedThenLeft.abort();
+    // Only the failure's own cancel, awaited before the answer.
+    expect(callsWith(failingSpy, "DELETE")).toHaveLength(1);
+    expect(failure.waitUntil).not.toHaveBeenCalled();
   });
 
   it("rejects a submit response without a well-formed job id", async () => {

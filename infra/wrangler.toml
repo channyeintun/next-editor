@@ -1,7 +1,10 @@
 name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
-compatibility_flags = ["nodejs_compat"]
+# enable_request_signal makes an incoming request's `signal` fire when the
+# client cancels it (routes/studio.ts then cancels the GPU job nobody is
+# waiting for); a request that completes never fires it.
+compatibility_flags = ["nodejs_compat", "enable_request_signal"]
 # Every isolate start (the first request per colo after idle, each Durable
 # Object wake) parses the whole bundle, so ship it minified. Wrangler keeps
 # function names by default, and the uploaded source maps keep Workers Logs
