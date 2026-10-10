@@ -200,6 +200,7 @@ describe("AgentSettingsDialog", () => {
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    fireEvent.mouseDown(screen.getByText("Agent settings").closest(".fixed")!);
     fireEvent.click(screen.getByText("Agent settings").closest(".fixed")!);
     expect(onClose).toHaveBeenCalledTimes(2);
   });

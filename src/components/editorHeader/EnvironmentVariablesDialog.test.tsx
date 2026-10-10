@@ -172,6 +172,7 @@ describe("EnvironmentVariablesDialog", () => {
     const { actions, onClose, container, textarea } = renderDialog();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.mouseDown(container.firstElementChild!);
     fireEvent.click(container.firstElementChild!);
     fireEvent.keyDown(textarea(), { key: "Escape" });
 

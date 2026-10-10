@@ -72,9 +72,19 @@ describe("ModalShell", () => {
   it("reports a click on the backdrop", () => {
     const { backdrop, onDismiss } = renderShell();
 
+    fireEvent.mouseDown(backdrop);
     fireEvent.click(backdrop);
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a drag that starts in the card and ends on the backdrop from dismissing", () => {
+    const { backdrop, onDismiss } = renderShell();
+
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Inside" }));
+    fireEvent.click(backdrop);
+
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 
   it("keeps clicks inside the card from reaching the backdrop", () => {

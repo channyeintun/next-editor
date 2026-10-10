@@ -81,6 +81,7 @@ describe("RunnerSettingsDialog", () => {
     fireEvent.click(screen.getByRole("textbox", { name: /^Run Command/ }));
     expect(onClose).not.toHaveBeenCalled();
 
+    fireEvent.mouseDown(backdrop);
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -103,6 +104,7 @@ describe("RunnerSettingsDialog", () => {
     expect(screen.queryByRole("button", { name: "Close runner settings" })).toBeNull();
     expect(document.body).toHaveFocus();
 
+    fireEvent.mouseDown(backdrop);
     fireEvent.click(backdrop);
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
