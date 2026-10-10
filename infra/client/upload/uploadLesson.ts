@@ -4,6 +4,7 @@ import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { formatMediaBytes, MAX_MEDIA_BYTES } from "../../lessons/uploadLimits";
+import { THUMBNAIL_EXTENSIONS, thumbnailFilename } from "../../lessons/thumbnailFiles";
 
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
@@ -40,19 +41,18 @@ interface UploadTarget {
   blob: Blob;
 }
 
-const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg", "webp"] as const;
-
 // The upload route's filename allow-list only recognizes these extensions, so a name-derived
 // guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
 // to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
 // svg is deliberately not one of them — see worker/lessonMediaFiles.ts.
-export function thumbnailExtension(file: File): string {
+export function thumbnailExtension(file: File): (typeof THUMBNAIL_EXTENSIONS)[number] {
   const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
-  if (fromName && (THUMBNAIL_EXTENSIONS as readonly string[]).includes(fromName)) {
-    return fromName;
+  const known = THUMBNAIL_EXTENSIONS.find((extension) => extension === fromName);
+  if (known) {
+    return known;
   }
 
-  const fromMime: Record<string, string> = {
+  const fromMime: Record<string, (typeof THUMBNAIL_EXTENSIONS)[number]> = {
     "image/png": "png",
     "image/jpeg": "jpg",
     "image/webp": "webp",
@@ -85,7 +85,8 @@ async function uploadFile(
 // simple and matches the spec's "single progress bar, not per-file" — the
 // user doesn't care which file is moving. The lesson id is generated once by
 // the caller (useState in the modal) and reused across retries, so a retry
-// re-PUTs to the same R2 keys rather than starting a new lesson cold.
+// re-PUTs to the same R2 keys (all but the thumbnail's, below) rather than
+// starting a new lesson cold.
 export async function uploadLesson(
   lessonId: string,
   input: UploadLessonInput,
@@ -121,11 +122,17 @@ export async function uploadLesson(
   if (files.audio) targets.push({ filename: files.audio.name, blob: files.audio.blob });
   if (files.camera) targets.push({ filename: files.camera.name, blob: files.camera.blob });
   targets.push(...captionTargets);
-  const thumbnailFilename = input.thumbnail
-    ? `${lessonId}-thumbnail.${thumbnailExtension(input.thumbnail)}`
+  // A new write-once name on every call (thumbnailFiles.ts), retries included:
+  // an earlier attempt's thumbnail is left unreferenced, like any abandoned
+  // upload, until the lesson's delete clears its whole folder.
+  const thumbnailTarget = input.thumbnail
+    ? {
+        filename: thumbnailFilename(lessonId, thumbnailExtension(input.thumbnail)),
+        blob: input.thumbnail,
+      }
     : null;
-  if (input.thumbnail && thumbnailFilename) {
-    targets.push({ filename: thumbnailFilename, blob: input.thumbnail });
+  if (thumbnailTarget) {
+    targets.push(thumbnailTarget);
   }
 
   // Checked before the first PUT, not per-request: Cloudflare rejects an
@@ -157,8 +164,8 @@ export async function uploadLesson(
     );
   }
 
-  const thumbnail = thumbnailFilename
-    ? pathsByFilename[thumbnailFilename]
+  const thumbnail = thumbnailTarget
+    ? pathsByFilename[thumbnailTarget.filename]
     : input.useDefaultThumbnail
       ? DEFAULT_THUMBNAIL_PATH
       : undefined;
@@ -187,10 +194,9 @@ export async function publishLesson(lessonId: string): Promise<void> {
   await apiClient.post(`/lessons/${lessonId}/publish`);
 }
 
-// A timestamp in the filename (rather than the fixed "<id>-thumbnail.<ext>"
-// the initial upload uses) so a thumbnail change on an already-published
-// lesson gets a fresh URL — reusing the old key would mean the CDN/browser
-// keeps serving cached bytes from the previous image at that same path.
+// The replacement goes up under a new write-once name (thumbnailFiles.ts), so
+// the lesson gets a fresh URL rather than browsers and the edge keeping the
+// previous image's cached bytes at the old one.
 export async function updateLessonThumbnail(
   lessonId: string,
   thumbnail: File | "default",
@@ -199,7 +205,7 @@ export async function updateLessonThumbnail(
   if (thumbnail === "default") {
     thumbnailPath = DEFAULT_THUMBNAIL_PATH;
   } else {
-    const filename = `${lessonId}-thumbnail-${Date.now()}.${thumbnailExtension(thumbnail)}`;
+    const filename = thumbnailFilename(lessonId, thumbnailExtension(thumbnail));
     thumbnailPath = await uploadFile(lessonId, { filename, blob: thumbnail }, () => {});
   }
   await apiClient.patch(`/lessons/${lessonId}`, { thumbnail: thumbnailPath });

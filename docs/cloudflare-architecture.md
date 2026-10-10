@@ -116,7 +116,7 @@ next-editor-tube-media/
       <lesson-id>.webm        # externalized camera (optional)
       <lesson-id>.en.vtt      # captions (optional; a second track in the same
                               # language is <lesson-id>-2.en.vtt, then -3, …)
-      <lesson-id>-thumbnail-<timestamp>.png|jpg  # a new key per replacement
+      <lesson-id>-thumbnail-<timestamp>.png|jpg|webp  # a new key per upload
   slide-images/
     <sha256-of-source-url>    # Google Slides deck images copied at import time
                               # (POST /api/slide-images); keyed by source URL so

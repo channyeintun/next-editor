@@ -90,6 +90,10 @@ describe("thumbnailExtension", () => {
 });
 
 describe("uploadLesson", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("uploads only the .ne file for a recording with no media, then creates the draft", async () => {
     mockedPut.mockImplementationOnce((_url, body, config) => {
       const size = (body as Blob).size;
@@ -140,6 +144,34 @@ describe("uploadLesson", () => {
     // onProgress(0) at the start, at least one more update after the upload.
     expect(progressValues[0]).toBe(0);
     expect(progressValues.at(-1)).toBeGreaterThan(0);
+  });
+
+  it("uploads a chosen thumbnail under a write-once timestamped name", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_791_222_405_295);
+    mockedPut.mockImplementation((url) =>
+      Promise.resolve({
+        data: { path: `lessons/l1/${String(url).split("/").at(-1)}` },
+      }),
+    );
+    mockedPost.mockResolvedValueOnce({ data: { id: "l1", slug: "my-lesson" } });
+
+    const thumbnail = new File(["webp"], "cover.webp", { type: "image/webp" });
+    await uploadLesson(
+      "l1",
+      { recording: createRecording(), title: "My Lesson", description: "", tags: [], thumbnail },
+      () => {},
+    );
+
+    expect(mockedPut).toHaveBeenCalledWith(
+      "/uploads/l1/media/l1-thumbnail-1791222405295.webp",
+      thumbnail,
+      expect.objectContaining({ headers: { "Content-Type": "image/webp" } }),
+    );
+    expect(mockedPost).toHaveBeenCalledWith(
+      "/lessons",
+      expect.objectContaining({ thumbnail: "lessons/l1/l1-thumbnail-1791222405295.webp" }),
+      expect.anything(),
+    );
   });
 
   it("uploads audio and camera as separate sibling files when present", async () => {
