@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createIframeConsoleBridgeScript,
+  formatPreviewConsoleLine,
   IFRAME_CONSOLE_MESSAGE_TYPE,
 } from "./iframeConsoleBridge";
 
@@ -97,5 +98,22 @@ describe("createIframeConsoleBridgeScript", () => {
     frameWindow.console.warn("once");
 
     expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("formatPreviewConsoleLine", () => {
+  it("tags the line with the kind and the page path", () => {
+    expect(formatPreviewConsoleLine("warn", "/about?tab=1", "careful")).toBe(
+      "[preview:warn] /about?tab=1 careful",
+    );
+    expect(formatPreviewConsoleLine("console-error", "", "boom")).toBe(
+      "[preview:console-error] boom",
+    );
+    expect(formatPreviewConsoleLine("log", "/", "")).toBe("[preview:log] /");
+  });
+
+  it("opens an error line with the [preview:error] tag studio QA fails a render on", () => {
+    // src/studio/qa.ts keys preview.noErrors and RUNNER_ERROR_LINE on this prefix.
+    expect(formatPreviewConsoleLine("error", undefined, "x")).toMatch(/^\[preview:error\] x$/);
   });
 });

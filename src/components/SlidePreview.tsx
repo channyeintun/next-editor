@@ -4,6 +4,7 @@ import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import CustomSlideRenderer from "./CustomSlideRenderer";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../core/src/utils/iframeInteractionProtocol";
 
 interface SlidePreviewProps {
   slides: Slide[];
@@ -108,7 +109,7 @@ function SlidePreview({
     const { type, payload } = event.data || {};
     // payload was dereferenced unguarded, so a bare {type:"IFRAME_INTERACTION"}
     // threw a TypeError inside the listener.
-    if (type === "IFRAME_INTERACTION" && payload && typeof payload === "object") {
+    if (type === IFRAME_INTERACTION_MESSAGE_TYPE && payload && typeof payload === "object") {
       collaboration?.stopFollowing("local-slide-input");
       const interaction = {
         type: payload.type,

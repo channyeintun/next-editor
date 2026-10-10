@@ -14,7 +14,9 @@ import {
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import { recordPerformanceMetric } from "../../utils/performanceMetrics";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../core/src/utils/iframeInteractionProtocol";
 import {
+  formatPreviewConsoleLine,
   IFRAME_CONSOLE_MESSAGE_TYPE,
   isIframeConsoleMethod,
   type IframeConsoleMessagePayload,
@@ -59,13 +61,10 @@ function formatPreviewConsoleMessage(payload: unknown): string | null {
   const args = Array.isArray(consolePayload.args)
     ? consolePayload.args.filter((arg): arg is string => typeof arg === "string")
     : [];
-  const message = args.join(" ");
-  const location =
-    typeof consolePayload.pathname === "string" && consolePayload.pathname
-      ? ` ${consolePayload.pathname}`
-      : "";
+  const pathname =
+    typeof consolePayload.pathname === "string" ? consolePayload.pathname : undefined;
 
-  return `[preview:${consolePayload.method}]${location} ${message}`.trim();
+  return formatPreviewConsoleLine(consolePayload.method, pathname, args.join(" "));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -274,7 +273,7 @@ export function usePreviewMessageBridge({
         return;
       }
 
-      if (type !== "IFRAME_INTERACTION") {
+      if (type !== IFRAME_INTERACTION_MESSAGE_TYPE) {
         return;
       }
 

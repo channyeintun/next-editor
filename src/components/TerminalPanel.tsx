@@ -35,6 +35,7 @@ import {
   dockTabStateClassName,
 } from "./terminalPanel/runtimeDockHelpers";
 import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
+import { formatPreviewConsoleLine } from "../utils/iframeConsoleBridge";
 
 const DEFAULT_CONSOLE_LINES: string[] = [];
 const RUNTIME_PANEL_BG = "bg-[#15191f]";
@@ -241,10 +242,12 @@ function TerminalPanel() {
 
     previousPreviewMessageIdRef.current = latestPreviewMessage.id;
 
-    const location = latestPreviewMessage.pathname ? ` ${latestPreviewMessage.pathname}` : "";
-
     appendConsoleLine(
-      `[preview:${latestPreviewMessage.kind}]${location} ${latestPreviewMessage.text}`.trim(),
+      formatPreviewConsoleLine(
+        latestPreviewMessage.kind,
+        latestPreviewMessage.pathname,
+        latestPreviewMessage.text,
+      ),
     );
   }, [appendConsoleLine, isPlaybackSnapshotActive, latestPreviewMessage]);
 
