@@ -38,13 +38,13 @@ import {
   type CollaborationWebSocketServerMessage,
 } from "../../../src/collaboration/protocol";
 import {
-  CollaborationTeachingError,
   assertCollaborationTeachingTransition,
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
   validateCollaborationTeachingDocument,
   type CollaborationTeachingIntegrity,
 } from "../../../src/collaboration/teachingDocument";
+import { CollaborationTeachingError } from "../../../src/collaboration/teachingRoot";
 import {
   CollaborationProjectError,
   assertCollaborationProjectStructure,

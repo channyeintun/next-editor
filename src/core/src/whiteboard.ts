@@ -220,7 +220,7 @@ export function compareWhiteboardElementIndices(
 /**
  * The collaboration room's canonical scene order: fractional `index`, then the
  * element id for ties. Merges that must converge with a room sort with this
- * (teachingDocument's projection, {@link rebaseWhiteboardDelta}). Replay and the
+ * (teachingWhiteboard's projection, {@link rebaseWhiteboardDelta}). Replay and the
  * studio driver keep {@link compareWhiteboardElementIndices}, because a stable
  * sort over its ties is the only z-order unindexed authored assets have.
  */

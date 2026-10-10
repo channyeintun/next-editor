@@ -4,74 +4,20 @@ import type { Slide } from "../types/slides";
 import { MAX_YJS_UPDATE_BYTES } from "./protocol";
 import { projectCollaborationDocument, seedCollaborationProject } from "./projectDocument";
 import {
-  applyCollaborationWhiteboardDelta,
   assertCollaborationTeachingTransition,
-  collaborationSlidePayloadAssetId,
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
-  decodeCollaborationSlidePayload,
-  encodeCollaborationSlidePayload,
-  hydrateCollaborationSlideManifest,
-  MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES,
-  normalizeCollaborationTeachingSlides,
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
   validateCollaborationTeachingDocument,
-  verifyCollaborationSlideAsset,
 } from "./teachingDocument";
-
-const ASSET = {
-  id: "a".repeat(64),
-  mimeType: "application/vnd.next-editor.slide+json",
-  size: 100,
-};
-
-function slide(id: string, order: number, content = `<h1>${id}</h1>`): Slide {
-  return { id, order, content, contentType: "html" };
-}
-
-function element(id: string, version = 1, index = "a0") {
-  return {
-    id,
-    type: "rectangle",
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 80,
-    angle: 0,
-    strokeColor: "#1e1e1e",
-    backgroundColor: "transparent",
-    fillStyle: "solid",
-    strokeWidth: 1,
-    strokeStyle: "solid",
-    roundness: null,
-    roughness: 1,
-    opacity: 100,
-    seed: 1,
-    version,
-    versionNonce: version * 10,
-    index,
-    isDeleted: false,
-    groupIds: [],
-    frameId: null,
-    boundElements: null,
-    updated: 1,
-    link: null,
-    locked: false,
-  };
-}
-
-function freedraw(id: string, points: number[][]) {
-  return {
-    ...element(id),
-    type: "freedraw",
-    points,
-    pressures: points.map(() => 0.5),
-    simulatePressure: true,
-    lastCommittedPoint: null,
-  };
-}
+import { encodeCollaborationSlidePayload } from "./teachingSlides";
+import { ASSET, element, slide } from "./teachingTestFixtures";
+import {
+  applyCollaborationWhiteboardDelta,
+  MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES,
+} from "./teachingWhiteboard";
 
 describe("collaboration teaching document", () => {
   it("initializes an empty deck and scene without inventing a current slide", () => {
@@ -221,80 +167,6 @@ describe("collaboration teaching document", () => {
     target.destroy();
   });
 
-  it("normalizes duplicate IDs and reuses payload bytes independently of slide identity", () => {
-    const normalized = normalizeCollaborationTeachingSlides([
-      slide("same", 2, "later"),
-      slide("first", 0),
-      slide("same", 1, "first occurrence by order"),
-    ]);
-    expect(normalized.map(({ slide: item }) => item.id)).toEqual(["first", "same"]);
-    const payload = encodeCollaborationSlidePayload(normalized[0].slide);
-    expect(
-      encodeCollaborationSlidePayload(slide("same-payload", 99, normalized[0].slide.content)),
-    ).toEqual(payload);
-    expect(
-      decodeCollaborationSlidePayload(payload, {
-        id: "manifest-slide",
-        contentType: "html",
-        asset: { ...ASSET, size: payload.byteLength },
-      }),
-    ).toMatchObject({ id: "manifest-slide", order: 0, content: normalized[0].slide.content });
-  });
-
-  it("verifies hydrated slide bytes against their content-addressed manifest", async () => {
-    const payload = encodeCollaborationSlidePayload(slide("source", 0));
-    const manifest = {
-      id: "manifest-slide",
-      contentType: "html" as const,
-      asset: {
-        ...ASSET,
-        id: await collaborationSlidePayloadAssetId(payload),
-        size: payload.byteLength,
-      },
-    };
-
-    const fromBytes = (bytes: Uint8Array) =>
-      hydrateCollaborationSlideManifest(manifest, new Map(), async () => bytes);
-    await expect(fromBytes(payload)).resolves.toMatchObject({
-      id: "manifest-slide",
-      content: "<h1>source</h1>",
-    });
-    const verifiedBytes = await verifyCollaborationSlideAsset(payload, manifest.asset);
-    expect(
-      [manifest.id, "reused-manifest"].map((id) =>
-        decodeCollaborationSlidePayload(verifiedBytes, { ...manifest, id }),
-      ),
-    ).toMatchObject([
-      { id: "manifest-slide", content: "<h1>source</h1>" },
-      { id: "reused-manifest", content: "<h1>source</h1>" },
-    ]);
-    let downloads = 0;
-    const cache = new Map<string, Promise<Uint8Array>>();
-    const download = async () => {
-      downloads += 1;
-      return payload;
-    };
-    await expect(
-      Promise.all([
-        hydrateCollaborationSlideManifest(manifest, cache, download),
-        hydrateCollaborationSlideManifest(
-          { ...manifest, id: "cached-reused-manifest" },
-          cache,
-          download,
-        ),
-      ]),
-    ).resolves.toMatchObject([
-      { id: "manifest-slide", content: "<h1>source</h1>" },
-      { id: "cached-reused-manifest", content: "<h1>source</h1>" },
-    ]);
-    expect(downloads).toBe(1);
-
-    const tampered = payload.slice();
-    tampered[0] = (tampered[0] ?? 0) ^ 1;
-    await expect(fromBytes(tampered)).rejects.toThrow(/digest/);
-    await expect(fromBytes(payload.subarray(1))).rejects.toThrow(/size/);
-  });
-
   it("rejects unsafe or malformed teaching payloads before projection", () => {
     expect(() =>
       encodeCollaborationSlidePayload({
@@ -387,111 +259,6 @@ describe("collaboration teaching document", () => {
     right.destroy();
   });
 
-  it("refuses a whiteboard delta before the room's teaching surfaces exist", () => {
-    const doc = new Y.Doc();
-
-    expect(() => applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape")] })).toThrow(
-      "The room teaching surfaces are not initialized",
-    );
-    doc.getMap("project").set("teaching", new Y.Map());
-    expect(() => applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape")] })).toThrow(
-      "The room teaching surfaces are not initialized",
-    );
-
-    doc.destroy();
-  });
-
-  it("returns the current winner when a delta's candidate loses", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, {
-      slides: [],
-      whiteboardElements: [element("shape", 3)],
-    });
-
-    const { elements, accepted } = applyCollaborationWhiteboardDelta(doc, {
-      upserts: [element("shape", 2)],
-    });
-
-    expect(elements).toEqual([expect.objectContaining({ id: "shape", version: 3 })]);
-    expect(projectCollaborationTeachingDocument(doc).whiteboardElements).toEqual(elements);
-    // Another client's version won, so the canvas does not show the result.
-    expect(accepted).toBe(false);
-
-    doc.destroy();
-  });
-
-  it("accepts a delta whose upserts win and whose removals take", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, {
-      slides: [],
-      whiteboardElements: [element("shape", 1, "a0"), element("note", 1, "a1")],
-    });
-
-    expect(
-      applyCollaborationWhiteboardDelta(doc, {
-        upserts: [element("shape", 2, "a0")],
-        removedIds: ["note"],
-      }).accepted,
-    ).toBe(true);
-    // An ID the room never had is already absent.
-    expect(applyCollaborationWhiteboardDelta(doc, { removedIds: ["missing"] }).accepted).toBe(true);
-
-    doc.destroy();
-  });
-
-  it("accepts an upsert equal to the stored winner, whatever its key order", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, {
-      slides: [],
-      whiteboardElements: [element("shape", 3)],
-    });
-    const reordered = Object.fromEntries(Object.entries(element("shape", 3)).reverse());
-
-    expect(
-      applyCollaborationWhiteboardDelta(doc, {
-        upserts: [reordered as ReturnType<typeof element>],
-      }).accepted,
-    ).toBe(true);
-
-    doc.destroy();
-  });
-
-  it("does not accept a removal that a newer upsert of the same element overrides", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [element("shape")] });
-
-    const { elements, accepted } = applyCollaborationWhiteboardDelta(doc, {
-      upserts: [element("shape", 5)],
-      removedIds: ["shape"],
-    });
-
-    expect(elements).toEqual([expect.objectContaining({ id: "shape", version: 5 })]);
-    expect(accepted).toBe(false);
-
-    doc.destroy();
-  });
-
-  it("keeps the longest progressive freehand snapshot at one Excalidraw version", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [] });
-    const partial = freedraw("stroke", [[0, 0]]);
-    const completed = freedraw("stroke", [
-      [0, 0],
-      [1, 1],
-      [2, 2],
-    ]);
-
-    applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
-    const longer = applyCollaborationWhiteboardDelta(doc, { upserts: [completed] });
-    expect(longer.elements[0]?.points).toEqual(completed.points);
-    expect(longer.accepted).toBe(true);
-    const shorter = applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
-    expect(shorter.elements[0]?.points).toEqual(completed.points);
-    expect(shorter.accepted).toBe(false);
-
-    doc.destroy();
-  });
-
   it("converges concurrent whole-slide navigation through Yjs ordering", () => {
     const seed = new Y.Doc();
     seedCollaborationTeachingDocument(seed, {
@@ -524,37 +291,6 @@ describe("collaboration teaching document", () => {
     right.destroy();
   });
 
-  it("keeps hard-removal tombstones through concurrent stale updates", () => {
-    const seed = new Y.Doc();
-    seedCollaborationTeachingDocument(seed, {
-      slides: [],
-      whiteboardElements: [element("shape", 1)],
-    });
-    const left = new Y.Doc();
-    const right = new Y.Doc();
-    const snapshot = Y.encodeStateAsUpdate(seed);
-    Y.applyUpdate(left, snapshot);
-    Y.applyUpdate(right, snapshot);
-
-    applyCollaborationWhiteboardDelta(left, { removedIds: ["shape"] });
-    applyCollaborationWhiteboardDelta(right, { upserts: [element("shape", 2)] });
-    Y.applyUpdate(right, Y.encodeStateAsUpdate(left));
-    Y.applyUpdate(left, Y.encodeStateAsUpdate(right));
-
-    expect(validateCollaborationTeachingDocument(left).projection.whiteboardElements).toEqual([]);
-    expect(projectCollaborationTeachingDocument(right).whiteboardElements).toEqual([]);
-
-    applyCollaborationWhiteboardDelta(left, { upserts: [element("shape", 3)] });
-    Y.applyUpdate(right, Y.encodeStateAsUpdate(left));
-    expect(projectCollaborationTeachingDocument(right).whiteboardElements).toEqual([
-      expect.objectContaining({ id: "shape", version: 3 }),
-    ]);
-
-    seed.destroy();
-    left.destroy();
-    right.destroy();
-  });
-
   it("fingerprints candidate history even when the projected whiteboard winner is unchanged", () => {
     const doc = new Y.Doc();
     seedCollaborationTeachingDocument(doc, {
@@ -577,76 +313,6 @@ describe("collaboration teaching document", () => {
 
     expect(after.projection.whiteboardElements).toEqual(before.projection.whiteboardElements);
     expect(after.mutableFingerprint).not.toBe(before.mutableFingerprint);
-    doc.destroy();
-  });
-
-  it("reuses parsed whiteboard candidates without skipping the record identity check", () => {
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [element("shape")] });
-    const [first] = projectCollaborationTeachingDocument(doc).whiteboardElements;
-    const [second] = validateCollaborationTeachingDocument(doc).projection.whiteboardElements;
-    // An unchanged record is not parsed again: every projection shares its
-    // element, so nothing may mutate it.
-    expect(second).toBe(first);
-    expect(Object.isFrozen(first)).toBe(true);
-    expect(Object.isFrozen(first?.groupIds)).toBe(true);
-
-    const teaching = doc.getMap("project").get("teaching") as Y.Map<unknown>;
-    const whiteboard = teaching.get("whiteboardElements") as Y.Map<Y.Array<string>>;
-    const impostor = new Y.Array<string>();
-    impostor.insert(0, whiteboard.get("shape")!.toArray());
-    whiteboard.set("impostor", impostor);
-
-    expect(
-      projectCollaborationTeachingDocument(doc).whiteboardElements.map(({ id }) => id),
-    ).toEqual(["shape"]);
-    expect(() => validateCollaborationTeachingDocument(doc)).toThrow(/mismatched identity/);
-    doc.destroy();
-  });
-
-  it("counts reused whiteboard candidates in UTF-8 bytes against the scene limit", () => {
-    // Three UTF-8 bytes per UTF-16 unit, so a string-length count would pass.
-    const text = (id: string, index: number) => ({
-      ...element(id, 1, `a${String(index).padStart(3, "0")}`),
-      type: "text",
-      fontSize: 20,
-      fontFamily: 1,
-      text: "မ".repeat(7_000),
-      textAlign: "left",
-      verticalAlign: "top",
-      containerId: null,
-      originalText: "မ".repeat(7_000),
-      autoResize: true,
-      lineHeight: 1.25,
-    });
-    const doc = new Y.Doc();
-    seedCollaborationTeachingDocument(doc, {
-      slides: [],
-      whiteboardElements: Array.from({ length: 70 }, (_, index) => text(`t${index}`, index)),
-    });
-    expect(validateCollaborationTeachingDocument(doc).projection.whiteboardElements).toHaveLength(
-      70,
-    );
-
-    const teaching = doc.getMap("project").get("teaching") as Y.Map<unknown>;
-    const whiteboard = teaching.get("whiteboardElements") as Y.Map<Y.Array<string>>;
-    doc.transact(() => {
-      for (let index = 70; index < 76; index += 1) {
-        const record = new Y.Array<string>();
-        record.insert(0, [
-          JSON.stringify({
-            kind: "element",
-            version: 1,
-            versionNonce: 10,
-            element: text(`t${index}`, index),
-          }),
-        ]);
-        whiteboard.set(`t${index}`, record);
-      }
-    });
-
-    expect(() => projectCollaborationTeachingDocument(doc)).toThrow(/scene limit/);
-    expect(() => validateCollaborationTeachingDocument(doc)).toThrow(/scene limit/);
     doc.destroy();
   });
 

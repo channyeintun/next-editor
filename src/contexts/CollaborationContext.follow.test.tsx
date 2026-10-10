@@ -204,12 +204,14 @@ import { WhiteboardStoreProvider, useWhiteboardStore } from "./WhiteboardStoreCo
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import {
-  COLLABORATION_SLIDE_ASSET_MIME_TYPE,
-  collaborationSlidePayloadAssetId,
-  encodeCollaborationSlidePayload,
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
 } from "../collaboration/teachingDocument";
+import {
+  COLLABORATION_SLIDE_ASSET_MIME_TYPE,
+  collaborationSlidePayloadAssetId,
+  encodeCollaborationSlidePayload,
+} from "../collaboration/teachingSlides";
 import {
   createCollaborationInvitation,
   downloadCollaborationAsset,

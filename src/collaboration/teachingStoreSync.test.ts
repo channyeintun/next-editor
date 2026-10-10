@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import {
-  applyCollaborationWhiteboardDelta,
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
 } from "./teachingDocument";
+import { applyCollaborationWhiteboardDelta } from "./teachingWhiteboard";
 import { applyTeachingWhiteboard, isSameTeachingProjection } from "./teachingStoreSync";
 import { createWhiteboardStore } from "../stores/whiteboardStore";
 

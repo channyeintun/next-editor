@@ -87,16 +87,16 @@ import { liveRoomEndBlockReason } from "../collaboration/recordingPolicy";
 import { getWorkspaceAssetBlob, registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 import { createCollaborationUndoManager } from "../collaboration/undo";
 import {
-  applyCollaborationWhiteboardDelta,
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
-  hydrateCollaborationSlideManifest,
-  isCollaborationTeachingInitialized,
   projectCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
   UNINITIALIZED_TEACHING_PROJECTION,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
+import { isCollaborationTeachingInitialized } from "../collaboration/teachingRoot";
+import { hydrateCollaborationSlideManifest } from "../collaboration/teachingSlides";
+import { applyCollaborationWhiteboardDelta } from "../collaboration/teachingWhiteboard";
 import {
   applyTeachingSlides,
   applyTeachingWhiteboard,

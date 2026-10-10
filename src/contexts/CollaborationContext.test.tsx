@@ -92,11 +92,11 @@ import { CollaborationProvider, useCollaboration } from "./CollaborationContext"
 import type { CollaborationRoomSession } from "../collaboration/protocol";
 import { applyEncodedYjsSnapshot } from "../collaboration/yjsUpdates";
 import { projectCollaborationDocument } from "../collaboration/projectDocument";
+import { validateCollaborationTeachingDocument } from "../collaboration/teachingDocument";
 import {
   COLLABORATION_SLIDE_ASSET_MIME_TYPE,
   collaborationSlidePayloadAssetId,
-  validateCollaborationTeachingDocument,
-} from "../collaboration/teachingDocument";
+} from "../collaboration/teachingSlides";
 import {
   registerWorkspaceAsset,
   resetWorkspaceAssetStoreForTests,

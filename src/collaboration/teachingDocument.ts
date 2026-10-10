@@ -1,18 +1,8 @@
 import * as Y from "yjs";
-import { z } from "zod";
-import {
-  compareWhiteboardElementOrder,
-  type WhiteboardElementJSON,
-  type WhiteboardEvent,
-} from "../core/src/whiteboard";
-import { sha256Hex } from "../shared/sha256Hex";
+import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 import type { Slide } from "../types/slides";
 import {
-  collaborationAssetDescriptorSchema,
   collaborationCurrentSlideCommandSchema,
-  collaborationSlideIdSchema,
-  MAX_COLLABORATION_WHITEBOARD_COORDINATE,
-  MAX_YJS_SNAPSHOT_BYTES,
   type CollaborationAssetDescriptor,
 } from "./protocol";
 import {
@@ -22,197 +12,36 @@ import {
   getOrCreateChildMap,
   type CollaborationTransactionOrigin,
 } from "./projectDocument";
+import {
+  COLLABORATION_TEACHING_PRESENTATION,
+  COLLABORATION_TEACHING_ROOT,
+  COLLABORATION_TEACHING_SLIDE_ORDER,
+  COLLABORATION_TEACHING_SLIDES,
+  COLLABORATION_TEACHING_WHITEBOARD,
+  CollaborationTeachingError,
+  assertTeachingUpdateFitsSnapshot,
+  getCollaborationTeachingRoot,
+  isCollaborationTeachingInitialized,
+  optionalTeachingRoot,
+} from "./teachingRoot";
+import {
+  MAX_COLLABORATION_TEACHING_SLIDES,
+  collaborationTeachingSlideManifestSchema,
+  readSlideManifest,
+  slideManifestMap,
+  type CollaborationTeachingSlideManifest,
+} from "./teachingSlides";
+import {
+  collaborationWhiteboardRecord,
+  normalizeCollaborationWhiteboardSeed,
+  projectCollaborationWhiteboard,
+  readCollaborationWhiteboardHistory,
+} from "./teachingWhiteboard";
 
-export const COLLABORATION_TEACHING_ROOT = "teaching";
-export const COLLABORATION_TEACHING_SLIDE_ORDER = "slideOrder";
-export const COLLABORATION_TEACHING_SLIDES = "slides";
-export const COLLABORATION_TEACHING_PRESENTATION = "presentation";
-export const COLLABORATION_TEACHING_WHITEBOARD = "whiteboardElements";
-
-export const MAX_COLLABORATION_TEACHING_SLIDES = 100;
-export const MAX_COLLABORATION_SLIDE_PAYLOAD_BYTES = 5 * 1024 * 1024;
-export const MAX_COLLABORATION_WHITEBOARD_ELEMENTS = 5_000;
-export const MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES = 48 * 1024;
-export const MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES = 3 * 1024 * 1024;
-export const MAX_COLLABORATION_WHITEBOARD_CANDIDATES_PER_ELEMENT = 64;
-export const COLLABORATION_SLIDE_ASSET_MIME_TYPE =
-  "application/vnd.next-editor.slide+json" as const;
-
-const boundedAnimationNumberSchema = z.number().finite().min(-10_000_000).max(10_000_000);
-const collaborationDeckStepTrackSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("opacity"),
-      from: boundedAnimationNumberSchema,
-      to: boundedAnimationNumberSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("scale"),
-      from: boundedAnimationNumberSchema,
-      to: boundedAnimationNumberSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("translate"),
-      fromX: boundedAnimationNumberSchema,
-      fromY: boundedAnimationNumberSchema,
-      toX: boundedAnimationNumberSchema,
-      toY: boundedAnimationNumberSchema,
-    })
-    .strict(),
-]);
-const collaborationDeckStepsSchema = z
-  .array(
-    z
-      .array(
-        z
-          .object({
-            elementId: z.string().min(1).max(2_048),
-            durationMs: z.number().finite().min(0).max(600_000),
-            delayMs: z.number().finite().min(-600_000).max(600_000),
-            tracks: z.array(collaborationDeckStepTrackSchema).max(32),
-          })
-          .strict(),
-      )
-      .max(2_000),
-  )
-  .max(2_000);
-
-const whiteboardCoordinateSchema = z
-  .number()
-  .finite()
-  .min(-MAX_COLLABORATION_WHITEBOARD_COORDINATE)
-  .max(MAX_COLLABORATION_WHITEBOARD_COORDINATE);
-const whiteboardDimensionSchema = z
-  .number()
-  .finite()
-  .min(-MAX_COLLABORATION_WHITEBOARD_COORDINATE)
-  .max(MAX_COLLABORATION_WHITEBOARD_COORDINATE);
-const whiteboardPointSchema = z.tuple([whiteboardCoordinateSchema, whiteboardCoordinateSchema]);
-const whiteboardBindingSchema = z
-  .object({
-    elementId: z.string().min(1).max(256),
-    focus: z.number().finite().min(-10).max(10),
-    gap: whiteboardCoordinateSchema,
-    fixedPoint: whiteboardPointSchema.optional(),
-  })
-  .strict();
-const whiteboardArrowheadSchema = z
-  .enum([
-    "arrow",
-    "bar",
-    "dot",
-    "circle",
-    "circle_outline",
-    "triangle",
-    "triangle_outline",
-    "diamond",
-    "diamond_outline",
-    "crowfoot_one",
-    "crowfoot_many",
-    "crowfoot_one_or_many",
-  ])
-  .nullable();
-const collaborationWhiteboardElementBaseSchema = z
-  .object({
-    id: z.string().min(1).max(256),
-    x: whiteboardCoordinateSchema,
-    y: whiteboardCoordinateSchema,
-    strokeColor: z.string().min(1).max(128),
-    backgroundColor: z.string().min(1).max(128),
-    fillStyle: z.enum(["hachure", "cross-hatch", "solid", "zigzag"]),
-    strokeWidth: z.number().finite().min(0).max(1_000),
-    strokeStyle: z.enum(["solid", "dashed", "dotted"]),
-    roundness: z
-      .object({ type: z.number().int().min(1).max(3), value: z.number().finite().optional() })
-      .strict()
-      .nullable(),
-    roughness: z.number().finite().min(0).max(100),
-    opacity: z.number().finite().min(0).max(100),
-    width: whiteboardDimensionSchema,
-    height: whiteboardDimensionSchema,
-    angle: z.number().finite().min(-10_000).max(10_000),
-    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    version: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    versionNonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    index: z.string().min(1).max(128).nullable(),
-    isDeleted: z.boolean(),
-    groupIds: z.array(z.string().min(1).max(256)).max(100),
-    frameId: z.string().min(1).max(256).nullable(),
-    boundElements: z
-      .array(z.object({ id: z.string().min(1).max(256), type: z.enum(["arrow", "text"]) }).strict())
-      .max(1_000)
-      .nullable(),
-    updated: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    link: z.string().max(2_048).nullable(),
-    locked: z.boolean(),
-  })
-  .passthrough();
-const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("rectangle") }),
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("diamond") }),
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("ellipse") }),
-  collaborationWhiteboardElementBaseSchema.extend({
-    type: z.literal("text"),
-    fontSize: z.number().finite().positive().max(10_000),
-    fontFamily: z.number().int().positive().max(100),
-    text: z.string().max(MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES),
-    textAlign: z.enum(["left", "center", "right"]),
-    verticalAlign: z.enum(["top", "middle", "bottom"]),
-    containerId: z.string().min(1).max(256).nullable(),
-    originalText: z.string().max(MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES),
-    autoResize: z.boolean(),
-    lineHeight: z.number().finite().positive().max(100),
-  }),
-  collaborationWhiteboardElementBaseSchema.extend({
-    type: z.literal("line"),
-    points: z.array(whiteboardPointSchema).max(20_000),
-    lastCommittedPoint: whiteboardPointSchema.nullable(),
-    startBinding: whiteboardBindingSchema.nullable(),
-    endBinding: whiteboardBindingSchema.nullable(),
-    startArrowhead: whiteboardArrowheadSchema,
-    endArrowhead: whiteboardArrowheadSchema,
-  }),
-  collaborationWhiteboardElementBaseSchema.extend({
-    type: z.literal("arrow"),
-    points: z.array(whiteboardPointSchema).max(20_000),
-    lastCommittedPoint: whiteboardPointSchema.nullable(),
-    startBinding: whiteboardBindingSchema.nullable(),
-    endBinding: whiteboardBindingSchema.nullable(),
-    startArrowhead: whiteboardArrowheadSchema,
-    endArrowhead: whiteboardArrowheadSchema,
-    elbowed: z.boolean(),
-  }),
-  collaborationWhiteboardElementBaseSchema.extend({
-    type: z.literal("freedraw"),
-    points: z.array(whiteboardPointSchema).max(20_000),
-    pressures: z.array(z.number().finite().min(0).max(1)).max(20_000),
-    simulatePressure: z.boolean(),
-    lastCommittedPoint: whiteboardPointSchema.nullable(),
-  }),
-  collaborationWhiteboardElementBaseSchema.extend({
-    type: z.literal("frame"),
-    name: z.string().max(512).nullable(),
-  }),
-]);
-
-export const collaborationTeachingSlideManifestSchema = z
-  .object({
-    id: collaborationSlideIdSchema,
-    contentType: z.enum(["html", "markdown", "google-svg"]),
-    asset: collaborationAssetDescriptorSchema.refine(
-      (asset) => asset.mimeType === COLLABORATION_SLIDE_ASSET_MIME_TYPE,
-      "invalid collaboration slide asset type",
-    ),
-  })
-  .strict();
-
-export type CollaborationTeachingSlideManifest = z.infer<
-  typeof collaborationTeachingSlideManifestSchema
->;
+// The room's teaching tree as one document: owner seeding, the projection
+// every client renders, the validator and transition rules the room enforces,
+// and current-slide navigation. Slides and whiteboard rules live in
+// teachingSlides and teachingWhiteboard.
 
 export interface CollaborationTeachingSeedSlide {
   slide: Slide;
@@ -265,21 +94,6 @@ export function assertCollaborationTeachingTransition(
       "A changed room slide must advance the presentation revision",
     );
   }
-}
-
-export class CollaborationTeachingError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CollaborationTeachingError";
-  }
-}
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder("utf-8", { fatal: true });
-
-function optionalTeachingRoot(doc: Y.Doc): Y.Map<unknown> | null {
-  const teaching = getCollaborationProjectRoot(doc).get(COLLABORATION_TEACHING_ROOT);
-  return teaching instanceof Y.Map ? teaching : null;
 }
 
 type TransactionChangedType = Y.AbstractType<Y.YEvent<any>>;
@@ -345,564 +159,6 @@ function childArray<T>(root: Y.Map<unknown>, key: string): Y.Array<T> {
   return next;
 }
 
-export function getCollaborationTeachingRoot(doc: Y.Doc): Y.Map<unknown> {
-  return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_TEACHING_ROOT);
-}
-
-export function isCollaborationTeachingInitialized(doc: Y.Doc): boolean {
-  return optionalTeachingRoot(doc)?.get("initialized") === true;
-}
-
-function normalizeSlideId(value: string): string {
-  const parsed = collaborationSlideIdSchema.safeParse(value);
-  if (!parsed.success) throw new CollaborationTeachingError("A slide has an invalid ID");
-  return parsed.data;
-}
-
-const SLIDE_PAYLOAD_KEYS = new Set([
-  "content",
-  "name",
-  "background",
-  "title",
-  "steps",
-  "sourceUrl",
-]);
-const SLIDE_KEYS = new Set(["id", "contentType", "order", ...SLIDE_PAYLOAD_KEYS]);
-
-type CollaborationSlidePayload = Omit<Slide, "id" | "contentType" | "order">;
-
-function optionalBoundedString(
-  object: Record<string, unknown>,
-  key: string,
-  maxLength: number,
-): string | undefined {
-  const value = object[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || value.length > maxLength) {
-    throw new CollaborationTeachingError(`A slide has an invalid ${key}`);
-  }
-  return value;
-}
-
-function parseSlidePayloadValue(value: unknown): CollaborationSlidePayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new CollaborationTeachingError("A slide payload is invalid");
-  }
-  const object = value as Record<string, unknown>;
-  if (Object.keys(object).some((key) => !SLIDE_PAYLOAD_KEYS.has(key))) {
-    throw new CollaborationTeachingError("A slide payload contains unsupported fields");
-  }
-  if (typeof object.content !== "string") {
-    throw new CollaborationTeachingError("A slide payload is missing its content");
-  }
-  if (object.steps !== undefined && !Array.isArray(object.steps)) {
-    throw new CollaborationTeachingError("A slide payload has invalid build-step data");
-  }
-  const parsedSteps =
-    object.steps === undefined ? undefined : collaborationDeckStepsSchema.safeParse(object.steps);
-  if (parsedSteps && !parsedSteps.success) {
-    throw new CollaborationTeachingError("A slide payload has invalid build-step data");
-  }
-
-  return {
-    content: object.content,
-    ...(optionalBoundedString(object, "name", 512) === undefined
-      ? {}
-      : { name: object.name as string }),
-    ...(optionalBoundedString(object, "background", 2_048) === undefined
-      ? {}
-      : { background: object.background as string }),
-    ...(optionalBoundedString(object, "title", 2_048) === undefined
-      ? {}
-      : { title: object.title as string }),
-    ...(parsedSteps === undefined ? {} : { steps: parsedSteps.data }),
-    ...(optionalBoundedString(object, "sourceUrl", 2_048) === undefined
-      ? {}
-      : { sourceUrl: object.sourceUrl as string }),
-  };
-}
-
-function parseSlideValue(value: unknown): Slide {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new CollaborationTeachingError("A slide is invalid");
-  }
-  const object = value as Record<string, unknown>;
-  if (Object.keys(object).some((key) => !SLIDE_KEYS.has(key))) {
-    throw new CollaborationTeachingError("A slide contains unsupported fields");
-  }
-  const id = normalizeSlideId(typeof object.id === "string" ? object.id : "");
-  const contentType = object.contentType;
-  if (contentType !== "html" && contentType !== "markdown" && contentType !== "google-svg") {
-    throw new CollaborationTeachingError("A slide has an invalid content type");
-  }
-  if (!Number.isSafeInteger(object.order) || (object.order as number) < 0) {
-    throw new CollaborationTeachingError("A slide has an invalid order");
-  }
-  const payload = Object.fromEntries(
-    Object.entries(object).filter(([key]) => SLIDE_PAYLOAD_KEYS.has(key)),
-  );
-  return {
-    id,
-    contentType,
-    order: object.order as number,
-    ...parseSlidePayloadValue(payload),
-  };
-}
-
-export function encodeCollaborationSlidePayload(slide: Slide): Uint8Array {
-  const normalized = parseSlideValue(structuredClone(slide));
-  const payload = parseSlidePayloadValue(
-    Object.fromEntries(Object.entries(normalized).filter(([key]) => SLIDE_PAYLOAD_KEYS.has(key))),
-  );
-  const bytes = textEncoder.encode(JSON.stringify(payload));
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_COLLABORATION_SLIDE_PAYLOAD_BYTES) {
-    throw new CollaborationTeachingError("A slide payload exceeds the collaboration asset limit");
-  }
-  return bytes;
-}
-
-export function decodeCollaborationSlidePayload(
-  bytes: Uint8Array,
-  manifest: CollaborationTeachingSlideManifest,
-): Slide {
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_COLLABORATION_SLIDE_PAYLOAD_BYTES) {
-    throw new CollaborationTeachingError("A shared slide payload has an invalid size");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(textDecoder.decode(bytes)) as unknown;
-  } catch {
-    throw new CollaborationTeachingError("A shared slide payload is not valid JSON");
-  }
-  const payload = parseSlidePayloadValue(parsed);
-  return {
-    id: manifest.id,
-    contentType: manifest.contentType,
-    order: 0,
-    ...payload,
-  };
-}
-
-export async function collaborationSlidePayloadAssetId(payload: Uint8Array): Promise<string> {
-  return sha256Hex(payload);
-}
-
-export async function verifyCollaborationSlideAsset(
-  bytes: Uint8Array,
-  asset: CollaborationAssetDescriptor,
-): Promise<Uint8Array> {
-  if (bytes.byteLength !== asset.size) {
-    throw new CollaborationTeachingError("A shared slide asset has an unexpected size");
-  }
-  if ((await collaborationSlidePayloadAssetId(bytes)) !== asset.id) {
-    throw new CollaborationTeachingError("A shared slide asset failed its content digest check");
-  }
-  return bytes;
-}
-
-export async function hydrateCollaborationSlideManifest(
-  manifest: CollaborationTeachingSlideManifest,
-  verifiedAssetCache: Map<string, Promise<Uint8Array>>,
-  download: () => Promise<Uint8Array>,
-): Promise<Slide> {
-  const cacheKey = `${manifest.asset.id}:${manifest.asset.size}`;
-  let verifiedBytes = verifiedAssetCache.get(cacheKey);
-  if (!verifiedBytes) {
-    verifiedBytes = download().then((bytes) =>
-      verifyCollaborationSlideAsset(bytes, manifest.asset),
-    );
-    verifiedAssetCache.set(cacheKey, verifiedBytes);
-  }
-  return decodeCollaborationSlidePayload(await verifiedBytes, manifest);
-}
-
-export function normalizeCollaborationTeachingSlides(
-  slides: readonly Slide[],
-): Array<{ slide: Slide; payload: Uint8Array }> {
-  const normalized: Array<{ slide: Slide; payload: Uint8Array }> = [];
-  const seen = new Set<string>();
-  for (const candidate of [...slides].sort((left, right) => left.order - right.order)) {
-    if (normalized.length >= MAX_COLLABORATION_TEACHING_SLIDES) {
-      throw new CollaborationTeachingError(
-        `A live room can contain at most ${MAX_COLLABORATION_TEACHING_SLIDES} slides`,
-      );
-    }
-    const id = normalizeSlideId(candidate.id);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const slide = { ...structuredClone(candidate), id, order: normalized.length };
-    normalized.push({ slide, payload: encodeCollaborationSlidePayload(slide) });
-  }
-  return normalized;
-}
-
-function serializeWhiteboardElement(element: WhiteboardElementJSON): {
-  serialized: string;
-  bytes: number;
-} {
-  let serialized: string;
-  try {
-    serialized = JSON.stringify(element, (_key, value: unknown) => {
-      if (typeof value === "number" && !Number.isFinite(value)) {
-        throw new Error("non-finite number");
-      }
-      return value;
-    });
-  } catch {
-    throw new CollaborationTeachingError("A whiteboard element is not serializable");
-  }
-  const bytes = textEncoder.encode(serialized).byteLength;
-  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES) {
-    throw new CollaborationTeachingError("A whiteboard element is too large to share");
-  }
-  return { serialized, bytes };
-}
-
-function serializedElement(element: WhiteboardElementJSON): string {
-  return serializeWhiteboardElement(element).serialized;
-}
-
-function compareCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function compareProgressiveWhiteboardStroke(
-  left: WhiteboardElementJSON,
-  right: WhiteboardElementJSON,
-): number {
-  // During one pointer gesture Excalidraw may append freehand points before it
-  // advances version/versionNonce. Prefer the monotonic longer snapshot so the
-  // deterministic serialized fallback cannot lock the room to the first chunk.
-  if (left.type !== "freedraw" || right.type !== "freedraw" || left.isDeleted || right.isDeleted) {
-    return 0;
-  }
-  const leftPoints = Array.isArray(left.points) ? left.points.length : 0;
-  const rightPoints = Array.isArray(right.points) ? right.points.length : 0;
-  return leftPoints - rightPoints;
-}
-
-/** Validates an element; `bytes` is the size of its serialized form. */
-function normalizeWhiteboardElement(value: unknown): {
-  element: WhiteboardElementJSON;
-  bytes: number;
-} {
-  let clone: WhiteboardElementJSON;
-  try {
-    clone = structuredClone(value) as WhiteboardElementJSON;
-  } catch {
-    throw new CollaborationTeachingError("A whiteboard element is not serializable");
-  }
-  const parsed = collaborationWhiteboardElementSchema.safeParse(clone);
-  if (!parsed.success) {
-    throw new CollaborationTeachingError("A whiteboard element is malformed or unsafe");
-  }
-  const { serialized, bytes } = serializeWhiteboardElement(parsed.data);
-  return { element: JSON.parse(serialized) as WhiteboardElementJSON, bytes };
-}
-
-export function validateCollaborationWhiteboardElement(value: unknown): WhiteboardElementJSON {
-  return normalizeWhiteboardElement(value).element;
-}
-
-function compareWhiteboardElements(
-  left: WhiteboardElementJSON,
-  right: WhiteboardElementJSON,
-): number {
-  return (
-    left.version - right.version ||
-    left.versionNonce - right.versionNonce ||
-    Number(left.isDeleted) - Number(right.isDeleted) ||
-    compareProgressiveWhiteboardStroke(left, right) ||
-    compareCodeUnits(serializedElement(left), serializedElement(right))
-  );
-}
-
-interface CollaborationWhiteboardElementCandidate {
-  kind: "element";
-  version: number;
-  versionNonce: number;
-  element: WhiteboardElementJSON;
-}
-
-interface CollaborationWhiteboardTombstoneCandidate {
-  kind: "tombstone";
-  version: number;
-  versionNonce: number;
-}
-
-type CollaborationWhiteboardCandidate =
-  | CollaborationWhiteboardElementCandidate
-  | CollaborationWhiteboardTombstoneCandidate;
-
-interface SerializedCollaborationWhiteboardCandidate {
-  candidate: CollaborationWhiteboardCandidate;
-  serialized: string;
-  /** The size of `serialized`, which the whiteboard history limit counts. */
-  bytes: number;
-  /** The size of the serialized element, which the scene limit counts; 0 for a tombstone. */
-  elementBytes: number;
-}
-
-/**
- * The candidates parsed by the latest full read of a whiteboard map, by their
- * serialized string. Parsing is a pure function of the string, so reusing one
- * is exact. Every whiteboard delta (one per 100 ms while someone draws) makes
- * the drawing client, each peer and the room read the whole board, and only
- * the changed records hold new strings; a read keeps only the strings it saw,
- * so the cache never outgrows the board. Cached candidates are shared by every
- * projection, so they are frozen.
- */
-const parsedWhiteboardCandidates = new WeakMap<
-  object,
-  ReadonlyMap<string, SerializedCollaborationWhiteboardCandidate>
->();
-
-interface WhiteboardCandidateRead {
-  previous: ReadonlyMap<string, SerializedCollaborationWhiteboardCandidate> | undefined;
-  current: Map<string, SerializedCollaborationWhiteboardCandidate>;
-}
-
-function beginWhiteboardCandidateRead<T>(whiteboard: Y.Map<T>): WhiteboardCandidateRead {
-  return { previous: parsedWhiteboardCandidates.get(whiteboard), current: new Map() };
-}
-
-function finishWhiteboardCandidateRead<T>(
-  whiteboard: Y.Map<T>,
-  read: WhiteboardCandidateRead,
-): void {
-  parsedWhiteboardCandidates.set(whiteboard, read.current);
-}
-
-function freezeJsonValue<T>(value: T): T {
-  if (typeof value === "object" && value !== null) {
-    for (const child of Object.values(value)) freezeJsonValue(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-
-function whiteboardCandidateRank(candidate: CollaborationWhiteboardCandidate): number {
-  if (candidate.kind === "tombstone") return 2;
-  return candidate.element.isDeleted ? 1 : 0;
-}
-
-function compareWhiteboardCandidates(
-  left: SerializedCollaborationWhiteboardCandidate,
-  right: SerializedCollaborationWhiteboardCandidate,
-): number {
-  const progressiveStrokeOrder =
-    left.candidate.kind === "element" && right.candidate.kind === "element"
-      ? compareProgressiveWhiteboardStroke(left.candidate.element, right.candidate.element)
-      : 0;
-  return (
-    left.candidate.version - right.candidate.version ||
-    left.candidate.versionNonce - right.candidate.versionNonce ||
-    whiteboardCandidateRank(left.candidate) - whiteboardCandidateRank(right.candidate) ||
-    progressiveStrokeOrder ||
-    compareCodeUnits(left.serialized, right.serialized)
-  );
-}
-
-function serializeWhiteboardCandidate(
-  candidate: CollaborationWhiteboardCandidate,
-  elementBytes: number,
-): SerializedCollaborationWhiteboardCandidate {
-  const serialized = JSON.stringify(candidate);
-  const bytes = textEncoder.encode(serialized).byteLength;
-  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512) {
-    throw new CollaborationTeachingError("A whiteboard element record is too large to share");
-  }
-  return { candidate, serialized, bytes, elementBytes };
-}
-
-function elementWhiteboardCandidate(
-  element: WhiteboardElementJSON,
-): SerializedCollaborationWhiteboardCandidate {
-  const { element: normalized, bytes } = normalizeWhiteboardElement(element);
-  return serializeWhiteboardCandidate(
-    {
-      kind: "element",
-      version: normalized.version,
-      versionNonce: normalized.versionNonce,
-      element: normalized,
-    },
-    bytes,
-  );
-}
-
-function tombstoneWhiteboardCandidate(
-  previous: CollaborationWhiteboardCandidate,
-): SerializedCollaborationWhiteboardCandidate {
-  return serializeWhiteboardCandidate(
-    {
-      kind: "tombstone",
-      version:
-        previous.version === Number.MAX_SAFE_INTEGER ? previous.version : previous.version + 1,
-      versionNonce: Number.MAX_SAFE_INTEGER,
-    },
-    0,
-  );
-}
-
-/** Parses and validates one candidate; the record's element ID is checked by the caller. */
-function parseWhiteboardCandidate(serialized: string): SerializedCollaborationWhiteboardCandidate {
-  const bytes = textEncoder.encode(serialized).byteLength;
-  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512) {
-    throw new CollaborationTeachingError("A whiteboard element candidate is too large");
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(serialized) as unknown;
-  } catch {
-    throw new CollaborationTeachingError("A whiteboard element candidate is not valid JSON");
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
-  }
-  const object = value as Record<string, unknown>;
-  if (
-    !Number.isSafeInteger(object.version) ||
-    (object.version as number) < 0 ||
-    !Number.isSafeInteger(object.versionNonce) ||
-    (object.versionNonce as number) < 0
-  ) {
-    throw new CollaborationTeachingError("A whiteboard element candidate has invalid version data");
-  }
-  if (object.kind === "tombstone") {
-    if (Object.keys(object).some((key) => !["kind", "version", "versionNonce"].includes(key))) {
-      throw new CollaborationTeachingError("A whiteboard tombstone contains unsupported fields");
-    }
-    return {
-      candidate: object as unknown as CollaborationWhiteboardTombstoneCandidate,
-      serialized,
-      bytes,
-      elementBytes: 0,
-    };
-  }
-  if (object.kind !== "element") {
-    throw new CollaborationTeachingError("A whiteboard element candidate has an invalid kind");
-  }
-  if (
-    Object.keys(object).some((key) => !["kind", "version", "versionNonce", "element"].includes(key))
-  ) {
-    throw new CollaborationTeachingError(
-      "A whiteboard element candidate contains unsupported fields",
-    );
-  }
-  const { element, bytes: elementBytes } = normalizeWhiteboardElement(object.element);
-  if (element.version !== object.version || element.versionNonce !== object.versionNonce) {
-    throw new CollaborationTeachingError(
-      "A whiteboard element candidate has mismatched identity data",
-    );
-  }
-  return {
-    candidate: {
-      kind: "element",
-      version: element.version,
-      versionNonce: element.versionNonce,
-      element,
-    },
-    serialized,
-    bytes,
-    elementBytes,
-  };
-}
-
-function readWhiteboardCandidate(
-  id: string,
-  value: unknown,
-  read: WhiteboardCandidateRead,
-): SerializedCollaborationWhiteboardCandidate {
-  if (!(value instanceof Y.Array)) {
-    throw new CollaborationTeachingError("A whiteboard element record is malformed");
-  }
-  if (value.length < 1 || value.length > MAX_COLLABORATION_WHITEBOARD_CANDIDATES_PER_ELEMENT) {
-    throw new CollaborationTeachingError("A whiteboard element record has invalid history");
-  }
-  let winner: SerializedCollaborationWhiteboardCandidate | null = null;
-  for (const serialized of value.toArray()) {
-    if (typeof serialized !== "string") {
-      throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
-    }
-    let candidate = read.current.get(serialized) ?? read.previous?.get(serialized);
-    if (!candidate) candidate = freezeJsonValue(parseWhiteboardCandidate(serialized));
-    read.current.set(serialized, candidate);
-    if (candidate.candidate.kind === "element" && candidate.candidate.element.id !== id) {
-      throw new CollaborationTeachingError(
-        "A whiteboard element candidate has mismatched identity data",
-      );
-    }
-    if (!winner || compareWhiteboardCandidates(candidate, winner) > 0) winner = candidate;
-  }
-  if (!winner) throw new CollaborationTeachingError("A whiteboard element record is empty");
-  return winner;
-}
-
-/** The UTF-8 size of a candidate string, from the read that parsed it when possible. */
-function whiteboardCandidateBytes(read: WhiteboardCandidateRead, serialized: string): number {
-  return read.current.get(serialized)?.bytes ?? textEncoder.encode(serialized).byteLength;
-}
-
-function whiteboardCandidateArray(
-  candidate: SerializedCollaborationWhiteboardCandidate,
-): Y.Array<string> {
-  const value = new Y.Array<string>();
-  value.insert(0, [candidate.serialized]);
-  return value;
-}
-
-export function applyCollaborationWhiteboardEvent(
-  elements: readonly WhiteboardElementJSON[],
-  event: Pick<WhiteboardEvent, "upserts" | "removedIds">,
-): WhiteboardElementJSON[] {
-  const byId = new Map(elements.map((element) => [element.id, element] as const));
-  for (const id of event.removedIds ?? []) {
-    if (typeof id === "string" && id.length <= 256) byId.delete(id);
-  }
-  for (const candidate of event.upserts ?? []) {
-    const element = validateCollaborationWhiteboardElement(candidate);
-    const existing = byId.get(element.id);
-    if (!existing || compareWhiteboardElements(element, existing) >= 0) {
-      byId.set(element.id, element);
-    }
-  }
-  return Array.from(byId.values()).sort(compareWhiteboardElementOrder);
-}
-
-/** `elementBytes` is the total size of the elements' serialized forms. */
-function assertWhiteboardSceneBounds(elementCount: number, elementBytes: number): void {
-  if (elementCount > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
-    throw new CollaborationTeachingError("The shared whiteboard has too many elements");
-  }
-  if (elementBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
-    throw new CollaborationTeachingError("The shared whiteboard exceeds the room scene limit");
-  }
-}
-
-function manifestMap(manifest: CollaborationTeachingSlideManifest): Y.Map<unknown> {
-  const value = new Y.Map<unknown>();
-  value.set("id", manifest.id);
-  value.set("contentType", manifest.contentType);
-  value.set("assetId", manifest.asset.id);
-  value.set("assetMimeType", manifest.asset.mimeType);
-  value.set("assetSize", manifest.asset.size);
-  return value;
-}
-
-function readManifest(id: string, value: unknown): CollaborationTeachingSlideManifest | null {
-  if (!(value instanceof Y.Map)) return null;
-  const result = collaborationTeachingSlideManifestSchema.safeParse({
-    id: value.get("id"),
-    contentType: value.get("contentType"),
-    asset: {
-      id: value.get("assetId"),
-      mimeType: value.get("assetMimeType"),
-      size: value.get("assetSize"),
-    },
-  });
-  return result.success && result.data.id === id ? result.data : null;
-}
-
 export function seedCollaborationTeachingDocument(
   doc: Y.Doc,
   seed: CollaborationTeachingSeed,
@@ -926,16 +182,7 @@ export function seedCollaborationTeachingDocument(
     ids.add(manifest.id);
     normalizedSlides.push({ slide: candidate.slide, asset: manifest.asset });
   }
-  const whiteboardElements = applyCollaborationWhiteboardEvent([], {
-    upserts: [...seed.whiteboardElements],
-  });
-  assertWhiteboardSceneBounds(
-    whiteboardElements.length,
-    whiteboardElements.reduce(
-      (total, element) => total + serializeWhiteboardElement(element).bytes,
-      0,
-    ),
-  );
+  const whiteboardElements = normalizeCollaborationWhiteboardSeed(seed.whiteboardElements);
 
   doc.transact(() => {
     const teaching = getCollaborationTeachingRoot(doc);
@@ -959,12 +206,15 @@ export function seedCollaborationTeachingDocument(
         normalizedSlides.map(({ slide }) => slide.id),
       );
     for (const { slide, asset } of normalizedSlides) {
-      slides.set(slide.id, manifestMap({ id: slide.id, contentType: slide.contentType, asset }));
+      slides.set(
+        slide.id,
+        slideManifestMap({ id: slide.id, contentType: slide.contentType, asset }),
+      );
     }
     presentation.set("currentSlideId", normalizedSlides[0]?.slide.id ?? null);
     presentation.set("revision", 0);
     for (const element of whiteboardElements) {
-      whiteboard.set(element.id, whiteboardCandidateArray(elementWhiteboardCandidate(element)));
+      whiteboard.set(element.id, collaborationWhiteboardRecord(element));
     }
     teaching.set("initialized", true);
   }, origin);
@@ -992,7 +242,7 @@ export function projectCollaborationTeachingDocument(doc: Y.Doc): CollaborationT
   const slides = new Map<string, CollaborationTeachingSlideManifest>();
   if (slidesValue instanceof Y.Map) {
     for (const [id, value] of slidesValue) {
-      const manifest = readManifest(id, value);
+      const manifest = readSlideManifest(id, value);
       if (manifest) slides.set(id, manifest);
     }
   }
@@ -1007,26 +257,7 @@ export function projectCollaborationTeachingDocument(doc: Y.Doc): CollaborationT
   const currentSlideValue =
     presentationValue instanceof Y.Map ? presentationValue.get("currentSlideId") : null;
   const revisionValue = presentationValue instanceof Y.Map ? presentationValue.get("revision") : 0;
-  const whiteboardElements: WhiteboardElementJSON[] = [];
-  let whiteboardElementBytes = 0;
-  if (whiteboardValue instanceof Y.Map) {
-    const read = beginWhiteboardCandidateRead(whiteboardValue);
-    for (const [id, value] of whiteboardValue) {
-      try {
-        const winner = readWhiteboardCandidate(id, value, read);
-        if (winner.candidate.kind === "element") {
-          whiteboardElements.push(winner.candidate.element);
-          whiteboardElementBytes += winner.elementBytes;
-        }
-      } catch {
-        // Malformed teaching entries are isolated instead of crashing workspace projection.
-      }
-    }
-    finishWhiteboardCandidateRead(whiteboardValue, read);
-  }
-  // Each winner was validated when it was parsed, and the map holds one per ID.
-  const orderedWhiteboard = whiteboardElements.sort(compareWhiteboardElementOrder);
-  assertWhiteboardSceneBounds(orderedWhiteboard.length, whiteboardElementBytes);
+  const orderedWhiteboard = projectCollaborationWhiteboard(whiteboardValue);
   return {
     initialized: true,
     slideOrder,
@@ -1108,7 +339,7 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
       ["id", "contentType", "assetId", "assetMimeType", "assetSize"],
       "A room slide manifest",
     );
-    if (!readManifest(id, value)) {
+    if (!readSlideManifest(id, value)) {
       throw new CollaborationTeachingError("A room slide manifest is malformed");
     }
   }
@@ -1125,36 +356,7 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
   ) {
     throw new CollaborationTeachingError("The presentation state is invalid");
   }
-  if (whiteboard.size > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
-    throw new CollaborationTeachingError("The whiteboard element map has too many records");
-  }
-  let whiteboardBytes = 0;
-  const whiteboardHistory: Array<{ id: string; candidates: string[] }> = [];
-  const read = beginWhiteboardCandidateRead(whiteboard);
-  for (const [id, value] of whiteboard) {
-    if (typeof id !== "string" || id.length < 1 || id.length > 256) {
-      throw new CollaborationTeachingError("A whiteboard element ID is malformed");
-    }
-    if (!(value instanceof Y.Array)) {
-      throw new CollaborationTeachingError("A whiteboard element record is malformed");
-    }
-    readWhiteboardCandidate(id, value, read);
-    const candidates = value.toArray();
-    for (const serialized of candidates) {
-      if (typeof serialized !== "string") {
-        throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
-      }
-      whiteboardBytes += whiteboardCandidateBytes(read, serialized);
-      if (whiteboardBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
-        throw new CollaborationTeachingError(
-          "The shared whiteboard history exceeds the room limit",
-        );
-      }
-    }
-    whiteboardHistory.push({ id, candidates });
-  }
-  finishWhiteboardCandidateRead(whiteboard, read);
-  whiteboardHistory.sort((left, right) => compareCodeUnits(left.id, right.id));
+  const whiteboardHistory = readCollaborationWhiteboardHistory(whiteboard);
   const immutableFingerprint = JSON.stringify({
     slideOrder: projection.slideOrder,
     slides: projection.slideOrder.map((id) => projection.slides.get(id)),
@@ -1175,14 +377,6 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
       return mutableFingerprint;
     },
   };
-}
-
-function assertTeachingUpdateFitsSnapshot(doc: Y.Doc, additionalBytes: number): void {
-  if (Y.encodeStateAsUpdate(doc).byteLength + additionalBytes > MAX_YJS_SNAPSHOT_BYTES) {
-    throw new CollaborationTeachingError(
-      "The shared teaching state exceeds the room snapshot limit",
-    );
-  }
 }
 
 export function setCollaborationCurrentSlide(
@@ -1212,131 +406,4 @@ export function setCollaborationCurrentSlide(
     presentation.set("revision", nextRevision);
   }, origin);
   return nextRevision;
-}
-
-export interface CollaborationWhiteboardDeltaResult {
-  /** The room's whiteboard after the delta, in scene order. */
-  elements: WhiteboardElementJSON[];
-  /**
-   * Whether the room now shows exactly what the delta asked for: each upsert
-   * is (or equals) its element's winner and no removed ID has an element.
-   * False when another client's version won, so the caller's canvas does not
-   * show the room's result.
-   */
-  accepted: boolean;
-}
-
-export function applyCollaborationWhiteboardDelta(
-  doc: Y.Doc,
-  event: Pick<WhiteboardEvent, "upserts" | "removedIds">,
-  origin: CollaborationTransactionOrigin = COLLABORATION_ORIGIN.localWhiteboard,
-): CollaborationWhiteboardDeltaResult {
-  // The O(1) check, not a projection: this runs for every local delta while
-  // drawing, and the reads below reject a malformed or oversized board anyway.
-  if (!isCollaborationTeachingInitialized(doc)) {
-    throw new CollaborationTeachingError("The room teaching surfaces are not initialized");
-  }
-  const whiteboard = getOrCreateChildMap<Y.Array<string>>(
-    getCollaborationTeachingRoot(doc),
-    COLLABORATION_TEACHING_WHITEBOARD,
-  );
-  const winners = new Map<string, SerializedCollaborationWhiteboardCandidate>();
-  const read = beginWhiteboardCandidateRead(whiteboard);
-  for (const [id, value] of whiteboard) {
-    winners.set(id, readWhiteboardCandidate(id, value, read));
-  }
-  finishWhiteboardCandidateRead(whiteboard, read);
-
-  const changed = new Map<string, SerializedCollaborationWhiteboardCandidate>();
-  for (const id of event.removedIds ?? []) {
-    if (typeof id !== "string" || id.length < 1 || id.length > 256) continue;
-    const previous = winners.get(id);
-    if (!previous || previous.candidate.kind === "tombstone") continue;
-    const tombstone = tombstoneWhiteboardCandidate(previous.candidate);
-    winners.set(id, tombstone);
-    changed.set(id, tombstone);
-  }
-  const requested: SerializedCollaborationWhiteboardCandidate[] = [];
-  for (const candidateValue of event.upserts ?? []) {
-    const candidate = elementWhiteboardCandidate(candidateValue);
-    requested.push(candidate);
-    const id = candidate.candidate.kind === "element" ? candidate.candidate.element.id : "";
-    const previous = winners.get(id);
-    if (!previous || compareWhiteboardCandidates(candidate, previous) > 0) {
-      winners.set(id, candidate);
-      changed.set(id, candidate);
-    }
-  }
-
-  if (winners.size > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
-    throw new CollaborationTeachingError("The shared whiteboard has too many element records");
-  }
-  const next: WhiteboardElementJSON[] = [];
-  let nextElementBytes = 0;
-  for (const { candidate, elementBytes } of winners.values()) {
-    if (candidate.kind !== "element") continue;
-    next.push(candidate.element);
-    nextElementBytes += elementBytes;
-  }
-  next.sort(compareWhiteboardElementOrder);
-  assertWhiteboardSceneBounds(next.length, nextElementBytes);
-
-  let additionalBytes = 0;
-  for (const candidate of changed.values()) {
-    additionalBytes += candidate.bytes + 512;
-  }
-  if (additionalBytes > 0) {
-    let historyBytes = 0;
-    const existingIds = new Set<string>();
-    for (const [id, value] of whiteboard) {
-      existingIds.add(id);
-      const replacement = changed.get(id);
-      if (replacement) {
-        historyBytes += replacement.bytes;
-      } else {
-        for (const serialized of value.toArray()) {
-          if (typeof serialized !== "string") {
-            throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
-          }
-          historyBytes += whiteboardCandidateBytes(read, serialized);
-        }
-      }
-    }
-    for (const [id, candidate] of changed) {
-      if (!existingIds.has(id)) historyBytes += candidate.bytes;
-    }
-    if (historyBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
-      throw new CollaborationTeachingError("The shared whiteboard history exceeds the room limit");
-    }
-    assertTeachingUpdateFitsSnapshot(doc, additionalBytes);
-  }
-
-  for (const [id, candidate] of changed) {
-    // One bounded element per transaction keeps every live Yjs update below
-    // the provider's 64 KiB update limit. Replacing only the history visible to
-    // this client preserves concurrent candidates that arrive during a merge;
-    // projection deterministically selects the Excalidraw-version winner.
-    doc.transact(() => {
-      const current = whiteboard.get(id);
-      if (current instanceof Y.Array) {
-        if (current.length) current.delete(0, current.length);
-        current.insert(0, [candidate.serialized]);
-      } else {
-        whiteboard.set(id, whiteboardCandidateArray(candidate));
-      }
-    }, origin);
-  }
-  // Both sides are schema-normalized elements, so a request equal to the
-  // element already stored still counts as accepted.
-  const accepted =
-    requested.every(({ candidate }) => {
-      if (candidate.kind !== "element") return false;
-      const winner = winners.get(candidate.element.id)?.candidate;
-      return (
-        winner?.kind === "element" &&
-        (winner === candidate ||
-          JSON.stringify(winner.element) === JSON.stringify(candidate.element))
-      );
-    }) && (event.removedIds ?? []).every((id) => winners.get(id)?.candidate.kind !== "element");
-  return { elements: next, accepted };
 }

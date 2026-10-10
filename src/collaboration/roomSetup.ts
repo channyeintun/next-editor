@@ -19,12 +19,12 @@ import {
   MAX_COLLABORATION_ROOM_ASSET_BYTES,
   type CollaborationRoomSession,
 } from "./protocol";
+import { seedCollaborationTeachingDocument } from "./teachingDocument";
 import {
   COLLABORATION_SLIDE_ASSET_MIME_TYPE,
   collaborationSlidePayloadAssetId,
   normalizeCollaborationTeachingSlides,
-  seedCollaborationTeachingDocument,
-} from "./teachingDocument";
+} from "./teachingSlides";
 import {
   createCollaborationRoomSnapshot,
   createCollaborationTeachingInitialization,

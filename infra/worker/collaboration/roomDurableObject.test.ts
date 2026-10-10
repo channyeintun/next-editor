@@ -21,10 +21,8 @@ import {
   type CollaborationRole,
 } from "../../../src/collaboration/protocol";
 import { seedCollaborationProject } from "../../../src/collaboration/projectDocument";
-import {
-  isCollaborationTeachingInitialized,
-  seedCollaborationTeachingDocument,
-} from "../../../src/collaboration/teachingDocument";
+import { seedCollaborationTeachingDocument } from "../../../src/collaboration/teachingDocument";
+import { isCollaborationTeachingInitialized } from "../../../src/collaboration/teachingRoot";
 import {
   applyEncodedYjsSnapshot,
   encodeYjsDocument,
