@@ -5,9 +5,11 @@ import { getLessonById } from "../../db/queries";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { LESSON_ID_PATTERN } from "../lessonIds";
 import { LESSON_MEDIA_CONTENT_TYPES, LESSON_MEDIA_FILENAME_PATTERN } from "../lessonMediaFiles";
-import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
-import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
-import { MAX_MEDIA_BYTES } from "../../client/upload/mediaConstraints";
+import {
+  MAX_CAPTION_BYTES,
+  MAX_MEDIA_BYTES,
+  MAX_THUMBNAIL_BYTES,
+} from "../../lessons/uploadLimits";
 
 // Mounted at /api/uploads in worker/index.ts. The client PUTs bytes through
 // this same-origin authenticated Worker route, which streams them into R2

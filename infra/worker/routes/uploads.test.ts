@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";
-import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
-import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
+import { MAX_CAPTION_BYTES, MAX_THUMBNAIL_BYTES } from "../../lessons/uploadLimits";
 import { LESSON_MEDIA_EXTENSIONS } from "../lessonMediaFiles";
 
 vi.mock("../auth/session", () => ({

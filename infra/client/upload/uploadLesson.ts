@@ -3,7 +3,7 @@ import { buildRecordingFiles } from "@app/storage/RecordingStorage";
 import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
-import { formatMediaBytes, MAX_MEDIA_BYTES } from "./mediaConstraints";
+import { formatMediaBytes, MAX_MEDIA_BYTES } from "../../lessons/uploadLimits";
 
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));

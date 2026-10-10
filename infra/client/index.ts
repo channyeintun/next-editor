@@ -49,7 +49,8 @@ export {
   useReorderPlaylistLessons,
 } from "./playlists/usePlaylists";
 export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
-export { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./upload/thumbnailConstraints";
+export { THUMBNAIL_ACCEPT } from "./upload/thumbnailConstraints";
+export { MAX_THUMBNAIL_BYTES } from "../lessons/uploadLimits";
 export { MAX_TITLE_CHARS, MAX_DESCRIPTION_CHARS } from "../lessons/metadataLimits";
 export { resizeThumbnail } from "./upload/resizeThumbnail";
 export { useStudioCapabilities } from "./studio/useStudioCapabilities";

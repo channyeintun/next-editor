@@ -15,6 +15,7 @@ vi.mock("@next-editor/infra", async () => {
   return {
     ...(await import("../../../infra/lessons/metadataLimits")),
     ...(await import("../../../infra/client/upload/thumbnailConstraints")),
+    ...(await import("../../../infra/lessons/uploadLimits")),
     resizeThumbnail: vi.fn<(file: File) => Promise<File>>(),
     usePublishFromLibrary: idleMutation,
     useUnpublishLesson: idleMutation,

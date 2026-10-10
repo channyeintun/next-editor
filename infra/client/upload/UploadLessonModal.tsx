@@ -10,8 +10,9 @@ import { useAuth, signInUrl } from "../auth/useAuth";
 import { usePublishFromLibrary } from "../library/useMyLessons";
 import { useUploadLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
-import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
-import { CAPTION_ACCEPT, MAX_CAPTION_BYTES } from "./captionConstraints";
+import { THUMBNAIL_ACCEPT } from "./thumbnailConstraints";
+import { CAPTION_ACCEPT } from "./captionConstraints";
+import { MAX_CAPTION_BYTES, MAX_THUMBNAIL_BYTES } from "../../lessons/uploadLimits";
 import { resizeThumbnail } from "./resizeThumbnail";
 import {
   MAX_DESCRIPTION_CHARS,

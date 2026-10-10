@@ -332,8 +332,9 @@ gallery shows it (once published) alongside the static seed
 `.ne` files are small; audio/camera can be tens of MB. The implemented route
 streams each request body into `env.BUCKET.put()` without buffering the whole
 file in Worker memory. Lesson media has a 100 MB limit, Cloudflare's own
-request-body cap (`MAX_MEDIA_BYTES`, infra/client/upload/mediaConstraints.ts);
-thumbnails and captions use their smaller shared client/server constraints.
+request-body cap (`MAX_MEDIA_BYTES`, infra/lessons/uploadLimits.ts);
+thumbnails and captions use their smaller limits from the same module, which
+the client and the upload route share.
 
 ## Security notes
 
