@@ -24,7 +24,6 @@ import {
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
-import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
   areWorkspaceTopologiesEqual,
   getDefaultFile,
@@ -793,25 +792,14 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           { topologyChanged: true },
         );
       }),
-      applyFileTextEdits: whenInitialized((context, event: TextEditEvent) => {
-        const normalizedPath = normalizeWorkspacePath(event.path);
-        const existingFile = context.project.files[normalizedPath];
-        if (!existingFile || !isWorkspaceTextFile(existingFile)) return context;
-
-        const content = applyTextEditEvent(existingFile.content, {
-          ...event,
-          path: normalizedPath,
-        });
-        if (content === null || content === existingFile.content) return context;
-
-        return withTimedContentUpdate(context, normalizedPath, content, "incremental");
-      }),
       updateFileContent: whenInitialized(
         (
           context,
           event: {
             path: string;
             content: string;
+            /** How the content was produced, for the span: a Monaco edit or a whole replacement. */
+            source?: "incremental" | "replacement";
           },
         ) => {
           const normalizedPath = normalizeWorkspacePath(event.path);
@@ -825,7 +813,12 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             return context;
           }
 
-          return withTimedContentUpdate(context, normalizedPath, event.content, "replacement");
+          return withTimedContentUpdate(
+            context,
+            normalizedPath,
+            event.content,
+            event.source ?? "replacement",
+          );
         },
       ),
       updateLessonType: whenInitialized(

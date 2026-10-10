@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceSyncMutation } from "./workspaceActions";
 import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
+import type { TextEditEvent } from "../types/textEdit";
 import { FILE_SIDEBAR_COLLAPSED_STORAGE_KEY } from "../utils/sidebarLayout";
 
 const assets = vi.hoisted(() => ({
@@ -167,6 +168,87 @@ describe("createWorkspaceActions", () => {
     actions.setSidebarCollapsed(false);
     expect(store.getSnapshot().context.sidebarCollapsed).toBe(false);
     expect(window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("false");
+  });
+
+  describe("applyFileTextEdits", () => {
+    const before = "<html></html>";
+    const after = "<html>fast</html>";
+
+    function htmlLesson(): WorkspaceProject {
+      const project = lesson();
+      project.files["index.html"] = {
+        path: "index.html",
+        name: "index.html",
+        language: "html",
+        content: before,
+      };
+      return project;
+    }
+
+    function edit(overrides: Partial<TextEditEvent> = {}): TextEditEvent {
+      return {
+        fileId: "index.html",
+        path: "index.html",
+        beforeVersion: 1,
+        afterVersion: 2,
+        beforeLength: before.length,
+        afterLength: after.length,
+        changes: [{ offset: 6, deleteLength: 0, text: "fast" }],
+        ...overrides,
+      };
+    }
+
+    function contentOf(store: ReturnType<typeof createWorkspaceStore>, path: string): unknown {
+      const context = store.getSnapshot().context;
+      return context.isInitialized ? context.project.files[path]?.content : undefined;
+    }
+
+    it("applies a validated edit, returns the new content and marks the file modified", () => {
+      const store = createWorkspaceStore({ activeFilePath: "index.html", project: htmlLesson() });
+      const actions = createWorkspaceActions(store);
+      const listener = vi.fn<(mutation: WorkspaceSyncMutation) => void>();
+      actions.subscribeWorkspaceSync(listener);
+
+      expect(actions.applyFileTextEdits(edit({ path: "/index.html" }))).toBe(after);
+      expect(contentOf(store, "index.html")).toBe(after);
+      const context = store.getSnapshot().context;
+      expect(context.isInitialized && context.dirtyState.modifiedFilePaths).toEqual(["index.html"]);
+      expect(context.isInitialized && context.editorState.activeFile.content).toBe(after);
+      expect(listener.mock.calls.map(([mutation]) => mutation.kind)).toEqual(["file"]);
+    });
+
+    it("rejects a stale or invalid edit and leaves the store unchanged", () => {
+      const store = createWorkspaceStore({ activeFilePath: "index.html", project: htmlLesson() });
+      const actions = createWorkspaceActions(store);
+      const snapshot = store.getSnapshot();
+
+      expect(actions.applyFileTextEdits(edit({ beforeLength: before.length + 1 }))).toBeNull();
+      expect(actions.applyFileTextEdits(edit({ afterVersion: 1 }))).toBeNull();
+      expect(actions.applyFileTextEdits(edit({ afterLength: before.length }))).toBeNull();
+      expect(actions.applyFileTextEdits(edit({ path: "missing.html" }))).toBeNull();
+      expect(store.getSnapshot()).toBe(snapshot);
+      expect(contentOf(store, "index.html")).toBe(before);
+    });
+
+    it("returns unchanged content without a store update when the edit changes nothing", () => {
+      const store = createWorkspaceStore({ activeFilePath: "index.html", project: htmlLesson() });
+      const actions = createWorkspaceActions(store);
+      const snapshot = store.getSnapshot();
+
+      const noOp = edit({
+        afterLength: before.length,
+        changes: [{ offset: 1, deleteLength: 4, text: "html" }],
+      });
+      expect(actions.applyFileTextEdits(noOp)).toBe(before);
+      expect(store.getSnapshot()).toBe(snapshot);
+      expect(store.getSnapshot().context.syncVersion).toBe(snapshot.context.syncVersion);
+      expect(isDirty(store)).toBe(false);
+    });
+
+    it("does nothing until a project is loaded", () => {
+      const actions = createWorkspaceActions(createWorkspaceStore(null));
+      expect(actions.applyFileTextEdits(edit())).toBeNull();
+    });
   });
 
   it("publishes an edit as a file mutation and a new file as a project mutation", () => {

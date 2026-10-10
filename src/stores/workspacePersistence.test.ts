@@ -168,43 +168,6 @@ describe("hydrateAssetDescriptors", () => {
 });
 
 describe("workspace dirty state", () => {
-  it("applies validated incremental text edits and rejects stale events", () => {
-    const before = "<html></html>";
-    const after = "<html>fast</html>";
-    const store = createWorkspaceStore({
-      activeFilePath: "index.html",
-      project: makeProject([makeFile("index.html", before)]),
-    });
-
-    store.trigger.applyFileTextEdits({
-      fileId: "index.html",
-      path: "index.html",
-      beforeVersion: 1,
-      afterVersion: 2,
-      beforeLength: before.length,
-      afterLength: after.length,
-      changes: [{ offset: 6, deleteLength: 0, text: "fast" }],
-    });
-
-    let context = store.getSnapshot().context;
-    if (!context.isInitialized) throw new Error("Expected initialized");
-    expect(context.project.files["index.html"].content).toBe(after);
-    expect(context.dirtyState.modifiedFilePaths).toEqual(["index.html"]);
-
-    store.trigger.applyFileTextEdits({
-      fileId: "index.html",
-      path: "index.html",
-      beforeVersion: 2,
-      afterVersion: 3,
-      beforeLength: before.length,
-      afterLength: before.length + 1,
-      changes: [{ offset: 0, deleteLength: 0, text: "!" }],
-    });
-    context = store.getSnapshot().context;
-    if (!context.isInitialized) throw new Error("Expected initialized");
-    expect(context.project.files["index.html"].content).toBe(after);
-  });
-
   it("tracks deleted files and returns to clean after an exact revert", () => {
     const store = createWorkspaceStore({
       activeFilePath: "index.html",

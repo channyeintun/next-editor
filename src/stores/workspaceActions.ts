@@ -14,7 +14,7 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { normalizeWorkspacePath } from "../types/workspacePaths";
-import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
+import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 export interface WorkspaceActions {
@@ -164,19 +164,16 @@ export function createWorkspaceActions(
 
       const path = normalizeWorkspacePath(event.path);
       const file = context.project.files[path];
-      if (
-        !file ||
-        !isWorkspaceTextFile(file) ||
-        !prepareTextEditEvent(event, file.content.length)
-      ) {
-        return null;
-      }
+      if (!file || !isWorkspaceTextFile(file)) return null;
 
-      workspaceStore.trigger.applyFileTextEdits({ ...event, path });
-      const nextContext = workspaceStore.getSnapshot().context;
-      if (!nextContext.isInitialized) return null;
-      const nextFile = nextContext.project.files[path];
-      return nextFile && isWorkspaceTextFile(nextFile) ? nextFile.content : null;
+      // Validated and applied once, here; the store takes the result as a
+      // content update, which emits nothing when the edit changed nothing.
+      const content = applyTextEditEvent(file.content, { ...event, path });
+      if (content === null) return null;
+      if (content !== file.content) {
+        workspaceStore.trigger.updateFileContent({ path, content, source: "incremental" });
+      }
+      return content;
     },
 
     notifyAssetAvailable: (assetId) => {
