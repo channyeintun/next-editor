@@ -51,8 +51,7 @@ import {
   projectCollaborationDocument,
 } from "../../../src/collaboration/projectDocument";
 import { decodeYjsSnapshot, decodeYjsUpdate } from "../../../src/collaboration/yjsUpdates";
-import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
-import { getCollaborationAsset } from "../../db/collaborationQueries";
+import { getCollaborationAsset, getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import {
   CollaborationRoomSqliteQuotaError,
   RoomSqliteDocumentStore,
@@ -123,21 +122,11 @@ const socketAttachmentSchema = canonicalSocketSessionSchema
 
 type SocketAttachment = z.infer<typeof socketAttachmentSchema>;
 
-// Earlier revisions also stored the awareness event as `awareness`, a copy of
-// awarenessState.collaboration that pushed a maximal state past the attachment
-// limit. Accept an attachment they wrote and drop the copy. Delete this once
-// the change has deployed.
-const storedSocketAttachmentSchema = socketAttachmentSchema
-  .extend({ awareness: z.unknown().optional() })
-  .strict();
-
 type ClientUpdateFrame = Extract<CollaborationBinaryFrame, { kind: "client-update" }>;
 
 function attachmentFor(socket: WebSocket): SocketAttachment | null {
-  const result = storedSocketAttachmentSchema.safeParse(socket.deserializeAttachment());
-  if (!result.success) return null;
-  const { awareness: _awareness, ...attachment } = result.data;
-  return attachment;
+  const result = socketAttachmentSchema.safeParse(socket.deserializeAttachment());
+  return result.success ? result.data : null;
 }
 
 function sendMessage(socket: WebSocket, message: CollaborationWebSocketServerMessage): void {

@@ -12,7 +12,6 @@ import {
   type CollaborationBinaryFrame,
 } from "../../../src/collaboration/binaryProtocol";
 import {
-  COLLABORATION_AWARENESS_TTL_MS,
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
@@ -798,55 +797,6 @@ describe("CollaborationRoomDurableObject awareness", () => {
       updateWindowCount: 1,
       awarenessState: { selection: { anchor: end, head: end } },
     });
-  });
-
-  // Earlier revisions also stored the awareness event as `awareness`, beside
-  // the same event inside awarenessState.
-  it("reads an attachment an earlier revision wrote and drops its awareness copy", async () => {
-    const { room, connect } = await createRoom();
-    const member = connect(MEMBER_ID, "editor");
-    const peer = connect(PEER_ID, "viewer");
-    const session = member.deserializeAttachment() as ReturnType<typeof canonicalSession>;
-    const now = Date.now();
-    const event = {
-      kind: "state",
-      sessionId: session.sessionId,
-      revision: 1,
-      surface: { kind: "slides", isMaximized: false },
-      cursor: null,
-      roomId: ROOM_ID,
-      actorId: MEMBER_ID,
-      role: "editor",
-      username: session.username,
-      name: null,
-      avatarUrl: null,
-      isHost: false,
-      occurredAt: now,
-      expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
-    };
-    member.serializeAttachment({
-      ...session,
-      awarenessClientId: 7,
-      awarenessClock: 1,
-      awareness: event,
-      awarenessState: { collaboration: event },
-    });
-
-    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 2));
-
-    expect(peer.frames().map((frame) => frame.kind)).toEqual(["awareness"]);
-    const stored = member.deserializeAttachment();
-    expect(stored).not.toHaveProperty("awareness");
-    expect(stored).toMatchObject({ awarenessState: { collaboration: { revision: 2 } } });
-
-    peer.sent.length = 0;
-    room.webSocketClose(member as never);
-    const leaves = peer
-      .frames()
-      .flatMap((frame) =>
-        frame.kind === "awareness" ? decodeCollaborationAwarenessProtocolUpdate(frame.update) : [],
-      );
-    expect(leaves).toEqual([expect.objectContaining({ clientId: 7, state: null })]);
   });
 
   it("carries a demotion into the member's stored awareness state", async () => {
