@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlaygroundClientBinding } from "../runtime/playgroundLanguage";
 
 /** How one playground request ended, as a runner panel renders it. */
@@ -35,11 +35,11 @@ export function usePlaygroundRunner<Client, Operation extends string, ErrorKind 
     };
   }, [binding]);
 
-  const cancel = useCallback(() => {
+  const cancel = () => {
     activeRequestRef.current += 1;
     if (clientRef.current) binding.stop(clientRef.current);
     setActiveOperation(null);
-  }, [binding]);
+  };
 
   const request = async <Result>(
     operation: Operation,

@@ -147,6 +147,20 @@ describe("usePlaygroundRunner", () => {
     expect(result.current.activeOperation).toBeNull();
   });
 
+  // PlaygroundRunnerPanel cancels from effects that depend on cancel, so a new cancel on
+  // every render (the busy flag re-renders it) would stop each run as it starts.
+  it("keeps cancel the same function across renders", () => {
+    const { result } = renderRunner();
+    const { cancel } = result.current;
+
+    act(() => {
+      void result.current.request("run", (c) => c.run());
+    });
+
+    expect(result.current.activeOperation).toBe("run");
+    expect(result.current.cancel).toBe(cancel);
+  });
+
   it("stops the client on unmount and creates it only once", async () => {
     const { result, clients, client, unmount } = renderRunner();
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   areWhiteboardViewsEqual,
@@ -100,7 +100,7 @@ export const useWhiteboardController = ({
     canvas: readonly WhiteboardElementJSON[];
   } | null>(null);
 
-  const discardPendingChange = useCallback(() => {
+  const discardPendingChange = () => {
     if (throttleTimeoutRef.current !== null) {
       window.clearTimeout(throttleTimeoutRef.current);
     }
@@ -110,9 +110,9 @@ export const useWhiteboardController = ({
     pendingCanvasBaseRef.current = null;
     pendingViewRef.current = undefined;
     syncedCanvasRef.current = null;
-  }, []);
+  };
 
-  const flushPendingChange = useCallback(() => {
+  const flushPendingChange = () => {
     if (throttleTimeoutRef.current !== null) {
       window.clearTimeout(throttleTimeoutRef.current);
     }
@@ -181,7 +181,7 @@ export const useWhiteboardController = ({
       // pointer gesture is still growing.
       source: "canvas",
     });
-  }, [store]);
+  };
 
   useLayoutEffect(() => {
     const controller = { flush: flushPendingChange, discard: discardPendingChange };
