@@ -6,13 +6,16 @@
  * every duration exact (samples / rate).
  */
 
-// The 16-bit PCM mono writer is shared with recorded narration, so it lives in core.
-import { allocateWavPcm16, encodeWavPcm16, floatTo16BitPcm } from "../../core/src/utils/wavPcm16";
-
-const RIFF = 0x46464952; // "RIFF" LE
-const WAVE = 0x45564157; // "WAVE" LE
-const FMT_ = 0x20746d66; // "fmt " LE
-const DATA = 0x61746164; // "data" LE
+// The 16-bit PCM mono writer is shared with recorded narration, and the RIFF
+// chunk walk with every WAV reader, so both live in core.
+import {
+  allocateWavPcm16,
+  DATA,
+  encodeWavPcm16,
+  floatTo16BitPcm,
+  FMT_,
+  readRiffChunks,
+} from "../../core/src/utils/wavPcm16";
 
 /** Absolute amplitude (of full scale) above which a sample counts as voiced. */
 const VOICED_THRESHOLD = 0.004;
@@ -97,25 +100,17 @@ export interface DecodedWav {
 }
 
 export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (
-    bytes.byteLength < 44 ||
-    view.getUint32(0, true) !== RIFF ||
-    view.getUint32(8, true) !== WAVE
-  ) {
+  if (bytes.byteLength < 44) {
     throw new Error("Not a RIFF/WAVE file");
   }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
-  let offset = 12;
   let sampleRate = 0;
   let channels = 0;
   let bitsPerSample = 0;
   let pcm: Int16Array | null = null;
 
-  while (offset + 8 <= bytes.byteLength) {
-    const chunkId = view.getUint32(offset, true);
-    const chunkSize = view.getUint32(offset + 4, true);
-    const body = offset + 8;
+  for (const { id: chunkId, body, size: chunkSize } of readRiffChunks(view)) {
     if (chunkId === FMT_) {
       const format = view.getUint16(body, true);
       channels = view.getUint16(body + 2, true);
@@ -138,7 +133,6 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
       // little-endian, as the writer (and every supported host) assumes.
       pcm = new Int16Array(bytes.slice(body, body + sampleCount * 2).buffer);
     }
-    offset = body + chunkSize + (chunkSize % 2);
   }
 
   if (!pcm || sampleRate === 0) {

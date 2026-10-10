@@ -1,12 +1,49 @@
 // ============================================================================
 // 16-bit PCM mono WAV writing: the studio stitches narration in it, and an edited
-// recording falls back to it where WebCodecs cannot encode Opus.
+// recording falls back to it where WebCodecs cannot encode Opus. The RIFF/WAVE
+// layout lives here too, so every WAV reader shares its FourCCs and chunk walk.
 // ============================================================================
 
-const RIFF = 0x46464952; // "RIFF" LE
-const WAVE = 0x45564157; // "WAVE" LE
-const FMT_ = 0x20746d66; // "fmt " LE
-const DATA = 0x61746164; // "data" LE
+export const RIFF = 0x46464952; // "RIFF" LE
+export const WAVE = 0x45564157; // "WAVE" LE
+export const FMT_ = 0x20746d66; // "fmt " LE
+export const DATA = 0x61746164; // "data" LE
+
+export interface RiffChunk {
+  /** The chunk's FourCC as a little-endian u32, comparable with FMT_ and DATA. */
+  id: number;
+  /** Where the chunk's body starts in the view. */
+  body: number;
+  /** The body size the chunk declares, which may run past the end of the file. */
+  size: number;
+}
+
+/**
+ * The chunks of a RIFF/WAVE file, in order. Throws "Not a RIFF/WAVE file" when
+ * the header is not one. Each chunk is reported with its declared size, so the
+ * reader decides what a size past the end means (truncation, or a streamed
+ * file's placeholder); the walk moves past each body and its pad byte (bodies
+ * of odd size are padded to an even length) and stops when no chunk header fits.
+ */
+export function readRiffChunks(view: DataView): Iterable<RiffChunk> {
+  if (
+    view.byteLength < 12 ||
+    view.getUint32(0, true) !== RIFF ||
+    view.getUint32(8, true) !== WAVE
+  ) {
+    throw new Error("Not a RIFF/WAVE file");
+  }
+  return chunksAfterHeader(view);
+}
+
+function* chunksAfterHeader(view: DataView): Generator<RiffChunk> {
+  let offset = 12;
+  while (offset + 8 <= view.byteLength) {
+    const size = view.getUint32(offset + 4, true);
+    yield { id: view.getUint32(offset, true), body: offset + 8, size };
+    offset += 8 + size + (size % 2);
+  }
+}
 
 export function floatTo16BitPcm(samples: Float32Array): Int16Array {
   const pcm = new Int16Array(samples.length);

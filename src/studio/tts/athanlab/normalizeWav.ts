@@ -13,12 +13,8 @@
  * and 44100 Hz all reach 48000 Hz with a few hundred filter phases at most.
  */
 
+import { DATA, FMT_, readRiffChunks } from "../../../core/src/utils/wavPcm16";
 import { encodeWavPcm16, floatTo16BitPcm, trimSilence } from "../wav";
-
-const RIFF = 0x46464952; // "RIFF" LE
-const WAVE = 0x45564157; // "WAVE" LE
-const FMT_ = 0x20746d66; // "fmt " LE
-const DATA = 0x61746164; // "data" LE
 
 const WAVE_FORMAT_PCM = 0x0001;
 const WAVE_FORMAT_IEEE_FLOAT = 0x0003;
@@ -193,22 +189,11 @@ function chunkStartsAt(view: DataView, offset: number): boolean {
  */
 export function decodeAthanLabWav(bytes: Uint8Array): DecodedMonoWav {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (
-    bytes.byteLength < 12 ||
-    view.getUint32(0, true) !== RIFF ||
-    view.getUint32(8, true) !== WAVE
-  ) {
-    throw new Error("Not a RIFF/WAVE file");
-  }
 
   let format: WavFormat | null = null;
   let dataOffset = -1;
   let dataSize = 0;
-  let offset = 12;
-  while (offset + 8 <= bytes.byteLength) {
-    const chunkId = view.getUint32(offset, true);
-    const chunkSize = view.getUint32(offset + 4, true);
-    const body = offset + 8;
+  for (const { id: chunkId, body, size: chunkSize } of readRiffChunks(view)) {
     if (chunkId === FMT_) {
       if (format) {
         throw new Error("WAV has more than one fmt chunk");
@@ -234,7 +219,6 @@ export function decodeAthanLabWav(bytes: Uint8Array): DecodedMonoWav {
         break;
       }
     }
-    offset = body + chunkSize + (chunkSize % 2);
   }
 
   if (!format) {

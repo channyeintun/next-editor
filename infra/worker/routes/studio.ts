@@ -5,6 +5,7 @@ import { isJsonObject, readBodyWithLimit, readJsonWithLimit } from "../httpBody"
 import { sanitizeUpstreamText } from "../upstreamText";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
 import { keyVaultOf } from "../athanlab/keyVault";
+import { DATA, FMT_, RIFF, WAVE } from "../../../src/core/src/utils/wavPcm16";
 import {
   VOXCPM2_MAX_REFERENCE_SECONDS,
   VOXCPM2_MAX_SEED,
@@ -24,10 +25,6 @@ const MAX_TEXT_CHARS = 2_000;
 const WAV_HEADER_BYTES = 44;
 const MAX_REFERENCE_WAV_BYTES =
   WAV_HEADER_BYTES + VOXCPM2_REFERENCE_SAMPLE_RATE * VOXCPM2_MAX_REFERENCE_SECONDS * 2;
-const RIFF = 0x46464952;
-const WAVE = 0x45564157;
-const FMT_ = 0x20746d66;
-const DATA = 0x61746164;
 // An upstream error body is read only to quote its message; FastAPI's
 // {"detail": "..."} errors are far below this.
 const MAX_UPSTREAM_ERROR_BYTES = 4 * 1024;
