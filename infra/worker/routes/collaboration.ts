@@ -44,6 +44,7 @@ import {
   CollaborationAssetMetadataError,
   CollaborationAssetQuotaError,
 } from "../../db/collaborationQueries";
+import { requireUser } from "../auth/requireUser";
 import { getCurrentUser } from "../auth/session";
 import {
   COLLABORATION_CLEANUP_DELAY,
@@ -90,8 +91,6 @@ const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGT
 const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
 // Invitation, claim and member-role bodies are a few short fields.
 const MAX_SMALL_JSON_REQUEST_BYTES = 4 * 1024;
-
-type CollaborationContext = Context<{ Bindings: Env }>;
 
 type ParsedCreateRoomBody =
   | { ok: true; data: CollaborationCreateRoomInput }
@@ -140,8 +139,8 @@ function invitationResponse(invitation: CollaborationInvitationRow) {
   };
 }
 
-async function readBoundedJson(
-  c: CollaborationContext,
+async function readBoundedJson<E extends { Bindings: Env }>(
+  c: Context<E>,
   maxBytes: number,
 ): Promise<{ ok: true; body: unknown } | { ok: false; status: 400 | 413 }> {
   const body = await readJsonWithLimit(c.req.raw, maxBytes);
@@ -151,8 +150,8 @@ async function readBoundedJson(
 }
 
 /** The body as strict UTF-8: the maintenance job's signature covers exact text. */
-async function readBoundedText(
-  c: CollaborationContext,
+async function readBoundedText<E extends { Bindings: Env }>(
+  c: Context<E>,
   maxBytes: number,
 ): Promise<{ ok: true; body: string } | { ok: false; status: 400 | 413 }> {
   const body = await readBytesWithLimit(c.req.raw, maxBytes);
@@ -165,7 +164,9 @@ async function readBoundedText(
   }
 }
 
-async function parseCreateRoomBody(c: CollaborationContext): Promise<ParsedCreateRoomBody> {
+async function parseCreateRoomBody<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<ParsedCreateRoomBody> {
   const json = await readBoundedJson(c, MAX_CREATE_ROOM_REQUEST_BYTES);
   if (!json.ok) {
     return {
@@ -179,8 +180,8 @@ async function parseCreateRoomBody(c: CollaborationContext): Promise<ParsedCreat
     : { ok: false, status: 400, error: "invalid collaboration snapshot" };
 }
 
-async function dispatchControlEvent(
-  c: CollaborationContext,
+async function dispatchControlEvent<E extends { Bindings: Env }>(
+  c: Context<E>,
   event: {
     kind: "membership-changed" | "room-closed";
     roomId: string;
@@ -233,8 +234,8 @@ async function dispatchControlEvent(
   }
 }
 
-function scheduleAuditEvent(
-  c: CollaborationContext,
+function scheduleAuditEvent<E extends { Bindings: Env }>(
+  c: Context<E>,
   input: Parameters<typeof recordCollaborationAuditEvent>[1],
 ): void {
   c.executionCtx.waitUntil(
@@ -248,8 +249,8 @@ function scheduleAuditEvent(
   );
 }
 
-function scheduleClosedRoomCleanup(
-  c: CollaborationContext,
+function scheduleClosedRoomCleanup<E extends { Bindings: Env }>(
+  c: Context<E>,
   roomId: string,
   closedAt: number,
 ): void {
@@ -361,17 +362,15 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
   return c.json({ purged: marked, documentPurged: deleted, deletedAssets, deletedAssetRecords });
 });
 
-collaborationRoute.get("/rooms", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms", requireUser, async (c) => {
+  const user = c.get("user");
 
   const rooms = await listCollaborationRoomsForUser(c.env.DB, user.id);
   return c.json({ rooms: rooms.map((room) => roomResponse(room, room.member_role)) });
 });
 
-collaborationRoute.post("/rooms", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.post("/rooms", requireUser, async (c) => {
+  const user = c.get("user");
 
   const parsed = await parseCreateRoomBody(c);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
@@ -423,9 +422,8 @@ collaborationRoute.post("/rooms", async (c) => {
   return c.json(roomResponse(activeRoom, "owner"), 201);
 });
 
-collaborationRoute.get("/rooms/:roomId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId", requireUser, async (c) => {
+  const user = c.get("user");
 
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
@@ -438,9 +436,8 @@ collaborationRoute.get("/rooms/:roomId", async (c) => {
   });
 });
 
-collaborationRoute.post("/rooms/:roomId/teaching/initialize", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.post("/rooms/:roomId/teaching/initialize", requireUser, async (c) => {
+  const user = c.get("user");
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomId.success) return c.json({ error: "invalid room id" }, 400);
   const raw = await readBoundedJson(c, MAX_TEACHING_INITIALIZATION_REQUEST_BYTES);
@@ -464,9 +461,8 @@ collaborationRoute.post("/rooms/:roomId/teaching/initialize", async (c) => {
   return c.json({ initialized: true }, 201);
 });
 
-collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.put("/rooms/:roomId/assets/:assetId", requireUser, async (c) => {
+  const user = c.get("user");
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const assetId = collaborationAssetIdSchema.safeParse(c.req.param("assetId"));
   if (!roomId.success || !assetId.success) return c.json({ error: "invalid asset id" }, 400);
@@ -538,9 +534,8 @@ collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
   );
 });
 
-collaborationRoute.get("/rooms/:roomId/assets/:assetId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId/assets/:assetId", requireUser, async (c) => {
+  const user = c.get("user");
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const assetId = collaborationAssetIdSchema.safeParse(c.req.param("assetId"));
   if (!roomId.success || !assetId.success) return c.json({ error: "invalid asset id" }, 400);
@@ -570,9 +565,8 @@ collaborationRoute.get("/rooms/:roomId/assets/:assetId", async (c) => {
   return new Response(object.body, { headers });
 });
 
-collaborationRoute.get("/rooms/:roomId/export", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId/export", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
@@ -607,9 +601,8 @@ collaborationRoute.get("/rooms/:roomId/export", async (c) => {
   }
 });
 
-collaborationRoute.get("/rooms/:roomId/members", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId/members", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
 
@@ -619,9 +612,8 @@ collaborationRoute.get("/rooms/:roomId/members", async (c) => {
   return c.json({ members: members.map(memberResponse), roleVersion: access.role_version });
 });
 
-collaborationRoute.get("/rooms/:roomId/invitations", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId/invitations", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
 
@@ -630,9 +622,8 @@ collaborationRoute.get("/rooms/:roomId/invitations", async (c) => {
   return c.json({ invitations: invitations.map(invitationResponse) });
 });
 
-collaborationRoute.post("/rooms/:roomId/invitations", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.post("/rooms/:roomId/invitations", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
   const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
@@ -661,9 +652,8 @@ collaborationRoute.post("/rooms/:roomId/invitations", async (c) => {
   return c.json({ ...invitationResponse(invitation), token }, 201);
 });
 
-collaborationRoute.delete("/rooms/:roomId/invitations/:invitationId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.delete("/rooms/:roomId/invitations/:invitationId", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const invitationIdResult = collaborationIdSchema.safeParse(c.req.param("invitationId"));
   if (!roomIdResult.success || !invitationIdResult.success) {
@@ -686,9 +676,8 @@ collaborationRoute.delete("/rooms/:roomId/invitations/:invitationId", async (c) 
   return c.body(null, 204);
 });
 
-collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.patch("/rooms/:roomId/members/:userId", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const userIdResult = collaborationIdSchema.safeParse(c.req.param("userId"));
   const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
@@ -724,9 +713,8 @@ collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
   return c.json({ member: memberResponse(member) });
 });
 
-collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.delete("/rooms/:roomId/members/:userId", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const userIdResult = collaborationIdSchema.safeParse(c.req.param("userId"));
   if (!roomIdResult.success || !userIdResult.success) return c.json({ error: "invalid id" }, 400);
@@ -764,9 +752,8 @@ collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
   return c.body(null, 204);
 });
 
-collaborationRoute.post("/rooms/:roomId/close", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.post("/rooms/:roomId/close", requireUser, async (c) => {
+  const user = c.get("user");
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
@@ -805,9 +792,8 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
   return c.json(roomResponse(room, "owner"));
 });
 
-collaborationRoute.post("/invitations/claim", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.post("/invitations/claim", requireUser, async (c) => {
+  const user = c.get("user");
   const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
   if (!body.ok) return c.json({ error: "invalid invitation" }, body.status);
   const input = claimCollaborationInvitationInputSchema.safeParse(body.body);
@@ -887,7 +873,7 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
 // Origins allowed to open voice transports. Browsers always send Origin on
 // WebSocket upgrades and on non-GET fetches; a mismatch is rejected. Local
 // development uses the Vite proxy, so loopback origins are also accepted.
-function isAllowedVoiceOrigin(c: CollaborationContext): boolean {
+function isAllowedVoiceOrigin<E extends { Bindings: Env }>(c: Context<E>): boolean {
   const origin = c.req.header("Origin");
   if (!origin) return c.req.method === "GET";
   try {
@@ -908,8 +894,8 @@ function isAllowedVoiceOrigin(c: CollaborationContext): boolean {
 // Loads the caller's canonical voice identity for an active room, or maps the
 // failure to a sanitized response. Voice must fail closed while the document
 // collaboration endpoints continue normally.
-async function resolveVoiceAccess(
-  c: CollaborationContext,
+async function resolveVoiceAccess<E extends { Bindings: Env }>(
+  c: Context<E>,
   collaborationSessionId: string,
 ): Promise<{ ok: true; session: CanonicalVoiceSession } | { ok: false; response: Response }> {
   if (!isVoiceChatEnabled(c.env)) {
@@ -947,9 +933,8 @@ async function resolveVoiceAccess(
 // Lets the client decide whether to render voice controls at all. Always a
 // sanitized 200 for authenticated members; the real gates re-run on every
 // voice transport request.
-collaborationRoute.get("/rooms/:roomId/voice/availability", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+collaborationRoute.get("/rooms/:roomId/voice/availability", requireUser, async (c) => {
+  const user = c.get("user");
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomId.success) return c.json({ error: "invalid room id" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);

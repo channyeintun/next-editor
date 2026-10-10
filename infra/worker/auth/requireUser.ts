@@ -14,7 +14,9 @@ export type SignedInEnv = { Bindings: Env; Variables: { user: UserRow } };
  * The playground routes resolve the user inline instead: their kill switch
  * comes first, so a disabled playground answers 503 before it asks who is
  * calling. GET /api/auth/me and PATCH /api/auth/username in session.ts do too,
- * since this module imports session.ts.
+ * since this module imports session.ts. So do the collaboration WebSocket
+ * upgrade, which answers 426 to a non-upgrade request first, and the voice
+ * transports' resolveVoiceAccess, whose voice flag and Origin checks come first.
  */
 export const requireUser = createMiddleware<SignedInEnv>(async (c, next) => {
   const user = await getCurrentUser(c);

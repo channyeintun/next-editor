@@ -93,6 +93,45 @@ beforeEach(() => {
   vi.mocked(getCurrentUser).mockResolvedValue({ id: OWNER_ID } as never);
 });
 
+describe("signed-out callers", () => {
+  const ASSET_ID = "a".repeat(64);
+  const INVITATION_ID = "30000000-0000-4000-8000-000000000001";
+  it.each([
+    ["GET", "/rooms"],
+    ["POST", "/rooms"],
+    ["GET", `/rooms/${ROOM_ID}`],
+    ["POST", `/rooms/${ROOM_ID}/teaching/initialize`],
+    ["PUT", `/rooms/${ROOM_ID}/assets/${ASSET_ID}`],
+    ["GET", `/rooms/${ROOM_ID}/assets/${ASSET_ID}`],
+    ["GET", `/rooms/${ROOM_ID}/export`],
+    ["GET", `/rooms/${ROOM_ID}/members`],
+    ["GET", `/rooms/${ROOM_ID}/invitations`],
+    ["POST", `/rooms/${ROOM_ID}/invitations`],
+    ["DELETE", `/rooms/${ROOM_ID}/invitations/${INVITATION_ID}`],
+    ["PATCH", `/rooms/${ROOM_ID}/members/${OWNER_ID}`],
+    ["DELETE", `/rooms/${ROOM_ID}/members/${OWNER_ID}`],
+    ["POST", `/rooms/${ROOM_ID}/close`],
+    ["POST", "/invitations/claim"],
+    ["GET", `/rooms/${ROOM_ID}/voice/availability`],
+  ])("%s %s answers 401 before reading the body or the room", async (method, path) => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+    const hasBody = method !== "GET" && method !== "DELETE";
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev${path}`,
+      {
+        method,
+        ...(hasBody ? { headers: { "Content-Type": "application/json" }, body: "not json" } : {}),
+      },
+      { DB: {} } as Env,
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "not signed in" });
+    expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /rooms/:roomId/close", () => {
   it("schedules the purge even when the room coordinator cannot be reached", async () => {
     vi.mocked(getCollaborationRoomAccess).mockResolvedValue(ownerAccess());
