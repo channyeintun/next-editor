@@ -828,6 +828,25 @@ describe("PUT /api/studio/athanlab/key", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("answers 503 when the rate limiter itself fails, without logging the user", async () => {
+    const { fetchSpy } = stubAthanLab();
+    const failing: RateLimit = {
+      async limit() {
+        throw new Error("rate limiter unavailable");
+      },
+    };
+
+    const response = await putKey(makeEnv({ ATHANLAB_KEY_RATE_LIMITER: failing }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "AthanLab narration is temporarily unavailable — try again soon",
+    });
+    expect(consoleOutput).toContainEqual(["AthanLab rate-limit check failed"]);
+    expect(JSON.stringify(consoleOutput)).not.toContain(USER_ID);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("records auth_blocked and then fails every route fast", async () => {
     const athanlab = stubAthanLab({
       "GET /voices": athanlabError(429, "auth_blocked", { retryable: true, retryAfter: "600" }),

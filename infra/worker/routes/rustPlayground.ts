@@ -3,7 +3,6 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
-  checkPlaygroundRateLimit,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -11,6 +10,7 @@ import {
   validateSingleFileLessonRequest,
   writeCachedValue,
 } from "../playgroundProxy";
+import { checkRateLimit } from "../rateLimit";
 import { requestWaitUntil } from "../waitUntil";
 import {
   parseRustPlaygroundRunResult,
@@ -257,7 +257,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
   }
 
   // The run budget is RUST_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
-  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_RUN_RATE_LIMITER, {
+  const rateLimitDecision = await checkRateLimit(c.env.RUST_RUN_RATE_LIMITER, {
     key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
@@ -379,7 +379,7 @@ rustPlaygroundRoute.post("/format", async (c) => {
   }
 
   // The format budget is RUST_FORMAT_RATE_LIMITER's, set in infra/wrangler.toml.
-  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_FORMAT_RATE_LIMITER, {
+  const rateLimitDecision = await checkRateLimit(c.env.RUST_FORMAT_RATE_LIMITER, {
     key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });

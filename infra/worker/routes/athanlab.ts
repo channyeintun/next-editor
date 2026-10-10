@@ -47,6 +47,7 @@ import {
   type SpeechJob,
 } from "../athanlab/client";
 import { keyVaultOf, openApiKey, sealApiKey, type KeyVault } from "../athanlab/keyVault";
+import { checkRateLimit } from "../rateLimit";
 import {
   ATHANLAB_MAX_TEXT_CHARS,
   ATHANLAB_RETRY_LATER,
@@ -223,14 +224,9 @@ async function chargeRateLimit(
   userId: string,
 ): Promise<Response | null> {
   if (!limiter) return notConfigured(c);
-  let success: boolean;
-  try {
-    ({ success } = await limiter.limit({ key: `user:${userId}` }));
-  } catch {
-    console.error("AthanLab rate-limit check failed");
-    return failure(c, 503, TEMPORARILY_UNAVAILABLE);
-  }
-  return success
+  const decision = await checkRateLimit(limiter, { key: `user:${userId}`, label: "AthanLab" });
+  if (decision === "unavailable") return failure(c, 503, TEMPORARILY_UNAVAILABLE);
+  return decision === "allowed"
     ? null
     : retryLater(
         c,

@@ -3,7 +3,6 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
-  checkPlaygroundRateLimit,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -11,6 +10,7 @@ import {
   validateSingleFileLessonRequest,
   writeCachedValue,
 } from "../playgroundProxy";
+import { checkRateLimit } from "../rateLimit";
 import { requestWaitUntil } from "../waitUntil";
 import {
   parseZigPlaygroundFormatResult,
@@ -342,7 +342,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // Charged only once the request is really going upstream, so re-running
   // unchanged source never spends a slot a Format may need. The budget, shared
   // with /format, is ZIG_UPSTREAM_RATE_LIMITER's, set in infra/wrangler.toml.
-  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
+  const rateLimitDecision = await checkRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
     key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
@@ -473,7 +473,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
 
   // The budget, shared with /run, is ZIG_UPSTREAM_RATE_LIMITER's, set in
   // infra/wrangler.toml.
-  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
+  const rateLimitDecision = await checkRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
     key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });

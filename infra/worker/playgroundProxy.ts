@@ -9,10 +9,10 @@ import type { WaitUntil } from "./waitUntil";
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
 //
 // Only the parts that are genuinely identical across upstreams live here: the
-// rate-limit key and check, the content-addressed cache key, the KV result
-// cache, the output bound, and reading the `{ files: [...] }` request body
-// (whole for single-file upstreams, up to the per-language policy for Go and
-// Kotlin). Everything that encodes a particular service's behaviour — its file
+// rate-limit key (charged through rateLimit.ts's checkRateLimit), the
+// content-addressed cache key, the KV result cache, the output bound, and
+// reading the `{ files: [...] }` request body (whole for single-file
+// upstreams, up to the per-language policy for Go and Kotlin). Everything that encodes a particular service's behaviour — its file
 // path and source policy, its request encoding, its non-ok status policy, its
 // response normalization, its telemetry channel — stays in the route, because
 // those are the parts that differ and the reasons they differ are documented
@@ -35,12 +35,6 @@ export function truncateOutput(text: string, maxChars: number): string {
 export async function contentCacheKey(prefix: string, content: string): Promise<string> {
   return `${prefix}:${await sha256Hex(content)}`;
 }
-
-// Per-caller limit through a Workers Rate Limiting binding. Approximate by
-// design (Cloudflare counts per location), but fail closed when the binding is
-// missing or unavailable so a configuration outage cannot turn a route into an
-// unlimited proxy.
-export type RateLimitDecision = "allowed" | "limited" | "unavailable";
 
 /** The key every signed-out caller without a CF-Connecting-IP header shares. */
 const UNKNOWN_CLIENT_KEY = "ip:unknown";
@@ -85,6 +79,11 @@ function ipv6Slash64(address: string): string | null {
  *
  * The address is only ever this key: it is never logged, never sent upstream,
  * and never stored by this Worker.
+ *
+ * Routes charge it with checkRateLimit (rateLimit.ts). A route that serves
+ * both /run and /format passes a different binding for each so the two get
+ * their own budgets — except where the upstream itself counts them together
+ * (zigPlayground.ts), which passes one binding for both.
  */
 export async function playgroundRateLimitKey<E extends { Bindings: Env }>(
   c: Context<E>,
@@ -102,33 +101,6 @@ export async function playgroundRateLimitKey<E extends { Bindings: Env }>(
   }
   const prefix = ipv6Slash64(address);
   return prefix ? `ip:${prefix}` : UNKNOWN_CLIENT_KEY;
-}
-
-/**
- * Charge one call against `key`'s budget on `limiter`. The key comes from
- * playgroundRateLimitKey, so every route charges callers the same way.
- *
- * Each budget is its own binding, declared with its limit and period in
- * infra/wrangler.toml. A route that serves both /run and /format passes a
- * different binding for each so the two get their own budgets — except where
- * the upstream itself counts them together (zigPlayground.ts), which passes
- * one binding for both. `label` only ever reaches console.error; user sources,
- * output and the key itself must never be logged.
- */
-export async function checkPlaygroundRateLimit(
-  limiter: RateLimit | undefined,
-  options: { key: string; label: string },
-): Promise<RateLimitDecision> {
-  if (!limiter) {
-    return "unavailable";
-  }
-  try {
-    const { success } = await limiter.limit({ key: options.key });
-    return success ? "allowed" : "limited";
-  } catch {
-    console.error(`${options.label} rate-limit check failed`);
-    return "unavailable";
-  }
 }
 
 /**

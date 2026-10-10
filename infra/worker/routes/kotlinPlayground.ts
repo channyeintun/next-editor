@@ -3,7 +3,6 @@ import type { Env } from "../env";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
-  checkPlaygroundRateLimit,
   contentCacheKey,
   playgroundRateLimitKey,
   readCachedValue,
@@ -11,6 +10,7 @@ import {
   truncateOutput,
   writeCachedValue,
 } from "../playgroundProxy";
+import { checkRateLimit } from "../rateLimit";
 import { requestWaitUntil } from "../waitUntil";
 import {
   parseKotlinPlaygroundRunResult,
@@ -432,7 +432,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
   }
 
   // The run budget is KOTLIN_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
-  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.KOTLIN_RUN_RATE_LIMITER, {
+  const rateLimitDecision = await checkRateLimit(c.env.KOTLIN_RUN_RATE_LIMITER, {
     key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
