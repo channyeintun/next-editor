@@ -179,8 +179,9 @@ describe("QuickOpenDialog", () => {
   });
 
   it("outlines only the active option, for forced colors", () => {
-    const { activeOption } = renderDialog();
+    const { input, activeOption } = renderDialog();
 
+    expect(input).toHaveClass("focus:outline-hidden");
     expect(activeOption()).toHaveClass("outline-2");
     for (const option of screen.getAllByRole("option").filter((row) => row !== activeOption())) {
       expect(option).not.toHaveClass("outline-2");

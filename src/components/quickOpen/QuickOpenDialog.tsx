@@ -170,7 +170,7 @@ export default function QuickOpenDialog({
                 setActiveIndex(0);
               }}
               onKeyDown={handleKeyDown}
-              className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-400 focus:border-slate-500"
+              className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-[13px] text-slate-100 placeholder:text-slate-400 focus:border-slate-500 focus:outline-hidden"
             />
           </div>
           <button
