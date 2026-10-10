@@ -64,7 +64,7 @@ import PlayerShortcutsHelp, { PlayerShortcutFeedback } from "./PlayerShortcutsHe
 import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { serializeCuesToVtt } from "../captions/serializeVtt";
-import { selectCaptionTrack } from "../captions/captionTracks";
+import { createCaptionTrack, selectCaptionTrack } from "../captions/captionTracks";
 import { downloadBlob } from "../utils/downloadBlob";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
@@ -342,13 +342,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     }
 
     const { cues, language } = parsed;
-    addCaptionTrack(recordingId, {
-      id: `${language}-${Date.now()}`,
-      language,
-      label: language.toUpperCase(),
-      cues,
-      default: !currentRecording?.captions?.length,
-    });
+    addCaptionTrack(
+      recordingId,
+      createCaptionTrack({
+        id: `${language}-${Date.now()}`,
+        language,
+        cues,
+        isDefault: !currentRecording?.captions?.length,
+      }),
+    );
   };
 
   const handleToggleCameraForNextRecording = () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { CaptionTrack } from "../core/src/types";
-import { captionTrackLabel, selectCaptionTrack } from "./captionTracks";
+import { captionTrackLabel, createCaptionTrack, selectCaptionTrack } from "./captionTracks";
 
 const studio: CaptionTrack = { id: "studio-narration", language: "en", label: "en-US", cues: [] };
 const generated: CaptionTrack = { id: "auto-en-1", language: "en", label: "EN (auto)", cues: [] };
@@ -78,5 +78,36 @@ describe("captionTrackLabel", () => {
     expect(captionTrackLabel(track("New"))).toBe("New");
     expect(captionTrackLabel(track("SDH"))).toBe("SDH");
     expect(captionTrackLabel(track("Pro", "my"))).toBe("Pro");
+  });
+});
+
+describe("createCaptionTrack", () => {
+  const cues = [{ start: 0, end: 1000, text: "Hello" }];
+
+  it("labels an imported or sibling track with its language tag", () => {
+    expect(createCaptionTrack({ id: "en-1", language: "en", cues, isDefault: true })).toEqual({
+      id: "en-1",
+      language: "en",
+      label: "EN",
+      cues,
+      default: true,
+    });
+  });
+
+  it("marks a generated track, and captionTrackLabel reads back what it writes", () => {
+    const generatedTrack = createCaptionTrack({
+      id: "auto-en-1",
+      language: "en",
+      cues,
+      generated: true,
+      isDefault: false,
+    });
+
+    expect(generatedTrack.label).toBe("EN (auto)");
+    expect(generatedTrack.default).toBe(false);
+    expect(captionTrackLabel(generatedTrack)).toBe("English (auto)");
+    expect(
+      captionTrackLabel(createCaptionTrack({ id: "my", language: "my", cues, isDefault: true })),
+    ).toBe("Burmese");
   });
 });

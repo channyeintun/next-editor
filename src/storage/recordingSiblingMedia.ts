@@ -1,5 +1,6 @@
 import type { CaptionTrack, Recording } from "../core/src";
 import { fetchNextEditorUrl, probeMediaUrl } from "./recordingFetch";
+import { createCaptionTrack } from "../captions/captionTracks";
 import {
   AUDIO_MIME_BY_EXT,
   audioMimeFromFilename,
@@ -124,15 +125,14 @@ async function fetchVttFile(url: string, signal?: AbortSignal): Promise<CaptionT
     const cues = parseVtt(text);
     if (cues.length === 0) return null;
     const lang = inferLanguageFromFilename(url) ?? "en";
-    return {
+    return createCaptionTrack({
       // Keyed on the file, not the language: ADD_CAPTION_TRACK replaces a track with the same id,
       // and two declared files can share a language (or both lack a tag and default to "en").
       id: `sibling:${new URL(url).pathname}`,
       language: lang,
-      label: lang.toUpperCase(),
       cues,
-      default: true,
-    };
+      isDefault: true,
+    });
   } catch {
     return null;
   }

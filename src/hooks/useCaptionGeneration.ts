@@ -3,6 +3,7 @@ import type { CaptionCue, Recording } from "../core/src";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { useCaptionStoreTrigger } from "./useCaptionStore";
 import type { CaptionGenerationProgress } from "../captions/generateCaptions";
+import { createCaptionTrack } from "../captions/captionTracks";
 import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 
 export type CaptionGenerationState =
@@ -83,13 +84,16 @@ export function useCaptionGeneration() {
       },
       onCaptions: (language, cues) => {
         const trackId = `auto-${language}-${Date.now()}`;
-        addCaptionTrack(recording.id, {
-          id: trackId,
-          language,
-          label: `${language.toUpperCase()} (auto)`,
-          cues,
-          default: !recording.captions?.length,
-        });
+        addCaptionTrack(
+          recording.id,
+          createCaptionTrack({
+            id: trackId,
+            language,
+            cues,
+            generated: true,
+            isDefault: !recording.captions?.length,
+          }),
+        );
         // By id: the lesson may already have a track in this language.
         captionTrigger.selectTrack({ trackId, language });
         captionTrigger.setEnabled({ enabled: true });

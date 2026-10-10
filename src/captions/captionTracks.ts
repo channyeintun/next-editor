@@ -1,4 +1,4 @@
-import type { CaptionTrack } from "../core/src/types";
+import type { CaptionCue, CaptionTrack } from "../core/src/types";
 
 /** What the viewer last picked: that track, and its language for lessons without it. */
 export interface CaptionTrackPreference {
@@ -30,9 +30,42 @@ export function selectCaptionTrack(
   return tracks.find((track) => track.default) ?? tracks[0];
 }
 
+/** What a generated track's label carries after its language tag: "EN (auto)". */
+const AUTO_SUFFIX = " (auto)";
+
+/**
+ * A track for the recording, labelled by its language tag ("EN", or "EN (auto)" when it
+ * was generated). Importing, generating and loading a sibling VTT all build their tracks
+ * here, so captionTrackLabel reads back the one label shape they write.
+ */
+export function createCaptionTrack({
+  id,
+  language,
+  cues,
+  generated = false,
+  isDefault,
+}: {
+  id: string;
+  language: string;
+  cues: CaptionCue[];
+  generated?: boolean;
+  isDefault: boolean;
+}): CaptionTrack {
+  return {
+    id,
+    language,
+    label: `${language.toUpperCase()}${generated ? AUTO_SUFFIX : ""}`,
+    cues,
+    default: isDefault,
+  };
+}
+
 // A bare language tag, as tracks are often labelled ("my-MM", "EN"), with the
-// " (auto)" a generated track carries.
-const TAGGED_LABEL = /^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)( \(auto\))?$/i;
+// AUTO_SUFFIX a generated track carries (escaped: it holds parentheses).
+const TAGGED_LABEL = new RegExp(
+  `^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)(${AUTO_SUFFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})?$`,
+  "i",
+);
 
 let languageNames: Intl.DisplayNames | null | undefined;
 
