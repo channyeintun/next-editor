@@ -201,13 +201,18 @@ describe("MyLessonCard", () => {
     );
   });
 
-  it("exposes the in-flight rename as a status message", () => {
+  it("announces the in-flight rename through the one persistent status region", () => {
     const view = startRename();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
 
     rename.isPending = true;
     view.rerender(card());
 
-    expect(screen.getByRole("status")).toHaveTextContent("Updating lesson name…");
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent("Updating lesson name…");
+    // The visible copy is hidden from assistive tech so it is not read twice.
+    const visible = screen.getAllByText("Updating lesson name…").find((el) => el !== status);
+    expect(visible).toHaveAttribute("aria-hidden", "true");
   });
 });

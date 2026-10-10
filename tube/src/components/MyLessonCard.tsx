@@ -63,6 +63,12 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     updateName.isPending;
   const hasMutationError =
     publish.isError || unpublish.isError || del.isError || updateThumbnail.isError;
+  // A thumbnail upload can still be running when a rename is saved, so both
+  // can show at once.
+  const pendingMessages = [
+    updateThumbnail.isPending && "Updating thumbnail…",
+    updateName.isPending && "Updating lesson name…",
+  ].filter((message) => message !== false);
 
   // Menu actions, the confirmations, the rename field and the playlist
   // popover all unmount the control that had focus, which would drop focus to
@@ -270,6 +276,13 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
       </div>
 
       <div className="mt-3 space-y-2">
+        {/* Always mounted, and first, so screen readers announce the progress
+            text as it changes (a region mounted together with its text is not
+            reliably read). The visible lines below repeat it, hidden from
+            assistive tech so it is not read twice. */}
+        <p role="status" className="sr-only">
+          {pendingMessages.join(" ")}
+        </p>
         {renaming ? (
           <div className="flex items-center gap-1.5">
             <input
@@ -336,16 +349,11 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
             Something went wrong — try again.
           </p>
         ) : null}
-        {updateThumbnail.isPending ? (
-          <p role="status" className="text-xs text-slate-400">
-            Updating thumbnail…
+        {pendingMessages.map((message) => (
+          <p key={message} aria-hidden="true" className="text-xs text-slate-400">
+            {message}
           </p>
-        ) : null}
-        {updateName.isPending ? (
-          <p role="status" className="text-xs text-slate-400">
-            Updating lesson name…
-          </p>
-        ) : null}
+        ))}
 
         {confirming === "unpublish" ? (
           <div className="space-y-2 rounded-lg border border-white/10 bg-white/5 p-2.5">
