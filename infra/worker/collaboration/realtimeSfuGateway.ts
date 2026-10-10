@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  MAX_VOICE_ROSTER_SIZE,
   MAX_VOICE_SFU_REQUEST_BYTES,
   voiceSfuSessionIdSchema,
   voiceSfuTrackNameSchema,
@@ -32,6 +33,31 @@ const sdpSchema = z
 
 const midSchema = z.string().regex(/^[!-~]{1,16}$/);
 
+/**
+ * Tracks one voice connection may pull, close or hold at once. A room can
+ * never have more remote publications than members, so it is the roster
+ * ceiling; authorization, the request schemas and the Durable Object's
+ * hibernated attachment all bound by it.
+ */
+export const MAX_VOICE_TRACKS_PER_CONNECTION = MAX_VOICE_ROSTER_SIZE;
+
+/** A remote track this connection pulled, as its attachment registers it. */
+export const receivingTrackSchema = z
+  .object({
+    sessionId: voiceSfuSessionIdSchema,
+    trackName: voiceSfuTrackNameSchema,
+    mid: midSchema,
+  })
+  .strict();
+
+/**
+ * A remote track's stable identity. NUL cannot occur in a schema-checked
+ * session ID or track name, so distinct tracks never share a key.
+ */
+export function receivingTrackKey(track: { sessionId: string; trackName: string }): string {
+  return `${track.sessionId}\u0000${track.trackName}`;
+}
+
 const offerSchema = z.object({ type: z.literal("offer"), sdp: sdpSchema }).strict();
 const answerSchema = z.object({ type: z.literal("answer"), sdp: sdpSchema }).strict();
 
@@ -63,9 +89,7 @@ const pullTrackSchema = z
 
 export const pullTracksRequestSchema = z
   .object({
-    // Bounded by the roster ceiling; a room can never have more remote
-    // publications than members.
-    tracks: z.array(pullTrackSchema).min(1).max(64),
+    tracks: z.array(pullTrackSchema).min(1).max(MAX_VOICE_TRACKS_PER_CONNECTION),
   })
   .strict();
 
@@ -76,7 +100,7 @@ export const closeTracksRequestSchema = z
     tracks: z
       .array(z.object({ mid: midSchema }).strict())
       .min(1)
-      .max(64),
+      .max(MAX_VOICE_TRACKS_PER_CONNECTION),
     sessionDescription: offerSchema.optional(),
     force: z.boolean().optional(),
   })
@@ -105,7 +129,7 @@ export const upstreamTracksResponseSchema = z.object({
   requiresImmediateRenegotiation: z.boolean().optional(),
   // PartyTracks requires track results for both tracks/new and tracks/close,
   // and the gateway needs them to update ownership without guessing.
-  tracks: z.array(upstreamTrackResultSchema).max(64),
+  tracks: z.array(upstreamTrackResultSchema).max(MAX_VOICE_TRACKS_PER_CONNECTION),
   sessionDescription: upstreamSessionDescriptionSchema.optional(),
   errorCode: z.string().max(64).optional(),
 });
@@ -151,11 +175,7 @@ export interface VoiceConnectionSfuState {
   receivingTracks: readonly ReceivingTrack[];
 }
 
-export interface ReceivingTrack {
-  sessionId: string;
-  trackName: string;
-  mid: string;
-}
+export type ReceivingTrack = z.infer<typeof receivingTrackSchema>;
 
 export interface ActivePublication {
   ownerVoiceConnectionId: string;
@@ -220,7 +240,7 @@ export function authorizePullTracks(
   const requestedKeys = new Set<string>();
   let newSubscriptionCount = 0;
   for (const track of body.tracks) {
-    const key = `${track.sessionId}\u0000${track.trackName}`;
+    const key = receivingTrackKey(track);
     if (requestedKeys.has(key)) return deny(409, "already subscribed");
     requestedKeys.add(key);
     const replacesExisting = state.receivingTracks.some(
@@ -241,7 +261,7 @@ export function authorizePullTracks(
   // receivingMids is the authoritative ownership set. receivingTracks was
   // added later to identify safe retries and can be incomplete on an older
   // hibernating attachment during a rolling deployment.
-  if (state.receivingMids.length + newSubscriptionCount > 64) {
+  if (state.receivingMids.length + newSubscriptionCount > MAX_VOICE_TRACKS_PER_CONNECTION) {
     return deny(409, "subscription limit reached");
   }
   return { ok: true };

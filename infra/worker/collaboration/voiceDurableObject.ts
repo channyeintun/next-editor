@@ -15,14 +15,13 @@ import {
   VOICE_CAPABILITY_HEADER,
   parseVoiceClientMessage,
   voiceCapabilitySchema,
-  voiceSfuSessionIdSchema,
-  voiceSfuTrackNameSchema,
   voiceServerMessageSchema,
   type VoiceParticipant,
   type VoiceRoomClosedReason,
   type VoiceServerMessage,
 } from "../../../src/collaboration/voiceProtocol";
 import {
+  MAX_VOICE_TRACKS_PER_CONNECTION,
   VOICE_STUN_ICE_SERVERS,
   authorizeCloseTracks,
   authorizePullTracks,
@@ -33,6 +32,8 @@ import {
   parseVoiceSfuOperation,
   pullTracksRequestSchema,
   pushTracksRequestSchema,
+  receivingTrackKey,
+  receivingTrackSchema,
   renegotiateRequestSchema,
   upstreamNewSessionResponseSchema,
   upstreamRenegotiateResponseSchema,
@@ -106,19 +107,8 @@ const voiceSocketAttachmentSchema = canonicalVoiceSessionSchema
     sfuSessionId: z.string().nullable(),
     publishedTrackName: z.string().nullable(),
     publishedMid: z.string().nullable(),
-    receivingMids: z.array(z.string()).max(64),
-    receivingTracks: z
-      .array(
-        z
-          .object({
-            sessionId: voiceSfuSessionIdSchema,
-            trackName: voiceSfuTrackNameSchema,
-            mid: z.string().regex(/^[!-~]{1,16}$/),
-          })
-          .strict(),
-      )
-      .max(64)
-      .default([]),
+    receivingMids: z.array(z.string()).max(MAX_VOICE_TRACKS_PER_CONNECTION),
+    receivingTracks: z.array(receivingTrackSchema).max(MAX_VOICE_TRACKS_PER_CONNECTION).default([]),
     accessCheckedAt: z.number().int().nonnegative().optional(),
     superseded: z.boolean().optional(),
     messageWindowSecond: z.number().int().nonnegative().optional(),
@@ -1109,11 +1099,9 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           // Retry replacement mirrors the publication path: close only the
           // registered mids for requested stable remote track identities,
           // update the ownership registry, then forward the replacement pull.
-          const requestedKeys = new Set(
-            pull.data.tracks.map((track) => `${track.sessionId}\u0000${track.trackName}`),
-          );
+          const requestedKeys = new Set(pull.data.tracks.map(receivingTrackKey));
           const replacedTracks = current.receivingTracks.filter((track) =>
-            requestedKeys.has(`${track.sessionId}\u0000${track.trackName}`),
+            requestedKeys.has(receivingTrackKey(track)),
           );
           if (replacedTracks.length > 0) {
             const replacedMids = new Set(replacedTracks.map((track) => track.mid));
@@ -1149,7 +1137,10 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               malformedSuccess = true;
               continue;
             }
-            const key = `${track.sessionId}\u0000${track.trackName}`;
+            const key = receivingTrackKey({
+              sessionId: track.sessionId,
+              trackName: track.trackName,
+            });
             const requested = pull.data.tracks.find(
               (candidate) =>
                 candidate.sessionId === track.sessionId && candidate.trackName === track.trackName,
@@ -1183,20 +1174,20 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           if (additions.length > 0) {
             const next = persist((latest) => {
               const byTrack = new Map(
-                latest.receivingTracks.map((track) => [
-                  `${track.sessionId}\u0000${track.trackName}`,
-                  track,
-                ]),
+                latest.receivingTracks.map((track) => [receivingTrackKey(track), track]),
               );
               for (const addition of additions) {
-                byTrack.set(`${addition.sessionId}\u0000${addition.trackName}`, addition);
+                byTrack.set(receivingTrackKey(addition), addition);
               }
-              const receivingTracks = [...byTrack.values()].slice(0, 64);
+              const receivingTracks = [...byTrack.values()].slice(
+                0,
+                MAX_VOICE_TRACKS_PER_CONNECTION,
+              );
               // Preserve legacy owned mids that predate receivingTracks; they
               // must remain closable and count toward the per-session limit.
               const receivingMids = [
                 ...new Set([...latest.receivingMids, ...additions.map((addition) => addition.mid)]),
-              ].slice(0, 64);
+              ].slice(0, MAX_VOICE_TRACKS_PER_CONNECTION);
               return {
                 ...latest,
                 receivingMids,

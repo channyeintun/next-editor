@@ -6,9 +6,12 @@ import {
   authorizeSessionScoped,
   buildUpstreamSfuUrl,
   closeTracksRequestSchema,
+  MAX_VOICE_TRACKS_PER_CONNECTION,
   parseVoiceSfuOperation,
   pullTracksRequestSchema,
   pushTracksRequestSchema,
+  receivingTrackKey,
+  receivingTrackSchema,
   renegotiateRequestSchema,
   upstreamNewSessionResponseSchema,
   upstreamTracksResponseSchema,
@@ -135,6 +138,33 @@ describe("request schemas", () => {
       pullTracksRequestSchema.safeParse({
         tracks: [{ location: "remote", sessionId: "bad session", trackName: "their-mic" }],
       }).success,
+    ).toBe(false);
+    const batch = (length: number) => ({
+      tracks: Array.from({ length }, (_, index) => ({
+        location: "remote",
+        sessionId: `session-${index}`,
+        trackName: "their-mic",
+      })),
+    });
+    expect(MAX_VOICE_TRACKS_PER_CONNECTION).toBe(64);
+    expect(pullTracksRequestSchema.safeParse(batch(64)).success).toBe(true);
+    expect(pullTracksRequestSchema.safeParse(batch(65)).success).toBe(false);
+  });
+
+  it("keys a remote track by session and name, joined by NUL", () => {
+    expect(receivingTrackKey({ sessionId: "session-a", trackName: "mic" })).toBe(
+      "session-a\u0000mic",
+    );
+    // Two tracks whose parts concatenate alike still get distinct keys.
+    expect(receivingTrackKey({ sessionId: "a", trackName: "b-mic" })).not.toBe(
+      receivingTrackKey({ sessionId: "a-b", trackName: "mic" }),
+    );
+    // NUL never passes the identifier schemas, so no part can forge the separator.
+    expect(
+      receivingTrackSchema.safeParse({ sessionId: "a", trackName: "b\u0000c", mid: "1" }).success,
+    ).toBe(false);
+    expect(
+      receivingTrackSchema.safeParse({ sessionId: "a\u0000b", trackName: "c", mid: "1" }).success,
     ).toBe(false);
   });
 

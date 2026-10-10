@@ -43,7 +43,11 @@ function createVoiceRoom(env: Env = {} as Env) {
   const room = new CollaborationVoiceRoomDurableObject(ctx as unknown as DurableObjectState, env);
 
   /** A joined voice socket as acceptConnection leaves it (the 101 upgrade needs workerd). */
-  function join(userId: string, roleVersion = 1): FakeWebSocket {
+  function join(
+    userId: string,
+    roleVersion = 1,
+    overrides: Record<string, unknown> = {},
+  ): FakeWebSocket {
     const socket = new FakeWebSocket();
     socket.serializeAttachment({
       roomId: ROOM_ID,
@@ -65,6 +69,7 @@ function createVoiceRoom(env: Env = {} as Env) {
       receivingTracks: [],
       // Fresh, so a message skips the D1 access revalidation.
       accessCheckedAt: Date.now(),
+      ...overrides,
     });
     sockets.push(socket);
     return socket;
@@ -216,5 +221,44 @@ describe("CollaborationVoiceRoomDurableObject roster upserts", () => {
     expect(peer.messages()).toContainEqual(
       expect.objectContaining({ type: "voice.participant-upsert" }),
     );
+  });
+});
+
+describe("CollaborationVoiceRoomDurableObject hibernated attachments", () => {
+  function receiving(count: number) {
+    const receivingTracks = Array.from({ length: count }, (_, index) => ({
+      sessionId: `session-${index}`,
+      trackName: "mic",
+      mid: String(index),
+    }));
+    return { receivingTracks, receivingMids: receivingTracks.map((track) => track.mid) };
+  }
+
+  function muteChange(room: ReturnType<typeof createVoiceRoom>, socket: FakeWebSocket) {
+    return room.message(socket, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+  }
+
+  it("accepts an attachment holding the per-connection maximum of pulled tracks", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = room.join(MEMBER_ID, 1, receiving(64));
+
+    await muteChange(room, member);
+
+    expect(member.closeCode).toBeNull();
+  });
+
+  it("refuses an attachment holding one pulled track over the maximum", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = room.join(MEMBER_ID, 1, receiving(65));
+
+    await muteChange(room, member);
+
+    // 1008: the attachment no longer parses as a voice session.
+    expect(member.closeCode).toBe(1008);
   });
 });
