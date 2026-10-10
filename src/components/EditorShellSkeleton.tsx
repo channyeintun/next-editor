@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   FilePlus2,
+  FileSearch,
   FolderPlus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -62,6 +63,9 @@ export default function EditorShellSkeleton({
         <div className="flex items-center gap-2 min-w-0">
           <div aria-hidden="true" className={HEADER_ICON_CLASS}>
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </div>
+          <div aria-hidden="true" className={HEADER_ICON_CLASS}>
+            <FileSearch size={16} />
           </div>
           {breadcrumb ?? (
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">

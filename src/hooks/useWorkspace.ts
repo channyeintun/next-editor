@@ -19,13 +19,14 @@ import {
   selectWorkspaceSidebarCollapsed,
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
+  selectWorkspaceTreeFiles,
   selectWorkspaceTreeVersion,
   type WorkspaceEditorState,
   type WorkspaceSaveStatus,
   type WorkspaceSidebarState,
 } from "../stores/workspaceStore";
 import type { WorkspaceDirtyState } from "../stores/workspaceDirtyState";
-import type { WorkspaceLessonType } from "../types/workspace";
+import type { WorkspaceLessonType, WorkspaceTreeFile } from "../types/workspace";
 
 function useWorkspaceStore(hookName: string) {
   const store = useContext(WorkspaceStoreContext);
@@ -94,6 +95,10 @@ export const useWorkspaceExternalProjectVersion = (): number => {
 
 export const useWorkspaceTreeVersion = (): number => {
   return useWorkspaceSelector("useWorkspaceTreeVersion", selectWorkspaceTreeVersion);
+};
+
+export const useWorkspaceTreeFiles = (): WorkspaceTreeFile[] => {
+  return useWorkspaceSelector("useWorkspaceTreeFiles", selectWorkspaceTreeFiles);
 };
 
 export const useWorkspaceProjectId = (): string => {

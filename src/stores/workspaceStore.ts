@@ -1035,6 +1035,10 @@ export const selectWorkspaceEditorState = (context: WorkspaceState): WorkspaceEd
 export const selectWorkspaceSidebarState = (context: WorkspaceState): WorkspaceSidebarState =>
   context.isInitialized ? context.sidebarState : emptySidebarState;
 
+/** The files the explorer lists. Keeps its identity until the file tree changes. */
+export const selectWorkspaceTreeFiles = (context: WorkspaceState): WorkspaceTreeFile[] =>
+  context.isInitialized ? context.sidebarState.files : emptySidebarState.files;
+
 export const selectWorkspaceSidebarWidth = (context: WorkspaceState): number =>
   context.sidebarWidth;
 

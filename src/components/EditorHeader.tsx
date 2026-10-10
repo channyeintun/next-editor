@@ -18,6 +18,7 @@ import { lessonSupportsPreview } from "../types/lessonTypes";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
 import WorkspaceSettingsButton from "./editorHeader/WorkspaceSettingsButton";
+import QuickOpenButton from "./quickOpen/QuickOpenButton";
 import {
   HEADER_ICON_BUTTON_CLASS,
   HEADER_ICON_BUTTON_NEUTRAL_CLASS,
@@ -107,6 +108,7 @@ function EditorHeader({ isAuthoring, breadcrumb }: EditorHeaderProps) {
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
       <div className="flex items-center gap-2 min-w-0">
         <FileSidebarToggleButton />
+        <QuickOpenButton />
         {breadcrumb ?? (
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Editor</span>
         )}

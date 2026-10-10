@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { PLAYER_SHORTCUTS } from "../hooks/usePlayerShortcuts";
+import { isApplePlatform } from "../utils/keyboardPlatform";
+import { goToFileShortcutLabel } from "./quickOpen/goToFileShortcut";
 
 /** The player's keyboard shortcuts, opened with "?" or from the settings. */
 export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }) {
@@ -73,6 +75,9 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
       </p>
       <p className="mt-1 text-[11px] text-slate-300">
         In the code editor, Tab types a tab. Press Esc, then Tab, to move on.
+      </p>
+      <p className="mt-1 text-[11px] text-slate-300">
+        Press {goToFileShortcutLabel(isApplePlatform())} to go to a file by name.
       </p>
     </div>
   );

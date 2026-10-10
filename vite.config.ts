@@ -201,6 +201,11 @@ export default ({ mode }: { mode: string }) => {
         // The first-party grammars import Monaco's editor entry point. It has to
         // precede the bare package alias, which would otherwise prefix-match it.
         "monaco-editor/editor": monacoTestMock,
+        // The fuzzy matcher src/monaco/fuzzyMatch.ts wraps is plain functions
+        // with no CSS, so tests rank with the real one. Also ahead of the bare alias.
+        "monaco-editor/base/common/filters": fileURLToPath(
+          new URL("./node_modules/monaco-editor/esm/vs/base/common/filters.js", import.meta.url),
+        ),
         "monaco-editor": monacoTestMock,
       },
       server: {

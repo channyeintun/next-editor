@@ -1,4 +1,4 @@
-import type { DriveStep } from "driver.js";
+import type { DriveStep, Driver } from "driver.js";
 
 const TOUR_SEEN_KEY = "next-editor.tour.v1.seen";
 
@@ -129,6 +129,14 @@ function buildTourSteps(): DriveStep[] {
   ).map(({ mountsAfter: _mountsAfter, ...step }) => step);
 }
 
+// The tour on screen, if any. Its overlay and keyboard trap own the page while it runs.
+let activeTour: Driver | null = null;
+
+/** Whether a tour is on screen, so other surfaces leave the keyboard to it. */
+export function isProductTourActive(): boolean {
+  return activeTour?.isActive() ?? false;
+}
+
 export function hasSeenTour(): boolean {
   try {
     return localStorage.getItem(TOUR_SEEN_KEY) === "1";
@@ -170,9 +178,11 @@ export async function startTour({ force = false }: { force?: boolean } = {}): Pr
     popoverClass: "ne-tour-popover",
     steps,
     onDestroyed: () => {
+      activeTour = null;
       markTourSeen();
     },
   });
 
+  activeTour = tourDriver;
   tourDriver.drive();
 }

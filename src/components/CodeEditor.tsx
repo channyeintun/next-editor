@@ -43,6 +43,7 @@ import {
 import { startPerformanceSpan } from "../utils/performanceMetrics";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { useIsWorkspaceCovered } from "../hooks/useIsWorkspaceCovered";
 import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 import "./editorCursors.css";
@@ -91,13 +92,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   // surface is that overlay (see CollaborationSurfaceBridge); the editor's
   // selection, cursor and viewport are not published over it.
   const isEditorCovered = slidesContext.previewState.isOpen || whiteboardContext.isOpen;
-  // A maximized slide deck or the whiteboard is drawn over the whole workspace
-  // (a non-maximized deck is not drawn at all). While one is, the workspace is
-  // inert: keyboard focus and screen readers cannot reach controls hidden under
-  // the overlay's scrim, just as a pointer cannot. The player bar sits outside.
-  const isWorkspaceCovered =
-    (slidesContext.previewState.isOpen && slidesContext.previewState.isMaximized === true) ||
-    whiteboardContext.isOpen;
+  // While a maximized deck or the whiteboard covers the workspace, it is inert.
+  const isWorkspaceCovered = useIsWorkspaceCovered();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
