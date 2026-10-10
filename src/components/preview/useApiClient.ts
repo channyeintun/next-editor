@@ -6,12 +6,12 @@ import {
   normalizeApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
+import { toRetainedApiClientResult } from "../../stores/apiClientStore";
 import {
   buildHeaderRecord,
   recordedResultToStoreResult,
   storeResultToRecorded,
-  toRetainedApiClientResult,
-} from "../../stores/apiClientStore";
+} from "../../stores/apiClientRecordingAdapter";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 

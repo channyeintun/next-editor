@@ -40,12 +40,12 @@ import type {
 import { lessonRunsInWebContainer } from "../../types/lessonTypes";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
+import type { ApiClientHistoryEntry } from "../../stores/apiClientStore";
 import {
   buildHeaderRecord,
   recordedApiStateToReplayPayload,
   storeResultToRecorded,
-  type ApiClientHistoryEntry,
-} from "../../stores/apiClientStore";
+} from "../../stores/apiClientRecordingAdapter";
 import { hasRrwebPreviewSeed } from "../../core/src/preview";
 import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
