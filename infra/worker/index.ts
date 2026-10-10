@@ -23,8 +23,7 @@ import { collaborationRoute } from "./routes/collaboration";
 import { studioRoute } from "./routes/studio";
 import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
 import { renderLandingResponse } from "./ssr/landing";
-import { renderLessonDetailResponse, renderMissingLessonResponse } from "./ssr/lessonDetail";
-import { findPublishedLessonBySlug } from "./lessonCatalog";
+import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -124,40 +123,10 @@ app.route("/api/slide-images", slideImagesRoute);
 // takes over after load; editor and lesson routes keep their existing CSR path.
 app.get("/", async (c) => renderLandingResponse(await c.env.ASSETS.fetch(c.req.raw)));
 
-// Data-only SSR for lesson detail. The page itself stays client-rendered (the
-// editor is Monaco + WebContainers), but resolving the row here gives crawlers
-// real per-lesson metadata instead of the generic shell every lesson URL used
-// to serve, and dehydrates that same row into the React Query cache so the
-// browser skips the /api/lessons/:slug round trip it would otherwise make on
-// a direct visit. In-app navigations never reach this handler — the gallery
-// and playlist views seed the same cache entry from the list they already
-// hold (tube/src/hooks/useLessons.ts).
-//
-// Any failure degrades to the untouched SPA shell: an un-decorated document
-// still works, an error page does not.
-app.get("/learn/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
-
-  // Author profiles share this path segment (see LearnSlugRoute) and aren't
-  // lessons at all.
-  if (slug.startsWith("@")) {
-    return assetResponse;
-  }
-
-  try {
-    const lesson = await findPublishedLessonBySlug(c.env, slug);
-    if (!lesson) {
-      return await renderMissingLessonResponse(assetResponse, slug);
-    }
-
-    const origin = c.env.PUBLIC_URL || new URL(c.req.url).origin;
-    return await renderLessonDetailResponse(assetResponse, { lesson, slug, origin });
-  } catch (error) {
-    console.error("Lesson detail SSR failed", { slug }, error);
-    return assetResponse;
-  }
-});
+// Data-only SSR for lesson detail (ssr/lessonDetailRoute.ts): per-lesson
+// metadata for crawlers and the row dehydrated into React Query's cache, on
+// top of the SPA shell. Author profiles (/learn/@username) share the segment.
+app.get("/learn/:slug", (c) => serveLessonDetailDocument(c.env, c.req.raw, c.req.param("slug")));
 
 // `run_worker_first = true` (wrangler.toml) sends every request through this
 // Worker, so this catch-all serves all the static files too — JS chunks, the
