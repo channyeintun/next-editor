@@ -35,6 +35,7 @@ import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlLoader } from "../hooks/useUrlLoader";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
+import { isReadOnlyView } from "../utils/embed";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
@@ -165,7 +166,7 @@ function EditorLayout({
   // Read params through the router (not `window.location.search`) so we share one
   // source of truth with the rest of the app and react to in-app param changes.
   const [searchParams] = useSearchParams();
-  const readOnly = readOnlyProp ?? searchParams.get("readOnly") === "true";
+  const readOnly = readOnlyProp ?? isReadOnlyView(searchParams);
   const authorInteracted = useAuthorInteractionFlag();
 
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).

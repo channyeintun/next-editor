@@ -15,6 +15,7 @@ import {
 } from "@next-editor/infra";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 import { runWhenIdleAfterLoad } from "../utils/idle";
+import { isReadOnlyView } from "../utils/embed";
 import {
   claimRecordingDraftFor,
   discardRecordingDraftFor,
@@ -45,7 +46,7 @@ const UPLOAD_MODAL_PRELOAD_IDLE_TIMEOUT_MS = 5000;
 export default function CodeRoute() {
   useDocumentTitle("Editor | Next Editor");
 
-  // Same readOnly derivation as Editor.tsx. Gates the resume-check below:
+  // Same isReadOnlyView flag as Editor.tsx. Gates the resume-check below:
   // the landing page's embedded live-demo iframe also loads /code
   // (?readOnly=true) — that path can never trigger an upload (recording is
   // disabled), so it shouldn't pay for an extra /api/auth/me fetch + an
@@ -53,7 +54,7 @@ export default function CodeRoute() {
   // fragile, crash-prone surface on mobile (see isMobileBrowser() in
   // LandingPage) — no reason to add work to it it'll never use.
   const [searchParams] = useSearchParams();
-  const readOnly = searchParams.get("readOnly") === "true";
+  const readOnly = isReadOnlyView(searchParams);
 
   const { isSignedIn, isLoading: authLoading } = useAuth({ enabled: !readOnly });
   const [resumedRecording, setResumedRecording] = useState<Recording | null>(null);

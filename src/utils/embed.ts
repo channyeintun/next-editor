@@ -25,3 +25,15 @@ export function useEmbedded(): boolean {
 export function isEmbedded(search: string): boolean {
   return new URLSearchParams(search).get("embed") === "true";
 }
+
+export const READ_ONLY_PARAM = "readOnly";
+
+/**
+ * `?readOnly=true` — /code opens a read-only editor; the landing page's demo
+ * iframe loads it this way. CodeRoute, Editor and isLandingDemoFrame all read
+ * the flag through here, so the URL contract has one home.
+ */
+export function isReadOnlyView(search: string | URLSearchParams): boolean {
+  const params = typeof search === "string" ? new URLSearchParams(search) : search;
+  return params.get(READ_ONLY_PARAM) === "true";
+}
