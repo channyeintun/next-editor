@@ -13,13 +13,41 @@ import {
 export interface RecordingLoadSink extends RecordingStreamSink {
   /** A caption file found beside the `.ne`, for the recording it loaded. */
   addCaptionTrack: (recordingId: string, track: CaptionTrack) => void;
+  /**
+   * Settles when the lesson's narration may start downloading. Without it, the narration
+   * downloads as soon as the `.ne` has loaded; either way it waits no longer than
+   * NARRATION_GATE_TIMEOUT_MS.
+   */
+  narrationGate?: () => Promise<void>;
+}
+
+// The longest the narration download waits for the sink's gate. The gate settles on its own
+// (the editor chunk loads or fails, or the viewer presses Play); this only keeps a gate that
+// never does from leaving the lesson without narration. Slow-4G phones take ~15 s for Monaco.
+export const NARRATION_GATE_TIMEOUT_MS = 20_000;
+
+/** Waits for `gate`, at most NARRATION_GATE_TIMEOUT_MS, and no longer once `signal` aborts. */
+async function waitForNarrationGate(gate: Promise<void>, signal: AbortSignal): Promise<void> {
+  let stopWaiting!: () => void;
+  const timeoutOrAbort = new Promise<void>((resolve) => {
+    stopWaiting = resolve;
+  });
+  const timer = setTimeout(stopWaiting, NARRATION_GATE_TIMEOUT_MS);
+  signal.addEventListener("abort", stopWaiting, { once: true });
+  try {
+    await Promise.race([gate.catch(() => {}), timeoutOrAbort]);
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", stopWaiting);
+  }
 }
 
 /**
  * Resolves external audio/camera media out-of-band, after the (now tiny) `.ne` itself has
- * loaded. Camera is probed first (cheap HEAD/ranged-GET) so a single `extend` can carry both
- * fixes — audio's full download happens after, folding in whatever the camera probe found
- * instead of racing it.
+ * loaded. Camera is probed first (cheap HEAD/ranged-GET) and audio's full download happens
+ * after, folding in whatever the camera probe found instead of racing it. That download waits
+ * for the sink's narration gate first; a camera fix found meanwhile is handed over before the
+ * wait rather than held back by it, and audio then extends on top of it.
  */
 async function resolveExternalMedia(
   recording: Recording,
@@ -28,6 +56,7 @@ async function resolveExternalMedia(
   sink: RecordingLoadSink,
 ): Promise<void> {
   let current = recording;
+  let handedOver = recording;
 
   if (current.cameraFile || current.cameraUrl) {
     const cameraUrl = await findWorkingCameraUrl(current, neUrl, signal);
@@ -36,12 +65,26 @@ async function resolveExternalMedia(
     }
   }
 
-  const audio = await findWorkingAudioBlob(current, neUrl, signal);
+  const { narrationGate } = sink;
+  const audio = await findWorkingAudioBlob(
+    current,
+    neUrl,
+    signal,
+    narrationGate
+      ? async () => {
+          if (current !== handedOver && !sink.isStale()) {
+            sink.extend(current);
+            handedOver = current;
+          }
+          await waitForNarrationGate(narrationGate(), signal);
+        }
+      : undefined,
+  );
   if (audio) {
     current = { ...current, audioUrl: audio.url, audioBlob: audio.blob };
   }
 
-  if (current !== recording && !sink.isStale()) {
+  if (current !== handedOver && !sink.isStale()) {
     sink.extend(current);
   }
 }

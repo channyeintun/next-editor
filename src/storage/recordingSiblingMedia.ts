@@ -209,13 +209,15 @@ export async function fetchSiblingCaptions(
 /**
  * Finds a working audio candidate (a sibling file referenced by `audioFile` / `audioUrl`, or
  * the `.ne` basename fallback) and downloads it, without touching the recording — the caller
- * applies the result via a single `extendRecording` alongside any camera fix, so the two
- * out-of-band resolutions never race and clobber each other.
+ * applies the result via `extendRecording` on top of any camera fix, so the two out-of-band
+ * resolutions never race and clobber each other. `beforeDownload` is awaited once, only when
+ * there is a candidate to download, before the first request.
  */
 export async function findWorkingAudioBlob(
   recording: Recording,
   neUrl: string | undefined,
   signal?: AbortSignal,
+  beforeDownload?: () => Promise<void>,
 ): Promise<{ url: string; blob: Blob } | null> {
   if (recording.audioBlob instanceof Blob) {
     return null;
@@ -227,6 +229,9 @@ export async function findWorkingAudioBlob(
     DEFAULT_AUDIO_EXTENSION,
     recording.audioSource === "external",
   );
+  if (candidates.length > 0 && beforeDownload) {
+    await beforeDownload();
+  }
   for (const url of candidates) {
     signal?.throwIfAborted();
     try {

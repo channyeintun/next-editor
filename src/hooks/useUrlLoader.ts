@@ -38,8 +38,10 @@ export type UrlLoader = ReturnType<typeof useUrlLoader>;
  * Loads a lesson from a URL or a dropped/picked `.ne` file into the editor. One instance serves
  * every entry point of an editor surface (the `?url=` query and drag-and-drop), so a newer load of
  * either kind supersedes an older one: its requests are aborted and its late results dropped.
+ * `narrationGate`, when given, holds a URL lesson's narration download until it settles (for the
+ * load whose `signal` it is passed); without it the narration downloads once the lesson loads.
  */
-export const useUrlLoader = () => {
+export const useUrlLoader = (narrationGate?: (signal: AbortSignal) => Promise<void>) => {
   const [isLoading, setIsLoading] = useState(false);
   // Surfaces a human-readable load failure to the UI instead of a blocking `alert()`,
   // so callers can render an inline, themeable error panel (with retry) in context.
@@ -117,6 +119,7 @@ export const useUrlLoader = () => {
         appendDelta: appendRecordingDelta,
         extend: extendRecording,
         addCaptionTrack,
+        narrationGate: narrationGate ? () => narrationGate(signal) : undefined,
       }),
     );
     if (isStale()) return;

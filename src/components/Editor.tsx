@@ -33,6 +33,7 @@ import { CollaborationVoiceProvider } from "../contexts/CollaborationVoiceContex
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlLoader } from "../hooks/useUrlLoader";
+import { whenNarrationMayDownload } from "../hooks/narrationDownloadGate";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 import { isReadOnlyView } from "../utils/embed";
@@ -54,8 +55,9 @@ import {
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
+import { loadCodeEditor } from "./codeEditorLoader";
 
-const CodeEditor = lazy(() => import("./CodeEditor"));
+const CodeEditor = lazy(loadCodeEditor);
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
 const WhiteboardPanel = lazy(loadWhiteboardPanel);
@@ -134,9 +136,10 @@ function EditorLayout({
   autoplayOverride = false,
   recordingDrafts = true,
 }: EditorProps = {}) {
+  const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   // One loader for the `?url=` lesson and for drops, so whichever load is newest wins and its
-  // state is the one shown.
-  const recordingLoader = useUrlLoader();
+  // state is the one shown. A URL lesson's narration waits for Monaco's chunk, or for Play.
+  const recordingLoader = useUrlLoader((signal) => whenNarrationMayDownload(editorActor, signal));
   useUrlQuery(recordingLoader, recordingUrl);
   const { isDragging } = useDragAndDropUrl(recordingLoader);
   const {
@@ -153,7 +156,6 @@ function EditorLayout({
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
   const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
   const { play, seekTo, setPlaybackSpeed, setVolume, loadRecording } = useNextEditorActions();
-  const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   const { autoplay, speed: persistedSpeed, volume: persistedVolume } = usePlaybackSettings();
   const {
     target: postRecordingTarget,

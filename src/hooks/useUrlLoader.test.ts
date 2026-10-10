@@ -1012,6 +1012,48 @@ describe("useUrlLoader", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("holds the narration download until the narration gate opens", async () => {
+    const recording = createRecording({ audioFile: "intro-01.weba", audioSource: "external" });
+    const neBytes = await encodeRecordingToStream(recording);
+    const requested: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        requested.push(url);
+        return url.endsWith(".ne")
+          ? fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" })
+          : fakeResponse(new Uint8Array([1, 2, 3]), { ok: true, contentType: "audio/webm" });
+      }),
+    );
+    const narration = gate();
+    const narrationGate = vi.fn<(signal: AbortSignal) => Promise<void>>(() => narration.opened);
+    const actions = makeActionsMock();
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+    const { result } = renderHook(() => useUrlLoader(narrationGate), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+    await waitFor(() => {
+      expect(narrationGate).toHaveBeenCalledTimes(1);
+    });
+
+    expect(narrationGate.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+    expect(requested).toEqual(["https://example.com/intro-01.ne"]);
+    expect(actions.extendRecording).not.toHaveBeenCalled();
+
+    narration.open();
+    await waitFor(() => {
+      expect(actions.extendRecording).toHaveBeenCalledTimes(1);
+    });
+    const [extended] = vi.mocked(actions.extendRecording).mock.calls[0] as [Recording];
+    expect(extended.audioBlob).toBeInstanceOf(Blob);
+    expect(requested).toEqual([
+      "https://example.com/intro-01.ne",
+      "https://example.com/intro-01.weba",
+    ]);
+  });
+
   it("stops looking for sibling media once the lesson is left", async () => {
     // Three audio candidates: the configured URL, the stored file name, the .ne basename.
     const recording = createRecording({

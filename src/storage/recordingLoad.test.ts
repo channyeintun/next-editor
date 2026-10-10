@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Recording } from "../core/src";
 import { decompressBinaryToRecording } from "./recordingCodecClient";
 import { fetchNextEditorUrl } from "./recordingFetch";
-import { loadRecordingFromUrl, type RecordingLoadSink } from "./recordingLoad";
+import {
+  loadRecordingFromUrl,
+  NARRATION_GATE_TIMEOUT_MS,
+  type RecordingLoadSink,
+} from "./recordingLoad";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";
 
 vi.mock("./recordingFetch", async (importOriginal) => {
@@ -112,6 +116,35 @@ function createSink(isStale: () => boolean = () => false) {
   } satisfies RecordingLoadSink;
 }
 
+/** A narration download's response. */
+function audioResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/ogg" }),
+  } as unknown as Response;
+}
+
+/** A gate the test opens by hand. */
+function narrationGate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { gate: vi.fn<() => Promise<void>>(() => opened), open };
+}
+
+/** The URLs fetchNextEditorUrl was asked for, in order. */
+function fetchedUrls(): string[] {
+  return vi.mocked(fetchNextEditorUrl).mock.calls.map(([url]) => url);
+}
+
+/** Lets pending promise callbacks (and the stream reader) run. */
+async function settle() {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("loadRecordingFromUrl", () => {
   beforeEach(() => {
     vi.mocked(fetchNextEditorUrl).mockReset();
@@ -181,5 +214,143 @@ describe("loadRecordingFromUrl", () => {
 
     expect(decompressBinaryToRecording).toHaveBeenCalledTimes(1);
     expect(sink.load).not.toHaveBeenCalled();
+  });
+  describe("the narration download", () => {
+    const narrated = { audioFile: "lesson.ogg", audioSource: "external" } as const;
+
+    it("waits for the narration gate, then downloads", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      const { gate, open } = narrationGate();
+      const sink = { ...createSink(), narrationGate: gate };
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+      await settle();
+
+      expect(gate).toHaveBeenCalledTimes(1);
+      expect(fetchedUrls()).toEqual([LESSON_URL]);
+      expect(sink.extend.mock.calls.some(([recording]) => recording.audioBlob)).toBe(false);
+
+      open();
+      await vi.waitFor(() => {
+        expect(sink.extend.mock.calls.at(-1)?.[0].audioBlob).toBeInstanceOf(Blob);
+      });
+      expect(fetchedUrls()).toEqual([LESSON_URL, "https://example.com/lesson.ogg"]);
+    });
+
+    it("downloads without waiting when the sink has no gate", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      const sink = createSink();
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+
+      await vi.waitFor(() => {
+        expect(sink.extend.mock.calls.at(-1)?.[0].audioBlob).toBeInstanceOf(Blob);
+      });
+    });
+
+    it("downloads anyway once a gate that never opens times out", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+        vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+          url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+        );
+        const { gate } = narrationGate();
+        const sink = { ...createSink(), narrationGate: gate };
+
+        await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+        await vi.advanceTimersByTimeAsync(NARRATION_GATE_TIMEOUT_MS - 1);
+        expect(fetchedUrls()).toEqual([LESSON_URL]);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await vi.waitFor(() => {
+          expect(sink.extend.mock.calls.at(-1)?.[0].audioBlob).toBeInstanceOf(Blob);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops waiting, and downloads nothing, once the lesson is left", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { gate } = narrationGate();
+      const sink = { ...createSink(), narrationGate: gate };
+      const controller = new AbortController();
+
+      await loadRecordingFromUrl(LESSON_URL, controller.signal, sink);
+      await settle();
+      expect(gate).toHaveBeenCalledTimes(1);
+      controller.abort();
+      await settle();
+
+      expect(fetchedUrls()).toEqual([LESSON_URL]);
+      expect(sink.extend.mock.calls.some(([recording]) => recording.audioBlob)).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("never asks the gate when there is no narration to download", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2));
+      vi.mocked(fetchNextEditorUrl).mockResolvedValue(streamedResponse(bytes));
+      const { gate } = narrationGate();
+      const sink = { ...createSink(), narrationGate: gate };
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+      await settle();
+
+      expect(gate).not.toHaveBeenCalled();
+      expect(fetchedUrls()).toEqual([LESSON_URL]);
+    });
+
+    it("hands a camera fix over without waiting for the gate", async () => {
+      const bytes = await encodeRecordingToStream(
+        createRecording(2, { ...narrated, cameraFile: "renamed.webm" }),
+      );
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      // The camera probe asks through the same-origin proxy: the stored name is gone, the
+      // `.ne` basename is where the video lives now.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input) => {
+          const target = new URL(String(input)).searchParams.get("url") ?? String(input);
+          return target.endsWith("/lesson.webm")
+            ? new Response(null, { status: 200, headers: { "content-type": "video/webm" } })
+            : new Response(null, { status: 404 });
+        }),
+      );
+      const { gate, open } = narrationGate();
+      const sink = { ...createSink(), narrationGate: gate };
+
+      try {
+        await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+        await vi.waitFor(() => {
+          expect(sink.extend.mock.calls.at(-1)?.[0].cameraUrl).toBe(
+            "https://example.com/lesson.webm",
+          );
+        });
+        expect(sink.extend.mock.calls.at(-1)?.[0].audioBlob).toBeUndefined();
+
+        open();
+        await vi.waitFor(() => {
+          expect(sink.extend.mock.calls.at(-1)?.[0].audioBlob).toBeInstanceOf(Blob);
+        });
+        expect(sink.extend.mock.calls.at(-1)?.[0].cameraUrl).toBe(
+          "https://example.com/lesson.webm",
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 });
