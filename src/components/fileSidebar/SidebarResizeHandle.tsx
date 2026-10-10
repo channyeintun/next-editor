@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { dispatchRecordedCursorVisibility } from "../../core/src/utils/recordedCursorVisibility";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -44,16 +44,20 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
   const movedRef = useRef(false);
   const [isResizing, setIsResizing] = useState(false);
 
+  // Reads the width when the window resizes, so a drag (a new width on every
+  // pointer move) does not re-subscribe the listener each time.
+  const clampToWindow = useEffectEvent(() => {
+    onWidthChange(getClampedFileSidebarWidth(width, window.innerWidth));
+  });
+
   useEffect(() => {
-    const handleWindowResize = () => {
-      onWidthChange(getClampedFileSidebarWidth(width, window.innerWidth));
-    };
+    const handleWindowResize = () => clampToWindow();
 
     window.addEventListener("resize", handleWindowResize);
     return () => {
       window.removeEventListener("resize", handleWindowResize);
     };
-  }, [onWidthChange, width]);
+  }, []);
 
   useEffect(() => {
     if (!isResizing) {

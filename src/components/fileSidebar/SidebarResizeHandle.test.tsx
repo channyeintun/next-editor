@@ -180,4 +180,19 @@ describe("SidebarResizeHandle", () => {
 
     expect(onWidthChange).toHaveBeenCalledWith(clamp(280));
   });
+
+  it("listens for window resizes once across width changes, and clamps the latest width", () => {
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const { rerender, onWidthChange } = renderHandle(280);
+
+    for (const width of [300, 320, 340]) {
+      rerender(<SidebarResizeHandle width={width} onWidthChange={onWidthChange} />);
+    }
+    const resizeSubscriptions = addEventListener.mock.calls.filter(([type]) => type === "resize");
+    addEventListener.mockRestore();
+
+    expect(resizeSubscriptions).toHaveLength(1);
+    fireEvent(window, new Event("resize"));
+    expect(onWidthChange).toHaveBeenLastCalledWith(clamp(340));
+  });
 });
