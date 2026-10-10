@@ -37,6 +37,7 @@ import { addSafePoint } from "./retake";
 import { chapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
+import { getRunningRecorders } from "./runningRecorders";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 // ============================================================================
@@ -62,26 +63,6 @@ export const getExternalAudioBlob = (event: EditorMachineEvent): Blob | null =>
   event.type === "START_RECORDING" && event.audioBlob instanceof Blob && event.audioBlob.size > 0
     ? event.audioBlob
     : null;
-
-/** The recorders a take is running now. A paused one is still running. */
-export interface RunningRecorders {
-  /** The microphone recorder, `audioRecorder`. */
-  microphone: boolean;
-  /** A selected narration file, played in step with the take by `recordingAudioPlayer`. */
-  externalAudio: boolean;
-  /** The camera recorder, `cameraRecorder`. */
-  camera: boolean;
-  /** The screen recorder's child id, or null when none is running. */
-  screenActorId: string | null;
-}
-
-/** The one answer to "which recorders are running", for the machine's sends and guards. */
-export const getRunningRecorders = (context: EditorMachineContext): RunningRecorders => ({
-  microphone: context.audio.isRecording && context.audio.source === "microphone",
-  externalAudio: context.audio.isRecording && context.audio.source === "external",
-  camera: context.enableCameraRecording && context.camera.isRecording,
-  screenActorId: context.screen.isRecording ? context.screen.actorId : null,
-});
 
 /** The take's microphone, per take like the camera: a start that names none uses the default. */
 export const setMicrophoneDevice = ({ event }: EditorActionArgs): EditorContextUpdate => {

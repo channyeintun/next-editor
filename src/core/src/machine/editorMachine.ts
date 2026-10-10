@@ -10,7 +10,6 @@ import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
   getExternalAudioBlob,
-  getRunningRecorders,
   setCameraRecordingEnabled,
   setMicrophoneDevice,
   prepareExternalAudioRecording,
@@ -52,6 +51,15 @@ import {
   releaseScreenStream,
   releaseUnacceptedScreenStream,
 } from "./screenCaptureActions";
+import {
+  getRunningRecorders,
+  PAUSE_RECORDER_SENDS,
+  pauseRecordingMedia,
+  resumeRecordingMedia,
+  sendToRunningRecorders,
+  stopRecordingMedia,
+  stopScreenRecording,
+} from "./runningRecorders";
 import { findRetakeTargetNow, rewindSessionToSafePoint } from "./retake";
 import { appendChatDelta, appendRuntimeRecordingEvent } from "./recordingSession";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
@@ -299,9 +307,9 @@ export const editorMachine = setup({
     // frameCapture.ts and screenCaptureActions.ts, wrapped here so `setup()` can
     // infer this machine's exact context/event/actor types. The ones that only
     // append to the session in place are plain actions: they replace nothing in the
-    // context, so an assign would only copy it on every captured event. The recorder
-    // actions (start, pause, resume and stop of the microphone, camera and screen
-    // recorders) and retakeRecording keep their bodies inline.
+    // context, so an assign would only copy it on every captured event. The pause,
+    // resume and stop of the recorders have their bodies in runningRecorders.ts; the
+    // recorder starts and retakeRecording keep theirs inline.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
@@ -389,38 +397,12 @@ export const editorMachine = setup({
         },
       });
     }),
-    // The recorders follow the take's clock: each writes nothing while it is paused, so
-    // the narration, camera and screen files skip the same spans the timeline does. A
-    // selected narration file is an input, not a recording, so it pauses in place.
-    pauseRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      const running = getRunningRecorders(context);
-      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "PAUSE" });
-      if (running.externalAudio) enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
-      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
-      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "PAUSE" });
-    }),
-    resumeRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      const running = getRunningRecorders(context);
-      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "RESUME" });
-      if (running.externalAudio) enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
-      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "RESUME" });
-      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "RESUME" });
-    }),
-    // Asks the microphone and camera for their files; stoppingRecording waits for them.
-    stopRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      const running = getRunningRecorders(context);
-      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "STOP" });
-      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "STOP" });
-    }),
-    // Every exit from `recording` ends the session (→ stoppingRecording / loading / idle), so
-    // this single action stops the screen recorder on all of them — including the external-audio
-    // and no-audio paths that bypass `stoppingRecording`. The actor's STOP → onstop → root
-    // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
-    // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
-    stopScreenRecording: enqueueActions(({ context, enqueue }) => {
-      const { screenActorId } = getRunningRecorders(context);
-      if (screenActorId) enqueue.sendTo(screenActorId, { type: "STOP" });
-    }),
+    // Pause, resume and stop the running recorders, through the one fan-out in
+    // runningRecorders.ts.
+    pauseRecordingMedia: enqueueActions(pauseRecordingMedia),
+    resumeRecordingMedia: enqueueActions(resumeRecordingMedia),
+    stopRecordingMedia: enqueueActions(stopRecordingMedia),
+    stopScreenRecording: enqueueActions(stopScreenRecording),
     // Rewinds the take to its last safe point and holds it paused there (see retake.ts).
     retakeRecording: enqueueActions(({ context, enqueue }) => {
       const session = context.session;
@@ -432,14 +414,10 @@ export const editorMachine = setup({
       // The recorders hold still until the take resumes; the stretch they recorded since
       // the safe point is in the session's media cuts. A selected narration file is an
       // input, so it is rewound to be performed over again.
-      const running = getRunningRecorders(context);
-      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "PAUSE" });
-      if (running.externalAudio) {
-        enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
-        enqueue.sendTo("recordingAudioPlayer", { type: "SEEK", timeMs: target.recordingTime });
-      }
-      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
-      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "PAUSE" });
+      sendToRunningRecorders(getRunningRecorders(context), enqueue, {
+        ...PAUSE_RECORDER_SENDS,
+        externalAudio: [{ type: "PAUSE" }, { type: "SEEK", timeMs: target.recordingTime }],
+      });
 
       // The live terminal and agent conversation cannot be rewound. What they show now is
       // recorded whole at the safe point, so what follows is recorded against it.
