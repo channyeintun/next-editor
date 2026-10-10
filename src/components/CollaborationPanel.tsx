@@ -32,6 +32,7 @@ import {
   collaboratorDisplayName,
 } from "./collaboratorAppearance";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { downloadBlob } from "../utils/downloadBlob";
 
 const STATUS_LABELS = {
   disconnected: "Disconnected",
@@ -416,12 +417,7 @@ function RoomOwnerSection({
   const downloadRecoveryExport = async () => {
     await run(async () => {
       const blob = await collaboration.exportRoom();
-      const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = `collaboration-${collaboration.session?.room.id ?? "room"}.json`;
-      anchor.click();
-      URL.revokeObjectURL(href);
+      downloadBlob(blob, `collaboration-${collaboration.session?.room.id ?? "room"}.json`);
     });
   };
 

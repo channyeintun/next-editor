@@ -5,6 +5,7 @@ import type { useCollaboration } from "../contexts/CollaborationContext";
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const mocks = vi.hoisted(() => ({
+  downloadBlob: vi.fn<(blob: Blob, filename: string) => void>(),
   followParticipant: vi.fn<CollaborationContextValue["followParticipant"]>(),
   stopFollowing: vi.fn<CollaborationContextValue["stopFollowing"]>(),
 }));
@@ -24,6 +25,8 @@ vi.mock("../contexts/CollaborationContext", () => ({
 vi.mock("../contexts/collaboration/RoomPresenceContext", () => ({
   useRoomPresence: () => collaborationState,
 }));
+
+vi.mock("../utils/downloadBlob", () => ({ downloadBlob: mocks.downloadBlob }));
 
 // Voice UI behavior has its own suite (CollaborationPanel.voice.test.tsx);
 // here voice is server-disabled so the panel renders without voice controls.
@@ -418,6 +421,25 @@ describe("CollaborationPanel lists", () => {
       expect.stringContaining("editor · 2/10 used"),
       expect.stringContaining("viewer · 0/10 used"),
     ]);
+  });
+
+  it("downloads the room recovery snapshot named after the room", async () => {
+    const snapshot = new Blob(["{}"], { type: "application/json" });
+    collaborationState = {
+      ...makeOwnerCollaborationState(),
+      session: { room: { id: "20000000-0000-4000-8000-000000000001" } },
+      exportRoom: vi.fn<CollaborationContextValue["exportRoom"]>().mockResolvedValue(snapshot),
+    };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Export room recovery snapshot" }));
+
+    await waitFor(() =>
+      expect(mocks.downloadBlob).toHaveBeenCalledWith(
+        snapshot,
+        "collaboration-20000000-0000-4000-8000-000000000001.json",
+      ),
+    );
   });
 
   it("names each Revoke button after the invitation it revokes", async () => {
