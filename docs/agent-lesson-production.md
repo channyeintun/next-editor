@@ -446,7 +446,7 @@ Add the persona guide, curriculum/scriptwriter workflow, source citation require
 ### Repository evidence
 
 - [Recording schema and track types](../src/core/src/types.ts)
-- [Recorder capture and external-audio path](../src/core/src/machine/captureActions.ts)
+- [Recorder capture](../src/core/src/machine/captureActions.ts) and [external-audio path](../src/core/src/machine/audioCaptureActions.ts)
 - [Editor diff application](../src/core/src/utils/editorDiff.ts)
 - [Cursor coordinate remapping](../src/core/src/utils/cursorCoordinates.ts) and [cursor replay](../src/core/src/utils/cursorReplay.ts)
 - [Sibling media and caption resolution](../src/hooks/useUrlLoader.ts)

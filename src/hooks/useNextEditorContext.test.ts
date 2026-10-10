@@ -2,11 +2,8 @@ import { shallowEqual } from "@xstate/react";
 import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { editorMachine } from "../core/src/machine/editorMachine";
-import {
-  createIdleAudioState,
-  createInitialContext,
-  type RecordingSession,
-} from "../core/src/machine/types";
+import { createInitialContext, type RecordingSession } from "../core/src/machine/types";
+import { createIdleAudioState } from "../core/src/machine/audioCaptureActions";
 import { createRecordingClock, pauseRecordingClock } from "../core/src/machine/recordingClock";
 import {
   selectIsTakeInProgress,

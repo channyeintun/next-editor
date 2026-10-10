@@ -1,14 +1,13 @@
 import type { PreviewEvent } from "../preview";
 import type { SlideEvent } from "../slides";
 import {
-  createIdleAudioState,
   createIdleCameraState,
   type EditorActionArgs,
   type EditorContextUpdate,
   type EditorMachineContext,
-  type EditorMachineEvent,
   type RecordingSession,
 } from "./types";
+import { createIdleAudioState } from "./audioCaptureActions";
 import type { MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../runtime";
 import type { WhiteboardEvent } from "../whiteboard";
@@ -38,37 +37,22 @@ import { chapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
 import { getRunningRecorders } from "./runningRecorders";
-import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 // ============================================================================
 // Recording-capture action bodies
 //
 // Plain functions with the exact shape XState's `assign`/`enqueueActions`
-// callbacks expect, specific to the recording/capture side (audio/camera
-// capture, the recording-state tracks, session lifecycle, session finalize).
-// Editor frame and cursor capture live in frameCapture.ts and the local screen
-// recorder in screenCaptureActions.ts. editorMachine.ts wires each of these
+// callbacks expect, specific to the recording/capture side (camera capture,
+// the recording-state tracks, session lifecycle, session finalize). Editor
+// frame and cursor capture live in frameCapture.ts, the microphone and
+// narration file in audioCaptureActions.ts, and the local screen recorder in
+// screenCaptureActions.ts. editorMachine.ts wires each of these
 // into `actions: {}` via `assign(fn)` / `enqueueActions(fn)` — kept there
 // (rather than wrapped here) so XState's `setup()` can still infer the
 // machine's exact context/event/actor types for the wrapped action, which
 // isn't independently nameable outside `setup()`. The bodies that return
 // void only mutate the session in place and are registered as plain actions.
 // ============================================================================
-
-/**
- * A selected narration file rides in on START_RECORDING. An empty file counts as none, so
- * that take records from the microphone (or silently) like a start without one.
- */
-export const getExternalAudioBlob = (event: EditorMachineEvent): Blob | null =>
-  event.type === "START_RECORDING" && event.audioBlob instanceof Blob && event.audioBlob.size > 0
-    ? event.audioBlob
-    : null;
-
-/** The take's microphone, per take like the camera: a start that names none uses the default. */
-export const setMicrophoneDevice = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "START_RECORDING") return {};
-  return { microphoneDeviceId: event.microphoneDeviceId ?? null };
-};
 
 export const setCameraRecordingEnabled = ({
   context,
@@ -82,98 +66,6 @@ export const setCameraRecordingEnabled = ({
     enableCameraRecording: event.enableCamera ?? context.defaultEnableCameraRecording,
   };
 };
-
-export const prepareExternalAudioRecording = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  const audioBlob = getExternalAudioBlob(event);
-  if (!audioBlob) return {};
-
-  return {
-    audio: {
-      ...context.audio,
-      blob: audioBlob,
-      isRecording: true,
-      mediaRecorder: null,
-      mimeType: audioBlob.type || "audio/webm",
-      source: "external" as const,
-      externalDurationMs: null,
-    },
-  };
-};
-
-interface RecordingAudioPlayerEnqueue {
-  spawnChild: (
-    src: "audioPlayback",
-    options: { id: "recordingAudioPlayer"; input: AudioPlaybackInput },
-  ) => void;
-  sendTo: (actor: "recordingAudioPlayer", event: AudioPlaybackEvent) => void;
-}
-
-export const startExternalAudioPlayback = ({
-  context,
-  event,
-  enqueue,
-}: EditorActionArgs & { enqueue: RecordingAudioPlayerEnqueue }): void => {
-  const audioBlob = getExternalAudioBlob(event);
-  if (!audioBlob) return;
-
-  enqueue.spawnChild("audioPlayback", {
-    id: "recordingAudioPlayer",
-    input: {
-      blob: audioBlob,
-      volume: context.timeline.volume,
-      playbackRate: 1,
-      startPositionMs: 0,
-    },
-  });
-  enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
-};
-
-export const storeExternalAudioDuration = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_PLAYBACK_READY" || context.audio.source !== "external") {
-    return {};
-  }
-
-  // A zero or unknown length says nothing about the narration. Storing it would let it
-  // overwrite a real length reported earlier, and finalize would measure the take by it.
-  const externalDurationMs =
-    Number.isFinite(event.durationMs) && event.durationMs > 0 ? event.durationMs : null;
-  if (externalDurationMs === null) return {};
-
-  return {
-    audio: {
-      ...context.audio,
-      externalDurationMs,
-    },
-  };
-};
-
-export const stopExternalAudioRecording = ({ context }: EditorActionArgs): EditorContextUpdate => {
-  if (context.audio.source !== "external") return {};
-  return {
-    audio: {
-      ...context.audio,
-      isRecording: false,
-    },
-  };
-};
-
-export const resetAudioAfterRecorderStop = ({
-  context,
-}: EditorActionArgs): EditorContextUpdate => ({
-  audio: {
-    ...context.audio,
-    isRecording: false,
-    mediaRecorder: null,
-    source: null,
-    startOffsetMs: 0,
-  },
-});
 
 export const initRecordingSession = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const startedAt =
@@ -469,70 +361,6 @@ export const notifyRecordingStop = ({ context }: EditorActionArgs): void => {
   }
 };
 
-export const storeAudioBlob = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
-  return {
-    audio: {
-      ...createIdleAudioState(),
-      blob: event.blob,
-      mimeType: event.blob.type,
-      source: "microphone" as const,
-    },
-  };
-};
-
-/**
- * Accept a microphone blob that arrives after the session has already finalized.
- *
- * `stoppingRecording` gives `MediaRecorder.stop()` 2s before a watchdog finalizes
- * anyway; a slower stop then delivers `AUDIO_RECORDING_STOPPED` in `loading` or
- * `playback`, where the capture-side handlers no longer exist. The blob is the
- * entire narration, so dropping it produced a silently silent lesson — the track
- * metadata still advertised audio (the microphone recorder was running at finalize)
- * while `Recording.audioBlob` was undefined, so playback and export found none.
- *
- * Splice it into the finalized recording instead. An already-attached blob wins:
- * the normal path has run and this is a duplicate.
- */
-export const attachLateAudioBlob = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
-
-  const audio = {
-    ...context.audio,
-    blob: event.blob,
-    isRecording: false,
-    mediaRecorder: null,
-    mimeType: event.blob.type,
-    source: "microphone" as const,
-  };
-
-  if (!context.recording || context.recording.audioBlob) {
-    return { audio };
-  }
-
-  return {
-    audio,
-    recording: {
-      ...context.recording,
-      audioBlob: event.blob,
-      audioSource: "microphone" as const,
-      audioStartOffsetMs: context.recording.audioStartOffsetMs ?? 0,
-    },
-  };
-};
-
-export const storeAudioStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_RECORDING_STARTED") return {};
-  return {
-    audio: {
-      ...context.audio,
-      mediaRecorder: event.mediaRecorder,
-      mimeType: event.mimeType,
-      startOffsetMs: 0,
-    },
-  };
-};
-
 export const storeCameraBlob = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_STOPPED") return {};
   return {
@@ -575,22 +403,4 @@ export const handleCameraError = ({ event }: EditorActionArgs): EditorContextUpd
   if (event.type !== "CAMERA_ERROR") return {};
   console.warn("Camera recording disabled:", event.error);
   return clearCameraRecording();
-};
-
-export const handleAudioRecordingError = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_RECORDING_ERROR") return {};
-  return { error: event.error };
-};
-
-/**
- * The selected narration file failed to play. The take cannot go on without it, so it
- * ends here: its audio slice and session are dropped and the failure is kept.
- */
-export const handleExternalAudioError = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "AUDIO_PLAYBACK_ERROR") return {};
-  return {
-    error: event.error,
-    audio: createIdleAudioState(),
-    session: null,
-  };
 };

@@ -491,6 +491,31 @@ describe("audioRecordingActor lifecycle", () => {
     });
   });
 
+  // startMicrophoneRecorder: the microphone take's audio slice starts from the idle one.
+  it("starts a microphone take with an idle audio slice marked as recording", () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: () => new Promise<MediaStream>(() => {}) },
+    });
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, enableAudioRecording: true },
+    }).start();
+    actors.push(actor);
+
+    actor.send({ type: "START_RECORDING" });
+
+    expect(actor.getSnapshot().value).toBe("startingRecording");
+    expect(actor.getSnapshot().context.audio).toEqual({
+      blob: null,
+      isRecording: true,
+      mediaRecorder: null,
+      mimeType: "",
+      source: "microphone",
+      startOffsetMs: 0,
+      externalDurationMs: null,
+    });
+  });
+
   // MediaRecorder stops by itself when its track ends (device unplugged, permission
   // revoked). Its file is stored then, and `stoppingRecording` does not wait for a
   // microphone that already stopped, so nothing else would stop the actor, and the

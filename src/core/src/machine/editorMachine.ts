@@ -9,14 +9,7 @@ import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
-  getExternalAudioBlob,
   setCameraRecordingEnabled,
-  setMicrophoneDevice,
-  prepareExternalAudioRecording,
-  startExternalAudioPlayback,
-  storeExternalAudioDuration,
-  stopExternalAudioRecording,
-  resetAudioAfterRecorderStop,
   initRecordingSession,
   captureSlideEvent,
   capturePreviewEvent,
@@ -29,19 +22,29 @@ import {
   finalizeRecording,
   notifyRecordingStart,
   notifyRecordingStop,
-  storeAudioBlob,
-  attachLateAudioBlob,
-  storeAudioStarted,
   storeCameraBlob,
   storeCameraStarted,
   handleCameraError,
   clearCameraRecording,
-  handleAudioRecordingError,
-  handleExternalAudioError,
   pauseRecordingSession,
   resumeRecordingSession,
   addChapterMarker,
 } from "./captureActions";
+import {
+  getExternalAudioBlob,
+  setMicrophoneDevice,
+  startMicrophoneRecorder,
+  prepareExternalAudioRecording,
+  startExternalAudioPlayback,
+  storeExternalAudioDuration,
+  stopExternalAudioRecording,
+  resetAudioAfterRecorderStop,
+  storeAudioBlob,
+  attachLateAudioBlob,
+  storeAudioStarted,
+  handleAudioRecordingError,
+  handleExternalAudioError,
+} from "./audioCaptureActions";
 import { captureInitialFrame, captureFrame, capturePreviewRefreshFrame } from "./frameCapture";
 import {
   setScreenStream,
@@ -304,12 +307,13 @@ export const editorMachine = setup({
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts,
-    // frameCapture.ts and screenCaptureActions.ts, wrapped here so `setup()` can
-    // infer this machine's exact context/event/actor types. The ones that only
-    // append to the session in place are plain actions: they replace nothing in the
-    // context, so an assign would only copy it on every captured event. The pause,
-    // resume and stop of the recorders have their bodies in runningRecorders.ts; the
-    // recorder starts and retakeRecording keep theirs inline.
+    // audioCaptureActions.ts, frameCapture.ts and screenCaptureActions.ts, wrapped
+    // here so `setup()` can infer this machine's exact context/event/actor types. The
+    // ones that only append to the session in place are plain actions: they replace
+    // nothing in the context, so an assign would only copy it on every captured event.
+    // The pause, resume and stop of the recorders have their bodies in
+    // runningRecorders.ts; the camera and screen recorder starts and retakeRecording
+    // keep theirs inline.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
@@ -333,30 +337,7 @@ export const editorMachine = setup({
     addChapterMarker: assign(addChapterMarker),
     pauseRecordingSession,
     resumeRecordingSession,
-    startMicrophoneRecorder: enqueueActions(({ context, enqueue }) => {
-      // A previous take's recorder can outlive its session while it waits on a
-      // late blob. Spawning under the same id would only replace the reference
-      // and leave the old actor running, so stop it first.
-      enqueue.stopChild("audioRecorder");
-      // Spawn, not invoke: must survive into recording/stoppingRecording — its
-      // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
-      enqueue.spawnChild("audioRecording", {
-        id: "audioRecorder",
-        input: { deviceId: context.microphoneDeviceId ?? undefined },
-      });
-      enqueue.sendTo("audioRecorder", { type: "START" });
-      enqueue.assign({
-        audio: {
-          ...context.audio,
-          blob: null,
-          isRecording: true,
-          mimeType: "",
-          source: "microphone" as const,
-          startOffsetMs: 0,
-          externalDurationMs: null,
-        },
-      });
-    }),
+    startMicrophoneRecorder: enqueueActions(startMicrophoneRecorder),
     startCameraRecorder: enqueueActions(({ context, enqueue }) => {
       if (!context.enableCameraRecording) return;
 

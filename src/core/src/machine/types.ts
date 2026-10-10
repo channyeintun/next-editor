@@ -14,7 +14,6 @@ import type {
   Recording,
   RecordingStreamDelta,
   EditorSelection,
-  RecordingAudioSource,
   RecordingCameraSource,
   PreviewPatchReplayInput,
   ScreenRecordingReadyPayload,
@@ -33,6 +32,7 @@ import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
 import type { CapturedContentRef, CapturedViewStateRef } from "./frameCapture";
+import { createIdleAudioState, type AudioState } from "./audioCaptureActions";
 import { normalizePlaybackSpeed } from "./playbackValues";
 
 // ============================================================================
@@ -152,26 +152,6 @@ export interface RecordingSession extends RecordingTracks {
    * model's content.
    */
   lastCapturedContent?: CapturedContentRef;
-}
-
-/**
- * Audio state for recording and playback
- */
-export interface AudioState {
-  /** Audio blob from recording */
-  blob: Blob | null;
-  /** Whether audio recording is active */
-  isRecording: boolean;
-  /** MediaRecorder instance */
-  mediaRecorder: MediaRecorder | null;
-  /** Detected MIME type */
-  mimeType: string;
-  /** Source used for the active or finalized recording audio */
-  source: RecordingAudioSource | null;
-  /** Offset between the recording origin and the first audio sample on the editor timeline. */
-  startOffsetMs: number;
-  /** Known duration for external audio, in milliseconds */
-  externalDurationMs: number | null;
 }
 
 /**
@@ -721,16 +701,6 @@ export interface EditorMachineInput extends EditorMachineHostHooks {
 
 // Idle media slices. Factories rather than shared constants: each call returns a new
 // object, so no two contexts or takes alias one slice.
-
-export const createIdleAudioState = (): AudioState => ({
-  blob: null,
-  isRecording: false,
-  mediaRecorder: null,
-  mimeType: "",
-  source: null,
-  startOffsetMs: 0,
-  externalDurationMs: null,
-});
 
 export const createIdleCameraState = (): CameraState => ({
   blob: null,
