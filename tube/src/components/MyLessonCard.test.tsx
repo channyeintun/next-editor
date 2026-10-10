@@ -47,10 +47,10 @@ const lesson: OwnedLesson = {
   publishedAt: 1,
 };
 
-function card() {
+function card(overrides: Partial<OwnedLesson> = {}) {
   return (
     <MemoryRouter>
-      <MyLessonCard lesson={lesson} />
+      <MyLessonCard lesson={{ ...lesson, ...overrides }} />
     </MemoryRouter>
   );
 }
@@ -70,6 +70,50 @@ describe("MyLessonCard", () => {
   beforeEach(() => {
     rename.mutate.mockReset();
     rename.isPending = false;
+  });
+
+  it("opens a published lesson from the thumbnail and the title, with one tab stop", () => {
+    render(card());
+
+    // Only the title link is exposed; its name is exactly the visible title.
+    const title = screen.getByRole("link", { name: "Intro" });
+    expect(title).toHaveAttribute("href", "/learn/intro");
+    const links = document.querySelectorAll('a[href="/learn/intro"]');
+    expect(links).toHaveLength(2);
+    const thumbnail = [...links].find((link) => link !== title)!;
+    expect(thumbnail).toHaveAttribute("tabindex", "-1");
+    expect(thumbnail).toHaveAttribute("aria-hidden", "true");
+    expect(thumbnail).toHaveTextContent("Published");
+  });
+
+  it("names the status and duration in the heading, since the badges are hidden", () => {
+    render(card());
+
+    expect(
+      screen.getByRole("heading", { name: "Intro, published, duration 1:00" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Published")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("keeps a draft card unlinked, since drafts have no lesson page", () => {
+    render(card({ status: "draft" }));
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(document.querySelector("a")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Intro, draft, duration 1:00" }),
+    ).toBeInTheDocument();
+    // The title is the heading, so the draft's thumbnail image is decorative.
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("puts the options button in the title row, after the title and outside any link", () => {
+    render(card());
+    const title = screen.getByRole("link", { name: "Intro" });
+    const trigger = screen.getByRole("button", { name: "Lesson options" });
+
+    expect(trigger.closest("a")).toBeNull();
+    expect(title.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps the click-outside backdrop out of the tab order and the accessibility tree", () => {

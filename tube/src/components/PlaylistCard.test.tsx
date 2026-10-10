@@ -134,15 +134,38 @@ describe("PlaylistCard", () => {
     expect(input).toHaveAccessibleDescription("Playlist name can't be empty.");
   });
 
-  it("says what the lesson-count badge counts", () => {
+  it("says what the lesson-count badge counts in the heading", () => {
     renderCard();
-    // The badge's icon is decorative; hidden text names the unit.
-    expect(screen.getByText("2").textContent).toBe("2 lessons");
+    // The badge sits inside the hidden thumbnail link, so the heading names
+    // the count and its unit.
+    expect(screen.getByRole("heading", { name: "Rust basics, 2 lessons" })).toBeInTheDocument();
   });
 
   it("uses the singular for a one-lesson playlist", () => {
     renderCard(undefined, { lessonCount: 1 });
-    expect(screen.getByText("1").textContent).toBe("1 lesson");
+    expect(screen.getByRole("heading", { name: "Rust basics, 1 lesson" })).toBeInTheDocument();
+  });
+
+  it("opens the playlist from the thumbnail and the title, with one tab stop", () => {
+    renderCard();
+
+    // Only the title link is exposed; its name is exactly the visible title.
+    const title = screen.getByRole("link", { name: "Rust basics" });
+    expect(title).toHaveAttribute("href", "/learn/playlist/rust-basics");
+    const links = document.querySelectorAll('a[href="/learn/playlist/rust-basics"]');
+    expect(links).toHaveLength(2);
+    const thumbnail = [...links].find((link) => link !== title)!;
+    expect(thumbnail).toHaveAttribute("tabindex", "-1");
+    expect(thumbnail).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("puts the options button in the title row, after the title and outside any link", () => {
+    renderCard();
+    const title = screen.getByRole("link", { name: "Rust basics" });
+    const trigger = screen.getByRole("button", { name: "Playlist options" });
+
+    expect(trigger.closest("a")).toBeNull();
+    expect(title.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("announces a failed delete", () => {
