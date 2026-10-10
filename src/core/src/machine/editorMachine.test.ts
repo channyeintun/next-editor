@@ -38,68 +38,13 @@ import {
 } from "../../dmp/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
 import type { LearnerWorkspaceSave } from "./learnerWorkspace";
-
-const selection = {
-  startLineNumber: 1,
-  startColumn: 1,
-  endLineNumber: 1,
-  endColumn: 1,
-  selectionStartLineNumber: 1,
-  selectionStartColumn: 1,
-  positionLineNumber: 1,
-  positionColumn: 1,
-};
-
-function createRecording(audioBlob?: Blob): Recording {
-  return {
-    version: 4,
-    id: "recording-1",
-    name: "Recording 1",
-    createdAt: 1,
-    duration: 1000,
-    keyframeInterval: 120,
-    audioBlob,
-    frames: [
-      {
-        timestamp: 0,
-        isKeyframe: true,
-        state: {
-          content: "hello",
-          selection,
-          position: { lineNumber: 1, column: 1 },
-          viewState: null,
-          mouseCursor: { x: 0, y: 0, visible: false },
-        },
-      },
-    ],
-  };
-}
-
-function createWorkspaceSnapshot(
-  content: string,
-  sidebarScrollTop = 0,
-): WorkspaceRecordingSnapshot {
-  return {
-    activeFilePath: "index.html",
-    collapsedFolders: [],
-    sidebarScrollTop,
-    project: {
-      id: "project-1",
-      name: "Project",
-      lessonType: "html-css",
-      entryFilePath: "index.html",
-      folders: [],
-      files: {
-        "index.html": {
-          path: "index.html",
-          name: "index.html",
-          language: "html",
-          content,
-        },
-      },
-    },
-  };
-}
+import {
+  createRecording,
+  createWorkspaceSnapshot,
+  pinPerformanceClock,
+  selection,
+  startTake,
+} from "./testing/takeFixtures";
 
 function createTwoFileWorkspaceSnapshot(
   activeFilePath: "a.ts" | "b.ts",
@@ -2327,14 +2272,6 @@ describe("editorMachine actor lifecycle", () => {
   });
 });
 
-// Finalize measures a take on performance.now(). Pinning it lets a test assert a take's
-// length exactly; vi.restoreAllMocks() in afterEach releases it.
-function pinPerformanceClock() {
-  const clock = { now: 1_000 };
-  vi.spyOn(performance, "now").mockImplementation(() => clock.now);
-  return clock;
-}
-
 // Playback driven by the real timeline child: its ticker runs one frame per advance(),
 // against the pinned clock, so positions come out exact.
 describe("editorMachine playback lifecycle", () => {
@@ -4190,20 +4127,6 @@ describe("editorMachine pointer captures while recording", () => {
     });
     actor.stop();
   });
-
-  const startTake = (editor: RecordingEditor) => {
-    const actor = createActor(
-      editorMachine.provide({ actors: { mouseTracking: fromCallback(() => {}) } }),
-      {
-        input: {
-          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
-        },
-      },
-    ).start();
-    actor.send({ type: "START_RECORDING" });
-    expect(actor.getSnapshot().matches("recording")).toBe(true);
-    return actor;
-  };
 
   it("reuses the captured content until the model changes", () => {
     const clock = pinPerformanceClock();

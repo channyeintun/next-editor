@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createActor, fromCallback } from "xstate";
-import type * as monaco from "monaco-editor";
-import { editorMachine } from "./editorMachine";
+import { createActor } from "xstate";
 import type {
   AudioPlaybackEmit,
   AudioPlaybackEvent,
@@ -11,7 +9,7 @@ import type {
   AudioRecordingInput,
 } from "./audioActor";
 import { fromTypedCallback } from "./fromTypedCallback";
-import type { EditorMachineInput } from "./types";
+import { pinClocks, RecordingEditor, startTake, takeMachine } from "./testing/takeFixtures";
 import type { PreviewState } from "../preview";
 import { getRecordingTimestamp } from "./recordingSession";
 import {
@@ -39,67 +37,6 @@ vi.mock("../utils/audioDuration", () => ({
   measureAudioDurationSeconds: audioDuration.measureAudioDurationSeconds,
 }));
 
-const selection = {
-  startLineNumber: 1,
-  startColumn: 1,
-  endLineNumber: 1,
-  endColumn: 1,
-  selectionStartLineNumber: 1,
-  selectionStartColumn: 1,
-  positionLineNumber: 1,
-  positionColumn: 1,
-};
-
-class RecordingEditor {
-  content = "const a = 1;";
-  versionId = 1;
-  readonly model = {
-    uri: { toString: () => "file:///main.ts" },
-    getVersionId: () => this.versionId,
-    getValue: () => this.content,
-  };
-  getModel = () => this.model as unknown as monaco.editor.ITextModel;
-  getValue = () => this.content;
-  getPosition = () => ({ lineNumber: 1, column: 1 });
-  getSelection = () => selection as monaco.Selection;
-  getScrollTop = () => 0;
-  getScrollLeft = () => 0;
-  saveViewState = () => null;
-  setContent(text: string) {
-    this.content = text;
-    this.versionId += 1;
-  }
-}
-
-function pinClocks() {
-  const clock = { perf: 1_000, wall: 50_000 };
-  vi.spyOn(performance, "now").mockImplementation(() => clock.perf);
-  vi.spyOn(Date, "now").mockImplementation(() => clock.wall);
-  return (ms: number) => {
-    clock.perf += ms;
-    clock.wall += ms;
-  };
-}
-
-const takeMachine = editorMachine.provide({
-  actors: { mouseTracking: fromCallback(() => {}) },
-});
-
-function startTake(
-  editor: RecordingEditor = new RecordingEditor(),
-  input: Partial<EditorMachineInput> = {},
-  machine = takeMachine,
-) {
-  const actor = createActor(machine, {
-    input: {
-      editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
-      ...input,
-    },
-  }).start();
-  actor.send({ type: "START_RECORDING" });
-  return actor;
-}
-
 const sessionOf = (actor: ReturnType<typeof startTake>) => actor.getSnapshot().context.session!;
 
 afterEach(() => {
@@ -113,7 +50,7 @@ describe("retaking", () => {
   // useSelector reuses its last result while the snapshot object is the same, so the
   // retake must publish a new one for the rewound clock and safe points.
   it("publishes a new snapshot on a retake from paused, so the take's selectors see it", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const actor = startTake();
 
     advance(1_000);
@@ -137,7 +74,7 @@ describe("retaking", () => {
   });
 
   it("rewinds a running take to its start and holds it paused there", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const editor = new RecordingEditor();
     const actor = startTake(editor);
 
@@ -158,7 +95,7 @@ describe("retaking", () => {
   });
 
   it("carries on from the safe point, diffing the next frame against it", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const editor = new RecordingEditor();
     const actor = startTake(editor);
 
@@ -181,7 +118,7 @@ describe("retaking", () => {
   });
 
   it("rewinds to the last resume, and one safe point further on each retake", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const editor = new RecordingEditor();
     const actor = startTake(editor);
 
@@ -230,7 +167,7 @@ describe("retaking", () => {
   });
 
   it("puts the workspace back, undoing the panel moves it discards", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
     const actor = startTake(new RecordingEditor(), {
@@ -253,7 +190,7 @@ describe("retaking", () => {
   });
 
   it("undoes every panel move it discards, summed", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
     const actor = startTake(new RecordingEditor(), {
@@ -280,7 +217,7 @@ describe("retaking", () => {
   // The host applies a width delta only when it is finite and non-zero, so moves that
   // cancel out leave the panels where they are.
   it("leaves the panels alone when the moves it discards cancel out", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
     const actor = startTake(new RecordingEditor(), {
@@ -305,7 +242,7 @@ describe("retaking", () => {
   });
 
   it("records the live terminal whole at the safe point", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     let live: RuntimeRecordingSnapshot = {
       mode: "webcontainer",
       status: "ready",
@@ -329,7 +266,7 @@ describe("retaking", () => {
   });
 
   it("records the agent conversation whole at the safe point", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const live: ChatCheckpoint = {
       items: [{ kind: "message", id: "m1", role: "user", text: "add a button" }],
       status: "done",
@@ -351,7 +288,7 @@ describe("retaking", () => {
   // The rebuilt safe-point frame used to keep the preview open: closing it went out as a
   // delta with no previewState, which reads as unchanged.
   it("leaves a preview closed before the safe point closed", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     let preview: PreviewState | null = { size: "medium", isOpen: true, content: "<p>hi</p>" };
     const applyPreviewState = vi.fn<(previewState: PreviewState) => void>();
     const editor = new RecordingEditor();
@@ -393,7 +330,7 @@ describe("retaking", () => {
     });
 
     it("drops patches until the preview answers with a fresh snapshot, and older ones after", () => {
-      const advance = pinClocks();
+      const { advance } = pinClocks();
       const requestPreviewCheckpoint = vi.fn<() => void>();
       const actor = startTake(new RecordingEditor(), { requestPreviewCheckpoint });
       actor.send({ type: "PREVIEW_INITIAL_DOCUMENT", document: document(50_000) });
@@ -441,7 +378,7 @@ describe("retaking", () => {
     }
 
     it("stops storing the HTML fallback in frames once the take has an rrweb seed", () => {
-      const advance = pinClocks();
+      const { advance } = pinClocks();
       const { actor, capture, storedPages } = startPreviewTake();
 
       advance(100);
@@ -462,7 +399,7 @@ describe("retaking", () => {
     });
 
     it("stores the HTML fallback again once a retake discards the seed", () => {
-      const advance = pinClocks();
+      const { advance } = pinClocks();
       const { actor, capture, storedPages } = startPreviewTake();
 
       advance(100);
@@ -482,7 +419,7 @@ describe("retaking", () => {
 
 describe("retaking with recorders", () => {
   it("pauses the microphone, and cuts the discarded narration when the take loads", async () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const received: AudioRecordingEvent["type"][] = [];
     const edited = new Blob(["edited"], { type: "audio/ogg" });
     audioEdit.editRecordedAudio.mockResolvedValue({ blob: edited, durationMs: 1_250 });
@@ -536,7 +473,7 @@ describe("retaking with recorders", () => {
   });
 
   it("rewinds a selected narration file to the safe point instead of cutting it", () => {
-    const advance = pinClocks();
+    const { advance } = pinClocks();
     const received: AudioPlaybackEvent[] = [];
     const machine = takeMachine.provide({
       actors: {

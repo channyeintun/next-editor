@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import fc from "fast-check";
-import { createActor, fromCallback } from "xstate";
-import type * as monaco from "monaco-editor";
-import { editorMachine } from "./editorMachine";
+import { createActor } from "xstate";
 import { isRecordingClockPaused } from "./recordingClock";
 import type {
   AudioPlaybackEmit,
@@ -23,89 +21,8 @@ import type {
   ScreenRecordingInput,
 } from "./screenActor";
 import { fromTypedCallback } from "./fromTypedCallback";
+import { pinClocks, RecordingEditor, startTake, takeMachine } from "./testing/takeFixtures";
 import { selectNextEditorMetadata } from "../useNextEditor";
-
-const selection = {
-  startLineNumber: 1,
-  startColumn: 1,
-  endLineNumber: 1,
-  endColumn: 1,
-  selectionStartLineNumber: 1,
-  selectionStartColumn: 1,
-  positionLineNumber: 1,
-  positionColumn: 1,
-};
-
-/** The Monaco surface createFrame reads during a take. */
-class RecordingEditor {
-  content = "const a = 1;";
-  versionId = 1;
-  readonly model = {
-    uri: { toString: () => "file:///main.ts" },
-    getVersionId: () => this.versionId,
-  };
-
-  getModel() {
-    return this.model as unknown as monaco.editor.ITextModel;
-  }
-
-  getValue() {
-    return this.content;
-  }
-
-  type(text: string) {
-    this.content += text;
-    this.versionId += 1;
-  }
-
-  getPosition() {
-    return { lineNumber: 1, column: 1 };
-  }
-
-  getSelection() {
-    return selection as monaco.Selection;
-  }
-
-  getScrollTop() {
-    return 0;
-  }
-
-  getScrollLeft() {
-    return 0;
-  }
-
-  saveViewState() {
-    return null;
-  }
-}
-
-function pinClocks() {
-  const clock = { perf: 1_000, wall: 50_000 };
-  vi.spyOn(performance, "now").mockImplementation(() => clock.perf);
-  vi.spyOn(Date, "now").mockImplementation(() => clock.wall);
-  return {
-    clock,
-    advance(ms: number) {
-      clock.perf += ms;
-      clock.wall += ms;
-    },
-  };
-}
-
-const takeMachine = editorMachine.provide({
-  actors: { mouseTracking: fromCallback(() => {}) },
-});
-
-function startTake(editor: RecordingEditor = new RecordingEditor()) {
-  const actor = createActor(takeMachine, {
-    input: {
-      editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
-    },
-  }).start();
-  actor.send({ type: "START_RECORDING" });
-  expect(actor.getSnapshot().matches("recording")).toBe(true);
-  return actor;
-}
 
 describe("pausing a take", () => {
   afterEach(() => {
