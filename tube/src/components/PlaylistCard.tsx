@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Check, ListMusic, MoreVertical, Trash2, X } from "lucide-react";
 import {
@@ -7,6 +7,7 @@ import {
   useUpdatePlaylist,
   type OwnedPlaylist,
 } from "@next-editor/infra";
+import PopoverMenu from "@app/components/PopoverMenu";
 
 const ghostButton =
   "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
@@ -43,18 +44,6 @@ export default function PlaylistCard({
 
   const update = useUpdatePlaylist();
   const del = useDeletePlaylist();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
 
   const href = `/learn/playlist/${playlist.slug}`;
 
@@ -125,63 +114,53 @@ export default function PlaylistCard({
             <MoreVertical className="size-4" />
           </button>
 
-          {menuOpen && (
-            <>
-              <button
-                type="button"
-                aria-label="Close menu"
-                tabIndex={-1}
-                aria-hidden="true"
-                className="fixed inset-0 z-40 cursor-default"
-                onClick={() => setMenuOpen(false)}
-              />
-              <div
-                role="menu"
-                className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] text-left shadow-xl"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    // Focus the trigger first, so the panel takes it as the
-                    // place to return focus to, not this unmounting item.
-                    triggerRef.current?.focus();
-                    onManage();
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                >
-                  <ListMusic className="size-4 text-slate-400" />
-                  Manage lessons
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setTitleValue(playlist.title);
-                    setTitleError(null);
-                    setRenaming(true);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setConfirming("delete");
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-rose-300 transition-colors hover:bg-white/10"
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
+          <PopoverMenu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            triggerRef={triggerRef}
+            className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] text-left shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                // Focus the trigger first, so the panel takes it as the
+                // place to return focus to, not this unmounting item.
+                triggerRef.current?.focus();
+                onManage();
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+            >
+              <ListMusic className="size-4 text-slate-400" />
+              Manage lessons
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setTitleValue(playlist.title);
+                setTitleError(null);
+                setRenaming(true);
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirming("delete");
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-rose-300 transition-colors hover:bg-white/10"
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </button>
+          </PopoverMenu>
         </div>
       </div>
 

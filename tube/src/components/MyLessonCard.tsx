@@ -23,6 +23,7 @@ import {
   useUpdateThumbnail,
   type OwnedLesson,
 } from "@next-editor/infra";
+import PopoverMenu from "@app/components/PopoverMenu";
 import AddToPlaylistPopover from "./AddToPlaylistPopover";
 
 type Confirming = "unpublish" | "delete" | null;
@@ -126,18 +127,6 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     );
   };
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
-
   return (
     <div className="group">
       <div className="relative aspect-video rounded-xl bg-slate-900">
@@ -183,99 +172,89 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
             <MoreVertical className="size-4" />
           </button>
 
-          {menuOpen && (
-            <>
+          <PopoverMenu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            triggerRef={triggerRef}
+            className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] text-left shadow-xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                if (isPublished) {
+                  setConfirming("unpublish");
+                } else {
+                  publish.mutate(lesson.id);
+                  focusTrigger();
+                }
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+            >
+              {isPublished ? (
+                <EyeOff className="size-4 text-slate-400" />
+              ) : (
+                <Eye className="size-4 text-slate-400" />
+              )}
+              {isPublished ? "Unpublish" : "Publish"}
+            </button>
+            {isPublished && (
               <button
                 type="button"
-                aria-label="Close menu"
-                tabIndex={-1}
-                aria-hidden="true"
-                className="fixed inset-0 z-40 cursor-default"
-                onClick={() => setMenuOpen(false)}
-              />
-              <div
-                role="menu"
-                className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] text-left shadow-xl"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setAddingToPlaylist(true);
+                }}
+                className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (isPublished) {
-                      setConfirming("unpublish");
-                    } else {
-                      publish.mutate(lesson.id);
-                      focusTrigger();
-                    }
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                >
-                  {isPublished ? (
-                    <EyeOff className="size-4 text-slate-400" />
-                  ) : (
-                    <Eye className="size-4 text-slate-400" />
-                  )}
-                  {isPublished ? "Unpublish" : "Publish"}
-                </button>
-                {isPublished && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setAddingToPlaylist(true);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                  >
-                    <ListMusic className="size-4 text-slate-400" />
-                    Add to playlist
-                  </button>
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    // Focus the trigger before the picker opens, so focus is on
-                    // it (not <body>) when the picker closes.
-                    triggerRef.current?.focus();
-                    thumbnailInputRef.current?.click();
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                >
-                  <ImagePlus className="size-4 text-slate-400" />
-                  Update thumbnail
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setTitleValue(lesson.title);
-                    setTitleError(null);
-                    setRenaming(true);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
-                >
-                  <Pencil className="size-4 text-slate-400" />
-                  Update lesson name
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setConfirming("delete");
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-rose-300 transition-colors hover:bg-white/10"
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
+                <ListMusic className="size-4 text-slate-400" />
+                Add to playlist
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                // Focus the trigger before the picker opens, so focus is on
+                // it (not <body>) when the picker closes.
+                triggerRef.current?.focus();
+                thumbnailInputRef.current?.click();
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+            >
+              <ImagePlus className="size-4 text-slate-400" />
+              Update thumbnail
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setTitleValue(lesson.title);
+                setTitleError(null);
+                setRenaming(true);
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+            >
+              <Pencil className="size-4 text-slate-400" />
+              Update lesson name
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirming("delete");
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-rose-300 transition-colors hover:bg-white/10"
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </button>
+          </PopoverMenu>
 
           {addingToPlaylist && (
             <AddToPlaylistPopover

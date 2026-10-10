@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { KeyRound, LibraryBig, LogOut, Plus } from "lucide-react";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
@@ -13,6 +13,7 @@ import {
 } from "./usePasskey";
 import GoogleOneTap from "./GoogleOneTap";
 import GoogleIcon from "@app/components/icon/Google";
+import PopoverMenu from "@app/components/PopoverMenu";
 import { analytics } from "@app/utils/analytics";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
@@ -22,6 +23,7 @@ export default function AuthMenu() {
   const { user, isSignedIn, isLoading } = useAuth();
   const signOut = useSignOut();
   const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Identify user on login and on every page load when already signed in.
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function AuthMenu() {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
         className="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 py-1 pl-1 pr-3 text-sm text-white transition-all hover:bg-white/20"
@@ -73,57 +76,47 @@ export default function AuthMenu() {
         <span className="hidden max-w-32 truncate sm:inline">{user.name || user.email}</span>
       </button>
 
-      {menuOpen && (
-        <>
-          {/* Click-outside catcher — a plain overlay is simpler and more
-              robust here than wiring a document listener for one menu. */}
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={() => setMenuOpen(false)}
-          />
-          <div
-            role="menu"
-            className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] shadow-xl"
-          >
-            <Link
-              to="/code"
-              role="menuitem"
-              onClick={() => setMenuOpen(false)}
-              className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
-            >
-              <Plus className="size-4 text-slate-400" />
-              Start creating
-            </Link>
-            <Link
-              to={`/learn/@${user.username}`}
-              role="menuitem"
-              onClick={() => setMenuOpen(false)}
-              className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
-            >
-              <LibraryBig className="size-4 text-slate-400" />
-              My Library
-            </Link>
-            {browserSupportsPasskeys() && <AddPasskeyMenuItem />}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                analytics.capture("signed_out");
-                analytics.reset();
-                signOut.mutate();
-              }}
-              disabled={signOut.isPending}
-              className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
-            >
-              <LogOut className="size-4 text-slate-400" />
-              {signOut.isPending ? "Signing out…" : "Sign out"}
-            </button>
-          </div>
-        </>
-      )}
+      <PopoverMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        triggerRef={triggerRef}
+        className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] shadow-xl"
+      >
+        <Link
+          to="/code"
+          role="menuitem"
+          onClick={() => setMenuOpen(false)}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+        >
+          <Plus className="size-4 text-slate-400" />
+          Start creating
+        </Link>
+        <Link
+          to={`/learn/@${user.username}`}
+          role="menuitem"
+          onClick={() => setMenuOpen(false)}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+        >
+          <LibraryBig className="size-4 text-slate-400" />
+          My Library
+        </Link>
+        {browserSupportsPasskeys() && <AddPasskeyMenuItem />}
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setMenuOpen(false);
+            analytics.capture("signed_out");
+            analytics.reset();
+            signOut.mutate();
+          }}
+          disabled={signOut.isPending}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+        >
+          <LogOut className="size-4 text-slate-400" />
+          {signOut.isPending ? "Signing out…" : "Sign out"}
+        </button>
+      </PopoverMenu>
     </div>
   );
 }
