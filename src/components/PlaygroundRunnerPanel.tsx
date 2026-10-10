@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
@@ -12,6 +12,7 @@ import {
 } from "./terminalPanel/runtimeDockHelpers";
 import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
+import { usePlaygroundFormatting } from "./playgroundRunner/usePlaygroundFormatting";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
@@ -23,14 +24,12 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import { usePlaygroundRunner } from "../hooks/usePlaygroundRunner";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
-import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
   appendRunnerConsoleLines,
   beginRunnerOperation,
   clearRunnerConsole,
   resetRunnerConsoleForProject,
 } from "../runtime/playgroundConsoleStore";
-import { arePlaygroundFilesEqual } from "../runtime/playgroundFiles";
 import {
   STUDIO_DOCK_TOGGLE_TARGET_ID,
   STUDIO_TARGET_ATTRIBUTE,
@@ -45,6 +44,8 @@ import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtim
  * preview, or WebContainer surface here. Console output lives in the shared
  * runtime panel store's consoleLines, so the existing runtime recording
  * snapshot captures it and playback replays it without any live execution.
+ * The Format flow, Monaco's formatting provider included, lives in
+ * usePlaygroundFormatting; the panel keeps the dock, the console and Run.
  * The dock also hosts the Agent tab: the agent runs with file tools only in
  * Playground lessons (no bash or runtime observation — see
  * agent/tools/index.ts).
@@ -108,9 +109,9 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const terminalScrollLines = useSelector(runtimePanelStore, (s) =>
     selectTerminalScrollLines(s.context),
   );
-  const { editorRef, handleRuntimeEvent } = useNextEditorActions();
+  const { handleRuntimeEvent } = useNextEditorActions();
   const { currentRecording, isRecording } = useNextEditorMetadata();
-  const { getProject, updateFileContent } = useWorkspaceActions();
+  const { getProject } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
   const collaboration = useOptionalCollaboration();
   const { activeOperation, request, cancel } = usePlaygroundRunner<
@@ -160,136 +161,14 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     setOutcomeText(describeOutcome(lines, consoleTags));
   };
 
-  const formatProject = async (
-    activeModel: monaco.editor.ITextModel | null = null,
-  ): Promise<monaco.languages.TextEdit[]> => {
-    if (!format || isPlaybackSnapshotActive) {
-      return [];
-    }
-    if (!canFormatWorkspace) {
-      appendOutcomeLines([format.readOnlyLine]);
-      return [];
-    }
-
-    const project = getProject();
-    const submittedFiles = collectFiles(project);
-    const rejection = format.rejectFiles(submittedFiles);
-    if (rejection) {
-      appendOutcomeLines([rejection]);
-      return [];
-    }
-
-    const activePath = activeModel ? workspacePathFromMonacoModelUri(activeModel.uri) : null;
-    const activeModelVersion = activeModel?.getVersionId();
-    const submittedActiveFile = activePath
-      ? submittedFiles.find((file) => file.path === activePath)
-      : null;
-    if (activeModel && !submittedActiveFile && format.unsubmittedModelLine) {
-      appendOutcomeLines([format.unsubmittedModelLine]);
-      return [];
-    }
-    if (
-      activeModel &&
-      (!submittedActiveFile || activeModel.getValue() !== submittedActiveFile.content)
-    ) {
-      appendOutcomeLines(format.staleLines());
-      return [];
-    }
-
-    setOutcomeText("");
-    beginRunnerOperation(runtimePanelStore, format.startedLines(submittedFiles));
-    const outcome = await request("format", (client) => format.execute(client, submittedFiles));
-    if (outcome.kind === "superseded") {
-      return [];
-    }
-    if (outcome.kind === "service-error") {
-      appendOutcomeLines(format.serviceErrorLines(outcome.errorKind, outcome.message));
-      return [];
-    }
-
-    const currentProject = getProject();
-    const currentFiles = collectFiles(currentProject);
-    if (
-      currentProject.id !== project.id ||
-      !arePlaygroundFilesEqual(currentFiles, submittedFiles) ||
-      activeModel?.isDisposed() ||
-      (activeModel && activeModel.getVersionId() !== activeModelVersion) ||
-      (activeModel && activeModel.getValue() !== submittedActiveFile?.content)
-    ) {
-      appendOutcomeLines(format.staleLines());
-      return [];
-    }
-
-    // A format can touch several files: every Go file, or every file of a Kite
-    // module, which is a directory. A client answers with exactly the files it
-    // was sent. Every changed file except the open one is written straight to
-    // the workspace; the open one comes back as an edit so Monaco keeps the
-    // undo stack.
-    const submittedContent = new Map(submittedFiles.map((file) => [file.path, file.content]));
-    const changedFiles = outcome.result.files.filter(
-      (file) => submittedContent.get(file.path) !== file.content,
-    );
-
-    for (const file of changedFiles) {
-      if (!activeModel || file.path !== activePath) {
-        updateFileContent(file.path, file.content);
-      }
-    }
-    appendOutcomeLines(format.resultLines(changedFiles.map((file) => file.path)));
-
-    const formattedActiveFile = activePath
-      ? outcome.result.files.find((file) => file.path === activePath)
-      : null;
-    return activeModel &&
-      formattedActiveFile &&
-      formattedActiveFile.content !== submittedActiveFile?.content
-      ? [{ range: activeModel.getFullModelRange(), text: formattedActiveFile.content }]
-      : [];
-  };
-
-  const provideFormattingEdits = useEffectEvent(
-    async (
-      model: monaco.editor.ITextModel,
-      _options: monaco.languages.FormattingOptions,
-      token: monaco.CancellationToken,
-    ) => {
-      if (token.isCancellationRequested) {
-        return [];
-      }
-      return formatProject(model);
-    },
-  );
-
-  // One registration per mount. The effect event is called from the closure
-  // rather than listed as a dependency: React 19.3 returns a new function for
-  // it on every render (see CodeEditor's syncActivePlaybackModel effect), which
-  // would re-register the provider on every console line.
-  useEffect(() => {
-    if (!format) {
-      return;
-    }
-    const disposable = monaco.languages.registerDocumentFormattingEditProvider(
-      format.monacoLanguageId,
-      {
-        displayName: format.providerDisplayName,
-        provideDocumentFormattingEdits: (model, options, token) =>
-          provideFormattingEdits(model, options, token),
-      },
-    );
-    return () => disposable.dispose();
-  }, [format]);
-
-  const handleFormat = async () => {
-    const editor = editorRef.current;
-    if (format && editor?.getModel()?.getLanguageId() === format.monacoLanguageId) {
-      const action = editor.getAction("editor.action.formatDocument");
-      if (action) {
-        await action.run();
-        return;
-      }
-    }
-    await formatProject();
-  };
+  const { handleFormat } = usePlaygroundFormatting(language, {
+    request,
+    isPlaybackSnapshotActive,
+    canFormatWorkspace,
+    runtimePanelStore,
+    appendOutcomeLines,
+    setOutcomeText,
+  });
 
   const updateScrollLine = (scrollLine: number) => {
     if (isPlaybackSnapshotActive) {
