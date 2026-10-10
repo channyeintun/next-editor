@@ -1,8 +1,6 @@
 import { decodeWavPcm16 } from "./wav";
-import { encodeMonoPcmToOggOpus } from "../../core/src/utils/oggOpus";
-
 // The Ogg/Opus encoder lives in core, where recorded narration uses it too.
-export { muxOggOpus, oggCrc32, OGG_OPUS_MIME } from "../../core/src/utils/oggOpus";
+import { encodeMonoPcmToOggOpus } from "../../core/src/utils/oggOpus";
 
 /**
  * Transcode a stitched PCM16 mono WAV narration track into Ogg/Opus.

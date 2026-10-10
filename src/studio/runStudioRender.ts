@@ -10,6 +10,7 @@ import {
 } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { EMPTY_WHITEBOARD_SCENE } from "../core/src/whiteboard";
+import { OGG_OPUS_MIME } from "../core/src/utils/oggOpus";
 import { loadWhiteboardPanel } from "../components/whiteboardPanelLoader";
 import { buildRecordingFiles } from "../storage/recordingExport";
 import type { WorkspaceProject } from "../types/workspace";
@@ -24,7 +25,7 @@ import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks } from "./qa";
-import { encodeWavToOggOpus, OGG_OPUS_MIME } from "./tts/opus";
+import { encodeWavToOggOpus } from "./tts/opus";
 import {
   computeTimingStats,
   timingGateCheck,
