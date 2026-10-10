@@ -184,6 +184,8 @@ describe("ChaptersMenu", () => {
     const title = screen.getByLabelText("Title of the chapter at 1:00");
     title.focus();
     expect(fireEvent.keyDown(title, { key: "Escape", isComposing: true })).toBe(true);
+    // Safari's key that ends a composition comes after compositionend.
+    expect(fireEvent.keyDown(title, { key: "Escape", keyCode: 229 })).toBe(true);
     expect(screen.getByRole("group", { name: "Chapters" })).toBeInTheDocument();
 
     expect(fireEvent.keyDown(title, { key: "Escape" })).toBe(false);

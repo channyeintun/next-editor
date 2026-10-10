@@ -33,6 +33,7 @@ import {
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
+import { isImeComposingKey } from "../../utils/keyboardPlatform";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import { dockContentSizeClassName } from "../terminalPanel/runtimeDockHelpers";
 import AgentErrorNotice from "./AgentErrorNotice";
@@ -254,7 +255,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     // The Enter that commits an IME candidate (Burmese, CJK) belongs to the
     // composition, not the composer; sending on it would start a run with the
     // half-composed prompt.
-    if (event.nativeEvent.isComposing) return;
+    if (isImeComposingKey(event.nativeEvent)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();

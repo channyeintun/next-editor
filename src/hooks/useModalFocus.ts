@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type KeyboardEvent, type RefObject } from "react";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 
 /** What Tab can land on inside a dialog. */
 const TABBABLE_SELECTOR = [
@@ -89,7 +90,7 @@ export function useModalFocus(
 
     if (event.key === "Escape") {
       // Escape that ends an IME composition is the input method's.
-      if (event.nativeEvent.isComposing) return;
+      if (isImeComposingKey(event.nativeEvent)) return;
       event.stopPropagation();
       onEscape();
       return;

@@ -13,7 +13,8 @@ import LangText from "../LangText";
 import { getFileIcon } from "../fileSidebar/fileIcons";
 import { useWorkspaceActiveFilePath, useWorkspaceTreeFiles } from "../../hooks/useWorkspace";
 import type { WorkspaceTreeFile } from "../../types/workspace";
-import { isGoToFileShortcut, isImeComposingKey } from "./goToFileShortcut";
+import { isImeComposingKey } from "../../utils/keyboardPlatform";
+import { isGoToFileShortcut } from "./goToFileShortcut";
 import {
   highlightRuns,
   prepareQuickOpenCandidates,

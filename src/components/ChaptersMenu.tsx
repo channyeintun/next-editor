@@ -13,6 +13,7 @@ import {
 } from "../core/src/utils/chapters";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import { copyTextToClipboard } from "../utils/clipboard";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 
 /** How long a copied-link check mark stays. */
 const COPIED_MS = 1_500;
@@ -117,7 +118,7 @@ export default function ChaptersMenu({
           aria-labelledby={headingId}
           onKeyDown={(event) => {
             // Not while an input method is composing in the title field: Escape cancels that.
-            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+            if (event.key !== "Escape" || isImeComposingKey(event.nativeEvent)) return;
             event.preventDefault();
             setOpen(false);
             triggerRef.current?.focus();

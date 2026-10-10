@@ -131,6 +131,8 @@ describe("useModalFocus", () => {
     openCard({ onEscape });
 
     fireEvent.keyDown(button("First"), { key: "Escape", isComposing: true });
+    // Safari's key that ends a composition comes after compositionend.
+    fireEvent.keyDown(button("First"), { key: "Escape", keyCode: 229 });
 
     expect(onEscape).not.toHaveBeenCalled();
   });

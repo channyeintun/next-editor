@@ -1,3 +1,6 @@
+// Keyboard rules shared across the app: the command key, and keys an input
+// method owns.
+
 /**
  * Whether the keyboard's command key is Cmd (macOS, iOS, iPadOS), so app
  * shortcuts take Meta there and Ctrl everywhere else. On Apple keyboards Ctrl
@@ -13,4 +16,13 @@ export function isApplePlatform(): boolean {
   const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
   const platform = uaData?.platform || navigator.platform || "";
   return /mac|ios|iphone|ipad|ipod/i.test(platform);
+}
+
+/**
+ * Whether a key belongs to an input method. keyCode 229 is a key it handled:
+ * Safari sends the Enter that commits a composition after compositionend,
+ * with isComposing already false.
+ */
+export function isImeComposingKey(event: Pick<KeyboardEvent, "isComposing" | "keyCode">): boolean {
+  return event.isComposing || event.keyCode === 229;
 }

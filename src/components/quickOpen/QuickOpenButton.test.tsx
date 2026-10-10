@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   files: [] as WorkspaceTreeFile[],
 }));
 
-vi.mock("../../utils/keyboardPlatform", () => ({ isApplePlatform: () => mocks.isApple }));
+vi.mock("../../utils/keyboardPlatform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../utils/keyboardPlatform")>()),
+  isApplePlatform: () => mocks.isApple,
+}));
 vi.mock("../../hooks/useIsWorkspaceCovered", () => ({
   useIsWorkspaceCovered: () => mocks.isCovered,
 }));

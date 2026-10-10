@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { isApplePlatform } from "./keyboardPlatform";
+import { isApplePlatform, isImeComposingKey } from "./keyboardPlatform";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -37,5 +37,13 @@ describe("isApplePlatform", () => {
   it("is false without a navigator", () => {
     vi.stubGlobal("navigator", undefined);
     expect(isApplePlatform()).toBe(false);
+  });
+});
+
+describe("isImeComposingKey", () => {
+  it("is true while composing and for Safari's committing key, false otherwise", () => {
+    expect(isImeComposingKey({ isComposing: true, keyCode: 13 })).toBe(true);
+    expect(isImeComposingKey({ isComposing: false, keyCode: 229 })).toBe(true);
+    expect(isImeComposingKey({ isComposing: false, keyCode: 13 })).toBe(false);
   });
 });

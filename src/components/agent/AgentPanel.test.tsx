@@ -135,8 +135,11 @@ describe("AgentPanel composer focus", () => {
     fireEvent.change(composer(), { target: { value: "Add a footer" } });
 
     const isDefaultAllowed = fireEvent.keyDown(composer(), { key: "Enter", isComposing: true });
+    // Safari's Enter that commits a composition comes after compositionend.
+    const isSafariDefaultAllowed = fireEvent.keyDown(composer(), { key: "Enter", keyCode: 229 });
 
     expect(isDefaultAllowed).toBe(true);
+    expect(isSafariDefaultAllowed).toBe(true);
     expect(startAgentRun).not.toHaveBeenCalled();
     expect(composer()).toHaveValue("Add a footer");
     expect(composer()).not.toHaveAttribute("readonly");

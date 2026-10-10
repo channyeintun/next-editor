@@ -3,7 +3,6 @@ import {
   goToFileAriaKeyShortcuts,
   goToFileShortcutLabel,
   isGoToFileShortcut,
-  isImeComposingKey,
 } from "./goToFileShortcut";
 
 const press = (init: Partial<KeyboardEvent>) => ({
@@ -52,13 +51,5 @@ describe("isGoToFileShortcut", () => {
     expect(goToFileShortcutLabel(false)).toBe("Ctrl+P");
     expect(goToFileAriaKeyShortcuts(true)).toBe("Meta+P");
     expect(goToFileAriaKeyShortcuts(false)).toBe("Control+P");
-  });
-});
-
-describe("isImeComposingKey", () => {
-  it("is true while composing and for Safari's committing key, false otherwise", () => {
-    expect(isImeComposingKey({ isComposing: true, keyCode: 13 })).toBe(true);
-    expect(isImeComposingKey({ isComposing: false, keyCode: 229 })).toBe(true);
-    expect(isImeComposingKey({ isComposing: false, keyCode: 13 })).toBe(false);
   });
 });

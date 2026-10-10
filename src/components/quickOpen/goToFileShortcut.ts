@@ -3,19 +3,12 @@
 // VS Code. The one home of the binding, its label and its aria-keyshortcuts.
 // ============================================================================
 
+import { isImeComposingKey } from "../../utils/keyboardPlatform";
+
 type GoToFileKeyPress = Pick<
   KeyboardEvent,
   "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing" | "keyCode"
 >;
-
-/**
- * Whether a key belongs to an input method. keyCode 229 is a key it handled:
- * Safari sends the Enter that commits a composition after compositionend,
- * with isComposing already false.
- */
-export function isImeComposingKey(event: Pick<KeyboardEvent, "isComposing" | "keyCode">): boolean {
-  return event.isComposing || event.keyCode === 229;
-}
 
 /**
  * Whether a key press asks for Go to File. Only the platform's command
