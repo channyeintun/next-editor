@@ -18,10 +18,15 @@ import {
   prepareQuickOpenCandidates,
   QUICK_OPEN_RESULT_LIMIT,
   rankQuickOpenFiles,
+  type QuickOpenCandidate,
 } from "./quickOpenMatch";
 
 /** How far Page Up and Page Down move through the results. */
 const PAGE_SIZE = 10;
+
+// Keyed by path, not position: when typing brings a new file to the top, the
+// active descendant changes and a screen reader reads the new file.
+const optionIdFor = (listboxId: string, path: string) => `${listboxId}-${encodeURIComponent(path)}`;
 
 const KBD_CLASS =
   "rounded border border-slate-600 bg-slate-800 px-1 py-px font-mono text-[10px] text-slate-200";
@@ -52,6 +57,12 @@ function matchCountText(query: string, total: number): string {
   return total === 1 ? "1 file matches" : `${total} files match`;
 }
 
+/** The query-independent candidate list, re-prepared only when the file tree changes. */
+function useQuickOpenCandidates(): QuickOpenCandidate[] {
+  const files = useWorkspaceTreeFiles();
+  return prepareQuickOpenCandidates(files);
+}
+
 /**
  * Go to File: a search field over the workspace's files, as VS Code's Cmd+P.
  * The field is a combobox whose listbox holds the ranked files; the arrow keys
@@ -63,7 +74,7 @@ export default function QuickOpenDialog({
   onDismiss,
   returnFocusTo,
 }: QuickOpenDialogProps) {
-  const files = useWorkspaceTreeFiles();
+  const candidates = useQuickOpenCandidates();
   const activeFilePath = useWorkspaceActiveFilePath();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -71,13 +82,13 @@ export default function QuickOpenDialog({
   const listboxId = useId();
   const hintId = useId();
 
-  const candidates = prepareQuickOpenCandidates(files);
   const { results, total } = rankQuickOpenFiles(candidates, query);
   const selected = results.length ? Math.min(activeIndex, results.length - 1) : -1;
-  // Keyed by path, not position: when typing brings a new file to the top, the
-  // active descendant changes and a screen reader reads the new file.
-  const optionId = (path: string) => `${listboxId}-${encodeURIComponent(path)}`;
-  const activeId = selected >= 0 ? optionId(results[selected].file.path) : undefined;
+  const optionId = (path: string) => optionIdFor(listboxId, path);
+  // String() tells the React Compiler the path is a primitive: a call it cannot
+  // see into, given a value read out of `results`, would re-rank on every arrow.
+  const activeId =
+    selected >= 0 ? optionIdFor(listboxId, String(results[selected].file.path)) : undefined;
 
   useEffect(() => {
     if (activeId) document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });

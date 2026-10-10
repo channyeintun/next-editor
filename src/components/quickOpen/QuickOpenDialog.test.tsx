@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceTreeFile } from "../../types/workspace";
 import QuickOpenDialog from "./QuickOpenDialog";
+import { prepareQuickOpenCandidates, rankQuickOpenFiles } from "./quickOpenMatch";
 
 const workspace = vi.hoisted(() => ({
   files: [] as WorkspaceTreeFile[],
@@ -13,6 +14,18 @@ vi.mock("../../hooks/useWorkspace", () => ({
   useWorkspaceTreeFiles: () => workspace.files,
   useWorkspaceActiveFilePath: () => workspace.activeFilePath,
 }));
+
+// The real matcher, watched so a test can count how often the dialog runs it.
+vi.mock("./quickOpenMatch", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./quickOpenMatch")>();
+  return {
+    ...actual,
+    prepareQuickOpenCandidates: vi.fn<typeof actual.prepareQuickOpenCandidates>(
+      actual.prepareQuickOpenCandidates,
+    ),
+    rankQuickOpenFiles: vi.fn<typeof actual.rankQuickOpenFiles>(actual.rankQuickOpenFiles),
+  };
+});
 
 function treeFile(path: string): WorkspaceTreeFile {
   return { path, name: path.split("/").at(-1) ?? path, language: "typescript" };
@@ -203,6 +216,22 @@ describe("QuickOpenDialog", () => {
 
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
     expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+
+  it("prepares the files once and ranks only when the query changes", () => {
+    vi.mocked(prepareQuickOpenCandidates).mockClear();
+    const { type, press, activeOption } = renderDialog();
+
+    type("s");
+    type("sr");
+    type("src");
+    const ranks = vi.mocked(rankQuickOpenFiles).mock.calls.length;
+    press({ key: "ArrowDown" });
+    press({ key: "PageDown" });
+
+    expect(activeOption()).toBe(screen.getAllByRole("option").at(-1));
+    expect(prepareQuickOpenCandidates).toHaveBeenCalledTimes(1);
+    expect(rankQuickOpenFiles).toHaveBeenCalledTimes(ranks);
   });
 
   it("says when it shows only the first results", () => {
