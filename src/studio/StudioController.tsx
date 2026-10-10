@@ -32,7 +32,12 @@ import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
 import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
-import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
+import {
+  appendCompletedRun,
+  checkRepeatability,
+  runExposedForSelection,
+  sourceRevisionOf,
+} from "./runSelection";
 import { DEFAULT_STUDIO_PLAN_SLUG, mergeStudioSources, parseLessonScriptYaml } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
@@ -146,6 +151,7 @@ interface StudioRunEntry {
   voiceKind: "cloned" | "reference" | "athanlab" | null;
   /** TTS implementation used to produce this run's narration. */
   narrationProvider: string | null;
+  /** Its artifacts are kept for the newest run only (appendCompletedRun). */
   result: StudioRunResult;
 }
 
@@ -543,7 +549,7 @@ export default function StudioController() {
         narrationProvider,
         result,
       };
-      runHistory.push(entry);
+      appendCompletedRun(runHistory, entry);
       setLatest(entry);
 
       let nextComparison: StudioCheckResult[] | null = null;

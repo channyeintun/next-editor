@@ -4,7 +4,8 @@ import type { StudioCheckResult, StudioRenderOutcome } from "./report";
 
 /**
  * Selection ↔ completed-run reconciliation for the Studio console
- * (docs/agent-lesson-production.md §10). Pure so the exposure and repeatability
+ * (docs/agent-lesson-production.md §10). Pure (appendCompletedRun touches only
+ * the history array it is handed) so the exposure, retention and repeatability
  * rules that keep a render's artifact bound to the lesson that produced it can
  * be tested without mounting the controller.
  */
@@ -51,6 +52,25 @@ export function runExposedForSelection(
     run.slug === planSlug &&
     run.sourceRevision === selectedSourceRevision
   );
+}
+
+/**
+ * Append a completed run to the session's run history, releasing the artifacts
+ * (bundle, audio, decoded recording) of the run it supersedes. Only the newest
+ * run is ever exposed (runExposedForSelection is asked about it alone), so an
+ * older run's artifacts are unreachable yet would otherwise stay in memory for
+ * the whole session. Its report, manifest and semantics stay: the window handle
+ * and the repeatability baseline still read them.
+ */
+export function appendCompletedRun<Run extends { result: { artifacts: unknown } }>(
+  history: Run[],
+  run: Run,
+): void {
+  const previous = history.at(-1);
+  if (previous?.result.artifacts) {
+    history[history.length - 1] = { ...previous, result: { ...previous.result, artifacts: null } };
+  }
+  history.push(run);
 }
 
 /** Prior run as the repeatability baseline sees it — mode plus its render semantics. */

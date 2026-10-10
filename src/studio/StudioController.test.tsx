@@ -427,6 +427,69 @@ describe("StudioController narrator voice", () => {
   });
 });
 
+describe("StudioController run history", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+  });
+
+  /** A passing render of english-script; equal semantics make the two runs repeatable. */
+  function passingRun(name: string): Awaited<ReturnType<typeof runStudioRender>> {
+    return {
+      report: { planSlug: "english-script", outcome: "passed", checks: [], errors: [] },
+      manifest: { planSlug: "english-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: {
+        planSha256: "0".repeat(64),
+        actionSequence: [],
+        actionStartsMs: {},
+        finalWorkspaceHash: "workspace",
+        captionText: "",
+        audioSha256: "audio",
+        consoleLines: [],
+        previewState: { finalRoute: null, checkpoints: [] },
+        previewInteractionSequence: [],
+        durationMs: 1_000,
+      },
+      artifacts: {
+        neBlob: new Blob([name]),
+        audioBlob: new Blob(),
+        audioFileName: "lesson-english-script.m4a",
+        recording: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>;
+  }
+
+  it("offers the newest run's bundle and keeps the earlier run's report and semantics", async () => {
+    const first = passingRun("first");
+    const second = passingRun("second");
+    studio.runRender.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    // A fresh module: its run history starts empty and stays out of the later tests.
+    renderController(await freshStudioController());
+
+    fireEvent.click(startButton());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Download bundle" })).toBeEnabled(),
+    );
+    // Only the history can supply the second run's repeatability baseline now.
+    sessionStorage.clear();
+
+    fireEvent.click(startButton());
+    await waitFor(() => expect(window.__NEXT_EDITOR_STUDIO__?.runs).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Download bundle" })).toBeEnabled(),
+    );
+
+    const handle = window.__NEXT_EDITOR_STUDIO__;
+    expect(handle?.runs[0]?.report).toBe(first.report);
+    expect(handle?.runs[0]?.manifest).toBe(first.manifest);
+    expect(handle?.runs[1]?.report).toBe(second.report);
+    expect(handle?.comparison?.length).toBeGreaterThan(0);
+  });
+});
+
 // Last: a passing render stays in the module's run history for every later mount.
 describe("StudioController draft upload focus", () => {
   beforeEach(() => {

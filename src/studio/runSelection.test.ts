@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RenderSemantics } from "./compare";
 import {
+  appendCompletedRun,
   BASELINE_RESET_NOTE,
   checkRepeatability,
   runExposedForSelection,
@@ -78,6 +79,52 @@ describe("runExposedForSelection (STUDIO-02)", () => {
 
   it("exposes nothing when there is no completed run", () => {
     expect(runExposedForSelection(null, "lesson-a", "builtin:lesson-a", false)).toBe(false);
+  });
+});
+
+describe("appendCompletedRun", () => {
+  interface Run {
+    index: number;
+    result: { report: string; semantics: RenderSemantics | null; artifacts: string | null };
+  }
+  const run = (index: number, artifacts: string | null): Run => ({
+    index,
+    result: { report: `report-${index}`, semantics: semanticsWithHash(`plan-${index}`), artifacts },
+  });
+
+  it("keeps the artifacts of the newest run only", () => {
+    const history: Run[] = [];
+    const first = run(1, "bundle-1");
+    const second = run(2, "bundle-2");
+
+    appendCompletedRun(history, first);
+    expect(history).toEqual([first]);
+
+    appendCompletedRun(history, second);
+    expect(history[1]).toBe(second);
+    expect(history[0]).toEqual({
+      index: 1,
+      result: { report: "report-1", semantics: semanticsWithHash("plan-1"), artifacts: null },
+    });
+  });
+
+  it("copies the superseded run instead of mutating it", () => {
+    const history: Run[] = [];
+    const first = run(1, "bundle-1");
+    appendCompletedRun(history, first);
+    appendCompletedRun(history, run(2, null));
+
+    expect(history[0]).not.toBe(first);
+    expect(first.result.artifacts).toBe("bundle-1");
+  });
+
+  it("leaves a superseded run without artifacts as it was", () => {
+    const failed = run(1, null);
+    const history: Run[] = [failed];
+    appendCompletedRun(history, run(2, "bundle-2"));
+
+    expect(history[0]).toBe(failed);
+    expect(history.map((entry) => entry.result.artifacts)).toEqual([null, "bundle-2"]);
   });
 });
 
