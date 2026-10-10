@@ -1,13 +1,13 @@
-import { setup, assign, raise, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
+import { setup, assign, raise, stateIn, stopChild, enqueueActions } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
-import type { MouseCursorPosition, Recording } from "../types";
+import type { MouseCursorPosition } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
 import { cameraRecordingActor } from "./cameraActor";
 import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
-import { measureAudioDurationSeconds } from "../utils/audioDuration";
+import { loadRecordingActor } from "./loadRecordingActor";
 import {
   initRecordingSession,
   captureSlideEvent,
@@ -66,7 +66,7 @@ import {
   stopScreenRecording,
 } from "./runningRecorders";
 import { findRetakeTargetNow, retakeRecording } from "./retake";
-import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
+import { hasAudioEdit } from "../utils/audioEditSpec";
 import {
   setRecording,
   extendRecording,
@@ -97,7 +97,6 @@ import {
 } from "./replayActions";
 import { clearCursorDecorations } from "./frameReplay";
 import {
-  getPlaybackAudioState,
   syncPlaybackAudio,
   seekPlaybackActors,
   spawnPlaybackAudio,
@@ -108,7 +107,7 @@ import {
   pausePlaybackActors,
 } from "./playbackActors";
 import { reportMachineError } from "./machineError";
-import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
+import { isAtPlaybackEnd } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../dmp/dmpCodec";
 
 /**
@@ -195,64 +194,7 @@ export const editorMachine = setup({
     screenRecording: screenRecordingActor,
     audioPlayback: audioPlaybackActor,
     mouseTracking: mouseTrackingActor,
-    loadRecording: fromPromise<
-      { recording: Recording; duration: number },
-      { recording: Recording | null }
-    >(async ({ input }) => {
-      // Thrown here, not in the invoke's `input`: xstate treats a throwing input as fatal to
-      // the whole editor actor, while a rejection reaches `loading.onError`.
-      let recording = input.recording;
-      if (!recording) throw new Error("No recording found to load");
-
-      // A retake left what it discarded in the narration file, and an edit asks for cuts
-      // and mutes. Both are applied here, once the audio is in hand; a microphone blob
-      // that has not arrived yet keeps the edit for when it does.
-      let editedAudioDurationMs: number | undefined;
-      if (hasAudioEdit(recording.pendingAudioEdit) && recording.audioBlob instanceof Blob) {
-        try {
-          const { blob: audioBlob, durationMs } = await editRecordedAudio(
-            recording.audioBlob,
-            recording.pendingAudioEdit,
-          );
-          editedAudioDurationMs = durationMs;
-          recording = {
-            ...recording,
-            audioBlob,
-            pendingAudioEdit: undefined,
-            tracks: recording.tracks?.map((track) =>
-              track.kind === "audio" ? { ...track, mimeType: audioBlob.type } : track,
-            ),
-          };
-        } catch (err) {
-          // Keeping the unedited narration is the lesser harm: it still plays, and its
-          // stretches before the first cut stay in step.
-          console.error("Failed to edit the recording's narration:", err);
-          recording = { ...recording, pendingAudioEdit: undefined };
-        }
-      }
-
-      let duration = normalizeTimelineDuration(recording.duration);
-
-      const playbackAudioState = getPlaybackAudioState(recording);
-      if (playbackAudioState?.finalized && recording.audioSource !== "external") {
-        try {
-          if (recording.audioBlob instanceof Blob) {
-            // An edit above already knows its output's length from the samples it
-            // encoded, so only an unedited file is decoded to measure it.
-            const exactDurationMs =
-              editedAudioDurationMs ??
-              (await measureAudioDurationSeconds(recording.audioBlob)) * 1000;
-            // Use audio duration as the source of truth if it exists
-            // This prevents trailing silence from wall-clock overhead
-            duration = normalizeTimelineDuration(exactDurationMs, duration);
-          }
-        } catch (err) {
-          console.error("Failed to calculate exact audio duration:", err);
-        }
-      }
-
-      return { recording: { ...recording, duration }, duration };
-    }),
+    loadRecording: loadRecordingActor,
   },
   guards: {
     // Content deltas are built through the diff-match-patch WASM codec, and

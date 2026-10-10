@@ -13,7 +13,7 @@ import type { ChatRecordingEvent } from "./chat";
 import type { CursorRecordingEvent, MouseCursorPosition } from "./cursor";
 import type { RECORDING_SCHEMA_VERSION } from "./utils/deltaTypes";
 import type { MediaSpan } from "./utils/mediaSpans";
-import type { AudioEdit } from "./utils/audioEdit";
+import type { AudioEdit } from "./utils/audioEditSpec";
 
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";

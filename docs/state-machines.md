@@ -225,9 +225,9 @@ This is a drain state, not a second recording mode.
 
 ### `loading`
 
-An invoked `loadRecording` actor (a promise actor, not a spawned child) normalizes the recording:
+An invoked `loadRecording` actor (`loadRecordingActor.ts`; a promise actor, not a spawned child) normalizes the recording:
 
-- computes exact duration from the audio blob via `measureAudioDurationSeconds` (an offline decode) when finalized non-external audio is present (avoids trailing silence from wall-clock overhead); when it has just applied a `pendingAudioEdit`, `editRecordedAudio` returns the edited samples' length and the file it encoded is not decoded again
+- computes exact duration from the audio blob via `measureAudioDurationSeconds` (an offline decode) when finalized non-external audio is present (avoids trailing silence from wall-clock overhead); when it has just applied a `pendingAudioEdit`, `editRecordedAudio` returns the edited samples' length and the file it encoded is not decoded again. The encoder behind an edit (`utils/audioEdit.ts`, with the Ogg/Opus muxer and the WAV encoder) is imported dynamically, only for a take that has an edit to apply; the edit's shape and `hasAudioEdit` live in `utils/audioEditSpec.ts`
 - `onDone` passes the actor's typed output to `setRecording` and transitions to `playback.ready`
 - `onError` records the error and returns to `idle`
 - `LOAD_RECORDING` re-enters `loading`, restarting the invoke with the newer recording; the

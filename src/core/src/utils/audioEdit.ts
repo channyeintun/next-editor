@@ -1,5 +1,6 @@
 import { decodeAudioBlob } from "./audioDecode";
-import { normalizeMediaSpans, type MediaSpan } from "./mediaSpans";
+import { normalizeMediaSpans } from "./mediaSpans";
+import type { AudioEdit } from "./audioEditSpec";
 import { encodeMonoPcmToOggOpus, OGG_OPUS_MIME } from "./oggOpus";
 import { encodeWavPcm16, floatTo16BitPcm } from "./wavPcm16";
 
@@ -10,6 +11,8 @@ import { encodeWavPcm16, floatTo16BitPcm } from "./wavPcm16";
 // and an edit cuts or mutes spans of a finished take. MediaRecorder's WebM
 // cannot be cut in place, so the narration is decoded, edited as samples, and
 // encoded again: Ogg/Opus through WebCodecs, 16-bit WAV where that is missing.
+// The edit itself (AudioEdit, hasAudioEdit) is in audioEditSpec.ts, so only an
+// edit being applied loads this module (loadRecordingActor imports it lazily).
 // ============================================================================
 
 /**
@@ -20,17 +23,6 @@ const AUDIO_EDIT_SAMPLE_RATE = 24_000;
 
 /** Fades either side of a cut, so a splice mid-waveform does not click. */
 const SPLICE_FADE_MS = 8;
-
-export interface AudioEdit {
-  /** Spans removed, in the audio's own time (ms). */
-  cuts?: readonly MediaSpan[];
-  /** Spans silenced in place, in the same time. */
-  mutes?: readonly MediaSpan[];
-}
-
-export function hasAudioEdit(edit: AudioEdit | undefined): edit is AudioEdit {
-  return Boolean(edit && ((edit.cuts?.length ?? 0) > 0 || (edit.mutes?.length ?? 0) > 0));
-}
 
 function fadeOut(samples: Float32Array, end: number, length: number): void {
   const start = Math.max(0, end - length);

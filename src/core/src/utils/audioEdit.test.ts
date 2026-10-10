@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { applyAudioEditToSamples, hasAudioEdit } from "./audioEdit";
+import { applyAudioEditToSamples } from "./audioEdit";
+import { hasAudioEdit } from "./audioEditSpec";
 
 // 1 kHz: one sample per millisecond keeps the spans readable.
 const RATE = 1_000;

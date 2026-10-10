@@ -8,7 +8,7 @@ import {
   normalizeMediaSpans,
   type MediaSpan,
 } from "./utils/mediaSpans";
-import { hasAudioEdit, type AudioEdit } from "./utils/audioEdit";
+import { hasAudioEdit, type AudioEdit } from "./utils/audioEditSpec";
 import { captionTextFromWords } from "./utils/captionCues";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
 
