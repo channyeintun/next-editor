@@ -2,6 +2,7 @@ import { normalizeAthanLabWav } from "./athanlab/normalizeWav";
 import { prepareAthanLabText } from "./athanlab/textPrep";
 import type { AthanLabVoiceProfile } from "./profiles";
 import type { DialogSynthProvider } from "./synthProvider";
+import { DROPPED_CONNECTION_ATTEMPTS, postStudioTtsWav, retryDroppedConnection } from "./workerTts";
 
 /**
  * AthanLab synthesis adapter: one same-origin Worker request per dialog. The
@@ -13,14 +14,6 @@ import type { DialogSynthProvider } from "./synthProvider";
  * which is what makes the retries below safe.
  */
 
-interface ErrorPayload {
-  error?: unknown;
-  code?: unknown;
-  retryAfterSeconds?: unknown;
-}
-
-const NETWORK_ATTEMPTS = 3;
-const NETWORK_RETRY_DELAYS_MS = [2_000, 5_000];
 /**
  * Worker answers that the same request succeeds if asked again later, with the
  * status each comes with and how many more POSTs each allows per dialog:
@@ -105,9 +98,6 @@ export async function synthesizeAthanLabWav(
   profile: AthanLabVoiceProfile,
   speechText: string,
 ): Promise<Uint8Array> {
-  if (profile.sampleRate !== 48_000 || profile.mimeType !== "audio/wav") {
-    throw new Error(`Unsupported AthanLab profile "${profile.id}"`);
-  }
   const text = prepareAthanLabText(speechText);
   if (!text) {
     throw new Error("AthanLab: this dialog has nothing to speak");
@@ -120,28 +110,23 @@ export async function synthesizeAthanLabWav(
   const body = JSON.stringify({ text, voiceId: profile.voiceId });
 
   // Two kinds of failure are asked again, both safe because the Worker
-  // re-attaches to the same AthanLab job: a connection dropped between the
-  // browser and the Worker (a TypeError with no response, even when the job
-  // finished), and the RETRY_LATER answers. Any other Worker error carries its
-  // own message and is never retried.
-  let networkFailures = 0;
+  // re-attaches to the same AthanLab job: a dropped connection
+  // (retryDroppedConnection, its count starting over at every answer), and
+  // the RETRY_LATER answers. Any other Worker error carries its own message
+  // and is never retried.
   const retriesUsed = new Map<string, number>();
   for (;;) {
-    let response: SynthesisResponse;
-    try {
-      response = await requestSynthesis(body);
-    } catch (error) {
-      if (!(error instanceof TypeError)) throw error;
-      networkFailures += 1;
-      if (networkFailures >= NETWORK_ATTEMPTS) {
-        throw failure(`the connection failed ${NETWORK_ATTEMPTS} times (${error.message})`, null, {
-          cause: error,
-        });
-      }
-      await wait(NETWORK_RETRY_DELAYS_MS[networkFailures - 1]);
-      continue;
-    }
-    networkFailures = 0;
+    const response = await retryDroppedConnection(
+      () => requestSynthesis(body),
+      (error) =>
+        failure(
+          `the connection failed ${DROPPED_CONNECTION_ATTEMPTS} times (${error.message})`,
+          null,
+          {
+            cause: error,
+          },
+        ),
+    );
     if (response.kind === "audio") {
       return normalizeTake(response.bytes, profile.sampleRate);
     }
@@ -187,39 +172,23 @@ function normalizeTake(bytes: Uint8Array, sampleRate: number): Uint8Array {
 }
 
 async function requestSynthesis(body: string): Promise<SynthesisResponse> {
-  const response = await fetch("/api/studio/tts/athanlab", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      Accept: "audio/wav",
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ErrorPayload | null;
-    const detail =
-      typeof payload?.error === "string"
-        ? payload.error
-        : `request failed with HTTP ${response.status}`;
-    const code = typeof payload?.code === "string" ? payload.code : null;
+  const result = await postStudioTtsWav("athanlab", body);
+  if (result.kind === "not-wav") {
+    throw failure("the narration request returned a non-WAV response", null);
+  }
+  if (result.kind === "error") {
+    const { code, detail, status } = result;
     const retryLater =
       code !== null && Object.hasOwn(RETRY_LATER, code) ? RETRY_LATER[code] : undefined;
-    if (code !== null && retryLater?.status === response.status) {
+    if (code !== null && retryLater?.status === status) {
       return {
         kind: "retry-later",
         code,
         message: detail,
-        retryAfterSeconds: retryAfterSecondsOf(payload?.retryAfterSeconds),
+        retryAfterSeconds: retryAfterSecondsOf(result.retryAfterSeconds),
       };
     }
     throw failure(detail, code);
   }
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("audio/wav")) {
-    throw failure("the narration request returned a non-WAV response", null);
-  }
-
-  return { kind: "audio", bytes: new Uint8Array(await response.arrayBuffer()) };
+  return result;
 }

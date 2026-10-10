@@ -7,15 +7,10 @@ import {
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
 import type { DialogSynthProvider } from "./synthProvider";
 import { decodeWavPcm16, encodeWavPcm16, floatTo16BitPcm, trimSilencePcm16 } from "./wav";
+import { DROPPED_CONNECTION_ATTEMPTS, postStudioTtsWav, retryDroppedConnection } from "./workerTts";
 import { bytesToBase64 } from "../../shared/base64";
 
-interface ErrorPayload {
-  error?: unknown;
-}
-
 const referenceAudioCache = new Map<string, Promise<string>>();
-const NETWORK_ATTEMPTS = 3;
-const NETWORK_RETRY_DELAYS_MS = [2_000, 5_000];
 
 async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Promise<string> {
   const referenceVoiceId = profile.referenceVoiceId;
@@ -64,30 +59,17 @@ export async function synthesizeModalVoxCpm2Wav(
   speechText: string,
   seed: number,
 ): Promise<Uint8Array> {
-  if (profile.sampleRate !== 48_000 || profile.mimeType !== "audio/wav") {
-    throw new Error(`Unsupported VoxCPM2 profile "${profile.id}"`);
-  }
   const referenceAudioBase64 = await loadReferenceAudioBase64(profile);
   const body = JSON.stringify({ text: speechText, seed, referenceAudioBase64 });
 
-  // A connection dropped between the browser and the Worker rejects with a
-  // TypeError ("Failed to fetch") and no response, even when Modal finished the
-  // take. A synthesis request changes nothing server-side, so asking again is
-  // safe; a Worker error response carries its own message and is never retried.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await requestSynthesis(body);
-    } catch (error) {
-      if (!(error instanceof TypeError)) throw error;
-      if (attempt >= NETWORK_ATTEMPTS) {
-        throw new Error(
-          `VoxCPM2 narration: the connection failed ${NETWORK_ATTEMPTS} times (${error.message})`,
-          { cause: error },
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAYS_MS[attempt - 1]));
-    }
-  }
+  return retryDroppedConnection(
+    () => requestSynthesis(body),
+    (error) =>
+      new Error(
+        `VoxCPM2 narration: the connection failed ${DROPPED_CONNECTION_ATTEMPTS} times (${error.message})`,
+        { cause: error },
+      ),
+  );
 }
 
 /**
@@ -125,28 +107,12 @@ export function voxCpm2SynthProvider(
 }
 
 async function requestSynthesis(body: string): Promise<Uint8Array> {
-  const response = await fetch("/api/studio/tts/voxcpm2", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      Accept: "audio/wav",
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ErrorPayload | null;
-    const detail =
-      typeof payload?.error === "string"
-        ? payload.error
-        : `request failed with HTTP ${response.status}`;
-    throw new Error(`VoxCPM2 narration: ${detail}`);
+  const result = await postStudioTtsWav("voxcpm2", body);
+  if (result.kind === "error") {
+    throw new Error(`VoxCPM2 narration: ${result.detail}`);
   }
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("audio/wav")) {
+  if (result.kind === "not-wav") {
     throw new Error("VoxCPM2 narration returned a non-WAV response");
   }
-
-  return new Uint8Array(await response.arrayBuffer());
+  return result.bytes;
 }
