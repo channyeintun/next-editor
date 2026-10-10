@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { Play } from "lucide-react";
 import LangText from "@app/components/LangText";
 import type { Lesson } from "../types";
 import { resolveThumb } from "../lib/links";
+import ThumbnailTile from "./ThumbnailTile";
 
 // "2026-06-28" → "Jun 28, 2026". Parsed as a local date (not UTC) to avoid an
 // off-by-one day in timezones behind UTC. Non-date strings pass through as-is.
@@ -28,7 +28,6 @@ export default function LessonCard({
    *  loads at once and at high priority instead of lazily. */
   priority?: boolean;
 }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
   const href = listSlug ? `/learn/${lesson.slug}?list=${listSlug}` : `/learn/${lesson.slug}`;
   const published = formatPublished(lesson.publishedAt);
 
@@ -44,20 +43,13 @@ export default function LessonCard({
         aria-hidden="true"
         className="relative block aspect-video overflow-hidden rounded-xl bg-slate-900"
       >
-        {thumbFailed ? (
-          <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
-            <Play className="size-8" />
-          </div>
-        ) : (
-          <img
-            src={resolveThumb(lesson)}
-            alt={lesson.title}
-            loading={priority ? "eager" : "lazy"}
-            fetchPriority={priority ? "high" : undefined}
-            onError={() => setThumbFailed(true)}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        )}
+        <ThumbnailTile
+          src={resolveThumb(lesson.thumbnail)}
+          alt={lesson.title}
+          fallbackIcon={Play}
+          priority={priority}
+          hoverScale
+        />
         {lesson.duration && (
           <span className="absolute bottom-2 right-2 rounded-md bg-black/80 px-1.5 py-0.5 text-xs font-semibold text-white">
             {lesson.duration}

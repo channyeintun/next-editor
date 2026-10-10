@@ -1,13 +1,13 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { ListMusic } from "lucide-react";
 import type { PlaylistSummary } from "@next-editor/infra";
+import { resolveThumb } from "../lib/links";
+import ThumbnailTile from "./ThumbnailTile";
 
 // Read-only playlist card for the public author profile — the same thumbnail
 // + lesson-count visual as the owner's PlaylistCard, but with no manage menu
 // (a visitor can only open the playlist, not rename/reorder/delete it).
 export default function PlaylistSummaryCard({ playlist }: { playlist: PlaylistSummary }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
   const href = `/learn/playlist/${playlist.slug}`;
 
   return (
@@ -18,19 +18,12 @@ export default function PlaylistSummaryCard({ playlist }: { playlist: PlaylistSu
         aria-hidden="true"
         className="relative block aspect-video overflow-hidden rounded-xl bg-slate-900"
       >
-        {thumbFailed || !playlist.thumbnail ? (
-          <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
-            <ListMusic className="size-8" />
-          </div>
-        ) : (
-          <img
-            src={`/${playlist.thumbnail}`}
-            alt=""
-            loading="lazy"
-            onError={() => setThumbFailed(true)}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        )}
+        <ThumbnailTile
+          src={playlist.thumbnail ? resolveThumb(playlist.thumbnail) : null}
+          alt=""
+          fallbackIcon={ListMusic}
+          hoverScale
+        />
         <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/80 px-1.5 py-0.5 text-xs font-semibold text-white">
           <ListMusic className="size-3" />
           {playlist.lessonCount}

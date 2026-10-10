@@ -24,7 +24,9 @@ import {
   type OwnedLesson,
 } from "@next-editor/infra";
 import PopoverMenu from "@app/components/PopoverMenu";
+import { resolveThumb } from "../lib/links";
 import AddToPlaylistPopover from "./AddToPlaylistPopover";
+import ThumbnailTile from "./ThumbnailTile";
 
 type Confirming = "unpublish" | "delete" | null;
 
@@ -34,7 +36,6 @@ const confirmButton =
   "rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-white hover:text-slate-950";
 
 export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [addingToPlaylist, setAddingToPlaylist] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
@@ -131,19 +132,11 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     <div className="group">
       <div className="relative aspect-video rounded-xl bg-slate-900">
         <div className="absolute inset-0 overflow-hidden rounded-xl">
-          {thumbFailed ? (
-            <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
-              <Play className="size-8" />
-            </div>
-          ) : (
-            <img
-              src={`/${lesson.thumbnail}`}
-              alt={lesson.title}
-              loading="lazy"
-              onError={() => setThumbFailed(true)}
-              className="size-full object-cover"
-            />
-          )}
+          <ThumbnailTile
+            src={resolveThumb(lesson.thumbnail)}
+            alt={lesson.title}
+            fallbackIcon={Play}
+          />
         </div>
         <span
           className={`absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${

@@ -8,6 +8,8 @@ import {
   type OwnedPlaylist,
 } from "@next-editor/infra";
 import PopoverMenu from "@app/components/PopoverMenu";
+import { resolveThumb } from "../lib/links";
+import ThumbnailTile from "./ThumbnailTile";
 
 const ghostButton =
   "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
@@ -29,7 +31,6 @@ export default function PlaylistCard({
   isManaging: boolean;
   onManage: () => void;
 }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [renaming, setRenaming] = useState(false);
@@ -80,19 +81,11 @@ export default function PlaylistCard({
         }`}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
-          {thumbFailed || !playlist.thumbnail ? (
-            <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
-              <ListMusic className="size-8" />
-            </div>
-          ) : (
-            <img
-              src={`/${playlist.thumbnail}`}
-              alt=""
-              loading="lazy"
-              onError={() => setThumbFailed(true)}
-              className="size-full object-cover"
-            />
-          )}
+          <ThumbnailTile
+            src={playlist.thumbnail ? resolveThumb(playlist.thumbnail) : null}
+            alt=""
+            fallbackIcon={ListMusic}
+          />
         </div>
 
         <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/80 px-1.5 py-0.5 text-xs font-semibold text-white">
