@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   Scissors,
   FileMusic,
@@ -63,10 +63,14 @@ import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { selectCaptionTrack } from "../captions/captionTracks";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
+import { lazyWithRecovery } from "../routeRecovery";
 
 // Opened only by the author, from a finished take in record mode, so a learner's player
 // does not load it (or the edit and waveform code behind it).
-const RecordingEditPanel = lazy(() => import("./RecordingEditPanel"));
+const RecordingEditPanel = lazyWithRecovery(
+  () => import("./RecordingEditPanel"),
+  "RecordingEditPanel",
+);
 
 interface MediaControlsProps {
   recordMode?: boolean;

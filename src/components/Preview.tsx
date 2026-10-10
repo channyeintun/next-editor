@@ -1,11 +1,11 @@
-import { lazy } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import { lazyWithRecovery } from "../routeRecovery";
 
-const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
+const ApiClientPanel = lazyWithRecovery(() => import("./preview/ApiClientPanel"), "ApiClientPanel");
 
 function Preview() {
   const controller = usePreviewController();

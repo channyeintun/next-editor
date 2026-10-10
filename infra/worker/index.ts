@@ -24,6 +24,7 @@ import { studioRoute } from "./routes/studio";
 import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
 import { renderLandingResponse } from "./ssr/landing";
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
+import { serveStaticFile } from "./staticAssets";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -134,8 +135,9 @@ app.get("/learn/:slug", (c) => serveLessonDetailDocument(c.env, c.req.raw, c.req
 // COEP/COOP on them. For a path with no file (an SPA route such as /code or
 // /learn/:slug, or an unimplemented API path), `not_found_handling =
 // "single-page-application"` makes ASSETS.fetch return index.html (200)
-// directly, with no redirect.
-app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+// directly, with no redirect. Hashed /assets/* files are cached for a year,
+// and a missing one is a 404 rather than that shell (staticAssets.ts).
+app.all("*", (c) => serveStaticFile(c.env, c.req.raw));
 
 export default app;
 export { CollaborationRoomDurableObject } from "./collaboration/roomDurableObject";

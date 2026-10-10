@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { Recording } from "../core/src";
@@ -56,11 +56,12 @@ import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
 import { loadCodeEditor } from "./codeEditorLoader";
+import { lazyWithRecovery } from "../routeRecovery";
 
-const CodeEditor = lazy(loadCodeEditor);
+const CodeEditor = lazyWithRecovery(loadCodeEditor, "CodeEditor");
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
-const WhiteboardPanel = lazy(loadWhiteboardPanel);
+const WhiteboardPanel = lazyWithRecovery(loadWhiteboardPanel, "WhiteboardPanel");
 
 // Rendered inside CodeEditor's Suspense boundary, so it commits only together
 // with CodeEditor: most tour targets (header, runner dock, agent tab) live

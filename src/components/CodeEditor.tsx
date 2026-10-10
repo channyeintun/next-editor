@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -46,8 +46,9 @@ import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 import "./editorCursors.css";
+import { lazyWithRecovery } from "../routeRecovery";
 
-const Preview = lazy(() => import("./Preview"));
+const Preview = lazyWithRecovery(() => import("./Preview"), "Preview");
 interface CodeEditorProps {
   /**
    * The author's editor, not a read-only lesson: the header offers starters,

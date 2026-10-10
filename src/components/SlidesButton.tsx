@@ -1,13 +1,14 @@
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { Suspense, useEffect, useId, useState } from "react";
 import { Presentation, Circle } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { lazyWithRecovery } from "../routeRecovery";
 
 // Only an author opens the deck manager (never in playback, a take or a room), so a
 // learner's editor does not load it, or the Google Slides import behind it.
-const SlidesManager = lazy(() => import("./SlidesManager"));
+const SlidesManager = lazyWithRecovery(() => import("./SlidesManager"), "SlidesManager");
 
 /**
  * After the user opens the presentation, focus moves into it (the next frame, once

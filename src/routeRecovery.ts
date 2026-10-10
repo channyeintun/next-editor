@@ -1,12 +1,17 @@
-import type { ComponentType } from "react";
+import { lazy } from "react";
+import type { ComponentType, LazyExoticComponent } from "react";
 
-// Stale-chunk recovery for the router's lazy routes. After a deploy, a cached
-// page can ask for chunk names that no longer exist; each route then gets one
-// automatic reload, which refetches the HTML and the current chunk names.
+// Stale-chunk recovery for every lazily imported chunk: the router's lazy
+// routes and the panels they load later (lazyWithRecovery). After a deploy, a
+// cached page can ask for chunk names that no longer exist; each route and
+// each panel then gets one automatic reload, which refetches the HTML and the
+// current chunk names.
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
+// Vite's preload helper rejects with "Unable to preload CSS for <url>" when a
+// chunk's stylesheet is missing, before it even imports the JS.
 const DYNAMIC_IMPORT_ERROR_PATTERN =
-  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i;
 const ROUTE_RELOAD_STORAGE_PREFIX = "next-editor:route-reload:";
 
 function normalizeRoutePath(routePath: string) {
@@ -107,26 +112,46 @@ export function isDynamicImportError(error: unknown) {
   return false;
 }
 
+// One import with the stale-chunk rule: success re-arms the automatic reload,
+// a stale chunk spends it (keyed by `recoveryKey`), anything else rethrows.
+async function importWithRecovery<T>(importer: () => Promise<T>, recoveryKey: string): Promise<T> {
+  try {
+    const module = await importer();
+    clearRouteReload(recoveryKey);
+    clearRecoverySearchParam();
+    return module;
+  } catch (error) {
+    if (
+      typeof window !== "undefined" &&
+      isDynamicImportError(error) &&
+      !hasRouteReloaded(recoveryKey) &&
+      markRouteReloaded(recoveryKey)
+    ) {
+      reloadWithRecoveryParam();
+
+      return new Promise<never>(() => {});
+    }
+
+    throw error;
+  }
+}
+
 export function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePath: string) {
   return async () => {
-    try {
-      const module = await importer();
-      clearRouteReload(routePath);
-      clearRecoverySearchParam();
-      return { Component: module.default };
-    } catch (error) {
-      if (
-        typeof window !== "undefined" &&
-        isDynamicImportError(error) &&
-        !hasRouteReloaded(routePath) &&
-        markRouteReloaded(routePath)
-      ) {
-        reloadWithRecoveryParam();
-
-        return new Promise<never>(() => {});
-      }
-
-      throw error;
-    }
+    const module = await importWithRecovery(importer, routePath);
+    return { Component: module.default };
   };
+}
+
+/**
+ * React.lazy with the routes' stale-chunk recovery, for chunks a route loads
+ * after it renders (CodeEditor, panels, dialogs). Without it, a stale panel
+ * chunk reaches the route's error boundary and waits for a manual reload.
+ * `chunkName` keys the one automatic reload, separately from the routes'.
+ */
+export function lazyWithRecovery<P>(
+  importer: () => Promise<{ default: ComponentType<P> }>,
+  chunkName: string,
+): LazyExoticComponent<ComponentType<P>> {
+  return lazy(() => importWithRecovery(importer, `chunk:${chunkName}`));
 }

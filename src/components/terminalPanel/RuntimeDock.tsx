@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from "react";
+import { Suspense, type ComponentType } from "react";
 import type { WorkspaceLessonType } from "../../types/workspace";
 import { executionKindForLessonType, type WorkspaceExecutionKind } from "../../types/lessonTypes";
 import GoPlaygroundRunnerPanel from "../GoPlaygroundRunnerPanel";
@@ -8,13 +8,17 @@ import KotlinPlaygroundRunnerPanel from "../KotlinPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel from "../RustPlaygroundRunnerPanel";
 import TerminalPanel from "../TerminalPanel";
 import ZigPlaygroundRunnerPanel from "../ZigPlaygroundRunnerPanel";
+import { lazyWithRecovery } from "../../routeRecovery";
 
 // The other runner panels are thin clients in front of a Worker proxy, but this
 // one reaches the whole first-party x86-64 assembler and CPU in `src/core/x86`,
 // which only an `asm` lesson can ever run. Splitting it out keeps that code from
 // being fetched and parsed on every editor load, the way CodeEditor's `Preview`
 // already is.
-const AsmPlaygroundRunnerPanel = lazy(() => import("../AsmPlaygroundRunnerPanel"));
+const AsmPlaygroundRunnerPanel = lazyWithRecovery(
+  () => import("../AsmPlaygroundRunnerPanel"),
+  "AsmPlaygroundRunnerPanel",
+);
 
 // One entry per non-webcontainer execution kind. The `Record` is what makes a new
 // playground kind a compile error here rather than a lesson that renders an editor

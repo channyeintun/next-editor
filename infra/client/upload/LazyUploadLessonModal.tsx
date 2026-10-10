@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { lazyWithRecovery } from "@app/routeRecovery";
 import type { UploadLessonModalProps } from "./UploadLessonModal";
 
 // The modal only opens once an author has recorded and shares (or returns from
@@ -6,7 +7,7 @@ import type { UploadLessonModalProps } from "./UploadLessonModal";
 // downloads. Nothing renders until its chunk lands; the modal then mounts and
 // takes focus exactly as it would have.
 const loadUploadLessonModal = () => import("./UploadLessonModal");
-const UploadLessonModalChunk = lazy(loadUploadLessonModal);
+const UploadLessonModalChunk = lazyWithRecovery(loadUploadLessonModal, "UploadLessonModal");
 
 /**
  * Starts fetching the modal's chunk ahead of the first share, so it is in hand

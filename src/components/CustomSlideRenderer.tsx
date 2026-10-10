@@ -1,15 +1,16 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { Slide } from "../types/slides";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
 import { createSandboxedSlideDocument } from "../utils/sandboxedSlideDocument";
 import { inlinableSlideImageHrefs, retainSlideImages } from "../utils/slideImageCache";
 import GoogleSvgSlide from "./GoogleSvgSlide";
+import { lazyWithRecovery } from "../routeRecovery";
 
 // Only markdown slides need marked; lesson decks are google-svg. Until the
 // chunk arrives the slide shows its black frame, as it does while any slide's
 // iframe loads, and a buffered transition keeps the previous slide on screen
 // until the new iframe's onLoad either way.
-const MarkdownSlide = lazy(() => import("./MarkdownSlide"));
+const MarkdownSlide = lazyWithRecovery(() => import("./MarkdownSlide"), "MarkdownSlide");
 
 interface CustomSlideRendererProps {
   slides: Slide[];
