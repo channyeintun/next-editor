@@ -48,6 +48,15 @@ If COEP/COOP headers are missing on a _static asset_ specifically (not an
 `wrangler.toml`'s `[assets]` block — without it, exact-match static files
 bypass the Worker (and its header middleware) entirely.
 
+Hashed `/assets/*` files go to browsers that accept Brotli as the build's
+quality-11 copies (`<file>.br`, written by `bun run build`; see
+`infra/worker/staticAssets.ts`). With a chunk name from the page's HTML,
+`curl -sI -H 'Accept-Encoding: gzip, deflate, br, zstd' https://<your-domain>/assets/<chunk>.js`
+should show `content-encoding: br` and
+`cache-control: public, max-age=31536000, immutable, no-transform`. `zstd` or
+`gzip` there means the edge compressed the file itself; a missing chunk answers
+`404` with `cache-control: no-store`.
+
 ## One-time setup (fresh Cloudflare account / disaster recovery)
 
 ### 1. Create the D1 database

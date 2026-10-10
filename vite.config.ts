@@ -8,6 +8,7 @@ import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
+import { precompressAssetsPlugin } from "./build/precompressAssetsPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -64,6 +65,8 @@ export default ({ mode }: { mode: string }) => {
         host: process.env.POSTHOG_HOST,
         sourcemaps: { deleteAfterUpload: true },
       }),
+      // Brotli-11 copies of dist/assets, served by the Worker (staticAssets.ts).
+      precompressAssetsPlugin(),
       tailwindcss(),
       // Writes dist/landing.html, the landing page the Worker serves at `/`
       // (infra/worker/ssr/landing.tsx rendered once per build).

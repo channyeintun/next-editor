@@ -30,22 +30,21 @@ const app = new Hono<{ Bindings: Env }>();
 
 // The app requires cross-origin isolation on every response (WebContainers
 // need SharedArrayBuffer). Static Assets/ASSETS.fetch don't add it, so it
-// has to happen here. Rebuilds
-// the Response rather than mutating c.res.headers in place, since responses
-// coming back from a Fetcher binding (ASSETS.fetch) may have immutable headers.
+// has to happen here. Copies the Response rather than mutating c.res.headers
+// in place, since responses coming back from a Fetcher binding (ASSETS.fetch)
+// may have immutable headers; the copy's are mutable. Copying from the
+// Response itself, not a ResponseInit built from its fields, also keeps
+// workerd's body encoding: a precompressed asset (encodeBody: "manual",
+// staticAssets.ts) would otherwise be compressed a second time.
 app.use("*", async (c, next) => {
   await next();
   // Reconstructing a 101 response drops its WebSocket handle. Cross-origin
   // isolation applies to documents and subresources, not the upgraded stream.
   if (c.req.header("Upgrade")?.toLowerCase() === "websocket") return;
-  const headers = new Headers(c.res.headers);
-  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-  headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  c.res = new Response(c.res.body, {
-    status: c.res.status,
-    statusText: c.res.statusText,
-    headers,
-  });
+  const response = new Response(c.res.body, c.res);
+  response.headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  c.res = response;
 });
 
 // One structured, queryable log line per API/media request (Workers Logs
@@ -138,7 +137,8 @@ app.get("/learn/:slug", (c) => serveLessonDetailDocument(c.env, c.req.raw, c.req
 // /learn/:slug, or an unimplemented API path), `not_found_handling =
 // "single-page-application"` makes ASSETS.fetch return index.html (200)
 // directly, with no redirect. Hashed /assets/* files are cached for a year,
-// and a missing one is a 404 rather than that shell (staticAssets.ts).
+// served as the build's Brotli copy when the browser takes br, and a missing
+// one is a 404 rather than that shell (staticAssets.ts).
 app.all("*", (c) => serveStaticFile(c.env, c.req.raw));
 
 export default app;
