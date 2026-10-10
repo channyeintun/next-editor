@@ -1,5 +1,9 @@
 import { expose } from "comlink";
-import { RECORDING_OPFS_DIRECTORY, recordingOpfsFilename } from "./recordingOpfsShared";
+import {
+  isNotFoundError,
+  RECORDING_OPFS_DIRECTORY,
+  recordingOpfsFilename,
+} from "./recordingOpfsShared";
 
 interface StorageManagerWithOpfs {
   getDirectory?: () => Promise<FileSystemDirectoryHandle>;
@@ -14,10 +18,6 @@ interface SyncAccessHandleLike {
 
 interface FileHandleWithSyncAccess {
   createSyncAccessHandle?: () => Promise<SyncAccessHandleLike>;
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "NotFoundError";
 }
 
 async function getRootDirectory(): Promise<FileSystemDirectoryHandle> {

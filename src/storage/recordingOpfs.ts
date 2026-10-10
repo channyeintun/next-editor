@@ -1,20 +1,13 @@
-import { transfer, wrap, type Remote } from "comlink";
+import { transfer } from "comlink";
+import { spawnComlinkWorkerClient, type ComlinkWorkerClient } from "./comlinkWorkerClient";
 import type { RecordingOpfsWorkerApi } from "./recordingOpfs.worker";
-import { RECORDING_OPFS_DIRECTORY, recordingOpfsFilename } from "./recordingOpfsShared";
+import {
+  isNotFoundError,
+  RECORDING_OPFS_DIRECTORY,
+  recordingOpfsFilename,
+} from "./recordingOpfsShared";
 
-interface RecordingOpfsClient {
-  api: Remote<RecordingOpfsWorkerApi>;
-  worker: Worker;
-  /**
-   * Rejects when the worker dies. Comlink settles a call only when a reply
-   * message arrives, so without something to race against, a worker that fails
-   * at runtime leaves every call pending forever, and with it the save or
-   * delete that is waiting on the call.
-   */
-  failed: Promise<never>;
-}
-
-let client: RecordingOpfsClient | null = null;
+let client: ComlinkWorkerClient<RecordingOpfsWorkerApi> | null = null;
 let unavailable = false;
 let availabilityPromise: Promise<boolean> | null = null;
 
@@ -33,49 +26,27 @@ function canUseOpfsWorker(): boolean {
   );
 }
 
-function getClient(): RecordingOpfsClient | null {
+/**
+ * The writer worker. Its calls reject when it dies, so a save or delete waiting
+ * on one can fall back instead of waiting forever.
+ */
+function getClient(): ComlinkWorkerClient<RecordingOpfsWorkerApi> | null {
   if (!canUseOpfsWorker()) return null;
-  if (client) return client;
 
-  try {
-    const worker = new Worker(new URL("./recordingOpfs.worker.ts", import.meta.url), {
-      name: "next-editor-recording-opfs",
-      type: "module",
-    });
-
-    // The constructor only throws for a synchronously rejected worker. One whose
-    // module fails at runtime — chunk fetched over a flaky network, or the worker
-    // killed under memory pressure mid-save — constructs fine and then fires
-    // `error`, which nothing used to listen for.
-    let failWorker: (error: Error) => void = () => {};
-    const failed = new Promise<never>((_, reject) => {
-      failWorker = reject;
-    });
-    failed.catch(() => {});
-    const onWorkerFailure = () => {
+  client ??= spawnComlinkWorkerClient<RecordingOpfsWorkerApi>({
+    spawn: () =>
+      new Worker(new URL("./recordingOpfs.worker.ts", import.meta.url), {
+        name: "next-editor-recording-opfs",
+        type: "module",
+      }),
+    failure: () => new Error("Origin-private recording storage worker failed"),
+    onFailure: () => {
       unavailable = true;
       availabilityPromise = null;
       client = null;
-      worker.terminate();
-      failWorker(new Error("Origin-private recording storage worker failed"));
-    };
-    worker.addEventListener("error", onWorkerFailure);
-    worker.addEventListener("messageerror", onWorkerFailure);
-
-    client = { api: wrap<RecordingOpfsWorkerApi>(worker), worker, failed };
-    return client;
-  } catch {
-    unavailable = true;
-    return null;
-  }
-}
-
-/**
- * Every worker call races the worker's own death, so callers get a rejection
- * they can fall back from instead of a promise that never settles.
- */
-function callWorker<T>(current: RecordingOpfsClient, call: Promise<T>): Promise<T> {
-  return Promise.race([call, current.failed]);
+    },
+  });
+  return client;
 }
 
 // Backstop for a worker that neither replies nor reports an error. Only the
@@ -92,7 +63,7 @@ export function isRecordingOpfsAvailable(): Promise<boolean> {
     const current = getClient();
     availabilityPromise = current
       ? Promise.race([
-          callWorker(current, current.api.isAvailable()),
+          current.call(current.api.isAvailable()),
           new Promise<boolean>((resolve) =>
             setTimeout(() => resolve(false), AVAILABILITY_TIMEOUT_MS),
           ),
@@ -113,11 +84,7 @@ export async function replaceRecordingOpfs(
   if (!current || !(await isRecordingOpfsAvailable())) {
     throw new Error("Origin-private recording storage is unavailable");
   }
-  return callWorker(current, current.api.replace(recordingId, transferableCopy(bytes)));
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "NotFoundError";
+  return current.call(current.api.replace(recordingId, transferableCopy(bytes)));
 }
 
 /**
@@ -148,7 +115,7 @@ export async function deleteRecordingOpfs(recordingId: string): Promise<void> {
   const current = getClient();
   if (current && (await isRecordingOpfsAvailable())) {
     // Through the worker, so the removal waits for any write it has queued for this id.
-    await callWorker(current, current.api.delete(recordingId));
+    await current.call(current.api.delete(recordingId));
     return;
   }
   // Without a writer there is no queued write to wait for, so remove the file here.
