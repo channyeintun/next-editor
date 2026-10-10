@@ -23,6 +23,30 @@ describe("GalleryShell", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  // The navbar's height must not change when the session resolves (its
+  // actions go from nothing, to AuthMenu's placeholder, to a signed-out row or
+  // an avatar), or the whole page under it shifts. jsdom has no layout, so
+  // this checks that the page and the skeleton reserve the same slot.
+  it("keeps the navbar's actions in one fixed-height slot, with or without actions", () => {
+    const page = render(
+      <MemoryRouter>
+        <GalleryShell actions={<button type="button">Account</button>} />
+      </MemoryRouter>,
+    );
+    const slot = screen.getByRole("button", { name: "Account" }).parentElement;
+    expect(slot).toHaveClass("min-h-[42px]");
+    page.unmount();
+
+    const { container } = render(
+      <MemoryRouter>
+        <LessonGallerySkeleton />
+      </MemoryRouter>,
+    );
+    const emptySlot = container.querySelector("nav")?.lastElementChild?.lastElementChild;
+    expect(emptySlot).toHaveClass("min-h-[42px]");
+    expect(emptySlot).toBeEmptyDOMElement();
+  });
+
   it("stands in for a loading page as one named status with its placeholders hidden", () => {
     const { container } = render(
       <MemoryRouter>
