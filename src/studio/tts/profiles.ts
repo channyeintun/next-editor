@@ -94,8 +94,9 @@ export interface AthanLabVoiceProfile {
 
 export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile | AthanLabVoiceProfile;
 
-const POCKET_BUNDLE_BASE =
-  "https://huggingface.co/spaces/KevinAHM/pocket-tts-web/resolve/d0c0c79b7712256a32d691c67f20b8ae2e020d00/onnx/english_2026-04";
+/** The exported pocket-tts ONNX bundle; its name is part of every Pocket request hash. */
+const POCKET_BUNDLE_NAME = "english_2026-04";
+const POCKET_BUNDLE_BASE = `https://huggingface.co/spaces/KevinAHM/pocket-tts-web/resolve/d0c0c79b7712256a32d691c67f20b8ae2e020d00/onnx/${POCKET_BUNDLE_NAME}`;
 
 /**
  * The onnxruntime-web release pocket-tts synthesizes on, kept equal to the
@@ -105,35 +106,36 @@ const POCKET_BUNDLE_BASE =
  */
 export const POCKET_ONNX_RUNTIME_VERSION = "1.30.0";
 
-export const VOICE_PROFILES: Record<string, VoiceProfile> = {
-  "pocket-alba-v1": {
-    id: "pocket-alba-v1",
-    providerId: "pocket-tts-web",
-    bundleBaseUrl: POCKET_BUNDLE_BASE,
-    bundleName: "english_2026-04",
-    onnxRuntimeVersion: POCKET_ONNX_RUNTIME_VERSION,
-    voice: "alba",
-    sampleRate: 24000,
-    mimeType: "audio/wav",
-  },
-  "modal-voxcpm2-burmese-v1": {
-    id: "modal-voxcpm2-burmese-v1",
-    providerId: "voxcpm2-modal",
-    model: "openbmb/VoxCPM2",
-    modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
-    packageVersion: "2.0.3",
-    voiceDesignId: "burmese-educator-v3",
-    referenceSampleRate: 24000,
-    cfgValue: 2,
-    inferenceTimesteps: 10,
-    sampleRate: 48000,
-    mimeType: "audio/wav",
-  },
+/** The built-in English voice; cloned voices are this profile with their own sample. */
+const POCKET_ALBA_PROFILE: PocketVoiceProfile = {
+  id: "pocket-alba-v1",
+  providerId: "pocket-tts-web",
+  bundleBaseUrl: POCKET_BUNDLE_BASE,
+  bundleName: POCKET_BUNDLE_NAME,
+  onnxRuntimeVersion: POCKET_ONNX_RUNTIME_VERSION,
+  voice: "alba",
+  sampleRate: 24000,
+  mimeType: "audio/wav",
 };
 
-export const MODAL_VOXCPM2_BURMESE_PROFILE = VOICE_PROFILES[
-  "modal-voxcpm2-burmese-v1"
-] as ModalVoxCpm2VoiceProfile;
+export const MODAL_VOXCPM2_BURMESE_PROFILE: ModalVoxCpm2VoiceProfile = {
+  id: "modal-voxcpm2-burmese-v1",
+  providerId: "voxcpm2-modal",
+  model: "openbmb/VoxCPM2",
+  modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
+  packageVersion: "2.0.3",
+  voiceDesignId: "burmese-educator-v3",
+  referenceSampleRate: 24000,
+  cfgValue: 2,
+  inferenceTimesteps: 10,
+  sampleRate: 48000,
+  mimeType: "audio/wav",
+};
+
+export const VOICE_PROFILES: Record<string, VoiceProfile> = {
+  [POCKET_ALBA_PROFILE.id]: POCKET_ALBA_PROFILE,
+  [MODAL_VOXCPM2_BURMESE_PROFILE.id]: MODAL_VOXCPM2_BURMESE_PROFILE,
+};
 
 /** Bind the server-pinned Burmese narrator style to one browser-local speaker. */
 export function modalVoxCpm2BurmeseProfileOf(voice: {
@@ -158,16 +160,11 @@ export function customVoiceProfileOf(voice: {
   sampleSha256: string;
 }): PocketVoiceProfile {
   return {
+    ...POCKET_ALBA_PROFILE,
     id: `pocket-custom-${voice.id}`,
-    providerId: "pocket-tts-web",
-    bundleBaseUrl: POCKET_BUNDLE_BASE,
-    bundleName: "english_2026-04",
-    onnxRuntimeVersion: POCKET_ONNX_RUNTIME_VERSION,
     voice: "custom",
     customVoiceId: voice.id,
     customVoiceSha256: voice.sampleSha256,
-    sampleRate: 24000,
-    mimeType: "audio/wav",
   };
 }
 

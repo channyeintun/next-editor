@@ -39,6 +39,21 @@ describe("pocket voice profiles", () => {
     );
   });
 
+  // A profile's fields are its dialogs' cache key: these change only on purpose.
+  it("keep the request hash of the built-in and cloned voices", async () => {
+    const request = { speechText: "Hello there.", lexiconVersion: 1, seed: 7 };
+
+    expect(
+      await ttsRequestHash({ ...request, profile: requireVoiceProfile("pocket-alba-v1") }),
+    ).toBe("24d821ef9a86b4b27f1598a67e0a9c65e5b5211a90a6d406475e5fd95c89f705");
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: customVoiceProfileOf({ id: "voice-1", sampleSha256: "abc" }),
+      }),
+    ).toBe("a726b11d89a27b1e1287bd09efa1e791b4e43bf392870d572bf5b705774809b9");
+  });
+
   // Text prep v2 changed the prompt for the same speech text, so the v1 key
   // (this exact request before the bump) must no longer hit the cache.
   it("keys cached dialogs on the text-prep version", async () => {
@@ -61,6 +76,17 @@ describe("voxcpm2 request hash", () => {
     expect(
       await ttsRequestHash({ profile, speechText: "မင်္ဂလာပါ။", lexiconVersion: 1, seed: 42 }),
     ).toBe("fd4e90cdaaeb185a9d38e6b99c4086d20452231db164412357060df7fad51cfa");
+  });
+
+  it("keeps the request hash of the registry profile", async () => {
+    expect(
+      await ttsRequestHash({
+        profile: requireVoiceProfile("modal-voxcpm2-burmese-v1"),
+        speechText: "မင်္ဂလာပါ။",
+        lexiconVersion: 1,
+        seed: 42,
+      }),
+    ).toBe("0e897f1c6cd990a2d466568a16bfefeedc226284894bc7292ffa4fa864ed3a41");
   });
 });
 
