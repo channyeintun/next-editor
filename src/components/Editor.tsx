@@ -56,21 +56,24 @@ import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
 import { loadCodeEditor } from "./codeEditorLoader";
+import { CODE_EDITOR_CHUNK, useCodeEditorComponent } from "./useCodeEditorComponent";
 import { lazyWithRecovery } from "../routeRecovery";
 
-const CodeEditor = lazyWithRecovery(loadCodeEditor, "CodeEditor");
+// Only after the import useCodeEditorComponent waits on has failed for good:
+// it imports again, and reports a second failure to the route's error boundary.
+const LazyCodeEditor = lazyWithRecovery(loadCodeEditor, CODE_EDITOR_CHUNK);
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
 const WhiteboardPanel = lazyWithRecovery(loadWhiteboardPanel, "WhiteboardPanel");
 
-// Rendered inside CodeEditor's Suspense boundary, so it commits only together
-// with CodeEditor: most tour targets (header, runner dock, agent tab) live
-// there, and with Monaco downloading alongside the route rather than ahead of
-// it, CodeEditor can mount well after this shell. Started from the shell, the
-// tour would pick its steps from the record bar alone, then mark itself seen.
+// Rendered beside CodeEditor, so it commits only together with CodeEditor:
+// most tour targets (header, runner dock, agent tab) live there, and with
+// Monaco downloading alongside the route rather than ahead of it, CodeEditor
+// can mount well after this shell. Started from the shell, the tour would pick
+// its steps from the record bar alone, then mark itself seen.
 // Its `authorInteracted` flag comes from the shell (EditorLayout), which mounts
-// before this Suspense resolves, so a key or pointer press during the chunk
-// load still keeps the tour from taking focus.
+// before CodeEditor does, so a key or pointer press during the chunk load
+// still keeps the tour from taking focus.
 function ProductTourOnce(options: ProductTourOnceOptions) {
   useProductTourOnce(options);
   return null;
@@ -171,6 +174,8 @@ function EditorLayout({
   const [searchParams] = useSearchParams();
   const readOnly = readOnlyProp ?? isReadOnlyView(searchParams);
   const authorInteracted = useAuthorInteractionFlag();
+  const { CodeEditor: LoadedCodeEditor, failed: codeEditorFailed } = useCodeEditorComponent();
+  const CodeEditor = LoadedCodeEditor ?? (codeEditorFailed ? LazyCodeEditor : null);
 
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
   const largeControlsOverride = useDemoEmbedLargeControls();
@@ -212,20 +217,25 @@ function EditorLayout({
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
         {/* CodeEditor statically pulls in Monaco, so its chunk is by far the
-            heaviest thing on the critical path. Without a boundary here the
-            suspension reaches the root and React can commit nothing at all —
-            the caller's loading spinner stays alone on screen until Monaco
-            lands, then the entire UI pops in at once. The skeleton lets the
-            shell, the player bar, and the "Loading recording…" overlay paint
-            immediately instead. */}
+            heaviest thing on the critical path. The skeleton stands in for it
+            while that chunk loads, so the shell, the player bar, and the
+            "Loading recording…" overlay paint immediately instead of the
+            whole UI popping in at once when Monaco lands. The boundary keeps
+            the same skeleton for anything inside CodeEditor that suspends. */}
         <Suspense fallback={<EditorShellSkeleton breadcrumb={breadcrumb} fill />}>
-          <CodeEditor isAuthoring={!readOnly} breadcrumb={breadcrumb} />
-          <ProductTourOnce
-            recordingLoading={recordingLoading}
-            loadError={loadError}
-            readOnly={readOnly}
-            authorInteracted={authorInteracted}
-          />
+          {CodeEditor ? (
+            <>
+              <CodeEditor isAuthoring={!readOnly} breadcrumb={breadcrumb} />
+              <ProductTourOnce
+                recordingLoading={recordingLoading}
+                loadError={loadError}
+                readOnly={readOnly}
+                authorInteracted={authorInteracted}
+              />
+            </>
+          ) : (
+            <EditorShellSkeleton breadcrumb={breadcrumb} fill />
+          )}
         </Suspense>
         <CursorComponent />
         <CameraOverlay />

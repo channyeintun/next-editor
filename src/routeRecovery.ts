@@ -144,6 +144,18 @@ export function lazyRoute(importer: () => Promise<{ default: ComponentType }>, r
 }
 
 /**
+ * An import with the routes' stale-chunk recovery, for a chunk a route loads
+ * after it renders. `chunkName` keys the one automatic reload, separately from
+ * the routes'; lazyWithRecovery with the same name shares it.
+ */
+export function importWithChunkRecovery<T>(
+  importer: () => Promise<T>,
+  chunkName: string,
+): Promise<T> {
+  return importWithRecovery(importer, `chunk:${chunkName}`);
+}
+
+/**
  * React.lazy with the routes' stale-chunk recovery, for chunks a route loads
  * after it renders (CodeEditor, panels, dialogs). Without it, a stale panel
  * chunk reaches the route's error boundary and waits for a manual reload.
@@ -153,5 +165,5 @@ export function lazyWithRecovery<P>(
   importer: () => Promise<{ default: ComponentType<P> }>,
   chunkName: string,
 ): LazyExoticComponent<ComponentType<P>> {
-  return lazy(() => importWithRecovery(importer, `chunk:${chunkName}`));
+  return lazy(() => importWithChunkRecovery(importer, chunkName));
 }
