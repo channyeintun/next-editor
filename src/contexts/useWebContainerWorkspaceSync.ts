@@ -3,11 +3,17 @@ import type { IFSWatcher, WebContainer } from "@webcontainer/api";
 import {
   createWorkspaceTree,
   getWorkspaceRuntimeFileContents,
+  readWorkspaceProject,
   shouldIgnoreRuntimeImportPath,
   syncWorkspaceProject,
 } from "../runtime/webcontainer/files";
 import { runSerializedWebContainerTask } from "../runtime/webcontainer/sharedContainer";
-import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
+import type { WorkspaceActions } from "../stores/workspaceActions";
+import {
+  areWorkspaceProjectsEqual,
+  type WorkspaceFile,
+  type WorkspaceProject,
+} from "../types/workspace";
 import { normalizeWorkspacePath } from "../types/workspacePaths";
 import { incrementPerformanceCounter, startPerformanceSpan } from "../utils/performanceMetrics";
 
@@ -19,6 +25,8 @@ import { incrementPerformanceCounter, startPerformanceSpan } from "../utils/perf
 // optimization — a spurious reverse sync no-ops on the project-equality check.
 const FORWARD_SYNC_ECHO_WINDOW_MS = 1000;
 export const WEBCONTAINER_FILE_SYNC_WINDOW_MS = 75;
+// Reverse-sync requests closer together than this coalesce into one container read.
+export const WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS = 150;
 
 const watchFilenameDecoder = new TextDecoder();
 
@@ -52,11 +60,22 @@ interface SerializedRuntimeTaskOptions<T> {
   task: () => Promise<T>;
 }
 
-interface WorkspaceSyncOptions {
-  // Fired when a container process (not our own forward sync) creates, changes,
-  // or removes a path the editor cares about, so the caller can schedule a
-  // reverse sync without waiting for a terminal-output heuristic.
-  onExternalFileChange?: (instance: WebContainer) => void;
+/**
+ * What the reverse sync (container to workspace) needs from its callers: the
+ * workspace store it reads and reconciles into, and the runtime session's
+ * generation guards. All of them are read at the asynchronous moment they are
+ * used, never during render.
+ */
+export interface WorkspaceSyncOptions extends Pick<
+  WorkspaceActions,
+  "getProject" | "getWorkspaceRevision" | "reconcileExternalProject"
+> {
+  /** False while the lesson does not run in the container; a due reverse sync then skips. */
+  shouldReverseSync: () => boolean;
+  getRuntimeGeneration: () => number;
+  isRuntimeGenerationActive: (generation: number) => boolean;
+  /** Reports a failed reverse sync for `generation` in the runner console. */
+  reportErrorFor: (generation: number) => (error: unknown) => void;
 }
 
 // The try blocks live in these module-level helpers rather than in the hook: the
@@ -129,8 +148,14 @@ function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[])
   );
 }
 
-export function useWebContainerWorkspaceSync({ onExternalFileChange }: WorkspaceSyncOptions = {}) {
-  const hasMountedProjectRef = useRef(false);
+/**
+ * Keeps the container's filesystem and the workspace in step, both ways. The
+ * forward sync mirrors store changes into the container; the reverse sync pulls
+ * what container processes wrote (a lockfile, generated code) back into the
+ * store, when the fs.watch below reports it or a caller asks (see
+ * requestReverseSync).
+ */
+export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
   const mountedInstanceRef = useRef<WebContainer | null>(null);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const queuedProjectRef = useRef<WorkspaceProject | null>(null);
@@ -141,12 +166,16 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   const syncGenerationRef = useRef(0);
   const fsWatcherRef = useRef<IFSWatcher | null>(null);
   const forwardSyncWritesRef = useRef<Map<string, number>>(new Map());
-  const onExternalFileChangeRef = useRef(onExternalFileChange);
+  const reverseSyncTimeoutRef = useRef<number | null>(null);
+  const reverseSyncRequestRef = useRef(0);
+  const reverseSyncEnabledRef = useRef(true);
+  const optionsRef = useRef(options);
 
   // Synced in a layout effect, not during render, so the React Compiler can
-  // compile this hook; the only reader is the async fs.watch listener.
+  // compile this hook; every reader is asynchronous (the fs.watch listener and
+  // the reverse-sync timer).
   useLayoutEffect(() => {
-    onExternalFileChangeRef.current = onExternalFileChange;
+    optionsRef.current = options;
   });
 
   const recordForwardSyncWrite = (path: string) => {
@@ -211,17 +240,18 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
         return;
       }
 
-      onExternalFileChangeRef.current?.(instance);
+      // A container process changed a file our own sync didn't write: pull the
+      // container filesystem back into the workspace.
+      requestReverseSync(instance, optionsRef.current.getRuntimeGeneration());
     });
   };
 
   const isFsWatchActive = () => fsWatcherRef.current !== null;
 
-  const isProjectMounted = () => hasMountedProjectRef.current;
+  const isProjectMounted = () => mountedInstanceRef.current !== null;
 
   /** A project is mounted, and on `instance`. */
-  const isMountedOn = (instance: WebContainer) =>
-    isProjectMounted() && mountedInstanceRef.current === instance;
+  const isMountedOn = (instance: WebContainer) => mountedInstanceRef.current === instance;
 
   const clearFileSyncTimer = () => {
     if (fileSyncTimerRef.current !== null) {
@@ -268,7 +298,6 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     mountedInstanceRef.current = instance;
     lastSyncedProjectRef.current = cloneProjectForSync(project);
     queuedProjectRef.current = null;
-    hasMountedProjectRef.current = true;
 
     // Started only after the mount finishes so the initial tree never echoes
     // back as external changes.
@@ -442,7 +471,101 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     }
   };
 
+  /**
+   * Schedules a reverse sync. Requests within the debounce window coalesce, and
+   * a newer request, a reset or turning reverse sync off makes an older one
+   * return unapplied.
+   */
+  const requestReverseSync = (instance: WebContainer, generation: number) => {
+    if (typeof window === "undefined" || !reverseSyncEnabledRef.current) {
+      return;
+    }
+
+    const requestId = ++reverseSyncRequestRef.current;
+
+    if (reverseSyncTimeoutRef.current !== null) {
+      window.clearTimeout(reverseSyncTimeoutRef.current);
+    }
+
+    reverseSyncTimeoutRef.current = window.setTimeout(() => {
+      reverseSyncTimeoutRef.current = null;
+      const {
+        getProject,
+        getWorkspaceRevision,
+        isRuntimeGenerationActive,
+        reconcileExternalProject,
+        reportErrorFor,
+        shouldReverseSync,
+      } = optionsRef.current;
+
+      void (async () => {
+        if (!shouldReverseSync()) {
+          return;
+        }
+
+        if (!isRuntimeGenerationActive(generation)) {
+          return;
+        }
+
+        await flushWorkspaceSync({ instance });
+        await runSerializedRuntimeTask({
+          instance,
+          task: async () => {
+            if (
+              requestId !== reverseSyncRequestRef.current ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
+
+            const workspaceRevision = getWorkspaceRevision();
+            const currentProject = getProject();
+            const nextProject = await readWorkspaceProject(instance, currentProject);
+
+            if (
+              requestId !== reverseSyncRequestRef.current ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
+
+            // An editor/store mutation landed while the recursive read was in
+            // flight. Let its forward sync finish, then read a converged tree.
+            if (workspaceRevision !== getWorkspaceRevision()) {
+              requestReverseSync(instance, generation);
+              return;
+            }
+
+            // The container holds nextProject, so the forward sync that the
+            // reconcile below triggers must not write it back.
+            recordContainerProject(instance, nextProject);
+            if (!areWorkspaceProjectsEqual(currentProject, nextProject)) {
+              reconcileExternalProject(nextProject);
+            }
+          },
+        });
+      })().catch(reportErrorFor(generation));
+    }, WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+  };
+
+  /** Clears a queued reverse sync; the new request ID makes one in flight return unapplied. */
+  const cancelPendingReverseSync = () => {
+    reverseSyncRequestRef.current += 1;
+    if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
+      window.clearTimeout(reverseSyncTimeoutRef.current);
+      reverseSyncTimeoutRef.current = null;
+    }
+  };
+
+  const setReverseSyncEnabled = (enabled: boolean) => {
+    reverseSyncEnabledRef.current = enabled;
+    if (!enabled) {
+      cancelPendingReverseSync();
+    }
+  };
+
   const resetWorkspaceSync = () => {
+    cancelPendingReverseSync();
     syncGenerationRef.current += 1;
     stopFsWatch();
     clearFileSyncTimer();
@@ -450,7 +573,6 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     queuedFilesRef.current.clear();
     for (const waiter of fileSyncWaitersRef.current) waiter.resolve();
     fileSyncWaitersRef.current = [];
-    hasMountedProjectRef.current = false;
     mountedInstanceRef.current = null;
     lastSyncedProjectRef.current = null;
     queuedProjectRef.current = null;
@@ -464,8 +586,9 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     isProjectMounted,
     queueFileSync,
     queueProjectSync,
-    recordContainerProject,
+    requestReverseSync,
     runSerializedRuntimeTask,
     resetWorkspaceSync,
+    setReverseSyncEnabled,
   };
 }

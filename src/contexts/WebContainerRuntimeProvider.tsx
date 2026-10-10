@@ -27,7 +27,6 @@ import {
   normalizeEnvironmentVariables,
   persistEnvironmentVariables,
 } from "../runtime/webcontainer/environmentVariables";
-import { readWorkspaceProject } from "../runtime/webcontainer/files";
 import {
   holdSharedWebContainer,
   isWebContainerRuntimeSupported,
@@ -91,9 +90,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   // Bumped by a reset a consumer asks for, so the auto-start effect looks again.
   const [autoStartRequest, setAutoStartRequest] = useState(0);
   const loadedProjectIdRef = useRef<string | null>(null);
-  const reverseSyncTimeoutRef = useRef<number | null>(null);
-  const reverseSyncRequestRef = useRef(0);
-  const reverseSyncEnabledRef = useRef(true);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   // What the runner last started on, so a replay re-saving the same workspace does not
@@ -117,78 +113,20 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     isProjectMounted,
     queueFileSync,
     queueProjectSync,
-    recordContainerProject,
-    runSerializedRuntimeTask,
+    requestReverseSync,
     resetWorkspaceSync,
+    setReverseSyncEnabled,
   } = useWebContainerWorkspaceSync({
-    // A container process changed a file our own sync didn't write — pull the
-    // container filesystem back into the workspace.
-    onExternalFileChange: (instance) => requestReverseSync(instance, getRuntimeGeneration()),
+    getProject,
+    getWorkspaceRevision,
+    reconcileExternalProject,
+    shouldReverseSync: () => lessonRunsInWebContainer(lessonTypeRef.current),
+    // The session hook below owns the runtime generation. The sync calls these only
+    // asynchronously, after that hook has run.
+    getRuntimeGeneration: () => getRuntimeGeneration(),
+    isRuntimeGenerationActive: (generation) => isRuntimeGenerationActive(generation),
+    reportErrorFor: (generation) => reportErrorFor(generation),
   });
-
-  const requestReverseSync = (instance: WebContainer, generation: number) => {
-    if (typeof window === "undefined" || !reverseSyncEnabledRef.current) {
-      return;
-    }
-
-    const requestId = ++reverseSyncRequestRef.current;
-
-    if (reverseSyncTimeoutRef.current !== null) {
-      window.clearTimeout(reverseSyncTimeoutRef.current);
-    }
-
-    reverseSyncTimeoutRef.current = window.setTimeout(() => {
-      reverseSyncTimeoutRef.current = null;
-
-      void (async () => {
-        if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
-          return;
-        }
-
-        if (!isRuntimeGenerationActive(generation)) {
-          return;
-        }
-
-        await flushWorkspaceSync({ instance });
-        await runSerializedRuntimeTask({
-          instance,
-          task: async () => {
-            if (
-              requestId !== reverseSyncRequestRef.current ||
-              !isRuntimeGenerationActive(generation)
-            ) {
-              return;
-            }
-
-            const workspaceRevision = getWorkspaceRevision();
-            const currentProject = getProject();
-            const nextProject = await readWorkspaceProject(instance, currentProject);
-
-            if (
-              requestId !== reverseSyncRequestRef.current ||
-              !isRuntimeGenerationActive(generation)
-            ) {
-              return;
-            }
-
-            // An editor/store mutation landed while the recursive read was in
-            // flight. Let its forward sync finish, then read a converged tree.
-            if (workspaceRevision !== getWorkspaceRevision()) {
-              requestReverseSync(instance, generation);
-              return;
-            }
-
-            // The container holds nextProject, so the forward sync that the
-            // reconcile below triggers must not write it back.
-            recordContainerProject(instance, nextProject);
-            if (!areWorkspaceProjectsEqual(currentProject, nextProject)) {
-              reconcileExternalProject(nextProject);
-            }
-          },
-        });
-      })().catch(reportErrorFor(generation));
-    }, 150);
-  };
 
   const {
     activeTerminalSessionId,
@@ -266,20 +204,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const isSupported = isWebContainerRuntimeSupported();
 
-  /** Clears a queued reverse sync; the new request ID makes one in flight return unapplied. */
-  const cancelPendingReverseSync = () => {
-    reverseSyncRequestRef.current += 1;
-    if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
-      window.clearTimeout(reverseSyncTimeoutRef.current);
-      reverseSyncTimeoutRef.current = null;
-    }
-  };
-
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
     lastRunRef.current = null;
     prepareRuntimePromiseRef.current = null;
-    cancelPendingReverseSync();
+    // Also cancels a pending reverse sync.
     resetWorkspaceSync();
     resetRuntimeSession();
   };
@@ -296,13 +225,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     resetRuntime();
     hasAutoStartedRef.current = false;
     setAutoStartRequest((request) => request + 1);
-  };
-
-  const setReverseSyncEnabled = (enabled: boolean) => {
-    reverseSyncEnabledRef.current = enabled;
-    if (!enabled) {
-      cancelPendingReverseSync();
-    }
   };
 
   const prepareRuntime = (): Promise<WebContainer | null> => {
