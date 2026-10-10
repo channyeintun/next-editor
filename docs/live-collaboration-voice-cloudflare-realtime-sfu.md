@@ -967,7 +967,8 @@ Treat a failure in the first three areas as release-blocking.
   session/track/mid ownership registry + gateway proxy),
   `infra/worker/collaboration/realtimeSfuGateway.ts` (pure §6.2 authorization matrix, request and
   response schemas, response sanitization), room-scoped routes in
-  `infra/worker/routes/collaboration.ts`, control-event fan-out to the voice room,
+  `infra/worker/routes/collaboration.ts` (since moved to
+  `infra/worker/routes/collaborationVoice.ts`), control-event fan-out to the voice room,
   `COLLABORATION_VOICE_ROOMS` binding + `collaboration-voice-v1` migration, env types, flag.
 - `feat(voice): implement SFU audio client lifecycle` — `src/voice/partyTracksAdapter.ts`
   (the only partytracks import), `client.ts`, `engine.ts`, `remoteAudioSink.ts`,

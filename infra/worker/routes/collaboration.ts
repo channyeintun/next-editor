@@ -15,24 +15,19 @@ import {
   createCollaborationInvitationInputSchema,
   updateCollaborationMemberInputSchema,
   type CollaborationCreateRoomInput,
-  type CollaborationRole,
 } from "../../../src/collaboration/protocol";
 import {
   createProvisioningCollaborationRoom,
   claimCollaborationInvitation,
   deleteCollaborationAssetRegistration,
-  deleteCollaborationRoomAssetRegistrations,
   createCollaborationInvitation,
   getCollaborationAsset,
   getCollaborationRoomAccess,
-  getCollaborationRoomById,
   getCollaborationInvitationByHash,
   listCollaborationInvitations,
   listCollaborationRoomMembers,
   listCollaborationRoomsForUser,
   removeCollaborationMember,
-  markCollaborationRoomPurged,
-  recordCollaborationAuditEvent,
   registerCollaborationAsset,
   revokeCollaborationInvitation,
   setCollaborationRoomStatus,
@@ -46,49 +41,29 @@ import {
 } from "../../db/collaborationQueries";
 import { requireUser } from "../auth/requireUser";
 import { getCurrentUser } from "../auth/session";
-import {
-  COLLABORATION_CLEANUP_DELAY,
-  COLLABORATION_ROOM_RETENTION_MS,
-  collaborationMaintenanceDestination,
-  collaborationMaintenanceJobSchema,
-  publishCollaborationMaintenanceJob,
-  verifyQStashSignature,
-} from "../collaboration/qstash";
-import {
-  collaborationAssetKey,
-  deleteCollaborationRoomAssets,
-  readCollaborationAsset,
-} from "../collaboration/assetStore";
+import { collaborationAssetKey, readCollaborationAsset } from "../collaboration/assetStore";
 import { exactArrayBuffer, randomToken } from "../collaboration/bytes";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import type { Env } from "../env";
-import { readBytesWithLimit, readJsonWithLimit } from "../httpBody";
+import { readJsonWithLimit } from "../httpBody";
 import {
-  deleteCollaborationRoomSqliteDocument,
   exportCollaborationRoomSqliteDocument,
   forwardCollaborationWebSocket,
   hasCollaborationRoomBinding,
   initializeCollaborationRoomSqliteDocument,
   initializeCollaborationRoomTeachingDocument,
-  notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
 import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
+import { collaborationMaintenanceRoute } from "./collaborationMaintenance";
 import {
-  forwardCollaborationVoiceSfuRequest,
-  forwardCollaborationVoiceWebSocket,
-  isVoiceChatEnabled,
-  notifyCollaborationVoiceRoomControl,
-  type CanonicalVoiceSession,
-} from "../collaboration/voiceDurableObject";
-import {
-  MAX_VOICE_SFU_REQUEST_BYTES,
-  VOICE_CAPABILITY_HEADER,
-  voiceCapabilitySchema,
-} from "../../../src/voice/protocol";
+  dispatchControlEvent,
+  scheduleAuditEvent,
+  scheduleClosedRoomCleanup,
+} from "./collaborationSideEffects";
+import { collaborationVoiceRoute } from "./collaborationVoice";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
-const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
 // Invitation, claim and member-role bodies are a few short fields.
 const MAX_SMALL_JSON_REQUEST_BYTES = 4 * 1024;
 
@@ -149,21 +124,6 @@ async function readBoundedJson<E extends { Bindings: Env }>(
   return { ok: true, body: body.value };
 }
 
-/** The body as strict UTF-8: the maintenance job's signature covers exact text. */
-async function readBoundedText<E extends { Bindings: Env }>(
-  c: Context<E>,
-  maxBytes: number,
-): Promise<{ ok: true; body: string } | { ok: false; status: 400 | 413 }> {
-  const body = await readBytesWithLimit(c.req.raw, maxBytes);
-  if (body.status === "too-large") return { ok: false, status: 413 };
-  if (body.status === "read-error") return { ok: false, status: 400 };
-  try {
-    return { ok: true, body: new TextDecoder("utf-8", { fatal: true }).decode(body.bytes) };
-  } catch {
-    return { ok: false, status: 400 };
-  }
-}
-
 async function parseCreateRoomBody<E extends { Bindings: Env }>(
   c: Context<E>,
 ): Promise<ParsedCreateRoomBody> {
@@ -180,187 +140,13 @@ async function parseCreateRoomBody<E extends { Bindings: Env }>(
     : { ok: false, status: 400, error: "invalid collaboration snapshot" };
 }
 
-async function dispatchControlEvent<E extends { Bindings: Env }>(
-  c: Context<E>,
-  event: {
-    kind: "membership-changed" | "room-closed";
-    roomId: string;
-    roleVersion: number;
-    targetUserId: string | null;
-    targetRole?: CollaborationRole | null;
-  },
-): Promise<void> {
-  const control = {
-    kind: event.kind,
-    roomId: event.roomId,
-    roleVersion: event.roleVersion,
-    targetUserId: event.targetUserId,
-    occurredAt: Date.now(),
-  } as const;
-  const command = {
-    event: control,
-    ...(event.targetUserId ? { targetRole: event.targetRole ?? null } : {}),
-  };
-  const delivered = await notifyCollaborationRoomControl(c.env, event.roomId, command);
-  if (!delivered) throw new Error("collaboration room coordinator unavailable");
-  // Removal and room closure are access-revocation events: deliver them
-  // before returning so an already-negotiated media path cannot outlive D1
-  // membership merely because no further SFU API call is needed. Role-only
-  // changes remain best-effort because every gateway call revalidates D1 and
-  // voice permission is role-independent.
-  if (c.env.COLLABORATION_VOICE_ROOMS) {
-    const revokesVoiceAccess = event.kind === "room-closed" || command.targetRole === null;
-    if (revokesVoiceAccess) {
-      const voiceDelivered = await notifyCollaborationVoiceRoomControl(
-        c.env,
-        event.roomId,
-        command,
-      );
-      if (!voiceDelivered) throw new Error("collaboration voice coordinator unavailable");
-    } else {
-      c.executionCtx.waitUntil(
-        notifyCollaborationVoiceRoomControl(c.env, event.roomId, command).then(
-          () => undefined,
-          (error: unknown) => {
-            console.error("collaboration_voice_control_failed", {
-              roomId: event.roomId,
-              kind: event.kind,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          },
-        ),
-      );
-    }
-  }
-}
-
-function scheduleAuditEvent<E extends { Bindings: Env }>(
-  c: Context<E>,
-  input: Parameters<typeof recordCollaborationAuditEvent>[1],
-): void {
-  c.executionCtx.waitUntil(
-    recordCollaborationAuditEvent(c.env.DB, input).catch((error) => {
-      console.error("Failed to record collaboration audit event", {
-        roomId: input.roomId,
-        action: input.action,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }),
-  );
-}
-
-function scheduleClosedRoomCleanup<E extends { Bindings: Env }>(
-  c: Context<E>,
-  roomId: string,
-  closedAt: number,
-): void {
-  c.executionCtx.waitUntil(
-    (async () => {
-      const result = await publishCollaborationMaintenanceJob(
-        c.env,
-        { kind: "cleanup-room", roomId, closedAt },
-        { delay: COLLABORATION_CLEANUP_DELAY },
-      );
-      if (!result.queued) {
-        console.error("collaboration_qstash_disabled", {
-          kind: "cleanup-room",
-          roomId,
-          missing: result.missing,
-          consequence: "cleanup-not-scheduled",
-        });
-        return;
-      }
-      console.log("collaboration_qstash_queued", {
-        kind: "cleanup-room",
-        roomId,
-        messageId: result.messageId,
-        deduplicated: result.deduplicated,
-        delay: COLLABORATION_CLEANUP_DELAY,
-      });
-    })().catch((error) => {
-      console.error("collaboration_qstash_publish_failed", {
-        kind: "cleanup-room",
-        roomId,
-        consequence: "cleanup-not-scheduled",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }),
-  );
-}
-
 // Mounted at /api/collaboration in worker/index.ts. D1 owns room/access
 // metadata; each room Durable Object owns its live socket and SQLite document.
+// The QStash maintenance receiver and the voice gateway are their own modules,
+// mounted here so they share the /api/collaboration URL space.
 export const collaborationRoute = new Hono<{ Bindings: Env }>();
 
-collaborationRoute.post("/jobs/maintenance", async (c) => {
-  if (!c.env.QSTASH_CURRENT_SIGNING_KEY || !c.env.QSTASH_NEXT_SIGNING_KEY) {
-    return c.json({ error: "maintenance receiver unavailable" }, 503);
-  }
-  const raw = await readBoundedText(c, MAX_MAINTENANCE_REQUEST_BYTES);
-  if (!raw.ok) return c.json({ error: "invalid maintenance job" }, raw.status);
-  const signature = c.req.header("upstash-signature");
-  const upstashRegion = c.req.header("upstash-region");
-  if (
-    !signature ||
-    !(await verifyQStashSignature({
-      signature,
-      body: raw.body,
-      url: collaborationMaintenanceDestination(c.env),
-      currentSigningKey: c.env.QSTASH_CURRENT_SIGNING_KEY,
-      nextSigningKey: c.env.QSTASH_NEXT_SIGNING_KEY,
-      ...(upstashRegion ? { upstashRegion } : {}),
-    }))
-  ) {
-    return c.json({ error: "invalid maintenance signature" }, 401);
-  }
-  let json: unknown;
-  try {
-    json = JSON.parse(raw.body) as unknown;
-  } catch {
-    json = null;
-  }
-  const job = collaborationMaintenanceJobSchema.safeParse(json);
-  if (!job.success) {
-    return new Response(JSON.stringify({ error: "invalid maintenance job" }), {
-      status: 489,
-      headers: {
-        "Content-Type": "application/json",
-        "Upstash-NonRetryable-Error": "true",
-      },
-    });
-  }
-
-  const room = await getCollaborationRoomById(c.env.DB, job.data.roomId);
-  if (!room || room.purged_at !== null) return c.body(null, 204);
-  if (
-    room.status !== "closed" ||
-    room.closed_at !== job.data.closedAt ||
-    Date.now() < job.data.closedAt + COLLABORATION_ROOM_RETENTION_MS
-  ) {
-    return c.body(null, 204);
-  }
-  const deleted = await deleteCollaborationRoomSqliteDocument(c.env, room.id);
-  if (!deleted) throw new Error("collaboration room SQLite binding unavailable during purge");
-  const deletedAssets = await deleteCollaborationRoomAssets(c.env.BUCKET, room.id);
-  const deletedAssetRecords = await deleteCollaborationRoomAssetRegistrations(c.env.DB, room.id);
-  const marked = await markCollaborationRoomPurged(c.env.DB, room.id, job.data.closedAt);
-  if (marked) {
-    scheduleAuditEvent(c, {
-      roomId: room.id,
-      actorUserId: null,
-      action: "room.purged",
-    });
-  }
-  console.log("collaboration_maintenance", {
-    kind: job.data.kind,
-    roomId: room.id,
-    documentPurged: deleted,
-    deletedAssets,
-    deletedAssetRecords,
-    marked,
-  });
-  return c.json({ purged: marked, documentPurged: deleted, deletedAssets, deletedAssetRecords });
-});
+collaborationRoute.route("/", collaborationMaintenanceRoute);
 
 collaborationRoute.get("/rooms", requireUser, async (c) => {
   const user = c.get("user");
@@ -870,131 +656,4 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   });
 });
 
-// Origins allowed to open voice transports. Browsers always send Origin on
-// WebSocket upgrades and on non-GET fetches; a mismatch is rejected. Local
-// development uses the Vite proxy, so loopback origins are also accepted.
-function isAllowedVoiceOrigin<E extends { Bindings: Env }>(c: Context<E>): boolean {
-  const origin = c.req.header("Origin");
-  if (!origin) return c.req.method === "GET";
-  try {
-    const parsed = new URL(origin);
-    const requestUrl = new URL(c.req.url);
-    const requestIsLoopback =
-      requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
-    if (requestIsLoopback && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")) {
-      return true;
-    }
-    if (origin === new URL(c.env.PUBLIC_URL).origin) return true;
-    return origin === requestUrl.origin;
-  } catch {
-    return false;
-  }
-}
-
-// Loads the caller's canonical voice identity for an active room, or maps the
-// failure to a sanitized response. Voice must fail closed while the document
-// collaboration endpoints continue normally.
-async function resolveVoiceAccess<E extends { Bindings: Env }>(
-  c: Context<E>,
-  collaborationSessionId: string,
-): Promise<{ ok: true; session: CanonicalVoiceSession } | { ok: false; response: Response }> {
-  if (!isVoiceChatEnabled(c.env)) {
-    return { ok: false, response: c.json({ error: "voice chat unavailable" }, 503) };
-  }
-  if (!isAllowedVoiceOrigin(c)) {
-    return { ok: false, response: c.json({ error: "unauthorized" }, 403) };
-  }
-  const user = await getCurrentUser(c);
-  if (!user) return { ok: false, response: c.json({ error: "not signed in" }, 401) };
-  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
-  const sessionId = collaborationIdSchema.safeParse(collaborationSessionId);
-  if (!roomId.success || !sessionId.success) {
-    return { ok: false, response: c.json({ error: "invalid voice session" }, 400) };
-  }
-  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
-  if (!access) return { ok: false, response: c.json({ error: "not found" }, 404) };
-  if (access.status !== "active") {
-    return { ok: false, response: c.json({ error: "room is not active" }, 409) };
-  }
-  return {
-    ok: true,
-    session: {
-      roomId: access.id,
-      userId: user.id,
-      displayName: user.name?.trim() || user.username,
-      role: access.member_role,
-      roleVersion: access.role_version,
-      collaborationSessionId: sessionId.data,
-      maxMembers: access.max_members,
-    },
-  };
-}
-
-// Lets the client decide whether to render voice controls at all. Always a
-// sanitized 200 for authenticated members; the real gates re-run on every
-// voice transport request.
-collaborationRoute.get("/rooms/:roomId/voice/availability", requireUser, async (c) => {
-  const user = c.get("user");
-  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
-  if (!roomId.success) return c.json({ error: "invalid room id" }, 400);
-  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
-  if (!access) return c.json({ error: "not found" }, 404);
-  const enabled = isVoiceChatEnabled(c.env) && access.status === "active";
-  return c.json({ enabled }, 200, { "Cache-Control": "private, no-store" });
-});
-
-collaborationRoute.get("/rooms/:roomId/voice/websocket", async (c) => {
-  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
-    return c.json({ error: "expected WebSocket upgrade" }, 426);
-  }
-  const resolved = await resolveVoiceAccess(c, c.req.query("collaborationSessionId") ?? "");
-  if (!resolved.ok) return resolved.response;
-  return forwardCollaborationVoiceWebSocket(c.env, c.req.raw, resolved.session);
-});
-
-// Secured SFU gateway used by the partytracks client. The Worker
-// re-authenticates the application session and D1 membership; the voice
-// Durable Object then verifies the connection capability and the full
-// session/track/mid ownership matrix before proxying upstream.
-collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
-  if (c.req.method !== "POST" && c.req.method !== "PUT") {
-    return c.json({ error: "unsupported operation" }, 403, { "Cache-Control": "no-store" });
-  }
-  const contentType = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") {
-    return c.json({ error: "unsupported content type" }, 415, {
-      "Cache-Control": "no-store",
-    });
-  }
-  // A declared Content-Length is REQUIRED, not defaulted to 0: a default let a
-  // chunked request (no Content-Length) straight past this check. The header is
-  // only the cheap first gate; the voice DO still bounds the body as it reads it
-  // (readBodyWithLimit), so a lying header cannot exhaust its memory.
-  const contentLengthHeader = c.req.header("content-length");
-  const contentLength = Number(contentLengthHeader);
-  if (
-    contentLengthHeader === undefined ||
-    !Number.isFinite(contentLength) ||
-    contentLength < 0 ||
-    contentLength > MAX_VOICE_SFU_REQUEST_BYTES
-  ) {
-    return c.json({ error: "payload too large" }, 413, { "Cache-Control": "no-store" });
-  }
-  const capability = voiceCapabilitySchema.safeParse(c.req.header(VOICE_CAPABILITY_HEADER));
-  const voiceConnectionId = collaborationIdSchema.safeParse(c.req.query("voiceConnectionId"));
-  const collaborationSessionId = c.req.query("collaborationSessionId") ?? "";
-  if (!capability.success || !voiceConnectionId.success) {
-    return c.json({ error: "unauthorized" }, 403, { "Cache-Control": "no-store" });
-  }
-  const resolved = await resolveVoiceAccess(c, collaborationSessionId);
-  if (!resolved.ok) return resolved.response;
-  const path = new URL(c.req.url).pathname;
-  const marker = "/voice/sfu";
-  const subpath = path.slice(path.indexOf(marker) + marker.length);
-  return forwardCollaborationVoiceSfuRequest(c.env, c.req.raw, {
-    session: resolved.session,
-    subpath,
-    capability: capability.data,
-    voiceConnectionId: voiceConnectionId.data,
-  });
-});
+collaborationRoute.route("/", collaborationVoiceRoute);

@@ -112,7 +112,6 @@ describe("signed-out callers", () => {
     ["DELETE", `/rooms/${ROOM_ID}/members/${OWNER_ID}`],
     ["POST", `/rooms/${ROOM_ID}/close`],
     ["POST", "/invitations/claim"],
-    ["GET", `/rooms/${ROOM_ID}/voice/availability`],
   ])("%s %s answers 401 before reading the body or the room", async (method, path) => {
     vi.mocked(getCurrentUser).mockResolvedValue(null);
     const hasBody = method !== "GET" && method !== "DELETE";
@@ -257,29 +256,5 @@ describe("small JSON bodies", () => {
 
     // Parsed and rejected by the token schema, as before.
     expect(response.status).toBe(400);
-  });
-});
-
-describe("voice SFU gateway", () => {
-  it("fails a GET closed as an unsupported operation", async () => {
-    const response = await collaborationRoute.request(
-      `https://nexteditor.dev/rooms/${ROOM_ID}/voice/sfu/generate-ice-servers`,
-      { method: "GET" },
-      { DB: {} } as Env,
-    );
-
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "unsupported operation" });
-  });
-
-  it("refuses a request that is not JSON", async () => {
-    const response = await collaborationRoute.request(
-      `https://nexteditor.dev/rooms/${ROOM_ID}/voice/sfu/sessions/new`,
-      { method: "POST" },
-      { DB: {} } as Env,
-    );
-
-    expect(response.status).toBe(415);
-    expect(await response.json()).toEqual({ error: "unsupported content type" });
   });
 });
