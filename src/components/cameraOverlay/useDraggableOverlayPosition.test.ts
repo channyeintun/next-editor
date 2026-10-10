@@ -76,25 +76,33 @@ describe("useDraggableOverlayPosition", () => {
     expect(result.current.position).toEqual(DEFAULT_POSITION);
   });
 
-  it("follows the pointer that holds it, inside the window, storing each step", () => {
+  it("follows the pointer that holds it, inside the window, storing where the drag ends", () => {
     window.localStorage.setItem(POSITION_KEY, JSON.stringify({ x: 100, y: 100 }));
     const { result } = renderHook(() => useDraggableOverlayPosition());
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
 
     const grab = pointer(150, 130);
     act(() => result.current.handlePointerDown(grab));
     expect(grab.currentTarget.setPointerCapture).toHaveBeenCalledWith(1);
 
+    // The overlay moves with every step, but nothing is stored mid-drag.
     act(() => result.current.handlePointerMove(pointer(250, 180)));
     expect(result.current.position).toEqual({ x: 200, y: 150 });
-    expect(stored()).toEqual({ x: 200, y: 150 });
-
     act(() => result.current.handlePointerMove(pointer(-500, 180)));
     expect(result.current.position).toEqual({ x: 24, y: 150 });
-    expect(stored()).toEqual({ x: 24, y: 150 });
+    expect(setItem).not.toHaveBeenCalled();
+    expect(stored()).toEqual({ x: 100, y: 100 });
 
     // A pointer that is not holding the overlay leaves it where it is.
     act(() => result.current.handlePointerMove(pointer(400, 300, false)));
     expect(result.current.position).toEqual({ x: 24, y: 150 });
+
+    // Released: the last position is stored, once, though pointerup and the lost capture
+    // both end the drag.
+    act(() => result.current.handleDragEnd());
+    act(() => result.current.handleDragEnd());
+    expect(stored()).toEqual({ x: 24, y: 150 });
+    expect(setItem).toHaveBeenCalledTimes(1);
   });
 
   it("moves to the next corner clockwise without a drag, storing each step", () => {
@@ -118,5 +126,16 @@ describe("useDraggableOverlayPosition", () => {
     const inside = { x: 800 - 176 - 24, y: 600 - 176 - 88 };
     expect(result.current.position).toEqual(inside);
     expect(stored()).toEqual(inside);
+  });
+
+  it("stays put, and stores nothing, when a resize leaves it inside the window", () => {
+    window.localStorage.setItem(POSITION_KEY, JSON.stringify({ x: 100, y: 100 }));
+    const { result } = renderHook(() => useDraggableOverlayPosition());
+    const before = result.current.position;
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    resizeWindowTo(900, 700);
+    expect(result.current.position).toBe(before);
+    expect(setItem).not.toHaveBeenCalled();
   });
 });

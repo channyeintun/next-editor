@@ -29,15 +29,22 @@ function readStoredPosition(): OverlayPosition {
  * Where the overlay sits, dragged by the pointer (or stepped through the corners by
  * `moveToNextCorner`) and kept inside the viewport as the window resizes. It starts from the
  * stored position, clamped to the window it mounts in (or the default spot above the player
- * bar's right end), and every position it takes is stored, the first one included.
+ * bar's right end). The position is stored when a drag ends, and after each corner step or
+ * window resize, the first position included.
  */
 export function useDraggableOverlayPosition() {
   const dragOffsetRef = useRef<OverlayPosition>({ x: 0, y: 0 });
   const [position, setPosition] = useState(readStoredPosition);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
+    // The same position when the clamp changes nothing, so a resize that leaves the overlay
+    // where it is neither re-renders nor stores it again.
     const handleResize = () => {
-      setPosition((current) => clampPosition(current));
+      setPosition((current) => {
+        const next = clampPosition(current);
+        return next.x === current.x && next.y === current.y ? current : next;
+      });
     };
 
     window.addEventListener("resize", handleResize);
@@ -46,12 +53,16 @@ export function useDraggableOverlayPosition() {
     };
   }, []);
 
+  // A drag stores where it ends, not every pointermove on the way (each one a synchronous
+  // localStorage write and a storage event in every other tab).
   useEffect(() => {
+    if (isDragging) return;
     writeStoredPreference(POSITION_KEY, JSON.stringify(position));
-  }, [position]);
+  }, [position, isDragging]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
     dragOffsetRef.current = {
       x: event.clientX - position.x,
       y: event.clientY - position.y,
@@ -69,10 +80,15 @@ export function useDraggableOverlayPosition() {
     );
   };
 
+  // The drag ends when the pointer is released or loses its capture (a cancelled touch).
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
   // The single-pointer and keyboard alternative to dragging: step to the next corner clockwise.
   const moveToNextCorner = () => {
     setPosition((current) => nextCornerPosition(current));
   };
 
-  return { position, handlePointerDown, handlePointerMove, moveToNextCorner };
+  return { position, handlePointerDown, handlePointerMove, handleDragEnd, moveToNextCorner };
 }

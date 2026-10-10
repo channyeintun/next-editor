@@ -77,7 +77,7 @@ const CameraOverlay: React.FC = () => {
   // The hooks' effects run in this order, as when they were written out here: the preview's
   // stream is attached or detached before the recorded video takes the element over.
   const previewError = useCameraPreviewStream(videoRef, previewMode, isMinimized);
-  const { position, handlePointerDown, handlePointerMove, moveToNextCorner } =
+  const { position, handlePointerDown, handlePointerMove, handleDragEnd, moveToNextCorner } =
     useDraggableOverlayPosition();
   useTimelineSyncedVideo(videoRef, videoUrl, {
     cameraCuts,
@@ -139,6 +139,8 @@ const CameraOverlay: React.FC = () => {
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={handleDragEnd}
+      onLostPointerCapture={handleDragEnd}
     >
       <video
         ref={videoRef}
