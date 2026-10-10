@@ -29,6 +29,21 @@ afterEach(() => {
 });
 
 describe("useSlidesController", () => {
+  it("applies a slides update function to the deck as it is when it runs", () => {
+    const { store, controller } = renderController();
+    // The deck changes after the update was prepared, as during an import's fetch.
+    const setSlides = controller().setSlides;
+    act(() => store.trigger.setSlides({ slides: [slide("one"), slide("two"), slide("three")] }));
+
+    act(() => setSlides((prev) => prev.filter((entry) => entry.id !== "one")));
+    expect(store.getSnapshot().context.slides.map((entry) => entry.id)).toEqual(["two", "three"]);
+
+    // A plain deck still replaces it.
+    const replacement = [slide("four")];
+    act(() => controller().setSlides(replacement));
+    expect(store.getSnapshot().context.slides).toBe(replacement);
+  });
+
   it("opens on the first slide, and leaves an already showing slide alone", () => {
     const { store, written, controller } = renderController();
     act(() => controller().startPresentation());

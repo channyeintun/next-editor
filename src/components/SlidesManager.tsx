@@ -19,6 +19,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { Slide, SlideContentType } from "../types/slides";
+import type { SlidesUpdate } from "../hooks/useSlidesController";
 import {
   SLIDE_BACKGROUND_PRESETS,
   getSlideBackgroundImage,
@@ -42,7 +43,7 @@ function isHttpsUrl(value: string | undefined): value is string {
 
 interface SlidesManagerProps {
   slides: Slide[];
-  onSlidesChange: (slides: Slide[]) => void;
+  onSlidesChange: (update: SlidesUpdate) => void;
   onStartPresentation?: () => void;
   onClose?: () => void;
 }
@@ -219,7 +220,7 @@ function GoogleSlidesImport({
   onRemove,
 }: {
   slides: Slide[];
-  onSlidesChange: (slides: Slide[]) => void;
+  onSlidesChange: (update: SlidesUpdate) => void;
   /** Takes the deck left once the imported slides are removed, and offers an undo. */
   onRemove: (remaining: Slide[]) => void;
 }) {
@@ -247,7 +248,8 @@ function GoogleSlidesImport({
     // throw, so the line after it runs on every path, as a finally would.
     try {
       const deck = await fetchPublishedDeck(deckUrl);
-      onSlidesChange(applyDeckToSlides(slides, deck));
+      // Onto the deck as it is now: slides added, moved or edited during the fetch stay.
+      onSlidesChange((current) => applyDeckToSlides(current, deck));
       setUrl("");
     } catch (err) {
       setError(

@@ -2,19 +2,36 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Slide } from "../types/slides";
+import type { SlidesUpdate } from "../hooks/useSlidesController";
+import type { ParsedDeck } from "../googleSlides/types";
+import { fetchPublishedDeck } from "../googleSlides/fetchPublishedDeck";
 import SlidesManager from "./SlidesManager";
+
+// The real fetch (its link checks included), which a test can hold open to change the deck
+// while an import waits.
+vi.mock("../googleSlides/fetchPublishedDeck", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../googleSlides/fetchPublishedDeck")>();
+  return {
+    ...actual,
+    fetchPublishedDeck: vi.fn<typeof actual.fetchPublishedDeck>(actual.fetchPublishedDeck),
+  };
+});
 
 function slide(id: string, order: number): Slide {
   return { id, content: `# ${id}`, contentType: "markdown", order };
 }
+
+/** The deck an update leaves, applied to `current` as the slides store applies it. */
+const applyUpdate = (update: SlidesUpdate, current: Slide[]) =>
+  typeof update === "function" ? update(current) : update;
 
 function renderManager(slides: Slide[]) {
   const emitted: Slide[][] = [];
   render(
     <SlidesManager
       slides={slides}
-      onSlidesChange={(next) => {
-        emitted.push(next);
+      onSlidesChange={(update) => {
+        emitted.push(applyUpdate(update, slides));
       }}
       onStartPresentation={() => {}}
       onClose={() => {}}
@@ -26,14 +43,17 @@ function renderManager(slides: Slide[]) {
 /** Like renderManager, but feeds each emitted deck back in, as the slides store does. */
 function renderLiveManager(initial: Slide[]) {
   const emitted: Slide[][] = [];
+  // The store's deck: an update applies to the latest one, not to a render's copy.
+  let deck = initial;
   function LiveManager() {
     const [slides, setSlides] = useState(initial);
     return (
       <SlidesManager
         slides={slides}
-        onSlidesChange={(next) => {
-          emitted.push(next);
-          setSlides(next);
+        onSlidesChange={(update) => {
+          deck = applyUpdate(update, deck);
+          emitted.push(deck);
+          setSlides(deck);
         }}
         onStartPresentation={() => {}}
         onClose={() => {}}
@@ -70,8 +90,8 @@ describe("SlidesManager", () => {
     render(
       <SlidesManager
         slides={given}
-        onSlidesChange={(slides) => {
-          emitted = slides;
+        onSlidesChange={(update) => {
+          emitted = applyUpdate(update, given);
         }}
         onStartPresentation={() => {}}
         onClose={() => {}}
@@ -259,6 +279,44 @@ describe("SlidesManager", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(link).not.toHaveAttribute("aria-invalid");
     expect(link).toHaveAccessibleDescription(LINK_HINT);
+  });
+
+  it("imports a deck onto the slides as they are when it arrives, keeping edits made meanwhile", async () => {
+    let deliver: (deck: ParsedDeck) => void = () => {};
+    vi.mocked(fetchPublishedDeck).mockReturnValueOnce(
+      new Promise((resolve) => {
+        deliver = resolve;
+      }),
+    );
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const emitted = renderLiveManager([slide("a", 0)]);
+    const deckUrl = "https://docs.google.com/presentation/d/e/deck/pub";
+
+    fireEvent.change(screen.getByLabelText("Import from Google Slides"), {
+      target: { value: deckUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(fetchPublishedDeck).toHaveBeenCalledWith(deckUrl);
+
+    // A slide is created while the deck is still downloading.
+    fireEvent.click(screen.getByText("Create Slide"));
+    const created = emitted.at(-1)!.at(-1)!;
+    expect(created.id).toBe("1700000000000");
+
+    await act(async () => {
+      deliver({
+        sourceUrl: deckUrl,
+        width: 16,
+        height: 9,
+        slides: [{ pageId: "p1", title: "Intro", svg: "<svg></svg>", steps: [] }],
+      });
+    });
+
+    expect(emitted.at(-1)!.map((entry) => [entry.id, entry.order])).toEqual([
+      ["a", 0],
+      ["1700000000000", 1],
+      ["p1", 2],
+    ]);
   });
 
   it("keeps a failed upload's alert until the next background choice", async () => {

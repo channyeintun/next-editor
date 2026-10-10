@@ -8,6 +8,13 @@ import {
   type SlidesStoreInstance,
 } from "../stores/slidesStore";
 
+/**
+ * A new deck, or a function of the deck as it is when the change is applied: an async
+ * change (an import that waits on the network) uses the function so it builds on edits
+ * made while it waited, not on the deck it started from.
+ */
+export type SlidesUpdate = Slide[] | ((prev: Slide[]) => Slide[]);
+
 interface UseSlidesControllerConfig {
   store: SlidesStoreInstance;
   onSlideEvent?: (event: SlideEvent) => boolean | void;
@@ -24,8 +31,10 @@ export const useSlidesController = ({
   const slides = useSelector(store, (snapshot) => selectSlides(snapshot.context));
   const previewState = useSelector(store, (snapshot) => selectPreviewState(snapshot.context));
 
-  const setSlides = (nextSlides: Slide[]) => {
-    store.trigger.setSlides({ slides: nextSlides });
+  const setSlides = (update: SlidesUpdate) => {
+    const next =
+      typeof update === "function" ? update(selectSlides(store.getSnapshot().context)) : update;
+    store.trigger.setSlides({ slides: next });
   };
 
   const setPreviewState = (
