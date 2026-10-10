@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createRuntimePanelStore } from "../stores/runtimePanelStore";
-import { ASM_CONSOLE_TAG_PATTERN } from "./asmPlayground/console";
+import { ASM_CONSOLE_TAG_PATTERN, asmRunStartedConsoleLines } from "./asmPlayground/console";
 import {
   GO_CONSOLE_TAG_PATTERN,
   goFormatStartedConsoleLines,
@@ -31,19 +31,19 @@ import {
 } from "./zigPlayground/console";
 import {
   MAX_RUNNER_CONSOLE_LINES,
-  OPERATION_START_PREFIXES,
   appendRunnerConsoleLines,
+  beginRunnerOperation,
   clearRunnerConsole,
   resetRunnerConsoleForProject,
 } from "./playgroundConsoleStore";
-import { isPlaygroundRuntimeKind, studioRuntimeSchema } from "../studio/plan";
-import { runErrorPrefixFor } from "../studio/playgroundRuntime";
 
-describe("appendRunnerConsoleLines", () => {
-  it("appends lines and inserts a separator before a new operation", () => {
+describe("beginRunnerOperation", () => {
+  it("separates a new operation from the output before it", () => {
     const store = createRuntimePanelStore();
-    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
-    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "again"]);
+    beginRunnerOperation(store, ["[go-run] go run main.go"]);
+    appendRunnerConsoleLines(store, ["hello"]);
+    beginRunnerOperation(store, ["[go-run] go run main.go"]);
+    appendRunnerConsoleLines(store, ["again"]);
 
     expect(store.getSnapshot().context.consoleLines).toEqual([
       "[go-run] go run main.go",
@@ -54,13 +54,37 @@ describe("appendRunnerConsoleLines", () => {
     ]);
   });
 
+  it("ignores an empty start", () => {
+    const store = createRuntimePanelStore();
+    appendRunnerConsoleLines(store, ["earlier output"]);
+    beginRunnerOperation(store, []);
+
+    expect(store.getSnapshot().context.consoleLines).toEqual(["earlier output"]);
+  });
+});
+
+describe("appendRunnerConsoleLines", () => {
   it("does not separate continuation output", () => {
     const store = createRuntimePanelStore();
-    appendRunnerConsoleLines(store, ["[go-run] go run main.go"]);
+    beginRunnerOperation(store, ["[go-run] go run main.go"]);
     appendRunnerConsoleLines(store, ["program output"]);
     expect(store.getSnapshot().context.consoleLines).toEqual([
       "[go-run] go run main.go",
       "program output",
+    ]);
+  });
+
+  // Only the caller knows a batch starts an operation, so the store never
+  // guesses from the text: a program that prints a started line of its own
+  // stays where it printed it.
+  it("never separates, even a line that reads like a started line", () => {
+    const store = createRuntimePanelStore();
+    appendRunnerConsoleLines(store, ["earlier output"]);
+    appendRunnerConsoleLines(store, ["[go-run] go run main.go"]);
+
+    expect(store.getSnapshot().context.consoleLines).toEqual([
+      "earlier output",
+      "[go-run] go run main.go",
     ]);
   });
 
@@ -76,53 +100,6 @@ describe("appendRunnerConsoleLines", () => {
     const lines = store.getSnapshot().context.consoleLines;
     expect(lines).toHaveLength(MAX_RUNNER_CONSOLE_LINES);
     expect(lines.at(-1)).toBe(`line ${MAX_RUNNER_CONSOLE_LINES + 49}`);
-  });
-
-  // The studio driver appends every language's run lines through this one
-  // module, so a language whose prefix is missing here loses the separator on
-  // the rendered path while its own panel still inserts one.
-  it.each([
-    ["go run", goRunStartedConsoleLines(["main.go"])],
-    ["gofmt", goFormatStartedConsoleLines(["main.go"])],
-    ["kotlin run", kotlinRunStartedConsoleLines(["Main.kt"])],
-    ["cargo run", rustRunStartedConsoleLines()],
-    ["rustfmt", rustFormatStartedConsoleLines()],
-    ["kitec run", kiteRunStartedConsoleLines()],
-    ["kitec fmt", kiteFormatStartedConsoleLines()],
-    ["zig run", zigRunStartedConsoleLines()],
-    ["zig fmt", zigFormatStartedConsoleLines()],
-    ["runghc", haskellRunStartedConsoleLines()],
-  ])("separates a new %s operation", (_label, startedLines) => {
-    const store = createRuntimePanelStore();
-    appendRunnerConsoleLines(store, ["earlier output"]);
-    appendRunnerConsoleLines(store, startedLines);
-
-    expect(store.getSnapshot().context.consoleLines).toEqual([
-      "earlier output",
-      "",
-      ...startedLines,
-    ]);
-  });
-
-  // The list above is hand-written, which is exactly how Zig shipped without
-  // a separator: its console module was added, its runner worked, and the
-  // omission was invisible until a lesson ran twice. This derives the set of
-  // playground languages from the plan schema instead, so a language added
-  // later fails here rather than losing its separator quietly.
-  it("has a start prefix for every playground runtime the schema allows", () => {
-    const kinds = studioRuntimeSchema.options
-      .map((option) => option.shape.kind.value as string)
-      .filter((kind) => isPlaygroundRuntimeKind(kind));
-
-    expect(kinds.length).toBeGreaterThan(0);
-
-    const missing = kinds.filter((kind) => {
-      // runErrorPrefixFor gives "[go-run error]"; the run prefix shares its head.
-      const head = runErrorPrefixFor(kind).replace(" error]", "]");
-      return !OPERATION_START_PREFIXES.some((prefix) => prefix.startsWith(head));
-    });
-
-    expect(missing, "playground runtimes with no console separator prefix").toEqual([]);
   });
 });
 
@@ -145,9 +122,9 @@ describe("clearRunnerConsole", () => {
 
   it("leaves the next run's output unseparated, as if the console were new", () => {
     const store = createRuntimePanelStore();
-    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+    beginRunnerOperation(store, ["[go-run] go run main.go", "hello"]);
     clearRunnerConsole(store, "go-runner");
-    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+    beginRunnerOperation(store, ["[go-run] go run main.go", "hello"]);
 
     expect(store.getSnapshot().context.consoleLines).toEqual(["[go-run] go run main.go", "hello"]);
   });
@@ -205,12 +182,25 @@ describe("runner console tag patterns", () => {
     ASM_CONSOLE_TAG_PATTERN,
   ];
 
-  it("recognizes every operation-start line the shared store knows about", () => {
-    const unmatched = OPERATION_START_PREFIXES.filter(
-      (prefix) => !TAG_PATTERNS.some((pattern) => pattern.test(prefix)),
-    );
+  // Every Run and Format opens with its language's started lines, which the
+  // panel colours through that language's own pattern.
+  it.each([
+    ["go run", goRunStartedConsoleLines(["main.go"]), GO_CONSOLE_TAG_PATTERN],
+    ["gofmt", goFormatStartedConsoleLines(["main.go"]), GO_CONSOLE_TAG_PATTERN],
+    ["kotlin run", kotlinRunStartedConsoleLines(["Main.kt"]), KOTLIN_CONSOLE_TAG_PATTERN],
+    ["cargo run", rustRunStartedConsoleLines(), RUST_CONSOLE_TAG_PATTERN],
+    ["rustfmt", rustFormatStartedConsoleLines(), RUST_CONSOLE_TAG_PATTERN],
+    ["kitec run", kiteRunStartedConsoleLines(), KITE_CONSOLE_TAG_PATTERN],
+    ["kitec fmt", kiteFormatStartedConsoleLines(), KITE_CONSOLE_TAG_PATTERN],
+    ["zig run", zigRunStartedConsoleLines(), ZIG_CONSOLE_TAG_PATTERN],
+    ["zig fmt", zigFormatStartedConsoleLines(), ZIG_CONSOLE_TAG_PATTERN],
+    ["runghc", haskellRunStartedConsoleLines(), HASKELL_CONSOLE_TAG_PATTERN],
+    ["nasm", asmRunStartedConsoleLines(), ASM_CONSOLE_TAG_PATTERN],
+  ])("colours every line of a %s start", (_label, startedLines, pattern) => {
+    expect(startedLines.length).toBeGreaterThan(0);
+    const uncoloured = startedLines.filter((line) => !pattern.test(line));
 
-    expect(unmatched, "operation-start prefixes no runner panel would colour").toEqual([]);
+    expect(uncoloured, "started lines the runner panel would not colour").toEqual([]);
   });
 
   it.each([

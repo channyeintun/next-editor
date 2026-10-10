@@ -6,15 +6,13 @@ import {
   asmRunServiceErrorToConsoleLines,
   asmRunStartedConsoleLines,
 } from "./console";
-import { OPERATION_START_PREFIXES } from "../playgroundConsoleStore";
 
 describe("asm console lines", () => {
   it("opens with the command a person would run on their own machine", () => {
     const [line] = asmRunStartedConsoleLines();
     expect(line).toContain("nasm -f elf64 main.asm");
-    // The shared store gives a blank separator to lines it recognizes as the
-    // start of an operation; a prefix missing there drops it for asm only.
-    expect(OPERATION_START_PREFIXES.some((prefix) => line.startsWith(prefix))).toBe(true);
+    // Tagged, so the dock colours it as the runner's own line.
+    expect(line).toMatch(ASM_CONSOLE_TAG_PATTERN);
   });
 
   it("shows program output then the exit status", () => {

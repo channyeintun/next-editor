@@ -4,34 +4,13 @@ import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
  * The one write path for playground-runner console lines into the shared
  * runtime panel store. Every runner panel and the studio performer append
  * through here so recorded console state is identical whichever surface drove
- * the run — which only holds while this module knows about every language.
- * It lives beside the per-language `runtime/*Playground` directories rather
- * than inside one of them for exactly that reason.
+ * the run. It serves every language, so it lives beside the per-language
+ * `runtime/*Playground` directories rather than inside one of them.
  */
 
 // Bounds the recorded console state — every runtime recording event snapshots
 // the full line array, so an unbounded log would bloat .ne recordings.
 export const MAX_RUNNER_CONSOLE_LINES = 200;
-
-/**
- * Lines that begin a new tool operation get a blank separator before them.
- * Keep this in step with the `*StartedConsoleLines` builders in each
- * `runtime/<lang>Playground/console.ts`; a prefix missing here silently drops
- * the separator for that language only.
- */
-export const OPERATION_START_PREFIXES = [
-  "[go-run] go run",
-  "[gofmt] gofmt",
-  "[kotlin-run] kotlin",
-  "[rust-run] cargo run",
-  "[rustfmt] rustfmt",
-  "[kite-run] kitec run",
-  "[kitefmt] kitec fmt",
-  "[zig-run] zig run",
-  "[zig-fmt] zig fmt",
-  "[haskell-run] runghc",
-  "[asm-run] nasm",
-];
 
 /**
  * The matching clear for `appendRunnerConsoleLines`, behind the Clear button in
@@ -79,16 +58,36 @@ export function resetRunnerConsoleForProject(store: RuntimePanelStoreInstance): 
   }
 }
 
-export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {
+function appendLines(
+  store: RuntimePanelStoreInstance,
+  lines: string[],
+  startsOperation: boolean,
+): void {
   if (lines.length === 0) {
     return;
   }
 
   const current = store.getSnapshot().context.consoleLines;
   // Blank separator between explicit tool operations keeps results readable.
-  const startsOperation = OPERATION_START_PREFIXES.some((prefix) => lines[0].startsWith(prefix));
   const separator = current.length > 0 && startsOperation ? [""] : [];
   store.trigger.setConsoleLines({
     consoleLines: [...current, ...separator, ...lines].slice(-MAX_RUNNER_CONSOLE_LINES),
   });
+}
+
+/**
+ * Appends the lines that start a Run or Format (a language's `startedLines`),
+ * with a blank separator from any output already in the console. The caller
+ * marks the start: it is the one that knows it is beginning an operation.
+ */
+export function beginRunnerOperation(store: RuntimePanelStoreInstance, lines: string[]): void {
+  appendLines(store, lines, true);
+}
+
+/**
+ * Appends lines that continue the current operation: its result, a refusal or
+ * an error. Never separated; `beginRunnerOperation` starts an operation.
+ */
+export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {
+  appendLines(store, lines, false);
 }

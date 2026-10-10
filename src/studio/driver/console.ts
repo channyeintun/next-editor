@@ -1,7 +1,10 @@
 import type { Terminal } from "@xterm/xterm";
 import { easePointerAim, pointerAimDurationMs } from "../../core/src/utils/pointerMotion";
 import { getXtermTerminal } from "../../components/xtermRegistry";
-import { appendRunnerConsoleLines } from "../../runtime/playgroundConsoleStore";
+import {
+  appendRunnerConsoleLines,
+  beginRunnerOperation,
+} from "../../runtime/playgroundConsoleStore";
 import { selectIsCollapsed } from "../../stores/runtimePanelStore";
 import { StudioActionError, tween, waitUntil } from "../async";
 import { consoleLineAimPoint, findConsoleLine, type ConsoleLineLookup } from "../consoleLines";
@@ -188,7 +191,7 @@ export function consoleCommands(
         signal,
       });
       lastRunHeader = prepared.startedLines.at(-1) ?? null;
-      appendRunnerConsoleLines(deps.runtimePanelStore, prepared.startedLines);
+      beginRunnerOperation(deps.runtimePanelStore, prepared.startedLines);
 
       let outcome;
       try {

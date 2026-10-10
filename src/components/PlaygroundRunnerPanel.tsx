@@ -26,6 +26,7 @@ import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWor
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
   appendRunnerConsoleLines,
+  beginRunnerOperation,
   clearRunnerConsole,
   resetRunnerConsoleForProject,
 } from "../runtime/playgroundConsoleStore";
@@ -152,14 +153,10 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     }
   }, [cancel, isPlaybackSnapshotActive]);
 
-  const appendConsoleLines = (lines: string[]) => {
-    appendRunnerConsoleLines(runtimePanelStore, lines);
-  };
-
   // Prints how a Run or Format ended, refusals included, and says it in the
   // status region.
   const appendOutcomeLines = (lines: string[]) => {
-    appendConsoleLines(lines);
+    appendRunnerConsoleLines(runtimePanelStore, lines);
     setOutcomeText(describeOutcome(lines, consoleTags));
   };
 
@@ -200,7 +197,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     }
 
     setOutcomeText("");
-    appendConsoleLines(format.startedLines(submittedFiles));
+    beginRunnerOperation(runtimePanelStore, format.startedLines(submittedFiles));
     const outcome = await request("format", (client) => format.execute(client, submittedFiles));
     if (outcome.kind === "superseded") {
       return [];
@@ -333,7 +330,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     }
 
     setOutcomeText("");
-    appendConsoleLines(run.startedLines(files));
+    beginRunnerOperation(runtimePanelStore, run.startedLines(files));
     const outcome = await request("run", (client) => run.execute(client, files));
 
     // A newer Run owns the console from here on.

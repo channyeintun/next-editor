@@ -240,8 +240,9 @@ describe("preparePlaygroundRun", () => {
   it("still writes an error line for a kind the language's own table lacks", async () => {
     // The retry engine synthesizes "timeout" from its deadline for every kind,
     // including the in-page runners whose tables have no such entry. An
-    // unguarded lookup yields `undefined`, and appendRunnerConsoleLines throws
-    // a TypeError on it — a crashed render carrying no error line at all.
+    // unguarded lookup yields `undefined`, a console line the dock throws a
+    // TypeError on when it colours it — a crashed render carrying no error
+    // line at all.
     const failure = await prepare(kiteRuntime(["timeout", "timeout"]), projectWith("main.kite"))
       .run()
       .catch((error: unknown) => error);
