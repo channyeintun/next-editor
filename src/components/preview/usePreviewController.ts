@@ -42,9 +42,9 @@ import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import type { ApiClientHistoryEntry } from "../../stores/apiClientStore";
 import {
-  buildHeaderRecord,
   recordedApiStateToReplayPayload,
   storeResultToRecorded,
+  toRecordedApiRequest,
 } from "../../stores/apiClientRecordingAdapter";
 import { hasRrwebPreviewSeed } from "../../core/src/preview";
 import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
@@ -1060,12 +1060,7 @@ export function usePreviewController(): PreviewController {
     },
     recordApiClientInspect: (entry: ApiClientHistoryEntry) => {
       emitPreviewEvent("api_client_inspect_history", {
-        apiClientRequest: {
-          method: entry.method,
-          path: entry.path,
-          headers: buildHeaderRecord(entry.headers),
-          body: entry.method === "GET" ? undefined : entry.body || undefined,
-        },
+        apiClientRequest: toRecordedApiRequest(entry),
         apiClientResult: storeResultToRecorded(entry.result),
       });
     },

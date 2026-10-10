@@ -1,4 +1,8 @@
-import type { ApiClientRecordedResult, ApiClientReplayState } from "../types/slides";
+import type {
+  ApiClientRecordedRequest,
+  ApiClientRecordedResult,
+  ApiClientReplayState,
+} from "../types/slides";
 import type {
   ApiClientHeader,
   ApiClientReplayPayload,
@@ -13,7 +17,7 @@ import type {
 
 /** Collapse the editable header rows into the enabled, non-empty header map that
  *  is actually sent (and recorded). */
-export function buildHeaderRecord(headers: ApiClientHeader[]): Record<string, string> {
+function buildHeaderRecord(headers: ApiClientHeader[]): Record<string, string> {
   const record: Record<string, string> = {};
   for (const header of headers) {
     const key = header.key.trim();
@@ -22,6 +26,27 @@ export function buildHeaderRecord(headers: ApiClientHeader[]): Record<string, st
     }
   }
   return record;
+}
+
+/** A request as it is sent and recorded: the enabled headers as a map, and no body on
+ *  a GET (an empty body is none too). */
+export function toRecordedApiRequest({
+  method,
+  path,
+  headers,
+  body,
+}: {
+  method: HttpMethod;
+  path: string;
+  headers: ApiClientHeader[];
+  body: string;
+}): ApiClientRecordedRequest {
+  return {
+    method,
+    path,
+    headers: buildHeaderRecord(headers),
+    body: method === "GET" ? undefined : body || undefined,
+  };
 }
 
 /** Expand a recorded header map back into editable rows (used on replay). */

@@ -8,9 +8,9 @@ import {
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
 import { toRetainedApiClientResult } from "../../stores/apiClientStore";
 import {
-  buildHeaderRecord,
   recordedResultToStoreResult,
   storeResultToRecorded,
+  toRecordedApiRequest,
 } from "../../stores/apiClientRecordingAdapter";
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -120,9 +120,7 @@ export function useApiClient({
     }
 
     const id = generateRequestId();
-    const headerRecord = buildHeaderRecord(headers);
-
-    const requestBody = method === "GET" ? undefined : body || undefined;
+    const recorded = toRecordedApiRequest({ method, path, headers, body });
 
     pendingIdRef.current = id;
     store.trigger.markSending({
@@ -130,9 +128,9 @@ export function useApiClient({
       method,
       path,
       headers: headers.map((header) => ({ ...header })),
-      body: requestBody ?? "",
+      body: recorded.body ?? "",
     });
-    onRequestSent?.({ method, path, headers: headerRecord, body: requestBody });
+    onRequestSent?.(recorded);
 
     let origin: string;
     try {
@@ -145,7 +143,7 @@ export function useApiClient({
     iframe.contentWindow.postMessage(
       {
         type: API_CLIENT_REQUEST_MESSAGE_TYPE,
-        payload: { id, method, path, headers: headerRecord, body: requestBody },
+        payload: { id, ...recorded },
       },
       origin,
     );
