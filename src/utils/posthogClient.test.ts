@@ -27,6 +27,7 @@ describe("initPostHog", () => {
     expect(config).toMatchObject({
       defaults: "2026-01-30",
       capture_exceptions: true,
+      disable_surveys: true,
       ...POSTHOG_REPLAY_PRIVACY_OPTIONS,
     });
     expect(config).not.toHaveProperty("capture_pageview");
@@ -40,6 +41,23 @@ describe("initPostHog", () => {
     ).toEqual({
       event: "$exception",
       properties: { $exception_list: [{ type: "Error", value: "[redacted]" }] },
+    });
+  });
+
+  it("has exception autocapture in place before init, so PostHog never fetches it", () => {
+    const extensions = () =>
+      (window as { __PosthogExtensions__?: { errorWrappingFunctions?: Record<string, unknown> } })
+        .__PosthogExtensions__;
+    let wrappersAtInit: Record<string, unknown> | undefined;
+    mocks.init.mockImplementationOnce(() => {
+      wrappersAtInit = extensions()?.errorWrappingFunctions;
+    });
+
+    initPostHog();
+
+    expect(wrappersAtInit).toMatchObject({
+      wrapOnError: expect.any(Function),
+      wrapUnhandledRejection: expect.any(Function),
     });
   });
 
