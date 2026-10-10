@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Lesson } from "../../lessons/types";
 import type { Env } from "../env";
+import app from "../index";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { serveLessonDetailDocument } from "./lessonDetailRoute";
 
@@ -111,13 +112,25 @@ describe("lesson detail route", () => {
     );
   });
 
-  it("serves author profiles the shell without a lesson lookup", async () => {
-    const response = await serve("@chan");
+  it.each(["/learn/@chan", "/learn/%40chan"])(
+    "serves %s the app shell from / without a redirect or a lesson lookup",
+    async (path) => {
+      assetsFetch.mockImplementation(async (request) =>
+        new URL(request.url).pathname === "/"
+          ? shellResponse()
+          : new Response(null, { status: 307, headers: { location: "/learn/%40chan" } }),
+      );
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe(INDEX_HTML);
-    expect(findPublishedLessonBySlug).not.toHaveBeenCalled();
-  });
+      const response = await app.request(`https://nexteditor.dev${path}`, {}, env());
+
+      expect(assetsFetch.mock.calls.map(([request]) => request.url)).toEqual([
+        "https://nexteditor.dev/",
+      ]);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(INDEX_HTML);
+      expect(findPublishedLessonBySlug).not.toHaveBeenCalled();
+    },
+  );
 
   it("passes a shell revalidation through untouched", async () => {
     assetsFetch.mockResolvedValue(

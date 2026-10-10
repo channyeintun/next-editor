@@ -2,6 +2,7 @@ import type { Lesson } from "../../lessons/types";
 import type { Env } from "../env";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { renderLessonDetailResponse, renderMissingLessonResponse } from "./lessonDetail";
+import { serveAppShell } from "./staticDocuments";
 
 // A failed lookup is not a missing lesson: only a lookup that succeeded and
 // found nothing may answer 404 + noindex. A D1 hiccup must never tell crawlers
@@ -35,9 +36,12 @@ export async function serveLessonDetailDocument(
   slug: string,
 ): Promise<Response> {
   // Author profiles share this path segment (see LearnSlugRoute) and aren't
-  // lessons at all.
+  // lessons at all. Their shell is fetched by its canonical URL: Static Assets
+  // percent-encodes every path segment it is asked for, so /learn/@chan would
+  // come back as a 307 to /learn/%40chan, an extra round trip for the
+  // browser before the same index.html.
   if (slug.startsWith("@")) {
-    return env.ASSETS.fetch(request);
+    return serveAppShell(env.ASSETS, request);
   }
 
   // The shell and the row are independent, so the D1 lookup runs while the
