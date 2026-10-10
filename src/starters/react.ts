@@ -1,6 +1,6 @@
 import type { WorkspaceProject } from "../types/workspace";
 import { collectWorkspaceFolders } from "../types/workspacePaths";
-import { createWorkspaceFile, STARTER_FAVICON_SVG } from "./shared";
+import { createWorkspaceFile, STARTER_FAVICON_SVG, STARTER_VITE_VERSION } from "./shared";
 
 /**
  * TanStack Start "basic" starter.
@@ -48,7 +48,7 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
             // match a floating prerelease tag.
             nitro: "3.0.260610-beta",
             typescript: "^7.0.2",
-            vite: "^8.1.3",
+            vite: STARTER_VITE_VERSION,
             "vite-tsconfig-paths": "^6.1.1",
           },
         },

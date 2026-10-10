@@ -1,6 +1,6 @@
 import type { WorkspaceProject } from "../types/workspace";
 import { collectWorkspaceFolders } from "../types/workspacePaths";
-import { createWorkspaceFile } from "./shared";
+import { createWorkspaceFile, STARTER_VITE_VERSION } from "./shared";
 
 /**
  * Kite web lesson starter: a real page, with the parts worth type checking
@@ -39,7 +39,7 @@ export function createStarterKiteWebWorkspace(): WorkspaceProject {
   },
   "devDependencies": {
     "@kite-lang/compiler-wasm": "^0.1.9",
-    "vite": "^8.1.3",
+    "vite": "${STARTER_VITE_VERSION}",
     "vite-plugin-kite": "^0.1.9"
   }
 }

@@ -5,25 +5,21 @@ export { STARTER_FAVICON_SVG };
 // The one workspace-file builder; re-exported so every starter keeps importing it from here.
 export { createWorkspaceFile } from "../types/workspaceFiles";
 
+/**
+ * The Vite range every Vite-based starter installs, so a bump is one line
+ * instead of one per starter (the last one missed a file).
+ */
+export const STARTER_VITE_VERSION = "^8.1.3";
+
+/** The dev/build/preview scripts of a plain Vite lesson, served where the preview looks. */
+const VITE_LESSON_SCRIPTS = {
+  dev: "vite --host 0.0.0.0 --port 4173",
+  build: "vite build",
+  preview: "vite preview --host 0.0.0.0 --port 4173",
+};
+
 export function createHtmlCssLessonPackageJson(): string {
-  return JSON.stringify(
-    {
-      name: "html-css-lesson",
-      private: true,
-      version: "0.0.0",
-      type: "module",
-      scripts: {
-        dev: "vite --host 0.0.0.0 --port 4173",
-        build: "vite build",
-        preview: "vite preview --host 0.0.0.0 --port 4173",
-      },
-      devDependencies: {
-        vite: "^8.1.3",
-      },
-    },
-    null,
-    2,
-  );
+  return createViteSpaPackageJson("html-css-lesson");
 }
 
 /**
@@ -76,10 +72,15 @@ button:hover {
 `;
 }
 
+/**
+ * A Vite lesson's package.json. With no `dependencies` the key is left out
+ * entirely (JSON.stringify drops an undefined value), which is the html-css
+ * lesson's manifest: Vite and nothing else.
+ */
 export function createViteSpaPackageJson(
   name: string,
-  dependencies: Record<string, string>,
-  devDependencies: Record<string, string>,
+  dependencies?: Record<string, string>,
+  devDependencies: Record<string, string> = {},
 ): string {
   return JSON.stringify(
     {
@@ -87,14 +88,10 @@ export function createViteSpaPackageJson(
       private: true,
       version: "0.0.0",
       type: "module",
-      scripts: {
-        dev: "vite --host 0.0.0.0 --port 4173",
-        build: "vite build",
-        preview: "vite preview --host 0.0.0.0 --port 4173",
-      },
+      scripts: VITE_LESSON_SCRIPTS,
       dependencies,
       devDependencies: {
-        vite: "^8.1.3",
+        vite: STARTER_VITE_VERSION,
         ...devDependencies,
       },
     },
