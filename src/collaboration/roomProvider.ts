@@ -2,10 +2,10 @@ import { createActor, type ActorRefFrom, type Subscription } from "xstate";
 import * as awarenessProtocol from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
+import { RoomAwarenessChannel } from "./awarenessChannel";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,
   decodeCollaborationBinaryFrame,
-  encodeCollaborationAwarenessUpdate,
   encodeCollaborationClientUpdate,
   encodeCollaborationSyncStep1,
   type CollaborationBinaryFrame,
@@ -16,8 +16,6 @@ import {
   COLLABORATION_WEBSOCKET_ERROR_STATUS,
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
-  collaborationAwarenessClientStateSchema,
-  collaborationAwarenessServerStateSchema,
   collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
   type CollaborationAwarenessInput,
@@ -45,14 +43,6 @@ const MAX_SEEN_STREAM_IDS = 2_000;
 const WEBSOCKET_ACK_TIMEOUT_MS = 15_000;
 const WEBSOCKET_HEARTBEAT_MS = 20_000;
 const WEBSOCKET_OPEN = 1;
-// y-monaco republishes the local selection on every Monaco selection change,
-// each mousemove of a drag-select, and the room accepts 20 awareness frames
-// per second per socket, refusing the rest without broadcasting them (the
-// final selection among them). Explicit publishes are already throttled by
-// the collaboration context and carry the current selection, so they go out
-// at once; any other change waits until this long after the last frame of
-// either kind, which keeps the total near 13 per second.
-const IMPLICIT_AWARENESS_INTERVAL_MS = 150;
 
 export interface CollaborationRoomApi {
   getRoom(roomId: string): Promise<CollaborationRoomSession>;
@@ -132,7 +122,6 @@ export class CollaborationRoomProvider {
   private readonly maxReconnectAttempts: number;
   private readonly random: () => number;
   private readonly onDocumentChange?: CollaborationRoomProviderOptions["onDocumentChange"];
-  private readonly onAwarenessEvent?: CollaborationRoomProviderOptions["onAwarenessEvent"];
   private readonly onControlEvent?: CollaborationRoomProviderOptions["onControlEvent"];
   private readonly onRejectedLocalChanges?: CollaborationRoomProviderOptions["onRejectedLocalChanges"];
 
@@ -161,7 +150,6 @@ export class CollaborationRoomProvider {
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
   private pendingControlRoleVersion = 0;
-  private readonly remoteAwarenessEvents = new Map<number, CollaborationAwarenessEvent>();
   private pendingBinarySync: {
     attemptId: string;
     resolve: (update: Uint8Array) => void;
@@ -176,11 +164,7 @@ export class CollaborationRoomProvider {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
-  private awarenessPublicationSuppressed = false;
-  private isPublishingExplicitAwareness = false;
-  private lastAwarenessSentAt = Number.NEGATIVE_INFINITY;
-  private pendingAwarenessUpdate: Uint8Array | null = null;
-  private pendingAwarenessTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly awarenessChannel: RoomAwarenessChannel;
 
   constructor(options: CollaborationRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -193,12 +177,21 @@ export class CollaborationRoomProvider {
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.random = options.random ?? Math.random;
     this.onDocumentChange = options.onDocumentChange;
-    this.onAwarenessEvent = options.onAwarenessEvent;
     this.onControlEvent = options.onControlEvent;
     this.onRejectedLocalChanges = options.onRejectedLocalChanges;
     this.actor = createActor(collaborationMachine);
-    this.awareness.on("update", this.handleAwarenessProtocolUpdate);
-    this.awareness.on("change", this.handleAwarenessProtocolChange);
+    this.awarenessChannel = new RoomAwarenessChannel({
+      awareness: this.awareness,
+      isLive: () => this.connectionState === "live",
+      openSocket: () => (this.socket?.readyState === WEBSOCKET_OPEN ? this.socket : null),
+      onSendFailure: () =>
+        this.handleTransportFailure(
+          "Collaboration awareness could not be delivered",
+          this.attemptId,
+        ),
+      onEvent: options.onAwarenessEvent,
+      now: monotonicNow,
+    });
   }
 
   get connectionState(): CollaborationConnectionState {
@@ -268,13 +261,11 @@ export class CollaborationRoomProvider {
     if (this.batchTimer) clearTimeout(this.batchTimer);
     this.reconnectTimer = null;
     this.batchTimer = null;
-    this.clearPendingAwareness();
+    this.awarenessChannel.clear();
     this.doc.off("update", this.handleDocumentUpdate);
     this.doc.off("afterTransaction", this.handleAfterTransaction);
-    this.awareness.off("update", this.handleAwarenessProtocolUpdate);
-    this.awareness.off("change", this.handleAwarenessProtocolChange);
+    this.awarenessChannel.dispose();
     this.awareness.destroy();
-    this.remoteAwarenessEvents.clear();
     this.pendingUpdates = [];
     this.outbox = [];
     this.bufferedBinaryUpdates = [];
@@ -302,120 +293,15 @@ export class CollaborationRoomProvider {
   async publishAwareness(input: CollaborationAwarenessInput): Promise<void> {
     const session = this.roomSession;
     if (!session || this.connectionState !== "live") return;
-    this.isPublishingExplicitAwareness = true;
-    try {
-      if (input.kind === "leave") {
-        this.awareness.setLocalState(null);
-      } else {
-        const selection =
-          input.surface.kind === "editor" && !this.awarenessPublicationSuppressed
-            ? this.awareness.getLocalState()?.selection
-            : null;
-        this.awareness.setLocalState(
-          collaborationAwarenessClientStateSchema.parse({
-            collaboration: input,
-            ...(selection === undefined ? {} : { selection }),
-          }),
-        );
-      }
-    } finally {
-      this.isPublishingExplicitAwareness = false;
-    }
+    this.awarenessChannel.publish(input);
   }
 
   setAwarenessPublicationSuppressed(suppressed: boolean): void {
-    this.awarenessPublicationSuppressed = suppressed;
+    this.awarenessChannel.setSuppressed(suppressed);
   }
 
   private readonly handleAfterTransaction = (transaction: Y.Transaction) => {
     this.onDocumentChange?.(this.doc, transaction);
-  };
-
-  private readonly handleAwarenessProtocolUpdate = (
-    changes: { added: number[]; updated: number[]; removed: number[] },
-    origin: unknown,
-  ) => {
-    if (origin === COLLABORATION_ORIGIN.remoteProvider || this.connectionState !== "live") {
-      return;
-    }
-    if (this.awarenessPublicationSuppressed && !this.isPublishingExplicitAwareness) return;
-    const changedClients = [...changes.added, ...changes.updated, ...changes.removed];
-    if (!changedClients.includes(this.awareness.clientID)) return;
-    const state = this.awareness.getLocalState();
-    if (state !== null && !collaborationAwarenessClientStateSchema.safeParse(state).success) return;
-    // Encoded now: a later flush must send this state, not one changed while
-    // publication was suppressed.
-    const update = awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
-      this.awareness.clientID,
-    ]);
-    if (state === null || this.isPublishingExplicitAwareness) {
-      // A leave or an explicit publish replaces a throttled state, never follows it.
-      this.clearPendingAwareness();
-      this.sendAwarenessUpdate(update);
-      return;
-    }
-    this.pendingAwarenessUpdate = update;
-    if (this.pendingAwarenessTimer) return;
-    const delay = this.lastAwarenessSentAt + IMPLICIT_AWARENESS_INTERVAL_MS - monotonicNow();
-    if (delay <= 0) {
-      this.flushPendingAwareness();
-      return;
-    }
-    this.pendingAwarenessTimer = setTimeout(() => {
-      this.pendingAwarenessTimer = null;
-      this.flushPendingAwareness();
-    }, delay);
-  };
-
-  private flushPendingAwareness(): void {
-    const update = this.pendingAwarenessUpdate;
-    this.pendingAwarenessUpdate = null;
-    if (update && this.connectionState === "live") this.sendAwarenessUpdate(update);
-  }
-
-  private clearPendingAwareness(): void {
-    if (this.pendingAwarenessTimer) clearTimeout(this.pendingAwarenessTimer);
-    this.pendingAwarenessTimer = null;
-    this.pendingAwarenessUpdate = null;
-  }
-
-  private sendAwarenessUpdate(update: Uint8Array): void {
-    const socket = this.socket;
-    if (!socket || socket.readyState !== WEBSOCKET_OPEN) return;
-    this.lastAwarenessSentAt = monotonicNow();
-    try {
-      socket.send(encodeCollaborationAwarenessUpdate(update));
-    } catch {
-      this.handleTransportFailure("Collaboration awareness could not be delivered", this.attemptId);
-    }
-  }
-
-  private readonly handleAwarenessProtocolChange = (changes: {
-    added: number[];
-    updated: number[];
-    removed: number[];
-  }) => {
-    for (const clientId of [...changes.added, ...changes.updated]) {
-      const state = collaborationAwarenessServerStateSchema.safeParse(
-        this.awareness.getStates().get(clientId),
-      );
-      if (!state.success) continue;
-      this.remoteAwarenessEvents.set(clientId, state.data.collaboration);
-      this.onAwarenessEvent?.(state.data.collaboration);
-    }
-    for (const clientId of changes.removed) {
-      const previous = this.remoteAwarenessEvents.get(clientId);
-      this.remoteAwarenessEvents.delete(clientId);
-      if (!previous || previous.kind !== "state") continue;
-      this.onAwarenessEvent?.({
-        kind: "leave",
-        roomId: previous.roomId,
-        actorId: previous.actorId,
-        sessionId: previous.sessionId,
-        revision: Math.min(previous.revision + 1, Number.MAX_SAFE_INTEGER),
-        occurredAt: Date.now(),
-      });
-    }
   };
 
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown) => {
@@ -670,11 +556,7 @@ export class CollaborationRoomProvider {
     }
     if (frame.kind === "awareness") {
       try {
-        awarenessProtocol.applyAwarenessUpdate(
-          this.awareness,
-          frame.update,
-          COLLABORATION_ORIGIN.remoteProvider,
-        );
+        this.awarenessChannel.applyRemote(frame.update);
       } catch {
         this.handleTransportFailure("WebSocket provider sent invalid awareness", attemptId);
       }
