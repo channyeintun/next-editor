@@ -1,9 +1,11 @@
+# check=skip=SecretsUsedInArgOrEnv
 # Build environment for Anthropic's OSS Scanner (https://github.com/anthropics/oss-scanner).
 # The scanner builds this image with the repository as the build context, then audits it with
 # no network access, so every dependency the build and the tests need is installed here.
 FROM node:24-bookworm
 # vite.config.ts constructs the PostHog source-map plugins whenever it loads (vitest loads it too), and
-# they refuse to start without a project id. Placeholders let the config load; no build step here uploads.
+# they refuse to start without a project id and API key. Placeholders (not secrets, hence the lint skip on
+# line 1) let the config load; no build step here uploads.
 ENV DEBIAN_FRONTEND=noninteractive \
     CI=true \
     VP_GIT_HOOKS=0 \
