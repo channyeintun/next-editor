@@ -15,3 +15,15 @@ export function useIsWorkspaceCovered(): boolean {
     (slides.previewState.isOpen && slides.previewState.isMaximized === true) || whiteboard.isOpen
   );
 }
+
+/**
+ * Whether slides or the whiteboard are open, so this member's published surface
+ * is that overlay (see CollaborationSurfaceBridge) and the editor's selection,
+ * cursor and viewport are not published over it. Unlike useIsWorkspaceCovered,
+ * an open deck counts even when it is not maximized.
+ */
+export function useIsEditorCovered(): boolean {
+  const slides = useSlidesContext();
+  const whiteboard = useWhiteboardContext();
+  return slides.previewState.isOpen || whiteboard.isOpen;
+}

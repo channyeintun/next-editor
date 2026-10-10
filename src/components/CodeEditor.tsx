@@ -43,7 +43,7 @@ import {
 import { startPerformanceSpan } from "../utils/performanceMetrics";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
-import { useIsWorkspaceCovered } from "../hooks/useIsWorkspaceCovered";
+import { useIsEditorCovered, useIsWorkspaceCovered } from "../hooks/useIsWorkspaceCovered";
 import { mayTakeFocus } from "./mayTakeFocus";
 import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 import "./editorCursors.css";
@@ -88,10 +88,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   const roomPresence = useOptionalRoomPresence();
   const slidesContext = useSlidesContext();
   const whiteboardContext = useWhiteboardContext();
-  // Slides or the whiteboard cover the editor, so this member's published
-  // surface is that overlay (see CollaborationSurfaceBridge); the editor's
-  // selection, cursor and viewport are not published over it.
-  const isEditorCovered = slidesContext.previewState.isOpen || whiteboardContext.isOpen;
+  const isEditorCovered = useIsEditorCovered();
   // While a maximized deck or the whiteboard covers the workspace, it is inert.
   const isWorkspaceCovered = useIsWorkspaceCovered();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
