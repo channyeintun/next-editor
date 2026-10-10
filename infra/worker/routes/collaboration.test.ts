@@ -9,6 +9,7 @@ import {
   getCollaborationRoomAccess,
   recordCollaborationAuditEvent,
   setCollaborationRoomStatus,
+  updateCollaborationMemberRole,
   type CollaborationRoomAccess,
   type CollaborationRoomRow,
 } from "../../db/collaborationQueries";
@@ -28,6 +29,7 @@ vi.mock("../../db/collaborationQueries", async (importOriginal) => ({
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
   setCollaborationRoomStatus: vi.fn<typeof setCollaborationRoomStatus>(),
   recordCollaborationAuditEvent: vi.fn<typeof recordCollaborationAuditEvent>(async () => {}),
+  updateCollaborationMemberRole: vi.fn<typeof updateCollaborationMemberRole>(),
 }));
 
 vi.mock("../collaboration/qstash", async (importOriginal) => ({
@@ -224,6 +226,89 @@ describe("POST /rooms/:roomId/invitations", () => {
     const dayMs = 24 * 60 * 60 * 1000;
     expect(params?.expiresAt).toBeGreaterThanOrEqual(before + dayMs);
     expect(params?.expiresAt).toBeLessThanOrEqual(Date.now() + dayMs);
+  });
+});
+
+describe("PATCH /rooms/:roomId/members/:userId", () => {
+  const MEMBER_ID = "20000000-0000-4000-8000-000000000002";
+
+  it("tells the room the role_version the update itself wrote", async () => {
+    vi.mocked(updateCollaborationMemberRole).mockResolvedValue({
+      member: {
+        user_id: MEMBER_ID,
+        role: "editor",
+        username: "member",
+        name: null,
+        avatar_url: null,
+        joined_at: 1,
+        updated_at: 2,
+      },
+      roleVersion: 7,
+    });
+    vi.mocked(notifyCollaborationRoomControl).mockResolvedValue(true);
+    const executionContext = {
+      waitUntil: () => undefined,
+      passThroughOnException: () => undefined,
+      props: {},
+    };
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/members/${MEMBER_ID}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "editor" }),
+      },
+      { DB: {} } as Env,
+      executionContext as unknown as ExecutionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      member: {
+        userId: MEMBER_ID,
+        role: "editor",
+        username: "member",
+        name: null,
+        avatarUrl: null,
+        joinedAt: 1,
+        updatedAt: 2,
+      },
+    });
+    expect(updateCollaborationMemberRole).toHaveBeenCalledWith(
+      expect.anything(),
+      ROOM_ID,
+      OWNER_ID,
+      MEMBER_ID,
+      "editor",
+    );
+    expect(notifyCollaborationRoomControl).toHaveBeenCalledWith(expect.anything(), ROOM_ID, {
+      event: expect.objectContaining({
+        kind: "membership-changed",
+        roomId: ROOM_ID,
+        roleVersion: 7,
+        targetUserId: MEMBER_ID,
+      }),
+      targetRole: "editor",
+    });
+    expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 and tells no one when there is no such member", async () => {
+    vi.mocked(updateCollaborationMemberRole).mockResolvedValue(null);
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/members/${MEMBER_ID}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "viewer" }),
+      },
+      { DB: {} } as Env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(notifyCollaborationRoomControl).not.toHaveBeenCalled();
   });
 });
 

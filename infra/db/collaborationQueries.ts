@@ -383,14 +383,25 @@ export async function listCollaborationRoomsForUser(
   return result.results ?? [];
 }
 
+// The columns of a CollaborationMemberRow, read from collaboration_members
+// AS members JOIN users.
+const MEMBER_PROJECTION = `members.user_id, members.role, users.username, users.name,
+       users.avatar_url, members.joined_at, members.updated_at`;
+
+// A member's role in a room the given owner owns: the pre-read that keeps the
+// owner's own row out of role changes and removals. Binds room, user, owner.
+const OWNED_MEMBER_ROLE_SQL = `SELECT members.role
+       FROM collaboration_members AS members
+       JOIN collaboration_rooms AS rooms ON rooms.id = members.room_id
+       WHERE members.room_id = ? AND members.user_id = ? AND rooms.owner_id = ?`;
+
 export async function listCollaborationRoomMembers(
   db: D1Database,
   roomId: string,
 ): Promise<CollaborationMemberRow[]> {
   const result = await db
     .prepare(
-      `SELECT members.user_id, members.role, users.username, users.name, users.avatar_url,
-              members.joined_at, members.updated_at
+      `SELECT ${MEMBER_PROJECTION}
        FROM collaboration_members AS members
        JOIN users ON users.id = members.user_id
        WHERE members.room_id = ?
@@ -583,26 +594,26 @@ export async function claimCollaborationInvitation(
   return getCollaborationRoomAccess(db, invitation.room_id, userId);
 }
 
+/**
+ * Changes a non-owner member's role in a room the owner owns, and bumps the
+ * room's role_version. Answers the member as written with the role_version the
+ * write produced, or null when there is no such member.
+ */
 export async function updateCollaborationMemberRole(
   db: D1Database,
   roomId: string,
   ownerId: string,
   userId: string,
   role: CollaborationInviteRole,
-): Promise<CollaborationMemberRow | null> {
+): Promise<{ member: CollaborationMemberRow; roleVersion: number } | null> {
   const target = await db
-    .prepare(
-      `SELECT members.role
-       FROM collaboration_members AS members
-       JOIN collaboration_rooms AS rooms ON rooms.id = members.room_id
-       WHERE members.room_id = ? AND members.user_id = ? AND rooms.owner_id = ?`,
-    )
+    .prepare(OWNED_MEMBER_ROLE_SQL)
     .bind(roomId, userId, ownerId)
     .first<{ role: CollaborationRole }>();
   if (!target || target.role === "owner") return null;
 
   const now = Date.now();
-  await db.batch([
+  const [, roomUpdate, memberRead] = await db.batch([
     db
       .prepare(
         `UPDATE collaboration_members
@@ -615,20 +626,23 @@ export async function updateCollaborationMemberRole(
       .prepare(
         `UPDATE collaboration_rooms
          SET role_version = role_version + 1, updated_at = ?
-         WHERE id = ? AND owner_id = ?`,
+         WHERE id = ? AND owner_id = ?
+         RETURNING role_version`,
       )
       .bind(now, roomId, ownerId),
+    db
+      .prepare(
+        `SELECT ${MEMBER_PROJECTION}
+         FROM collaboration_members AS members
+         JOIN users ON users.id = members.user_id
+         WHERE members.room_id = ? AND members.user_id = ?`,
+      )
+      .bind(roomId, userId),
   ]);
-  return db
-    .prepare(
-      `SELECT members.user_id, members.role, users.username, users.name, users.avatar_url,
-              members.joined_at, members.updated_at
-       FROM collaboration_members AS members
-       JOIN users ON users.id = members.user_id
-       WHERE members.room_id = ? AND members.user_id = ?`,
-    )
-    .bind(roomId, userId)
-    .first<CollaborationMemberRow>();
+  const roomRow = roomUpdate.results?.[0] as { role_version: number } | undefined;
+  const member = memberRead.results?.[0] as CollaborationMemberRow | undefined;
+  if (!roomRow || !member) return null;
+  return { member, roleVersion: roomRow.role_version };
 }
 
 /**
@@ -643,12 +657,7 @@ export async function removeCollaborationMember(
   userId: string,
 ): Promise<boolean> {
   const target = await db
-    .prepare(
-      `SELECT members.role
-       FROM collaboration_members AS members
-       JOIN collaboration_rooms AS rooms ON rooms.id = members.room_id
-       WHERE members.room_id = ? AND members.user_id = ? AND rooms.owner_id = ?`,
-    )
+    .prepare(OWNED_MEMBER_ROLE_SQL)
     .bind(roomId, userId, ownerId)
     .first<{ role: CollaborationRole }>();
   if (!target || target.role === "owner") return false;

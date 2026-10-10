@@ -472,24 +472,22 @@ collaborationRoute.patch("/rooms/:roomId/members/:userId", requireUser, async (c
   if (!roomIdResult.success || !userIdResult.success || !input.success) {
     return c.json({ error: "invalid member update" }, 400);
   }
-  const member = await updateCollaborationMemberRole(
+  const updated = await updateCollaborationMemberRole(
     c.env.DB,
     roomIdResult.data,
     user.id,
     userIdResult.data,
     input.data.role,
   );
-  if (!member) return c.json({ error: "not found" }, 404);
-  const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
-  if (access) {
-    await dispatchControlEvent(c, {
-      kind: "membership-changed",
-      roomId: access.id,
-      roleVersion: access.role_version,
-      targetUserId: member.user_id,
-      targetRole: member.role,
-    });
-  }
+  if (!updated) return c.json({ error: "not found" }, 404);
+  const { member, roleVersion } = updated;
+  await dispatchControlEvent(c, {
+    kind: "membership-changed",
+    roomId: roomIdResult.data,
+    roleVersion,
+    targetUserId: member.user_id,
+    targetRole: member.role,
+  });
   scheduleAuditEvent(c, {
     roomId: roomIdResult.data,
     actorUserId: user.id,

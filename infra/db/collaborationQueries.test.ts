@@ -9,6 +9,7 @@ import {
   createProvisioningCollaborationRoom,
   removeCollaborationMember,
   setCollaborationRoomStatus,
+  updateCollaborationMemberRole,
 } from "./collaborationQueries";
 import { openSqliteD1, type SqliteD1 } from "./testing";
 
@@ -293,5 +294,53 @@ describe("claimCollaborationInvitation", () => {
     expect(access).toBeNull();
     expect(memberCount(sqlite, roomId)).toBe(2);
     expect(useCount(sqlite, editorInvitation.id)).toBe(0);
+  });
+});
+
+describe("updateCollaborationMemberRole", () => {
+  it("answers the member as written and the role_version its own write produced", async () => {
+    const database = openSqliteD1();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation } = await openRoom(database);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+    const versionBefore = roleVersion(sqlite, roomId);
+
+    const updated = await updateCollaborationMemberRole(db, roomId, OWNER_ID, VIEWER_ID, "editor");
+
+    expect(updated?.member).toMatchObject({
+      user_id: VIEWER_ID,
+      role: "editor",
+      username: VIEWER_ID,
+    });
+    expect(updated?.roleVersion).toBe(versionBefore + 1);
+    expect(updated?.roleVersion).toBe(roleVersion(sqlite, roomId));
+  });
+
+  it("refuses to change the owner's own role, leaving role_version alone", async () => {
+    const database = openSqliteD1();
+    const { db, sqlite } = database;
+    const { roomId } = await openRoom(database);
+    const versionBefore = roleVersion(sqlite, roomId);
+
+    const updated = await updateCollaborationMemberRole(db, roomId, OWNER_ID, OWNER_ID, "viewer");
+
+    expect(updated).toBeNull();
+    expect(roleVersion(sqlite, roomId)).toBe(versionBefore);
+  });
+
+  it("answers null for someone who is not a member, or a caller who is not the owner", async () => {
+    const database = openSqliteD1();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation } = await openRoom(database);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+    const versionBefore = roleVersion(sqlite, roomId);
+
+    expect(
+      await updateCollaborationMemberRole(db, roomId, OWNER_ID, NEWCOMER_ID, "editor"),
+    ).toBeNull();
+    expect(
+      await updateCollaborationMemberRole(db, roomId, VIEWER_ID, VIEWER_ID, "editor"),
+    ).toBeNull();
+    expect(roleVersion(sqlite, roomId)).toBe(versionBefore);
   });
 });
