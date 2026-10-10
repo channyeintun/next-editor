@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   drive: vi.fn<() => void>(),
-  driver: vi.fn<(options?: unknown) => { drive: () => void }>(),
+  driver: vi.fn<(options?: unknown) => { drive: () => void; isActive: () => boolean }>(),
 }));
 
 vi.mock("driver.js", () => ({ driver: mocks.driver }));
 
-import { startTour } from "./productTour";
+import { isProductTourActive, startTour } from "./productTour";
 
 describe("product tour", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.driver.mockReturnValue({ drive: mocks.drive });
+    mocks.driver.mockReturnValue({ drive: mocks.drive, isActive: () => true });
     document.body.innerHTML = "";
   });
 
@@ -38,6 +38,17 @@ describe("product tour", () => {
       },
     ]);
     expect(mocks.drive).toHaveBeenCalledOnce();
+  });
+
+  it("reports a tour on screen until it is destroyed", async () => {
+    document.body.innerHTML = '<button data-tour="record">Record</button>';
+
+    await startTour({ force: true });
+    expect(isProductTourActive()).toBe(true);
+
+    const { onDestroyed } = mocks.driver.mock.calls[0][0] as { onDestroyed: () => void };
+    onDestroyed();
+    expect(isProductTourActive()).toBe(false);
   });
 
   describe("the Agent step", () => {
