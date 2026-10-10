@@ -250,14 +250,11 @@ export function assembleRecording({
   }
   // One clock read, so the id, the name and createdAt name the same instant.
   const createdAt = Date.now();
-
-  return {
-    version: DELTA_CONFIG.VERSION,
-    id: String(createdAt),
-    name: `Recording ${createdAt}`,
-    createdAt,
+  // Every track but frames is optional on Recording, so a track left out of a plain
+  // literal would still compile and be dropped from the saved take; `satisfies` makes
+  // leaving one out a type error.
+  const trackFields = {
     frames: tracks.frames,
-    keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
     slideEvents: tracks.slideEvents,
     previewEvents: tracks.previewEvents,
     previewInitialDocuments: tracks.previewInitialDocuments,
@@ -267,6 +264,15 @@ export function assembleRecording({
     cursorEvents: tracks.cursorEvents,
     whiteboardEvents: tracks.whiteboardEvents,
     chatEvents: tracks.chatEvents,
+  } satisfies Record<RecordingTrackName, unknown>;
+
+  return {
+    version: DELTA_CONFIG.VERSION,
+    id: String(createdAt),
+    name: `Recording ${createdAt}`,
+    createdAt,
+    ...trackFields,
+    keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
     slides,
     chapters: chapters.length > 0 ? [...chapters] : undefined,
     tracks: trackMetadata,

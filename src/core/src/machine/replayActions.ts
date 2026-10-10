@@ -4,7 +4,7 @@ import type {
   EditorMachineContext,
   LearnerWorkspaceSave,
 } from "./types";
-import type { Recording } from "../types";
+import type { Recording, RecordingStreamDelta } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
 import {
   areWorkspaceProjectsEqual,
@@ -33,6 +33,11 @@ import {
 import { applyFrameAtTime, RENDERED_FRAME_RESET } from "./frameReplay";
 import { reportMachineError } from "./machineError";
 import { resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
+import {
+  RECORDING_TRACK_NAMES,
+  type RecordingTrackName,
+  type RecordingTracks,
+} from "./recordingAssembly";
 
 // ============================================================================
 // Playback-replay action bodies
@@ -186,6 +191,28 @@ function appendRecordsInPlace<T>(
   return target;
 }
 
+/** The delta fields whose records have track K's type. */
+type StreamDeltaKeyOf<K extends RecordingTrackName> = {
+  [D in keyof RecordingStreamDelta]: RecordingStreamDelta[D] extends RecordingTracks[K] ? D : never;
+}[keyof RecordingStreamDelta];
+
+/**
+ * Where each track's new records sit in a streamed delta. A track left out fails the
+ * typecheck, so streamed growth cannot silently drop a track added to RecordingTracks.
+ */
+const STREAM_DELTA_KEY: { readonly [K in RecordingTrackName]: StreamDeltaKeyOf<K> } = {
+  frames: "newFrames",
+  slideEvents: "newSlideEvents",
+  previewEvents: "newPreviewEvents",
+  previewInitialDocuments: "newPreviewInitialDocuments",
+  previewPatchBatches: "newPreviewPatchBatches",
+  workspaceEvents: "newWorkspaceEvents",
+  runtimeEvents: "newRuntimeEvents",
+  cursorEvents: "newCursorEvents",
+  whiteboardEvents: "newWhiteboardEvents",
+  chatEvents: "newChatEvents",
+};
+
 /**
  * Adds one decoded SCR delta without copying every record reference accumulated so
  * far. The machine owns the arrays created by `setRecording`, so mutating those
@@ -200,27 +227,17 @@ export const appendRecordingDelta = ({ context, event }: EditorActionArgs): Edit
 
   const current = context.recording;
   const duration = normalizeTimelineDuration(delta.duration, context.timeline.duration);
-  const recording = {
+  const recording: Recording = {
     ...current,
     duration: Math.max(current.duration, duration),
     streamFinalized: current.streamFinalized || delta.streamFinalized,
-    frames: appendRecordsInPlace(current.frames, delta.newFrames) ?? current.frames,
-    slideEvents: appendRecordsInPlace(current.slideEvents, delta.newSlideEvents),
-    previewEvents: appendRecordsInPlace(current.previewEvents, delta.newPreviewEvents),
-    previewInitialDocuments: appendRecordsInPlace(
-      current.previewInitialDocuments,
-      delta.newPreviewInitialDocuments,
-    ),
-    previewPatchBatches: appendRecordsInPlace(
-      current.previewPatchBatches,
-      delta.newPreviewPatchBatches,
-    ),
-    workspaceEvents: appendRecordsInPlace(current.workspaceEvents, delta.newWorkspaceEvents),
-    runtimeEvents: appendRecordsInPlace(current.runtimeEvents, delta.newRuntimeEvents),
-    cursorEvents: appendRecordsInPlace(current.cursorEvents, delta.newCursorEvents),
-    whiteboardEvents: appendRecordsInPlace(current.whiteboardEvents, delta.newWhiteboardEvents),
-    chatEvents: appendRecordsInPlace(current.chatEvents, delta.newChatEvents),
   };
+  // Widened so one loop covers every track. Frames, the one required track, always
+  // has an array already, so its append keeps that array rather than leaving it unset.
+  const tracks = recording as Partial<Record<RecordingTrackName, unknown[]>>;
+  for (const name of RECORDING_TRACK_NAMES) {
+    tracks[name] = appendRecordsInPlace(tracks[name], delta[STREAM_DELTA_KEY[name]]);
+  }
 
   return {
     recording,

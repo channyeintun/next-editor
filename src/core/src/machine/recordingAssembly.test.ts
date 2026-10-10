@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  assembleRecording,
   createEmptyRecordingTracks,
   lastRecordedTrackTime,
   RECORDING_TRACK_NAMES,
@@ -99,5 +100,25 @@ describe("lastRecordedTrackTime", () => {
     const tracks = tracksWith({ runtimeEvents: [{ timestamp: 800 }, { timestamp: 300 }] });
 
     expect(lastRecordedTrackTime(tracks)).toBe(300);
+  });
+});
+
+describe("assembleRecording", () => {
+  it("carries every track's array into the recording", () => {
+    const tracks = tracksWith(
+      Object.fromEntries(
+        RECORDING_TRACK_NAMES.map((name) => [name, [{ timestamp: 0, tag: name }]]),
+      ),
+    );
+
+    const recording = assembleRecording({
+      tracks,
+      duration: 1000,
+      audio: { startOffsetMs: 0 },
+      camera: { startOffsetMs: 0 },
+    });
+
+    const dropped = RECORDING_TRACK_NAMES.filter((name) => recording[name] !== tracks[name]);
+    expect(dropped).toEqual([]);
   });
 });
