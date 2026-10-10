@@ -30,18 +30,8 @@ vi.mock("../utils/downloadBlob", () => ({ downloadBlob: mocks.downloadBlob }));
 
 // Voice UI behavior has its own suite (CollaborationPanel.voice.test.tsx);
 // here voice is server-disabled so the panel renders without voice controls.
-vi.mock("../contexts/CollaborationVoiceContext", () => ({
-  useCollaborationVoice: () => ({
-    subscribe: () => () => undefined,
-    getState: () => null,
-    join: () => undefined,
-    leave: () => undefined,
-    mute: () => undefined,
-    unmute: () => undefined,
-    retry: () => undefined,
-    enableAudio: () => undefined,
-  }),
-  useCollaborationVoiceState: () => ({
+vi.mock("../contexts/CollaborationVoiceContext", () => {
+  const disabledVoice = {
     state: "unavailable",
     unavailableReason: "feature-disabled",
     errorCode: null,
@@ -49,8 +39,21 @@ vi.mock("../contexts/CollaborationVoiceContext", () => ({
     autoplayBlocked: false,
     roster: [],
     isLocalSpeaking: false,
-  }),
-}));
+  };
+  return {
+    useCollaborationVoice: () => ({
+      subscribe: () => () => undefined,
+      getState: () => disabledVoice,
+      join: () => undefined,
+      leave: () => undefined,
+      mute: () => undefined,
+      unmute: () => undefined,
+      retry: () => undefined,
+      enableAudio: () => undefined,
+    }),
+    useCollaborationVoiceState: () => disabledVoice,
+  };
+});
 
 import CollaborationPanel from "./CollaborationPanel";
 import { collaborationParticipantKey } from "../collaboration/participantKey";

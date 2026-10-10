@@ -252,6 +252,53 @@ describe("voice controls", () => {
   });
 });
 
+/** The panel's one status region, found through a message it is reading. */
+function statusRegionOf(message: string) {
+  return screen.getByText(message).closest('[role="status"]');
+}
+
+describe("voice status announcements", () => {
+  it("announces voice changes while the panel is closed", () => {
+    const view = render(<CollaborationPanel />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // Voice becoming available in the room is not news.
+    expect(screen.queryByText(/^Voice/)).toBeNull();
+
+    voiceState = idleVoiceState({ state: "joining" });
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Voice: Connecting…")).not.toBeNull();
+
+    voiceState = idleVoiceState({ state: "reconnecting" });
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Voice: Reconnecting…")).not.toBeNull();
+
+    voiceState = idleVoiceState({ state: "failed", errorCode: "network" });
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Voice failed")).not.toBeNull();
+
+    // Idle after a call is its end, and leaving the room is not.
+    voiceState = idleVoiceState();
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Voice: Not in voice")).not.toBeNull();
+
+    voiceState = idleVoiceState({ state: "unavailable", unavailableReason: "no-room" });
+    view.rerender(<CollaborationPanel />);
+    expect(screen.queryByText(/^Voice/)).toBeNull();
+
+    voiceState = idleVoiceState();
+    view.rerender(<CollaborationPanel />);
+    expect(screen.queryByText(/^Voice/)).toBeNull();
+  });
+
+  it("keeps the visible voice status out of the live region", () => {
+    voiceState = idleVoiceState({ state: "listening" });
+    openPanel();
+
+    expect(screen.getByText("Listening").closest('[role="status"]')).toBeNull();
+    expect(statusRegionOf("Voice: Listening")).not.toBeNull();
+  });
+});
+
 describe("participant voice badges", () => {
   it("marks joined-and-muted participants", () => {
     voiceState = idleVoiceState({

@@ -11,7 +11,11 @@ import {
   collaboratorColorIndex,
   collaboratorDisplayName,
 } from "./collaboratorAppearance";
-import { VoiceControls, VoiceParticipantBadge } from "./CollaborationVoiceControls";
+import {
+  VoiceControls,
+  VoiceParticipantBadge,
+  VoiceStatusLine,
+} from "./CollaborationVoiceControls";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { downloadBlob } from "../utils/downloadBlob";
 
@@ -464,14 +468,15 @@ export default function CollaborationPanel() {
   return (
     <div className="relative">
       {/* The panel's one status region. It is mounted with the header button,
-          so connection, presence, invitation and copy messages are heard
-          whether or not the panel is open. aria-atomic is off so a change to
-          one line is read on its own, not together with the others. */}
+          so connection, presence, invitation, copy and voice messages are
+          heard whether or not the panel is open. aria-atomic is off so a
+          change to one line is read on its own, not together with the others. */}
       <div role="status" aria-atomic="false" className="sr-only">
         <p>{connectionMessage}</p>
         <p>{presenceMessage}</p>
         <p>{invitationMessage}</p>
         <p>{copied ? "Invitation link copied to clipboard." : ""}</p>
+        <VoiceStatusLine />
       </div>
 
       {collaboration.pendingInviteToken ? (

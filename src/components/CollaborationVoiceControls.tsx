@@ -1,3 +1,4 @@
+import { useState, useSyncExternalStore } from "react";
 import { Headphones, LogOut, Mic, MicOff, RefreshCw, Volume2 } from "lucide-react";
 import {
   useCollaborationVoice,
@@ -84,8 +85,9 @@ export function VoiceControls() {
         <span className="inline-flex items-center gap-1.5 text-slate-300">
           <Headphones size={13} aria-hidden="true" /> Voice
         </span>
+        {/* Not a live region: VoiceStatusLine announces voice changes from the
+            panel's persistent status region, which is heard with the panel closed. */}
         <span
-          role="status"
           className={
             state.state === "live" || state.state === "listening"
               ? "text-emerald-300"
@@ -161,6 +163,30 @@ export function VoiceControls() {
       ) : null}
     </section>
   );
+}
+
+/**
+ * The voice line of the room panel's persistent status region, so voice
+ * joining, reconnecting and failing are heard while the panel is closed. It
+ * subscribes to the state name alone, so speaking and roster updates do not
+ * re-render it. Voice becoming available in a room is not news: idle is read
+ * only as the end of a call.
+ */
+export function VoiceStatusLine() {
+  const voice = useCollaborationVoice();
+  const readState = () => voice.getState().state;
+  const state = useSyncExternalStore(voice.subscribe, readState, readState);
+  const inVoice = state !== "idle" && state !== "unavailable";
+  const [wasInVoice, setWasInVoice] = useState(false);
+  if (inVoice && !wasInVoice) setWasInVoice(true);
+  if (state === "unavailable" && wasInVoice) setWasInVoice(false);
+  let message = "";
+  if (state !== "unavailable" && (state !== "idle" || wasInVoice)) {
+    const label = VOICE_STATUS_LABELS[state];
+    // "Voice failed" names voice already.
+    message = label.startsWith("Voice") ? label : `Voice: ${label}`;
+  }
+  return <p>{message}</p>;
 }
 
 // Per-row voice indicator, correlated by canonical user + session identity
