@@ -28,5 +28,3 @@ After completing the work, provide:
 
 - Always finish by providing a recommended Git commit message
 - After every successful commit, push the current branch to `origin`.
-- For HTTPS pushes, use `channyeintun` as the GitHub username and the value of the `NE_GITHUB_TOKEN` environment variable as the password.
-- Never print, log, commit, or embed `NE_GITHUB_TOKEN` in a Git remote URL. If the variable is unset or authentication fails, report that the push could not be completed without exposing the token.
