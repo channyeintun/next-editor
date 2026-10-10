@@ -84,6 +84,54 @@ export const RECORDING_TRACK_NAMES = Object.keys(
   createEmptyRecordingTracks(),
 ) as readonly RecordingTrackName[];
 
+const byTimestamp = (entry: { timestamp: number }) => entry.timestamp;
+const byTime = (entry: { time: number }) => entry.time;
+
+/**
+ * Each track's recording time: most entries carry `timestamp`, the preview's
+ * documents and patch batches carry `time`. A track left out fails the typecheck,
+ * so ordering, cutting and measuring a take cannot skip a new track.
+ */
+export const RECORDING_TRACK_TIME: {
+  readonly [K in RecordingTrackName]: (entry: RecordingTracks[K][number]) => number;
+} = {
+  frames: byTimestamp,
+  slideEvents: byTimestamp,
+  previewEvents: byTimestamp,
+  previewInitialDocuments: byTime,
+  previewPatchBatches: byTime,
+  workspaceEvents: byTimestamp,
+  runtimeEvents: byTimestamp,
+  cursorEvents: byTimestamp,
+  whiteboardEvents: byTimestamp,
+  chatEvents: byTimestamp,
+};
+
+/** One track's time accessor, widened so a loop over every track can call it. */
+const trackTimeOf = (name: RecordingTrackName) =>
+  RECORDING_TRACK_TIME[name] as (entry: unknown) => number;
+
+/**
+ * Orders every track by its recording time, in place. Array sort is stable, so
+ * entries already in timeline order keep their order.
+ */
+export function sortRecordingTracksByTime(tracks: RecordingTracks): void {
+  for (const name of RECORDING_TRACK_NAMES) {
+    const timeOf = trackTimeOf(name);
+    (tracks[name] as unknown[]).sort((left, right) => timeOf(left) - timeOf(right));
+  }
+}
+
+/** The latest time any track's last entry reached; an empty track counts as 0. */
+export function lastRecordedTrackTime(tracks: RecordingTracks): number {
+  return Math.max(
+    ...RECORDING_TRACK_NAMES.map((name) => {
+      const entries: readonly unknown[] = tracks[name];
+      return entries.length > 0 ? trackTimeOf(name)(entries[entries.length - 1]) : 0;
+    }),
+  );
+}
+
 interface RecordingMediaInput<Source> {
   blob?: Blob;
   source?: Source;

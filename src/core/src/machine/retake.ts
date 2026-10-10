@@ -12,7 +12,7 @@ import { RUNTIME_CHECKPOINT_DUE, resolveLatestRuntimeSnapshot } from "../runtime
 import { getRecordingTimestamp, restartPreviewStream } from "./recordingSession";
 import { rewindRecordingClock } from "./recordingClock";
 import { resolveWorkspaceSnapshotBetween } from "./replayState";
-import type { RecordingTracks } from "./recordingAssembly";
+import { RECORDING_TRACK_TIME, type RecordingTracks } from "./recordingAssembly";
 import type { RecordingSafePoint, RecordingSession } from "./types";
 
 // ============================================================================
@@ -90,9 +90,6 @@ function keptUntil<T>(entries: readonly T[], time: number, timeOf: (entry: T) =>
   return entries.slice(0, end);
 }
 
-const byTimestamp = (entry: { timestamp: number }) => entry.timestamp;
-const byTime = (entry: { time: number }) => entry.time;
-
 /** What the live editor has to be put back to after a rewind. */
 export interface RetakeRestore {
   /** The editor state at the safe point: the last kept frame. */
@@ -140,17 +137,26 @@ export function rewindSessionToSafePoint(
 
   // RecordingSession declares its tracks through RecordingTracks, so a track left out
   // here fails the typecheck instead of keeping what was recorded after the safe point.
+  const trackTime = RECORDING_TRACK_TIME;
   const kept: RecordingTracks = {
-    frames: keptUntil(session.frames, time, byTimestamp),
-    slideEvents: keptUntil(session.slideEvents, time, byTimestamp),
-    previewEvents: keptUntil(session.previewEvents, time, byTimestamp),
-    previewInitialDocuments: keptUntil(session.previewInitialDocuments, time, byTime),
-    previewPatchBatches: keptUntil(session.previewPatchBatches, time, byTime),
-    workspaceEvents: keptUntil(session.workspaceEvents, time, byTimestamp),
-    runtimeEvents: keptUntil(session.runtimeEvents, time, byTimestamp),
-    cursorEvents: keptUntil(session.cursorEvents, time, byTimestamp),
-    whiteboardEvents: keptUntil(session.whiteboardEvents, time, byTimestamp),
-    chatEvents: keptUntil(session.chatEvents, time, byTimestamp),
+    frames: keptUntil(session.frames, time, trackTime.frames),
+    slideEvents: keptUntil(session.slideEvents, time, trackTime.slideEvents),
+    previewEvents: keptUntil(session.previewEvents, time, trackTime.previewEvents),
+    previewInitialDocuments: keptUntil(
+      session.previewInitialDocuments,
+      time,
+      trackTime.previewInitialDocuments,
+    ),
+    previewPatchBatches: keptUntil(
+      session.previewPatchBatches,
+      time,
+      trackTime.previewPatchBatches,
+    ),
+    workspaceEvents: keptUntil(session.workspaceEvents, time, trackTime.workspaceEvents),
+    runtimeEvents: keptUntil(session.runtimeEvents, time, trackTime.runtimeEvents),
+    cursorEvents: keptUntil(session.cursorEvents, time, trackTime.cursorEvents),
+    whiteboardEvents: keptUntil(session.whiteboardEvents, time, trackTime.whiteboardEvents),
+    chatEvents: keptUntil(session.chatEvents, time, trackTime.chatEvents),
   };
   Object.assign(session, kept);
 

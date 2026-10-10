@@ -13,6 +13,13 @@ import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../typ
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
 import type { ChatRecordingEvent } from "../../core/src/chat";
 import {
+  createEmptyRecordingTracks,
+  RECORDING_TRACK_NAMES,
+  sortRecordingTracksByTime,
+  type RecordingTrackName,
+  type RecordingTracks,
+} from "../../core/src/machine/recordingAssembly";
+import {
   decodeRecords,
   createInflationBudget,
   type InflationBudget,
@@ -79,34 +86,12 @@ function assertWorkspaceAssetFormatCompatibility(formatVersion: number): void {
   throw new Error("Invalid SCR3 stream: workspace assets require format version 4");
 }
 
-/** Decoded records per track, each in stream (timeline) order. */
-interface DecodedRecords {
-  frames: DeltaFrame[];
-  slideEvents: SlideEvent[];
-  previewEvents: PreviewEvent[];
-  previewInitialDocuments: PreviewInitialDocument[];
-  previewPatchBatches: PreviewDomPatchBatch[];
-  workspaceEvents: WorkspaceRecordingEvent[];
-  runtimeEvents: RuntimeRecordingEvent[];
-  cursorEvents: CursorRecordingEvent[];
-  whiteboardEvents: WhiteboardEvent[];
-  chatEvents: ChatRecordingEvent[];
-}
-
 /** Fresh arrays holding the same record objects, so consumers keyed on reference see growth. */
-function copyDecodedRecords(records: DecodedRecords): DecodedRecords {
-  return {
-    frames: records.frames.slice(),
-    slideEvents: records.slideEvents.slice(),
-    previewEvents: records.previewEvents.slice(),
-    previewInitialDocuments: records.previewInitialDocuments.slice(),
-    previewPatchBatches: records.previewPatchBatches.slice(),
-    workspaceEvents: records.workspaceEvents.slice(),
-    runtimeEvents: records.runtimeEvents.slice(),
-    cursorEvents: records.cursorEvents.slice(),
-    whiteboardEvents: records.whiteboardEvents.slice(),
-    chatEvents: records.chatEvents.slice(),
-  };
+function copyDecodedRecords(records: RecordingTracks): RecordingTracks {
+  const copy = createEmptyRecordingTracks();
+  const target: Record<RecordingTrackName, readonly unknown[]> = copy;
+  for (const name of RECORDING_TRACK_NAMES) target[name] = records[name].slice();
+  return copy;
 }
 
 /**
@@ -120,7 +105,8 @@ interface DecodedStream {
   readonly formatVersion: number;
   /** MAX_INFLATED_SEGMENT_BYTES bounds each segment; this bounds their sum. */
   readonly budget: InflationBudget;
-  readonly records: DecodedRecords;
+  /** Decoded records per track, each in stream (timeline) order. */
+  readonly records: RecordingTracks;
   /**
    * Raw assets not yet handed off. Their bytes are not part of the long-lived decoded
    * recording, so the streaming reader drains this queue on every `readDelta`.
@@ -147,18 +133,7 @@ function createDecodedStream(meta: RecordingStreamMeta, formatVersion: number): 
     meta,
     formatVersion,
     budget: createInflationBudget(),
-    records: {
-      frames: [],
-      slideEvents: [],
-      previewEvents: [],
-      previewInitialDocuments: [],
-      previewPatchBatches: [],
-      workspaceEvents: [],
-      runtimeEvents: [],
-      cursorEvents: [],
-      whiteboardEvents: [],
-      chatEvents: [],
-    },
+    records: createEmptyRecordingTracks(),
     workspaceAssets: [],
     workspaceAssetIds: new Set(),
     clusterSummaries: new Map(),
@@ -418,7 +393,7 @@ function ingestSegmentRegion(
  */
 function assembleRecording(
   stream: DecodedStream,
-  records: DecodedRecords,
+  records: RecordingTracks,
   streamFinalized: boolean,
 ): DecodedRecording {
   const { meta } = stream;
@@ -515,19 +490,7 @@ export function decodeRecordingStream(bytes: Uint8Array): DecodedRecording {
   // A whole buffer may come from any writer, so order each track by time here. Array
   // sort is stable, so records already in timeline order keep their stream order.
   const { records } = stream;
-  const byTimestamp = (left: { timestamp: number }, right: { timestamp: number }) =>
-    left.timestamp - right.timestamp;
-  const byTime = (left: { time: number }, right: { time: number }) => left.time - right.time;
-  records.frames.sort(byTimestamp);
-  records.slideEvents.sort(byTimestamp);
-  records.previewEvents.sort(byTimestamp);
-  records.previewInitialDocuments.sort(byTime);
-  records.previewPatchBatches.sort(byTime);
-  records.workspaceEvents.sort(byTimestamp);
-  records.runtimeEvents.sort(byTimestamp);
-  records.cursorEvents.sort(byTimestamp);
-  records.whiteboardEvents.sort(byTimestamp);
-  records.chatEvents.sort(byTimestamp);
+  sortRecordingTracksByTime(records);
 
   return assembleRecording(stream, records, progress.finalized);
 }
@@ -594,18 +557,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   let deliveredSegmentCount = 0;
   let deliveredDuration = 0;
   let deliveredFinalized = false;
-  const deliveredRecordCounts: Record<keyof DecodedRecords, number> = {
-    frames: 0,
-    slideEvents: 0,
-    previewEvents: 0,
-    previewInitialDocuments: 0,
-    previewPatchBatches: 0,
-    workspaceEvents: 0,
-    runtimeEvents: 0,
-    cursorEvents: 0,
-    whiteboardEvents: 0,
-    chatEvents: 0,
-  };
+  const deliveredRecordCounts = Object.fromEntries(
+    RECORDING_TRACK_NAMES.map((name) => [name, 0]),
+  ) as Record<RecordingTrackName, number>;
 
   const append = (incoming: Uint8Array): void => {
     if (totalLength + incoming.length > MAX_STREAM_BYTES) {
@@ -717,8 +671,8 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         deliveredFinalized !== finalized;
       if (!hasChanges) return null;
 
-      const undelivered = <K extends keyof DecodedRecords>(key: K): DecodedRecords[K] =>
-        records[key].slice(deliveredRecordCounts[key]) as DecodedRecords[K];
+      const undelivered = <K extends RecordingTrackName>(key: K): RecordingTracks[K] =>
+        records[key].slice(deliveredRecordCounts[key]) as RecordingTracks[K];
       const delta: StreamingRecordingDelta = {
         cursor: ++deltaCursor,
         recordingId: meta.id,
@@ -742,7 +696,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       deliveredSegmentCount = stream.segmentCount;
       deliveredDuration = duration;
       deliveredFinalized = finalized;
-      for (const key of Object.keys(deliveredRecordCounts) as Array<keyof DecodedRecords>) {
+      for (const key of RECORDING_TRACK_NAMES) {
         deliveredRecordCounts[key] = records[key].length;
       }
       return delta;

@@ -1,30 +1,9 @@
-import { assembleRecording, type RecordingTracks } from "../../core/src/machine/recordingAssembly";
+import { assembleRecording, lastRecordedTrackTime } from "../../core/src/machine/recordingAssembly";
 import { resolveLatestRuntimeSnapshot } from "../../core/src/runtimeTrack";
 import type { Recording } from "../../core/src/types";
 import { toSidebarWidthDeltaSnapshot } from "../../types/workspace";
 import { getRecordingDraftStore } from "./recordingDraftStore";
 import { rebuildRecordingDraftTracks } from "./recordingDraftTracks";
-
-const lastOf = <T>(entries: readonly T[], time: (entry: T) => number): number =>
-  entries.length > 0 ? time(entries[entries.length - 1]) : 0;
-
-/** The latest recorded time any track reached. */
-function lastRecordedTime(tracks: RecordingTracks): number {
-  const byTimestamp = (entry: { timestamp: number }) => entry.timestamp;
-  const byTime = (entry: { time: number }) => entry.time;
-  return Math.max(
-    lastOf(tracks.frames, byTimestamp),
-    lastOf(tracks.cursorEvents, byTimestamp),
-    lastOf(tracks.slideEvents, byTimestamp),
-    lastOf(tracks.previewEvents, byTimestamp),
-    lastOf(tracks.previewInitialDocuments, byTime),
-    lastOf(tracks.previewPatchBatches, byTime),
-    lastOf(tracks.workspaceEvents, byTimestamp),
-    lastOf(tracks.runtimeEvents, byTimestamp),
-    lastOf(tracks.whiteboardEvents, byTimestamp),
-    lastOf(tracks.chatEvents, byTimestamp),
-  );
-}
 
 /**
  * Rebuilds the Recording a draft's take would have become, as of its last write.
@@ -58,7 +37,7 @@ export async function recoverRecordingDraft(draftId: string): Promise<Recording 
 
   const recording = assembleRecording({
     tracks,
-    duration: Math.max(1, meta.durationMs, lastRecordedTime(tracks)),
+    duration: Math.max(1, meta.durationMs, lastRecordedTrackTime(tracks)),
     slides,
     workspaceSnapshot,
     runtimeSnapshot: resolveLatestRuntimeSnapshot(tracks.runtimeEvents) ?? undefined,
