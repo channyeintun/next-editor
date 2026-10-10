@@ -75,14 +75,17 @@ export default function LessonGrid() {
   // Virtualize rows against the page scroll, so the navbar and footer stay in
   // normal flow (no nested scrollbar) and only on-screen cards are mounted.
   // scrollMargin offsets the virtual list by its distance from the document top.
-  const listRef = useRef<HTMLDivElement>(null);
+  // The list mounts only once page 0 has lessons, often after this component, so
+  // it is measured whenever its node appears (a callback ref) and on resize.
+  const [listNode, setListNode] = useState<HTMLDivElement | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   useLayoutEffect(() => {
-    const update = () => setScrollMargin(listRef.current?.offsetTop ?? 0);
+    if (!listNode) return;
+    const update = () => setScrollMargin(listNode.offsetTop);
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, []);
+  }, [listNode]);
 
   const virtualizer = useWindowVirtualizer({
     count: rows.length,
@@ -187,7 +190,7 @@ export default function LessonGrid() {
         <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
       ) : (
         <>
-          <div ref={listRef}>
+          <div ref={setListNode}>
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((vi) => (
                 <div

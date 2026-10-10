@@ -19,6 +19,18 @@ vi.mock("./SearchResults", () => ({
 vi.mock("./LessonCard", () => ({
   default: ({ lesson }: { lesson: { title: string } }) => <p>{lesson.title}</p>,
 }));
+// The real window virtualizer, recording the scrollMargin of every render.
+const scrollMargins = vi.hoisted(() => [] as (number | undefined)[]);
+vi.mock("@tanstack/react-virtual", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-virtual")>();
+  return {
+    ...actual,
+    useWindowVirtualizer: ((options) => {
+      scrollMargins.push(options.scrollMargin);
+      return actual.useWindowVirtualizer(options);
+    }) satisfies typeof actual.useWindowVirtualizer,
+  };
+});
 
 const { default: LessonGrid } = await import("./LessonGrid");
 
@@ -49,6 +61,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("LessonGrid search while page 0 is a network fetch", () => {
@@ -206,5 +219,22 @@ describe("LessonGrid clear search", () => {
     });
     expect(screen.queryByText("results for rust")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Search authors and lessons" })).toHaveFocus();
+  });
+});
+
+describe("LessonGrid virtual list offset", () => {
+  it("measures the list's distance from the page top once page 0 lands after mount", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(240);
+    gallery = galleryState({ isPending: true });
+    const view = render(<LessonGrid />);
+
+    gallery = galleryState({
+      data: { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] },
+    });
+    scrollMargins.length = 0;
+    view.rerender(<LessonGrid />);
+
+    expect(screen.getByText("Intro")).toBeInTheDocument();
+    expect(scrollMargins.at(-1)).toBe(240);
   });
 });
