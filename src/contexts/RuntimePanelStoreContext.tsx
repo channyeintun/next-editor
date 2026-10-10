@@ -8,7 +8,7 @@ import {
 
 interface RuntimePanelStoreContextValue {
   store: RuntimePanelStoreInstance;
-  /** Imperative handles owned by the runtime panel (tier c). */
+  /** The console appender and opener the terminal panel registers for the preview to call. */
   consoleAppender: { current: ConsoleAppender | null };
   consoleOpener: { current: ConsoleOpener | null };
 }

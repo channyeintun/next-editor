@@ -88,8 +88,6 @@ export function createPlaybackSettingsStore() {
   return store;
 }
 
-export type PlaybackSettingsStoreInstance = ReturnType<typeof createPlaybackSettingsStore>;
-
 // Module-level singleton — unlike captionStore, this needs to be readable from both
 // MediaControls (inside the Editor's provider tree) and tube's LessonDetail (the parent
 // that renders <Editor/> from outside that tree), so a React Context provider scoped to

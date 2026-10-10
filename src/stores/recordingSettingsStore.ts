@@ -45,8 +45,6 @@ export function createRecordingSettingsStore() {
   return store;
 }
 
-export type RecordingSettingsStoreInstance = ReturnType<typeof createRecordingSettingsStore>;
-
 // Module-level singleton — readable from multiple parts of the app (recording UI,
 // settings panels) without coupling to a specific React Context provider tree.
 // A shared instance allows cross-tree access like playbackSettingsStore.

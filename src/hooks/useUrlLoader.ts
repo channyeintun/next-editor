@@ -195,7 +195,7 @@ export const useUrlLoader = () => {
         .catch(() => {});
 
       // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
-      if (loaded && !isStale()) {
+      if (!isStale()) {
         resolveExternalMedia(loaded, url, isStale, signal).catch((error: unknown) => {
           // Leaving or replacing the lesson aborts these downloads; that is not a failure.
           if (!signal.aborted) console.warn("Resolving the lesson's sibling media failed:", error);
