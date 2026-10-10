@@ -272,16 +272,12 @@ export default ({ mode }: { mode: string }) => {
                 test: /[\\/]node_modules[\\/]@xterm[\\/]/,
               },
               {
-                name: "archive",
-                test: /[\\/]node_modules[\\/]jszip[\\/]/,
-              },
-              {
                 name: "xstate",
                 test: /[\\/]node_modules[\\/](xstate|@xstate\/react)[\\/]/,
               },
               {
                 name: "utils",
-                test: /[\\/]node_modules[\\/](pako|@msgpack)[\\/]/,
+                test: /[\\/]node_modules[\\/]@msgpack[\\/]/,
               },
             ],
           },
