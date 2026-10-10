@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { buildBundle, zipDrift } from "../../scripts/build-lesson-script-skill";
+import { CRITIC_VERSION, PERSONA_GUIDE_VERSION } from "./script/critic";
 import { parseLessonScript } from "./script/schema";
 import { studioPlanActionSchema, type StudioLessonType, type StudioRuntimeKind } from "./plan";
 import { RUNTIME_KIND_FOR_LESSON } from "./runtimeContract";
@@ -23,6 +24,7 @@ const reference = readBundle("references/lesson-script-authoring.md");
 const persona = readBundle("references/studio-persona.md");
 const distributedSkill = readBundle("SKILL.md");
 const canonicalReference = readFileSync(resolve(ROOT, "docs/lesson-script-authoring.md"), "utf8");
+const canonicalPersona = readFileSync(resolve(ROOT, "docs/studio-persona.md"), "utf8");
 const inRepoSkill = readFileSync(resolve(ROOT, ".claude/skills/lesson-script/SKILL.md"), "utf8");
 
 /** The action types agents author. The compiler derives cursor.moveTo and runtime.expandDock. */
@@ -346,6 +348,17 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
       .find((line) => line.startsWith("| `expect.output`"));
     expect(expectOutputRow).toMatch(/Python/);
     expect(expectOutputRow).not.toMatch(/Playground kinds only/);
+  });
+
+  it("states the persona-guide and critic versions critic.ts carries", () => {
+    // The guide's prose quotes both constants and buildPersona's anchor quotes
+    // that prose, so a bump on either side must move the other in the same change.
+    expect(canonicalPersona).toMatch(
+      new RegExp(`^# Studio Persona Guide — v${PERSONA_GUIDE_VERSION}$`, "m"),
+    );
+    const prose = canonicalPersona.replace(/\s+/g, " ");
+    expect(prose).toContain(`(\`PERSONA_GUIDE_VERSION\`, currently ${PERSONA_GUIDE_VERSION})`);
+    expect(prose).toContain(`\`CRITIC_VERSION\` (currently ${CRITIC_VERSION})`);
   });
 
   it("keeps every distributed reference self-contained", () => {
