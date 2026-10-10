@@ -110,6 +110,8 @@ export function pocketSynthProvider(
       );
       return { wav, hitFrameCap: cappedChunkCount > 0 };
     },
+    // synthesizePocketDialog already trimmed the take.
+    prepareTake: (wav) => wav,
   };
 }
 

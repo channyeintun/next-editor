@@ -59,8 +59,14 @@ vi.mock("./tts/dialogCache", () => ({
 // Each adapter's own test pins its provider's seed and preload policy. Here the
 // factories are stand-ins that route to the spies above, so these tests see
 // which provider the Director picks, what it passes it, and how it drives it.
+// The Modal stand-in prepares takes with the real trim, so the Director's
+// handling of cached and fresh takes is measured on real audio.
 vi.mock("./tts/pocketSynth", () => ({ pocketSynthProvider: tts.pocketSynthProvider }));
-vi.mock("./tts/modalVoxCpm2Synth", () => ({ voxCpm2SynthProvider: tts.voxCpm2SynthProvider }));
+vi.mock("./tts/modalVoxCpm2Synth", async (importOriginal) => ({
+  prepareModalVoxCpm2Take: (await importOriginal<typeof import("./tts/modalVoxCpm2Synth")>())
+    .prepareModalVoxCpm2Take,
+  voxCpm2SynthProvider: tts.voxCpm2SynthProvider,
+}));
 vi.mock("./tts/athanlabSynth", () => ({ athanLabSynthProvider: tts.athanLabSynthProvider }));
 
 const slides = vi.hoisted(() => ({
@@ -85,6 +91,7 @@ vi.mock("./tts/wav", async (importOriginal) => {
 });
 
 const { buildPlanFromScript } = await import("./inPageDirector");
+const { prepareModalVoxCpm2Take } = await import("./tts/modalVoxCpm2Synth");
 
 /** A voiced (non-silent) PCM16 mono WAV of the given length: a 220 Hz tone. */
 function voicedWav(durationMs: number, sampleRate: number, amplitude = 0.1): Uint8Array {
@@ -93,6 +100,14 @@ function voicedWav(durationMs: number, sampleRate: number, amplitude = 0.1): Uin
     pcm[i] = Math.round(amplitude * 0x7fff * Math.sin((2 * Math.PI * 220 * i) / sampleRate));
   }
   return encodeWavPcm16(pcm, sampleRate);
+}
+
+/** `wav` with `silenceMs` of digital silence before it, as VoxCPM2 returns takes. */
+function withLeadIn(wav: Uint8Array, silenceMs: number): Uint8Array {
+  const { pcm, sampleRate } = decodeWavPcm16(wav);
+  const padded = new Int16Array(Math.round((silenceMs / 1000) * sampleRate) + pcm.length);
+  padded.set(pcm, padded.length - pcm.length);
+  return encodeWavPcm16(padded, sampleRate);
 }
 
 function loudnessOfPcm(pcm: Int16Array, sampleRate: number): number | null {
@@ -159,6 +174,7 @@ describe("buildPlanFromScript narration", () => {
         const take = await tts.synthesizePocketDialog(profile, speechText, buildSeed);
         return { wav: take.wav, hitFrameCap: take.cappedChunkCount > 0 };
       },
+      prepareTake: (wav) => wav,
     }));
     tts.voxCpm2SynthProvider.mockReset().mockImplementation((profile, buildSeed) => ({
       sampleRate: profile.sampleRate,
@@ -169,6 +185,7 @@ describe("buildPlanFromScript narration", () => {
         wav: await tts.synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
         hitFrameCap: false,
       }),
+      prepareTake: prepareModalVoxCpm2Take,
     }));
     tts.athanLabSynthProvider.mockReset().mockImplementation((profile) => ({
       sampleRate: profile.sampleRate,
@@ -179,6 +196,7 @@ describe("buildPlanFromScript narration", () => {
         wav: await tts.synthesizeAthanLabWav(profile, speechText),
         hitFrameCap: false,
       }),
+      prepareTake: (wav) => wav,
     }));
     slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
   });
@@ -237,6 +255,41 @@ describe("buildPlanFromScript narration", () => {
     );
     expect(result.plan.lesson.locale).toBe("my-MM");
     expect(result.plan.narration.mimeType).toBe("audio/wav");
+  });
+
+  it("trims the lead-in of every Modal take, cached or fresh, and caches the take as returned", async () => {
+    // Dialog 1 is a cache hit; every later one is synthesized. Both come with
+    // VoxCPM2's half second of lead-in silence.
+    const cachedRaw = withLeadIn(voicedWav(1_200, 48_000), 500);
+    tts.getCachedDialogWav.mockResolvedValueOnce({ wav: cachedRaw, hitFrameCap: false });
+    const synthesizedRaw: Uint8Array[] = [];
+    tts.synthesizeModalVoxCpm2Wav.mockImplementation(async (_, speechText) => {
+      const wav = withLeadIn(voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000), 500);
+      synthesizedRaw.push(wav);
+      return wav;
+    });
+    const script = loadPilot();
+    script.lesson.locale = "my-MM";
+
+    const result = await buildPlanFromScript(script, {
+      voiceProfile: VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
+    });
+
+    const lengthOf = (wav: Uint8Array) => decodeWavPcm16(wav).pcm.length;
+    const trimmedAway = Math.round(0.45 * 48_000);
+    const placed = stitch.segments[0].map((segment) => segment.pcm.length);
+    expect(result.synthesizedCount).toBe(result.dialogCount - 1);
+    expect(placed).toEqual(
+      [cachedRaw, ...synthesizedRaw].map((wav) => lengthOf(prepareModalVoxCpm2Take(wav))),
+    );
+    expect(placed[0]).toBeLessThan(lengthOf(cachedRaw) - trimmedAway);
+    expect(placed[1]).toBeLessThan(lengthOf(synthesizedRaw[0]) - trimmedAway);
+    // The cache keeps each synthesized take exactly as Modal returned it.
+    const cached = tts.putCachedDialogWav.mock.calls.map(
+      ([, take]) => (take as { wav: Uint8Array }).wav,
+    );
+    expect(cached.length).toBe(synthesizedRaw.length);
+    expect(cached.every((wav, index) => wav === synthesizedRaw[index])).toBe(true);
   });
 
   it("dispatches an AthanLab profile with a fixed seed, so a new script seed keeps every take", async () => {

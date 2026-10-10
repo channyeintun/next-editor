@@ -108,6 +108,16 @@ interface DialogTake extends CachedDialogWav {
 }
 
 /**
+ * The take the Director schedules from one the cache keeps (as synthesized):
+ * prepared by its provider, then validated. Throws with the reason a take is
+ * unusable.
+ */
+function preparedTakeOf(provider: DialogSynthProvider, raw: CachedDialogWav): DialogTake {
+  const wav = provider.prepareTake(raw.wav);
+  return { ...raw, wav, durationMs: validateDialogWav(wav, provider.sampleRate) };
+}
+
+/**
  * A cached take, re-validated on the way out: an entry written before takes
  * were validated (or damaged in storage) is evicted and reported, and the
  * caller synthesizes it again instead of every later render failing on it
@@ -115,7 +125,7 @@ interface DialogTake extends CachedDialogWav {
  */
 async function readCachedTake(
   requestHash: string,
-  sampleRate: number,
+  provider: DialogSynthProvider,
   onInvalid: (reason: string) => void,
 ): Promise<DialogTake | null> {
   const cached = await getCachedDialogWav(requestHash);
@@ -123,7 +133,7 @@ async function readCachedTake(
     return null;
   }
   try {
-    return { ...cached, durationMs: validateDialogWav(cached.wav, sampleRate) };
+    return preparedTakeOf(provider, cached);
   } catch (error) {
     await deleteCachedDialogWav(requestHash);
     onInvalid(errorMessageOf(error));
@@ -132,26 +142,24 @@ async function readCachedTake(
 }
 
 /**
- * Synthesize and validate one dialog. Validation happens before the caller
- * caches the take, so a truncated, wrong-rate, empty, or silent response fails
- * this render only rather than being replayed by every later one.
+ * Synthesize, prepare, and validate one dialog. Validation happens before the
+ * caller caches the raw take, so a truncated, wrong-rate, empty, or silent
+ * response fails this render only rather than being replayed by every later
+ * one.
  */
 async function synthesizeTake(
   provider: DialogSynthProvider,
   speechText: string,
   label: string,
-): Promise<DialogTake> {
-  let synthesized: CachedDialogWav;
+): Promise<{ raw: CachedDialogWav; take: DialogTake }> {
+  let raw: CachedDialogWav;
   try {
-    synthesized = await provider.synthesize(speechText);
+    raw = await provider.synthesize(speechText);
   } catch (error) {
     throw new Error(`Narration ${label}: ${errorMessageOf(error)}`, { cause: error });
   }
   try {
-    return {
-      ...synthesized,
-      durationMs: validateDialogWav(synthesized.wav, provider.sampleRate),
-    };
+    return { raw, take: preparedTakeOf(provider, raw) };
   } catch (error) {
     const reason = errorMessageOf(error);
     throw new Error(`Narration ${label}: synthesized audio is unusable — ${reason}`, {
@@ -209,7 +217,7 @@ export async function buildPlanFromScript(
 
     const label = dialogLabelOf(dialogs[i], i, dialogs.length);
     labels.push(label);
-    let take = await readCachedTake(requestHash, provider.sampleRate, (reason) =>
+    let take = await readCachedTake(requestHash, provider, (reason) =>
       synthesisWarnings.push(
         `Cached audio for ${label} was unusable (${reason}) and was synthesized again`,
       ),
@@ -222,12 +230,16 @@ export async function buildPlanFromScript(
         // The load reports its own sub-phases; put this dialog's progress back.
         onPhase?.(`synthesize ${i + 1}/${dialogs.length}`);
       }
-      take = await synthesizeTake(provider, speechText, label);
-      // A frame-capped take is cached too: Pocket is seeded and deterministic,
-      // so synthesizing the same request again reproduces the same audio and
+      const synthesized = await synthesizeTake(provider, speechText, label);
+      // The cache keeps the take as synthesized; preparing it happens on every
+      // build, like the leveling below, so a change to a provider's
+      // preparation never invalidates paid or slow synthesis. A frame-capped
+      // take is cached too: Pocket is seeded and deterministic, so
+      // synthesizing the same request again reproduces the same audio and
       // would only cost time. The flag travels with the entry, so the warning
       // repeats on every render until the dialog's text changes.
-      await putCachedDialogWav(requestHash, take);
+      await putCachedDialogWav(requestHash, synthesized.raw);
+      take = synthesized.take;
       synthesizedCount += 1;
     }
     if (take.hitFrameCap) {

@@ -15,4 +15,13 @@ export interface DialogSynthProvider {
   /** Called once, at the first dialog that misses the cache. */
   preload(): Promise<unknown>;
   synthesize(speechText: string): Promise<CachedDialogWav>;
+  /**
+   * Turn a take as synthesized — and as the dialog cache keeps it — into the
+   * take the Director validates and schedules, e.g. by trimming the model's
+   * lead-in silence. It runs on every build, over cache hits too, so it must
+   * be deterministic and idempotent; changing it never invalidates a cached
+   * (possibly paid) take. Adapters that already shape the take while
+   * synthesizing return the bytes unchanged.
+   */
+  prepareTake(wav: Uint8Array): Uint8Array;
 }

@@ -172,6 +172,8 @@ export function athanLabSynthProvider(profile: AthanLabVoiceProfile): DialogSynt
       wav: await synthesizeAthanLabWav(profile, speechText),
       hitFrameCap: false,
     }),
+    // normalizeAthanLabWav already resampled and trimmed the take.
+    prepareTake: (wav) => wav,
   };
 }
 

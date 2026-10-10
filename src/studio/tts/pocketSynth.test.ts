@@ -56,7 +56,10 @@ describe("pocketSynthProvider", () => {
       seed: narrationNoiseSeed(buildSeed),
     });
     expect(await provider.preload()).toEqual({ synthesize });
-    expect((await provider.synthesize("Hello there.")).hitFrameCap).toBe(true);
+    const capped = await provider.synthesize("Hello there.");
+    expect(capped.hitFrameCap).toBe(true);
+    // The take was trimmed while synthesizing, so the Director gets it as is.
+    expect(provider.prepareTake(capped.wav)).toBe(capped.wav);
     expect((await provider.synthesize("General Kenobi.")).hitFrameCap).toBe(false);
     expect(synthesize.mock.calls.map(([, seed]) => seed)).toEqual([
       narrationNoiseSeed(buildSeed),

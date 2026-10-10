@@ -35,29 +35,58 @@ export interface TrimSilenceOptions {
 export function trimSilence(
   samples: Float32Array,
   sampleRate: number,
-  { threshold = VOICED_THRESHOLD, headPadMs = 40, tailPadMs = 150 }: TrimSilenceOptions = {},
+  options: TrimSilenceOptions = {},
 ): Float32Array {
+  const span = paddedVoicedSpanOf(samples, sampleRate, 1, options);
+  return span ? samples.slice(span[0], span[1]) : samples;
+}
+
+/**
+ * trimSilence on 16-bit PCM, for takes that arrive as WAV: the samples are
+ * sliced as they are, never round-tripped through floats (which would move
+ * positive samples by one step). The threshold stays a fraction of full scale.
+ * Trimming is idempotent, so trimming a trimmed take returns the same span.
+ */
+export function trimSilencePcm16(
+  pcm: Int16Array,
+  sampleRate: number,
+  options: TrimSilenceOptions = {},
+): Int16Array {
+  const span = paddedVoicedSpanOf(pcm, sampleRate, 0x8000, options);
+  return span ? pcm.slice(span[0], span[1]) : pcm;
+}
+
+/**
+ * The [start, end) sample range trimSilence keeps — the voiced span widened
+ * by the pads — or null when nothing is voiced. `fullScale` converts the
+ * fractional threshold to the samples' units.
+ */
+function paddedVoicedSpanOf(
+  samples: ArrayLike<number>,
+  sampleRate: number,
+  fullScale: number,
+  { threshold = VOICED_THRESHOLD, headPadMs = 40, tailPadMs = 150 }: TrimSilenceOptions,
+): [number, number] | null {
+  const floor = threshold * fullScale;
   let first = -1;
   for (let i = 0; i < samples.length; i++) {
-    if (Math.abs(samples[i]) > threshold) {
+    if (Math.abs(samples[i]) > floor) {
       first = i;
       break;
     }
   }
   if (first === -1) {
-    return samples;
+    return null;
   }
   let last = samples.length - 1;
   for (; last > first; last--) {
-    if (Math.abs(samples[last]) > threshold) {
+    if (Math.abs(samples[last]) > floor) {
       break;
     }
   }
   const headPad = Math.round((headPadMs / 1000) * sampleRate);
   const tailPad = Math.round((tailPadMs / 1000) * sampleRate);
-  const start = Math.max(0, first - headPad);
-  const end = Math.min(samples.length, last + 1 + tailPad);
-  return samples.slice(start, end);
+  return [Math.max(0, first - headPad), Math.min(samples.length, last + 1 + tailPad)];
 }
 
 export { encodeWavPcm16, floatTo16BitPcm };

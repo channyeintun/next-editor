@@ -184,6 +184,12 @@ warning and synthesized afresh, so clearing the cache is not needed to recover
 from one. Delete that cache (or the site's data) only when intentionally
 forcing fresh Modal synthesis.
 
+The cache keeps each take as Modal returned it. Studio trims the lead-in and
+tail silence VoxCPM2 leaves around the speech on every build
+(`prepareModalVoxCpm2Take`), the way Pocket-TTS and AthanLab takes are
+trimmed, so captions and mark-anchored actions start with the voice. Because
+the trim is applied at build time, changing it never discards a paid take.
+
 When Modal rejects a request, the Worker passes its reason through, for example
 `Burmese narration service failed with HTTP 400: reference audio must be a
 valid WAV`.

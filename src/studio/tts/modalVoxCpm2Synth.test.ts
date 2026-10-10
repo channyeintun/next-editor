@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { SavedCustomVoice } from "./customVoices";
 import { modalVoxCpm2BurmeseProfileOf, MODAL_VOXCPM2_BURMESE_PROFILE } from "./profiles";
 import { synthesizeModalVoxCpm2Wav, voxCpm2SynthProvider } from "./modalVoxCpm2Synth";
+import { decodeWavPcm16, encodeWavPcm16 } from "./wav";
 
 const voiceStore = vi.hoisted(() => ({
   getCustomVoice: vi.fn<(id: string) => Promise<SavedCustomVoice | null>>(),
@@ -154,5 +155,38 @@ describe("voxCpm2SynthProvider", () => {
     expect((await provider.synthesize("စာသား")).hitFrameCap).toBe(false);
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).seed).toBe(42);
+  });
+});
+
+describe("voxCpm2SynthProvider.prepareTake", () => {
+  const RATE = 48_000;
+  const ms = (n: number) => Math.round((n / 1000) * RATE);
+
+  /** 500 ms of digital silence, then 800 ms of a full-scale-ish square wave. */
+  function leadInTake(sampleRate = RATE): Uint8Array {
+    const pcm = new Int16Array(ms(500) + ms(800));
+    for (let i = ms(500); i < pcm.length; i++) {
+      pcm[i] = i % 2 ? 12_345 : -12_345;
+    }
+    return encodeWavPcm16(pcm, sampleRate);
+  }
+
+  it("trims the lead-in to the 40 ms head pad and keeps every sample", () => {
+    const raw = leadInTake();
+    const { prepareTake } = voxCpm2SynthProvider(PROFILE, 1);
+
+    const prepared = decodeWavPcm16(prepareTake(raw));
+
+    expect(prepared.sampleRate).toBe(RATE);
+    expect(prepared.pcm.length).toBe(ms(40) + ms(800));
+    expect(prepared.pcm.subarray(0, ms(40)).every((sample) => sample === 0)).toBe(true);
+    expect(prepared.pcm.subarray(ms(40))).toEqual(decodeWavPcm16(raw).pcm.subarray(ms(500)));
+    // Idempotent: the Director prepares every cached take on every build.
+    expect(prepareTake(prepareTake(raw))).toEqual(prepareTake(raw));
+  });
+
+  it("keeps the take's own rate, so a wrong-rate take still fails validation", () => {
+    const { prepareTake } = voxCpm2SynthProvider(PROFILE, 1);
+    expect(decodeWavPcm16(prepareTake(leadInTake(24_000))).sampleRate).toBe(24_000);
   });
 });

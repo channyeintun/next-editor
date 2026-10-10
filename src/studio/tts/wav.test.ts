@@ -5,6 +5,7 @@ import {
   floatTo16BitPcm,
   stitchPcmSegments,
   trimSilence,
+  trimSilencePcm16,
   validateDialogWav,
   wavDurationMs,
 } from "./wav";
@@ -74,6 +75,43 @@ describe("trimSilence", () => {
   it("returns all-silence audio unchanged", () => {
     const silence = new Float32Array(RATE);
     expect(trimSilence(silence, RATE)).toBe(silence);
+  });
+});
+
+describe("trimSilencePcm16", () => {
+  /** A take with a quiet lead-in under the threshold, a voiced span, and silence. */
+  function take(): Int16Array {
+    const ms = (n: number) => Math.round((n / 1000) * RATE);
+    const pcm = new Int16Array(ms(500) + ms(800) + ms(400));
+    pcm.fill(100, 0, ms(500)); // 0.003 of full scale: below the voiced threshold
+    for (let i = ms(500); i < ms(1300); i++) {
+      pcm[i] = Math.round(0x7fff * 0.3 * Math.sin((2 * Math.PI * 220 * i) / RATE));
+    }
+    return pcm;
+  }
+
+  it("keeps the same span trimSilence keeps, with every sample as it was", () => {
+    const pcm = take();
+    const asFloat = Float32Array.from(pcm, (sample) => sample / 0x8000);
+
+    const trimmed = trimSilencePcm16(pcm, RATE);
+
+    expect(trimmed.length).toBeLessThan(pcm.length - Math.round(0.45 * RATE));
+    // Each float is its sample exactly, so equal arrays mean the same span of
+    // the same samples.
+    expect(Float32Array.from(trimmed, (sample) => sample / 0x8000)).toEqual(
+      trimSilence(asFloat, RATE),
+    );
+  });
+
+  it("is idempotent", () => {
+    const once = trimSilencePcm16(take(), RATE);
+    expect(trimSilencePcm16(once, RATE)).toEqual(once);
+  });
+
+  it("returns all-silence audio unchanged", () => {
+    const silence = new Int16Array(RATE);
+    expect(trimSilencePcm16(silence, RATE)).toBe(silence);
   });
 });
 

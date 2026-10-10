@@ -6,7 +6,7 @@ import {
 } from "./customVoices";
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
 import type { DialogSynthProvider } from "./synthProvider";
-import { encodeWavPcm16, floatTo16BitPcm } from "./wav";
+import { decodeWavPcm16, encodeWavPcm16, floatTo16BitPcm, trimSilencePcm16 } from "./wav";
 import { bytesToBase64 } from "../../shared/base64";
 
 interface ErrorPayload {
@@ -90,6 +90,19 @@ export async function synthesizeModalVoxCpm2Wav(
   }
 }
 
+/**
+ * Trim the lead-in and tail silence VoxCPM2 leaves around the speech, the way
+ * every provider's takes are (see trimSilence), so speech starts where the
+ * schedule puts the dialog. Neither Modal nor the Worker trims, and the dialog
+ * cache keeps the take as returned, so this runs on every build. The rate is
+ * the take's own: re-encoding at the profile's would hide a wrong-rate take
+ * from the Director's validation.
+ */
+export function prepareModalVoxCpm2Take(wav: Uint8Array): Uint8Array {
+  const { pcm, sampleRate } = decodeWavPcm16(wav);
+  return encodeWavPcm16(trimSilencePcm16(pcm, sampleRate), sampleRate);
+}
+
 /** The Director's Modal VoxCPM2 provider: the script's seed goes to Modal as it is. */
 export function voxCpm2SynthProvider(
   profile: ModalVoxCpm2VoiceProfile,
@@ -107,6 +120,7 @@ export function voxCpm2SynthProvider(
       wav: await synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
       hitFrameCap: false,
     }),
+    prepareTake: prepareModalVoxCpm2Take,
   };
 }
 

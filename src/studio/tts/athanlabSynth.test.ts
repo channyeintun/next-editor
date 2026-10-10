@@ -366,6 +366,8 @@ describe("athanLabSynthProvider", () => {
     const take = await provider.synthesize("စာသား");
     expect(take.hitFrameCap).toBe(false);
     expect(decodeWavPcm16(take.wav).sampleRate).toBe(PROFILE.sampleRate);
+    // The take was normalized while synthesizing, so the Director gets it as is.
+    expect(provider.prepareTake(take.wav)).toBe(take.wav);
     expect(fetchSpy).toHaveBeenCalledOnce();
   });
 });
