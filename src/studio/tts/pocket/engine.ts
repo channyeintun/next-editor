@@ -32,6 +32,8 @@ import {
  * reproducible from (text, profile, seed).
  */
 
+// A change here or below that alters the samples bumps POCKET_ENGINE_VERSION
+// (engineVersion.ts), or cached dialogs keep replaying the old audio.
 const MAX_FRAMES = 500;
 const LSD_STEPS = 1;
 const CHUNK_GAP_SEC = 0.25;
@@ -484,6 +486,25 @@ export class PocketTtsEngine {
       ]);
       let eosStep: number | null = null;
 
+      // Batch-mode: decode only when the chunk completes (no streaming
+      // latency concerns), keeping mimi state transitions identical.
+      const decodePending = async () => {
+        const decodeSize = chunkLatents.length - chunkDecodedFrames;
+        const decodeLatents = new Float32Array(decodeSize * latentDim);
+        for (let frame = 0; frame < decodeSize; frame++) {
+          decodeLatents.set(chunkLatents[chunkDecodedFrames + frame], frame * latentDim);
+        }
+        const decodeResult = await this.mimiDecoder.run({
+          latent: new ort.Tensor("float32", decodeLatents, [1, decodeSize, latentDim]),
+          ...mimiState,
+        });
+        updateStateFromManifestOutputs(mimiState, decodeResult, meta.mimi_state_manifest);
+        chunkDecodedFrames += decodeSize;
+        chunkAudioParts.push(
+          new Float32Array(decodeResult[this.mimiDecoder.outputNames[0]].data as Float32Array),
+        );
+      };
+
       for (let step = 0; step < MAX_FRAMES; step++) {
         // Yield periodically so the page stays responsive during synthesis.
         if (step > 0 && step % 4 === 0) {
@@ -528,28 +549,20 @@ export class PocketTtsEngine {
         onProgress?.(totalFrames);
 
         const pending = chunkLatents.length - chunkDecodedFrames;
-        // Batch-mode: decode only when the chunk completes (no streaming
-        // latency concerns), keeping mimi state transitions identical.
         if (shouldStop || pending >= 48) {
-          const decodeSize = pending;
-          const decodeLatents = new Float32Array(decodeSize * latentDim);
-          for (let frame = 0; frame < decodeSize; frame++) {
-            decodeLatents.set(chunkLatents[chunkDecodedFrames + frame], frame * latentDim);
-          }
-          const decodeResult = await this.mimiDecoder.run({
-            latent: new ort.Tensor("float32", decodeLatents, [1, decodeSize, latentDim]),
-            ...mimiState,
-          });
-          updateStateFromManifestOutputs(mimiState, decodeResult, meta.mimi_state_manifest);
-          chunkDecodedFrames += decodeSize;
-          chunkAudioParts.push(
-            new Float32Array(decodeResult[this.mimiDecoder.outputNames[0]].data as Float32Array),
-          );
+          await decodePending();
         }
 
         if (shouldStop) {
           break;
         }
+      }
+      // A chunk that ran to MAX_FRAMES without stopping still holds the
+      // latents since its last batch (the batches land at 48, 96, … 480):
+      // decode them too, so its audio is kept whole. A chunk that stopped
+      // decoded everything on its last step.
+      if (chunkLatents.length > chunkDecodedFrames) {
+        await decodePending();
       }
       // Only a chunk the model never ended counts as capped: EOS arriving in
       // the last framesAfterEos steps still ends the sentence, just at the cap.

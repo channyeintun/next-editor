@@ -164,8 +164,9 @@ a new voice is a one-line profile in `src/studio/tts/profiles.ts`). Pocket's
 text prep splits a dialog into sentences only at `.`, `!`, or `?` (plus closing
 quotes or brackets) followed by whitespace, so `fmt.Println` and `3.14` stay
 whole; a sentence over the token budget is cut at word boundaries, and token
-slicing is left for a single over-long word. `POCKET_TEXT_PREP_VERSION` (2) is
-part of Pocket dialogs' cache keys only. Burmese (`my-MM`) narration goes
+slicing is left for a single over-long word. `POCKET_TEXT_PREP_VERSION` (2) and
+`POCKET_ENGINE_VERSION` (2: a sentence that runs to the engine's frame cap keeps
+all of its audio) are part of Pocket dialogs' cache keys only. Burmese (`my-MM`) narration goes
 through the Worker instead, with one of two providers chosen in the render
 console:
 

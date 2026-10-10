@@ -1,5 +1,6 @@
 import { sha256HexOfJson } from "../hash";
 import { ATHANLAB_TEXT_PREP_VERSION } from "./athanlab/textPrep";
+import { POCKET_ENGINE_VERSION } from "./pocket/engineVersion";
 import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
 /**
@@ -227,5 +228,9 @@ export function ttsRequestHash(request: TtsRequest): Promise<string> {
     // unchanged.
     pocketTextPrepVersion:
       request.profile.providerId === "pocket-tts-web" ? POCKET_TEXT_PREP_VERSION : undefined,
+    // Likewise for the in-page engine's audio: a fix there re-keys only the
+    // (free, local) Pocket dialogs.
+    pocketEngineVersion:
+      request.profile.providerId === "pocket-tts-web" ? POCKET_ENGINE_VERSION : undefined,
   });
 }

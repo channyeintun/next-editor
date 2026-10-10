@@ -11,6 +11,7 @@ import {
   type PocketVoiceProfile,
 } from "./profiles";
 import { ATHANLAB_TEXT_PREP_VERSION } from "./athanlab/textPrep";
+import { POCKET_ENGINE_VERSION } from "./pocket/engineVersion";
 import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
 describe("pocket voice profiles", () => {
@@ -45,13 +46,30 @@ describe("pocket voice profiles", () => {
 
     expect(
       await ttsRequestHash({ ...request, profile: requireVoiceProfile("pocket-alba-v1") }),
-    ).toBe("24d821ef9a86b4b27f1598a67e0a9c65e5b5211a90a6d406475e5fd95c89f705");
+    ).toBe("25a1370ff71ca8b458b37a37b591b0cbac8653d7c8526c23b8fab39f4b356905");
     expect(
       await ttsRequestHash({
         ...request,
         profile: customVoiceProfileOf({ id: "voice-1", sampleSha256: "abc" }),
       }),
-    ).toBe("a726b11d89a27b1e1287bd09efa1e791b4e43bf392870d572bf5b705774809b9");
+    ).toBe("8707f593b995068279b04a805d271b3cb73e367107b47db07c49e71cae2c420a");
+  });
+
+  // Engine v2 decodes the trailing latents of a capped chunk, so the v1 keys
+  // (these exact requests before the bump) must no longer hit the cache.
+  it("key cached dialogs on the engine version", async () => {
+    const request = { speechText: "Hello there.", lexiconVersion: 1, seed: 7 };
+
+    expect(POCKET_ENGINE_VERSION).toBe(2);
+    expect(
+      await ttsRequestHash({ ...request, profile: requireVoiceProfile("pocket-alba-v1") }),
+    ).not.toBe("24d821ef9a86b4b27f1598a67e0a9c65e5b5211a90a6d406475e5fd95c89f705");
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: customVoiceProfileOf({ id: "voice-1", sampleSha256: "abc" }),
+      }),
+    ).not.toBe("a726b11d89a27b1e1287bd09efa1e791b4e43bf392870d572bf5b705774809b9");
   });
 
   // Text prep v2 changed the prompt for the same speech text, so the v1 key
@@ -69,7 +87,7 @@ describe("pocket voice profiles", () => {
 
 describe("voxcpm2 request hash", () => {
   // Pocket-only cache changes must not re-key paid Modal takes: this is the
-  // hash the request had before the Pocket text-prep version existed.
+  // hash the request had before the Pocket text-prep and engine versions existed.
   it("is unchanged by the Pocket text-prep version", async () => {
     const profile = modalVoxCpm2BurmeseProfileOf({ id: "voice-1", sampleSha256: "abc" });
 
