@@ -41,6 +41,37 @@ describe("rankQuickOpenFiles", () => {
     );
   });
 
+  it("ranks a name holding the query as one run above the same letters scattered", () => {
+    expect(
+      rank(
+        "icons",
+        "src/components/icon/IconCursor.tsx",
+        "src/utils/iframeConsoleBridge.ts",
+        "src/components/fileSidebar/fileIcons.tsx",
+      )[0],
+    ).toBe("src/components/fileSidebar/fileIcons.tsx");
+    expect(
+      rank(
+        "test",
+        "src/collaboration/teachingStoreSync.ts",
+        "src/components/FileSidebar.test.ts",
+      )[0],
+    ).toBe("src/components/FileSidebar.test.ts");
+    expect(rank("store", "scripts/studio-render.ts", "src/agent/agentStore.ts")[0]).toBe(
+      "src/agent/agentStore.ts",
+    );
+  });
+
+  it("highlights the run that ranked a name, preferring Monaco's own", () => {
+    const nameMatches = (query: string, path: string) =>
+      rankQuickOpenFiles(prepareQuickOpenCandidates(treeFiles(path)), query).results[0].nameMatches;
+    expect(nameMatches("icons", "src/fileIcons.tsx")).toEqual([4, 5, 6, 7, 8]);
+    // Monaco spreads "test" over te·aching·St·ore; the run is the ".test".
+    expect(nameMatches("test", "src/teachingStoreSync.test.ts")).toEqual([18, 19, 20, 21]);
+    // Monaco's run is the hump, not the earlier "test" inside "contest".
+    expect(nameMatches("test", "contestTest.ts")).toEqual([7, 8, 9, 10]);
+  });
+
   it("ranks a match in the name above one only in the folders", () => {
     expect(rank("side", "side/index.ts", "src/FileSidebar.tsx")).toEqual([
       "src/FileSidebar.tsx",

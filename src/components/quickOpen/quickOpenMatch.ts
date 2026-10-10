@@ -5,19 +5,24 @@ import { FUZZY_MATCH_MAX_LENGTH, foldCase, fuzzyMatch } from "../../monaco/fuzzy
 // Go to File's ranking, after VS Code's Quick Open (scoreItemFuzzy and
 // compareItemsByFuzzyScore in its fuzzyScorer): a query that matches a file's
 // name beats one that only matches its folders, a name that starts with the
-// query beats both, and shorter names win among those. The letter matching is
-// Monaco's own fuzzyScore.
+// query beats both, a name that holds the query as one run beats the same
+// letters scattered through another, and shorter names win among those. The
+// letter matching is Monaco's own fuzzyScore.
 // ============================================================================
 
 /** At most this many results are drawn; `total` still counts every match. */
 export const QUICK_OPEN_RESULT_LIMIT = 100;
 
-// VS Code's tiers. Monaco's per-word scores stay far below 1 << 16, so a tier
+// VS Code's tiers. Monaco's per-word scores stay far below 1 << 15, so a tier
 // always outranks every score inside the tier below it. Pieces add up, so a
 // several-word query can pass 1 << 18; an identity match sorts first anyway.
 const PATH_IDENTITY_SCORE = 1 << 18;
 const NAME_PREFIX_SCORE = 1 << 17;
 const NAME_SCORE = 1 << 16;
+/** Added to NAME_SCORE for a piece found whole inside the name, as one run. */
+const NAME_RUN_SCORE = 1 << 15;
+/** Shorter pieces stay acronyms: "fs" is FileSidebar.tsx, not offsets.ts. */
+const NAME_RUN_MIN_LENGTH = 3;
 
 export interface QuickOpenCandidate {
   file: WorkspaceTreeFile;
@@ -117,13 +122,32 @@ function scorePiece(
     const foldedName = candidate.folded.slice(nameStart);
     const match = fuzzyMatch(piece.text, piece.folded, name, foldedName);
     if (match) {
+      const positions = match.positions.map((at) => at + nameStart);
       // Typing a file's name wins over the same letters found inside another
       // name, and the more of the name it covers, the higher: "window" puts
       // window.ts above windowActions.ts.
-      const base = foldedName.startsWith(piece.folded)
-        ? NAME_PREFIX_SCORE + Math.round((piece.text.length / name.length) * 100)
-        : NAME_SCORE;
-      return { score: base + match.score, positions: match.positions.map((at) => at + nameStart) };
+      if (foldedName.startsWith(piece.folded)) {
+        const base = NAME_PREFIX_SCORE + Math.round((piece.text.length / name.length) * 100);
+        return { score: base + match.score, positions };
+      }
+      // Typing a run of the name as it is written ("icons" in fileIcons.tsx)
+      // wins over the same letters spread over humps (IconCursor.tsx), which
+      // Monaco scores higher for starting earlier.
+      const runStart =
+        piece.folded.length >= NAME_RUN_MIN_LENGTH ? foldedName.indexOf(piece.folded) : -1;
+      if (runStart >= 0) {
+        // Highlight a run: Monaco's own letters when they are one (the hump in
+        // contestTest.ts), else the first run in the name.
+        const run =
+          matchSpan(positions) === positions.length - 1
+            ? positions
+            : Array.from(
+                { length: piece.folded.length },
+                (_, index) => nameStart + runStart + index,
+              );
+        return { score: NAME_SCORE + NAME_RUN_SCORE + match.score, positions: run };
+      }
+      return { score: NAME_SCORE + match.score, positions };
     }
   }
   return matchPath(piece, candidate);
