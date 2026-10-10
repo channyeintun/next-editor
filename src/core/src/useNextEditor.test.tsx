@@ -56,9 +56,9 @@ afterEach(() => {
 });
 
 describe("useNextEditorActorActions", () => {
-  // The React Compiler skips hookless hooks, and CodeEditor keys an unmount cleanup
-  // (which detaches the editor from the machine) on syncEditorRef, so the senders'
-  // identities must be held explicitly.
+  // The React Compiler skips hookless hooks, and three CodeEditor effects list
+  // syncEditorRef in their deps and send SET_EDITOR_REF (which rebuilds the replay
+  // state during playback), so the senders' identities must be held explicitly.
   it("keeps sender identities across renders and renews them for a new actor", () => {
     const first = startActor({ current: null });
     const { result, rerender } = renderHook(({ actor }) => useNextEditorActorActions(actor), {

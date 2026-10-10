@@ -312,10 +312,11 @@ export type NextEditorActorActions = ReturnType<typeof createNextEditorActorActi
  * Memoized via useState rather than relying on the React Compiler: this hook
  * contains no React hook calls in its action bodies, so the compiler skips it
  * entirely (no memo cache is emitted) and every render would otherwise produce
- * fresh sender identities. That churn is not cosmetic — CodeEditor keys its
- * unmount-cleanup effect on `syncEditorRef`, and that cleanup nulls
- * `editorRef.current` and detaches the editor from the machine, so unstable
- * identities silently break frame/cursor capture and replay.
+ * fresh sender identities. That churn is not cosmetic — CodeEditor lists
+ * `syncEditorRef` in the deps of its playback-model, presence and binary-file
+ * effects, and each of them sends SET_EDITOR_REF. A new identity per render
+ * would re-send it on every commit, and during playback each SET_EDITOR_REF
+ * rebuilds the rendered replay state (shouldSyncPlaybackEditorRef).
  */
 export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
   const [cache, setCache] = useState(() => ({
