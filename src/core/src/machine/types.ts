@@ -26,6 +26,7 @@ import type { ChatCheckpoint, ChatRecordingEvent } from "../chat";
 import type { TextEditEvent } from "../textEdit";
 import type { RecordingClock } from "./recordingClock";
 import type { RecordingTracks } from "./recordingAssembly";
+import type { RecordingSafePoint } from "./retake";
 import type { MediaSpan } from "../utils/mediaSpans";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
@@ -52,19 +53,6 @@ export interface TimelineState {
   speed: number;
   /** Volume level (0.0 - 1.0) */
   volume: number;
-}
-
-/**
- * A moment a take can be rewound to: its start, and each resume. `perf` and `wall` are
- * the clock readings there, so rewinding can put the take's clock back; `mediaTime` is
- * where the recorders' own files were then (recorded time plus what earlier retakes
- * discarded).
- */
-export interface RecordingSafePoint {
-  recordingTime: number;
-  perf: number;
-  wall: number;
-  mediaTime: number;
 }
 
 /**

@@ -60,15 +60,12 @@ import {
 } from "./screenCaptureActions";
 import {
   getRunningRecorders,
-  PAUSE_RECORDER_SENDS,
   pauseRecordingMedia,
   resumeRecordingMedia,
-  sendToRunningRecorders,
   stopRecordingMedia,
   stopScreenRecording,
 } from "./runningRecorders";
-import { findRetakeTargetNow, rewindSessionToSafePoint } from "./retake";
-import { appendChatDelta, appendRuntimeRecordingEvent } from "./recordingSession";
+import { findRetakeTargetNow, retakeRecording } from "./retake";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
 import {
   setRecording,
@@ -316,7 +313,7 @@ export const editorMachine = setup({
     // context/event/actor types. The ones that only append to the session in place are
     // plain actions: they replace nothing in the context, so an assign would only copy
     // it on every captured event. The pause, resume and stop of the recorders have
-    // their bodies in runningRecorders.ts; retakeRecording keeps its body inline.
+    // their bodies in runningRecorders.ts, and retakeRecording has its body in retake.ts.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
@@ -350,50 +347,7 @@ export const editorMachine = setup({
     stopRecordingMedia: enqueueActions(stopRecordingMedia),
     stopScreenRecording: enqueueActions(stopScreenRecording),
     // Rewinds the take to its last safe point and holds it paused there (see retake.ts).
-    retakeRecording: enqueueActions(({ context, enqueue }) => {
-      const session = context.session;
-      if (!session) return;
-      const target = findRetakeTargetNow(session);
-      if (!target) return;
-      const restore = rewindSessionToSafePoint(session, target);
-
-      // The recorders hold still until the take resumes; the stretch they recorded since
-      // the safe point is in the session's media cuts. A selected narration file is an
-      // input, so it is rewound to be performed over again.
-      sendToRunningRecorders(getRunningRecorders(context), enqueue, {
-        ...PAUSE_RECORDER_SENDS,
-        externalAudio: [{ type: "PAUSE" }, { type: "SEEK", timeMs: target.recordingTime }],
-      });
-
-      // The live terminal and agent conversation cannot be rewound. What they show now is
-      // recorded whole at the safe point, so what follows is recorded against it.
-      if (restore.runtimeChanged) {
-        const runtime = context.getRuntimeSnapshot?.();
-        if (runtime) appendRuntimeRecordingEvent(session, runtime);
-      }
-      if (restore.chatChanged) {
-        const checkpoint = context.getChatCheckpoint?.();
-        if (checkpoint) appendChatDelta(session, { k: "checkpoint", state: checkpoint });
-      }
-
-      // The session changed in place. A retake from `paused` lands in `paused` again, a
-      // transition that changes no state, so this assign is what publishes a new snapshot
-      // for the selectors that read the rewound clock, safe points and chapters.
-      enqueue.assign({ session });
-
-      // Put the editor back the way it was at the safe point. These write to the app's
-      // stores, whose own capture records any remaining difference at that moment.
-      enqueue(() => {
-        if (restore.workspace) context.applyWorkspaceSnapshot?.(restore.workspace);
-        if (restore.whiteboard) context.applyWhiteboardState?.(restore.whiteboard);
-        const state = restore.frame?.state;
-        if (state?.slideState) {
-          context.applySlideState?.(state.slideState, state.currentSlideIndex ?? 0);
-        }
-        if (state?.previewState) context.applyPreviewState?.(state.previewState);
-        if (restore.previewStreamed) context.requestPreviewCheckpoint?.();
-      });
-    }),
+    retakeRecording: enqueueActions(retakeRecording),
     notifyRecordingStart,
     notifyRecordingStop,
     storeAudioBlob: assign(storeAudioBlob),

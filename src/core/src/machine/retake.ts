@@ -9,11 +9,22 @@ import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import { resumeFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
 import { RUNTIME_CHECKPOINT_DUE, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
-import { getRecordingTimestamp, restartPreviewStream } from "./recordingSession";
+import {
+  appendChatDelta,
+  appendRuntimeRecordingEvent,
+  getRecordingTimestamp,
+  restartPreviewStream,
+} from "./recordingSession";
 import { rewindRecordingClock } from "./recordingClock";
 import { resolveWorkspaceSnapshotBetween } from "./replayState";
 import { RECORDING_TRACK_TIME, type RecordingTracks } from "./recordingAssembly";
-import type { RecordingSafePoint, RecordingSession } from "./types";
+import {
+  getRunningRecorders,
+  PAUSE_RECORDER_SENDS,
+  sendToRunningRecorders,
+  type RecorderSendEnqueue,
+} from "./runningRecorders";
+import type { EditorActionArgs, EditorMachineContext, RecordingSession } from "./types";
 
 // ============================================================================
 // Retakes: rewinding a take to its last safe point.
@@ -26,6 +37,19 @@ import type { RecordingSafePoint, RecordingSession } from "./types";
 // back from the kept tracks, and the preview's rrweb stream is re-based on a
 // fresh full snapshot.
 // ============================================================================
+
+/**
+ * A moment a take can be rewound to: its start, and each resume. `perf` and `wall` are
+ * the clock readings there, so rewinding can put the take's clock back; `mediaTime` is
+ * where the recorders' own files were then (recorded time plus what earlier retakes
+ * discarded).
+ */
+export interface RecordingSafePoint {
+  recordingTime: number;
+  perf: number;
+  wall: number;
+  mediaTime: number;
+}
 
 /**
  * Where a retake from now would rewind to: the last safe point before now. Retaking
@@ -200,3 +224,67 @@ export function rewindSessionToSafePoint(
     previewStreamed,
   };
 }
+
+/**
+ * The subset of xstate's `enqueue` object a retake uses: the recorder sends, the assign
+ * that publishes the rewound session, and a plain action that restores the editor. Kept
+ * structural, like RecorderSendEnqueue, so the body doesn't need to thread the
+ * machine's full setup() type parameters.
+ */
+export interface RetakeEnqueue extends RecorderSendEnqueue {
+  (action: () => void): void;
+  assign: (updater: Partial<EditorMachineContext>) => void;
+}
+
+/**
+ * The RETAKE_RECORDING action: rewinds the take to its last safe point, holds the
+ * recorders still there, records what cannot be rewound whole, and puts the editor back.
+ * editorMachine.ts wraps it as `enqueueActions(retakeRecording)`.
+ */
+export const retakeRecording = ({
+  context,
+  enqueue,
+}: EditorActionArgs & { enqueue: RetakeEnqueue }): void => {
+  const session = context.session;
+  if (!session) return;
+  const target = findRetakeTargetNow(session);
+  if (!target) return;
+  const restore = rewindSessionToSafePoint(session, target);
+
+  // The recorders hold still until the take resumes; the stretch they recorded since
+  // the safe point is in the session's media cuts. A selected narration file is an
+  // input, so it is rewound to be performed over again.
+  sendToRunningRecorders(getRunningRecorders(context), enqueue, {
+    ...PAUSE_RECORDER_SENDS,
+    externalAudio: [{ type: "PAUSE" }, { type: "SEEK", timeMs: target.recordingTime }],
+  });
+
+  // The live terminal and agent conversation cannot be rewound. What they show now is
+  // recorded whole at the safe point, so what follows is recorded against it.
+  if (restore.runtimeChanged) {
+    const runtime = context.getRuntimeSnapshot?.();
+    if (runtime) appendRuntimeRecordingEvent(session, runtime);
+  }
+  if (restore.chatChanged) {
+    const checkpoint = context.getChatCheckpoint?.();
+    if (checkpoint) appendChatDelta(session, { k: "checkpoint", state: checkpoint });
+  }
+
+  // The session changed in place. A retake from `paused` lands in `paused` again, a
+  // transition that changes no state, so this assign is what publishes a new snapshot
+  // for the selectors that read the rewound clock, safe points and chapters.
+  enqueue.assign({ session });
+
+  // Put the editor back the way it was at the safe point. These write to the app's
+  // stores, whose own capture records any remaining difference at that moment.
+  enqueue(() => {
+    if (restore.workspace) context.applyWorkspaceSnapshot?.(restore.workspace);
+    if (restore.whiteboard) context.applyWhiteboardState?.(restore.whiteboard);
+    const state = restore.frame?.state;
+    if (state?.slideState) {
+      context.applySlideState?.(state.slideState, state.currentSlideIndex ?? 0);
+    }
+    if (state?.previewState) context.applyPreviewState?.(state.previewState);
+    if (restore.previewStreamed) context.requestPreviewCheckpoint?.();
+  });
+};
