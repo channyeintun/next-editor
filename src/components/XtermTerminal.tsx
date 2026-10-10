@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useEffectEvent, useRef, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -97,22 +97,14 @@ function XtermTerminal({
   // keepScrolledOffOutput was on.
   const hasScrolledOffOutputRef = useRef(false);
   const lastSessionIdRef = useRef<string | null>(null);
-  const onDataRef = useRef(onData);
-  const onResizeRef = useRef(onResize);
-  const onScrollRef = useRef(onScroll);
+  // The terminal outlives a change of callback props, so its listeners always
+  // call the latest ones.
+  const emitData = useEffectEvent((input: string) => onData?.(input));
+  const emitResize = useEffectEvent((size: { cols: number; rows: number }) => onResize?.(size));
+  const emitScroll = useEffectEvent((line: number) => onScroll?.(line));
 
-  useEffect(() => {
-    onDataRef.current = onData;
-  }, [onData]);
-
-  useEffect(() => {
-    onResizeRef.current = onResize;
-  }, [onResize]);
-
-  useEffect(() => {
-    onScrollRef.current = onScroll;
-  }, [onScroll]);
-
+  // A change of `interactive` rebuilds the terminal, so the constructor
+  // options below are the only place cursorBlink and disableStdin are set.
   useEffect(() => {
     const container = containerRef.current;
 
@@ -141,7 +133,7 @@ function XtermTerminal({
     const fitAddon = new FitAddon();
     const updateSize = () => {
       fitAddon.fit();
-      onResizeRef.current?.({ cols: terminal.cols, rows: terminal.rows });
+      emitResize({ cols: terminal.cols, rows: terminal.rows });
     };
 
     terminal.loadAddon(fitAddon);
@@ -181,11 +173,11 @@ function XtermTerminal({
 
     const dataDisposable = terminal.onData((input) => {
       if (interactive) {
-        onDataRef.current?.(input);
+        emitData(input);
       }
     });
     const scrollDisposable = terminal.onScroll((line) => {
-      onScrollRef.current?.(line);
+      emitScroll(line);
     });
 
     terminalRef.current = terminal;
@@ -214,17 +206,6 @@ function XtermTerminal({
       hasScrolledOffOutputRef.current = false;
       lastSessionIdRef.current = null;
     };
-  }, [interactive]);
-
-  useEffect(() => {
-    const terminal = terminalRef.current;
-
-    if (!terminal) {
-      return;
-    }
-
-    terminal.options.disableStdin = !interactive;
-    terminal.options.cursorBlink = interactive;
   }, [interactive]);
 
   useEffect(() => {

@@ -15,6 +15,7 @@ const xterm = vi.hoisted(() => {
     /** Sees every key before xterm does; false hands the key to the browser. */
     keyHandler?: (event: KeyboardEvent) => boolean;
     dataListener?: (input: string) => void;
+    scrollListener?: (line: number) => void;
 
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
@@ -36,7 +37,8 @@ const xterm = vi.hoisted(() => {
       this.dataListener = listener;
       return { dispose() {} };
     }
-    onScroll() {
+    onScroll(listener: (line: number) => void) {
+      this.scrollListener = listener;
       return { dispose() {} };
     }
     onWriteParsed() {
@@ -174,6 +176,20 @@ describe("XtermTerminal", () => {
       expect(options.theme).toMatchObject({ background: "#15191f", brightBlack: "#90a1b9" });
     },
   );
+
+  it("reports a scroll to the onScroll passed after the terminal was built", () => {
+    const firstOnScroll = vi.fn<(line: number) => void>();
+    const latestOnScroll = vi.fn<(line: number) => void>();
+    const props = { sessionId: "runner", output: "", interactive: false, label: "Runner output" };
+    const view = render(<XtermTerminal {...props} onScroll={firstOnScroll} />);
+    view.rerender(<XtermTerminal {...props} onScroll={latestOnScroll} />);
+
+    expect(xterm.FakeTerminal.instances).toHaveLength(1);
+    xterm.FakeTerminal.instances[0].scrollListener?.(12);
+
+    expect(latestOnScroll).toHaveBeenCalledWith(12);
+    expect(firstOnScroll).not.toHaveBeenCalled();
+  });
 
   it("drops the slid-off scrollback once scroll lines are recorded again", () => {
     const { update } = renderTerminal(windowAt(7000), true);
