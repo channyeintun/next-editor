@@ -90,6 +90,39 @@ describe("loadWhisperAssets", () => {
     expect(new Uint8Array(assets.encoder)).toEqual(encoder);
   });
 
+  it("caches each complete file and keeps the bytes it hands back whole", async () => {
+    vi.useFakeTimers();
+    const stored = new Map<string, ArrayBuffer>();
+    vi.stubGlobal("caches", {
+      open: async () => ({
+        match: async (url: string) => {
+          const bytes = stored.get(url);
+          return bytes ? new Response(bytes.slice(0)) : undefined;
+        },
+        put: async (url: string, response: Response) => {
+          stored.set(url, await response.arrayBuffer());
+        },
+      }),
+    });
+    const calls = serve();
+
+    const assets = await load();
+
+    const decoder = FILES["decoder_model_merged_quantized.onnx"];
+    expect(new Uint8Array(assets.decoder)).toEqual(decoder);
+    const cachedDecoder = [...stored].find(
+      ([url]) => fileOf(url) === "decoder_model_merged_quantized.onnx",
+    )?.[1];
+    expect(new Uint8Array(cachedDecoder!)).toEqual(decoder);
+
+    // A second run reads the cache and downloads nothing.
+    const downloads = calls.length;
+    const cached = await load();
+    expect(new Uint8Array(cached.decoder)).toEqual(decoder);
+    expect(new Uint8Array(cached.encoder)).toEqual(FILES["encoder_model_quantized.onnx"]);
+    expect(calls).toHaveLength(downloads);
+  });
+
   it("does not retry a missing file", async () => {
     vi.useFakeTimers();
     const calls = serve((file) =>

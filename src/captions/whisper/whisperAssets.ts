@@ -130,7 +130,8 @@ async function fetchFile(
   }
   const buffer = await download(url, path, onBytes, signal);
   // Only a complete file is cached, so an interrupted run never leaves a broken model.
-  await cache?.put(url, new Response(buffer.slice(0)));
+  // A Response copies the bytes it is given, so the buffer stays whole for the caller.
+  await cache?.put(url, new Response(buffer));
   return buffer;
 }
 
