@@ -1,27 +1,35 @@
 import { useState, useRef, useEffect } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
-import { decompressBinaryToRecording } from "../storage/recordingCodecClient";
 import {
   attachCompanionMedia,
   decodeRecordingFile,
   selectRecordingFiles,
 } from "../storage/recordingImport";
-import { describeFailedResponse, fetchNextEditorUrl } from "../storage/recordingFetch";
-import { streamRecording } from "../storage/recordingStream";
-import {
-  fetchSiblingCaptions,
-  findWorkingAudioBlob,
-  findWorkingCameraUrl,
-  withResolvedMediaUrls,
-} from "../storage/recordingSiblingMedia";
+import { loadRecordingFromUrl } from "../storage/recordingLoad";
 import { isNextEditorUrl } from "../utils/recordingUrl";
-import type { Recording } from "../core/src";
 
 interface LoadFailure {
   /** Human-readable reason, shown in the editor's inline error panel. */
   message: string;
   /** The URL that failed, so it can be retried; null for a file, which cannot be fetched again. */
   url: string | null;
+}
+
+/**
+ * Awaits `task` and returns what it threw, or null when it finished. Module-level because the
+ * React Compiler skips a hook that holds a try/finally or a throw inside a try block.
+ */
+async function failureOf(task: () => Promise<void>): Promise<{ error: unknown } | null> {
+  try {
+    await task();
+    return null;
+  } catch (error) {
+    return { error };
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 export type UrlLoader = ReturnType<typeof useUrlLoader>;
@@ -70,63 +78,21 @@ export const useUrlLoader = () => {
     const selection = selectRecordingFiles(files);
     if (!selection) return;
     const { isStale } = beginLoad();
-    try {
+    const failed = await failureOf(async () => {
       const recording = await decodeRecordingFile(selection.neFile);
       if (!isStale()) {
         loadRecording(attachCompanionMedia(recording, selection));
       }
-    } catch (err) {
-      if (isStale()) return;
-      console.error("Failed to import file:", err);
+    });
+    if (isStale()) return;
+    if (failed) {
+      console.error("Failed to import file:", failed.error);
       setFailure({
-        message: `Failed to import file: ${err instanceof Error ? err.message : "Unknown error"}`,
+        message: `Failed to import file: ${describeError(failed.error)}`,
         url: null,
       });
-    } finally {
-      if (!isStale()) {
-        setIsLoading(false);
-      }
     }
-  };
-
-  const loadRecordingFromBinaryBytes = async (
-    bytes: Uint8Array,
-    baseUrl?: string,
-  ): Promise<Recording> => {
-    const resolved = withResolvedMediaUrls(await decompressBinaryToRecording(bytes), baseUrl);
-    loadRecording(resolved);
-    return resolved;
-  };
-
-  /**
-   * Resolves external audio/camera media out-of-band, after the (now tiny) `.ne` itself has
-   * loaded. Camera is probed first (cheap HEAD/ranged-GET) so a single `extendRecording` can
-   * carry both fixes — audio's full download happens after, folding in whatever the camera
-   * probe found instead of racing it.
-   */
-  const resolveExternalMedia = async (
-    recording: Recording,
-    neUrl: string | undefined,
-    isStale: () => boolean,
-    signal: AbortSignal,
-  ) => {
-    let current = recording;
-
-    if (current.cameraFile || current.cameraUrl) {
-      const cameraUrl = await findWorkingCameraUrl(current, neUrl, signal);
-      if (cameraUrl) {
-        current = { ...current, cameraUrl };
-      }
-    }
-
-    const audio = await findWorkingAudioBlob(current, neUrl, signal);
-    if (audio) {
-      current = { ...current, audioUrl: audio.url, audioBlob: audio.blob };
-    }
-
-    if (current !== recording && !isStale()) {
-      extendRecording(current);
-    }
+    setIsLoading(false);
   };
 
   const fetchNextEditorFile = async (url: string) => {
@@ -141,82 +107,30 @@ export const useUrlLoader = () => {
       throw new Error(message);
     }
 
-    try {
-      const response = await fetchNextEditorUrl(url, { signal });
-
-      if (!response.ok) {
-        throw new Error(await describeFailedResponse(response));
-      }
-
-      if (isStale()) return;
-
-      // Stream + progressively decode straight from the response body. Cloning the
-      // response here would tee the stream and buffer the *entire* file in the unread
-      // branch — defeating streaming — so the body is consumed directly. The reader
-      // only returns null before touching the body (not a readable stream), and the
-      // body is then read whole. Once it has started reading, only a broken download
-      // (a network TypeError) is retried by fetching the whole file again; a decode
-      // error is final, since the whole-file decoder would reject the same bytes.
-      let loaded: Recording | null = null;
-      let bodyConsumed = false;
-      try {
-        loaded = await streamRecording(response, url, {
-          isStale,
-          load: (recording) => {
-            loadRecording(recording);
-            setIsLoading(false);
-          },
-          appendDelta: appendRecordingDelta,
-          extend: extendRecording,
-        });
-      } catch (error) {
-        if (!(error instanceof TypeError)) throw error;
-        console.warn("Streaming the recording failed, fetching it whole:", error);
-        bodyConsumed = true;
-      }
-
-      if (isStale()) return;
-
-      if (!loaded) {
-        const source = bodyConsumed ? await fetchNextEditorUrl(url, { signal }) : response;
-        const bytes = new Uint8Array(await source.arrayBuffer());
-        loaded = await loadRecordingFromBinaryBytes(bytes, url);
-      }
-
-      if (isStale()) return;
-
-      const recordingId = loaded.id;
-      fetchSiblingCaptions(url, loaded.captionFiles, signal)
-        .then((tracks) => {
-          if (!isStale()) {
-            for (const track of tracks) addCaptionTrack(recordingId, track);
-          }
-        })
-        .catch(() => {});
-
-      // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
-      if (!isStale()) {
-        resolveExternalMedia(loaded, url, isStale, signal).catch((error: unknown) => {
-          // Leaving or replacing the lesson aborts these downloads; that is not a failure.
-          if (!signal.aborted) console.warn("Resolving the lesson's sibling media failed:", error);
-        });
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        return;
-      }
-      if (isStale()) return;
-      console.error("Failed to load tutorial from URL:", err);
+    const failed = await failureOf(() =>
+      loadRecordingFromUrl(url, signal, {
+        isStale,
+        load: (recording) => {
+          loadRecording(recording);
+          setIsLoading(false);
+        },
+        appendDelta: appendRecordingDelta,
+        extend: extendRecording,
+        addCaptionTrack,
+      }),
+    );
+    if (isStale()) return;
+    // Leaving the editor aborts the load; that is not a failure.
+    if (failed && !(failed.error instanceof Error && failed.error.name === "AbortError")) {
+      console.error("Failed to load tutorial from URL:", failed.error);
       setFailure({
-        message: `Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`,
+        message: `Failed to load tutorial: ${describeError(failed.error)}`,
         url,
       });
-      throw err;
-    } finally {
-      if (!isStale()) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+      throw failed.error;
     }
+    setIsLoading(false);
   };
 
   const failedUrl = failure?.url;

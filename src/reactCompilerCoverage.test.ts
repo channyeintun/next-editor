@@ -43,7 +43,6 @@ const NOT_COMPILED: Record<string, string> = {
     "writes the preview handle's refs, which a hook returned",
   "src/components/preview/usePreviewInteractionCapture.ts":
     "conditional expressions inside a try block",
-  "src/hooks/useUrlLoader.ts": "try/finally, and a throw inside a try block",
   "src/studio/StudioController.tsx": "try/finally, and throws inside try blocks",
   "src/components/RecordingDraftRecovery.tsx": "try/finally",
   "src/components/LandingPage.tsx": "reads refs during render",

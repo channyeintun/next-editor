@@ -9,8 +9,8 @@ export const useDragAndDropUrl = ({
 }: UrlLoader) => {
   const [isDragging, setIsDragging] = useState(false);
 
-  // The loader hands out new functions on every render (the React Compiler skips useUrlLoader),
-  // so the drop reads them through an Effect Event and the listeners below are added once.
+  // The loader's functions are not promised to stay the same between renders, so the drop
+  // reads them through an Effect Event and the listeners below are added once.
   const loadDropped = useEffectEvent(async (e: DragEvent) => {
     // Handle file drops: a `.ne` plus optional sibling camera video / audio files.
     const files = e.dataTransfer?.files;

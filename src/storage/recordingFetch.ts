@@ -1,4 +1,4 @@
-// How the URL loader (src/hooks/useUrlLoader.ts) fetches a `.ne` and its sibling
+// How the URL loader (src/storage/recordingLoad.ts) fetches a `.ne` and its sibling
 // files: through the same-origin proxy when the host is another origin, since a
 // host without CORS is reachable only that way, and directly when there is no
 // proxy to ask.

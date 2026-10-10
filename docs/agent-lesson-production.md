@@ -449,7 +449,7 @@ Add the persona guide, curriculum/scriptwriter workflow, source citation require
 - [Recorder capture](../src/core/src/machine/captureActions.ts), [camera](../src/core/src/machine/cameraCaptureActions.ts) and [external-audio path](../src/core/src/machine/audioCaptureActions.ts)
 - [Editor diff application](../src/core/src/utils/editorDiff.ts)
 - [Cursor coordinate remapping](../src/core/src/utils/cursorCoordinates.ts) and [cursor replay](../src/core/src/utils/cursorReplay.ts)
-- [Sibling media and caption resolution](../src/hooks/useUrlLoader.ts)
+- [Sibling media and caption resolution](../src/storage/recordingSiblingMedia.ts)
 - [Execution-kind-scoped agent tools](../src/agent/tools/index.ts)
 - [Production lesson draft/publish API](../infra/worker/routes/lessons.ts) and [upload client](../infra/client/upload/uploadLesson.ts)
 - [Static Tube seed catalog](../tube/data/lessons.json)

@@ -9,7 +9,8 @@ This is one-way _playback_ streaming (one producer → many viewers, watch-as-it
 > The bundled **`introduction.ne`** demo already uses this: opening
 > `/code?url=/lessons/introduction/introduction.ne` streams the file and starts showing the
 > recording once its first frames have arrived (about 50 KB of the 432 KB) instead of waiting for
-> the whole file. See [useUrlLoader.ts](../src/hooks/useUrlLoader.ts).
+> the whole file. See [recordingLoad.ts](../src/storage/recordingLoad.ts), the pipeline behind
+> `useUrlLoader`.
 
 ---
 
@@ -28,7 +29,7 @@ in-order prefix** of those bytes into playable records. Three player actions con
   a later metadata/media update.
 
 Both are exposed from the actions hook (`useNextEditorActions`) and used by the shipped
-[useUrlLoader.ts](../src/hooks/useUrlLoader.ts).
+[recordingLoad.ts](../src/storage/recordingLoad.ts), which `useUrlLoader` hands them to.
 
 ---
 
@@ -77,7 +78,7 @@ Stream the bytes with `fetch` and feed each chunk to a
 [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts), then feed the
 player `loadRecording` (first), `appendRecordingDelta` (later intervals), and `extendRecording`
 (final immutable snapshot). A `.ne` is raw SCR3 bytes end-to-end — the shipped
-[useUrlLoader.ts](../src/hooks/useUrlLoader.ts) does not sniff or decode base64 text.
+[recordingLoad.ts](../src/storage/recordingLoad.ts) does not sniff or decode base64 text.
 
 ```ts
 import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
