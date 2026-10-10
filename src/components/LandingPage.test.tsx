@@ -6,6 +6,20 @@ import LandingPage from "./LandingPage";
 const device = vi.hoisted(() => ({ mobile: false }));
 vi.mock("../utils/isMobileBrowser", () => ({ isMobileBrowser: () => device.mobile }));
 
+// LandingPage calls useDocumentTitle once per render, so counting the calls
+// counts the page's renders.
+const pageRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("../hooks/useDocumentTitle", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/useDocumentTitle")>();
+  return {
+    ...actual,
+    useDocumentTitle: (title: string | null) => {
+      pageRenders.count += 1;
+      actual.useDocumentTitle(title);
+    },
+  };
+});
+
 class InertObserver {
   observe() {}
   disconnect() {}
@@ -123,6 +137,19 @@ describe("LandingPage framework rotation", () => {
     act(() => vi.advanceTimersByTime(2000));
     expect(heading.textContent).not.toBe(rotatedText);
     expect(worksWithHeading()).toBe(heading);
+  });
+
+  it("re-renders only the heading, not the whole page, on each rotation", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    renderLandingPage();
+    const heading = worksWithHeading();
+    const initialText = heading.textContent;
+    const rendersBeforeRotation = pageRenders.count;
+
+    act(() => vi.advanceTimersByTime(4000));
+
+    expect(heading.textContent).not.toBe(initialText);
+    expect(pageRenders.count).toBe(rendersBeforeRotation);
   });
 
   it("neither rotates nor shows the control under reduced motion", () => {
