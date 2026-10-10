@@ -110,11 +110,13 @@ function EditorHeader({ isAuthoring, breadcrumb }: EditorHeaderProps) {
         {breadcrumb ?? (
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Editor</span>
         )}
-        {isSaving ? (
-          <span className="text-[10px] text-slate-300" role="status">
-            Saving…
-          </span>
-        ) : errorMessage ? (
+        {/* Stays mounted and only its text changes, like the load status in
+            Editor.tsx: a status region inserted already filled is often not
+            announced. sr-only while empty, so it adds no flex gap. */}
+        <span role="status" className={isSaving ? "text-[10px] text-slate-300" : "sr-only"}>
+          {isSaving ? "Saving…" : ""}
+        </span>
+        {!isSaving && errorMessage ? (
           <span
             className="max-w-64 truncate text-[10px] text-rose-400"
             role="alert"

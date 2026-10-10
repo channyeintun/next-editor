@@ -42,6 +42,10 @@ const mocks = vi.hoisted(() => {
 let lessonType: WorkspaceLessonType = "react";
 let sidebarCollapsed = false;
 let whiteboardOpen = false;
+let saveStatus: { isSaving: boolean; errorMessage: string | null } = {
+  isSaving: false,
+  errorMessage: null,
+};
 
 vi.mock("../hooks/useWorkspace", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useWorkspace")>()),
@@ -54,6 +58,7 @@ vi.mock("../hooks/useWorkspace", async (importOriginal) => ({
   useWorkspaceDirtyState: () => ({ hasUnsavedChanges: false }),
   useWorkspaceFileCount: () => 0,
   useWorkspaceLessonType: () => lessonType,
+  useWorkspaceSaveStatus: () => saveStatus,
   useWorkspaceSidebarCollapsed: () => sidebarCollapsed,
 }));
 vi.mock("../contexts/WhiteboardContext", async (importOriginal) => ({
@@ -97,12 +102,16 @@ vi.mock("../utils/workspaceZipImport", async (importOriginal) => ({
 vi.mock("../starters", () => ({
   createStarterWorkspaceForLessonType: mocks.createStarterWorkspaceForLessonType,
 }));
+// The whole header renders only for the save-status tests, which don't need the
+// collaboration and slides controls (or the providers behind them).
+vi.mock("./CollaborationPanel", () => ({ default: () => null }));
+vi.mock("./SlidesButton", () => ({ default: () => null }));
 vi.mock("./tour/productTour", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tour/productTour")>()),
   startTour: mocks.startTour,
 }));
 
-import {
+import EditorHeader, {
   FileSidebarToggleButton,
   PreviewHeaderButton,
   WhiteboardHeaderButton,
@@ -127,6 +136,58 @@ describe("PreviewHeaderButton", () => {
 
     expect(screen.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-pressed", "true");
     expect(button).toHaveAccessibleDescription("Close preview");
+  });
+});
+
+describe("EditorHeader save status", () => {
+  beforeEach(() => {
+    lessonType = "react";
+    saveStatus = { isSaving: false, errorMessage: null };
+  });
+
+  function renderHeader() {
+    const header = () => (
+      <PreviewAdapterHandleProvider>
+        <PreviewPanelProvider>
+          <EditorHeader isAuthoring />
+        </PreviewPanelProvider>
+      </PreviewAdapterHandleProvider>
+    );
+    const view = render(header());
+    return { rerender: () => view.rerender(header()) };
+  }
+
+  it("keeps one status region mounted and changes only its text while saving", () => {
+    const { rerender } = renderHeader();
+    const status = screen.getByRole("status");
+
+    expect(status).toBeEmptyDOMElement();
+
+    saveStatus = { isSaving: true, errorMessage: null };
+    rerender();
+
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent("Saving…");
+
+    saveStatus = { isSaving: false, errorMessage: null };
+    rerender();
+
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it("shows a storage error as an alert only while it is not saving", () => {
+    saveStatus = { isSaving: false, errorMessage: "Quota exceeded" };
+    const { rerender } = renderHeader();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Workspace storage error: Quota exceeded");
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+
+    saveStatus = { isSaving: true, errorMessage: "Quota exceeded" };
+    rerender();
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Saving…");
   });
 });
 
