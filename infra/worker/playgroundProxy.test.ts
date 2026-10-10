@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { UserRow } from "../db/types";
 import type { Env } from "./env";
-import { playgroundRateLimitKey, sortLessonFiles, writeCachedValue } from "./playgroundProxy";
+import {
+  callUpstream,
+  isCacheableRunResult,
+  playgroundRateLimitKey,
+  sortLessonFiles,
+  writeCachedValue,
+} from "./playgroundProxy";
 
 describe("playgroundRateLimitKey", () => {
   const USER: UserRow = {
@@ -144,5 +150,121 @@ describe("sortLessonFiles", () => {
     expect(
       sortLessonFiles([{ path: "b.kt" }, { path: "A.kt" }], "Main.kt").map((file) => file.path),
     ).toEqual(["A.kt", "b.kt"]);
+  });
+});
+
+describe("callUpstream", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+  /** A response whose body breaks off after its first chunk. */
+  function brokenBody(): Response {
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"partial":'));
+          controller.error(new TypeError("connection reset"));
+        },
+      }),
+    );
+  }
+
+  it("sends the request with the timer's signal and hands back any response", async () => {
+    const fetchSpy = vi.fn<FetchFn>(async () => new Response("busy", { status: 503 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const call = await callUpstream(
+      "https://upstream.test/run",
+      { method: "POST", body: "x" },
+      1000,
+    );
+
+    expect(call.kind).toBe("response");
+    if (call.kind !== "response") return;
+    expect(call.response.status).toBe(503);
+    expect(await call.readBody(1024)).toEqual({ status: "ok", text: "busy" });
+    const [url, init] = fetchSpy.mock.calls[0] ?? [];
+    expect(url).toBe("https://upstream.test/run");
+    expect(init).toMatchObject({ method: "POST", body: "x" });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("is a timeout when fetch throws a TimeoutError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => {
+        throw new DOMException("The operation timed out", "TimeoutError");
+      }),
+    );
+
+    expect(await callUpstream("https://upstream.test", {}, 1000)).toEqual({ kind: "timeout" });
+  });
+
+  it("is a timeout when fetch throws after the timer fired", async () => {
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(AbortSignal.abort());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => {
+        throw new TypeError("aborted");
+      }),
+    );
+
+    expect(await callUpstream("https://upstream.test", {}, 1000)).toEqual({ kind: "timeout" });
+  });
+
+  it("is unreachable when fetch throws anything else", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => {
+        throw new TypeError("network connection lost");
+      }),
+    );
+
+    expect(await callUpstream("https://upstream.test", {}, 1000)).toEqual({ kind: "unreachable" });
+  });
+
+  it("reads a body that breaks off after the timer fired as a timeout", async () => {
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(AbortSignal.abort());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => brokenBody()),
+    );
+
+    const call = await callUpstream("https://upstream.test", {}, 1000);
+
+    expect(call.kind === "response" && (await call.readBody(1024))).toEqual({ status: "timeout" });
+  });
+
+  it("passes the bounded read through otherwise", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => brokenBody()),
+    );
+    const broken = await callUpstream("https://upstream.test", {}, 1000);
+    expect(broken.kind === "response" && (await broken.readBody(1024))).toEqual({
+      status: "read-error",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchFn>(async () => new Response("x".repeat(2048))),
+    );
+    const tooLarge = await callUpstream("https://upstream.test", {}, 1000);
+    expect(tooLarge.kind === "response" && (await tooLarge.readBody(1024))).toEqual({
+      status: "too-large",
+    });
+  });
+});
+
+describe("isCacheableRunResult", () => {
+  it("keeps only success and compile-error", () => {
+    expect(isCacheableRunResult({ status: "success" })).toBe(true);
+    expect(isCacheableRunResult({ status: "compile-error" })).toBe(true);
+    expect(isCacheableRunResult({ status: "runtime-error" })).toBe(false);
+    expect(isCacheableRunResult({ status: "timeout" })).toBe(false);
   });
 });

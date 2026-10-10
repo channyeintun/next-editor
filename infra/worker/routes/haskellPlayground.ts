@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { getCache } from "../cache";
-import { readBodyWithLimit } from "../httpBody";
 import {
   PLAYGROUND_CACHE_TTL_SECONDS,
   PLAYGROUND_MAX_EXIT_DETAIL_CHARS,
@@ -10,7 +9,9 @@ import {
   PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
   PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  callUpstream,
   contentCacheKey,
+  isCacheableRunResult,
   playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
@@ -270,10 +271,9 @@ haskellPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Haskell Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(UPSTREAM_URL, {
+  const call = await callUpstream(
+    UPSTREAM_URL,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -285,18 +285,17 @@ haskellPlaygroundRoute.post("/run", async (c) => {
         opt: UPSTREAM_OPT,
         output: UPSTREAM_OUTPUT,
       }),
-      signal: upstreamSignal,
-    });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    },
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logRun({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "the program took too long to compile and run" }, 504)
       : c.json({ error: "the Haskell Playground service is unavailable" }, 502);
   }
@@ -308,7 +307,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   // 502 copy ("unavailable right now — your code is unchanged, try again
   // shortly") is the accurate thing to show, and the distinction stays visible
   // in telemetry through the upstream-busy outcome.
-  if (upstreamResponse.status === 503) {
+  if (call.response.status === 503) {
     logRun({
       outcome: "upstream-busy",
       sourceBytes,
@@ -319,12 +318,9 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   }
 
   let normalized: ReturnType<typeof normalizeUpstreamRunResponse> = null;
-  if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(
-      upstreamResponse,
-      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-    );
-    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  if (call.response.ok) {
+    const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+    if (upstreamBody.status === "timeout") {
       logRun({
         outcome: "upstream-timeout",
         sourceBytes,
@@ -364,9 +360,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
 
   const result = normalized.result;
 
-  // Only deterministic outcomes are cached, mirroring the other playground
-  // routes: success and compile-error re-serve; runtime errors always re-run.
-  if (result.status === "success" || result.status === "compile-error") {
+  if (isCacheableRunResult(result)) {
     await writeCachedValue(
       cache,
       cacheKey,

@@ -2,18 +2,19 @@ import type { Context } from "hono";
 import { sha256Hex } from "../../src/shared/sha256Hex";
 import { getCurrentUser } from "./auth/session";
 import type { Env } from "./env";
-import { isJsonObject, readJsonWithLimit } from "./httpBody";
+import { isJsonObject, readBodyWithLimit, readJsonWithLimit, type LimitedBody } from "./httpBody";
 import type { WaitUntil } from "./waitUntil";
 
 // Plumbing shared by the language playground proxy routes (routes/{go,kotlin,
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
 //
 // Only the parts that are genuinely identical across upstreams live here: the
-// shared limits below, the rate-limit key (charged through rateLimit.ts's
-// checkRateLimit), the content-addressed cache key, the KV result cache, the
-// output bound, the lesson-file order, and reading the `{ files: [...] }`
-// request body (whole for single-file upstreams, up to the per-language
-// policy for Go and Kotlin). Everything that encodes a particular service's behaviour — its file
+// shared limits below, the upstream call and its timeout classification, the
+// rate-limit key (charged through rateLimit.ts's checkRateLimit), the
+// content-addressed cache key, the KV result cache and which results it
+// keeps, the output bound, the lesson-file order, and reading the
+// `{ files: [...] }` request body (whole for single-file upstreams, up to the
+// per-language policy for Go and Kotlin). Everything that encodes a particular service's behaviour — its file
 // path and source policy, its request encoding, its non-ok status policy, its
 // response normalization, its telemetry channel — stays in the route, because
 // those are the parts that differ and the reasons they differ are documented
@@ -47,6 +48,57 @@ export const PLAYGROUND_MAX_FORMAT_ERROR_CHARS = 16 * 1024;
 export const PLAYGROUND_MAX_EXIT_DETAIL_CHARS = 256;
 /** How long a run or format result stays in the KV cache. */
 export const PLAYGROUND_CACHE_TTL_SECONDS = 60 * 60;
+
+/** An upstream body read under a byte ceiling, or "timeout" when it broke off after the timer fired. */
+export type UpstreamBody = { status: "timeout" } | LimitedBody;
+
+export type UpstreamCall =
+  | { kind: "timeout" }
+  | { kind: "unreachable" }
+  | {
+      kind: "response";
+      /** Whatever its status: each route keeps its own non-ok status policy. */
+      response: Response;
+      readBody(maxBytes: number): Promise<UpstreamBody>;
+    };
+
+/**
+ * Send one request upstream under `timeoutMs` and sort how it ended. A failed
+ * fetch is a timeout when the timer fired (or the error says so) and the
+ * upstream unreachable otherwise; a body that breaks off after the timer
+ * fired is a timeout too, so a hung upstream answers a bounded 504 rather
+ * than a 502 on every route.
+ */
+export async function callUpstream(
+  url: string,
+  init: Omit<RequestInit, "signal">,
+  timeoutMs: number,
+): Promise<UpstreamCall> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, signal });
+  } catch (error) {
+    const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    return { kind: timedOut ? "timeout" : "unreachable" };
+  }
+  return {
+    kind: "response",
+    response,
+    async readBody(maxBytes) {
+      const body = await readBodyWithLimit(response, maxBytes);
+      return body.status === "read-error" && signal.aborted ? { status: "timeout" } : body;
+    },
+  };
+}
+
+/**
+ * Only deterministic run outcomes are cached: success and compile-error
+ * re-serve, while runtime errors and timeouts always re-run.
+ */
+export function isCacheableRunResult(result: { status: string }): boolean {
+  return result.status === "success" || result.status === "compile-error";
+}
 
 /**
  * Bound normalized program output. The upstreams apply their own limits well

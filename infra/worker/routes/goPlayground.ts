@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { getCache } from "../cache";
-import { readBodyWithLimit } from "../httpBody";
 import {
   PLAYGROUND_CACHE_TTL_SECONDS,
   PLAYGROUND_MAX_FORMAT_ERROR_CHARS,
@@ -9,7 +8,9 @@ import {
   PLAYGROUND_MAX_SOURCE_BYTES,
   PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
   PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  callUpstream,
   contentCacheKey,
+  isCacheableRunResult,
   playgroundRateLimitKey,
   readCachedValue,
   readMultiFileLessonRequest,
@@ -531,39 +532,34 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Go Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(UPSTREAM_COMPILE_URL, {
+  const call = await callUpstream(
+    UPSTREAM_COMPILE_URL,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": UPSTREAM_USER_AGENT,
       },
       body: new URLSearchParams({ version: "2", body: source, withVet: "true" }).toString(),
-      signal: upstreamSignal,
-    });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    },
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logRun({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "the program took too long to compile and run" }, 504)
       : c.json({ error: "the Go Playground service is unavailable" }, 502);
   }
 
   let result: GoPlaygroundRunResult | null = null;
-  if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(
-      upstreamResponse,
-      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-    );
-    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  if (call.response.ok) {
+    const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+    if (upstreamBody.status === "timeout") {
       logRun({
         outcome: "upstream-timeout",
         sourceBytes,
@@ -591,9 +587,7 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "the Go Playground service returned an unexpected response" }, 502);
   }
 
-  // Only successful and compiler-error responses are cached (plan §7.2);
-  // other categories always re-run.
-  if (result.status === "success" || result.status === "compile-error") {
+  if (isCacheableRunResult(result)) {
     await writeCachedValue(
       cache,
       cacheKey,
@@ -636,10 +630,9 @@ goPlaygroundRoute.post("/format", async (c) => {
   }
 
   const startedAt = Date.now();
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(UPSTREAM_FORMAT_URL, {
+  const call = await callUpstream(
+    UPSTREAM_FORMAT_URL,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -648,28 +641,24 @@ goPlaygroundRoute.post("/format", async (c) => {
       // Deliberately omit `imports`: this is canonical gofmt, not goimports,
       // whose upstream implementation cannot resolve symbols in sibling files.
       body: new URLSearchParams({ body: request.source }).toString(),
-      signal: upstreamSignal,
-    });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    },
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logFormat({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes: request.sourceBytes,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "formatting took too long" }, 504)
       : c.json({ error: "the Go Playground formatter is unavailable" }, 502);
   }
 
   let normalized: ReturnType<typeof normalizeUpstreamFormatResponse> = null;
-  if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(
-      upstreamResponse,
-      MAX_UPSTREAM_FORMAT_RESPONSE_BYTES,
-    );
-    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  if (call.response.ok) {
+    const upstreamBody = await call.readBody(MAX_UPSTREAM_FORMAT_RESPONSE_BYTES);
+    if (upstreamBody.status === "timeout") {
       logFormat({
         outcome: "upstream-timeout",
         sourceBytes: request.sourceBytes,

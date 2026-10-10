@@ -11,7 +11,9 @@ import {
   PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
   PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  callUpstream,
   contentCacheKey,
+  isCacheableRunResult,
   playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
@@ -275,10 +277,9 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Rust Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(UPSTREAM_EXECUTE_URL, {
+  const call = await callUpstream(
+    UPSTREAM_EXECUTE_URL,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -293,29 +294,25 @@ rustPlaygroundRoute.post("/run", async (c) => {
         code,
         backtrace: false,
       }),
-      signal: upstreamSignal,
-    });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    },
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logRun({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "the program took too long to compile and run" }, 504)
       : c.json({ error: "the Rust Playground service is unavailable" }, 502);
   }
 
   let result: RustPlaygroundRunResult | null = null;
-  if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(
-      upstreamResponse,
-      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-    );
-    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  if (call.response.ok) {
+    const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+    if (upstreamBody.status === "timeout") {
       logRun({
         outcome: "upstream-timeout",
         sourceBytes,
@@ -331,7 +328,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
         result = null;
       }
     }
-  } else if (await isUpstreamTimeoutResponse(upstreamResponse)) {
+  } else if (await isUpstreamTimeoutResponse(call.response)) {
     logRun({
       outcome: "upstream-timeout",
       sourceBytes,
@@ -351,9 +348,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "the Rust Playground service returned an unexpected response" }, 502);
   }
 
-  // Only deterministic outcomes are cached, mirroring the other playground
-  // routes: success and compile-error re-serve; runtime errors always re-run.
-  if (result.status === "success" || result.status === "compile-error") {
+  if (isCacheableRunResult(result)) {
     await writeCachedValue(
       cache,
       cacheKey,
@@ -401,10 +396,9 @@ rustPlaygroundRoute.post("/format", async (c) => {
   }
 
   const startedAt = Date.now();
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetch(UPSTREAM_FORMAT_URL, {
+  const call = await callUpstream(
+    UPSTREAM_FORMAT_URL,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -415,28 +409,24 @@ rustPlaygroundRoute.post("/format", async (c) => {
         edition: UPSTREAM_EDITION,
         code: request.code,
       }),
-      signal: upstreamSignal,
-    });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    },
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logFormat({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes: request.sourceBytes,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "formatting took too long" }, 504)
       : c.json({ error: "the Rust Playground formatter is unavailable" }, 502);
   }
 
   let normalized: ReturnType<typeof normalizeUpstreamFormatResponse> = null;
-  if (upstreamResponse.ok) {
-    const upstreamBody = await readBodyWithLimit(
-      upstreamResponse,
-      PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-    );
-    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  if (call.response.ok) {
+    const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+    if (upstreamBody.status === "timeout") {
       logFormat({
         outcome: "upstream-timeout",
         sourceBytes: request.sourceBytes,

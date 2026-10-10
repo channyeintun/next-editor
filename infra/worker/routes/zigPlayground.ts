@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { getCache } from "../cache";
-import { readBodyWithLimit } from "../httpBody";
 import {
   PLAYGROUND_CACHE_TTL_SECONDS,
   PLAYGROUND_MAX_EXIT_DETAIL_CHARS,
@@ -11,7 +10,9 @@ import {
   PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
   PLAYGROUND_SINGLE_FILE_MAX_REQUEST_BYTES,
   PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  callUpstream,
   contentCacheKey,
+  isCacheableRunResult,
   playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
@@ -284,8 +285,9 @@ function logFormat(entry: {
   console.log("zig-playground-format", entry);
 }
 
-async function fetchUpstream(url: string, code: string, signal: AbortSignal): Promise<Response> {
-  return fetch(url, {
+/** The request both upstream endpoints take: the source as a text/plain body. */
+function upstreamRequest(code: string): RequestInit {
+  return {
     method: "POST",
     headers: {
       "Content-Type": "text/plain",
@@ -293,8 +295,7 @@ async function fetchUpstream(url: string, code: string, signal: AbortSignal): Pr
       "User-Agent": UPSTREAM_USER_AGENT,
     },
     body: code,
-    signal,
-  });
+  };
 }
 
 export const zigPlaygroundRoute = new Hono<{ Bindings: Env }>();
@@ -350,20 +351,19 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Zig Playground execution policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetchUpstream(UPSTREAM_RUN_URL, code, upstreamSignal);
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+  const call = await callUpstream(
+    UPSTREAM_RUN_URL,
+    upstreamRequest(code),
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logRun({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "the program took too long to compile and run" }, 504)
       : c.json({ error: "the Zig Playground service is unavailable" }, 502);
   }
@@ -373,7 +373,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // 502 rather than a 429, because the client renders a 429 as "Too many runs"
   // — which blames a learner who pressed Run once. The distinction stays
   // visible in telemetry through the upstream-busy outcome, matching Haskell.
-  if (upstreamResponse.status === 429) {
+  if (call.response.status === 429) {
     logRun({
       outcome: "upstream-busy",
       sourceBytes,
@@ -383,11 +383,8 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
-  const upstreamBody = await readBodyWithLimit(
-    upstreamResponse,
-    PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-  );
-  if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+  if (upstreamBody.status === "timeout") {
     logRun({
       outcome: "upstream-timeout",
       sourceBytes,
@@ -399,7 +396,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
 
   const result =
     upstreamBody.status === "ok"
-      ? normalizeUpstreamRunResponse(upstreamResponse.status, upstreamBody.text)
+      ? normalizeUpstreamRunResponse(call.response.status, upstreamBody.text)
       : null;
 
   if (!result) {
@@ -412,9 +409,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "the Zig Playground service returned an unexpected response" }, 502);
   }
 
-  // Only deterministic outcomes are cached, mirroring the other playground
-  // routes: success and compile-error re-serve; runtime errors always re-run.
-  if (result.status === "success" || result.status === "compile-error") {
+  if (isCacheableRunResult(result)) {
     await writeCachedValue(
       cache,
       cacheKey,
@@ -484,27 +479,26 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "Zig Playground formatting policy is unavailable" }, 502);
   }
 
-  const upstreamSignal = AbortSignal.timeout(PLAYGROUND_UPSTREAM_TIMEOUT_MS);
-  let upstreamResponse: Response;
-  try {
-    upstreamResponse = await fetchUpstream(UPSTREAM_FORMAT_URL, request.code, upstreamSignal);
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+  const call = await callUpstream(
+    UPSTREAM_FORMAT_URL,
+    upstreamRequest(request.code),
+    PLAYGROUND_UPSTREAM_TIMEOUT_MS,
+  );
+  if (call.kind !== "response") {
     logFormat({
-      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      outcome: call.kind === "timeout" ? "upstream-timeout" : "upstream-error",
       sourceBytes: request.sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return timedOut
+    return call.kind === "timeout"
       ? c.json({ error: "formatting took too long" }, 504)
       : c.json({ error: "the Zig Playground formatter is unavailable" }, 502);
   }
 
   // Somebody else's load against the shared upstream budget — see the run
   // handler's note on why this is not reported to the learner as a 429.
-  if (upstreamResponse.status === 429) {
+  if (call.response.status === 429) {
     logFormat({
       outcome: "upstream-busy",
       sourceBytes: request.sourceBytes,
@@ -514,11 +508,8 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
-  const upstreamBody = await readBodyWithLimit(
-    upstreamResponse,
-    PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES,
-  );
-  if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+  const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
+  if (upstreamBody.status === "timeout") {
     logFormat({
       outcome: "upstream-timeout",
       sourceBytes: request.sourceBytes,
@@ -530,7 +521,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
 
   const normalized =
     upstreamBody.status === "ok"
-      ? normalizeUpstreamFormatResponse(upstreamResponse.status, upstreamBody.text, request.code)
+      ? normalizeUpstreamFormatResponse(call.response.status, upstreamBody.text, request.code)
       : null;
 
   if (!normalized) {
