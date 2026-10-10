@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";
@@ -15,11 +15,12 @@ vi.mock("../../db/queries", () => ({
 
 function createEnv() {
   const put = vi.fn<() => Promise<undefined>>(async () => undefined);
-  const env = { DB: {} as D1Database, BUCKET: { put } as unknown as R2Bucket };
-  return { env, put };
+  const del = vi.fn<() => Promise<undefined>>(async () => undefined);
+  const env = { DB: {} as D1Database, BUCKET: { put, delete: del } as unknown as R2Bucket };
+  return { env, put, del };
 }
 
-function putRequest(path: string, byteLength = 6): [string, RequestInit] {
+function putRequest(path: string, byteLength = 6, signal?: AbortSignal): [string, RequestInit] {
   return [
     `https://nexteditor.dev${path}`,
     {
@@ -29,6 +30,7 @@ function putRequest(path: string, byteLength = 6): [string, RequestInit] {
         "content-length": String(byteLength),
         "content-type": "text/vtt",
       },
+      signal,
       // Node's fetch primitives require duplex for streaming request bodies.
       duplex: "half",
     } as RequestInit,
@@ -38,6 +40,77 @@ function putRequest(path: string, byteLength = 6): [string, RequestInit] {
 beforeEach(() => {
   vi.mocked(getCurrentUser).mockResolvedValue({ id: "user-1" } as never);
   vi.mocked(getLessonById).mockResolvedValue(null as never);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("uploadsRoute cancelled uploads", () => {
+  function silenceLogs() {
+    return {
+      log: vi.spyOn(console, "log").mockImplementation(() => undefined),
+      error: vi.spyOn(console, "error").mockImplementation(() => undefined),
+    };
+  }
+
+  // What R2's put rejects with when the browser drops the connection while the
+  // body is still streaming in (seen in wrangler dev).
+  it("answers 499 with no body when the body breaks off", async () => {
+    const logs = silenceLogs();
+    const { env, put, del } = createEnv();
+    put.mockRejectedValueOnce(new Error("Network connection lost."));
+
+    const response = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), env);
+
+    expect(response.status).toBe(499);
+    expect(await response.text()).toBe("");
+    expect(logs.log).toHaveBeenCalledTimes(1);
+    expect(logs.log).toHaveBeenCalledWith("Upload cancelled by the client", {
+      key: "lessons/l1/l1.ne",
+      contentLength: 6,
+      clientCancelled: true,
+    });
+    expect(logs.error).not.toHaveBeenCalled();
+    // A failed put stores nothing, and the key may hold the file being replaced.
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("answers 499 once the request signal says the browser left", async () => {
+    const logs = silenceLogs();
+    const { env, put } = createEnv();
+    const browser = new AbortController();
+    put.mockImplementationOnce(async () => {
+      browser.abort();
+      throw new TypeError("This ReadableStream is errored.");
+    });
+
+    const response = await uploadsRoute.request(
+      ...putRequest("/l1/media/l1.ne", 6, browser.signal),
+      env,
+    );
+
+    expect(response.status).toBe(499);
+    expect(logs.log).toHaveBeenCalledWith(
+      "Upload cancelled by the client",
+      expect.objectContaining({ clientCancelled: true }),
+    );
+    expect(logs.error).not.toHaveBeenCalled();
+  });
+
+  it("keeps any other storage failure a logged 500", async () => {
+    const logs = silenceLogs();
+    const { env, put, del } = createEnv();
+    const failure = new Error("put: We encountered an internal error. Please try again. (10001)");
+    put.mockRejectedValueOnce(failure);
+
+    const response = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), env);
+
+    expect(response.status).toBe(500);
+    expect(logs.error).toHaveBeenCalledWith(failure);
+    expect(logs.log).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+  });
 });
 
 describe("uploadsRoute caption filenames", () => {

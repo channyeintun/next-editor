@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "../env";
 import { getLessonById } from "../../db/queries";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
+import { clientClosedResponse, isClientCancel } from "../clientClosed";
 import { LESSON_ID_PATTERN } from "../lessonIds";
 import { LESSON_MEDIA_CONTENT_TYPES, LESSON_MEDIA_FILENAME_PATTERN } from "../lessonMediaFiles";
 import {
@@ -68,11 +69,21 @@ const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   }
 
   const key = `lessons/${id}/${filename}`;
-  await c.env.BUCKET.put(key, c.req.raw.body, {
-    httpMetadata: {
-      contentType: storedContentTypeFor(filename),
-    },
-  });
+  try {
+    await c.env.BUCKET.put(key, c.req.raw.body, {
+      httpMetadata: {
+        contentType: storedContentTypeFor(filename),
+      },
+    });
+  } catch (error) {
+    // Anything but a cancelled upload stays a logged 500 (Hono's default).
+    if (!isClientCancel(c.req.raw, error)) throw error;
+    // R2 stores an object only once its put completes, so a cancelled upload
+    // leaves nothing behind. Nothing is deleted either: the key may still hold
+    // the file this upload was replacing.
+    console.log("Upload cancelled by the client", { key, contentLength, clientCancelled: true });
+    return clientClosedResponse();
+  }
 
   return c.json({ path: key });
 };
