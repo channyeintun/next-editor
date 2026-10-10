@@ -750,6 +750,49 @@ describe("playground runner panels", () => {
     },
   );
 
+  it.each(FORMAT_CASES)(
+    "$kind: keeps one formatter registration while the console re-renders it",
+    async (panel) => {
+      setFiles({ [panel.entry]: SOURCE });
+      harness.client.run.mockResolvedValue(panel.run.result);
+      await renderPanel(panel);
+      const [registration] = activeProviders();
+
+      await click(screen.getByRole("button", { name: "Run" }));
+
+      expect(consoleLines()).toEqual(panel.run.lines);
+      expect(harness.providers).toEqual([registration]);
+      expect(activeProviders()).toEqual([registration]);
+    },
+  );
+
+  it.each(FORMAT_CASES)(
+    "$kind: formats through the latest panel state from its one registration",
+    async (panel) => {
+      setFiles({ [panel.entry]: SOURCE });
+      formatEveryFile();
+      await renderPanel(panel);
+      const [registration] = activeProviders();
+
+      // The lesson turns read-only after the formatter was registered.
+      harness.state.collaboration = { provider: {}, canWrite: false };
+      act(() => harness.reactive.notify());
+      await act(async () => {
+        await registration.provide(
+          model(panel.entry, SOURCE),
+          {},
+          {
+            isCancellationRequested: false,
+          },
+        );
+      });
+
+      expect(harness.providers).toEqual([registration]);
+      expect(harness.client.format).not.toHaveBeenCalled();
+      expect(consoleLines()).toEqual([panel.format.readOnlyLine]);
+    },
+  );
+
   it.each(CASES.filter((panel) => panel.format === null))(
     "$kind: has no formatter to offer or register",
     async (panel) => {

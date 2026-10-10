@@ -263,6 +263,10 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     },
   );
 
+  // One registration per mount. The effect event is called from the closure
+  // rather than listed as a dependency: React 19.3 returns a new function for
+  // it on every render (see CodeEditor's syncActivePlaybackModel effect), which
+  // would re-register the provider on every console line.
   useEffect(() => {
     if (!format) {
       return;
@@ -271,11 +275,12 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       format.monacoLanguageId,
       {
         displayName: format.providerDisplayName,
-        provideDocumentFormattingEdits: provideFormattingEdits,
+        provideDocumentFormattingEdits: (model, options, token) =>
+          provideFormattingEdits(model, options, token),
       },
     );
     return () => disposable.dispose();
-  }, [provideFormattingEdits]);
+  }, [format]);
 
   const handleFormat = async () => {
     const editor = editorRef.current;
