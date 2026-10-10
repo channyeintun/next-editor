@@ -19,7 +19,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
 import YAML from "yaml";
-import { estimateNarrationMsForRenderWait, studioRenderWaitMs } from "../src/studio/plan.ts";
+import {
+  estimateNarrationMsForRenderWait,
+  studioRenderWaitMs,
+} from "../src/studio/renderLaunch.ts";
 import { extractScriptNarration } from "../src/studio/script/markers.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 import type { StudioWindowHandle } from "../src/studio/studioWindowHandle.ts";

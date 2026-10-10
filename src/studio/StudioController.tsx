@@ -30,12 +30,8 @@ import { downloadBlob } from "../utils/downloadBlob";
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
-import {
-  defaultRuntimeModeOf,
-  parseRuntimeModeParam,
-  shouldAutostartRender,
-  type StudioRuntimeMode,
-} from "./plan";
+import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
+import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
 import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
 import { DEFAULT_STUDIO_PLAN_SLUG, mergeStudioSources, parseLessonScriptYaml } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
