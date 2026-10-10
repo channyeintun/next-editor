@@ -4,7 +4,7 @@
 //   bun run build:wasm
 //
 // Two stages: `cargo build` (LLVM, opt-level=3 + LTO) then `wasm-opt` (Binaryen)
-// to shrink. The .wasm (a few KB) is committed so tests and Vercel need no Rust
+// to shrink. The .wasm (a few KB) is committed so tests and deploys need no Rust
 // toolchain; only regenerating it does. Requires the wasm32-unknown-unknown
 // target (`rustup target add wasm32-unknown-unknown`) and `wasm-opt` (Binaryen).
 import { execFileSync } from "node:child_process";

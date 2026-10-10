@@ -73,7 +73,7 @@ rustup target add wasm32-unknown-unknown
 brew install binaryen          # provides wasm-opt
 ```
 
-The `.wasm` (a few KB) is committed so tests and Vercel need **no** Rust
+The `.wasm` (a few KB) is committed so tests and deploys need **no** Rust
 toolchain; only regenerating the artifact does. The Cargo `target/` dir is
 gitignored.
 
@@ -85,7 +85,7 @@ bun run benchmark:dmp-codec
 
 Compares the diff-match-patch delta **size** against the old affix model on
 recording-shaped payloads and asserts every delta round-trips. See
-[`benchmark-dmp-codec.mjs`](../../../scripts/benchmark-dmp-codec.mjs).
+[`benchmark-dmp-codec.ts`](../../../scripts/benchmark-dmp-codec.ts).
 
 For the **speed** comparison against the previous AssemblyScript module (diff
 ~1.1× faster on contiguous edits, ~2.7× on scattered edits, at the same artifact
