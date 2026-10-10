@@ -2,8 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
+import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
 import { flattenLessonPages } from "../lib/lessons";
-import { observeFirstRowThumbnails, settleWithoutFirstRow } from "../lib/firstRowThumbnails";
+import {
+  observeFirstRowThumbnails,
+  settleWithoutFirstRow,
+  whenFirstRowThumbnailsSettled,
+} from "../lib/firstRowThumbnails";
 import LessonCard from "./LessonCard";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
@@ -93,6 +98,10 @@ export default function LessonGrid() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [listNode]);
+
+  // A card click opens the lesson route, which the gallery deliberately does
+  // not load up front; fetch it once the first row has its thumbnails.
+  useWarmLessonRoute(whenFirstRowThumbnailsSettled());
 
   const virtualizer = useWindowVirtualizer({
     count: rows.length,

@@ -288,6 +288,20 @@ export default ({ mode }: { mode: string }) => {
                 name: "utils",
                 test: /[\\/]node_modules[\\/]@msgpack[\\/]/,
               },
+              {
+                // First-party modules the entry loads that lazy routes import
+                // too: the routes' loading skeletons and their parts, route
+                // recovery, analytics. Rolldown gives each distinct set of
+                // importers its own chunk, so every first page load fetched
+                // these as a scatter of tiny files (21 in the entry closure),
+                // and each route split added more. `$initial` holds the group
+                // to modules the entry loads anyway, so no route downloads a
+                // byte more; modules only the entry imports stay in it.
+                name: "app-shell",
+                test: /[\\/](?:src|tube[\\/]src|infra[\\/]client)[\\/]/,
+                tags: ["$initial"],
+                minShareCount: 2,
+              },
             ],
           },
         },

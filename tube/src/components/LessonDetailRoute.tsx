@@ -1,11 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { useLesson } from "../hooks/useLessons";
+import { lessonPageTitle } from "../lib/lessonPageTitle";
 import LessonDetail from "./LessonDetail";
-import Breadcrumb from "@app/components/Breadcrumb";
-import EditorShellSkeleton from "@app/components/EditorShellSkeleton";
-import { lessonTitleFromSlug } from "@app/utils/lessonSlug";
-import { useEmbedded } from "@app/utils/embed";
+import LessonPageSkeleton from "@app/components/LessonPageSkeleton";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 
 // Route component for /learn/:slug. Resolves the slug to a lesson (so the detail
@@ -14,32 +12,18 @@ import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 // arriving from the grid is instant.
 export default function LessonDetailRoute() {
   const { slug } = useParams();
-  const { data: lesson, isPending, isError } = useLesson(slug);
-  const embedded = useEmbedded();
+  const lessonQuery = useLesson(slug);
+  const { data: lesson, isPending, isError } = lessonQuery;
   // Here rather than in LessonDetail, so the pending and not-found states and a
-  // playlist's auto-advance to the next slug all retitle the page. Matches the
-  // edge renderer's `${lesson.title} | Next Editor`.
-  const pageName = isPending
-    ? (lessonTitleFromSlug(slug) ?? "Lesson")
-    : lesson
-      ? lesson.title
-      : isError
-        ? "Failed to load lesson"
-        : "Lesson not found";
-  useDocumentTitle(`${pageName} | Next Editor`);
+  // playlist's auto-advance to the next slug all retitle the page.
+  useDocumentTitle(lessonPageTitle(slug, lessonQuery));
 
   // The editor shell rather than a lone spinner: this gate is one of several on
-  // the way to a playable lesson (route chunk → this lookup → CodeEditor/Monaco),
-  // and they all now paint the same layout, so the page assembles in place
-  // instead of flashing between unrelated screens.
+  // the way to a playable lesson (route chunk → this view's chunk → this lookup
+  // → CodeEditor/Monaco), and they all paint the same layout, so the page
+  // assembles in place instead of flashing between unrelated screens.
   if (isPending) {
-    const placeholderTitle = embedded ? undefined : lessonTitleFromSlug(slug);
-    return (
-      <EditorShellSkeleton
-        breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}
-        showPlayerBar
-      />
-    );
+    return <LessonPageSkeleton slug={slug} />;
   }
 
   if (lesson) {

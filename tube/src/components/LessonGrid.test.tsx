@@ -16,6 +16,8 @@ vi.mock("@next-editor/infra", () => ({
 vi.mock("./SearchResults", () => ({
   default: ({ query }: { query: string }) => <p>results for {query}</p>,
 }));
+// Warming the lesson route would import the whole lesson player.
+vi.mock("../hooks/useWarmLessonRoute", () => ({ useWarmLessonRoute: () => {} }));
 vi.mock("./LessonCard", () => ({
   default: ({ lesson }: { lesson: { title: string } }) => <p>{lesson.title}</p>,
 }));
@@ -26,6 +28,7 @@ const firstRow = vi.hoisted(() => ({
 vi.mock("../lib/firstRowThumbnails", () => ({
   observeFirstRowThumbnails: firstRow.observe,
   settleWithoutFirstRow: firstRow.settleWithout,
+  whenFirstRowThumbnailsSettled: () => new Promise<void>(() => {}),
 }));
 // The real window virtualizer, recording the scrollMargin of every render.
 const scrollMargins = vi.hoisted(() => [] as (number | undefined)[]);

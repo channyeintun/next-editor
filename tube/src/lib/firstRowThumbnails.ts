@@ -1,9 +1,10 @@
+import { whenImagesSettle } from "./imagesSettled";
+
 // The gallery's first row of thumbnails is its LCP: those tiles load eagerly at
 // high priority (ThumbnailTile's `priority`). Optional downloads that would
 // share the network with them (the router holds PostHog back on this) wait for
 // whenFirstRowThumbnailsSettled. It settles once per page load, and never
 // later than the gallery has something else to show instead.
-
 let settle: () => void = () => {};
 const settled = new Promise<void>((resolve) => {
   settle = resolve;
@@ -31,23 +32,7 @@ export function settleWithoutFirstRow(): void {
 export function observeFirstRowThumbnails(row: HTMLElement | null): void {
   if (!row || observing) return;
   observing = true;
-  const loading = Array.from(
-    row.querySelectorAll<HTMLImageElement>('img[fetchpriority="high"]'),
-  ).filter((image) => !image.complete);
-  let remaining = loading.length;
-  if (remaining === 0) {
-    settle();
-    return;
-  }
-  for (const image of loading) {
-    // `complete` stays false until one of these fires.
-    const onSettled = () => {
-      image.removeEventListener("load", onSettled);
-      image.removeEventListener("error", onSettled);
-      remaining -= 1;
-      if (remaining === 0) settle();
-    };
-    image.addEventListener("load", onSettled);
-    image.addEventListener("error", onSettled);
-  }
+  void whenImagesSettle(row.querySelectorAll<HTMLImageElement>('img[fetchpriority="high"]')).then(
+    settle,
+  );
 }

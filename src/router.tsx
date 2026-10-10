@@ -1,10 +1,21 @@
 import { useEffect } from "react";
-import { createBrowserRouter, isRouteErrorResponse, useParams, useRouteError } from "react-router";
-import Breadcrumb from "./components/Breadcrumb";
+import {
+  createBrowserRouter,
+  isRouteErrorResponse,
+  useParams,
+  useRouteError,
+  type LoaderFunctionArgs,
+} from "react-router";
 import EditorShellSkeleton from "./components/EditorShellSkeleton";
 import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
-import LoadingSpinner from "./components/LoadingSpinner";
+import LessonPageSkeleton from "./components/LessonPageSkeleton";
+import PageLoadingSpinner from "./components/PageLoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
+import {
+  isAuthorProfileSlug,
+  loadLearnSlugRoute,
+  prefetchLearnSlugView,
+} from "../tube/src/lessonRouteLoaders";
 import { queryClient } from "./queryClient";
 import {
   clearAllRouteReloads,
@@ -13,8 +24,6 @@ import {
   reloadWithRecoveryParam,
 } from "./routeRecovery";
 import { analytics, deferAnalyticsUntil } from "./utils/analytics";
-import { lessonTitleFromSlug } from "./utils/lessonSlug";
-import { useEmbedded } from "./utils/embed";
 
 function getRouteErrorMessage(error: unknown) {
   if (isRouteErrorResponse(error)) {
@@ -59,6 +68,15 @@ function prefetchLessonGallery() {
       thumbnails.whenFirstRowThumbnailsSettled(),
     ),
   );
+  return null;
+}
+
+// /learn/:slug renders a lesson or an author profile, each behind its own
+// chunk (see LearnSlugRoute). A route's lazy() can't see the slug, but its
+// loader can, and runs alongside it, so this starts the right view's chunk in
+// the same batch as the route's. Like prefetchLessonGallery, it returns at once.
+function prefetchLearnSlugRouteView({ params }: LoaderFunctionArgs) {
+  prefetchLearnSlugView(params.slug);
   return null;
 }
 
@@ -113,11 +131,7 @@ function RouteErrorBoundary() {
 }
 
 function RouteHydrateFallback() {
-  return (
-    <div className="h-dvh flex items-center justify-center bg-[#11141c] text-white">
-      <LoadingSpinner />
-    </div>
-  );
+  return <PageLoadingSpinner />;
 }
 
 // Editor-shaped routes get the editor shell instead: their chunk carries the
@@ -129,23 +143,15 @@ function EditorRouteHydrateFallback() {
 }
 
 // /learn/:slug serves both lesson detail and author profiles (see
-// LearnSlugRoute); only the former is an editor. The slug is already in the URL,
-// so the breadcrumb can name the lesson before anything has been fetched.
+// LearnSlugRoute); only the former is an editor.
 function LearnSlugHydrateFallback() {
   const { slug } = useParams();
-  const embedded = useEmbedded();
 
-  if (slug?.startsWith("@")) {
+  if (isAuthorProfileSlug(slug)) {
     return <RouteHydrateFallback />;
   }
 
-  const placeholderTitle = embedded ? undefined : lessonTitleFromSlug(slug);
-  return (
-    <EditorShellSkeleton
-      breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}
-      showPlayerBar
-    />
-  );
+  return <LessonPageSkeleton slug={slug} />;
 }
 
 export const router = createBrowserRouter([
@@ -184,10 +190,15 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
+  // The gallery routes import their own page modules, not the tube package's
+  // barrel: that re-exports the lesson route too, and with it the lesson player
+  // (Editor, collaboration, the recording codec), which the gallery's
+  // thumbnails would then wait for. The gallery warms the lesson route once its
+  // own thumbnails are in (see tube/src/lessonRouteLoaders.ts).
   {
     path: "/learn",
     loader: prefetchLessonGallery,
-    lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),
+    lazy: lazyRoute(() => import("../tube/src/LearnPage"), "/learn"),
     HydrateFallback: LessonGallerySkeleton,
     ErrorBoundary: RouteErrorBoundary,
   },
@@ -198,7 +209,7 @@ export const router = createBrowserRouter([
     // /learn/some-slug collide on the same single path segment).
     path: "/learn/playlist/:slug",
     lazy: lazyRoute(
-      () => import("@next-editor/tube").then((m) => ({ default: m.PlaylistDetailRoute })),
+      () => import("../tube/src/components/PlaylistDetailRoute"),
       "/learn/playlist/:slug",
     ),
     // Same shell: a playlist is a navbar plus a shelf of lesson cards.
@@ -210,14 +221,10 @@ export const router = createBrowserRouter([
     // profiles (/learn/@username) — see LearnSlugRoute for why these can't
     // be split into two router-level routes.
     path: "/learn/:slug",
+    loader: prefetchLearnSlugRouteView,
     // Author profiles share this route and also start the CodeEditor import:
     // a route's lazy() can't see the slug.
-    lazy: lazyRoute(
-      withCodeEditorPrefetch(() =>
-        import("@next-editor/tube").then((m) => ({ default: m.LearnSlugRoute })),
-      ),
-      "/learn/:slug",
-    ),
+    lazy: lazyRoute(withCodeEditorPrefetch(loadLearnSlugRoute), "/learn/:slug"),
     HydrateFallback: LearnSlugHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },

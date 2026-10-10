@@ -19,6 +19,8 @@ const ENTRIES = [
   "src/components/Editor.tsx",
   "src/contexts/CollaborationContext.tsx",
   "tube/src/index.tsx",
+  "tube/src/LearnPage.tsx",
+  "tube/src/components/PlaylistDetailRoute.tsx",
 ];
 const MONACO = /^(?:y-monaco|monaco-editor)(?:\/|$)/;
 // vite.config.ts resolve.alias, minus the Monaco deep-path alias.
@@ -71,8 +73,15 @@ function runtimeImports(file: string): string[] {
   return specifiers.filter((specifier) => !specifier.includes("?"));
 }
 
-/** Every Monaco import reachable from `entry`, as the import chain that reaches it. */
-function findMonacoImports(entry: string): string[] {
+/**
+ * Every static path from `entry` to a package whose specifier matches `bare`,
+ * or to a module whose repo-relative path matches `module`, as the import
+ * chain that reaches it.
+ */
+function findStaticImports(
+  entry: string,
+  { bare, module }: { bare?: RegExp; module?: RegExp },
+): string[] {
   const importerOf = new Map<string, string | null>([[resolve(entry), null]]);
   const queue = [resolve(entry)];
   const found: string[] = [];
@@ -87,10 +96,11 @@ function findMonacoImports(entry: string): string[] {
     for (const specifier of runtimeImports(file)) {
       const target = resolveSpecifier(specifier, file);
       if ("bare" in target) {
-        if (MONACO.test(target.bare)) found.push(`${chainTo(file)} -> ${target.bare}`);
+        if (bare?.test(target.bare)) found.push(`${chainTo(file)} -> ${target.bare}`);
       } else if (!importerOf.has(target.file)) {
         importerOf.set(target.file, file);
-        if (SOURCE.test(target.file)) queue.push(target.file);
+        if (module?.test(relative(process.cwd(), target.file))) found.push(chainTo(target.file));
+        else if (SOURCE.test(target.file)) queue.push(target.file);
       }
     }
   }
@@ -99,12 +109,42 @@ function findMonacoImports(entry: string): string[] {
 
 describe("Monaco stays behind the lazy CodeEditor", () => {
   it.each(ENTRIES)("%s has no static path to y-monaco or monaco-editor", (entry) => {
-    expect(findMonacoImports(entry)).toEqual([]);
+    expect(findStaticImports(entry, { bare: MONACO })).toEqual([]);
   });
 
   it("finds the Monaco imports CodeEditor does have", () => {
-    expect(findMonacoImports("src/components/CodeEditor.tsx")).toContain(
+    expect(findStaticImports("src/components/CodeEditor.tsx", { bare: MONACO })).toContain(
       "src/components/CodeEditor.tsx -> src/components/codeEditor/useYMonacoBinding.ts -> y-monaco",
+    );
+  });
+});
+
+/**
+ * The gallery and playlist pages render lesson cards, never a lesson, and
+ * their thumbnails (the largest paint) wait for every module they import
+ * statically. The lesson player behind a card (the Editor, and the
+ * collaboration provider with yjs) is reached through
+ * tube/src/lessonRouteLoaders.ts's dynamic imports only. LearnSlugRoute keeps
+ * the player behind React.lazy too: React Router awaits that module before it
+ * commits a card click, so it has to stay small.
+ */
+const LESSON_PLAYER = /^src\/(?:components\/Editor|contexts\/CollaborationContext)\.tsx$/;
+const OFF_THE_PLAYER = [
+  "tube/src/LearnPage.tsx",
+  "tube/src/components/PlaylistDetailRoute.tsx",
+  "tube/src/components/LearnSlugRoute.tsx",
+];
+
+describe("the lesson cards' pages stay off the lesson player", () => {
+  it.each(OFF_THE_PLAYER)("%s has no static path to the Editor", (entry) => {
+    expect(findStaticImports(entry, { module: LESSON_PLAYER })).toEqual([]);
+  });
+
+  it("finds the Editor LessonDetailRoute does reach", () => {
+    expect(
+      findStaticImports("tube/src/components/LessonDetailRoute.tsx", { module: LESSON_PLAYER }),
+    ).toContain(
+      "tube/src/components/LessonDetailRoute.tsx -> tube/src/components/LessonDetail.tsx -> src/components/Editor.tsx",
     );
   });
 });
