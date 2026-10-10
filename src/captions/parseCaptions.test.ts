@@ -65,6 +65,37 @@ Actual content`;
     expect(cues[0].text).toBe("Actual content");
   });
 
+  it("skips a NOTE whose comment follows the keyword on the same line", () => {
+    const vtt = `WEBVTT
+
+NOTE\tauthored by hand
+and reviewed
+
+NOTE checked again
+
+00:00:01.000 --> 00:00:04.000
+Actual content`;
+
+    expect(parseVtt(vtt)).toEqual([{ start: 1000, end: 4000, text: "Actual content" }]);
+  });
+
+  it("parses a cue whose identifier only starts with NOTE or STYLE", () => {
+    const vtt = `WEBVTT
+
+NOTE-1
+00:00:01.000 --> 00:00:02.000
+First cue
+
+STYLE_intro
+00:00:03.000 --> 00:00:04.000
+Second cue`;
+
+    expect(parseVtt(vtt)).toEqual([
+      { start: 1000, end: 2000, text: "First cue" },
+      { start: 3000, end: 4000, text: "Second cue" },
+    ]);
+  });
+
   it("skips cue identifiers", () => {
     const vtt = `WEBVTT
 

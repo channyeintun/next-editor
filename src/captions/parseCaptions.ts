@@ -28,6 +28,13 @@ function parseTimestampMs(raw: string): number {
 const TIMESTAMP_LINE =
   /^\s*(\d{1,2}:)?\d{2}:\d{2}[.,]\d{2,3}\s*-->\s*(\d{1,2}:)?\d{2}:\d{2}[.,]\d{2,3}/;
 
+/**
+ * A NOTE or STYLE block opens with its keyword followed by a space, a tab or the line's
+ * end (WebVTT). A cue identifier that merely starts with one ("NOTE-1", "STYLE_intro")
+ * is a cue: matching the bare prefix swallowed it with its timing and text.
+ */
+const COMMENT_BLOCK = /^(?:NOTE|STYLE)(?=\s|$)/;
+
 function stripVttTags(text: string): string {
   return text.replace(/<[^>]+>/g, "");
 }
@@ -44,7 +51,7 @@ export function parseVtt(text: string): CaptionCue[] {
   while (i < lines.length) {
     const line = lines[i];
 
-    if (line.trim().startsWith("NOTE") || line.trim().startsWith("STYLE")) {
+    if (COMMENT_BLOCK.test(line.trim())) {
       i++;
       while (i < lines.length && lines[i].trim() !== "") {
         i++;
