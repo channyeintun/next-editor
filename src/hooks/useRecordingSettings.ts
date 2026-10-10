@@ -15,7 +15,3 @@ export function useRecordingSettings(): RecordingSettingsContext {
   );
   return { screenRecordingEnabled, microphoneDeviceId };
 }
-
-export function useRecordingSettingsTrigger() {
-  return recordingSettingsStore.trigger;
-}

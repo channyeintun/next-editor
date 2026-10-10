@@ -44,8 +44,10 @@ import {
   selectLivePreviewOn,
 } from "../stores/cameraOverlayStore";
 import { useCaptionStore } from "../hooks/useCaptionStore";
-import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
-import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
+import { useRecordingSettings } from "../hooks/useRecordingSettings";
+import { playbackSettingsStore } from "../stores/playbackSettingsStore";
+import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
@@ -236,9 +238,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const captionPreference = useCaptionStore();
   const { autoplay, continueToNext, characterShortcuts } = usePlaybackSettings();
-  const playbackSettingsTrigger = usePlaybackSettingsTrigger();
   const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
-  const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   // Kept here rather than in CaptionsMenuButton, which unmounts while no lesson with captions
   // is loaded; the menu is as it was left when the button comes back.
@@ -577,7 +577,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 label="Screen"
                 on={screenRecordingEnabled}
                 onToggle={() =>
-                  recordingSettingsTrigger.setScreenRecordingEnabled({
+                  recordingSettingsStore.trigger.setScreenRecordingEnabled({
                     enabled: !screenRecordingEnabled,
                   })
                 }
@@ -710,7 +710,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           <Switch
                             checked={continueToNext}
                             onChange={(checked) =>
-                              playbackSettingsTrigger.setContinueToNext({
+                              playbackSettingsStore.trigger.setContinueToNext({
                                 continueToNext: checked,
                               })
                             }
@@ -721,7 +721,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           <Switch
                             checked={autoplay}
                             onChange={(checked) =>
-                              playbackSettingsTrigger.setAutoplay({ autoplay: checked })
+                              playbackSettingsStore.trigger.setAutoplay({ autoplay: checked })
                             }
                             label="Autoplay"
                           />
@@ -794,7 +794,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       <Switch
                         checked={characterShortcuts}
                         onChange={(enabled) =>
-                          playbackSettingsTrigger.setCharacterShortcuts({ enabled })
+                          playbackSettingsStore.trigger.setCharacterShortcuts({ enabled })
                         }
                         label="Single-key shortcuts"
                       />

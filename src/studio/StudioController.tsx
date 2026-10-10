@@ -22,7 +22,8 @@ import {
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
-import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { useRecordingSettings } from "../hooks/useRecordingSettings";
+import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { downloadBlob } from "../utils/downloadBlob";
@@ -273,7 +274,6 @@ export default function StudioController() {
   // (narration muxed in via tab audio) alongside the .ne bundle. Reuses the shared
   // recording-settings toggle and the same capture path as the manual record button.
   const { screenRecordingEnabled } = useRecordingSettings();
-  const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [isScreenSupported, setIsScreenSupported] = useState(false);
   useEffect(() => {
     setIsScreenSupported(isScreenCaptureSupported());
@@ -861,7 +861,9 @@ export default function StudioController() {
             checked={screenRecordingEnabled && isScreenSupported}
             disabled={running || !isScreenSupported}
             onChange={(event) =>
-              recordingSettingsTrigger.setScreenRecordingEnabled({ enabled: event.target.checked })
+              recordingSettingsStore.trigger.setScreenRecordingEnabled({
+                enabled: event.target.checked,
+              })
             }
             className="size-3.5 accent-sky-500 disabled:opacity-50"
           />

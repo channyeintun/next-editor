@@ -72,7 +72,6 @@ vi.mock("../contexts/PreviewAdapterHandleContext", () => ({
 vi.mock("../components/tour/productTour", () => ({ markTourSeen: () => {} }));
 vi.mock("../hooks/useRecordingSettings", () => ({
   useRecordingSettings: () => ({ screenRecordingEnabled: false }),
-  useRecordingSettingsTrigger: () => ({ setScreenRecordingEnabled: () => {} }),
 }));
 vi.mock("../utils/displayCapture", () => ({
   acquireDisplayStream: () => Promise.reject(new Error("unsupported")),

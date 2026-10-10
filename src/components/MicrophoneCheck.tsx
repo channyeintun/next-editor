@@ -4,7 +4,8 @@ import { openMicrophone } from "../core/src/machine/microphone";
 import { useAudioInputDevices } from "../hooks/useAudioInputDevices";
 import { useLevelMeter } from "../hooks/useLevelMeter";
 import { useRecordingMicrophoneStream } from "../hooks/useNextEditorContext";
-import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { useRecordingSettings } from "../hooks/useRecordingSettings";
+import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import type { MicrophoneVerdict } from "../utils/audioLevel";
 
 const VERDICT_TEXT: Record<MicrophoneVerdict, string> = {
@@ -51,7 +52,6 @@ function LevelBar({ meterRef }: { meterRef: React.RefObject<HTMLDivElement | nul
  */
 function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
   const { microphoneDeviceId } = useRecordingSettings();
-  const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const devices = useAudioInputDevices(stream);
@@ -118,7 +118,9 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
         aria-label="Microphone to record from"
         value={pickedIsMissing ? "" : (microphoneDeviceId ?? "")}
         onChange={(event) =>
-          recordingSettingsTrigger.setMicrophoneDeviceId({ deviceId: event.target.value || null })
+          recordingSettingsStore.trigger.setMicrophoneDeviceId({
+            deviceId: event.target.value || null,
+          })
         }
         className="mb-3 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500"
       >

@@ -21,10 +21,6 @@ export function usePlaybackSettings(): PlaybackSettingsContext {
   return { autoplay, continueToNext, speed, volume, characterShortcuts };
 }
 
-export function usePlaybackSettingsTrigger() {
-  return playbackSettingsStore.trigger;
-}
-
 /**
  * Changes the player's speed or volume for the viewer. Each goes to the machine (drives this
  * playback immediately) AND the settings store (persists it as a player-level setting — Editor
