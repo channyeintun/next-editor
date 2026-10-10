@@ -6,7 +6,7 @@ import {
   voiceCapabilitySchema,
   voiceParticipantSchema,
   voiceServerMessageSchema,
-} from "./voiceProtocol";
+} from "./protocol";
 
 const CONNECTION_ID = "0d5f4c72-9a3b-4c1d-8e2f-6a7b8c9d0e1f";
 const USER_ID = "1b2c3d4e-5f60-4711-8223-3445566778aa";

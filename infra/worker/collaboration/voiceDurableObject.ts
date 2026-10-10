@@ -19,7 +19,7 @@ import {
   type VoiceParticipant,
   type VoiceRoomClosedReason,
   type VoiceServerMessage,
-} from "../../../src/collaboration/voiceProtocol";
+} from "../../../src/voice/protocol";
 import {
   MAX_VOICE_TRACKS_PER_CONNECTION,
   VOICE_STUN_ICE_SERVERS,

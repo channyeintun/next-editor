@@ -83,7 +83,7 @@ import {
   MAX_VOICE_SFU_REQUEST_BYTES,
   VOICE_CAPABILITY_HEADER,
   voiceCapabilitySchema,
-} from "../../../src/collaboration/voiceProtocol";
+} from "../../../src/voice/protocol";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;

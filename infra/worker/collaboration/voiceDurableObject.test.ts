@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { CollaborationRole } from "../../../src/collaboration/protocol";
-import { COLLABORATION_VOICE_PROTOCOL_VERSION } from "../../../src/collaboration/voiceProtocol";
+import { COLLABORATION_VOICE_PROTOCOL_VERSION } from "../../../src/voice/protocol";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { CollaborationVoiceRoomDurableObject } from "./voiceDurableObject";

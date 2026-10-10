@@ -8,20 +8,9 @@ import {
 } from "react";
 import { getCollaborationVoiceAvailability } from "@next-editor/infra";
 import type { VoiceEngine } from "../voice/engine";
-import { setVoiceJoinedForRecording } from "../voice/recorderBridge";
+import { isVoiceJoined, setVoiceJoinedForRecording } from "../voice/recorderBridge";
 import type { VoiceCommands, VoiceUiState } from "../voice/types";
 import { useOptionalCollaboration } from "./CollaborationContext";
-
-// States in which remote voice may be (or is about to be) audible in this
-// tab, so recordings must exclude tab/display audio.
-const VOICE_JOINED_STATES = new Set([
-  "joining",
-  "listening",
-  "unmuting",
-  "live",
-  "reconnecting",
-  "leaving",
-]);
 
 // React integration for collaboration voice chat. The engine owns all media
 // state; this provider only manages one engine per active room/session and
@@ -93,7 +82,7 @@ export function CollaborationVoiceProvider({
       // Recorder privacy bridge: while voice is joined, tab/display audio is
       // excluded from screen recordings (plan §11).
       const syncRecorderBridge = () => {
-        setVoiceJoinedForRecording(VOICE_JOINED_STATES.has(nextEngine.getUiState().state));
+        setVoiceJoinedForRecording(isVoiceJoined(nextEngine.getUiState().state));
       };
       const unsubscribeRecorderBridge = nextEngine.subscribe(syncRecorderBridge);
       syncRecorderBridge();
@@ -179,5 +168,5 @@ export function useOptionalCollaborationVoiceState(): VoiceUiState | null {
 }
 
 export function isVoiceJoinedState(state: VoiceUiState | null): boolean {
-  return state !== null && VOICE_JOINED_STATES.has(state.state);
+  return state !== null && isVoiceJoined(state.state);
 }

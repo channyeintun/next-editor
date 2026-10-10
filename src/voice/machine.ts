@@ -1,5 +1,5 @@
 import { assign, setup } from "xstate";
-import type { VoiceErrorCode } from "../collaboration/voiceProtocol";
+import type { VoiceErrorCode } from "./protocol";
 
 // Deterministic lifecycle model for the collaboration voice client. All
 // side effects (sockets, WebRTC, microphone, sinks) live in the voice

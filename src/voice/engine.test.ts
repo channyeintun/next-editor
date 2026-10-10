@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { VoiceParticipant, VoicePublishedTrack } from "../collaboration/voiceProtocol";
+import type { VoiceParticipant, VoicePublishedTrack } from "./protocol";
 import { VoiceEngine, type VoiceEngineDeps } from "./engine";
 import type { VoiceSocketLike } from "./client";
 import type { VoiceMediaSession, VoiceMediaSessionConfig } from "./partyTracksAdapter";

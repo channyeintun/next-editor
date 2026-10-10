@@ -1,4 +1,4 @@
-import type { VoiceParticipant } from "../collaboration/voiceProtocol";
+import type { VoiceParticipant } from "./protocol";
 import type { VoiceClientErrorCode, VoiceConnectionState, VoiceUnavailableReason } from "./machine";
 
 // Roster entry as the UI consumes it: server-owned participant state plus

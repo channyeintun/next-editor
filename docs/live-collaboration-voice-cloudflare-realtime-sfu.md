@@ -465,6 +465,8 @@ src/
     engine.ts                              # lifecycle and media orchestration
     machine.ts                             # deterministic state model
     partyTracksAdapter.ts                  # only direct partytracks dependency
+    protocol.ts                            # protocol schemas shared with the Worker
+    recorderBridge.ts                      # joined states and the tab-audio exclusion
     remoteAudioSink.ts                     # sink/autoplay/cleanup wrapper
     speakingDetector.ts                    # local Web Audio analysis
     types.ts                               # UI-facing types
@@ -476,7 +478,6 @@ infra/
   worker/
     collaboration/
       voiceDurableObject.ts                 # ephemeral roster and ownership registry
-      voiceProtocol.ts                      # shared/server protocol schemas
       realtimeSfuGateway.ts                 # secured PartyTracks/SFU proxy wrapper
     routes/
       collaboration.ts                     # room-scoped voice routes
@@ -958,7 +959,8 @@ Treat a failure in the first three areas as release-blocking.
 - `chore(voice): validate Cloudflare SFU integration` — exact-pin `partytracks@0.0.56`
   (+ `rxjs@7.8.2` as a direct pinned dependency), Phase 0 findings in section 14.
 - `feat(voice): define collaboration voice protocol and state` —
-  `src/collaboration/voiceProtocol.ts` (strict Zod schemas, shared client/Worker),
+  `src/collaboration/voiceProtocol.ts` (strict Zod schemas, shared client/Worker; since moved
+  to `src/voice/protocol.ts`),
   `src/voice/machine.ts` (XState lifecycle), `src/voice/types.ts`, pure tests.
 - `feat(voice): add secured SFU room control plane` —
   `infra/worker/collaboration/voiceDurableObject.ts` (hibernating roster + capability digests +

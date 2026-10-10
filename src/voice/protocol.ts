@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { collaborationIdSchema, collaborationRoleSchema } from "./protocol";
+import { collaborationIdSchema, collaborationRoleSchema } from "../collaboration/protocol";
 
 // Coordination protocol for opt-in voice chat over the Cloudflare Realtime
 // SFU. This is a JSON WebSocket protocol that is deliberately independent of

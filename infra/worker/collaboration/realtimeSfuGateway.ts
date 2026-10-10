@@ -4,7 +4,7 @@ import {
   MAX_VOICE_SFU_REQUEST_BYTES,
   voiceSfuSessionIdSchema,
   voiceSfuTrackNameSchema,
-} from "../../../src/collaboration/voiceProtocol";
+} from "../../../src/voice/protocol";
 
 // Request/response contract between the partytracks client (verified against
 // the exact-pinned 0.0.56 build) and the Cloudflare Realtime SFU HTTPS API,

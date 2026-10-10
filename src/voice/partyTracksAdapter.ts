@@ -11,7 +11,7 @@ import {
   throwError,
 } from "rxjs";
 import { filter, map, retry, shareReplay, switchMap, take, timeout } from "rxjs/operators";
-import type { VoicePublishedTrack } from "../collaboration/voiceProtocol";
+import type { VoicePublishedTrack } from "./protocol";
 
 // The only module allowed to import partytracks (pinned exactly at 0.0.56).
 // Everything else consumes VoiceMediaSession so the pre-1.0 dependency stays

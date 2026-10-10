@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
+import type { VoiceConnectionState } from "./machine";
 import {
+  VOICE_JOINED_STATES,
   applyVoiceRecordingPolicy,
+  isVoiceJoined,
   isVoiceJoinedForRecording,
   resetVoiceRecorderBridgeForTests,
   setVoiceJoinedForRecording,
@@ -56,6 +59,17 @@ function asStream(stream: FakeStream): MediaStream {
 
 beforeEach(() => {
   resetVoiceRecorderBridgeForTests();
+});
+
+describe("voice joined states", () => {
+  it("counts every state from joining until leaving finishes as joined", () => {
+    expect([...VOICE_JOINED_STATES].sort()).toEqual(
+      ["joining", "leaving", "listening", "live", "reconnecting", "unmuting"].sort(),
+    );
+    const notJoined: VoiceConnectionState[] = ["unavailable", "idle", "failed"];
+    for (const state of notJoined) expect(isVoiceJoined(state)).toBe(false);
+    for (const state of VOICE_JOINED_STATES) expect(isVoiceJoined(state)).toBe(true);
+  });
 });
 
 describe("voice recorder bridge", () => {

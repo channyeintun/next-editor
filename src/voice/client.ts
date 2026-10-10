@@ -3,7 +3,7 @@ import {
   parseVoiceServerMessage,
   type VoiceClientMessage,
   type VoiceServerMessage,
-} from "../collaboration/voiceProtocol";
+} from "./protocol";
 
 // Thin room-scoped wrapper around the voice coordination WebSocket. The
 // engine owns reconnect policy; each client instance is a single connection

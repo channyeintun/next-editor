@@ -5,7 +5,7 @@ import {
   type VoiceParticipant,
   type VoicePublishedTrack,
   type VoiceServerMessage,
-} from "../collaboration/voiceProtocol";
+} from "./protocol";
 import {
   buildVoiceSfuExtraParams,
   buildVoiceSfuPrefix,
@@ -485,7 +485,7 @@ export class VoiceEngine {
   // --- UI state -----------------------------------------------------------
 
   private buildUiState(): VoiceUiState {
-    const snapshot = this.actor?.getSnapshot();
+    const snapshot = this.actor.getSnapshot();
     const roster: VoiceRosterEntry[] = [...this.roster.values()].map((participant) => ({
       participant,
       isSelf: participant.voiceConnectionId === this.voiceConnectionId,
@@ -496,10 +496,10 @@ export class VoiceEngine {
       if (entry.sink.isBlocked()) autoplayBlocked = true;
     }
     return {
-      state: (snapshot?.value as VoiceUiState["state"]) ?? "unavailable",
-      unavailableReason: snapshot?.context.unavailableReason ?? null,
-      errorCode: snapshot?.context.errorCode ?? null,
-      wantsMicrophone: snapshot?.context.wantsMicrophone ?? false,
+      state: snapshot.value,
+      unavailableReason: snapshot.context.unavailableReason,
+      errorCode: snapshot.context.errorCode,
+      wantsMicrophone: snapshot.context.wantsMicrophone,
       autoplayBlocked,
       roster,
       isLocalSpeaking: this.localSpeaking,

@@ -5,6 +5,20 @@
 // display-audio tracks — at acquisition time and retroactively when voice is
 // joined mid-recording. The host's microphone narration is unaffected.
 
+import type { VoiceConnectionState } from "./machine";
+
+// Voice states in which remote voice may be (or is about to be) audible in
+// this tab, so recordings must exclude tab/display audio. This module, not the
+// machine, owns the rule: the provider imports it eagerly, while the machine
+// loads with the lazy voice engine.
+export const VOICE_JOINED_STATES: ReadonlySet<VoiceConnectionState> = new Set<VoiceConnectionState>(
+  ["joining", "listening", "unmuting", "live", "reconnecting", "leaving"],
+);
+
+export function isVoiceJoined(state: VoiceConnectionState): boolean {
+  return VOICE_JOINED_STATES.has(state);
+}
+
 let voiceJoined = false;
 const liveDisplayAudioTracks = new Set<MediaStreamTrack>();
 
