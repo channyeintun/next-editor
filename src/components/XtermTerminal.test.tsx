@@ -124,6 +124,64 @@ describe("XtermTerminal", () => {
     xterm.FakeTerminal.instances = [];
   });
 
+  it("writes a new terminal's first output without resetting it first", () => {
+    const { terminal } = renderTerminal("Compiled successfully\n", true);
+
+    expect(terminal.calls).toEqual(["Compiled successfully\n"]);
+  });
+
+  it("leaves a new terminal with no output alone", () => {
+    const { terminal } = renderTerminal("", true);
+
+    expect(terminal.calls).toEqual([]);
+  });
+
+  it("still clears the terminal when the session changes", () => {
+    const view = render(
+      <XtermTerminal
+        sessionId="console-1"
+        output={"first\n"}
+        interactive={false}
+        label="Console"
+      />,
+    );
+    const terminal = xterm.FakeTerminal.instances.at(-1)!;
+    terminal.calls = [];
+
+    view.rerender(
+      <XtermTerminal
+        sessionId="console-2"
+        output={"second\n"}
+        interactive={false}
+        label="Console"
+      />,
+    );
+
+    expect(terminal.calls).toEqual(["reset", "second\n"]);
+  });
+
+  it("clears a terminal that started with no output once its session changes", () => {
+    const view = render(
+      <XtermTerminal sessionId="console-1" output="" interactive={false} label="Console" />,
+    );
+    const terminal = xterm.FakeTerminal.instances.at(-1)!;
+    view.rerender(
+      <XtermTerminal
+        sessionId="console-1"
+        output={"first\n"}
+        interactive={false}
+        label="Console"
+      />,
+    );
+    terminal.calls = [];
+
+    view.rerender(
+      <XtermTerminal sessionId="console-2" output="" interactive={false} label="Console" />,
+    );
+
+    expect(terminal.calls).toEqual(["reset"]);
+  });
+
   it("writes only the new text once a capped log starts dropping its oldest text", () => {
     const { update } = renderTerminal(windowAt(7000), true);
 

@@ -97,6 +97,10 @@ function XtermTerminal({
   // keepScrolledOffOutput was on.
   const hasScrolledOffOutputRef = useRef(false);
   const lastSessionIdRef = useRef<string | null>(null);
+  // True from the terminal's creation until anything is written to it or it is
+  // reset: resetting it then clears nothing, yet re-renders every row, the
+  // screen reader rows included, inside the commit that mounts it.
+  const freshTerminalRef = useRef(false);
   // The terminal outlives a change of callback props, so its listeners always
   // call the latest ones.
   const emitData = useEffectEvent((input: string) => onData?.(input));
@@ -185,6 +189,7 @@ function XtermTerminal({
     lastOutputRef.current = "";
     hasScrolledOffOutputRef.current = false;
     lastSessionIdRef.current = null;
+    freshTerminalRef.current = true;
     registerXtermTerminal(container, terminal);
     // Pointer samples over the console record the line and character they sit
     // on, so playback finds the same line however many rows the viewer fits.
@@ -205,6 +210,7 @@ function XtermTerminal({
       lastOutputRef.current = "";
       hasScrolledOffOutputRef.current = false;
       lastSessionIdRef.current = null;
+      freshTerminalRef.current = false;
     };
   }, [interactive]);
 
@@ -228,7 +234,10 @@ function XtermTerminal({
     }
 
     if (lastSessionIdRef.current !== sessionId) {
-      terminal.reset();
+      // The first session on a new terminal has nothing to clear.
+      if (!freshTerminalRef.current) {
+        terminal.reset();
+      }
       lastSessionIdRef.current = sessionId;
       lastOutputRef.current = "";
       hasScrolledOffOutputRef.current = false;
@@ -240,6 +249,9 @@ function XtermTerminal({
     if (output === lastOutputRef.current && !mustRewrite) {
       return;
     }
+
+    // Every path below writes to the terminal or resets it.
+    freshTerminalRef.current = false;
 
     if (!output) {
       terminal.reset();
