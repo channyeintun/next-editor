@@ -1,3 +1,5 @@
+import { requestFromPreviewFrame } from "./previewFrameRequest";
+
 export const STUDIO_PREVIEW_COMMAND_MESSAGE_TYPE = "NEXT_EDITOR_STUDIO_PREVIEW_COMMAND";
 export const STUDIO_PREVIEW_COMMAND_RESPONSE_MESSAGE_TYPE =
   "NEXT_EDITOR_STUDIO_PREVIEW_COMMAND_RESPONSE";
@@ -51,14 +53,6 @@ export interface StudioPreviewCommandResult {
   targetBox?: StudioPreviewTargetBox;
 }
 
-interface StudioPreviewCommandResponsePayload {
-  error?: unknown;
-  id?: unknown;
-  result?: unknown;
-}
-
-let commandRequestId = 0;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -108,58 +102,21 @@ export function requestStudioPreviewCommand(
   command: StudioPreviewCommand,
   options: { signal: AbortSignal; timeoutMs: number },
 ): Promise<StudioPreviewCommandResult> {
-  const targetWindow = iframe?.contentWindow;
-  if (!targetWindow) {
-    return Promise.reject(new Error("The live preview iframe is not available"));
-  }
-  if (options.signal.aborted) {
-    return Promise.reject(new Error("The preview command was cancelled"));
-  }
-
-  const id = `studio-preview-${++commandRequestId}`;
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      window.removeEventListener("message", handleMessage);
-      options.signal.removeEventListener("abort", handleAbort);
-    };
-    const handleAbort = () => {
-      cleanup();
-      reject(new Error("The preview command was cancelled"));
-    };
-    const handleMessage = (event: MessageEvent) => {
-      if (
-        event.source !== targetWindow ||
-        event.data?.type !== STUDIO_PREVIEW_COMMAND_RESPONSE_MESSAGE_TYPE
-      ) {
-        return;
-      }
-      const payload = event.data.payload as StudioPreviewCommandResponsePayload | undefined;
-      if (!payload || payload.id !== id) {
-        return;
-      }
-      cleanup();
-      if (typeof payload.error === "string") {
-        reject(new Error(payload.error));
-        return;
-      }
-      if (!isCommandResult(payload.result)) {
-        reject(new Error("The preview returned an invalid command acknowledgement"));
-        return;
-      }
-      resolve(payload.result);
-    };
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error(`Preview command timed out after ${options.timeoutMs}ms`));
-    }, options.timeoutMs);
-
-    window.addEventListener("message", handleMessage);
-    options.signal.addEventListener("abort", handleAbort, { once: true });
-    targetWindow.postMessage(
-      { type: STUDIO_PREVIEW_COMMAND_MESSAGE_TYPE, payload: { id, command } },
-      "*",
-    );
+  return requestFromPreviewFrame({
+    iframe,
+    requestType: STUDIO_PREVIEW_COMMAND_MESSAGE_TYPE,
+    responseType: STUDIO_PREVIEW_COMMAND_RESPONSE_MESSAGE_TYPE,
+    idPrefix: "studio-preview",
+    payload: { command },
+    timeoutMs: options.timeoutMs,
+    signal: options.signal,
+    parse: ({ result }) => (isCommandResult(result) ? result : undefined),
+    messages: {
+      unavailable: "The live preview iframe is not available",
+      invalid: "The preview returned an invalid command acknowledgement",
+      timedOut: `Preview command timed out after ${options.timeoutMs}ms`,
+      cancelled: "The preview command was cancelled",
+    },
   });
 }
 
@@ -167,7 +124,7 @@ export function requestStudioPreviewCommand(
 export function createStudioPreviewCommandBridgeScript(setupMarker: string): string {
   return `
     (function() {
-      var marker = ${JSON.stringify("__MARKER__")};
+      var marker = ${JSON.stringify(setupMarker)};
       if (window[marker]) return;
       window[marker] = true;
 
@@ -323,5 +280,5 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
         );
       });
     })();
-  `.replace("__MARKER__", setupMarker);
+  `;
 }

@@ -1,3 +1,5 @@
+import { requestFromPreviewFrame } from "./previewFrameRequest";
+
 export const PREVIEW_SCREENSHOT_REQUEST_MESSAGE_TYPE = "NEXT_EDITOR_PREVIEW_SCREENSHOT_REQUEST";
 export const PREVIEW_SCREENSHOT_RESPONSE_MESSAGE_TYPE = "NEXT_EDITOR_PREVIEW_SCREENSHOT_RESPONSE";
 
@@ -7,75 +9,28 @@ export interface PreviewScreenshotResult {
   width: number;
 }
 
-interface PreviewScreenshotResponsePayload {
-  dataUrl?: unknown;
-  error?: unknown;
-  height?: unknown;
-  id?: unknown;
-  width?: unknown;
-}
-
-let screenshotRequestId = 0;
-
 export function requestPreviewScreenshot(
   iframe: HTMLIFrameElement | null,
   timeoutMs = 10_000,
 ): Promise<PreviewScreenshotResult> {
-  if (!iframe?.contentWindow) {
-    return Promise.reject(new Error("The live preview iframe is not available."));
-  }
-
-  screenshotRequestId += 1;
-  const id = `preview-shot-${Date.now().toString(36)}-${screenshotRequestId}`;
-  const targetWindow = iframe.contentWindow;
-
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      window.removeEventListener("message", handleMessage);
-    };
-    const handleMessage = (event: MessageEvent) => {
-      if (
-        event.source !== targetWindow ||
-        event.data?.type !== PREVIEW_SCREENSHOT_RESPONSE_MESSAGE_TYPE
-      ) {
-        return;
-      }
-
-      const payload = event.data.payload as PreviewScreenshotResponsePayload | undefined;
-      if (!payload || payload.id !== id) {
-        return;
-      }
-
-      cleanup();
-
-      if (typeof payload.error === "string") {
-        reject(new Error(payload.error));
-        return;
-      }
-
-      if (
-        typeof payload.dataUrl !== "string" ||
-        !payload.dataUrl.startsWith("data:image/png;base64,") ||
-        typeof payload.width !== "number" ||
-        typeof payload.height !== "number"
-      ) {
-        reject(new Error("The preview returned an invalid screenshot."));
-        return;
-      }
-
-      resolve({ dataUrl: payload.dataUrl, width: payload.width, height: payload.height });
-    };
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error(`Preview screenshot timed out after ${timeoutMs}ms.`));
-    }, timeoutMs);
-
-    window.addEventListener("message", handleMessage);
-    targetWindow.postMessage(
-      { type: PREVIEW_SCREENSHOT_REQUEST_MESSAGE_TYPE, payload: { id } },
-      "*",
-    );
+  return requestFromPreviewFrame({
+    iframe,
+    requestType: PREVIEW_SCREENSHOT_REQUEST_MESSAGE_TYPE,
+    responseType: PREVIEW_SCREENSHOT_RESPONSE_MESSAGE_TYPE,
+    idPrefix: `preview-shot-${Date.now().toString(36)}`,
+    timeoutMs,
+    parse: ({ dataUrl, width, height }) =>
+      typeof dataUrl === "string" &&
+      dataUrl.startsWith("data:image/png;base64,") &&
+      typeof width === "number" &&
+      typeof height === "number"
+        ? { dataUrl, width, height }
+        : undefined,
+    messages: {
+      unavailable: "The live preview iframe is not available.",
+      invalid: "The preview returned an invalid screenshot.",
+      timedOut: `Preview screenshot timed out after ${timeoutMs}ms.`,
+    },
   });
 }
 
