@@ -3,7 +3,13 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { Env } from "../env";
 import { isJsonObject, readJsonWithLimit } from "../httpBody";
-import { deleteSession, getSessionUser, updateUsername, USERNAME_PATTERN } from "../../db/queries";
+import {
+  createSession,
+  deleteSession,
+  getSessionUser,
+  updateUsername,
+  USERNAME_PATTERN,
+} from "../../db/queries";
 import { type SessionRow, userRowToAuthUser } from "../../db/types";
 
 export const SESSION_COOKIE = "ne_session";
@@ -24,7 +30,7 @@ export function isHttps(c: Context): boolean {
 // add no security here (unlike the transient OAuth handshake cookie in
 // google.ts, which has no DB backing and so needs tamper protection itself).
 // The cookie lives exactly as long as the row createSession wrote.
-export function setSessionCookie(c: Context, session: SessionRow): void {
+function setSessionCookie(c: Context, session: SessionRow): void {
   setCookie(c, SESSION_COOKIE, session.id, {
     httpOnly: true,
     secure: isHttps(c),
@@ -32,6 +38,20 @@ export function setSessionCookie(c: Context, session: SessionRow): void {
     path: "/",
     maxAge: Math.floor((session.expires_at - session.created_at) / 1000),
   });
+}
+
+/**
+ * Signs the user in on this response: writes a session row and sets its
+ * cookie. Every sign-in path (Google One Tap, the Google redirect, passkeys)
+ * ends here.
+ */
+export async function startSession<E extends { Bindings: Env }>(
+  c: Context<E>,
+  userId: string,
+): Promise<SessionRow> {
+  const session = await createSession(c.env.DB, userId);
+  setSessionCookie(c, session);
+  return session;
 }
 
 export function clearSessionCookie(c: Context): void {

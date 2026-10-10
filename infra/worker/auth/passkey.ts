@@ -11,7 +11,6 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { Env } from "../env";
 import { readJsonWithLimit } from "../httpBody";
-import { createSession } from "../../db/queries";
 import {
   getPasskeyCredentialWithUser,
   insertPasskeyCredential,
@@ -20,7 +19,7 @@ import {
 } from "../../db/passkeyQueries";
 import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
 import { requireUser } from "./requireUser";
-import { isHttps, setSessionCookie } from "./session";
+import { isHttps, startSession } from "./session";
 
 const RP_NAME = "Next Editor";
 // A WebAuthn registration or authentication response is a few KB at most.
@@ -272,7 +271,6 @@ passkeyRoute.post("/login/verify", async (c) => {
     verification.authenticationInfo.newCounter,
   );
 
-  const session = await createSession(c.env.DB, match.user.id);
-  setSessionCookie(c, session);
+  await startSession(c, match.user.id);
   return c.json({ user: userRowToAuthUser(match.user) });
 });

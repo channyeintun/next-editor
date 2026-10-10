@@ -4,6 +4,8 @@
 // signature check — a browser-posted JWT is attacker-writable, so it must be
 // verified against Google's published JWKS before any claim is believed.
 
+import { base64UrlDecodeToBytes } from "../base64url";
+
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const JWKS_CACHE_TTL_MS = 60 * 60 * 1000;
 // Tolerated clock skew when checking exp (the only time claim checked), per
@@ -34,17 +36,6 @@ export interface VerifyGoogleIdTokenOptions {
   fetchJwks?: () => Promise<JwksResponse>;
   /** Injectable clock for tests; epoch ms. */
   now?: number;
-}
-
-// Returns a view over a plain ArrayBuffer, not the default ArrayBufferLike:
-// crypto.subtle.verify takes a BufferSource, which excludes SharedArrayBuffer
-// views. Uint8Array.from always allocates a fresh non-shared buffer, so the
-// narrower type is exact rather than an assertion.
-function base64UrlDecodeToBytes(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padLength = (4 - (padded.length % 4)) % 4;
-  const binary = atob(padded + "=".repeat(padLength));
-  return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
 }
 
 function base64UrlDecodeToJson<T>(value: string): T {

@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { Env } from "../env";
 import { isJsonObject, readJsonWithLimit } from "../httpBody";
-import { upsertUserByGoogleSub, createSession } from "../../db/queries";
+import { upsertUserByGoogleSub } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
-import { isHttps, setSessionCookie } from "./session";
+import { base64UrlDecodeToBytes, base64UrlEncode, randomBase64Url } from "../base64url";
+import { isHttps, startSession } from "./session";
 import { verifyGoogleIdToken, type VerifiedGoogleIdToken } from "./googleIdToken";
 
 const HANDSHAKE_COOKIE = "ne_oauth";
@@ -18,30 +19,6 @@ interface HandshakePayload {
   state: string;
   codeVerifier: string;
   returnTo: string;
-}
-
-interface GoogleIdTokenPayload {
-  sub: string;
-  email: string;
-  name?: string;
-  picture?: string;
-}
-
-function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
-  const binary = String.fromCharCode(...new Uint8Array(bytes));
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64UrlDecodeToString(value: string): string {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padLength = (4 - (padded.length % 4)) % 4;
-  const binary = atob(padded + "=".repeat(padLength));
-  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
-function randomBase64Url(byteLength: number): string {
-  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(byteLength)));
 }
 
 async function pkceChallengeFromVerifier(verifier: string): Promise<string> {
@@ -82,12 +59,12 @@ export function sanitizeReturnTo(value: string | undefined | null): string {
 // untrusted party) doesn't apply to a value we just fetched straight from
 // Google. Re-add JWKS signature verification here if that trust boundary
 // ever changes (e.g. accepting id_tokens from the client directly).
-function decodeIdTokenPayload(idToken: string): GoogleIdTokenPayload {
+function decodeIdTokenPayload(idToken: string): VerifiedGoogleIdToken {
   const [, payloadSegment] = idToken.split(".");
   if (!payloadSegment) {
     throw new Error("Malformed id_token: missing payload segment");
   }
-  return JSON.parse(base64UrlDecodeToString(payloadSegment));
+  return JSON.parse(new TextDecoder().decode(base64UrlDecodeToBytes(payloadSegment)));
 }
 
 // Mounted at /api/auth/google in worker/index.ts.
@@ -126,8 +103,7 @@ googleAuthRoute.post("/onetap", async (c) => {
     name: identity.name ?? null,
     avatarUrl: identity.picture ?? null,
   });
-  const session = await createSession(c.env.DB, user.id);
-  setSessionCookie(c, session);
+  await startSession(c, user.id);
   return c.json({ user: userRowToAuthUser(user) });
 });
 
@@ -205,7 +181,7 @@ googleAuthRoute.get("/callback", async (c) => {
     return c.text("OAuth error: Google's response had no id_token.", 502);
   }
 
-  let idTokenPayload: GoogleIdTokenPayload;
+  let idTokenPayload: VerifiedGoogleIdToken;
   try {
     idTokenPayload = decodeIdTokenPayload(tokens.id_token);
   } catch {
@@ -218,8 +194,7 @@ googleAuthRoute.get("/callback", async (c) => {
     avatarUrl: idTokenPayload.picture ?? null,
   });
 
-  const session = await createSession(c.env.DB, user.id);
-  setSessionCookie(c, session);
+  await startSession(c, user.id);
 
   // Re-sanitized rather than trusted from the handshake cookie: this is the
   // value that actually reaches the browser as a Location header, so it is the
