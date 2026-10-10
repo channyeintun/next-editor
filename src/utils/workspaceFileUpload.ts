@@ -2,13 +2,6 @@ import type { WorkspaceFileContent, WorkspaceFileEncoding } from "../types/works
 import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 
-/**
- * Largest local asset we accept into a workspace. Bytes persist to IndexedDB
- * (which has no ~5 MB localStorage quota), so this cap bounds browser/runtime
- * work rather than a base64 or localStorage representation.
- */
-export const MAX_WORKSPACE_ASSET_BYTES = 50 * 1024 * 1024;
-
 export interface UploadedWorkspaceFile {
   content: WorkspaceFileContent;
   encoding?: WorkspaceFileEncoding;

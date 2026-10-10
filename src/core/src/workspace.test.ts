@@ -5,12 +5,19 @@ import {
   areWorkspaceProjectsEqual,
   areWorkspaceSnapshotsEqual,
   isNonZeroWidthDelta,
+  MAX_WORKSPACE_ASSET_BYTES,
   type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceProject,
   type WorkspaceRecordingSnapshot,
   type WorkspaceTextFile,
 } from "./workspace";
+
+describe("MAX_WORKSPACE_ASSET_BYTES", () => {
+  it("pins the product limit for one workspace asset at 50 MiB", () => {
+    expect(MAX_WORKSPACE_ASSET_BYTES).toBe(50 * 1024 * 1024);
+  });
+});
 
 describe("isNonZeroWidthDelta", () => {
   it("accepts only a finite, non-zero number", () => {

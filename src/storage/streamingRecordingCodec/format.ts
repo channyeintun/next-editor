@@ -12,6 +12,7 @@ import type { RecordingTrackName } from "../../core/src/machine/recordingAssembl
 import type { RuntimeRecordingSnapshot } from "../../core/src/runtime";
 import {
   isWorkspaceAssetDescriptor,
+  MAX_WORKSPACE_ASSET_BYTES,
   type WorkspaceRecordingAsset,
   type WorkspaceRecordingSnapshot,
 } from "../../types/workspace";
@@ -96,7 +97,8 @@ export const MAX_COMPRESSED_META_BYTES = 4 * 1024 * 1024;
 const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
 const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
 const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
-const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = 50 * 1024 * 1024 + 64 * 1024;
+// The asset bytes plus a fixed allowance for the payload header (lengths, id, MIME).
+const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = MAX_WORKSPACE_ASSET_BYTES + 64 * 1024;
 export const MAX_DECODED_RECORDS = 1_000_000;
 
 export const SEGMENT_KIND = {

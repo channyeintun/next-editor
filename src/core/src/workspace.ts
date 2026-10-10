@@ -7,6 +7,14 @@ export interface WorkspaceAssetDescriptor {
   size: number;
 }
 
+/**
+ * Largest single workspace asset the editor accepts. Bytes persist to IndexedDB
+ * (which has no ~5 MB localStorage quota), so this cap bounds browser/runtime
+ * work rather than a base64 or localStorage representation. The recording codec
+ * refuses asset payloads above it plus a fixed header allowance.
+ */
+export const MAX_WORKSPACE_ASSET_BYTES = 50 * 1024 * 1024;
+
 /** Raw SCR3 payload carried outside workspace project snapshots. */
 export interface WorkspaceRecordingAsset {
   descriptor: WorkspaceAssetDescriptor;

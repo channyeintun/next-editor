@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { NextEditorActionsContext, type NextEditorActions } from "../../contexts/NextEditorContext";
 import { WorkspaceActionsContext } from "../../contexts/WorkspaceContext";
 import type { WorkspaceActions } from "../../stores/workspaceActions";
-import type { WorkspaceProject } from "../../types/workspace";
-import { MAX_WORKSPACE_ASSET_BYTES } from "../../utils/workspaceFileUpload";
+import { MAX_WORKSPACE_ASSET_BYTES, type WorkspaceProject } from "../../types/workspace";
 import { useWorkspaceFileImport } from "./useWorkspaceFileImport";
 
 const reader = vi.hoisted(() => ({

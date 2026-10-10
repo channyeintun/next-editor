@@ -2,10 +2,8 @@ import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { getUniqueWorkspacePath, joinWorkspacePath } from "../../types/workspacePaths";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import { useNextEditorActions } from "../../hooks/useNextEditorContext";
-import {
-  MAX_WORKSPACE_ASSET_BYTES,
-  readUploadedWorkspaceFile,
-} from "../../utils/workspaceFileUpload";
+import { MAX_WORKSPACE_ASSET_BYTES } from "../../types/workspace";
+import { readUploadedWorkspaceFile } from "../../utils/workspaceFileUpload";
 
 /**
  * Adds local files to the workspace, picked through a hidden file input or
