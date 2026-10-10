@@ -126,21 +126,6 @@ describe("asm console lines", () => {
       "Name it main.asm",
     ]);
   });
-
-  it("still yields a string for a kind the studio engine can synthesize", () => {
-    // liveAttempt (src/studio/playgroundRuntime.ts:172) turns its own deadline
-    // into a "timeout" kind and casts it in, so this call really happens with a
-    // kind outside the union. Without the fallback the store would be handed
-    // `undefined` and `lines[0].startsWith(...)` would throw.
-    const lines = asmRunServiceErrorToConsoleLines(
-      "timeout" as never,
-      "No response within 15000ms",
-    );
-
-    expect(lines).toEqual([
-      "[asm-run error] The run could not be completed (No response within 15000ms)",
-    ]);
-  });
 });
 
 describe("ASM_CONSOLE_TAG_PATTERN", () => {

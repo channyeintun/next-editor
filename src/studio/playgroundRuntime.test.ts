@@ -57,14 +57,16 @@ function rustRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   };
 }
 
-function asmRuntime(): StudioRuntime {
+function asmRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   return {
     kind: "asm-playground",
     dockStartsCollapsed: false,
     defaultMode: "fixture",
     fixture: {
       latencyMs: 5,
-      transientErrorKinds: [],
+      // Like Kite's, the asm fixture schema admits only "unavailable"; the
+      // engine's deadline can still synthesize a "timeout" its table lacks.
+      transientErrorKinds: transientErrorKinds as "unavailable"[],
       result: {
         status: "success",
         stdout: "hi\n",
@@ -247,6 +249,19 @@ describe("preparePlaygroundRun", () => {
     const terminal = failure as PlaygroundTerminalError;
     expect(terminal.consoleLines.every((line) => typeof line === "string")).toBe(true);
     expect(terminal.consoleLines[0]).toMatch(/^\[kite-run error\]/);
+  });
+
+  it("writes the same fallback line for asm, whose table lacks a timeout too", async () => {
+    // The asm console builder delegates to the shared table lookup like every
+    // other language; the line for a kind it never raises comes from the
+    // engine's normalizer, the one place every engine's failure passes.
+    const failure = await prepare(asmRuntime(["timeout", "timeout"]), projectWith("main.asm"))
+      .run()
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PlaygroundTerminalError);
+    expect((failure as PlaygroundTerminalError).consoleLines).toEqual([
+      "[asm-run error] The run could not be completed (Simulated transient timeout)",
+    ]);
   });
 
   it("rejects empty workspaces per kind", () => {

@@ -1,6 +1,6 @@
 import type { AsmPlaygroundRunResult } from "./types";
 import type { AsmPlaygroundServiceErrorKind } from "./client";
-import { splitOutputLines } from "../playgroundConsole";
+import { serviceErrorConsoleLines, splitOutputLines } from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -97,18 +97,5 @@ export function asmRunServiceErrorToConsoleLines(
   kind: Exclude<AsmPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  // The studio's shared retry engine normalizes *any* playground failure into
-  // a kind string, including "timeout" — a kind this runner cannot produce but
-  // that the engine can synthesize from its own deadline. Looking that up here
-  // would yield `undefined`, and a console line of `undefined` reaches the
-  // shared store's `lines[0].startsWith(...)` and throws. The fallback keeps a
-  // failure a failure rather than turning it into a crash.
-  const lines = [
-    SERVICE_ERROR_LINES[kind] ??
-      `[asm-run error] The run could not be completed${detail ? ` (${detail})` : ""}`,
-  ];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(SERVICE_ERROR_LINES, kind, detail);
 }
