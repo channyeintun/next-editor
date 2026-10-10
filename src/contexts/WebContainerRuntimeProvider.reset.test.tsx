@@ -147,7 +147,7 @@ describe("WebContainerRuntimeProvider resets a consumer asks for", () => {
   it("installs and runs a switched-to starter when the reset comes before the swap", async () => {
     const editor = await renderRunningSolidWorkspace();
 
-    // EditorHeader's starter switch.
+    // WorkspaceSettingsButton's starter switch (swapInWorkspace).
     editor.runtime().resetRuntime();
     editor
       .workspace()
@@ -181,7 +181,7 @@ describe("WebContainerRuntimeProvider resets a consumer asks for", () => {
     const reimported = starterProject("solid-workspace", "solid");
     reimported.files["src/extra.ts"] = createWorkspaceFile("src/extra.ts", "export {};");
 
-    // EditorHeader's zip import: the id comes from the zip's name, so no
+    // WorkspaceSettingsButton's zip import: the id comes from the zip's name, so no
     // project change resets the runtime; only the explicit reset does.
     editor.runtime().resetRuntime();
     editor.workspace().reconcileExternalProject(reimported);

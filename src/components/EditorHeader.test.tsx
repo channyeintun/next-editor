@@ -1,15 +1,42 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MockInstance } from "vite-plus/test";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
-import type { WorkspaceLessonType } from "../types/workspace";
+import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
 
-const mocks = vi.hoisted(() => ({
-  downloadWorkspaceProjectAsZip: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  startTour: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-  setSidebarCollapsed: vi.fn<(collapsed: boolean) => void>(),
-  setWhiteboardOpen: vi.fn<(open: boolean) => void>(),
-}));
+const mocks = vi.hoisted(() => {
+  // The order the workspace swap's steps ran in, across all four spies.
+  const swapCalls: string[] = [];
+  const project = { id: "swapped-in" } as WorkspaceProject;
+  return {
+    swapCalls,
+    project,
+    downloadWorkspaceProjectAsZip: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    startTour: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    setSidebarCollapsed: vi.fn<(collapsed: boolean) => void>(),
+    setWhiteboardOpen: vi.fn<(open: boolean) => void>(),
+    createStarterWorkspaceForLessonType: vi.fn<
+      (lessonType: WorkspaceLessonType) => Promise<WorkspaceProject>
+    >(() => Promise.resolve(project)),
+    importWorkspaceProjectFromZip: vi.fn<(file: File) => Promise<WorkspaceProject>>(() =>
+      Promise.resolve(project),
+    ),
+    resetRuntime: vi.fn<() => void>(() => {
+      swapCalls.push("resetRuntime");
+    }),
+    reconcileExternalProject: vi.fn<(project: WorkspaceProject) => void>(() => {
+      swapCalls.push("reconcileExternalProject");
+    }),
+    saveProject: vi.fn<() => Promise<void>>(() => {
+      swapCalls.push("saveProject");
+      return Promise.resolve();
+    }),
+    updateRunnerConfig: vi.fn<(config: { enabled: boolean }) => void>(() => {
+      swapCalls.push("updateRunnerConfig");
+    }),
+  };
+});
 
 let lessonType: WorkspaceLessonType = "react";
 let sidebarCollapsed = false;
@@ -19,8 +46,8 @@ vi.mock("../hooks/useWorkspace", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useWorkspace")>()),
   useWorkspaceActions: () => ({
     getProject: () => ({}),
-    reconcileExternalProject: () => {},
-    saveProject: () => Promise.resolve(),
+    reconcileExternalProject: mocks.reconcileExternalProject,
+    saveProject: mocks.saveProject,
     setSidebarCollapsed: mocks.setSidebarCollapsed,
   }),
   useWorkspaceDirtyState: () => ({ hasUnsavedChanges: false }),
@@ -47,7 +74,10 @@ vi.mock("../hooks/useNextEditorContext", async (importOriginal) => ({
 }));
 vi.mock("../hooks/useWebContainerRuntime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useWebContainerRuntime")>()),
-  useWebContainerRuntimeActions: () => ({}),
+  useWebContainerRuntimeActions: () => ({
+    resetRuntime: mocks.resetRuntime,
+    updateRunnerConfig: mocks.updateRunnerConfig,
+  }),
   useWebContainerRuntimeMetadata: () => ({
     environmentVariables: {},
     runnerConfig: { enabled: false },
@@ -58,6 +88,13 @@ vi.mock("../utils/workspaceZip", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../utils/workspaceZip")>()),
   downloadWorkspaceProjectAsZip: mocks.downloadWorkspaceProjectAsZip,
 }));
+vi.mock("../utils/workspaceZipImport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../utils/workspaceZipImport")>()),
+  importWorkspaceProjectFromZip: mocks.importWorkspaceProjectFromZip,
+}));
+vi.mock("../starters", () => ({
+  createStarterWorkspaceForLessonType: mocks.createStarterWorkspaceForLessonType,
+}));
 vi.mock("./tour/productTour", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tour/productTour")>()),
   startTour: mocks.startTour,
@@ -67,8 +104,8 @@ import {
   FileSidebarToggleButton,
   PreviewHeaderButton,
   WhiteboardHeaderButton,
-  WorkspaceSettingsButton,
 } from "./EditorHeader";
+import WorkspaceSettingsButton from "./editorHeader/WorkspaceSettingsButton";
 
 describe("PreviewHeaderButton", () => {
   it("opens the preview on the first click, keeping its name and reporting it pressed", () => {
@@ -202,5 +239,77 @@ describe("WorkspaceSettingsButton", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(settingsButton).toHaveFocus();
+  });
+
+  describe("replacing the workspace", () => {
+    let confirm: MockInstance<typeof window.confirm>;
+
+    beforeEach(() => {
+      mocks.swapCalls.length = 0;
+      mocks.createStarterWorkspaceForLessonType.mockClear();
+      mocks.reconcileExternalProject.mockClear();
+      mocks.updateRunnerConfig.mockClear();
+      confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      confirm.mockRestore();
+    });
+
+    // The reset comes first, in the same task as the swap, and never after the
+    // save: the swap's render auto-starts the new project, which a later reset
+    // would cancel.
+    const RESET_THEN_SWAP = [
+      "resetRuntime",
+      "reconcileExternalProject",
+      "saveProject",
+      "updateRunnerConfig",
+    ];
+
+    it("resets the runtime before swapping in a different starter, then saves and runs it", async () => {
+      openMenuAndFocus("Starter Template");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Starter Template" }));
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitemradio", { name: "Vue" }));
+      });
+
+      expect(mocks.createStarterWorkspaceForLessonType).toHaveBeenCalledWith("vue");
+      expect(mocks.reconcileExternalProject).toHaveBeenCalledWith(mocks.project);
+      expect(mocks.swapCalls).toEqual(RESET_THEN_SWAP);
+      expect(mocks.updateRunnerConfig).toHaveBeenCalledWith({ enabled: true });
+    });
+
+    it("swaps a fresh starter of the same framework in for New Editor without a reset", async () => {
+      const { item } = openMenuAndFocus("New Editor");
+
+      await act(async () => {
+        fireEvent.click(item);
+      });
+
+      expect(mocks.createStarterWorkspaceForLessonType).toHaveBeenCalledWith("react");
+      expect(mocks.swapCalls).toEqual([
+        "reconcileExternalProject",
+        "saveProject",
+        "updateRunnerConfig",
+      ]);
+      expect(mocks.updateRunnerConfig).toHaveBeenCalledWith({ enabled: true });
+    });
+
+    it("resets the runtime before swapping in an imported zip, then saves and runs it", async () => {
+      const { container } = render(<WorkspaceSettingsButton showImportExport />);
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error("expected the zip file input");
+
+      await act(async () => {
+        fireEvent.change(input, {
+          target: { files: [new File(["zip"], "project.zip", { type: "application/zip" })] },
+        });
+      });
+
+      expect(mocks.reconcileExternalProject).toHaveBeenCalledWith(mocks.project);
+      expect(mocks.swapCalls).toEqual(RESET_THEN_SWAP);
+      expect(mocks.updateRunnerConfig).toHaveBeenCalledWith({ enabled: true });
+    });
   });
 });
