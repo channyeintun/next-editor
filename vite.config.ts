@@ -17,6 +17,28 @@ const crossOriginHeaders = {
 
 const monacoTestMock = fileURLToPath(new URL("./src/test/monaco-editor.mock.ts", import.meta.url));
 
+const MONACO_MODULE = /[\\/]node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/;
+// What Monaco itself loads on demand, through the dynamic import()s in each
+// language's register.js, as paths under monaco-editor/esm/. The "editor"
+// group below leaves these out, so each stays the lazy chunk Monaco intends
+// instead of riding in the eager editor chunk (a group captures a matching
+// module wherever it is imported, dynamic imports included). Every language
+// still loads, on first use.
+const MONACO_ON_DEMAND_PATHS = [
+  // The grammars: languages/definitions/<lang>/<lang>.js. Each register.js
+  // beside them stays eager.
+  /^vs\/languages\/definitions\/[^/]+\/(?!register\.js$)[^/]+\.js$/,
+  // The language-service modes, and the modules only they import.
+  /^vs\/languages\/features\/[^/]+\/(?:\w+Mode|languageFeatures|workerManager|tokenization)\.js$/,
+  /^vs\/languages\/features\/(?:common\/lspLanguageFeatures|typescript\/lib\/lib\.index)\.js$/,
+  /^external\/(?:vscode-languageserver-types|jsonc-parser)\//,
+];
+
+function isMonacoOnDemandModule(id: string): boolean {
+  const [, path] = id.replaceAll("\\", "/").split("/monaco-editor/esm/");
+  return path !== undefined && MONACO_ON_DEMAND_PATHS.some((pattern) => pattern.test(path));
+}
+
 function quoteShellArgument(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -270,7 +292,7 @@ export default ({ mode }: { mode: string }) => {
               },
               {
                 name: "editor",
-                test: /[\\/]node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
+                test: (id) => MONACO_MODULE.test(id) && !isMonacoOnDemandModule(id),
               },
               {
                 name: "webcontainer",
@@ -301,6 +323,17 @@ export default ({ mode }: { mode: string }) => {
                 test: /[\\/](?:src|tube[\\/]src|infra[\\/]client)[\\/]/,
                 tags: ["$initial"],
                 minShareCount: 2,
+              },
+              {
+                // Each icon shared by a different set of routes was its own
+                // sub-1 KB chunk. Grouped by the set of entries that use them,
+                // a route loads its icons in a few requests. Subgroups under
+                // 6 KB merge into their nearest neighbour, which can hand a
+                // route a few icons it never draws (about 2 KB br on /learn).
+                name: "icons",
+                test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+                entriesAware: true,
+                entriesAwareMergeThreshold: 6144,
               },
             ],
           },
