@@ -18,7 +18,7 @@
     "lint": "vp lint",
     "typecheck": "tsc -b tsconfig.json infra/worker/tsconfig.json",
     "benchmark:dmp-codec": "node scripts/benchmark-dmp-codec.mjs",
-    "measure:recording": "node scripts/measure-recording-size.mjs",
+    "measure:recording": "bun scripts/measure-recording-size.ts",
     "preview": "vp preview",
     "prepare": "vp config --no-agent"
   },
