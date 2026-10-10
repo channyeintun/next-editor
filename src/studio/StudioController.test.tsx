@@ -215,14 +215,33 @@ describe("StudioController status messages", () => {
     fireEvent.click(startButton());
     await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: perform"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse studio render panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Studio render console" }));
     failRender(new Error("The live preview command bridge is not mounted"));
 
     await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: failed"));
-    fireEvent.click(screen.getByRole("button", { name: "Expand studio render panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Studio render console" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The live preview command bridge is not mounted",
     );
+  });
+
+  it("keeps the collapse toggle's name constant while aria-expanded reports the state", () => {
+    renderController();
+    const toggle = screen.getByRole("button", { name: "Studio render console" });
+    // The body stays mounted under the hidden attribute.
+    const lessonSelect = screen.getByRole("combobox", { name: "Lesson to render" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(lessonSelect).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAccessibleName("Studio render console");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(lessonSelect).not.toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAccessibleName("Studio render console");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(lessonSelect).toBeVisible();
   });
 
   it("describes the disabled Start button with its reason, without announcing the reason", () => {

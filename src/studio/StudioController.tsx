@@ -745,8 +745,9 @@ export default function StudioController() {
             // a toggle click mid-render must not blur it on screen.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setCollapsed((current) => !current)}
+            // A constant name: aria-expanded carries the state, the title the action.
             aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand studio render panel" : "Collapse studio render panel"}
+            aria-label="Studio render console"
             title={collapsed ? "Show the render console" : "Hide the render console"}
             className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-[#222d3b] hover:text-slate-100"
           >
