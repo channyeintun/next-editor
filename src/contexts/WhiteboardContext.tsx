@@ -3,6 +3,7 @@ import { useWhiteboardController } from "../hooks/useWhiteboardController";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useOptionalCollaboration } from "./CollaborationContext";
+import { useWhiteboardPanelPrefetch } from "../hooks/useWhiteboardPanelPrefetch";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 
 const WhiteboardContext = createContext<ReturnType<typeof useWhiteboardController> | null>(null);
@@ -13,9 +14,11 @@ interface WhiteboardProviderProps {
 
 export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
   const { handleWhiteboardEvent } = useNextEditorActions();
-  const { usesPlaybackModel, isInPlaybackSession, currentRecording } = useNextEditorMetadata();
+  const { usesPlaybackModel, isInPlaybackSession, isPlaying, currentRecording } =
+    useNextEditorMetadata();
   const { store } = useWhiteboardStore();
   const collaboration = useOptionalCollaboration();
+  useWhiteboardPanelPrefetch(currentRecording, isPlaying);
 
   const handleEvent = (event: WhiteboardEvent) => {
     const hasSharedDelta = Boolean(event.upserts?.length || event.removedIds?.length);
