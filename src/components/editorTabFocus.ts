@@ -41,6 +41,12 @@ export const TAB_MOVES_FOCUS_PRECONDITION = [
 export const LEAVE_EDITOR_HINT = "Press Escape, then Tab, to leave.";
 
 /**
+ * The id of the editor region (`<main>` in CodeEditor): the skip link's target
+ * and where Go to File returns focus.
+ */
+export const EDITOR_MAIN_ID = "editor-main";
+
+/**
  * In a writable Monaco editor Tab types a tab and Shift+Tab outdents, so
  * neither leaves it. This makes Escape switch the editor to "Tab moves focus"
  * until its text loses focus, when Tab goes back to indenting. Returns the

@@ -45,7 +45,7 @@ import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useIsEditorCovered, useIsWorkspaceCovered } from "../hooks/useIsWorkspaceCovered";
 import { mayTakeFocus } from "./mayTakeFocus";
-import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
+import { addEscapeThenTabExit, EDITOR_MAIN_ID, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 import "./editorCursors.css";
 import { lazyWithRecovery } from "../routeRecovery";
 
@@ -668,10 +668,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
           Focus moves without following the hash, which the router would see
           as a navigation. */}
       <a
-        href="#editor-main"
+        href={`#${EDITOR_MAIN_ID}`}
         onClick={(event) => {
           event.preventDefault();
-          document.getElementById("editor-main")?.focus();
+          document.getElementById(EDITOR_MAIN_ID)?.focus();
         }}
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-950"
       >
@@ -679,7 +679,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
       </a>
       {editorHeader}
       <main
-        id="editor-main"
+        id={EDITOR_MAIN_ID}
         tabIndex={-1}
         className="flex min-h-0 flex-1 overflow-hidden outline-none"
         data-cursor-replay-target="workspace-body"

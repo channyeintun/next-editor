@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceTreeFile } from "../../types/workspace";
+import { EDITOR_MAIN_ID } from "../editorTabFocus";
 import QuickOpenButton from "./QuickOpenButton";
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   files: [] as WorkspaceTreeFile[],
 }));
 
+// The real "../../monaco" loads the whole editor; the picker needs only the id.
+vi.mock("../../monaco", () => ({ monaco: { KeyCode: { Escape: 9 } } }));
 vi.mock("../../utils/keyboardPlatform", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../utils/keyboardPlatform")>()),
   isApplePlatform: () => mocks.isApple,
@@ -71,7 +74,7 @@ afterEach(() => {
 
 // A new element each time, so a rerender reads the changed mocks.
 const ui = () => (
-  <main id="editor-main" tabIndex={-1}>
+  <main id={EDITOR_MAIN_ID} tabIndex={-1}>
     <QuickOpenButton />
   </main>
 );
@@ -253,7 +256,7 @@ describe("QuickOpenButton", () => {
 
     expect(mocks.openWorkspaceFile).toHaveBeenCalledWith("src/b.ts");
     expect(dialog()).not.toBeInTheDocument();
-    expect(document.getElementById("editor-main")).toHaveFocus();
+    expect(document.getElementById(EDITOR_MAIN_ID)).toHaveFocus();
     flushFrames();
     expect(editorNode).toHaveFocus();
     expect(screen.getByRole("status")).toHaveTextContent("");
@@ -268,7 +271,7 @@ describe("QuickOpenButton", () => {
     flushFrames();
 
     expect(mocks.openWorkspaceFile).toHaveBeenCalledWith("logo.png");
-    expect(document.getElementById("editor-main")).toHaveFocus();
+    expect(document.getElementById(EDITOR_MAIN_ID)).toHaveFocus();
     expect(screen.getByRole("status")).toHaveTextContent("Opened logo.png");
   });
 

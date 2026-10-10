@@ -10,6 +10,7 @@ import {
   HEADER_ICON_BUTTON_NEUTRAL_CLASS,
 } from "../editorHeader/headerButtonClasses";
 import { isProductTourActive } from "../tour/productTour";
+import { EDITOR_MAIN_ID } from "../editorTabFocus";
 import {
   goToFileAriaKeyShortcuts,
   goToFileShortcutLabel,
@@ -71,7 +72,7 @@ export default function QuickOpenButton() {
     // screen reader hears the switch. An image, video or audio file has no
     // editor, and a full-height runtime dock hides it; then the switch is
     // announced instead.
-    returnFocusRef.current = document.getElementById("editor-main");
+    returnFocusRef.current = document.getElementById(EDITOR_MAIN_ID);
     openWorkspaceFile(file.path);
     setIsOpen(false);
     requestAnimationFrame(() => {
