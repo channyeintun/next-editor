@@ -5,7 +5,7 @@ import type { CaptionCue, Recording } from "@app/core/src";
 import ModalShell from "@app/components/ModalShell";
 import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
-import { createRecordingStorage } from "@app/storage/RecordingStorage";
+import { getRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { usePublishFromLibrary } from "../library/useMyLessons";
 import { useUploadLesson, formatDuration } from "./useUploadLesson";
@@ -124,7 +124,7 @@ export default function UploadLessonModal({
   // cannot be stored, stay here: navigating away would lose the only copy.
   const redirectToSignIn = async (draft?: ResumeIntent["draft"]) => {
     try {
-      await createRecordingStorage().save(recording);
+      await getRecordingStorage().save(recording);
       await saveResumeIntent({
         recordingId: recording.id,
         returnTo: window.location.pathname,

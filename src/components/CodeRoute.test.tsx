@@ -26,14 +26,10 @@ vi.mock("@next-editor/infra", () => ({
 }));
 
 vi.mock("../storage/RecordingStorage", () => ({
-  RecordingStorage: class {
-    loadById(id: string) {
-      return recovery.loadRecording(id);
-    }
-    delete(id: string) {
-      return recovery.deleteRecording(id);
-    }
-  },
+  getRecordingStorage: () => ({
+    loadById: (id: string) => recovery.loadRecording(id),
+    delete: (id: string) => recovery.deleteRecording(id),
+  }),
 }));
 
 const { default: CodeRoute } = await import("./CodeRoute");

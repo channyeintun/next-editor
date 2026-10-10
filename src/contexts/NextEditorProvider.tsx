@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
-import type { EditorMachineInput, Recording } from "../core/src";
+import type { EditorMachineInput } from "../core/src";
 import {
   selectIsTakeInProgress,
   useNextEditorActorActions,
@@ -26,7 +26,8 @@ import {
 import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
 import { useEndViewerDockOverride } from "../hooks/useRuntimeDockLayout";
 import { useWorkspaceRecordingAdapter } from "../hooks/useWorkspaceRecordingAdapter";
-import { createRecordingStorage, type RecordingStorage } from "../storage/RecordingStorage";
+import { exportRecordingFiles } from "../storage/recordingExport";
+import { pickRecordingFiles } from "../storage/recordingImport";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { WorkspaceWidthDeltas } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
@@ -47,7 +48,6 @@ interface NextEditorProviderContentProps {
   children: React.ReactNode;
   recordingDrafts: boolean;
   editorRef: EditorMachineInput["editorRef"];
-  recordingStorage: RecordingStorage;
   suppressWorkspaceEventsRef: { current: boolean };
 }
 
@@ -106,7 +106,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   children,
   recordingDrafts,
   editorRef,
-  recordingStorage,
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
@@ -137,10 +136,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     return stopRecordingPromiseRef.current;
   };
 
-  const exportAsFile = (recording: Recording, filename?: string) =>
-    recordingStorage.exportAsFile(recording, filename);
-  const importFromFile = () => recordingStorage.importFromFile();
-
   const handleWorkspaceEvent = (event?: WorkspaceWidthDeltas) => {
     if (suppressWorkspaceEventsRef.current) {
       return;
@@ -154,8 +149,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     editorRef,
     stopRecording,
     handleWorkspaceEvent,
-    exportAsFile,
-    importFromFile,
+    exportAsFile: exportRecordingFiles,
+    importFromFile: pickRecordingFiles,
   };
 
   return <NextEditorActionsContext value={actionsValue}>{children}</NextEditorActionsContext>;
@@ -166,7 +161,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   recordingDrafts = true,
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const [recordingStorage] = useState(createRecordingStorage);
   const previewHandle = usePreviewAdapterHandle();
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
@@ -215,7 +209,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       <NextEditorProviderContent
         recordingDrafts={recordingDrafts}
         editorRef={editorRef}
-        recordingStorage={recordingStorage}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
       >
         {children}

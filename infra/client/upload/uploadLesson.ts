@@ -1,5 +1,5 @@
 import type { CaptionCue, Recording } from "@app/core/src";
-import { buildRecordingFiles } from "@app/storage/RecordingStorage";
+import { buildRecordingFiles } from "@app/storage/recordingExport";
 import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";

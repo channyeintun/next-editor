@@ -7,7 +7,7 @@ import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { EMPTY_WHITEBOARD_SCENE } from "../core/src/whiteboard";
 import { loadWhiteboardPanel } from "../components/whiteboardPanelLoader";
-import { buildRecordingFiles } from "../storage/RecordingStorage";
+import { buildRecordingFiles } from "../storage/recordingExport";
 import type { WorkspaceProject } from "../types/workspace";
 import { collectWorkspaceFolders } from "../types/workspacePaths";
 import { createWorkspaceFile } from "../starters/shared";

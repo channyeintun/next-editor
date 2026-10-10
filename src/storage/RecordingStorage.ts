@@ -9,48 +9,11 @@ import {
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
-import { isStreamingRecording } from "./streamingRecordingCodec/format";
 import { createStreamingRecordingReader } from "./streamingRecordingCodec";
-import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
-import { downloadBlob } from "../utils/downloadBlob";
-import {
-  audioExtensionFromMime,
-  cameraExtensionFromMime,
-  isRecordingAudioFileName,
-  isRecordingVideoFileName,
-  RECORDING_IMPORT_ACCEPT,
-} from "../shared/recordingMediaFiles";
 import {
   hydrateDecodedRecordingWorkspaceAssets,
   persistDecodedWorkspaceAssets,
 } from "./recordingWorkspaceAssets";
-
-function stripExtension(filename: string): string {
-  return filename.replace(/\.[^.]+$/, "");
-}
-
-/**
- * Drop `audioUrl`/`cameraUrl` on export — a `blob:`/`data:` object URL from an import, or a
- * `https://` URL auto-resolved by `useUrlLoader` while loading from a `?url=` host, can't
- * survive a re-export as-is: baking it in would silently defeat sibling-file resolution on the
- * next load, since a present `cameraUrl`/`audioUrl` is preferred over the sibling filename.
- */
-function sanitizeMediaUrlsForExport(recording: Recording): Recording {
-  const sanitized = { ...recording };
-  delete sanitized.audioUrl;
-  delete sanitized.cameraUrl;
-  return sanitized;
-}
-
-/** True for companion files that are audio (by MIME, or by extension for `.weba` etc.). */
-function isAudioFile(file: File): boolean {
-  return file.type.startsWith("audio/") || isRecordingAudioFileName(file.name);
-}
-
-/** True for companion files that are video (by MIME, or by extension). */
-function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || isRecordingVideoFileName(file.name);
-}
 
 /** True when a recording carries non-empty media bytes. */
 function hasMediaPayload(blob: unknown): boolean {
@@ -58,183 +21,10 @@ function hasMediaPayload(blob: unknown): boolean {
 }
 
 /**
- * Choose the media file that pairs with an imported `.ne`. Prefers an exact referenced-name
- * match, then a basename match against the `.ne`, then the sole candidate if only one was
- * provided. Returns null when nothing matches (the recording then plays without that media).
- */
-function pickCompanionFile(
-  candidates: File[],
-  neFileName: string,
-  referencedName: string | undefined,
-): File | null {
-  if (candidates.length === 0) return null;
-  if (referencedName) {
-    const exact = candidates.find((candidate) => candidate.name === referencedName);
-    if (exact) return exact;
-  }
-  const baseName = stripExtension(neFileName);
-  const byBase = candidates.find((candidate) => stripExtension(candidate.name) === baseName);
-  if (byBase) return byBase;
-  return candidates.length === 1 ? candidates[0] : null;
-}
-
-/**
- * Attach a companion camera video to a recording as an object URL on `cameraUrl`, when the
- * recording references an external camera (`cameraFile`) and a matching video file is present.
- */
-function attachCompanionVideo(recording: Recording, videos: File[], neFileName: string): Recording {
-  if (!recording.cameraFile) return recording;
-  const video = pickCompanionFile(videos, neFileName, recording.cameraFile);
-  if (!video) return recording;
-  return { ...recording, cameraUrl: createImportedCameraObjectUrl(video) };
-}
-
-/**
- * Attach a companion audio file to a recording, when the recording references external audio
- * (`audioFile`, or `audioSource === "external"` for older exports that omitted the filename)
- * and a matching file is present. The `File` is attached directly as `audioBlob`
- * (a `File` is a `Blob`), so the existing blob playback path works unchanged.
- */
-export function attachCompanionAudio(
-  recording: Recording,
-  audios: File[],
-  neFileName: string,
-): Recording {
-  const declaresExternalAudio = recording.audioFile || recording.audioSource === "external";
-  if (!declaresExternalAudio || recording.audioBlob instanceof Blob) return recording;
-  const audio = pickCompanionFile(audios, neFileName, recording.audioFile);
-  if (!audio) return recording;
-  return { ...recording, audioBlob: audio };
-}
-
-/** A `.ne` picked or dropped together with other files, and the media among those files. */
-export interface RecordingFileSelection {
-  neFile: File;
-  videoFiles: File[];
-  audioFiles: File[];
-}
-
-/**
- * Finds the `.ne` (in any letter case) among files picked or dropped together, and the
- * video and audio files that may be its siblings. Null when no file is a `.ne`.
- */
-export function selectRecordingFiles(files: File[]): RecordingFileSelection | null {
-  const neFile = files.find((file) => file.name.toLowerCase().endsWith(".ne"));
-  if (!neFile) return null;
-  const companions = files.filter((file) => file !== neFile);
-  return {
-    neFile,
-    videoFiles: companions.filter((file) => isVideoFile(file) && !isAudioFile(file)),
-    audioFiles: companions.filter(isAudioFile),
-  };
-}
-
-/** Reads and decodes a `.ne` file, rejecting one that is empty or not an SCR3 stream. */
-export async function decodeRecordingFile(neFile: File): Promise<Recording> {
-  const bytes = new Uint8Array(await neFile.arrayBuffer());
-  if (bytes.length === 0) {
-    throw new Error("File appears to be empty or corrupted");
-  }
-  if (!isStreamingRecording(bytes)) {
-    throw new Error("File is not a valid .ne recording (bad SCR3 magic)");
-  }
-  return decompressBinaryToRecording(bytes);
-}
-
-/**
- * Attaches the camera video (as an object URL on `cameraUrl`) and the audio (as `audioBlob`)
- * that pair with the recording decoded from `selection.neFile`, matched by the names the
- * recording declares, then by the `.ne`'s basename, then as the only candidate.
- */
-export function attachCompanionMedia(
-  recording: Recording,
-  selection: RecordingFileSelection,
-): Recording {
-  const { neFile, videoFiles, audioFiles } = selection;
-  return attachCompanionAudio(
-    attachCompanionVideo(recording, videoFiles, neFile.name),
-    audioFiles,
-    neFile.name,
-  );
-}
-
-export interface RecordingFileSet {
-  /** The SCR3 byte stream — no base64 wrapping. */
-  ne: Blob;
-  audio?: { name: string; blob: Blob };
-  camera?: { name: string; blob: Blob };
-}
-
-export interface BuildRecordingFilesOptions {
-  /**
-   * Sibling caption filenames the encoded `.ne` should declare via `captionFiles`
-   * (the caller uploads those files next to the `.ne`). Replaces any declaration
-   * already on the recording — after a re-upload under a new base filename, the
-   * new siblings are the only ones guaranteed to exist.
-   */
-  captionFiles?: string[];
-}
-
-/**
- * Serializes a recording into its `.ne` stream plus externalized sibling media
- * blobs (audio/camera) — the same encoding `RecordingStorage.exportAsFile` uses,
- * extracted as a pure function (no DOM, no download side effect) so callers that
- * need the bytes without triggering a browser download (e.g. an upload flow)
- * get byte-identical output rather than a second, divergent encoding path.
- */
-export async function buildRecordingFiles(
-  recording: Recording,
-  baseFilename: string,
-  options?: BuildRecordingFilesOptions,
-): Promise<RecordingFileSet> {
-  // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
-  const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
-  let recordingToEncode = sanitizeMediaUrlsForExport(recording);
-  let videoName: string | null = null;
-  if (cameraBlob) {
-    videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
-    recordingToEncode = {
-      ...recordingToEncode,
-      cameraBlob: undefined,
-      cameraFile: videoName,
-    };
-  }
-
-  // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
-  // camera's `.webm`). Audio never goes into the stream; the `.ne` records the sibling name.
-  const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
-  let audioName: string | null = null;
-  if (audioBlob && audioBlob.size > 0) {
-    audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
-    recordingToEncode = {
-      ...recordingToEncode,
-      audioBlob: undefined,
-      audioFile: audioName,
-    };
-  }
-
-  if (options?.captionFiles?.length) {
-    recordingToEncode = {
-      ...recordingToEncode,
-      captionFiles: options.captionFiles,
-    };
-  }
-
-  const streamBytes = await encodeRecordingToStream(recordingToEncode);
-  const ne = new Blob([streamBytes as BlobPart], {
-    type: "application/octet-stream",
-  });
-
-  return {
-    ne,
-    audio: audioBlob && audioName ? { name: audioName, blob: audioBlob } : undefined,
-    camera: cameraBlob && videoName ? { name: videoName, blob: cameraBlob } : undefined,
-  };
-}
-
-/**
- * Recording storage for use-next-editor.
- * Provides IndexedDB persistence plus export/import support for recordings.
+ * Keeps a take in IndexedDB so it survives a page load: the upload flow saves it
+ * before the sign-in redirect and /code loads (then deletes) it on the way back.
+ * Writing a recording out as files is recordingExport.ts; reading one in is
+ * recordingImport.ts.
  */
 export class RecordingStorage {
   private indexedDBStore = createIndexedDBRecordingStore();
@@ -349,72 +139,12 @@ export class RecordingStorage {
       );
     }
   }
-
-  /**
-   * Export a recording. Camera video and audio are each written to their own sibling file so the
-   * `.ne` stays small (audio dominates long recordings) and media can be streamed natively on
-   * load: a full recording exports as `<name>.ne` + `<name>.<video-ext>` + `<name>.<audio-ext>`;
-   * one without media as a single `.ne`.
-   */
-  async exportAsFile(recording: Recording, filename?: string): Promise<void> {
-    try {
-      const baseFilename = filename?.replace(/\.(json|ne)$/, "") || `recording-${recording.id}`;
-      const files = await buildRecordingFiles(recording, baseFilename);
-
-      downloadBlob(files.ne, `${baseFilename}.ne`);
-
-      if (files.camera) {
-        // Small gap so the browser doesn't collapse consecutive programmatic downloads into one.
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        downloadBlob(files.camera.blob, files.camera.name);
-      }
-
-      if (files.audio) {
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        downloadBlob(files.audio.blob, files.audio.name);
-      }
-    } catch (error) {
-      throw new Error(
-        `Failed to export recording: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
-  }
-
-  /**
-   * Import recordings from a `.ne` file, optionally paired with sibling media files. The picker
-   * allows selecting them together; the camera video is matched to the recording's `cameraFile`
-   * (or by basename) and exposed via an object URL on `cameraUrl`, and the audio file is matched
-   * to `audioFile` and attached as `audioBlob`. Missing media is not an error — the recording
-   * loads and plays without it.
-   */
-  importFromFile(): Promise<Recording[]> {
-    return new Promise((resolve, reject) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.multiple = true;
-      input.accept = RECORDING_IMPORT_ACCEPT;
-
-      input.onchange = async (event) => {
-        const files = Array.from((event.target as HTMLInputElement).files ?? []);
-        const selection = selectRecordingFiles(files);
-        if (!selection) {
-          reject(new Error("No .ne file selected"));
-          return;
-        }
-
-        try {
-          const recording = await decodeRecordingFile(selection.neFile);
-          resolve([attachCompanionMedia(recording, selection)]);
-        } catch (error) {
-          console.error("Import error details:", error);
-          const errorMessage = error instanceof Error ? error.message : "Invalid file format";
-          reject(new Error(`Failed to import recordings: ${errorMessage}`));
-        }
-      };
-
-      input.click();
-    });
-  }
 }
 
-export const createRecordingStorage = () => new RecordingStorage();
+let sharedStorage: RecordingStorage | null = null;
+
+/** The page's one recording store: every caller shares its IndexedDB connection. */
+export function getRecordingStorage(): RecordingStorage {
+  sharedStorage ??= new RecordingStorage();
+  return sharedStorage;
+}

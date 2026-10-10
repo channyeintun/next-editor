@@ -50,7 +50,7 @@ vi.mock("./uploadLesson", async (importOriginal) => ({
 }));
 
 vi.mock("@app/storage/RecordingStorage", () => ({
-  createRecordingStorage: () => ({ save: signIn.saveRecording }),
+  getRecordingStorage: () => ({ save: signIn.saveRecording }),
 }));
 
 vi.mock("./resumeIntent", () => ({ saveResumeIntent: signIn.saveResumeIntent }));

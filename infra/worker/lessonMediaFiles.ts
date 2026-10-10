@@ -1,7 +1,7 @@
 // The files a lesson row may point at (`ne`, `thumbnail`), which is also what
 // PUT /api/uploads/:id/media/:filename accepts under its main pattern: a safe
 // charset and a known extension, never a path. The filename must be what
-// buildRecordingFiles (src/storage/RecordingStorage.ts) or the thumbnail
+// buildRecordingFiles (src/storage/recordingExport.ts) or the thumbnail
 // upload computed client-side (e.g. "<id>.ne", "recording-1.ogg"). svg is
 // deliberately absent although it is an image type: it can carry an inline
 // <script>, and R2 objects are served back same-origin at /media/<key>

@@ -5,7 +5,7 @@ import {
   attachCompanionMedia,
   decodeRecordingFile,
   selectRecordingFiles,
-} from "../storage/RecordingStorage";
+} from "../storage/recordingImport";
 import { describeFailedResponse, fetchNextEditorUrl } from "../storage/recordingFetch";
 import { streamRecording } from "../storage/recordingStream";
 import {

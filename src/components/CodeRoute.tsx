@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router";
 import Breadcrumb from "./Breadcrumb";
 import Editor from "./Editor";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { RecordingStorage } from "../storage/RecordingStorage";
+import { getRecordingStorage } from "../storage/RecordingStorage";
 import type { Recording } from "../core/src";
 import {
   UploadLessonModal,
@@ -26,7 +26,7 @@ import {
 async function consumeResumeIntent(intent: ResumeIntent): Promise<void> {
   await clearResumeIntent();
   try {
-    await new RecordingStorage().delete(intent.recordingId);
+    await getRecordingStorage().delete(intent.recordingId);
   } catch (error) {
     console.warn("Failed to delete the recording kept across sign-in:", error);
   }
@@ -82,7 +82,7 @@ export default function CodeRoute() {
           return;
         }
 
-        const recording = await new RecordingStorage().loadById(intent.recordingId);
+        const recording = await getRecordingStorage().loadById(intent.recordingId);
         if (cancelled) return;
 
         // The recording was deliberately removed or belongs to another device.
