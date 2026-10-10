@@ -212,7 +212,7 @@ export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlay
  * Public playlist card shape for the author profile — like OwnedPlaylist but
  * without the owner-only `id`/`updatedAt` (the public profile only links by
  * slug and has no manage actions). `lessonCount` here is the published-member
- * count (see listPublishedPlaylistsByOwner), matching what the public playlist
+ * count (see publishedPlaylistsByOwnerStatement), matching what the public playlist
  * page actually shows.
  */
 export interface PlaylistSummary {

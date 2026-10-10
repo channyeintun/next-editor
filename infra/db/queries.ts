@@ -415,14 +415,6 @@ export async function deleteLesson(db: D1Database, id: string, ownerId: string):
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function getUserByUsername(db: D1Database, username: string): Promise<UserRow | null> {
-  const row = await db
-    .prepare("SELECT * FROM users WHERE username = ?")
-    .bind(username)
-    .first<UserRow>();
-  return row ?? null;
-}
-
 export type UpdateUsernameResult = { status: "ok"; user: UserRow } | { status: "taken" };
 
 // Renames a user and cascades the change into every lesson's denormalized
@@ -456,19 +448,33 @@ export async function updateUsername(
   }
 }
 
+/**
+ * Whose rows a public author read selects: a user id, or a username, which the
+ * statement resolves itself (users.username is UNIQUE, so it is one index
+ * lookup) so a batch can run it alongside the user read instead of after it.
+ */
+export type AuthorRef = { id: string } | { username: string };
+
+/** The `owner_id` condition, and its one bound value, that selects `owner`'s rows. */
+export function ownerCondition(owner: AuthorRef): { sql: string; value: string } {
+  return "id" in owner
+    ? { sql: "owner_id = ?", value: owner.id }
+    : { sql: "owner_id = (SELECT id FROM users WHERE username = ?)", value: owner.username };
+}
+
 // Backs the public author-profile view (/learn/@username for anyone but the
-// owner) — published only, unlike listOwnedLessons.
-export async function listPublishedLessonsByOwner(
+// owner) — published only, unlike listOwnedLessons. A statement rather than a
+// read so getPublishedAuthorProfile can batch it.
+export function publishedLessonsByOwnerStatement(
   db: D1Database,
-  ownerId: string,
-): Promise<LessonRow[]> {
-  const result = await db
+  owner: AuthorRef,
+): D1PreparedStatement {
+  const { sql, value } = ownerCondition(owner);
+  return db
     .prepare(
-      "SELECT * FROM lessons WHERE owner_id = ? AND status = 'published' ORDER BY published_at DESC, id DESC",
+      `SELECT * FROM lessons WHERE ${sql} AND status = 'published' ORDER BY published_at DESC, id DESC`,
     )
-    .bind(ownerId)
-    .all<LessonRow>();
-  return result.results ?? [];
+    .bind(value);
 }
 
 // Backs GET /api/search — authors matched by username or display name.

@@ -3,7 +3,6 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createSession,
-  getUserByUsername,
   listPublishedLessons,
   upsertUserByGoogleSub,
   USERNAME_PATTERN,
@@ -291,26 +290,5 @@ describe("createSession", () => {
     });
     expect(session.expires_at - session.created_at).toBe(30 * 24 * 60 * 60 * 1000);
     expect(batch).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("getUserByUsername", () => {
-  // Older accounts keep names outside USERNAME_PATTERN on purpose (see its
-  // doc). Lookups must stay exact matches: validating the pattern here would
-  // break every profile and author link those names already have.
-  it("still resolves usernames issued before the rename rule", async () => {
-    const legacy = ["jo", "maximilian-alexander-von-habsburg-lothringen", "100%-sure-66666666"];
-    const { db, sqlite } = openSqliteD1();
-    for (const [index, username] of legacy.entries()) {
-      insertUser(sqlite, `user-${index}`, username);
-    }
-
-    for (const [index, username] of legacy.entries()) {
-      expect(username).not.toMatch(USERNAME_PATTERN);
-      expect(await getUserByUsername(db, username)).toMatchObject({
-        id: `user-${index}`,
-        username,
-      });
-    }
   });
 });

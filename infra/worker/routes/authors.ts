@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getUserByUsername, listPublishedLessonsByOwner } from "../../db/queries";
-import { listPublishedPlaylistsByOwner } from "../../db/playlistQueries";
+import { getPublishedAuthorProfile } from "../../db/authorQueries";
 import {
   lessonRowToLesson,
   playlistRowToPlaylistSummary,
@@ -14,18 +13,14 @@ import {
 export const authorsRoute = new Hono<{ Bindings: Env }>();
 
 authorsRoute.get("/:username", async (c) => {
-  const user = await getUserByUsername(c.env.DB, c.req.param("username"));
-  if (!user) {
+  const profile = await getPublishedAuthorProfile(c.env.DB, c.req.param("username"));
+  if (!profile) {
     return c.json({ error: "not found" }, 404);
   }
 
-  const [lessonRows, playlistRows] = await Promise.all([
-    listPublishedLessonsByOwner(c.env.DB, user.id),
-    listPublishedPlaylistsByOwner(c.env.DB, user.id),
-  ]);
   return c.json({
-    user: userRowToAuthorSummary(user),
-    lessons: lessonRows.map(lessonRowToLesson),
-    playlists: playlistRows.map(playlistRowToPlaylistSummary),
+    user: userRowToAuthorSummary(profile.user),
+    lessons: profile.lessons.map(lessonRowToLesson),
+    playlists: profile.playlists.map(playlistRowToPlaylistSummary),
   });
 });

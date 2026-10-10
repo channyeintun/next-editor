@@ -4,6 +4,7 @@ import type {
   PlaylistRowWithCount,
   PlaylistRowWithMembership,
 } from "./types";
+import { ownerCondition, type AuthorRef } from "./queries";
 import { isUniqueViolation } from "./uniqueViolation";
 
 // Shared subquery for PlaylistRowWithCount's first_lesson_thumbnail — the
@@ -158,15 +159,18 @@ export async function listOwnedPlaylists(
 
 // Backs the public author profile (/learn/@username, for anyone but the
 // owner): the owner's playlists that currently have at least one published
-// member. Mirrors listPublishedLessonsByOwner's "published only" convention —
-// lesson_count here counts published members only (not every member like
-// listOwnedPlaylists), and a playlist with no currently-published lesson is
-// omitted entirely so the public profile never shows an empty/all-draft card.
-export async function listPublishedPlaylistsByOwner(
+// member. Mirrors publishedLessonsByOwnerStatement's "published only"
+// convention — lesson_count here counts published members only (not every
+// member like listOwnedPlaylists), and a playlist with no currently-published
+// lesson is omitted entirely so the public profile never shows an
+// empty/all-draft card. A statement rather than a read so
+// getPublishedAuthorProfile can batch it.
+export function publishedPlaylistsByOwnerStatement(
   db: D1Database,
-  ownerId: string,
-): Promise<PlaylistRowWithCount[]> {
-  const result = await db
+  owner: AuthorRef,
+): D1PreparedStatement {
+  const { sql, value } = ownerCondition(owner);
+  return db
     .prepare(
       `SELECT playlists.*, (
          SELECT COUNT(*) FROM playlist_lessons
@@ -175,7 +179,7 @@ export async function listPublishedPlaylistsByOwner(
        ) AS lesson_count,
        ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
-       WHERE owner_id = ?
+       WHERE ${sql}
          AND EXISTS (
            SELECT 1 FROM playlist_lessons
            JOIN lessons ON lessons.id = playlist_lessons.lesson_id
@@ -183,9 +187,7 @@ export async function listPublishedPlaylistsByOwner(
          )
        ORDER BY updated_at DESC`,
     )
-    .bind(ownerId)
-    .all<PlaylistRowWithCount>();
-  return result.results ?? [];
+    .bind(value);
 }
 
 // Backs the "Add to playlist" popover: every one of the owner's playlists,
