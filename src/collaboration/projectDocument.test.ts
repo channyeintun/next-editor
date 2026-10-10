@@ -191,6 +191,40 @@ describe("collaboration project document", () => {
     expect(projectCollaborationDocument(doc).project.files["examples/renamed.ts"]).toBeUndefined();
   });
 
+  it("refuses a rename onto a path another node holds and ignores a rename to itself", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, { idFactory: idFactory() });
+    let commandId = 0;
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      idFactory: () => `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
+    });
+    controller.createFolder("examples");
+    controller.createFile("examples/a.ts", "a");
+    controller.createFile("examples/b.ts", "b");
+    controller.createFolder("other");
+    const before = projectCollaborationDocument(doc);
+    const updates: Uint8Array[] = [];
+    doc.on("update", (update: Uint8Array) => updates.push(update));
+
+    expect(() => controller.renameFile("examples/a.ts", "examples/b.ts")).toThrow(
+      "Collaboration path already exists: examples/b.ts",
+    );
+    expect(() => controller.renameFolder("other", "examples")).toThrow(
+      "Collaboration path already exists: examples",
+    );
+    controller.renameFile("examples/a.ts", "examples/a.ts");
+    controller.renameFolder("other", "other");
+
+    expect(updates).toHaveLength(0);
+    const after = projectCollaborationDocument(doc);
+    expect(after.pathByNodeId).toEqual(before.pathByNodeId);
+    expect(after.project.files["examples/a.ts"].content).toBe("a");
+    expect(after.project.files["examples/b.ts"].content).toBe("b");
+    expect(after.issues).toEqual(before.issues);
+  });
+
   it("applies Monaco text ranges to Y.Text without replacing the whole value", () => {
     const project = createStarterHtmlCssWorkspace();
     const path = project.entryFilePath;

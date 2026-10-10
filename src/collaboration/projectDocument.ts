@@ -820,6 +820,16 @@ export class CollaborationProjectController {
     const normalizedNextPath = parseWorkspacePath(nextPath);
     const { parentPath, name } = splitPath(normalizedNextPath);
     const normalizedCurrentPath = parseWorkspacePath(currentPath);
+    if (normalizedNextPath === normalizedCurrentPath) return;
+    // Same rule as createNode: another node already holds the path. Inside a
+    // room these commands replace the local store's conflict check, and
+    // without this the projection would quietly rename one node to name~<id>.
+    const occupant = this.project().nodeIdByPath.get(normalizedNextPath);
+    if (occupant !== undefined && occupant !== current.id) {
+      throw new CollaborationProjectError(
+        `Collaboration path already exists: ${normalizedNextPath}`,
+      );
+    }
     if (
       kind === "folder" &&
       (parentPath === normalizedCurrentPath || parentPath.startsWith(`${normalizedCurrentPath}/`))
