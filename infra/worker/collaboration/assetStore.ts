@@ -1,5 +1,5 @@
 import { readBytesWithLimit } from "../httpBody";
-import { sha256Hex } from "./bytes";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 import {
   MAX_COLLABORATION_ASSET_BYTES,
   collaborationAssetDescriptorSchema,

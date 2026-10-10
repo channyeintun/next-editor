@@ -5,6 +5,7 @@ import {
   type WhiteboardElementJSON,
   type WhiteboardEvent,
 } from "../core/src/whiteboard";
+import { sha256Hex } from "../shared/sha256Hex";
 import type { Slide } from "../types/slides";
 import {
   collaborationAssetDescriptorSchema,
@@ -483,12 +484,7 @@ export function decodeCollaborationSlidePayload(
 }
 
 export async function collaborationSlidePayloadAssetId(payload: Uint8Array): Promise<string> {
-  const exact = payload.buffer.slice(
-    payload.byteOffset,
-    payload.byteOffset + payload.byteLength,
-  ) as ArrayBuffer;
-  const digest = await crypto.subtle.digest("SHA-256", exact);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(payload);
 }
 
 export async function verifyCollaborationSlideAsset(

@@ -58,7 +58,8 @@ import {
   deleteCollaborationRoomAssets,
   readCollaborationAsset,
 } from "../collaboration/assetStore";
-import { exactArrayBuffer, randomToken, sha256Hex } from "../collaboration/bytes";
+import { exactArrayBuffer, randomToken } from "../collaboration/bytes";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 import type { Env } from "../env";
 import { readBytesWithLimit, readJsonWithLimit } from "../httpBody";
 import {

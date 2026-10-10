@@ -45,7 +45,8 @@ import {
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
-import { randomToken, sha256Hex } from "./bytes";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
+import { randomToken } from "./bytes";
 import {
   ConnectionQuota,
   decodeHeaderJson,

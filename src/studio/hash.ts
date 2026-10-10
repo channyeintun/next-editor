@@ -1,18 +1,10 @@
 /** Content hashing for build provenance — SHA-256 via WebCrypto, hex encoded. */
+import { sha256Hex } from "../shared/sha256Hex";
 
-export async function sha256Hex(data: Uint8Array | ArrayBuffer): Promise<string> {
-  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  // Only a SharedArrayBuffer-backed view (possible under cross-origin
-  // isolation) is copied, into a fresh ArrayBuffer, to satisfy WebCrypto's
-  // BufferSource contract; narration-sized views are digested in place.
-  const input =
-    bytes.buffer instanceof ArrayBuffer ? (bytes as Uint8Array<ArrayBuffer>) : bytes.slice();
-  const digest = await crypto.subtle.digest("SHA-256", input);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+export { sha256Hex };
 
 export async function sha256HexOfText(text: string): Promise<string> {
-  return sha256Hex(new TextEncoder().encode(text));
+  return sha256Hex(text);
 }
 
 /**

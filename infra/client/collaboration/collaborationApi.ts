@@ -12,15 +12,11 @@ import {
   MAX_COLLABORATION_ASSET_BYTES,
   collaborationAssetDescriptorSchema,
 } from "../../../src/collaboration/protocol";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { apiClient } from "../apiClient";
 
 function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", exactArrayBuffer(bytes));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function createCollaborationRoom(

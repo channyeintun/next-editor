@@ -4,7 +4,7 @@ import {
   deleteCollaborationRoomAssets,
   readCollaborationAsset,
 } from "./assetStore";
-import { sha256Hex } from "./bytes";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 
 describe("collaboration asset store", () => {
   it("hashes and bounds a private room asset", async () => {

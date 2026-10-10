@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 import type { Env } from "../env";
 import { isJsonObject, readBodyWithLimit, readJsonWithLimit, type LimitedBody } from "../httpBody";
 import {
@@ -953,11 +954,6 @@ async function readTtsRequest(request: Request): Promise<TtsRequest> {
     };
   }
   return { ok: true, text, voiceId };
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 // The retry rule of requestWithRetries (athanlab/client.ts), restated here

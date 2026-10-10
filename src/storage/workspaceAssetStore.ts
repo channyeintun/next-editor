@@ -6,6 +6,7 @@ import {
 } from "../types/workspace";
 import { getWorkspaceFileMimeType } from "../types/workspaceFiles";
 import { base64ToBytes } from "../shared/base64";
+import { sha256Hex } from "../shared/sha256Hex";
 import { createDatabaseOpener, requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 /**
@@ -82,14 +83,13 @@ export function subscribeWorkspaceAssetAvailability(
   return () => assetListeners.delete(listener);
 }
 
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+async function workspaceAssetId(bytes: ArrayBuffer): Promise<string> {
   if (typeof crypto === "undefined" || !crypto.subtle) {
     throw new WorkspaceAssetPersistenceError(
       "This browser cannot create content-addressed workspace assets",
     );
   }
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(bytes);
 }
 
 function asBlob(value: unknown, mimeType: string): Blob | null {
@@ -169,7 +169,7 @@ export async function registerWorkspaceAsset(
   // which excludes views on a SharedArrayBuffer (available here: the app is
   // cross-origin isolated), so neither may be handed the caller's view as is.
   const buffer = toArrayBuffer(bytes);
-  const assetId = await sha256Hex(buffer);
+  const assetId = await workspaceAssetId(buffer);
   if (options.expectedAssetId && options.expectedAssetId !== assetId) {
     throw new WorkspaceAssetPersistenceError(
       "The workspace asset failed its content-integrity check",
