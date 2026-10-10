@@ -3,6 +3,7 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { flattenLessonPages } from "../lib/lessons";
+import { observeFirstRowThumbnails, settleWithoutFirstRow } from "../lib/firstRowThumbnails";
 import LessonCard from "./LessonCard";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
@@ -66,6 +67,12 @@ export default function LessonGrid() {
   const columns = useColumns();
 
   const lessons = flattenLessonPages(data?.pages);
+  // The first row's thumbnails are what the page waits for (its LCP); when the
+  // gallery has no such row to show, there is nothing to wait for.
+  const waitsForFirstRow = !debouncedQuery && (isPending || lessons.length > 0);
+  useEffect(() => {
+    if (!waitsForFirstRow) settleWithoutFirstRow();
+  }, [waitsForFirstRow]);
   const skeletonsToAppend = isFetchingNextPage
     ? (columns - (lessons.length % columns)) % columns || columns
     : 0;
@@ -201,6 +208,7 @@ export default function LessonGrid() {
                   style={{ transform: `translateY(${vi.start - scrollMargin}px)` }}
                 >
                   <div
+                    ref={vi.index === 0 ? observeFirstRowThumbnails : undefined}
                     className="grid gap-5 pb-5"
                     style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
                   >

@@ -19,6 +19,14 @@ vi.mock("./SearchResults", () => ({
 vi.mock("./LessonCard", () => ({
   default: ({ lesson }: { lesson: { title: string } }) => <p>{lesson.title}</p>,
 }));
+const firstRow = vi.hoisted(() => ({
+  observe: vi.fn<(row: HTMLElement | null) => void>(),
+  settleWithout: vi.fn<() => void>(),
+}));
+vi.mock("../lib/firstRowThumbnails", () => ({
+  observeFirstRowThumbnails: firstRow.observe,
+  settleWithoutFirstRow: firstRow.settleWithout,
+}));
 // The real window virtualizer, recording the scrollMargin of every render.
 const scrollMargins = vi.hoisted(() => [] as (number | undefined)[]);
 vi.mock("@tanstack/react-virtual", async (importOriginal) => {
@@ -50,6 +58,8 @@ function galleryState(overrides: Record<string, unknown> = {}): Record<string, u
 }
 
 beforeEach(() => {
+  firstRow.observe.mockClear();
+  firstRow.settleWithout.mockClear();
   searchState = { isPending: true, isError: false, data: undefined };
   vi.useFakeTimers();
   vi.stubGlobal(
@@ -236,5 +246,42 @@ describe("LessonGrid virtual list offset", () => {
 
     expect(screen.getByText("Intro")).toBeInTheDocument();
     expect(scrollMargins.at(-1)).toBe(240);
+  });
+});
+
+describe("LessonGrid first-row thumbnails", () => {
+  const introPage = { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] };
+
+  it("waits on the first row's thumbnails once page 0 has lessons", () => {
+    gallery = galleryState({ isPending: true });
+    const view = render(<LessonGrid />);
+    expect(firstRow.settleWithout).not.toHaveBeenCalled();
+
+    gallery = galleryState({ data: introPage });
+    view.rerender(<LessonGrid />);
+
+    const observedRow = firstRow.observe.mock.calls.find(([row]) => row)?.[0];
+    expect(observedRow).toHaveTextContent("Intro");
+    expect(firstRow.settleWithout).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["page 0 is empty", { data: { pages: [{ lessons: [], nextPage: null }] } }],
+    ["page 0 failed", { isError: true, error: new Error("Request failed") }],
+  ])("has nothing to wait for when %s", (_case, state) => {
+    gallery = galleryState(state);
+    render(<LessonGrid />);
+
+    expect(firstRow.settleWithout).toHaveBeenCalled();
+    expect(firstRow.observe).not.toHaveBeenCalled();
+  });
+
+  it("has nothing to wait for once search results replace the gallery", () => {
+    gallery = galleryState({ isPending: true });
+    render(<LessonGrid />);
+
+    typeQuery("rust");
+
+    expect(firstRow.settleWithout).toHaveBeenCalled();
   });
 });

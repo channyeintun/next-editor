@@ -12,7 +12,7 @@ import {
   lazyRoute,
   reloadWithRecoveryParam,
 } from "./routeRecovery";
-import { analytics } from "./utils/analytics";
+import { analytics, deferAnalyticsUntil } from "./utils/analytics";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
 import { useEmbedded } from "./utils/embed";
 
@@ -32,10 +32,11 @@ function getRouteErrorMessage(error: unknown) {
 // fetch the lesson without waiting for Monaco. Routes that render the Editor
 // start that import alongside their own chunk, so Monaco still downloads from
 // the start of the navigation, in parallel. A failed fetch is left to Editor's
-// own lazy import, which reports it.
+// own lazy import, which reports it. PostHog waits for that chunk (Monaco text
+// is these routes' LCP) instead of taking a share of its download.
 function withCodeEditorPrefetch<T>(importer: () => Promise<T>) {
   return () => {
-    import("./components/CodeEditor").catch(() => {});
+    deferAnalyticsUntil(import("./components/CodeEditor"));
     return importer();
   };
 }
@@ -45,13 +46,19 @@ function withCodeEditorPrefetch<T>(importer: () => Promise<T>) {
 // a route's loader alongside its lazy(), so this starts the request in parallel.
 // It returns at once: the navigation never waits on data. The grid's query has
 // the same options, so it adopts this request, in flight or done, rather than
-// repeating it; a failure here leaves the grid to fetch for itself.
+// repeating it; a failure here leaves the grid to fetch for itself. PostHog
+// waits for the first row of thumbnails, the gallery's LCP.
 function prefetchLessonGallery() {
   import("../tube/src/hooks/useLessons")
     .then(({ lessonsInfiniteQueryOptions }) =>
       queryClient.prefetchInfiniteQuery(lessonsInfiniteQueryOptions(queryClient)),
     )
     .catch(() => {});
+  deferAnalyticsUntil(
+    import("../tube/src/lib/firstRowThumbnails").then((thumbnails) =>
+      thumbnails.whenFirstRowThumbnailsSettled(),
+    ),
+  );
   return null;
 }
 
