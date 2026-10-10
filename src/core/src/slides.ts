@@ -63,15 +63,15 @@ export interface SlidePreviewState {
    * rename needs a format change. Collaboration rooms never carry it.
    */
   indexv?: number;
-  currentInteraction?: IframeInteractionEvent;
 }
 
 /**
  * Whether the slide panel changed between two recorded states: opened or closed,
  * maximized, moved to another slide, or revealed another build step. The one home
  * for "did the slide panel change", read by the frame delta encoder and the frame
- * replay mirror. `currentInteraction` is not compared: it is ephemeral, and
- * nothing replays it from a frame.
+ * replay mirror. A frame from an older recording may also carry the interaction it
+ * was taken during (`currentInteraction`, no longer stored); nothing shows it, so it
+ * is not compared.
  */
 export function slidePreviewStateChanged(
   prev: SlidePreviewState | undefined,

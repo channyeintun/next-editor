@@ -25,7 +25,6 @@ describe("slide replay visibility", () => {
       isMaximized: false,
       currentSlideId: "two",
       indexv: 0,
-      currentInteraction: undefined,
     });
   });
 
@@ -142,7 +141,6 @@ describe("slide replay of a tick behind the cursor", () => {
             isMaximized: false,
             currentSlideId: "two",
             indexv: 0,
-            currentInteraction: undefined,
           },
         },
       ],
@@ -165,7 +163,6 @@ describe("slide replay of a slide deleted during the take", () => {
       isMaximized: false,
       currentSlideId: "one",
       indexv: 0,
-      currentInteraction: undefined,
     },
   };
 

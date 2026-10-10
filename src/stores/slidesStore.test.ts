@@ -4,6 +4,7 @@ import {
   DEFAULT_PREVIEW_STATE,
   isSlide,
   loadSlidesFromStorage,
+  nextSlidePreviewState,
   openedSlidePreviewState,
   restoreSlidesStore,
   saveSlidesToStorage,
@@ -11,7 +12,7 @@ import {
   snapshotSlidesStore,
   subscribeSlidesPersistence,
 } from "./slidesStore";
-import type { Slide } from "../types/slides";
+import type { IframeInteractionEvent, Slide, SlideEvent, SlidePreviewState } from "../types/slides";
 
 const STORAGE_KEY = "next-editor-slides";
 
@@ -85,6 +86,89 @@ describe("slide preview states", () => {
       currentSlideId: null,
       indexv: 0,
     });
+  });
+});
+
+describe("nextSlidePreviewState", () => {
+  const closed: SlidePreviewState = {
+    isOpen: false,
+    isMaximized: false,
+    currentSlideId: "one",
+    indexv: 0,
+  };
+
+  const open: SlidePreviewState = {
+    isOpen: true,
+    isMaximized: true,
+    currentSlideId: "one",
+    indexv: 2,
+  };
+
+  function event(type: SlideEvent["type"], fields: Partial<SlideEvent> = {}): SlideEvent {
+    return { type, timestamp: 1, ...fields };
+  }
+
+  const next = (prev: SlidePreviewState, slideEvent: SlideEvent, retainSlideOnClose = false) =>
+    nextSlidePreviewState(prev, slideEvent, { retainSlideOnClose });
+
+  it("opens maximized on the event's slide and step, defaulting to the current slide", () => {
+    expect(next(closed, event("slide_open", { slideId: "two", indexv: 1 }))).toEqual({
+      isOpen: true,
+      isMaximized: true,
+      currentSlideId: "two",
+      indexv: 1,
+    });
+    expect(next(closed, event("slide_open", { isMaximized: false }))).toEqual({
+      isOpen: true,
+      isMaximized: false,
+      currentSlideId: "one",
+      indexv: 0,
+    });
+    expect(next(open, event("slide_open", { slideId: "one", indexv: 2 }))).toBe(open);
+  });
+
+  it("closes to no slide, or keeps it when the slide is retained", () => {
+    expect(next(open, event("slide_close"))).toEqual({
+      isOpen: false,
+      isMaximized: false,
+      currentSlideId: null,
+      indexv: 0,
+    });
+    expect(next(open, event("slide_close"), true)).toEqual({ ...closed, currentSlideId: "one" });
+    expect(next(closed, event("slide_close"), true)).toBe(closed);
+    const cleared = { ...closed, currentSlideId: null };
+    expect(next(cleared, event("slide_close"))).toBe(cleared);
+    // Closed but still naming a slide: closing again clears it.
+    expect(next(closed, event("slide_close")).currentSlideId).toBeNull();
+  });
+
+  it("maximizes and minimizes only when that changes something", () => {
+    expect(next(closed, event("slide_maximize", { isMaximized: true })).isMaximized).toBe(true);
+    expect(next(open, event("slide_maximize", { isMaximized: true }))).toBe(open);
+    expect(next(open, event("slide_maximize"))).toEqual({ ...open, isMaximized: false });
+    expect(next(open, event("slide_minimize"))).toEqual({ ...open, isMaximized: false });
+    expect(next(closed, event("slide_minimize"))).toBe(closed);
+  });
+
+  it("changes the slide or build step, keeping the current slide when none is named", () => {
+    expect(next(open, event("slide_change", { slideId: "two" }))).toEqual({
+      ...open,
+      currentSlideId: "two",
+      indexv: 0,
+    });
+    expect(next(open, event("slide_change", { indexv: 3 }))).toEqual({ ...open, indexv: 3 });
+    expect(next(open, event("slide_change", { slideId: "one", indexv: 2 }))).toBe(open);
+  });
+
+  // Nothing reads an interaction, so storing it only re-rendered every slides consumer.
+  it("does not store an interaction", () => {
+    const interaction = { type: "click" } as IframeInteractionEvent;
+    expect(next(open, event("slide_interaction", { interaction }))).toBe(open);
+  });
+
+  it("leaves the state alone for an event type it does not know", () => {
+    const unknown = { type: "slide_unknown", timestamp: 1 } as unknown as SlideEvent;
+    expect(next(open, unknown)).toBe(open);
   });
 });
 

@@ -30,9 +30,9 @@ export function applySlideRecordingState(
   const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
   const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
 
-  // A recorded interaction is not shown: nothing reads `currentInteraction`, and
-  // each replayed one is a fresh object, so comparing it re-rendered every slides
-  // consumer for nothing.
+  // Only these four are shown. A frame from an older recording may also carry the
+  // interaction it was taken during (`currentInteraction`), which nothing reads; each
+  // is a fresh object, so comparing it would re-render every slides consumer.
   if (
     nextIsOpen !== prev.isOpen ||
     nextIsMaximized !== prev.isMaximized ||

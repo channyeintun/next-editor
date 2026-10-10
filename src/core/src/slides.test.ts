@@ -31,9 +31,10 @@ describe("slidePreviewStateChanged", () => {
     },
   );
 
-  // Nothing replays the interaction from a frame, so it must not make a frame differ.
-  it("ignores a currentInteraction-only difference", () => {
-    const next: SlidePreviewState = {
+  // A frame from an older recording may carry the interaction it was taken during;
+  // nothing replays it, so it must not make a frame differ.
+  it("ignores an older recording's currentInteraction", () => {
+    const next = {
       ...base,
       currentInteraction: {
         type: "scroll",
@@ -41,7 +42,7 @@ describe("slidePreviewStateChanged", () => {
         target: { tagName: "DIV" },
         data: { scrollTop: 120 },
       },
-    };
+    } as SlidePreviewState;
     expect(slidePreviewStateChanged(base, next)).toBe(false);
   });
 });

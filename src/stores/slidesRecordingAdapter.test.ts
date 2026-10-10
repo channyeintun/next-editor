@@ -9,7 +9,7 @@ import {
   loadSlidesFromStorage,
   subscribeSlidesPersistence,
 } from "./slidesStore";
-import type { Slide } from "../types/slides";
+import type { Slide, SlidePreviewState } from "../types/slides";
 
 afterEach(() => {
   localStorage.clear();
@@ -82,6 +82,7 @@ describe("applySlideRecordingState", () => {
     expect(store.getSnapshot().context.previewState).toBe(before);
   });
 
+  // A frame from an older recording may carry the interaction it was taken during.
   it("does not show a recorded interaction", () => {
     const store = storeShowing({
       isOpen: true,
@@ -99,7 +100,7 @@ describe("applySlideRecordingState", () => {
         timestamp: 10,
         target: { tagName: "DIV", xpath: "/html/body/div" },
       },
-    });
+    } as SlidePreviewState);
 
     expect(store.getSnapshot().context.previewState).toBe(before);
   });

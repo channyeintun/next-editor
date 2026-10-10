@@ -766,7 +766,6 @@ describe("replayState", () => {
           isMaximized: true,
           currentSlideId: "slide-2",
           indexv: 1,
-          currentInteraction: undefined,
         },
       },
     ]);

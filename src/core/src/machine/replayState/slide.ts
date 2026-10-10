@@ -114,7 +114,6 @@ function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): 
     isMaximized,
     currentSlideId: targetSlideId || null,
     indexv,
-    currentInteraction: slideEvent.interaction,
   };
 }
 

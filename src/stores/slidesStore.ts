@@ -1,6 +1,6 @@
 import { createStore } from "@xstate/store-react";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
-import type { Slide, SlidePreviewState } from "../types/slides";
+import type { Slide, SlideEvent, SlidePreviewState } from "../types/slides";
 import { base64ToBytes, bytesToBase64 } from "../shared/base64";
 
 const SLIDES_STORAGE_KEY = "next-editor-slides";
@@ -92,6 +92,89 @@ export function openedSlidePreviewState(
   { isMaximized = true, indexv = 0 }: { isMaximized?: boolean; indexv?: number } = {},
 ): SlidePreviewState {
   return { isOpen: true, isMaximized, currentSlideId: slideId, indexv };
+}
+
+/**
+ * The preview state after a slide event: `prev` itself when the event changes
+ * nothing, which the store keeps without emitting. A close keeps the current
+ * slide when `retainSlideOnClose` (SlidesProvider sets it in a live room).
+ */
+export function nextSlidePreviewState(
+  prev: SlidePreviewState,
+  event: SlideEvent,
+  { retainSlideOnClose }: { retainSlideOnClose: boolean },
+): SlidePreviewState {
+  switch (event.type) {
+    case "slide_open": {
+      const nextSlideId = event.slideId || prev.currentSlideId;
+      const nextIndexv = event.indexv ?? 0;
+      const nextIsMaximized = event.isMaximized ?? true;
+
+      if (
+        prev.isOpen &&
+        prev.currentSlideId === nextSlideId &&
+        prev.indexv === nextIndexv &&
+        prev.isMaximized === nextIsMaximized
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        isOpen: true,
+        isMaximized: nextIsMaximized,
+        currentSlideId: nextSlideId,
+        indexv: nextIndexv,
+      };
+    }
+    case "slide_close":
+      if (
+        !prev.isOpen &&
+        !prev.isMaximized &&
+        (retainSlideOnClose || prev.currentSlideId === null)
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        isOpen: false,
+        isMaximized: false,
+        currentSlideId: retainSlideOnClose ? prev.currentSlideId : null,
+        indexv: 0,
+      };
+    case "slide_maximize":
+      if (prev.isMaximized === (event.isMaximized || false)) {
+        return prev;
+      }
+      return { ...prev, isMaximized: event.isMaximized || false };
+    case "slide_minimize":
+      if (!prev.isMaximized) {
+        return prev;
+      }
+      return { ...prev, isMaximized: false };
+    case "slide_change": {
+      const targetIndexv = event.indexv ?? 0;
+      if (
+        prev.currentSlideId === (event.slideId || prev.currentSlideId) &&
+        prev.indexv === targetIndexv
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        currentSlideId: event.slideId || prev.currentSlideId,
+        indexv: targetIndexv,
+      };
+    }
+    case "slide_interaction":
+      // Not stored: nothing reads it (decode drops the event and replay ignores it), and
+      // storing each one re-rendered every slides consumer. The event still goes out
+      // through onSlideEvent.
+      return prev;
+    default:
+      // An event type outside SlideEvent's union changes nothing.
+      return prev;
+  }
 }
 
 /** The whole store state, including whether the deck was borrowed. */
