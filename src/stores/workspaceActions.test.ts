@@ -25,7 +25,8 @@ vi.mock("../storage/workspaceAssetStore", async (importOriginal) => {
 });
 
 const { createWorkspaceActions } = await import("./workspaceActions");
-const { WORKSPACE_STORAGE_KEY, createWorkspaceStore } = await import("./workspaceStore");
+const { createWorkspaceStore } = await import("./workspaceStore");
+const { WORKSPACE_STORAGE_KEY } = await import("./workspacePersistence");
 
 function lesson(): WorkspaceProject {
   return {

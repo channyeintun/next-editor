@@ -3,7 +3,6 @@ import {
   areStringArraysEqual,
   areWorkspaceFilesEqual,
   areWorkspaceProjectsEqual,
-  isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
   isWorkspaceTextFile,
   type WorkspaceFile,
@@ -20,14 +19,12 @@ import {
   normalizeWorkspacePath,
 } from "../types/workspacePaths";
 import { createWorkspaceFile } from "../types/workspaceFiles";
-import { createStarterWorkspaceProject } from "../starters/react";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
   getClampedFileSidebarWidth,
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
-import { isNextEditorUrl, resolveRecordingUrl } from "../utils/recordingUrl";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
   areWorkspaceTopologiesEqual,
@@ -117,35 +114,6 @@ export type WorkspaceState =
 
 export type InitializedWorkspaceState = Extract<WorkspaceState, { isInitialized: true }>;
 
-export const WORKSPACE_STORAGE_KEY = "next-editor-workspace";
-
-/**
- * Asset descriptors are already lightweight and JSON-serializable. Only legacy
- * inline base64 entries are stripped while a v1 snapshot is being migrated.
- */
-export function toPersistedSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWorkspaceSnapshot {
-  let strippedAny = false;
-  const files: Record<string, WorkspaceFile> = {};
-
-  for (const [path, file] of Object.entries(snapshot.project.files)) {
-    if (isLegacyWorkspaceBinaryFile(file) && file.content !== "") {
-      files[path] = { ...file, content: "" };
-      strippedAny = true;
-    } else {
-      files[path] = file;
-    }
-  }
-
-  if (!strippedAny) {
-    return snapshot;
-  }
-
-  return {
-    ...snapshot,
-    project: { ...snapshot.project, files },
-  };
-}
-
 function createDirtyState(
   currentProject: WorkspaceProject,
   savedProject: WorkspaceProject,
@@ -185,80 +153,6 @@ function createDirtyState(
     folderStructureChanged,
     hasUnsavedChanges:
       dirtyFilePaths.length > 0 || projectMetadataChanged || folderStructureChanged,
-  };
-}
-
-function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
-
-    if (!stored) {
-      return null;
-    }
-
-    const parsed = JSON.parse(stored) as StoredWorkspaceSnapshot;
-    const project = normalizeProject(parsed.project);
-    const activeFilePath = resolveActiveFilePath(
-      project,
-      normalizeWorkspacePath(parsed.activeFilePath ?? ""),
-    );
-
-    // Sidebar width is deliberately not restored from storage; it resets to the
-    // default on every reload (see sidebarLayout.ts).
-    return {
-      activeFilePath,
-      project,
-      assetGeneration:
-        typeof parsed.assetGeneration === "string" ? parsed.assetGeneration : undefined,
-    };
-  } catch (error) {
-    console.warn("Failed to load workspace snapshot:", error);
-    return null;
-  }
-}
-
-/**
- * Whether `?url=` names a `.ne`, read exactly as useUrlQuery reads it and
- * checked exactly as the loader checks it before loading it.
- */
-function hasPendingRecordingUrl(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  const url = resolveRecordingUrl(new URLSearchParams(window.location.search).get("url"));
-  return url !== null && isNextEditorUrl(url);
-}
-
-/**
- * `pendingRecordingUrl` is how a surface that loads a recording from a prop
- * rather than `?url=` — the /learn/:slug detail view — declares that its real
- * content is still in flight. Without it, the persisted workspace wins the
- * race and the editor mounts showing the *previous* session's files until the
- * `.ne` lands and replaces them. Sniffing the query string can't see that case:
- * a lesson URL carries no `url` param at all.
- */
-export function createInitialWorkspaceSnapshot(
-  pendingRecordingUrl?: string,
-): StoredWorkspaceSnapshot | null {
-  if (pendingRecordingUrl || hasPendingRecordingUrl()) {
-    return null;
-  }
-
-  const storedSnapshot = loadStoredWorkspaceSnapshot();
-
-  if (storedSnapshot) {
-    return storedSnapshot;
-  }
-
-  const project = createStarterWorkspaceProject();
-  return {
-    activeFilePath: project.entryFilePath,
-    project,
   };
 }
 

@@ -1,13 +1,15 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
-  createInitialWorkspaceSnapshot,
   createWorkspaceStore,
   normalizeProject,
-  toPersistedSnapshot,
-  WORKSPACE_STORAGE_KEY,
   type StoredWorkspaceSnapshot,
 } from "./workspaceStore";
+import {
+  createInitialWorkspaceSnapshot,
+  toPersistedSnapshot,
+  WORKSPACE_STORAGE_KEY,
+} from "./workspacePersistence";
 import {
   collectBinaryAssetPaths,
   persistWorkspaceAssets,

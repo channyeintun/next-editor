@@ -1,17 +1,10 @@
 import {
-  WORKSPACE_STORAGE_KEY,
   normalizeProject,
-  toPersistedSnapshot,
-  type InitializedWorkspaceState,
   type StoredWorkspaceSnapshot,
   type WorkspaceStoreInstance,
 } from "./workspaceStore";
-import { resolveActiveFilePath, withMigratedAssetDescriptors } from "./workspaceProjectSupport";
-import {
-  migrateLegacyWorkspaceAssets,
-  persistWorkspaceAssets,
-  pruneLegacyWorkspaceAssetKeys,
-} from "../storage/workspaceAssetStore";
+import { resolveActiveFilePath } from "./workspaceProjectSupport";
+import { persistWorkspace } from "./workspacePersistence";
 import {
   isWorkspaceTextFile,
   type WorkspaceFile,
@@ -23,57 +16,6 @@ import {
 import { normalizeWorkspacePath } from "../types/workspacePaths";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
-
-/**
- * Makes one workspace generation durable: the assets first, then the
- * localStorage metadata that references them. A failure leaves the workspace
- * dirty and is reported through the store.
- */
-async function persistWorkspace(
-  workspaceStore: WorkspaceStoreInstance,
-  { activeFilePath, project, savedSnapshot, workspaceLoadVersion }: InitializedWorkspaceState,
-): Promise<void> {
-  workspaceStore.trigger.beginSave({ workspaceLoadVersion });
-
-  try {
-    const migratedDescriptors = await migrateLegacyWorkspaceAssets(
-      project,
-      savedSnapshot.assetGeneration,
-    );
-    const storedFiles = withMigratedAssetDescriptors(project.files, migratedDescriptors);
-    const storedProject: WorkspaceProject =
-      storedFiles === project.files ? project : { ...project, files: storedFiles };
-    if (Object.keys(migratedDescriptors).length > 0) {
-      workspaceStore.trigger.hydrateAssetDescriptors({ descriptors: migratedDescriptors });
-    }
-    await persistWorkspaceAssets(storedProject);
-
-    // Capture the exact durable project generation. Edits arriving while
-    // this save is in flight remain dirty against this snapshot.
-    const storedSnapshot = {
-      activeFilePath,
-      project: storedProject,
-    } satisfies StoredWorkspaceSnapshot;
-
-    // Publish metadata only after every referenced asset is durable.
-    window.localStorage.setItem(
-      WORKSPACE_STORAGE_KEY,
-      JSON.stringify(toPersistedSnapshot(storedSnapshot)),
-    );
-    workspaceStore.trigger.markSaved({
-      snapshot: storedSnapshot,
-      workspaceLoadVersion,
-    });
-
-    void pruneLegacyWorkspaceAssetKeys().catch((error) => {
-      console.warn("Failed to prune old workspace assets:", error);
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "The workspace could not be saved";
-    workspaceStore.trigger.saveFailed({ message, workspaceLoadVersion });
-    console.warn("Failed to save workspace snapshot:", error);
-  }
-}
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;

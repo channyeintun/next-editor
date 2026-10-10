@@ -29,7 +29,7 @@ vi.mock("../storage/workspaceAssetStore", async (importOriginal) => {
 const { WorkspaceProvider } = await import("./WorkspaceProvider");
 const { useWorkspaceActions, useWorkspaceDirtyState, useWorkspaceSaveStatus } =
   await import("../hooks/useWorkspace");
-const { WORKSPACE_STORAGE_KEY } = await import("../stores/workspaceStore");
+const { WORKSPACE_STORAGE_KEY } = await import("../stores/workspacePersistence");
 
 interface HarnessValue {
   actions: WorkspaceActions;
