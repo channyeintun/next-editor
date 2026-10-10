@@ -8,11 +8,8 @@ import {
   Monitor,
   MonitorOff,
   X,
-  Captions,
-  Download,
   Keyboard,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import { useSelector } from "@xstate/store-react";
 import {
@@ -24,13 +21,15 @@ import {
 } from "../hooks/useNextEditorContext";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
-import type { CaptionCue, RecordingChapter } from "../core/src/types";
+import type { RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
 import RecordButton from "./mediaControls/RecordButton";
 import RecordingTransportControls from "./mediaControls/RecordingTransportControls";
 import RecordingOptionToggle from "./mediaControls/RecordingOptionToggle";
 import CaptionsMenuButton from "./mediaControls/CaptionsMenuButton";
+import CaptionSettings from "./mediaControls/CaptionSettings";
+import { useCaptionFileImport } from "./mediaControls/useCaptionFileImport";
 import PlaybackSpeedVolume from "./mediaControls/PlaybackSpeedVolume";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
@@ -63,9 +62,7 @@ import MicrophoneCheck, { RecordingMicrophoneLevel } from "./MicrophoneCheck";
 import PlayerShortcutsHelp, { PlayerShortcutFeedback } from "./PlayerShortcutsHelp";
 import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
-import { serializeCuesToVtt } from "../captions/serializeVtt";
-import { createCaptionTrack, selectCaptionTrack } from "../captions/captionTracks";
-import { downloadBlob } from "../utils/downloadBlob";
+import { selectCaptionTrack } from "../captions/captionTracks";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 interface MediaControlsProps {
@@ -84,35 +81,6 @@ interface MediaControlsProps {
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
-
-type ParsedCaptionFile = { cues: CaptionCue[]; language: string } | { error: string };
-
-/**
- * A picked caption file's cues and language, or what to tell the viewer when it gives none.
- * Kept out of the component: the React Compiler cannot compile a function holding `import()`.
- */
-async function parseCaptionFile(file: File): Promise<ParsedCaptionFile> {
-  // The parser yields zero cues for any file whose timestamp lines miss its
-  // format — timestamps with no fractional part, a non-subtitle file picked
-  // past the accept filter, a UTF-16 file that decodes as mojibake. A bare
-  // return there meant "Import captions…" appeared to do nothing at all.
-  let parseCaptions: typeof import("../captions/parseCaptions");
-  let text: string;
-  try {
-    parseCaptions = await import("../captions/parseCaptions");
-    text = await file.text();
-  } catch {
-    return { error: `Couldn't read "${file.name}" — try selecting it again.` };
-  }
-
-  const { detectAndParse, inferLanguageFromFilename } = parseCaptions;
-  const cues = detectAndParse(file.name, text);
-  if (cues.length === 0) {
-    return { error: `No captions found in "${file.name}" — expected WebVTT or SRT.` };
-  }
-
-  return { cues, language: inferLanguageFromFilename(file.name) ?? "en" };
-}
 
 const toProgressPercent = (currentTime: number, duration: number) =>
   duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
@@ -220,7 +188,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   playlistMode = false,
   onRecordingEdited,
 }) => {
-  const { startRecording, stopRecording, clearRecording, play, pause, seekTo, addCaptionTrack } =
+  const { startRecording, stopRecording, clearRecording, play, pause, seekTo } =
     useNextEditorActions();
 
   const { isRecording, isRecordingPaused, isPlaying, currentRecording, hasEnded } =
@@ -245,6 +213,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const captionGeneration = useCaptionGeneration();
+  const {
+    inputRef: captionFileInputRef,
+    importError: captionImportError,
+    openPicker: openCaptionPicker,
+    onFileChange: handleCaptionFileChange,
+  } = useCaptionFileImport();
   const playerShortcuts = usePlayerShortcuts();
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
@@ -258,9 +232,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     selectCameraOverlayVisible(s.context),
   );
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
-  const [captionImportError, setCaptionImportError] = useState<string | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
-  const captionFileInputRef = useRef<HTMLInputElement>(null);
   // Where "Keyboard shortcuts" leaves focus before its menu closes, so the help has an opener.
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -324,33 +296,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const handleClearSelectedAudio = () => {
     setSelectedAudioFile(null);
     setRecordingAudioSource("microphone");
-  };
-
-  const handleCaptionFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    event.target.value = "";
-    setCaptionImportError(null);
-    // Read before parsing awaits: the track belongs to the lesson the viewer picked it for.
-    const recordingId = currentRecording?.id;
-    if (!recordingId) return;
-
-    const parsed = await parseCaptionFile(file);
-    if ("error" in parsed) {
-      setCaptionImportError(parsed.error);
-      return;
-    }
-
-    const { cues, language } = parsed;
-    addCaptionTrack(
-      recordingId,
-      createCaptionTrack({
-        id: `${language}-${Date.now()}`,
-        language,
-        cues,
-        isDefault: !currentRecording?.captions?.length,
-      }),
-    );
   };
 
   const handleToggleCameraForNextRecording = () => {
@@ -423,20 +368,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     currentRecording?.cameraBlob instanceof Blob || Boolean(currentRecording?.cameraUrl);
   const captionTracks = currentRecording?.captions;
   const hasCaptionTracks = captionTracks && captionTracks.length > 0;
-  const hasNarration = Boolean(currentRecording?.audioBlob || currentRecording?.audioUrl);
-  // Until a cut reaches the narration, its audio runs on the old clock.
-  const isNarrationBeingEdited = Boolean(currentRecording?.pendingAudioEdit);
   const isGeneratingCaptions = captionGeneration.state.status === "running";
   // The track the viewer would see: the one they picked, their language, the default, or the first.
   const activeCaptionTrack = selectCaptionTrack(captionTracks, captionPreference);
-
-  const handleDownloadCaptions = () => {
-    if (!activeCaptionTrack || !currentRecording) return;
-    downloadBlob(
-      new Blob([serializeCuesToVtt(activeCaptionTrack.cues)], { type: "text/vtt" }),
-      `${currentRecording.name || "recording"}.${activeCaptionTrack.language}.vtt`,
-    );
-  };
 
   // Size tokens — scale the controls up for small embeds when `large` is set.
   const containerPadding = large ? "px-10 py-8" : "px-4 py-1";
@@ -731,67 +665,14 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       </div>
                     )}
                     <PlaybackSpeedVolume />
-                    <div className="border-t border-slate-700 pt-3">
-                      <button
-                        type="button"
-                        onClick={() => captionFileInputRef.current?.click()}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
-                      >
-                        <Captions size={14} aria-hidden="true" />
-                        Import captions…
-                      </button>
-                      {/* Alerts: they come after the picker closes, with focus left on the
-                          button, and are inserted (not changed in place) on each failure. */}
-                      {captionImportError && (
-                        <p role="alert" className="px-2 pt-2 text-xs text-red-400">
-                          {captionImportError}
-                        </p>
-                      )}
-                      {effectiveRecordMode && hasNarration ? (
-                        isGeneratingCaptions ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300">
-                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                            <span className="flex-1">
-                              {describeCaptionGeneration(captionGeneration.state)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={captionGeneration.cancel}
-                              className="font-medium text-slate-400 hover:text-white"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void captionGeneration.start(currentRecording)}
-                            disabled={isNarrationBeingEdited}
-                            title="Transcribe the narration on this device; the audio never leaves your browser"
-                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-transparent"
-                          >
-                            <Sparkles size={14} aria-hidden="true" />
-                            Generate captions
-                          </button>
-                        )
-                      ) : null}
-                      {captionGeneration.state.status === "failed" ? (
-                        <p role="alert" className="px-2 pt-1 text-xs text-red-400">
-                          {describeCaptionGeneration(captionGeneration.state)}
-                        </p>
-                      ) : null}
-                      {effectiveRecordMode && activeCaptionTrack ? (
-                        <button
-                          type="button"
-                          onClick={handleDownloadCaptions}
-                          title="Save these captions as WebVTT, to correct and import again"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
-                        >
-                          <Download size={14} aria-hidden="true" />
-                          Download captions (.vtt)
-                        </button>
-                      ) : null}
-                    </div>
+                    <CaptionSettings
+                      recording={currentRecording}
+                      effectiveRecordMode={effectiveRecordMode}
+                      captionGeneration={captionGeneration}
+                      activeCaptionTrack={activeCaptionTrack}
+                      importError={captionImportError}
+                      onImport={openCaptionPicker}
+                    />
                     <div className="mt-3 border-t border-slate-700 pt-3">
                       <Switch
                         checked={characterShortcuts}

@@ -113,6 +113,9 @@ export function useCaptionGeneration() {
   return { state, start, cancel };
 }
 
+/** One player's captioning job, as useCaptionGeneration hands it out. */
+export type CaptionGeneration = ReturnType<typeof useCaptionGeneration>;
+
 /** "Downloading the speech model… 40%" and the like. */
 export function describeCaptionGeneration(state: CaptionGenerationState): string {
   if (state.status === "failed") return state.message;
