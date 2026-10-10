@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BookmarkPlus, Check, Link, ListVideo, Trash2 } from "lucide-react";
 import type { Recording, RecordingChapter } from "../core/src";
 import { useLiveTimeValue, useNextEditorActions } from "../hooks/useNextEditorContext";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
+import { selectLiveTime } from "../core/src/useNextEditor";
 import {
   defaultChapterTitle,
   findChapterIndexAt,
@@ -65,6 +67,7 @@ export default function ChaptersMenu({
   buttonClassName: string;
 }) {
   const { seekTo, setChapters } = useNextEditorActions();
+  const editorActor = NextEditorActorContext.useActorRef();
   const [open, setOpen] = useState(false);
   const [copiedTime, setCopiedTime] = useState<number | null>(null);
   const panelId = useId();
@@ -72,10 +75,12 @@ export default function ChaptersMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const addChapterRef = useRef<HTMLButtonElement>(null);
   const chapters = recording.chapters ?? [];
-  // Only the open menu shows the playhead (the exact time, the chapter playing), so a
-  // closed one does not re-render every tick.
-  const currentTime = useLiveTimeValue((time) => (open ? time : 0));
-  const currentIndex = findChapterIndexAt(chapters, currentTime);
+  // Only the open menu shows the playhead, and only what it shows: the whole second (the
+  // labels and links floor to it) and the chapter playing. So it re-renders once a second
+  // and at chapter boundaries, not every tick; a closed one not at all. A new chapter
+  // reads the exact playhead when it is added.
+  const currentSecond = useLiveTimeValue((time) => (open ? Math.floor(time / 1000) * 1000 : 0));
+  const currentIndex = useLiveTimeValue((time) => (open ? findChapterIndexAt(chapters, time) : -1));
 
   useEffect(() => {
     if (copiedTime === null) return;
@@ -223,26 +228,29 @@ export default function ChaptersMenu({
                 onClick={() =>
                   update([
                     ...chapters,
-                    { time: currentTime, title: defaultChapterTitle(chapters.length) },
+                    {
+                      time: selectLiveTime(editorActor.getSnapshot()),
+                      title: defaultChapterTitle(chapters.length),
+                    },
                   ])
                 }
                 className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
               >
                 <BookmarkPlus size={13} aria-hidden="true" />
-                Add a chapter at {formatPlaybackTime(currentTime)}
+                Add a chapter at {formatPlaybackTime(currentSecond)}
               </button>
             ) : null}
             <button
               type="button"
-              onClick={() => void copyLink(currentTime)}
+              onClick={() => void copyLink(currentSecond)}
               className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
             >
-              {copiedTime === currentTime ? (
+              {copiedTime === currentSecond ? (
                 <Check size={13} aria-hidden="true" />
               ) : (
                 <Link size={13} aria-hidden="true" />
               )}
-              Copy a link to {formatPlaybackTime(currentTime)}
+              Copy a link to {formatPlaybackTime(currentSecond)}
             </button>
           </div>
         </div>

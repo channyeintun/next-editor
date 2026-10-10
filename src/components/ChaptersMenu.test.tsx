@@ -11,9 +11,19 @@ const clipboard = vi.hoisted(() => ({
   copyTextToClipboard: vi.fn<(text: string) => Promise<boolean>>(() => Promise.resolve(true)),
 }));
 
+// The playhead, between whole seconds: the menu shows 1:05 but keeps the exact time.
+const playhead = vi.hoisted(() => ({ time: 65_400 }));
+
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => actions,
-  useLiveTimeValue: <T,>(derive: (currentTime: number) => T) => derive(65_000),
+  useLiveTimeValue: <T,>(derive: (currentTime: number) => T) => derive(playhead.time),
+}));
+vi.mock("../contexts/NextEditorActorContext", () => ({
+  NextEditorActorContext: {
+    useActorRef: () => ({
+      getSnapshot: () => ({ context: { timeline: { currentTime: playhead.time } } }),
+    }),
+  },
 }));
 vi.mock("../utils/clipboard", () => clipboard);
 
@@ -29,6 +39,7 @@ const lesson = {
 const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Chapters" }));
 
 beforeEach(() => {
+  playhead.time = 65_400;
   window.history.replaceState(null, "", "/learn/router-basics?embed=true");
 });
 
@@ -95,12 +106,32 @@ describe("ChaptersMenu", () => {
     // Focus stays in the panel, on the next row, not on the page's start.
     expect(screen.getByRole("button", { name: "Delete Routing" })).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: /Add a chapter at 1:05/ }));
+    // Labelled by the whole second, stored at the exact playhead.
+    fireEvent.click(screen.getByRole("button", { name: "Add a chapter at 1:05" }));
     expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", [
       { time: 0, title: "Setup" },
       { time: 60_000, title: "Routing" },
-      { time: 65_000, title: "Chapter 3" },
+      { time: 65_400, title: "Chapter 3" },
     ]);
+  });
+
+  it("copies a link to the playhead's second and keeps its check mark through that second", async () => {
+    const { rerender } = render(
+      <ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />,
+    );
+    openMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy a link to 1:05" }));
+    expect(clipboard.copyTextToClipboard).toHaveBeenCalledWith(
+      `${window.location.origin}/learn/router-basics?t=65`,
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Link copied"));
+
+    // Playback moves on within the same second: the link is the same, so the check stays.
+    playhead.time = 65_900;
+    rerender(<ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />);
+    const copyCurrent = screen.getByRole("button", { name: "Copy a link to 1:05" });
+    expect(copyCurrent.querySelector(".lucide-check")).not.toBeNull();
   });
 
   it("moves focus to Add when the author deletes the last chapter", () => {
