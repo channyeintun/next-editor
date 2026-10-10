@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Profiler, type PropsWithChildren } from "react";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import MediaControls from "./MediaControls";
 import { NextEditorProvider } from "../contexts/NextEditorProvider";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
@@ -133,6 +133,14 @@ afterEach(() => {
 });
 
 describe("MediaControls", () => {
+  // Importing a caption file loads the parser on first use (importCaptionFile's
+  // dynamic import). Load it once up front so the alert tests time the player,
+  // not Vite transforming the module inside findByRole's 1 s window, which
+  // missed that window on a loaded machine.
+  beforeAll(async () => {
+    await import("../captions/parseCaptions");
+  });
+
   // The bar renders neither value (PlaybackSpeedVolume, inside Settings, does), so a drag
   // of either control must not re-render the whole bar on every input event.
   it("does not re-render when the speed or volume changes", async () => {
