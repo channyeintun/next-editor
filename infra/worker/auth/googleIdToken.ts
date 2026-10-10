@@ -44,7 +44,10 @@ function base64UrlDecodeToJson<T>(value: string): T {
 
 // Google rotates its signing keys every few days. Cached per isolate; a kid
 // miss within the TTL forces one refetch so a just-rotated key doesn't fail
-// sign-ins until the cache expires.
+// sign-ins until the cache expires. The kid comes from a header nobody has
+// verified yet, so a miss refetches only once the cached copy is this old:
+// otherwise every forged kid posted to /onetap would cost a fetch to Google.
+const JWKS_MISS_REFETCH_MIN_AGE_MS = 30 * 1000;
 let cachedJwks: { keys: GoogleJwk[]; fetchedAt: number } | null = null;
 
 async function fetchGoogleJwks(): Promise<JwksResponse> {
@@ -60,7 +63,7 @@ async function getGoogleJwk(kid: string, now: number): Promise<GoogleJwk | null>
     cachedJwks = { keys: (await fetchGoogleJwks()).keys, fetchedAt: now };
   }
   let key = cachedJwks.keys.find((k) => k.kid === kid);
-  if (!key) {
+  if (!key && now - cachedJwks.fetchedAt >= JWKS_MISS_REFETCH_MIN_AGE_MS) {
     cachedJwks = { keys: (await fetchGoogleJwks()).keys, fetchedAt: now };
     key = cachedJwks.keys.find((k) => k.kid === kid);
   }

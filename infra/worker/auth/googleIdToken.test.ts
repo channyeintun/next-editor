@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { verifyGoogleIdToken, type JwksResponse } from "./googleIdToken";
 
 const NOW = 1_800_000_000_000; // fixed epoch ms
@@ -156,5 +156,60 @@ describe("verifyGoogleIdToken", () => {
         now: NOW,
       }),
     ).rejects.toThrow(/unknown key/);
+  });
+});
+
+// These go through the isolate's own JWKS cache, so each test loads a fresh
+// copy of the module and answers Google's JWKS URL from a stubbed fetch.
+describe("verifyGoogleIdToken's JWKS cache", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function freshVerifier(jwksAt: () => JwksResponse) {
+    vi.resetModules();
+    const fetchJwks = vi.fn<typeof fetch>(async () => Response.json(jwksAt()));
+    vi.stubGlobal("fetch", fetchJwks);
+    const { verifyGoogleIdToken: verify } = await import("./googleIdToken");
+    return {
+      fetchJwks,
+      verify: (token: string, now: number) => verify(token, { clientId: CLIENT_ID, now }),
+    };
+  }
+
+  it("refetches for unknown kids at most once per 30 s", async () => {
+    const { privateKey, jwks } = await makeSigningKey();
+    const { fetchJwks, verify } = await freshVerifier(() => jwks);
+    const forged = (kid: string) => signToken(privateKey, defaultPayload(), { alg: "RS256", kid });
+
+    await expect(verify(await forged("forged-1"), NOW)).rejects.toThrow(/unknown key/);
+    await expect(verify(await forged("forged-2"), NOW + 10_000)).rejects.toThrow(/unknown key/);
+    await expect(verify(await forged("forged-3"), NOW + 29_999)).rejects.toThrow(/unknown key/);
+    expect(fetchJwks).toHaveBeenCalledOnce();
+
+    await expect(verify(await forged("forged-4"), NOW + 30_000)).rejects.toThrow(/unknown key/);
+    expect(fetchJwks).toHaveBeenCalledTimes(2);
+  });
+
+  it("finds a rotated key once the cached copy is 30 s old", async () => {
+    const original = await makeSigningKey();
+    const rotated = await makeSigningKey("test-key-2");
+    let published = original.jwks;
+    const { fetchJwks, verify } = await freshVerifier(() => published);
+
+    await expect(
+      verify(await signToken(original.privateKey, defaultPayload()), NOW),
+    ).resolves.toMatchObject({ sub: "google-sub-123" });
+    published = rotated.jwks;
+    const rotatedToken = await signToken(rotated.privateKey, defaultPayload(), {
+      alg: "RS256",
+      kid: "test-key-2",
+    });
+
+    await expect(verify(rotatedToken, NOW + 5_000)).rejects.toThrow(/unknown key/);
+    await expect(verify(rotatedToken, NOW + 30_000)).resolves.toMatchObject({
+      sub: "google-sub-123",
+    });
+    expect(fetchJwks).toHaveBeenCalledTimes(2);
   });
 });
