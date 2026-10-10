@@ -283,6 +283,8 @@ const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
  */
 const RECORDER_ASSIGNS_TIMESTAMP = 0;
 
+type StudioWebContainerRuntime = Extract<StudioRuntime, { kind: "webcontainer" }>;
+
 function previewCommandTarget(target: StudioPreviewTarget | undefined) {
   return target ? { testId: target.value } : undefined;
 }
@@ -324,6 +326,30 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   // Whether the recorded pointer is hidden right now (mouseTrackingActor records
   // every sample hidden until it is shown again).
   let pointerHidden = false;
+
+  // The WebContainer commands' guard. Returns the narrowed runtime so a caller
+  // that captures it keeps the narrowing inside its closures. `verb` agrees
+  // with a plural subject ("Preview commands require …").
+  const requireWebContainerRuntime = (
+    actionLabel: string,
+    verb: "requires" | "require" = "requires",
+  ): StudioWebContainerRuntime => {
+    if (deps.runtime.kind !== "webcontainer") {
+      throw new StudioActionError(
+        `${actionLabel} ${verb} runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+      );
+    }
+    return deps.runtime;
+  };
+
+  // A failed runtime wait keeps the diagnostic it already carries (a health
+  // assertion's) or gains the runtime's current one (a plain timeout's).
+  const withRuntimeDiagnostic = (error: unknown): StudioActionError =>
+    error instanceof StudioActionError && error.detail
+      ? error
+      : new StudioActionError(error instanceof Error ? error.message : String(error), {
+          runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()),
+        });
 
   const activeModelPath = (): string | null => {
     const model = deps.getEditor()?.getModel();
@@ -1017,11 +1043,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async startRuntime(timeoutMs) {
-      if (deps.runtime.kind !== "webcontainer") {
-        throw new StudioActionError(
-          `runtime.start requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
-        );
-      }
+      const runtime = requireWebContainerRuntime("runtime.start");
       try {
         await deps.webContainerRuntime.getActions().startRuntime();
       } catch (error) {
@@ -1052,30 +1074,21 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
             },
           );
         } catch (error) {
-          if (error instanceof StudioActionError && error.detail) {
-            throw error;
-          }
-          throw new StudioActionError(error instanceof Error ? error.message : String(error), {
-            runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()),
-          });
+          throw withRuntimeDiagnostic(error);
         }
       }
       const snapshot = deps.webContainerRuntime.getSnapshot();
       assertWebContainerHealthy(snapshot);
       return {
-        adapterVersion: deps.runtime.adapterVersion,
-        initCommand: deps.runtime.initCommand,
-        runCommand: deps.runtime.runCommand,
+        adapterVersion: runtime.adapterVersion,
+        initCommand: runtime.initCommand,
+        runCommand: runtime.runCommand,
         status: snapshot.status,
       };
     },
 
     async waitForRuntimeReady(timeoutMs) {
-      if (deps.runtime.kind !== "webcontainer") {
-        throw new StudioActionError(
-          `runtime.waitForReady requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
-        );
-      }
+      const runtime = requireWebContainerRuntime("runtime.waitForReady");
       try {
         await waitUntil(
           () => {
@@ -1084,26 +1097,18 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
             return (
               snapshot.status === "ready" &&
               Boolean(snapshot.previewUrl) &&
-              (deps.runtime.kind !== "webcontainer" ||
-                deps.runtime.expectedPort === undefined ||
-                snapshot.previewPort === deps.runtime.expectedPort)
+              (runtime.expectedPort === undefined || snapshot.previewPort === runtime.expectedPort)
             );
           },
           {
             timeoutMs,
             signal,
-            description: `WebContainer server${deps.runtime.expectedPort ? ` on port ${deps.runtime.expectedPort}` : ""} to become ready`,
+            description: `WebContainer server${runtime.expectedPort ? ` on port ${runtime.expectedPort}` : ""} to become ready`,
             intervalMs: 50,
           },
         );
       } catch (error) {
-        if (error instanceof StudioActionError && error.detail) {
-          throw error;
-        }
-        const snapshot = deps.webContainerRuntime.getSnapshot();
-        throw new StudioActionError(error instanceof Error ? error.message : String(error), {
-          runtime: webContainerDiagnostic(snapshot),
-        });
+        throw withRuntimeDiagnostic(error);
       }
       const snapshot = deps.webContainerRuntime.getSnapshot();
       return {
@@ -1157,11 +1162,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async openPreview({ mode, timeoutMs }) {
-      if (deps.runtime.kind !== "webcontainer") {
-        throw new StudioActionError(
-          `preview.open requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
-        );
-      }
+      requireWebContainerRuntime("preview.open");
       assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
       // Both phases below share this single deadline: `timeoutMs` is the whole
       // action's budget, matching what the Performer races the call against.
@@ -1221,11 +1222,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async executePreviewCommand({ command, timeoutMs }) {
-      if (deps.runtime.kind !== "webcontainer") {
-        throw new StudioActionError(
-          `Preview commands require runtime kind "webcontainer", got "${deps.runtime.kind}"`,
-        );
-      }
+      requireWebContainerRuntime("Preview commands", "require");
       assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
       let acknowledgement: StudioPreviewCommandResult;
       try {
@@ -1241,11 +1238,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async expectPreview({ actionId, target, textContains, value, route, attribute, timeoutMs }) {
-      if (deps.runtime.kind !== "webcontainer") {
-        throw new StudioActionError(
-          `expect.preview requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
-        );
-      }
+      requireWebContainerRuntime("expect.preview");
 
       try {
         assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());

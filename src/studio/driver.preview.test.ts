@@ -8,7 +8,9 @@ vi.mock("../monaco", () => ({
   workspacePathFromMonacoModelUri: vi.fn<() => string | null>(),
 }));
 
-function makeDriver(options: { lessonType?: "python" | "typescript" } = {}) {
+function makeDriver(
+  options: { lessonType?: "python" | "typescript"; runtime?: StudioDriverDeps["runtime"] } = {},
+) {
   let previewState = { isOpen: false } as PreviewState;
   const previewEvents: PreviewEvent[] = [];
   const startRuntime = vi.fn<() => Promise<void>>(async () => {});
@@ -58,25 +60,26 @@ function makeDriver(options: { lessonType?: "python" | "typescript" } = {}) {
     notifyWhiteboardEvent: () => {},
     notifyPreviewEvent: (event: PreviewEvent) => previewEvents.push(event),
     runtimeMode: "live",
-    runtime: (options.lessonType === "python"
-      ? {
-          kind: "webcontainer",
-          adapterVersion: 1,
-          defaultMode: "live",
-          initCommand: "",
-          runCommand: "python3 main.py",
-          environment: {},
-        }
-      : {
-          kind: "webcontainer",
-          adapterVersion: 1,
-          defaultMode: "live",
-          initCommand: "npm ci --no-audit --no-fund",
-          runCommand: "npm run dev",
-          expectedPort: 5173,
-          lockfilePath: "package-lock.json",
-          environment: {},
-        }) as StudioDriverDeps["runtime"],
+    runtime: (options.runtime ??
+      (options.lessonType === "python"
+        ? {
+            kind: "webcontainer",
+            adapterVersion: 1,
+            defaultMode: "live",
+            initCommand: "",
+            runCommand: "python3 main.py",
+            environment: {},
+          }
+        : {
+            kind: "webcontainer",
+            adapterVersion: 1,
+            defaultMode: "live",
+            initCommand: "npm ci --no-audit --no-fund",
+            runCommand: "npm run dev",
+            expectedPort: 5173,
+            lockfilePath: "package-lock.json",
+            environment: {},
+          })) as StudioDriverDeps["runtime"],
     planSeed: 29,
     whiteboardAssets: [],
     webContainerRuntime: {
@@ -233,6 +236,58 @@ describe("StudioDriver WebContainer preview adapter", () => {
     });
 
     await expect(driver.startRuntime(250)).rejects.toThrow("exited with code 1");
+  });
+
+  it("wraps a readiness timeout with the runtime's diagnostic", async () => {
+    const { driver, snapshot } = makeDriver();
+    Object.assign(snapshot, { status: "starting", previewUrl: null, previewPort: null });
+
+    await expect(driver.waitForRuntimeReady(60)).rejects.toMatchObject({
+      name: StudioActionError.name,
+      message: "Timed out after 60ms waiting for WebContainer server on port 5173 to become ready",
+      detail: { runtime: expect.objectContaining({ status: "starting", previewPort: null }) },
+    });
+  });
+
+  it("keeps a runtime failure's own diagnostic while waiting for readiness", async () => {
+    const { driver, snapshot } = makeDriver();
+    Object.assign(snapshot, {
+      status: "error",
+      errorMessage: "Vite exited before opening its port",
+    });
+
+    await expect(driver.waitForRuntimeReady(100)).rejects.toMatchObject({
+      name: StudioActionError.name,
+      message: "WebContainer runtime failed: Vite exited before opening its port",
+      detail: {
+        runtime: expect.objectContaining({
+          status: "error",
+          errorMessage: "Vite exited before opening its port",
+        }),
+      },
+    });
+  });
+
+  it("refuses every WebContainer command on another runtime, naming the action", async () => {
+    const { captureScreenshot, driver, startRuntime } = makeDriver({ runtime: { kind: "none" } });
+    const got = 'runtime kind "webcontainer", got "none"';
+
+    await expect(driver.startRuntime(100)).rejects.toThrow(`runtime.start requires ${got}`);
+    await expect(driver.waitForRuntimeReady(100)).rejects.toThrow(
+      `runtime.waitForReady requires ${got}`,
+    );
+    await expect(driver.openPreview({ mode: "docked", timeoutMs: 100 })).rejects.toThrow(
+      `preview.open requires ${got}`,
+    );
+    await expect(
+      driver.executePreviewCommand({ command: { type: "ping" }, timeoutMs: 100 }),
+    ).rejects.toThrow(`Preview commands require ${got}`);
+    await expect(
+      driver.expectPreview({ actionId: "expect-route", route: "/", timeoutMs: 100 }),
+    ).rejects.toThrow(`expect.preview requires ${got}`);
+    expect(startRuntime).not.toHaveBeenCalled();
+    // The guard runs before the screenshot-on-failure path.
+    expect(captureScreenshot).not.toHaveBeenCalled();
   });
 
   it("fails closed and attaches one screenshot when the DOM is wrong", async () => {
