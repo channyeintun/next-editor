@@ -42,4 +42,36 @@ describe("ArchitecturePage", () => {
     expect(rowHeaders[11]).toHaveAccessibleName("deploy");
     expect(within(table).queryAllByRole("columnheader")).toHaveLength(0);
   });
+
+  it("numbers the diagram's tags and the notes 1 to 41 in the same order", () => {
+    const { container } = render(<ArchitecturePage />);
+    const expected = Array.from({ length: 41 }, (_, index) => index + 1);
+
+    // Each chip and service box draws its tag as the text after its circle.
+    const tags = [...container.querySelectorAll("svg circle + text")].map((tag) =>
+      Number(tag.textContent),
+    );
+    expect(tags).toEqual(expected);
+
+    const [, notes] = screen.getAllByRole("list");
+    const noteItems = within(notes).getAllByRole("listitem");
+    expect(noteItems.map((item) => Number(item.querySelector(".n")?.textContent))).toEqual(
+      expected,
+    );
+    for (const item of noteItems) {
+      expect(item.querySelector("b")?.textContent).toMatch(/\S —$/);
+      expect(item.querySelector(".d")?.textContent).not.toBe("");
+    }
+    expect(noteItems[2].textContent).toMatch(/^03xstate \+ store-react — the recorder\/player/);
+    expect(noteItems[26].textContent).toMatch(/^27Workers KV — playground Run\/Format results/);
+  });
+
+  it("describes Workers KV as the playground result cache only", () => {
+    render(<ArchitecturePage />);
+    const table = screen.getByRole("table", { name: "Build & tooling" });
+    const row = within(table).getByRole("rowheader", { name: "public cache" }).closest("tr");
+
+    expect(row).toHaveTextContent("workers kv — fail-open playground Run/Format result cache");
+    expect(row?.textContent).not.toMatch(/lesson|playlist/);
+  });
 });

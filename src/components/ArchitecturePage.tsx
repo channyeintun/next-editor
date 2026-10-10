@@ -243,199 +243,258 @@ function ExternalBox({ x, y, title, lines, tag, connectorStartX }: ExternalBoxPr
   );
 }
 
-type ChipSpec = Omit<ChipProps, "x" | "y" | "width">;
+// One numbered item on the diagram: a chip in a layer, or an external service
+// box. Its tag on the diagram and its entry in the Notes both come from its
+// position (see numberInOrder), so the two cannot drift apart.
+interface DiagramItem {
+  title: string;
+  lines: string[];
+  /** The Notes heading, where it differs from the diagram's shorter label. */
+  noteTitle?: string;
+  /** The Notes text after the heading. */
+  detail: string;
+}
 
-const clientChips: ChipSpec[] = [
+type NumberedItem = DiagramItem & { tag: number };
+
+// What a Layer draws as chips and a ServiceGroup as boxes.
+type ChipSpec = Omit<ChipProps, "x" | "y" | "width">;
+type ExternalSpec = Omit<ExternalBoxProps, "x" | "y" | "connectorStartX">;
+
+const clientItems: DiagramItem[] = [
   {
     title: "React 19 + Compiler",
     lines: ["one SPA: /code /learn /studio", "compiler memoizes, no manual memo"],
-    tag: 1,
+    detail:
+      "one SPA for the landing page, /code, /learn, /studio, and this sheet; the compiler memoizes, so there is no manual useCallback/useMemo.",
   },
   {
     title: "Monaco editor",
     lines: ["multi-file editing surface +", "zig/haskell/kite/asm grammars"],
-    tag: 2,
+    detail:
+      "edits the multi-file workspace, with first-party grammars for Zig, Haskell, Kite, and x86-64 assembly.",
   },
   {
     title: "xstate · store-react",
     lines: ["recorder/player state machine", "+ app-level stores"],
-    tag: 3,
+    noteTitle: "xstate + store-react",
+    detail:
+      "the recorder/player machine owns the timeline; app-level stores hold the workspace, slides, whiteboard, and settings.",
   },
   {
     title: "WebContainer + xterm",
     lines: ["Node.js in the browser: 12 lesson", "types, preview + terminal tabs"],
-    tag: 4,
+    noteTitle: "WebContainer + xterm.js",
+    detail:
+      "Node.js in the browser for 12 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web, WASI Python), with a preview and terminal tabs.",
   },
   {
     title: "in-page runners",
     lines: ["Kite on a Wasm build of kitec,", "x86-64 assembler + machine (TS)"],
-    tag: 5,
+    noteTitle: "In-page runners",
+    detail:
+      "Kite compiles on a Wasm build of kitec, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine; neither calls a service.",
   },
   {
     title: "sandboxed iframes",
     lines: ["preview + slides under strict", "CSP; postMessage bridges"],
-    tag: 6,
+    noteTitle: "Sandboxed iframes",
+    detail:
+      "the live preview and every slide render in sandboxed frames; slides run no script except a nonce-locked animation driver for Google decks.",
   },
   {
     title: "rrweb",
     lines: ["preview DOM, scroll + input as", "events, corrective snapshots"],
-    tag: 7,
+    detail:
+      "records the preview's DOM, scroll, and input as one event stream, with corrective full snapshots, and replays it on the recording clock.",
   },
   {
     title: "MediaRecorder · WebCodecs",
     lines: ["narration, camera, local screen", "capture; edits → Ogg/Opus"],
-    tag: 8,
+    noteTitle: "MediaRecorder + WebCodecs",
+    detail:
+      "narration, camera, and a screen capture that is only saved locally; cut, muted, or retaken narration is re-encoded to Ogg/Opus.",
   },
   {
     title: "SCR3 codec",
     lines: ["dmp (Rust→WASM) + msgpack + fflate", "in a worker; plays mid-download"],
-    tag: 9,
+    detail:
+      "keyframes and deltas (exact Monaco edits or Rust→WASM diff-match-patch) in msgpack + fflate segments, decodable from any prefix so playback starts mid-download.",
   },
   {
     title: "IndexedDB · OPFS",
     lines: ["drafts, assets, learner versions;", "large .ne payloads in OPFS"],
-    tag: 10,
+    noteTitle: "IndexedDB + OPFS",
+    detail:
+      "crash-recovery drafts, workspace assets by SHA-256, and learner versions; .ne payloads of 8 MiB or more go to OPFS.",
   },
   {
     title: "Excalidraw",
     lines: ["whiteboard, loaded on demand;", "records element deltas"],
-    tag: 11,
+    detail: "the whiteboard, loaded on demand; records element deltas, not full snapshots.",
   },
   {
     title: "slides",
     lines: ["markdown (marked) or html, or", "Google Slides decks as SVG"],
-    tag: 12,
+    noteTitle: "Slides",
+    detail:
+      "Markdown (marked) or HTML slides, or a published Google Slides deck imported as SVG with its build steps.",
   },
   {
     title: "ONNX Runtime Web",
     lines: ["on-device Whisper captions", "+ Pocket TTS narration"],
-    tag: 13,
+    detail:
+      "Whisper captions and Pocket TTS narration run on the device; the weights are kept in Cache Storage.",
   },
   {
     title: "coding agent",
     lines: ["@openrouter/agent, user's own key;", "chat recorded into the lesson"],
-    tag: 14,
+    noteTitle: "Coding agent",
+    detail:
+      "@openrouter/agent with the user's own key; file tools everywhere, plus preview inspection and confirmed shell commands in WebContainer lessons. The chat is recorded.",
   },
   {
     title: "Studio performer",
     lines: ["LessonScript → plan → real editor", "→ QA gates → draft lesson"],
-    tag: 15,
+    detail:
+      "compiles a LessonScript into a timed plan, drives the real editor while the recorder captures it, and hands a render that passes QA to the upload flow as a draft.",
   },
   {
     title: "Yjs + y-monaco",
     lines: ["room edits + awareness over", "binary WebSockets; follow"],
-    tag: 16,
+    detail:
+      "room documents and awareness over binary WebSockets; any participant can follow another's file, slide, or whiteboard.",
   },
   {
     title: "partytracks · WebRTC",
     lines: ["audio-only room voice via the", "Cloudflare Realtime SFU"],
-    tag: 17,
+    noteTitle: "partytracks + WebRTC",
+    detail:
+      "audio-only voice chat; join is muted, unmute publishes one Opus track, mute releases the mic. Remote voice never enters the recorder.",
   },
   {
     title: "PostHog SDK",
     lines: ["analytics, masked replay,", "exceptions → PostHog (US)"],
-    tag: 18,
+    detail:
+      "autocapture + custom events, exception capture, privacy-masked session replay (inputs masked, Monaco/Excalidraw blocked); replay pauses during lesson recording.",
   },
 ];
 
-const edgeChips: ChipSpec[] = [
+const edgeItems: DiagramItem[] = [
   {
     title: "Hono API routes",
     lines: ["lessons, playlists, search,", "uploads, rooms + voice, studio"],
-    tag: 19,
+    detail:
+      "lessons, playlists, authors, search, uploads, collaboration + voice, Studio, and slide images; CSRF-guarded and logged per request.",
   },
   {
     title: "assets + edge SSR",
     lines: ["dist/ via ASSETS, COOP/COEP on", "every response; SSR landing"],
-    tag: 20,
+    noteTitle: "Assets + edge SSR",
+    detail:
+      "every request runs the Worker first so static files get COOP/COEP too; the landing page renders at the edge, and lesson pages get real metadata.",
   },
   {
     title: "auth",
     lines: ["Google OAuth + One Tap, passkeys;", "D1-backed session cookie"],
-    tag: 21,
+    noteTitle: "Auth",
+    detail:
+      "Google OAuth (PKCE) and One Tap create accounts, passkeys sign in to them, and the session is an opaque cookie looked up in D1.",
   },
   {
     title: "playground proxies",
     lines: ["go · kotlin · rust · zig · haskell", "kill switch · cache · rate limit"],
-    tag: 22,
+    noteTitle: "Playground proxies",
+    detail:
+      "Go, Kotlin, Rust, Zig, and Haskell runs with no sign-in needed, each behind a kill switch, a rate limit (per user, or per IP when signed out), and a one-hour result cache.",
   },
   {
     title: "/api/openrouter",
     lines: ["streams the agent's model calls;", "CORS pass-through, holds no key"],
-    tag: 23,
+    detail:
+      "forwards the agent's streamed model calls so the SDK's headers clear CORS; it stores and logs no key.",
   },
   {
     title: "/api/proxy",
     lines: ["SSRF-guarded https fetch: slide", "images, avatars, remote .ne"],
-    tag: 24,
+    detail:
+      "https-only fetch that blocks loopback and private hosts; serves slide-image fallbacks, avatars, and cross-origin .ne files.",
   },
 ];
 
-const storageChips: ChipSpec[] = [
+const storageItems: DiagramItem[] = [
   {
     title: "D1 (SQLite)",
     lines: ["users, sessions, passkeys, lessons,", "playlists, rooms, encrypted API keys"],
-    tag: 25,
+    noteTitle: "D1",
+    detail:
+      "users, sessions, passkeys, lessons, playlists, per-user feature flags, users' provider API keys (AthanLab) encrypted by the Worker with AES-256-GCM, a failed-sign-in breaker, and the collaboration room and access-control plane.",
   },
   {
     title: "R2 (object storage)",
     lines: ["lesson media + captions, slide", "images, private room assets"],
-    tag: 26,
+    noteTitle: "R2",
+    detail:
+      "lesson media (.ne, audio, camera, captions, thumbnails), imported slide images, and private content-addressed collaboration assets.",
   },
   {
     title: "Workers KV",
     lines: ["playground Run/Format", "results; fail-open"],
-    tag: 27,
+    detail:
+      "playground Run/Format results; eventually consistent and fail-open. The public lesson/playlist catalog reads D1 directly.",
   },
   {
     title: "Room Durable Objects",
     lines: ["binary WebSockets + SQLite Yjs", "log, compacted on an alarm"],
-    tag: 28,
+    detail:
+      "hibernating binary WebSockets, authoritative awareness, and a per-room SQLite Yjs log compacted on an alarm.",
   },
   {
     title: "Voice Durable Objects",
     lines: ["voice roster + capabilities;", "sole gateway to the SFU API"],
-    tag: 29,
+    detail:
+      "per-room voice roster and per-connection capabilities; the only path to the SFU API — validates session/track/mid ownership before proxying.",
   },
   {
     title: "Rate Limiting",
     lines: ["playground + AthanLab budgets,", "per user or per IP; fail closed"],
-    tag: 30,
+    detail:
+      "budgets for the playground proxies (per user, or per IP when signed out) and for AthanLab key checks and narration calls (per user); a route whose binding is missing refuses the request instead of calling out.",
   },
 ];
 
-type ExternalSpec = Omit<ExternalBoxProps, "x" | "y" | "connectorStartX">;
-
 // Services the browser reaches directly, without the Worker in between.
-const browserServices: ExternalSpec[] = [
+const browserServiceItems: DiagramItem[] = [
   {
     title: "StackBlitz",
     lines: ["WebContainer runtime iframe,", "stackblitz.com/headless"],
-    tag: 31,
+    detail: "the WebContainer runtime boots in a hidden iframe from stackblitz.com.",
   },
   {
     title: "Google Slides",
     lines: ["published decks, fetched by the", "browser at import"],
-    tag: 32,
+    detail:
+      "the browser fetches a published deck directly; the Worker copies its Google-hosted images into R2.",
   },
   {
     title: "Hugging Face",
     lines: ["Whisper + Pocket TTS weights,", "pinned revisions, cached"],
-    tag: 33,
+    detail: "Whisper and Pocket TTS weights at pinned revisions, downloaded once per browser.",
   },
   {
     title: "PostHog Cloud (US)",
     lines: ["analytics, masked session", "replay, exception reports"],
-    tag: 34,
+    detail:
+      "receives analytics, masked replay, and error reports; edge request logs carry X-POSTHOG-* ids to cross-link them.",
   },
 ];
 
 // Services only the Worker (or one of its Durable Objects) calls.
-const workerServices: ExternalSpec[] = [
+const workerServiceItems: DiagramItem[] = [
   {
     title: "Google Identity",
     lines: ["OAuth 2.0 code exchange,", "One Tap token verification"],
-    tag: 35,
+    detail: "OAuth code exchange, and One Tap token checks against Google's published keys.",
   },
   {
     title: "language playgrounds",
@@ -444,278 +503,58 @@ const workerServices: ExternalSpec[] = [
       "play.rust-lang.org · zig-play.dev",
       "play.haskell.org",
     ],
-    tag: 36,
-  },
-  {
-    title: "OpenRouter",
-    lines: ["model API for the coding agent,", "called with the user's own key"],
-    tag: 37,
-  },
-  {
-    title: "AthanLab",
-    lines: ["Burmese Studio narration with the", "user's own encrypted key"],
-    tag: 38,
-  },
-  {
-    title: "Modal · VoxCPM2",
-    lines: ["Burmese Studio narration,", "gated by a D1 feature flag"],
-    tag: 39,
-  },
-  {
-    title: "Upstash QStash",
-    lines: ["signed callback purges a", "room 7 days after it closes"],
-    tag: 40,
-  },
-  {
-    title: "Cloudflare Realtime SFU",
-    lines: ["audio-only WebRTC media plane,", "Opus fan-out between members"],
-    tag: 41,
-  },
-];
-
-const notes: Array<{ n: string; title: string; detail: string }> = [
-  {
-    n: "01",
-    title: "React 19 + Compiler",
-    detail:
-      "one SPA for the landing page, /code, /learn, /studio, and this sheet; the compiler memoizes, so there is no manual useCallback/useMemo.",
-  },
-  {
-    n: "02",
-    title: "Monaco editor",
-    detail:
-      "edits the multi-file workspace, with first-party grammars for Zig, Haskell, Kite, and x86-64 assembly.",
-  },
-  {
-    n: "03",
-    title: "xstate + store-react",
-    detail:
-      "the recorder/player machine owns the timeline; app-level stores hold the workspace, slides, whiteboard, and settings.",
-  },
-  {
-    n: "04",
-    title: "WebContainer + xterm.js",
-    detail:
-      "Node.js in the browser for 12 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web, WASI Python), with a preview and terminal tabs.",
-  },
-  {
-    n: "05",
-    title: "In-page runners",
-    detail:
-      "Kite compiles on a Wasm build of kitec, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine; neither calls a service.",
-  },
-  {
-    n: "06",
-    title: "Sandboxed iframes",
-    detail:
-      "the live preview and every slide render in sandboxed frames; slides run no script except a nonce-locked animation driver for Google decks.",
-  },
-  {
-    n: "07",
-    title: "rrweb",
-    detail:
-      "records the preview's DOM, scroll, and input as one event stream, with corrective full snapshots, and replays it on the recording clock.",
-  },
-  {
-    n: "08",
-    title: "MediaRecorder + WebCodecs",
-    detail:
-      "narration, camera, and a screen capture that is only saved locally; cut, muted, or retaken narration is re-encoded to Ogg/Opus.",
-  },
-  {
-    n: "09",
-    title: "SCR3 codec",
-    detail:
-      "keyframes and deltas (exact Monaco edits or Rust→WASM diff-match-patch) in msgpack + fflate segments, decodable from any prefix so playback starts mid-download.",
-  },
-  {
-    n: "10",
-    title: "IndexedDB + OPFS",
-    detail:
-      "crash-recovery drafts, workspace assets by SHA-256, and learner versions; .ne payloads of 8 MiB or more go to OPFS.",
-  },
-  {
-    n: "11",
-    title: "Excalidraw",
-    detail: "the whiteboard, loaded on demand; records element deltas, not full snapshots.",
-  },
-  {
-    n: "12",
-    title: "Slides",
-    detail:
-      "Markdown (marked) or HTML slides, or a published Google Slides deck imported as SVG with its build steps.",
-  },
-  {
-    n: "13",
-    title: "ONNX Runtime Web",
-    detail:
-      "Whisper captions and Pocket TTS narration run on the device; the weights are kept in Cache Storage.",
-  },
-  {
-    n: "14",
-    title: "Coding agent",
-    detail:
-      "@openrouter/agent with the user's own key; file tools everywhere, plus preview inspection and confirmed shell commands in WebContainer lessons. The chat is recorded.",
-  },
-  {
-    n: "15",
-    title: "Studio performer",
-    detail:
-      "compiles a LessonScript into a timed plan, drives the real editor while the recorder captures it, and hands a render that passes QA to the upload flow as a draft.",
-  },
-  {
-    n: "16",
-    title: "Yjs + y-monaco",
-    detail:
-      "room documents and awareness over binary WebSockets; any participant can follow another's file, slide, or whiteboard.",
-  },
-  {
-    n: "17",
-    title: "partytracks + WebRTC",
-    detail:
-      "audio-only voice chat; join is muted, unmute publishes one Opus track, mute releases the mic. Remote voice never enters the recorder.",
-  },
-  {
-    n: "18",
-    title: "PostHog SDK",
-    detail:
-      "autocapture + custom events, exception capture, privacy-masked session replay (inputs masked, Monaco/Excalidraw blocked); replay pauses during lesson recording.",
-  },
-  {
-    n: "19",
-    title: "Hono API routes",
-    detail:
-      "lessons, playlists, authors, search, uploads, collaboration + voice, Studio, and slide images; CSRF-guarded and logged per request.",
-  },
-  {
-    n: "20",
-    title: "Assets + edge SSR",
-    detail:
-      "every request runs the Worker first so static files get COOP/COEP too; the landing page renders at the edge, and lesson pages get real metadata.",
-  },
-  {
-    n: "21",
-    title: "Auth",
-    detail:
-      "Google OAuth (PKCE) and One Tap create accounts, passkeys sign in to them, and the session is an opaque cookie looked up in D1.",
-  },
-  {
-    n: "22",
-    title: "Playground proxies",
-    detail:
-      "Go, Kotlin, Rust, Zig, and Haskell runs with no sign-in needed, each behind a kill switch, a rate limit (per user, or per IP when signed out), and a one-hour result cache.",
-  },
-  {
-    n: "23",
-    title: "/api/openrouter",
-    detail:
-      "forwards the agent's streamed model calls so the SDK's headers clear CORS; it stores and logs no key.",
-  },
-  {
-    n: "24",
-    title: "/api/proxy",
-    detail:
-      "https-only fetch that blocks loopback and private hosts; serves slide-image fallbacks, avatars, and cross-origin .ne files.",
-  },
-  {
-    n: "25",
-    title: "D1",
-    detail:
-      "users, sessions, passkeys, lessons, playlists, per-user feature flags, users' provider API keys (AthanLab) encrypted by the Worker with AES-256-GCM, a failed-sign-in breaker, and the collaboration room and access-control plane.",
-  },
-  {
-    n: "26",
-    title: "R2",
-    detail:
-      "lesson media (.ne, audio, camera, captions, thumbnails), imported slide images, and private content-addressed collaboration assets.",
-  },
-  {
-    n: "27",
-    title: "Workers KV",
-    detail:
-      "playground Run/Format results; eventually consistent and fail-open. The public lesson/playlist catalog reads D1 directly.",
-  },
-  {
-    n: "28",
-    title: "Room Durable Objects",
-    detail:
-      "hibernating binary WebSockets, authoritative awareness, and a per-room SQLite Yjs log compacted on an alarm.",
-  },
-  {
-    n: "29",
-    title: "Voice Durable Objects",
-    detail:
-      "per-room voice roster and per-connection capabilities; the only path to the SFU API — validates session/track/mid ownership before proxying.",
-  },
-  {
-    n: "30",
-    title: "Rate Limiting",
-    detail:
-      "budgets for the playground proxies (per user, or per IP when signed out) and for AthanLab key checks and narration calls (per user); a route whose binding is missing refuses the request instead of calling out.",
-  },
-  {
-    n: "31",
-    title: "StackBlitz",
-    detail: "the WebContainer runtime boots in a hidden iframe from stackblitz.com.",
-  },
-  {
-    n: "32",
-    title: "Google Slides",
-    detail:
-      "the browser fetches a published deck directly; the Worker copies its Google-hosted images into R2.",
-  },
-  {
-    n: "33",
-    title: "Hugging Face",
-    detail: "Whisper and Pocket TTS weights at pinned revisions, downloaded once per browser.",
-  },
-  {
-    n: "34",
-    title: "PostHog Cloud (US)",
-    detail:
-      "receives analytics, masked replay, and error reports; edge request logs carry X-POSTHOG-* ids to cross-link them.",
-  },
-  {
-    n: "35",
-    title: "Google Identity",
-    detail: "OAuth code exchange, and One Tap token checks against Google's published keys.",
-  },
-  {
-    n: "36",
-    title: "Language playgrounds",
+    noteTitle: "Language playgrounds",
     detail:
       "play.golang.org, api.kotlinlang.org (Kotlin 2.4.10), play.rust-lang.org, zig-play.dev (Zig 0.16.0), and play.haskell.org (GHC 9.12.4).",
   },
   {
-    n: "37",
     title: "OpenRouter",
+    lines: ["model API for the coding agent,", "called with the user's own key"],
     detail: "the model API behind the coding agent, called with the user's own key.",
   },
   {
-    n: "38",
     title: "AthanLab",
+    lines: ["Burmese Studio narration with the", "user's own encrypted key"],
     detail:
       "Burmese Studio narration with the user's own encrypted key. Only the Worker calls api.athanlab.com, as AthanLab's terms require; each uncached dialog is one job charged to the user's AthanLab balance. A D1 breaker admits at most 8 failing key checks per 5-minute window (16 in any 5 minutes, under the 20 that make AthanLab block our shared network), and a per-user D1 lease, bound to the sealed key, holds other requests with the same stored key back until AthanLab has answered the first, so a revoked key is not rejected once per concurrent request.",
   },
   {
-    n: "39",
     title: "Modal · VoxCPM2",
+    lines: ["Burmese Studio narration,", "gated by a D1 feature flag"],
     detail:
       "Burmese Studio narration for users with the studio.burmese-voxcpm2 D1 flag; the Modal credentials stay in the Worker.",
   },
   {
-    n: "40",
     title: "Upstash QStash",
+    lines: ["signed callback purges a", "room 7 days after it closes"],
     detail:
       "seven days after a room closes, a signed job purges its Durable Object document, R2 assets, and D1 rows.",
   },
   {
-    n: "41",
     title: "Cloudflare Realtime SFU",
+    lines: ["audio-only WebRTC media plane,", "Opus fan-out between members"],
     detail:
       "Opus audio forwarding between room members over DTLS-SRTP; roomless by design, so the app decides who may subscribe. Feature-flagged via VOICE_CHAT_ENABLED.",
   },
 ];
+
+// Tags count up in reading order: the client, edge and storage layers top to
+// bottom, then the services the browser and the worker call. The Notes list
+// every item in the same order, so note N is the item tagged N.
+function numberInOrder(groups: DiagramItem[][]): NumberedItem[][] {
+  let tag = 0;
+  return groups.map((group) => group.map((item) => ({ ...item, tag: ++tag })));
+}
+
+const numberedGroups = numberInOrder([
+  clientItems,
+  edgeItems,
+  storageItems,
+  browserServiceItems,
+  workerServiceItems,
+]);
+const [clientChips, edgeChips, storageChips, browserServices, workerServices] = numberedGroups;
+const notes = numberedGroups.flat();
 
 // Diagram geometry. Layers stack in the left column; external services hang
 // off a dashed bus in the right column, grouped by which layer calls them.
@@ -1115,10 +954,10 @@ export default function ArchitecturePage() {
             <h2>Notes</h2>
             <ol className="notes-grid" role="list">
               {notes.map((note) => (
-                <li className="note" key={note.n}>
-                  <span className="n">{note.n}</span>
+                <li className="note" key={note.tag}>
+                  <span className="n">{String(note.tag).padStart(2, "0")}</span>
                   <span>
-                    <b>{note.title} —</b> <span className="d">{note.detail}</span>
+                    <b>{note.noteTitle ?? note.title} —</b> <span className="d">{note.detail}</span>
                   </span>
                 </li>
               ))}
@@ -1210,7 +1049,7 @@ export default function ArchitecturePage() {
                   <td>
                     <code>workers kv</code>{" "}
                     <span className="note-inline">
-                      — fail-open lesson, playlist, and playground-result cache
+                      — fail-open playground Run/Format result cache
                     </span>
                   </td>
                 </tr>
