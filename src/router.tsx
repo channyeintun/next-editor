@@ -145,7 +145,7 @@ export const router = createBrowserRouter([
   {
     path: "/",
     // The landing route is eager so its first client render exactly matches the
-    // HTML emitted by the edge renderer. Application-heavy routes remain lazy.
+    // HTML prerendered at build time. Application-heavy routes remain lazy.
     Component: LandingPageRoute,
     ErrorBoundary: RouteErrorBoundary,
   },

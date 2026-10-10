@@ -22,7 +22,7 @@ import { zigPlaygroundRoute } from "./routes/zigPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { studioRoute } from "./routes/studio";
 import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
-import { renderLandingResponse } from "./ssr/landing";
+import { LANDING_DOCUMENT_URLS, serveAppShell, serveLandingDocument } from "./ssr/staticDocuments";
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 import { serveStaticFile } from "./staticAssets";
 
@@ -119,10 +119,12 @@ app.route("/api/studio/tts/athanlab", athanlabTtsRoute);
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.
 app.route("/api/slide-images", slideImagesRoute);
 
-// Render the public landing page at the edge so crawlers and answer engines
-// receive its semantic content in the initial HTML. The hydrated browser app
-// takes over after load; editor and lesson routes keep their existing CSR path.
-app.get("/", async (c) => renderLandingResponse(await c.env.ASSETS.fetch(c.req.raw)));
+// The public landing page with its markup in the initial HTML, for crawlers
+// and answer engines; the browser app hydrates it. Prerendered by the client
+// build (ssr/landing.tsx), so it is served as a static asset, as is. Its file
+// has URLs of its own, which keep answering like any path with no file.
+app.get("/", (c) => serveLandingDocument(c.env.ASSETS, c.req.raw));
+app.on(["GET", "HEAD"], LANDING_DOCUMENT_URLS, (c) => serveAppShell(c.env.ASSETS, c.req.raw));
 
 // Data-only SSR for lesson detail (ssr/lessonDetailRoute.ts): per-lesson
 // metadata for crawlers and the row dehydrated into React Query's cache, on

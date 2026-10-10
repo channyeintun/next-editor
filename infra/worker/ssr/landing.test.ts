@@ -1,19 +1,41 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server.edge";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vite-plus/test";
+import { landingPrerenderPlugin } from "../../../build/landingPrerenderPlugin";
 import LandingPage from "../../../src/components/LandingPage";
 import {
+  buildLandingDocument,
   injectLandingFontPreloads,
   injectLandingMarkup,
   renderLandingMarkup,
-  renderLandingResponse,
 } from "./landing";
+import { LANDING_DOCUMENT_FILE } from "./staticDocuments";
 
 const repoFile = (path: string) =>
   readFileSync(fileURLToPath(new URL(`../../../${path}`, import.meta.url)), "utf8");
+
+type WriteBundle = (
+  this: unknown,
+  options: { dir?: string },
+  bundle: Record<string, { type: string; source?: string }>,
+) => Promise<void>;
+
+/** Runs the client build's prerender step against `shell` and returns what it wrote. */
+async function prerenderFromShell(shell: string): Promise<string> {
+  const dir = mkdtempSync(join(tmpdir(), "landing-prerender-"));
+  try {
+    const writeBundle = landingPrerenderPlugin().writeBundle as WriteBundle;
+    await writeBundle.call({}, { dir }, { "index.html": { type: "asset", source: shell } });
+    return readFileSync(join(dir, LANDING_DOCUMENT_FILE), "utf8");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 function fontPreloadHrefs(document: string): string[] {
   return [...document.matchAll(/<link rel="preload" href="([^"]+)" as="font"[^>]*>/g)].map(
@@ -50,34 +72,30 @@ describe("landing page SSR", () => {
     expect(browserMarkup).toBe(renderLandingMarkup());
   });
 
-  it("injects HTML responses and drops stale representation headers", async () => {
-    const assetResponse = new Response(
-      '<!doctype html><html><body><div id="root"></div></body></html>',
-      {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          etag: '"static-index"',
-          "last-modified": "Fri, 17 Jul 2026 00:00:00 GMT",
-        },
-      },
-    );
+  it("builds the landing document from the app shell", () => {
+    const document = buildLandingDocument(repoFile("index.html"));
 
-    const response = await renderLandingResponse(assetResponse);
-    const document = await response.text();
-
-    expect(document).toContain('data-ssr="landing"');
+    expect(document).toContain('<div id="root" data-ssr="landing">');
     expect(document).toContain("Turn real coding sessions into interactive tutorials");
-    expect(response.headers.get("etag")).toBeNull();
-    expect(response.headers.get("last-modified")).toBeNull();
+    expect(document).toBe(
+      injectLandingFontPreloads(injectLandingMarkup(repoFile("index.html"), renderLandingMarkup())),
+    );
   });
 
-  it("preloads the hero fonts at the top of the landing document's head", async () => {
-    const response = await renderLandingResponse(
-      new Response(repoFile("index.html"), {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      }),
+  it("is written beside index.html by the client build", async () => {
+    const shell = repoFile("index.html");
+
+    expect(await prerenderFromShell(shell)).toBe(buildLandingDocument(shell));
+  });
+
+  it("fails the build rather than write a landing page without its markup", async () => {
+    await expect(prerenderFromShell("<html><body><main></main></body></html>")).rejects.toThrow(
+      "no empty #root",
     );
-    const document = await response.text();
+  });
+
+  it("preloads the hero fonts at the top of the landing document's head", () => {
+    const document = buildLandingDocument(repoFile("index.html"));
 
     expect(fontPreloadHrefs(document)).toEqual([
       "/fonts/pp-neue-machina-inktrap-ultrabold.woff2",
@@ -105,13 +123,5 @@ describe("landing page SSR", () => {
 
   it("leaves the shared index.html without font preloads", () => {
     expect(fontPreloadHrefs(repoFile("index.html"))).toEqual([]);
-  });
-
-  it("preserves non-HTML asset responses", async () => {
-    const assetResponse = new Response("not html", {
-      headers: { "content-type": "text/plain" },
-    });
-
-    await expect(renderLandingResponse(assetResponse)).resolves.toBe(assetResponse);
   });
 });

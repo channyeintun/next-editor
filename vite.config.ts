@@ -7,6 +7,7 @@ import { proxyPlugin } from "./tube/vite/proxyPlugin";
 import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
+import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -64,6 +65,9 @@ export default ({ mode }: { mode: string }) => {
         sourcemaps: { deleteAfterUpload: true },
       }),
       tailwindcss(),
+      // Writes dist/landing.html, the landing page the Worker serves at `/`
+      // (infra/worker/ssr/landing.tsx rendered once per build).
+      landingPrerenderPlugin(),
       lazyPlugins(async () => {
         const { default: react, reactCompilerPreset } = await import("@vitejs/plugin-react");
         const { default: babel } = await import("@rolldown/plugin-babel");
