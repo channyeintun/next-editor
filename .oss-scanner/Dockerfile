@@ -22,7 +22,11 @@ COPY . /src
 WORKDIR /src
 
 # A large tarball (posthog-js) can arrive truncated on a slow link; retry before failing the build.
-RUN for attempt in 1 2 3; do bun install --frozen-lockfile && exit 0; echo "bun install failed (attempt $attempt), retrying"; rm -rf node_modules; sleep 10; done; exit 1
+# bun's download cache is dropped in the same layer so the image does not carry the packages twice.
+RUN for attempt in 1 2 3; do \
+      bun install --frozen-lockfile && rm -rf /root/.bun/install/cache && exit 0; \
+      echo "bun install failed (attempt $attempt), retrying"; rm -rf node_modules; sleep 10; \
+    done; exit 1
 
 # Production build without the PostHog source-map upload: those two plugins need deploy secrets and
 # network access, and nothing else depends on them. Everything else (React Compiler, Brotli sidecars,
