@@ -22,6 +22,16 @@ export function usePlaybackSettings(): PlaybackSettingsContext {
 }
 
 /**
+ * One playback setting, for a component that renders from it alone: it re-renders only
+ * when that setting changes, not on every drag of the speed or volume control.
+ */
+export function usePlaybackSetting<K extends keyof PlaybackSettingsContext>(
+  key: K,
+): PlaybackSettingsContext[K] {
+  return useSelector(playbackSettingsStore, (s) => s.context[key]);
+}
+
+/**
  * Changes the player's speed or volume for the viewer. Each goes to the machine (drives this
  * playback immediately) AND the settings store (persists it as a player-level setting — Editor
  * re-applies it when a fresh machine instance loads a recording), in that order.

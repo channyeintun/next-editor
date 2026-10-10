@@ -72,6 +72,14 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
 };
 
 /**
+ * The timeline's length in ms, which grows as a lesson streams in. For a component that
+ * needs only that and the actor (`NextEditorActorContext.useActorRef`), so a speed or
+ * volume change does not re-render it the way `useNextEditorPlayback` would.
+ */
+export const useTimelineDurationMs = (): number =>
+  NextEditorActorContext.useSelector(selectDuration);
+
+/**
  * Hook to access live playback time with high frequency.
  * Only the component using this hook will re-render on every tick.
  */

@@ -4,13 +4,12 @@ import { findChapterIndexAt } from "../core/src/utils/chapters";
 import { isPlayerKeyTarget } from "../core/src/utils/playerKeyTargets";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import { MAX_PLAYBACK_SPEED, MIN_PLAYBACK_SPEED } from "../core/src/machine/playbackValues";
-import {
-  useNextEditorActions,
-  useNextEditorMetadata,
-  useNextEditorPlayback,
-} from "./useNextEditorContext";
-import { useCaptionStore, useCaptionStoreTrigger } from "./useCaptionStore";
+import { selectDuration, selectPlaybackSpeed, selectVolume } from "../core/src/useNextEditor";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
+import { useCaptionStoreInstance } from "../contexts/CaptionStoreContext";
+import { useNextEditorActions, useNextEditorMetadata } from "./useNextEditorContext";
 import { useApplySpeedAndVolume } from "./usePlaybackSettings";
+import { selectCaptionsEnabled } from "../stores/captionStore";
 import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 
 // ============================================================================
@@ -135,9 +134,10 @@ const formatSpeed = (speed: number) => `${speed}×`;
 export function usePlayerShortcuts() {
   const { play, pause, seekTo } = useNextEditorActions();
   const { isPlaying, isRecording, currentRecording } = useNextEditorMetadata();
-  const { editorActor, playbackSpeed, volume, durationMs } = useNextEditorPlayback();
-  const { enabled: captionsEnabled } = useCaptionStore();
-  const captionTrigger = useCaptionStoreTrigger();
+  // Speed, volume, the timeline's length and the captions switch are read when a key is
+  // pressed, not subscribed to: dragging the volume would re-render the whole player bar.
+  const editorActor = NextEditorActorContext.useActorRef();
+  const captionStore = useCaptionStoreInstance();
   const { applySpeed, applyVolume } = useApplySpeedAndVolume();
   const [feedback, setFeedback] = useState<{ text: string; at: number } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -156,6 +156,8 @@ export function usePlayerShortcuts() {
   // is added once per loaded recording instead of again on every change these values see.
   const runShortcut = useEffectEvent((shortcut: PlayerShortcut): boolean => {
     if (!currentRecording) return false;
+    const snapshot = editorActor.getSnapshot();
+    const durationMs = selectDuration(snapshot);
     const duration = durationMs > 0 ? durationMs : currentRecording.duration;
     const chapters = currentRecording.chapters ?? [];
     const hasCaptions = Boolean(currentRecording.captions?.length);
@@ -194,6 +196,7 @@ export function usePlayerShortcuts() {
         seek(duration);
         return true;
       case "speedBy": {
+        const playbackSpeed = selectPlaybackSpeed(snapshot);
         const speed = Math.min(
           MAX_PLAYBACK_SPEED,
           Math.max(MIN_PLAYBACK_SPEED, playbackSpeed + shortcut.delta),
@@ -210,7 +213,8 @@ export function usePlayerShortcuts() {
         if (title) show(title);
         return true;
       }
-      case "toggleMute":
+      case "toggleMute": {
+        const volume = selectVolume(snapshot);
         if (volume > 0) {
           unmutedVolumeRef.current = volume;
           applyVolume(0);
@@ -220,11 +224,14 @@ export function usePlayerShortcuts() {
           show("Sound on");
         }
         return true;
-      case "toggleCaptions":
+      }
+      case "toggleCaptions": {
         if (!hasCaptions) return false;
-        captionTrigger.toggleEnabled();
+        const captionsEnabled = selectCaptionsEnabled(captionStore.getSnapshot().context);
+        captionStore.trigger.toggleEnabled();
         show(captionsEnabled ? "Captions off" : "Captions on");
         return true;
+      }
       case "toggleHelp":
         setHelpOpen((open) => !open);
         return true;

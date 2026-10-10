@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { PropsWithChildren } from "react";
+import { Profiler, type PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import MediaControls from "./MediaControls";
 import { NextEditorProvider } from "../contexts/NextEditorProvider";
@@ -15,6 +15,7 @@ import { compressFrames } from "../core/src/utils/frameStreamEncoder";
 import type { Recording } from "../core/src/types";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { CaptionGenerationState } from "../hooks/useCaptionGeneration";
+import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 
 // Captioning runs a speech model; here it only needs to end the way a failed job does.
 const generation = vi.hoisted(() => ({ fail: null as ((message: string) => void) | null }));
@@ -82,15 +83,20 @@ function Providers({ children }: PropsWithChildren) {
   );
 }
 
-const seen: { actions: NextEditorActions | null; loaded: Recording | null } = {
+const seen: { actions: NextEditorActions | null; loaded: Recording | null; barCommits: number } = {
   actions: null,
   loaded: null,
+  barCommits: 0,
 };
 
 function Player({ large = false, recordMode = false }: { large?: boolean; recordMode?: boolean }) {
   seen.actions = useNextEditorActions();
   seen.loaded = useNextEditorMetadata().currentRecording;
-  return <MediaControls recordMode={recordMode} large={large} />;
+  return (
+    <Profiler id="player-bar" onRender={() => (seen.barCommits += 1)}>
+      <MediaControls recordMode={recordMode} large={large} />
+    </Profiler>
+  );
 }
 
 /** The learner's player bar with the lesson loaded. */
@@ -127,6 +133,28 @@ afterEach(() => {
 });
 
 describe("MediaControls", () => {
+  // The bar renders neither value (PlaybackSpeedVolume, inside Settings, does), so a drag
+  // of either control must not re-render the whole bar on every input event.
+  it("does not re-render when the speed or volume changes", async () => {
+    await renderPlayer();
+    const { speed, volume } = playbackSettingsStore.getSnapshot().context;
+    const commits = seen.barCommits;
+
+    act(() => {
+      seen.actions!.setVolume(0.4);
+      playbackSettingsStore.trigger.setVolume({ volume: 0.4 });
+    });
+    act(() => {
+      seen.actions!.setPlaybackSpeed(1.5);
+      playbackSettingsStore.trigger.setSpeed({ speed: 1.5 });
+    });
+    expect(playbackSettingsStore.getSnapshot().context).toMatchObject({ speed: 1.5, volume: 0.4 });
+    expect(seen.barCommits).toBe(commits);
+
+    playbackSettingsStore.trigger.setVolume({ volume });
+    playbackSettingsStore.trigger.setSpeed({ speed });
+  });
+
   it("keeps the large bar's played fill distinct from its track", async () => {
     // The large bar is as tall as its thumb, so the fill's edge is all that shows the
     // position: blue-300 on the slate-600 track is 4.2:1 (blue-500 was 2.06:1).

@@ -15,9 +15,9 @@ import { useSelector } from "@xstate/store-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
-  useNextEditorPlayback,
   useLiveTimeValue,
   useRecordingElapsedMs,
+  useTimelineDurationMs,
 } from "../hooks/useNextEditorContext";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
@@ -43,7 +43,7 @@ import {
   selectLivePreviewOn,
 } from "../stores/cameraOverlayStore";
 import { useCaptionStore } from "../hooks/useCaptionStore";
-import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
+import { usePlaybackSetting } from "../hooks/usePlaybackSettings";
 import { useRecordingSettings } from "../hooks/useRecordingSettings";
 import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
@@ -202,10 +202,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     collaboration?.isHost ?? false,
   );
 
-  const { durationMs: timelineDurationMs, editorActor } = useNextEditorPlayback();
+  // Not useNextEditorPlayback or usePlaybackSettings: the bar does not render the speed
+  // or volume (PlaybackSpeedVolume does), and every drag of either would re-render it.
+  const editorActor = NextEditorActorContext.useActorRef();
+  const timelineDurationMs = useTimelineDurationMs();
 
   const captionPreference = useCaptionStore();
-  const { autoplay, continueToNext, characterShortcuts } = usePlaybackSettings();
+  const autoplay = usePlaybackSetting("autoplay");
+  const continueToNext = usePlaybackSetting("continueToNext");
+  const characterShortcuts = usePlaybackSetting("characterShortcuts");
   const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
   const [showSettings, setShowSettings] = useState(false);
   // Kept here rather than in CaptionsMenuButton, which unmounts while no lesson with captions

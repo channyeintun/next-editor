@@ -5,8 +5,8 @@ import {
   useLiveTime,
   useNextEditorActions,
   useNextEditorMetadata,
-  useNextEditorPlayback,
 } from "../hooks/useNextEditorContext";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
 import { applyRecordingEdit } from "../core/src/recordingEdit";
@@ -157,7 +157,7 @@ export default function RecordingEditPanel({
   const { currentRecording } = useNextEditorMetadata();
   // The playhead is read when an edge is marked, not subscribed to: useLiveTime would
   // re-render the whole panel on every frame.
-  const { editorActor } = useNextEditorPlayback();
+  const editorActor = NextEditorActorContext.useActorRef();
   const [edits, setEdits] = useState<EditSpan[]>([]);
   const [selection, setSelection] = useState<MediaSpan | null>(null);
   const [narration, setNarration] = useState<{ blob: Blob; peaks: AudioPeaks } | null>(null);
