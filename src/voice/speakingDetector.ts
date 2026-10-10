@@ -10,21 +10,43 @@ export interface SpeakingDetectorHandle {
   stop: () => void;
 }
 
+// Every detector (the local microphone and one per remote speaker) shares one
+// AudioContext: browsers cap how many a page may hold, and a failed
+// construction would silently drop that speaker's indicator. Each detector
+// keeps its own source and analyser; the last one to stop closes the context.
+let shared: { context: AudioContext; users: number } | null = null;
+
+function acquireContext(): AudioContext {
+  shared ??= { context: new AudioContext(), users: 0 };
+  shared.users += 1;
+  return shared.context;
+}
+
+function releaseContext(): void {
+  if (!shared) return;
+  shared.users -= 1;
+  if (shared.users > 0) return;
+  void shared.context.close().catch(() => undefined);
+  shared = null;
+}
+
 export function createSpeakingDetector(
   track: MediaStreamTrack,
   onChange: (isSpeaking: boolean) => void,
 ): SpeakingDetectorHandle {
   if (typeof AudioContext === "undefined") return { stop: () => undefined };
-  let context: AudioContext;
+  let acquired = false;
   let source: MediaStreamAudioSourceNode;
   let analyser: AnalyserNode;
   try {
-    context = new AudioContext();
+    const context = acquireContext();
+    acquired = true;
     source = context.createMediaStreamSource(new MediaStream([track]));
     analyser = context.createAnalyser();
     analyser.fftSize = 512;
     source.connect(analyser);
   } catch {
+    if (acquired) releaseContext();
     return { stop: () => undefined };
   }
 
@@ -61,8 +83,12 @@ export function createSpeakingDetector(
     }
   }, SAMPLE_INTERVAL_MS);
 
+  let stopped = false;
   return {
     stop() {
+      // A second stop must not release the shared context a second time.
+      if (stopped) return;
+      stopped = true;
       clearInterval(interval);
       try {
         source.disconnect();
@@ -70,7 +96,7 @@ export function createSpeakingDetector(
       } catch {
         // Nodes may already be disconnected.
       }
-      void context.close().catch(() => undefined);
+      releaseContext();
       if (speaking) onChange(false);
     },
   };
