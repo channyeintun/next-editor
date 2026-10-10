@@ -48,7 +48,12 @@ import { addEscapeThenTabExit, LEAVE_EDITOR_HINT } from "./editorTabFocus";
 
 const Preview = lazy(() => import("./Preview"));
 interface CodeEditorProps {
-  showImportExport?: boolean;
+  /**
+   * The author's editor, not a read-only lesson: the header offers starters,
+   * New Editor, recording and project import/export, the tour, and the slides
+   * manager (a read-only lesson gets only the presentation toggle).
+   */
+  isAuthoring?: boolean;
   breadcrumb?: ReactNode;
 }
 
@@ -58,10 +63,7 @@ type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
  */
 
-const CodeEditorComponent: React.FC<CodeEditorProps> = ({
-  showImportExport = false,
-  breadcrumb,
-}) => {
+const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, breadcrumb }) => {
   // Opt out of the React Compiler. Monaco is a heavily imperative integration:
   // the active model is reconciled during render (syncWorkspaceModel /
   // getOrCreatePlaybackModel below) and the editor is wired through the
@@ -654,8 +656,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     [handleWorkspaceEvent, isRecording, shouldTrackWorkspaceChanges],
   );
   const editorHeader = useMemo(
-    () => <EditorHeader showImportExport={showImportExport} breadcrumb={breadcrumb} />,
-    [breadcrumb, showImportExport],
+    () => <EditorHeader isAuthoring={isAuthoring} breadcrumb={breadcrumb} />,
+    [breadcrumb, isAuthoring],
   );
   const fileSidebar = useMemo(() => <FileSidebar />, []);
   const runtimeDock = useMemo(() => <RuntimeDock lessonType={lessonType} />, [lessonType]);

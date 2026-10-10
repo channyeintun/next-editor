@@ -94,12 +94,12 @@ export function WhiteboardHeaderButton() {
 }
 
 interface EditorHeaderProps {
-  showImportExport: boolean;
+  isAuthoring: boolean;
   /** Replaces the static "Editor" label — e.g. a /learn/:slug breadcrumb trail. */
   breadcrumb?: ReactNode;
 }
 
-function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
+function EditorHeader({ isAuthoring, breadcrumb }: EditorHeaderProps) {
   const { isSaving, errorMessage } = useWorkspaceSaveStatus();
   const lessonType = useWorkspaceLessonType();
 
@@ -126,11 +126,11 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
       </div>
       <div className="flex items-center gap-2">
         <CollaborationPanel />
-        <WorkspaceSettingsButton showImportExport={showImportExport} />
+        <WorkspaceSettingsButton isAuthoring={isAuthoring} />
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
           <WhiteboardHeaderButton />
-          <SlidesButton presentationToggleOnly={!showImportExport} />
+          <SlidesButton presentationToggleOnly={!isAuthoring} />
           {/* Go, Kotlin, Rust, and Python lessons have no preview surface — the
               control is absent, not disabled. */}
           {lessonSupportsPreview(lessonType) ? <PreviewHeaderButton /> : null}

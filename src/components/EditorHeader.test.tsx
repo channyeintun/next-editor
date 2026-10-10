@@ -186,7 +186,7 @@ describe("WorkspaceSettingsButton", () => {
   // Opens the menu the way a keyboard user does: focus on the button, then
   // activate it, then move focus onto the item that is about to be chosen.
   function openMenuAndFocus(itemName: string) {
-    render(<WorkspaceSettingsButton showImportExport />);
+    render(<WorkspaceSettingsButton isAuthoring />);
     const settingsButton = screen.getByRole("button", { name: "Open workspace settings" });
     settingsButton.focus();
     fireEvent.click(settingsButton);
@@ -297,7 +297,7 @@ describe("WorkspaceSettingsButton", () => {
     });
 
     it("resets the runtime before swapping in an imported zip, then saves and runs it", async () => {
-      const { container } = render(<WorkspaceSettingsButton showImportExport />);
+      const { container } = render(<WorkspaceSettingsButton isAuthoring />);
       const input = container.querySelector<HTMLInputElement>('input[type="file"]');
       if (!input) throw new Error("expected the zip file input");
 

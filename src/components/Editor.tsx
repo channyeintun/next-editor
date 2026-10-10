@@ -215,7 +215,7 @@ function EditorLayout({
             shell, the player bar, and the "Loading recording…" overlay paint
             immediately instead. */}
         <Suspense fallback={<EditorShellSkeleton breadcrumb={breadcrumb} fill />}>
-          <CodeEditor showImportExport={!readOnly} breadcrumb={breadcrumb} />
+          <CodeEditor isAuthoring={!readOnly} breadcrumb={breadcrumb} />
           <ProductTourOnce
             recordingLoading={recordingLoading}
             loadError={loadError}

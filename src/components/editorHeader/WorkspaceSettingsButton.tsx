@@ -43,11 +43,7 @@ const LESSON_TYPE_OPTIONS: LessonTypeOption[] = WORKSPACE_LESSON_TYPES.map((valu
 }));
 
 /** The header's Settings button and the workspace menu it opens. */
-export default function WorkspaceSettingsButton({
-  showImportExport,
-}: {
-  showImportExport: boolean;
-}) {
+export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: boolean }) {
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -302,16 +298,16 @@ export default function WorkspaceSettingsButton({
               role="menu"
               className="absolute right-0 top-full z-2147483647 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
-              {/* Outside the showImportExport block on purpose: see isVisible. */}
+              {/* The submenu hides itself from isAuthoring: see isVisible. */}
               <StarterTemplateSubmenu
-                isVisible={showImportExport}
+                isVisible={isAuthoring}
                 options={LESSON_TYPE_OPTIONS}
                 activeLessonType={lessonType}
                 onSelect={(nextLessonType) => {
                   void handleSelectLessonType(nextLessonType);
                 }}
               />
-              {showImportExport ? (
+              {isAuthoring ? (
                 <>
                   <div className="my-1 h-px bg-slate-700" />
 
@@ -370,7 +366,7 @@ export default function WorkspaceSettingsButton({
                 }}
               />
 
-              {showImportExport ? (
+              {isAuthoring ? (
                 <>
                   <div className="my-1 h-px bg-slate-700" />
 
