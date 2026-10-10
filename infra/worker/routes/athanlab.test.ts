@@ -344,9 +344,13 @@ async function settle<T>(run: () => T | Promise<T>): Promise<T> {
       settled = true;
     });
     while (!settled) {
-      await vi.advanceTimersByTimeAsync(250);
-      // Let real I/O (WebCrypto) finish between steps of fake time.
+      // Real I/O (WebCrypto, SQLite) runs first, and fake time moves only while
+      // the request waits on one of its own timers. Stepping the clock during
+      // real I/O added phantom seconds on a slow machine: a 5 s lease wait once
+      // measured 16.5 s.
       await new Promise((resolve) => setImmediate(resolve));
+      if (settled || vi.getTimerCount() === 0) continue;
+      await vi.advanceTimersByTimeAsync(250);
     }
     return await pending;
   } finally {
