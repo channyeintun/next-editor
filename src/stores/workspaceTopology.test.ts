@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createWorkspaceStore } from "./workspaceStore";
+import {
+  createWorkspaceStore,
+  selectWorkspaceLoadVersion,
+  selectWorkspaceProjectId,
+} from "./workspaceStore";
 import type { WorkspaceProject, WorkspaceTextFile } from "../types/workspace";
 
 function file(path: string, content: string): WorkspaceTextFile {
@@ -179,5 +183,44 @@ describe("a project always keeps one file", () => {
     expect(Object.keys(after.project.files)).toEqual(["go.mod"]);
     expect(after.project.lessonType).toBe("go");
     expect(after.activeFilePath).toBe("go.mod");
+  });
+});
+
+// The playground runner dock resets its console and stops a pending Run at a
+// lesson boundary, which it reads as the load version plus the project id. A
+// live room re-projects its project through reconcileExternalProject on every
+// file create, rename or delete, so that must change neither.
+describe("lesson boundaries", () => {
+  it("keeps the load version and project id when an external project adds a file", () => {
+    const store = createWorkspaceStore({ activeFilePath: "src/a.ts", project: project() });
+    const before = initialized(store);
+
+    store.trigger.reconcileExternalProject({
+      project: {
+        ...before.project,
+        files: { ...before.project.files, "src/c.ts": file("src/c.ts", "export const c = 1;") },
+      },
+    });
+
+    const after = initialized(store);
+    expect(Object.keys(after.project.files)).toContain("src/c.ts");
+    expect(after.projectVersion).toBe(before.projectVersion + 1);
+    expect(selectWorkspaceLoadVersion(after)).toBe(selectWorkspaceLoadVersion(before));
+    expect(selectWorkspaceProjectId(after)).toBe(selectWorkspaceProjectId(before));
+  });
+
+  it("bumps the load version on every load, even of the same project", () => {
+    const store = createWorkspaceStore({ activeFilePath: "src/a.ts", project: project() });
+    const before = initialized(store);
+
+    store.trigger.loadProject({
+      project: project(),
+      activeFilePath: "src/a.ts",
+      savedSnapshot: { activeFilePath: "src/a.ts", project: project() },
+    });
+
+    expect(selectWorkspaceLoadVersion(initialized(store))).toBe(
+      selectWorkspaceLoadVersion(before) + 1,
+    );
   });
 });

@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 // whatever hooks sit behind them) are real, the network and the in-page
 // compilers are not.
 const harness = vi.hoisted(() => {
-  // The session, editor and collaboration hooks re-render their caller when
-  // their value changes, as the real ones do; a test changes `state`, then
-  // calls notify().
+  // The session, editor, workspace and collaboration hooks re-render their
+  // caller when their value changes, as the real ones do; a test changes
+  // `state`, then calls notify().
   const listeners = new Set<() => void>();
   const reactive = {
     version: 0,
@@ -29,6 +29,9 @@ const harness = vi.hoisted(() => {
     auth: { isSignedIn: true, isLoading: false },
     metadata: { currentRecording: null as unknown, isRecording: false, isPlaying: false },
     project: { id: "project-1", files: {} as Record<string, { path: string; content: string }> },
+    // The workspace's loadVersion: only a load (a lesson, or a replayed
+    // snapshot) bumps it.
+    loadVersion: 1,
     collaboration: null as unknown,
   };
   const client = {
@@ -84,10 +87,20 @@ vi.mock("../hooks/useNextEditorContext", async () => {
     },
   };
 });
-vi.mock("../hooks/useWorkspace", () => ({
-  useWorkspaceActions: () => harness.workspace,
-  useWorkspaceProjectVersion: () => 1,
-}));
+vi.mock("../hooks/useWorkspace", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    useWorkspaceActions: () => harness.workspace,
+    useWorkspaceLoadVersion: () => {
+      useSyncExternalStore(harness.reactive.subscribe, harness.reactive.getVersion);
+      return harness.state.loadVersion;
+    },
+    useWorkspaceProjectId: () => {
+      useSyncExternalStore(harness.reactive.subscribe, harness.reactive.getVersion);
+      return harness.state.project.id;
+    },
+  };
+});
 vi.mock("../contexts/CollaborationContext", async () => {
   const { useSyncExternalStore } = await import("react");
   return {
@@ -488,6 +501,7 @@ describe("playground runner panels", () => {
     harness.providers.length = 0;
     harness.state.auth = { isSignedIn: true, isLoading: false };
     harness.state.metadata = { currentRecording: null, isRecording: false, isPlaying: false };
+    harness.state.loadVersion = 1;
     harness.state.collaboration = null;
     harness.client.run.mockReturnValue(new Promise(() => {}));
     harness.client.format.mockReturnValue(new Promise(() => {}));
@@ -1006,6 +1020,71 @@ describe("playground runner panels", () => {
     expect(harness.client.stop).toHaveBeenCalledTimes(1);
     // The stopped run's result never reaches the console.
     expect(consoleLines()).toEqual(panel.run.lines.slice(0, 1));
+  });
+
+  // In a live room every file create, rename or delete, a collaborator's or
+  // the learner's own, re-projects the room's project into the workspace under
+  // the same id and load version.
+  it.each(CASES)(
+    "$kind: keeps a pending run and its console when a live room adds a file",
+    async (panel) => {
+      setFiles({ [panel.entry]: SOURCE });
+      harness.state.collaboration = { provider: {}, canWrite: true };
+      let finishRun: (result: unknown) => void = () => {};
+      harness.client.run.mockReturnValue(new Promise((resolve) => (finishRun = resolve)));
+      await renderPanel(panel);
+      await click(screen.getByRole("button", { name: "Run" }));
+      act(() =>
+        store.trigger.setTerminalScrollLines({ terminalScrollLines: { [panel.surface]: 4 } }),
+      );
+
+      setFiles({ [panel.entry]: SOURCE, "notes.txt": "added by a collaborator" });
+      act(() => harness.reactive.notify());
+      await act(async () => {
+        finishRun(panel.run.result);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(harness.client.stop).not.toHaveBeenCalled();
+      expect(consoleLines()).toEqual(panel.run.lines);
+      expect(store.getSnapshot().context.terminalScrollLines).toEqual({ [panel.surface]: 4 });
+    },
+  );
+
+  it.each(
+    CASES.flatMap((panel) => [
+      {
+        ...panel,
+        boundary: "a lesson load",
+        cross: () => {
+          harness.state.loadVersion += 1;
+        },
+      },
+      {
+        ...panel,
+        boundary: "a new project id (a zip import or a starter swap)",
+        cross: () => setFiles({ [panel.entry]: SOURCE }, "starter-workspace"),
+      },
+    ]),
+  )("$kind: resets its console and stops a pending run at $boundary", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    let finishRun: (result: unknown) => void = () => {};
+    harness.client.run.mockReturnValue(new Promise((resolve) => (finishRun = resolve)));
+    await renderPanel(panel);
+    await click(screen.getByRole("button", { name: "Run" }));
+    act(() =>
+      store.trigger.setTerminalScrollLines({ terminalScrollLines: { [panel.surface]: 4 } }),
+    );
+    expect(consoleLines()).toEqual(panel.run.lines.slice(0, 1));
+
+    panel.cross();
+    act(() => harness.reactive.notify());
+    await act(async () => finishRun(panel.run.result));
+
+    expect(harness.client.stop).toHaveBeenCalledTimes(1);
+    // The stopped run's result never reaches the next lesson's console.
+    expect(consoleLines()).toEqual([]);
+    expect(store.getSnapshot().context.terminalScrollLines).toEqual({});
   });
 
   it.each(CASES)("$kind: clears its console and forgets where it was scrolled", async (panel) => {

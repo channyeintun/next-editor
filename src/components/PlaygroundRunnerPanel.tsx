@@ -23,7 +23,11 @@ import {
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePlaygroundRunner } from "../hooks/usePlaygroundRunner";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
-import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
+import {
+  useWorkspaceActions,
+  useWorkspaceLoadVersion,
+  useWorkspaceProjectId,
+} from "../hooks/useWorkspace";
 import {
   appendRunnerConsoleLines,
   beginRunnerOperation,
@@ -112,7 +116,8 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const { handleRuntimeEvent } = useNextEditorActions();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const { getProject } = useWorkspaceActions();
-  const projectVersion = useWorkspaceProjectVersion();
+  const loadVersion = useWorkspaceLoadVersion();
+  const projectId = useWorkspaceProjectId();
   const collaboration = useOptionalCollaboration();
   const { activeOperation, request, cancel } = usePlaygroundRunner<
     Client,
@@ -138,15 +143,20 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
 
   useEffect(() => {
     // The runtime panel store is shared by the browser and playground
-    // runners. Clear their content-specific console/scroll state at
-    // language/project boundaries so output cannot leak into another lesson. A
-    // project change also supersedes a tool request started against the
-    // previous set of files.
+    // runners. Clear their content-specific console/scroll state at lesson
+    // boundaries so output cannot leak into another lesson, and supersede a
+    // tool request started against the previous lesson's files. A boundary is
+    // a language switch (which remounts this panel), a load (a lesson, or a
+    // replayed workspace snapshot), or a project with a new id (a zip import or
+    // a starter swap). In a live room every file create, rename or delete,
+    // a collaborator's or the learner's own, re-projects the room's project
+    // under the same id: that is an edit, not a boundary, so it must not cancel
+    // the learner's Run or wipe its output.
     cancel();
 
     resetRunnerConsoleForProject(runtimePanelStore);
     return () => resetRunnerConsoleForProject(runtimePanelStore);
-  }, [cancel, projectVersion, runtimePanelStore]);
+  }, [cancel, loadVersion, projectId, runtimePanelStore]);
 
   useEffect(() => {
     if (isPlaybackSnapshotActive) {
