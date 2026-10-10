@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   authorizeCloseTracks,
   authorizePullTracks,
@@ -10,6 +10,7 @@ import {
   parseVoiceSfuOperation,
   pullTracksRequestSchema,
   pushTracksRequestSchema,
+  RealtimeSfuUpstream,
   receivingTrackKey,
   receivingTrackSchema,
   renegotiateRequestSchema,
@@ -425,5 +426,111 @@ describe("upstream URL construction", () => {
     expect(buildUpstreamSfuUrl("app123", "/sessions/new")).toBe(
       "https://rtc.live.cloudflare.com/v1/apps/app123/sessions/new",
     );
+  });
+});
+
+describe("RealtimeSfuUpstream", () => {
+  const CLOSE_URL =
+    "https://rtc.live.cloudflare.com/v1/apps/app123/sessions/session-abc/tracks/close";
+
+  function stubFetch(answer: () => Promise<Response>) {
+    const fetchMock = vi.fn<typeof fetch>(answer);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  function sentRequest(fetchMock: ReturnType<typeof stubFetch>, call = 0) {
+    const [url, init] = fetchMock.mock.calls[call] ?? [];
+    return { url, init: init ?? {} };
+  }
+
+  const json = (body: unknown, status = 200) =>
+    Promise.resolve(new Response(JSON.stringify(body), { status }));
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends an authenticated JSON request to the app-scoped URL", async () => {
+    const fetchMock = stubFetch(() => json({ sessionId: "session-abc" }, 201));
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    const response = await upstream.request("/sessions/new", "POST", { sessionDescription: 1 });
+
+    expect(response?.status).toBe(201);
+    const { url, init } = sentRequest(fetchMock);
+    expect(url).toBe(buildUpstreamSfuUrl("app123", "/sessions/new"));
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({
+      Authorization: "Bearer secret-value",
+      "Content-Type": "application/json",
+    });
+    expect(init.body).toBe(JSON.stringify({ sessionDescription: 1 }));
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("sends no body for a null payload and answers null when the call throws", async () => {
+    const fetchMock = stubFetch(() => Promise.reject(new TypeError("network down")));
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    await expect(upstream.request("/sessions/new", "POST", null)).resolves.toBeNull();
+    expect(sentRequest(fetchMock).init.body).toBeNull();
+  });
+
+  it("confirms a close only when every requested mid closed", async () => {
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    const fetchMock = stubFetch(() => json({ tracks: [{ mid: "0" }, { mid: "1" }] }));
+    await expect(upstream.closeTracks("session-abc", ["0", "1", "0"])).resolves.toBe(true);
+    const { url, init } = sentRequest(fetchMock);
+    expect(url).toBe(CLOSE_URL);
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({
+      tracks: [{ mid: "0" }, { mid: "1" }],
+      force: true,
+    });
+
+    stubFetch(() => json({ tracks: [{ mid: "0" }] }));
+    await expect(upstream.closeTracks("session-abc", ["0", "1"])).resolves.toBe(false);
+    stubFetch(() => json({ tracks: [{ mid: "0", errorCode: "not_found" }] }));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(false);
+    stubFetch(() => json({ tracks: [{ mid: "0" }], errorCode: "bad" }));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(false);
+  });
+
+  it("treats a gone session as closed and any other failure as not closed", async () => {
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    stubFetch(() => json({ errorCode: "not_found" }, 404));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(true);
+    stubFetch(() => json({ tracks: [{ mid: "0" }] }, 500));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(false);
+    stubFetch(() => Promise.reject(new TypeError("network down")));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(false);
+    stubFetch(() => Promise.resolve(new Response("not json")));
+    await expect(upstream.closeTracks("session-abc", ["0"])).resolves.toBe(false);
+  });
+
+  it("closes nothing upstream for an empty mid list", async () => {
+    const fetchMock = stubFetch(() => json({ tracks: [] }));
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    await expect(upstream.closeTracks("session-abc", [])).resolves.toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("releases tracks with a forced close and swallows a failure", async () => {
+    const fetchMock = stubFetch(() => Promise.reject(new TypeError("network down")));
+    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
+
+    expect(() => upstream.releaseTracks("session-abc", ["0", "2"])).not.toThrow();
+    await Promise.resolve();
+    const { url, init } = sentRequest(fetchMock);
+    expect(url).toBe(CLOSE_URL);
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({
+      tracks: [{ mid: "0" }, { mid: "2" }],
+      force: true,
+    });
   });
 });

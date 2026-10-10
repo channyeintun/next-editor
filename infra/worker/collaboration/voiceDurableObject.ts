@@ -27,11 +27,11 @@ import {
   authorizePullTracks,
   authorizePushTracks,
   authorizeSessionScoped,
-  buildUpstreamSfuUrl,
   closeTracksRequestSchema,
   parseVoiceSfuOperation,
   pullTracksRequestSchema,
   pushTracksRequestSchema,
+  RealtimeSfuUpstream,
   receivingTrackKey,
   receivingTrackSchema,
   renegotiateRequestSchema,
@@ -71,7 +71,6 @@ const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
  */
 const MAX_VOICE_SOCKETS_PER_USER = 4;
 const MAX_PENDING_SFU_REQUESTS_PER_CONNECTION = 4;
-const UPSTREAM_TIMEOUT_MS = 15_000;
 
 // WebSocket close codes for the voice coordination socket.
 const CLOSE_SUPERSEDED = 4000;
@@ -522,15 +521,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       ...attachment.receivingMids,
     ];
     if (mids.length === 0) return;
-    const url = buildUpstreamSfuUrl(appId, `/sessions/${attachment.sfuSessionId}/tracks/close`);
-    // Not awaited, and no waitUntil (it has no effect in a Durable Object,
-    // which stays alive for pending I/O anyway).
-    void fetch(url, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ tracks: mids.map((mid) => ({ mid })), force: true }),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    }).catch(() => undefined);
+    new RealtimeSfuUpstream(appId, secret).releaseTracks(attachment.sfuSessionId, mids);
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -743,6 +734,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     const appId = this.env.REALTIME_SFU_APP_ID;
     const secret = this.env.REALTIME_SFU_APP_SECRET;
     if (!appId || !secret) return noStoreJson({ error: "voice chat unavailable" }, 503);
+    const sfuUpstream = new RealtimeSfuUpstream(appId, secret);
 
     const session = decodeHeaderJson(canonicalVoiceSessionSchema, request, VOICE_SESSION_HEADER);
     const capability = voiceCapabilitySchema.safeParse(
@@ -905,61 +897,15 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
         });
       };
 
-      const upstreamAt = async (
-        targetSubpath: string,
-        method: string,
-        upstreamBody: unknown,
-      ): Promise<Response | null> => {
-        try {
-          return await fetch(buildUpstreamSfuUrl(appId, targetSubpath), {
-            method,
-            headers: {
-              Authorization: `Bearer ${secret}`,
-              "Content-Type": "application/json",
-            },
-            body: upstreamBody === null ? null : JSON.stringify(upstreamBody),
-            signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-          });
-        } catch {
-          return null;
-        }
-      };
-      const upstream = (upstreamBody: unknown) => upstreamAt(subpath, request.method, upstreamBody);
-
-      const closeSfuMids = async (
-        sfuSessionId: string,
-        requestedMids: readonly string[],
-      ): Promise<boolean> => {
-        const mids = new Set(requestedMids);
-        if (mids.size === 0) return true;
-        const response = await upstreamAt(`/sessions/${sfuSessionId}/tracks/close`, "PUT", {
-          tracks: [...mids].map((mid) => ({ mid })),
-          force: true,
-        });
-        // Closing an already-collected session/track is idempotent cleanup.
-        if (response?.status === 404) return true;
-        if (!response?.ok) return false;
-        const parsed = upstreamTracksResponseSchema.safeParse(
-          await response
-            .clone()
-            .json()
-            .catch(() => ({})),
-        );
-        if (!parsed.success || parsed.data.errorCode !== undefined) return false;
-        const closedMids = new Set(
-          parsed.data.tracks
-            .filter((track) => track.mid != null && track.errorCode === undefined)
-            .map((track) => track.mid as string),
-        );
-        return [...mids].every((mid) => closedMids.has(mid));
-      };
+      const upstream = (upstreamBody: unknown) =>
+        sfuUpstream.request(subpath, request.method, upstreamBody);
 
       const closeRegisteredTracks = (
         attachment: VoiceSocketAttachment,
         additionalMids: readonly string[] = [],
       ): Promise<boolean> => {
         if (attachment.sfuSessionId === null) return Promise.resolve(true);
-        return closeSfuMids(attachment.sfuSessionId, [
+        return sfuUpstream.closeTracks(attachment.sfuSessionId, [
           ...(attachment.publishedMid === null ? [] : [attachment.publishedMid]),
           ...attachment.receivingMids,
           ...additionalMids,
@@ -1032,7 +978,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           // rejected above.
           if (current.publishedTrackName === requested.trackName && current.publishedMid !== null) {
             const replacedMid = current.publishedMid;
-            if (!(await closeSfuMids(operation.sessionId, [replacedMid]))) {
+            if (!(await sfuUpstream.closeTracks(operation.sessionId, [replacedMid]))) {
               return upstreamFailure("replace-published-track");
             }
             const cleared = persist((latest) => ({
@@ -1064,7 +1010,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
             (parsed.data.tracks.length !== 1 ||
               (parsed.data.tracks[0]?.errorCode === undefined && !accepted))
           ) {
-            await closeSfuMids(
+            await sfuUpstream.closeTracks(
               operation.sessionId,
               parsed.data.tracks.flatMap((track) =>
                 track.errorCode === undefined && track.mid != null ? [track.mid] : [],
@@ -1081,7 +1027,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               participantRevision: this.nextRevision(),
             }));
             if (!next) {
-              await closeSfuMids(operation.sessionId, [acceptedMid]);
+              await sfuUpstream.closeTracks(operation.sessionId, [acceptedMid]);
               return noStoreJson({ error: "unauthorized" }, 403);
             }
             this.broadcastUpsert(next);
@@ -1110,7 +1056,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           );
           if (replacedTracks.length > 0) {
             const replacedMids = new Set(replacedTracks.map((track) => track.mid));
-            if (!(await closeSfuMids(operation.sessionId, [...replacedMids]))) {
+            if (!(await sfuUpstream.closeTracks(operation.sessionId, [...replacedMids]))) {
               return upstreamFailure("replace-pulled-tracks");
             }
             const cleared = persist((latest) => ({
@@ -1168,7 +1114,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               (parsed.data.requiresImmediateRenegotiation === true &&
                 parsed.data.sessionDescription === undefined))
           ) {
-            await closeSfuMids(
+            await sfuUpstream.closeTracks(
               operation.sessionId,
               successfulTracks.flatMap((track) =>
                 track.errorCode === undefined && track.mid != null ? [track.mid] : [],
@@ -1200,7 +1146,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               };
             });
             if (!next) {
-              await closeSfuMids(
+              await sfuUpstream.closeTracks(
                 operation.sessionId,
                 additions.map((track) => track.mid),
               );

@@ -8,9 +8,10 @@ import {
 
 // Request/response contract between the partytracks client (verified against
 // the exact-pinned 0.0.56 build) and the Cloudflare Realtime SFU HTTPS API,
-// plus the pure authorization rules from the plan's section 6.2 matrix. All
-// stateful ownership checks receive a snapshot of the caller's registered
-// state so this module stays testable without a Durable Object.
+// the one HTTP client for that API (RealtimeSfuUpstream), plus the pure
+// authorization rules from the plan's section 6.2 matrix. All stateful
+// ownership checks receive a snapshot of the caller's registered state so
+// this module stays testable without a Durable Object.
 
 const REALTIME_SFU_API_BASE = "https://rtc.live.cloudflare.com/v1";
 
@@ -283,6 +284,77 @@ export function authorizeCloseTracks(
 
 export function buildUpstreamSfuUrl(appId: string, subpath: string): string {
   return `${REALTIME_SFU_API_BASE}/apps/${appId}${subpath}`;
+}
+
+const UPSTREAM_TIMEOUT_MS = 15_000;
+
+/**
+ * The Realtime SFU HTTPS API for one app, as the voice Durable Object calls
+ * it: bearer auth, JSON bodies and a bounded wait on every request.
+ */
+export class RealtimeSfuUpstream {
+  private readonly appId: string;
+  private readonly secret: string;
+
+  constructor(appId: string, secret: string) {
+    this.appId = appId;
+    this.secret = secret;
+  }
+
+  /** The upstream response, or null when the call threw or timed out. */
+  async request(subpath: string, method: string, body: unknown): Promise<Response | null> {
+    try {
+      return await fetch(buildUpstreamSfuUrl(this.appId, subpath), {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.secret}`,
+          "Content-Type": "application/json",
+        },
+        body: body === null ? null : JSON.stringify(body),
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Force-closes `requestedMids`; true only once each one is confirmed closed. */
+  async closeTracks(sessionId: string, requestedMids: readonly string[]): Promise<boolean> {
+    const mids = new Set(requestedMids);
+    if (mids.size === 0) return true;
+    const response = await this.request(`/sessions/${sessionId}/tracks/close`, "PUT", {
+      tracks: [...mids].map((mid) => ({ mid })),
+      force: true,
+    });
+    // Closing an already-collected session/track is idempotent cleanup.
+    if (response?.status === 404) return true;
+    if (!response?.ok) return false;
+    const parsed = upstreamTracksResponseSchema.safeParse(
+      await response
+        .clone()
+        .json()
+        .catch(() => ({})),
+    );
+    if (!parsed.success || parsed.data.errorCode !== undefined) return false;
+    const closedMids = new Set(
+      parsed.data.tracks
+        .filter((track) => track.mid != null && track.errorCode === undefined)
+        .map((track) => track.mid as string),
+    );
+    return [...mids].every((mid) => closedMids.has(mid));
+  }
+
+  /**
+   * Force-closes `mids` without waiting for or checking the answer. Not
+   * awaited, and no waitUntil (it has no effect in a Durable Object, which
+   * stays alive for pending I/O anyway); it never rejects.
+   */
+  releaseTracks(sessionId: string, mids: readonly string[]): void {
+    void this.request(`/sessions/${sessionId}/tracks/close`, "PUT", {
+      tracks: mids.map((mid) => ({ mid })),
+      force: true,
+    });
+  }
 }
 
 // Durable Object events may interleave whenever a handler awaits an
