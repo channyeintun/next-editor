@@ -1048,6 +1048,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!followedParticipantKey) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // Innermost first: Escape in a modal dialog (Go to File) closes the dialog.
+      if (event.target instanceof Element && event.target.closest('[aria-modal="true"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       stopFollowing("user");

@@ -418,6 +418,61 @@ describe("CollaborationContext follow lifecycle", () => {
     view.unmount();
   });
 
+  it("leaves Escape inside a modal dialog to the dialog, and ends the follow elsewhere", async () => {
+    let collaboration: ReturnType<typeof useRoom> | null = null;
+    function Probe() {
+      collaboration = useRoom();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    const target = participant({
+      actorId: "50000000-0000-4000-8000-000000000001",
+      sessionId: "60000000-0000-4000-8000-000000000001",
+    });
+    act(() => provider.emitAwareness(target));
+    act(() => collaboration!.followParticipant(target));
+
+    // Outside any dialog, as from Monaco's textarea, Escape still ends the follow.
+    const outside = document.createElement("textarea");
+    document.body.append(outside);
+    const outsideEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => outside.dispatchEvent(outsideEscape));
+    expect(outsideEscape.defaultPrevented).toBe(true);
+    expect(collaboration!.followedParticipantKey).toBeNull();
+    outside.remove();
+    act(() => collaboration!.followParticipant(target));
+
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const field = document.createElement("input");
+    modal.append(field);
+    document.body.append(modal);
+    const dialogEscape = vi.fn();
+    modal.addEventListener("keydown", dialogEscape);
+
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    act(() => field.dispatchEvent(escape));
+
+    expect(escape.defaultPrevented).toBe(false);
+    expect(dialogEscape).toHaveBeenCalledTimes(1);
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(target));
+    modal.remove();
+    view.unmount();
+  });
+
   it("keeps the exact expired target visible while reconnecting and stops if it is absent live", async () => {
     let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
