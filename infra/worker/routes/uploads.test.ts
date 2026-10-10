@@ -110,6 +110,29 @@ describe("uploadsRoute caption filenames", () => {
 });
 
 describe("uploadsRoute media filenames", () => {
+  // Derived from src/shared/recordingMediaFiles.ts; pins the set the route accepted
+  // when it was a hand-kept list.
+  it("allows the same media extensions as the hand-kept list it replaced", () => {
+    expect(new Set(LESSON_MEDIA_EXTENSIONS)).toEqual(
+      new Set([
+        "ne",
+        "ogg",
+        "weba",
+        "webm",
+        "mp4",
+        "mov",
+        "m4a",
+        "mp3",
+        "wav",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+      ]),
+    );
+    expect(LESSON_MEDIA_EXTENSIONS).toHaveLength(13);
+  });
+
   // The route pattern is built from the same list lessons.ts checks a row's
   // `ne`/`thumbnail` against, so every extension a row may point at uploads.
   it.each(LESSON_MEDIA_EXTENSIONS)("accepts a .%s file", async (extension) => {

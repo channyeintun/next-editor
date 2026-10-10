@@ -9,14 +9,17 @@ import {
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
-import {
-  audioExtensionFromMime,
-  cameraExtensionFromMime,
-  isStreamingRecording,
-} from "./streamingRecordingCodec/format";
+import { isStreamingRecording } from "./streamingRecordingCodec/format";
 import { createStreamingRecordingReader } from "./streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
 import { downloadBlob } from "../utils/downloadBlob";
+import {
+  audioExtensionFromMime,
+  cameraExtensionFromMime,
+  isRecordingAudioFileName,
+  isRecordingVideoFileName,
+  RECORDING_IMPORT_ACCEPT,
+} from "../shared/recordingMediaFiles";
 import {
   hydrateDecodedRecordingWorkspaceAssets,
   persistDecodedWorkspaceAssets,
@@ -41,12 +44,12 @@ function sanitizeMediaUrlsForExport(recording: Recording): Recording {
 
 /** True for companion files that are audio (by MIME, or by extension for `.weba` etc.). */
 function isAudioFile(file: File): boolean {
-  return file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name);
+  return file.type.startsWith("audio/") || isRecordingAudioFileName(file.name);
 }
 
 /** True for companion files that are video (by MIME, or by extension). */
 function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || /\.(webm|mp4|mov)$/i.test(file.name);
+  return file.type.startsWith("video/") || isRecordingVideoFileName(file.name);
 }
 
 /** True when a recording carries non-empty media bytes. */
@@ -389,7 +392,7 @@ export class RecordingStorage {
       const input = document.createElement("input");
       input.type = "file";
       input.multiple = true;
-      input.accept = ".ne,.webm,.mp4,.mov,video/*,.weba,.ogg,.m4a,.mp3,.wav,audio/*";
+      input.accept = RECORDING_IMPORT_ACCEPT;
 
       input.onchange = async (event) => {
         const files = Array.from((event.target as HTMLInputElement).files ?? []);

@@ -11,7 +11,7 @@
  * It exits solely through `saveScreenRecordingLocally()` as a browser download.
  */
 
-import { cameraExtensionFromMime } from "./streamingRecordingCodec/format";
+import { cameraExtensionFromMime } from "../shared/recordingMediaFiles";
 import { downloadBlob } from "../utils/downloadBlob";
 
 /**

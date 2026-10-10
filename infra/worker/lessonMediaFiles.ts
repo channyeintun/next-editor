@@ -7,18 +7,21 @@
 // <script>, and R2 objects are served back same-origin at /media/<key>
 // (routes/media.ts), so a direct navigation would run it in the app's origin.
 // Caption files (`<id>.<lang>.vtt`, `<id>-N.<lang>.vtt`) have their own pattern in
-// routes/uploads.ts.
+// routes/uploads.ts. The sibling audio and camera extensions, and their types
+// below, come from src/shared/recordingMediaFiles.ts, which also names the files
+// buildRecordingFiles exports, so every container it can produce is uploadable.
+
+import {
+  AUDIO_MIME_BY_EXT,
+  CAMERA_MIME_BY_EXT,
+  RECORDING_AUDIO_EXTENSIONS,
+  RECORDING_CAMERA_EXTENSIONS,
+} from "../../src/shared/recordingMediaFiles";
 
 export const LESSON_MEDIA_EXTENSIONS = [
   "ne",
-  "ogg",
-  "weba",
-  "webm",
-  "mp4",
-  "mov",
-  "m4a",
-  "mp3",
-  "wav",
+  ...RECORDING_AUDIO_EXTENSIONS,
+  ...RECORDING_CAMERA_EXTENSIONS,
   "png",
   "jpg",
   "jpeg",
@@ -42,14 +45,8 @@ export type LessonMediaExtension = (typeof LESSON_MEDIA_EXTENSIONS)[number];
 // every type in this map inline.
 export const LESSON_MEDIA_CONTENT_TYPES: Readonly<Record<string, string>> = {
   ne: "application/octet-stream",
-  ogg: "audio/ogg",
-  weba: "audio/webm",
-  webm: "video/webm",
-  mp4: "video/mp4",
-  mov: "video/quicktime",
-  m4a: "audio/mp4",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
+  ...AUDIO_MIME_BY_EXT,
+  ...CAMERA_MIME_BY_EXT,
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",

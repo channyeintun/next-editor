@@ -6,11 +6,17 @@ import { normalizeRecordingData } from "../../core/src/utils/editorState";
 import type { WorkspaceRecordingAsset } from "../../types/workspace";
 import { iterateRecordingWorkspaceAssets } from "../recordingWorkspaceAssets";
 import {
+  AUDIO_MIME_BY_EXT,
   audioMimeFromFilename,
+  CAMERA_MIME_BY_EXT,
+  cameraMimeFromFilename,
+  DEFAULT_AUDIO_EXTENSION,
+  DEFAULT_CAMERA_EXTENSION,
+} from "../../shared/recordingMediaFiles";
+import {
   buildFooterChunk,
   buildHeaderChunk,
   buildSegmentChunk,
-  cameraMimeFromFilename,
   clampU32,
   concatChunks,
   encodeRecords,
@@ -299,14 +305,18 @@ function buildRecordingStreamMeta(
     tracks,
     clusters,
     audioType: hasAudio
-      ? audioTrack?.mimeType || audioMimeFromFilename(normalized.audioFile) || "audio/webm"
+      ? audioTrack?.mimeType ||
+        audioMimeFromFilename(normalized.audioFile) ||
+        AUDIO_MIME_BY_EXT[DEFAULT_AUDIO_EXTENSION]
       : undefined,
     audioSource: hasAudio ? normalized.audioSource : undefined,
     audioStartOffsetMs: hasAudio ? normalized.audioStartOffsetMs : undefined,
     audioFile: normalized.audioFile,
     audioUrl: normalized.audioUrl,
     cameraType: hasCamera
-      ? cameraTrack?.mimeType || cameraMimeFromFilename(normalized.cameraFile) || "video/webm"
+      ? cameraTrack?.mimeType ||
+        cameraMimeFromFilename(normalized.cameraFile) ||
+        CAMERA_MIME_BY_EXT[DEFAULT_CAMERA_EXTENSION]
       : undefined,
     cameraSource: hasCamera ? normalized.cameraSource : undefined,
     cameraStartOffsetMs: hasCamera ? normalized.cameraStartOffsetMs : undefined,

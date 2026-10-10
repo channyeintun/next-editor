@@ -1,6 +1,11 @@
 import type { CaptionTrack, Recording } from "../core/src";
 import { fetchNextEditorUrl, probeMediaUrl } from "./recordingFetch";
-import { audioMimeFromFilename } from "./streamingRecordingCodec";
+import {
+  AUDIO_MIME_BY_EXT,
+  audioMimeFromFilename,
+  DEFAULT_AUDIO_EXTENSION,
+  DEFAULT_CAMERA_EXTENSION,
+} from "../shared/recordingMediaFiles";
 
 // The files a `.ne` loaded from a URL names beside itself (external audio, a
 // camera video, caption VTTs), resolved against the `.ne` URL and fetched the
@@ -219,7 +224,7 @@ export async function findWorkingAudioBlob(
     recording.audioUrl,
     recording.audioFile,
     neUrl,
-    "weba",
+    DEFAULT_AUDIO_EXTENSION,
     recording.audioSource === "external",
   );
   for (const url of candidates) {
@@ -236,7 +241,10 @@ export async function findWorkingAudioBlob(
       }
       // Some hosts serve sibling audio without a usable content type; fall back to the
       // extension-derived MIME so `decodeAudioData` and track metadata behave.
-      const type = raw.type || (audioMimeFromFilename(recording.audioFile ?? url) ?? "audio/webm");
+      const type =
+        raw.type ||
+        (audioMimeFromFilename(recording.audioFile ?? url) ??
+          AUDIO_MIME_BY_EXT[DEFAULT_AUDIO_EXTENSION]);
       const blob = raw.type === type ? raw : new Blob([raw], { type });
       return { url, blob };
     } catch (err) {
@@ -260,7 +268,12 @@ export async function findWorkingCameraUrl(
   neUrl: string | undefined,
   signal?: AbortSignal,
 ): Promise<string | null> {
-  const candidates = buildMediaCandidates(recording.cameraUrl, recording.cameraFile, neUrl, "webm");
+  const candidates = buildMediaCandidates(
+    recording.cameraUrl,
+    recording.cameraFile,
+    neUrl,
+    DEFAULT_CAMERA_EXTENSION,
+  );
   for (const url of candidates) {
     if (await probeMediaUrl(url, signal)) {
       return url !== recording.cameraUrl ? url : null;
