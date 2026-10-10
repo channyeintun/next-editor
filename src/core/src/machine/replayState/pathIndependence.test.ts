@@ -879,7 +879,7 @@ function describeWorkspace(snapshot: WorkspaceRecordingSnapshot) {
 // sets hasManualWorkspaceOverride) and the PLAY after it takes it back, and the
 // walk's resume runs both. The viewer edits no files here: PLAY keeps their
 // edits on purpose until the recording changes the workspace again (see the
-// "learner workspace" tests in editorMachine.test.ts).
+// "learner workspace" tests in learnerWorkspace.test.ts).
 const workspaceTrack: ReplayTrack<WorkspaceRecordingEvent> = {
   field: "workspaceEvents",
   host() {

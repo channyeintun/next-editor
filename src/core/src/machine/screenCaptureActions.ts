@@ -10,7 +10,7 @@ import { normalizeNonNegativeTime } from "./playbackValues";
 // START_RECORDING event as a pre-acquired display stream (acquired in the click
 // handler to keep transient user activation) and exits via `onScreenRecordingReady`,
 // its only exit (the app saves it with `saveScreenRecordingLocally`). It NEVER enters
-// the `Recording`, the `.ne` codec, storage or any upload path; the editorMachine.test.ts
+// the `Recording`, the `.ne` codec, storage or any upload path; the screenRecording.test.ts
 // guardrail ("the finalized recording carries no screen fields") enforces it, and
 // "Screen recording actor" in docs/state-machines.md describes the actor. Nothing here
 // writes a `screen*` field onto the finalized recording.
@@ -23,7 +23,7 @@ import { normalizeNonNegativeTime } from "./playbackValues";
  * keep-forever local artifact. There is no `blob`/`source` field here: the blob never enters
  * the `Recording`, the `.ne` codec, storage or any upload path, and is never retained on
  * context. `onScreenRecordingReady` is its only exit (the app saves it with
- * `saveScreenRecordingLocally`). The editorMachine.test.ts guardrail ("the finalized recording
+ * `saveScreenRecordingLocally`). The screenRecording.test.ts guardrail ("the finalized recording
  * carries no screen fields") enforces this; see "Screen recording actor" in
  * docs/state-machines.md.
  */
