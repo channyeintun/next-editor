@@ -13,9 +13,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  MAX_THUMBNAIL_BYTES,
   MAX_TITLE_CHARS,
-  resizeThumbnail,
+  prepareThumbnail,
   THUMBNAIL_ACCEPT,
   useDeleteLesson,
   usePublishFromLibrary,
@@ -95,29 +94,16 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     input.value = "";
     if (!file) return;
 
-    if (!/^image\/(png|jpeg)$/.test(file.type)) {
-      setThumbnailError("Choose a PNG or JPG image.");
+    // Every rejection, including an image `createImageBitmap` can't read, lands
+    // here before `mutate`, so `updateThumbnail.isError` never lights up for
+    // it: this message is the only thing that tells the user the pick failed.
+    const prepared = await prepareThumbnail(file);
+    if ("error" in prepared) {
+      setThumbnailError(prepared.error);
       return;
     }
-    if (file.size > MAX_THUMBNAIL_BYTES) {
-      setThumbnailError("Image is too large — 5MB max.");
-      return;
-    }
-
     setThumbnailError(null);
-    // The guards above only read `type` and `size`, so a corrupt or renamed
-    // non-image still gets here and `createImageBitmap` rejects. That happens
-    // before `mutate`, so `updateThumbnail.isError` — the component's only error
-    // surface — never lights up: without this catch the pick silently does
-    // nothing and the user re-picks the same file forever.
-    let optimized: File;
-    try {
-      optimized = await resizeThumbnail(file);
-    } catch {
-      setThumbnailError("Couldn't read that image — try a different file.");
-      return;
-    }
-    updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: optimized });
+    updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: prepared.file });
   };
 
   const submitRename = () => {

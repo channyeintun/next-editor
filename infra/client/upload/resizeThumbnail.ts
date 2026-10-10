@@ -4,9 +4,7 @@
 // about 57% smaller than JPEG for these cards (a gallery page of 12 drops from
 // ~440 KB to ~190 KB). A browser that can't encode WebP hands back a PNG
 // instead of failing (toBlob's fallback for an unsupported type), so the
-// result's type is checked and JPEG is encoded instead. SVGs pass through
-// unchanged: they're vector, already tiny, and rasterizing one would only lose
-// quality for no size benefit.
+// result's type is checked and JPEG is encoded instead.
 const MAX_THUMBNAIL_DIMENSION = 640;
 const THUMBNAIL_WEBP_QUALITY = 0.82;
 const THUMBNAIL_JPEG_QUALITY = 0.85;
@@ -16,8 +14,6 @@ function encodeCanvas(canvas: HTMLCanvasElement, type: string, quality: number) 
 }
 
 export async function resizeThumbnail(file: File): Promise<File> {
-  if (file.type === "image/svg+xml") return file;
-
   const bitmap = await createImageBitmap(file);
   try {
     // Never upscale — a source image already smaller than the target is left

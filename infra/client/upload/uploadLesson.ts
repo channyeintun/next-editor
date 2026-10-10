@@ -200,16 +200,7 @@ export async function updateLessonThumbnail(
     thumbnailPath = DEFAULT_THUMBNAIL_PATH;
   } else {
     const filename = `${lessonId}-thumbnail-${Date.now()}.${thumbnailExtension(thumbnail)}`;
-    const res = await apiClient.put<{ path: string }>(
-      `/uploads/${lessonId}/media/${filename}`,
-      thumbnail,
-      {
-        headers: {
-          "Content-Type": thumbnail.type || "application/octet-stream",
-        },
-      },
-    );
-    thumbnailPath = res.data.path;
+    thumbnailPath = await uploadFile(lessonId, { filename, blob: thumbnail }, () => {});
   }
   await apiClient.patch(`/lessons/${lessonId}`, { thumbnail: thumbnailPath });
 }

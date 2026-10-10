@@ -27,14 +27,6 @@ describe("resizeThumbnail", () => {
     vi.unstubAllGlobals();
   });
 
-  it("passes an SVG through unchanged rather than rasterizing it", async () => {
-    const file = new File(["<svg></svg>"], "icon.svg", { type: "image/svg+xml" });
-
-    const result = await resizeThumbnail(file);
-
-    expect(result).toBe(file);
-  });
-
   it("re-encodes a raster image as WebP", async () => {
     const toBlob = stubCanvas({ encodesWebp: true });
 

@@ -1,18 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "@app/core/src";
 import { inferLanguageFromFilename } from "@app/captions/parseCaptions";
 import { apiClient } from "../apiClient";
-import { formatDuration, thumbnailExtension, uploadLesson } from "./uploadLesson";
+import {
+  formatDuration,
+  thumbnailExtension,
+  updateLessonThumbnail,
+  uploadLesson,
+} from "./uploadLesson";
 
 vi.mock("../apiClient", () => ({
   apiClient: {
     put: vi.fn<(url: string, body: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
     post: vi.fn<(url: string, body?: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
+    patch: vi.fn<(url: string, body?: unknown) => Promise<{ data: unknown }>>(),
   },
 }));
 
 const mockedPut = vi.mocked(apiClient.put);
 const mockedPost = vi.mocked(apiClient.post);
+const mockedPatch = vi.mocked(apiClient.patch);
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
@@ -50,6 +57,7 @@ function createRecording(overrides: Partial<Recording> = {}): Recording {
 beforeEach(() => {
   mockedPut.mockReset();
   mockedPost.mockReset();
+  mockedPatch.mockReset();
 });
 
 // jsdom's Blob has no .text(); FileReader is the portable way to read it here.
@@ -313,5 +321,40 @@ describe("uploadLesson", () => {
     ).rejects.toThrow("network error");
 
     expect(mockedPost).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateLessonThumbnail", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("PUTs the new image under a timestamped name, then points the lesson at it", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_791_222_405_295);
+    mockedPut.mockResolvedValueOnce({ data: { path: "media/lessons/l1/new.webp" } });
+    mockedPatch.mockResolvedValueOnce({ data: {} });
+
+    const thumbnail = new File(["webp"], "cover.webp", { type: "image/webp" });
+    await updateLessonThumbnail("l1", thumbnail);
+
+    expect(mockedPut).toHaveBeenCalledWith(
+      "/uploads/l1/media/l1-thumbnail-1791222405295.webp",
+      thumbnail,
+      expect.objectContaining({ headers: { "Content-Type": "image/webp" } }),
+    );
+    expect(mockedPatch).toHaveBeenCalledWith("/lessons/l1", {
+      thumbnail: "media/lessons/l1/new.webp",
+    });
+  });
+
+  it("points the lesson at the default thumbnail without uploading anything", async () => {
+    mockedPatch.mockResolvedValueOnce({ data: {} });
+
+    await updateLessonThumbnail("l1", "default");
+
+    expect(mockedPut).not.toHaveBeenCalled();
+    expect(mockedPatch).toHaveBeenCalledWith("/lessons/l1", {
+      thumbnail: "default-thumbnail.webp",
+    });
   });
 });

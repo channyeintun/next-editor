@@ -12,8 +12,9 @@ import { useUploadLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT } from "./thumbnailConstraints";
 import { CAPTION_ACCEPT } from "./captionConstraints";
-import { MAX_CAPTION_BYTES, MAX_THUMBNAIL_BYTES } from "../../lessons/uploadLimits";
-import { resizeThumbnail } from "./resizeThumbnail";
+import { MAX_CAPTION_BYTES } from "../../lessons/uploadLimits";
+import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
+import { prepareThumbnail } from "./prepareThumbnail";
 import {
   MAX_DESCRIPTION_CHARS,
   MAX_TITLE_CHARS,
@@ -151,28 +152,13 @@ export default function UploadLessonModal({
 
     if (!file) return;
 
-    if (!/^image\/(png|jpeg)$/.test(file.type)) {
-      setThumbnailError("Choose a PNG or JPG image.");
+    const prepared = await prepareThumbnail(file);
+    if ("error" in prepared) {
+      setThumbnailError(prepared.error);
       return;
     }
-    if (file.size > MAX_THUMBNAIL_BYTES) {
-      setThumbnailError("Image is too large — 5MB max.");
-      return;
-    }
-
+    const optimized = prepared.file;
     setThumbnailError(null);
-    // Downscaled/re-encoded here, before it ever touches state or an upload —
-    // the raw camera-resolution file is never what gets previewed or stored.
-    // The guards above only read `type` and `size`, so a corrupt or renamed
-    // non-image reaches `createImageBitmap` and rejects; without this catch the
-    // picker just goes dead with nothing shown.
-    let optimized: File;
-    try {
-      optimized = await resizeThumbnail(file);
-    } catch {
-      setThumbnailError("Couldn't read that image — try a different file.");
-      return;
-    }
     setThumbnailFile(optimized);
     setUseDefaultThumbnail(false);
     setThumbnailPreviewUrl((previous) => {
@@ -518,7 +504,7 @@ export default function UploadLessonModal({
               {thumbnailPreviewUrl || useDefaultThumbnail ? (
                 <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-[#11141c]">
                   <img
-                    src={thumbnailPreviewUrl ?? "/default-thumbnail.webp"}
+                    src={thumbnailPreviewUrl ?? `/${DEFAULT_THUMBNAIL_PATH}`}
                     alt="Thumbnail preview"
                     className="size-full object-cover"
                   />
