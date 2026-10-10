@@ -457,7 +457,8 @@ Names are recommendations; adjust only when repository conventions require it an
 ```text
 src/
   components/
-    CollaborationPanel.tsx                 # voice controls and participant badges
+    CollaborationPanel.tsx                 # places the voice section and badges in the room panel
+    CollaborationVoiceControls.tsx         # voice controls and participant badges
   contexts/
     CollaborationVoiceContext.tsx          # React integration and public voice API
   voice/
