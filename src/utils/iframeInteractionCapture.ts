@@ -87,23 +87,6 @@ export function createIframeInteractionCaptureScript(
 
       window[cleanupMarker] = cleanupInteractionCapture;
 
-      function getXPath(element) {
-        if (element.id) return '//*[@id="' + element.id + '"]';
-        if (element === document.body) return '/html/body';
-        const parent = element.parentElement;
-        if (!parent) return '/' + element.tagName.toLowerCase();
-        const siblings = Array.from(parent.children).filter(
-          (sibling) => sibling.tagName === element.tagName,
-        );
-        const index = siblings.indexOf(element) + 1;
-        return (
-          getXPath(parent) +
-          '/' +
-          element.tagName.toLowerCase() +
-          (siblings.length > 1 ? '[' + index + ']' : '')
-        );
-      }
-
       function getClassName(element) {
         const className = element.className;
 
@@ -125,8 +108,8 @@ export function createIframeInteractionCaptureScript(
         return undefined;
       }
 
-      function getTargetInfo(element, includeXPath) {
-        const info = {
+      function getTargetInfo(element) {
+        return {
           tagName: element.tagName.toLowerCase(),
           id: element.id || undefined,
           testId:
@@ -135,10 +118,6 @@ export function createIframeInteractionCaptureScript(
               : undefined,
           className: getClassName(element),
         };
-        if (includeXPath) {
-          info.xpath = getXPath(element);
-        }
-        return info;
       }
 
       function getWindowSize() {
@@ -154,17 +133,13 @@ export function createIframeInteractionCaptureScript(
       // default maskInputOptions is { password: true }), including one whose
       // type was later switched to text, which it marks data-rr-is-password.
       // Mask them here too, or the interaction track would store the plain
-      // text and every keystroke that the DOM track hides.
+      // text that the DOM track hides.
       function isPasswordInput(target) {
         return (
           target instanceof HTMLInputElement &&
           (String(target.type).toLowerCase() === 'password' ||
             target.hasAttribute('data-rr-is-password'))
         );
-      }
-
-      function getKeyData(event) {
-        return isPasswordInput(event.target) ? undefined : { key: event.key, code: event.code };
       }
 
       function emit(type, target, data) {
@@ -177,9 +152,7 @@ export function createIframeInteractionCaptureScript(
             type: messageType,
             payload: {
               type,
-              // Pointer moves post every frame and the host reads only their
-              // coordinates, so they skip the ancestor walk the path needs.
-              target: getTargetInfo(target, type !== 'mousemove'),
+              target: getTargetInfo(target),
               targetTag: target.tagName,
               data: Object.assign({}, getWindowSize(), data),
             },
@@ -275,6 +248,9 @@ export function createIframeInteractionCaptureScript(
         }
       });
 
+      // Only clicks, inputs, scrolls and pointer moves are posted: replay, the
+      // cursor track and studio QA read nothing else, and hover, focus and key
+      // events fired for every element the pointer crossed and every keystroke.
       addDocumentListener(
         'click',
         (event) => {
@@ -338,61 +314,6 @@ export function createIframeInteractionCaptureScript(
           true,
         );
       }
-
-      addDocumentListener(
-        'mouseenter',
-        (event) => {
-          if (event.target !== document.body) {
-            emit('hover_start', event.target, {
-              clientX: event.clientX,
-              clientY: event.clientY,
-            });
-          }
-        },
-        true,
-      );
-
-      addDocumentListener(
-        'mouseleave',
-        (event) => {
-          if (event.target !== document.body) {
-            emit('hover_end', event.target);
-          }
-        },
-        true,
-      );
-
-      addDocumentListener(
-        'focus',
-        (event) => {
-          emit('focus', event.target);
-        },
-        true,
-      );
-
-      addDocumentListener(
-        'blur',
-        (event) => {
-          emit('blur', event.target);
-        },
-        true,
-      );
-
-      addDocumentListener(
-        'keydown',
-        (event) => {
-          emit('keydown', event.target, getKeyData(event));
-        },
-        true,
-      );
-
-      addDocumentListener(
-        'keyup',
-        (event) => {
-          emit('keyup', event.target, getKeyData(event));
-        },
-        true,
-      );
 
       addDocumentListener(
         'input',

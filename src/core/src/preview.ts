@@ -5,7 +5,9 @@ export type PreviewSize = "small" | "medium" | "large" | { width: number; height
 export type PreviewPanelMode = "floating" | "docked";
 
 /**
- * Iframe interaction event types
+ * Iframe interaction event types. New recordings store click, input and
+ * scroll; focus, blur, hover_* and key* are present only in recordings made
+ * before 2026-10 and are never read.
  */
 export type IframeInteractionType =
   | "click"
@@ -26,7 +28,7 @@ export interface IframeInteractionTarget {
   id?: string;
   testId?: string;
   className?: string;
-  xpath?: string; // For precise element targeting during playback; absent on mousemove
+  xpath?: string; // Present only in recordings made before 2026-10; never read.
 }
 
 /**
@@ -40,7 +42,7 @@ export interface IframeInteractionData {
   buttons?: number;
   windowWidth?: number;
   windowHeight?: number;
-  // Key data
+  // Key data: present only in recordings made before 2026-10; never read.
   key?: string;
   code?: string;
   // Scroll data

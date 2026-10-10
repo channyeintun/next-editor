@@ -278,7 +278,7 @@ describe("createIframeInteractionCaptureScript", () => {
     expect(history.back).toHaveBeenCalledOnce();
   });
 
-  it("masks password values and keys the way the rrweb recorder does", () => {
+  it("masks password values the way the rrweb recorder does", () => {
     const { createInput, documentTarget, install, parentPostMessage } = createCaptureHarness();
     const password = createInput("password");
     const text = createInput("text");
@@ -288,13 +288,10 @@ describe("createIframeInteractionCaptureScript", () => {
     revealed.attributes.set("data-rr-is-password", "true");
 
     install();
-    documentTarget.emit("keydown", { code: "KeyS", key: "s", target: password });
-    documentTarget.emit("keyup", { code: "KeyS", key: "s", target: password });
     password.value = "s3cret";
     documentTarget.emit("input", { target: password });
     revealed.value = "hunter2";
     documentTarget.emit("input", { target: revealed });
-    documentTarget.emit("keydown", { code: "KeyA", key: "a", target: text });
     text.value = "Ada";
     documentTarget.emit("input", { target: text });
 
@@ -302,19 +299,26 @@ describe("createIframeInteractionCaptureScript", () => {
       ([message]) =>
         (message as { payload: { type: string; data: Record<string, unknown> } }).payload,
     );
-    const [passwordKeyDown, passwordKeyUp, passwordInput, revealedInput, textKeyDown, textInput] =
-      payloads;
+    const [passwordInput, revealedInput, textInput] = payloads;
 
-    expect(passwordKeyDown.type).toBe("keydown");
-    expect(passwordKeyDown.data).not.toHaveProperty("key");
-    expect(passwordKeyDown.data).not.toHaveProperty("code");
-    expect(passwordKeyUp.type).toBe("keyup");
-    expect(passwordKeyUp.data).not.toHaveProperty("key");
+    expect(payloads.map((payload) => payload.type)).toEqual(["input", "input", "input"]);
     expect(passwordInput.data.value).toBe("******");
     expect(revealedInput.data.value).toBe("*******");
-    expect(textKeyDown.data).toMatchObject({ code: "KeyA", key: "a" });
     expect(textInput.data.value).toBe("Ada");
     expect(JSON.stringify(payloads)).not.toMatch(/s3cret|hunter2/);
+  });
+
+  it("posts no hover, focus or key events, which nothing reads", () => {
+    const { button, documentTarget, install, parentPostMessage } = createCaptureHarness();
+
+    install();
+    for (const type of ["mouseenter", "mouseleave", "focus", "blur", "keydown", "keyup"]) {
+      expect(documentTarget.hasListener(type)).toBe(false);
+    }
+    documentTarget.emit("keydown", { code: "KeyS", key: "s", target: button });
+    documentTarget.emit("focus", { target: button });
+
+    expect(parentPostMessage).not.toHaveBeenCalled();
   });
 
   it("emits mousemove coordinates with iframe viewport dimensions when enabled", () => {
@@ -347,7 +351,7 @@ describe("createIframeInteractionCaptureScript", () => {
     );
   });
 
-  it("gives clicks an element path but not pointer moves", () => {
+  it("describes click and pointer-move targets without an element path", () => {
     const { button, documentTarget, installWithMouseMoveCapture, parentPostMessage } =
       createCaptureHarness();
 
@@ -358,18 +362,14 @@ describe("createIframeInteractionCaptureScript", () => {
     const payloads = parentPostMessage.mock.calls.map(
       ([message]) => (message as { payload: { type: string; target: object } }).payload,
     );
-    expect(payloads).toEqual([
-      expect.objectContaining({
-        type: "mousemove",
-        target: expect.not.objectContaining({ xpath: expect.anything() }),
-      }),
-      expect.objectContaining({
-        type: "click",
-        target: expect.objectContaining({ tagName: "button", xpath: '//*[@id="target"]' }),
-      }),
-    ]);
-    expect(payloads[0].target).toEqual(
-      expect.objectContaining({ tagName: "button", testId: "submit" }),
-    );
+    expect(payloads.map((payload) => payload.type)).toEqual(["mousemove", "click"]);
+    for (const payload of payloads) {
+      expect(payload.target).toEqual({
+        className: undefined,
+        id: "target",
+        tagName: "button",
+        testId: "submit",
+      });
+    }
   });
 });
