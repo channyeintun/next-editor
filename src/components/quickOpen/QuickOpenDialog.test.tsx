@@ -181,13 +181,28 @@ describe("QuickOpenDialog", () => {
     );
   });
 
-  it("keeps focus in the field on a press anywhere in the card but the field and Close", () => {
+  it("keeps focus in the field on a press anywhere in the card but the field, Close and the list", () => {
     const { input } = renderDialog();
 
-    expect(fireEvent.mouseDown(screen.getByRole("listbox"))).toBe(false);
     expect(fireEvent.mouseDown(screen.getByText(/to move/))).toBe(false);
     expect(fireEvent.mouseDown(input)).toBe(true);
     expect(fireEvent.mouseDown(screen.getByRole("button", { name: "Close" }))).toBe(true);
+    expect(input).toHaveFocus();
+  });
+
+  it("leaves a press on the list itself alone, so its scrollbar drags, and refocuses the field on release", () => {
+    const { input } = renderDialog();
+    const listbox = screen.getByRole("listbox");
+
+    // Firefox drops a scrollbar drag whose mousedown was prevented, overlay
+    // scrollbars included, and jsdom cannot tell a scrollbar press apart.
+    expect(fireEvent.mouseDown(listbox)).toBe(true);
+    expect(fireEvent.mouseDown(screen.getByRole("option", { name: /App\.tsx/ }))).toBe(false);
+    // A browser moves focus to the dialog on that press; jsdom does not.
+    screen.getByRole("dialog").focus();
+    expect(input).not.toHaveFocus();
+
+    fireEvent.mouseUp(listbox);
     expect(input).toHaveFocus();
   });
 

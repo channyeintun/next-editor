@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   type KeyboardEvent,
   type MouseEvent,
@@ -81,6 +82,7 @@ export default function QuickOpenDialog({
   const titleId = useId();
   const listboxId = useId();
   const hintId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { results, total } = rankQuickOpenFiles(candidates, query);
   const selected = results.length ? Math.min(activeIndex, results.length - 1) : -1;
@@ -125,16 +127,14 @@ export default function QuickOpenDialog({
   };
 
   // A press anywhere in the card but the field and Close keeps focus, and so
-  // the arrows, Enter and typing, in the field. The list's own scrollbar is
-  // left alone, so it can still be dragged.
+  // the arrows, Enter and typing, in the field. A press on the list itself (its
+  // padding, or its scrollbar, overlay or classic) is left alone: Firefox drops
+  // a scrollbar drag whose mousedown was prevented. Focus comes back on mouseup.
   const keepFocusInField = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.closest("input, button")) return;
-    const onScrollbar =
-      target.getAttribute("role") === "listbox" &&
-      target.clientWidth > 0 &&
-      event.nativeEvent.offsetX >= target.clientWidth;
-    if (!onScrollbar) event.preventDefault();
+    if (target.getAttribute("role") === "listbox") return;
+    event.preventDefault();
   };
 
   const trimmedQuery = query.trim();
@@ -160,6 +160,7 @@ export default function QuickOpenDialog({
             {/* Not type="search": its searchbox role and native Escape-to-clear
               would fight the combobox and the dialog's Escape. */}
             <input
+              ref={inputRef}
               type="text"
               role="combobox"
               aria-label="Search files by name"
@@ -205,6 +206,7 @@ export default function QuickOpenDialog({
           id={listboxId}
           aria-label="Files"
           hidden={!results.length}
+          onMouseUp={() => inputRef.current?.focus()}
           className="max-h-[min(60vh,28rem)] overflow-y-auto p-1.5"
         >
           {results.map((result, index) => {
