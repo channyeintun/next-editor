@@ -306,14 +306,19 @@ export default ({ mode }: { mode: string }) => {
         // or on a shared/CI box. Vite merges these with its defaults.
         deny: [".dev.vars", ".dev.vars.*", "**/.dev.vars", "**/.dev.vars.*"],
       },
-      // Routes implemented so far by the Tube Worker (`bun run dev:worker`,
-      // see infra/wrangler.toml). Deliberately NOT a blanket "/api" proxy: that
-      // would shadow proxyPlugin's existing /api/proxy dev route above before
-      // it moves into the Worker (Phase 4). Extend this list route-by-route as
-      // infra/worker/routes/* gains real handlers.
+      // Every route the Worker mounts in infra/worker/index.ts (`bun run
+      // dev:worker`, see infra/wrangler.toml), so `bun run dev:all` behaves
+      // like production. Add a line here whenever the Worker gains a mount: a
+      // GET this table misses falls through to Vite's SPA fallback and comes
+      // back as index.html with a 200, which the app then fails to parse. The
+      // table is explicit, not a blanket "/api", so it reads as that list.
       proxy: {
         "/api/health": "http://localhost:8787",
         "/api/lessons": "http://localhost:8787",
+        // Public catalog reads: playlists, author profiles and search.
+        "/api/playlists": "http://localhost:8787",
+        "/api/authors": "http://localhost:8787",
+        "/api/search": "http://localhost:8787",
         "/api/auth": "http://localhost:8787",
         "/api/uploads": "http://localhost:8787",
         // Authenticated Studio capabilities and the D1-gated Modal TTS proxy.
@@ -336,11 +341,13 @@ export default ({ mode }: { mode: string }) => {
         "/api/zig-playground": "http://localhost:8787",
         "/api/haskell-playground": "http://localhost:8787",
         "/media": "http://localhost:8787",
-        // /api/proxy is deliberately NOT proxied here — the Worker now
-        // implements it too (infra/worker/routes/proxy.ts, used for Slides
-        // images and avatars), but proxyPlugin below already intercepts this
-        // path directly in the vite dev server, so plain `bun run dev` (no
-        // `dev:worker`) keeps working unchanged for both.
+        // /api/proxy and /api/openrouter are deliberately NOT proxied here: the
+        // Worker implements them too (infra/worker/routes/proxy.ts, used for
+        // Slides images and avatars, and routes/openrouter.ts), but the plugins
+        // above answer them inside the vite dev server, so plain `bun run dev`
+        // (no `dev:worker`) keeps working unchanged for both. They add their
+        // middleware in configureServer, which Vite runs before this proxy,
+        // so they would win over a blanket "/api" entry as well.
       },
     },
     preview: {
