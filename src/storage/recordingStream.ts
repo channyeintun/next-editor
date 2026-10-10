@@ -6,6 +6,7 @@ import {
   stripRecordingWorkspaceAssets,
 } from "./recordingWorkspaceAssets";
 import { withResolvedMediaUrls } from "./recordingSiblingMedia";
+import { yieldToMain } from "../utils/idle";
 
 // Once the first playable prefix has loaded (tried on every chunk until then), hand newly
 // decoded records to the player at a chunk that arrives this long after the last hand-over.
@@ -16,6 +17,13 @@ import { withResolvedMediaUrls } from "./recordingSiblingMedia";
 const STREAM_DELIVERY_INTERVAL_MS = 250;
 // ...and at least every this many downloaded bytes, however fast they arrive.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
+// A body served from the cache or over a fast link arrives in one or a few large chunks.
+// Decoding such a chunk whole held the main thread for the entire file, and the first
+// playable prefix waited for all of it. Each chunk is decoded this many bytes at a time
+// instead, every slice handed over under the rules above as if the network had split it...
+const STREAM_DECODE_SLICE_BYTES = 64 * 1024;
+// ...and the decode yields to the main thread once it has held it this long.
+const STREAM_DECODE_BUDGET_MS = 8;
 
 /** Where streamRecording hands a `.ne` over as it decodes (the URL loader's editor actions). */
 export interface RecordingStreamSink {
@@ -109,6 +117,19 @@ export async function streamRecording(
     }
   };
 
+  // Main-thread time the decode has taken since it last yielded. Only its own work counts:
+  // waiting on the network may or may not have let the browser run, so it is not credited.
+  let busyMs = 0;
+
+  // Yields to the main thread once the decode has held it for its budget. False when a newer
+  // load has superseded this one meanwhile (which also aborted its download): stop decoding.
+  const keepDecodingAfterYield = async (): Promise<boolean> => {
+    if (busyMs < STREAM_DECODE_BUDGET_MS) return true;
+    await yieldToMain();
+    busyMs = 0;
+    return !sink.isStale();
+  };
+
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -118,21 +139,31 @@ export async function streamRecording(
         continue;
       }
 
-      streamReader.push(value);
+      for (let offset = 0; offset < value.length; offset += STREAM_DECODE_SLICE_BYTES) {
+        if (!(await keepDecodingAfterYield())) {
+          await reader.cancel().catch(() => {});
+          return latestRecording;
+        }
+        const sliceStartedAt = performance.now();
 
-      const downloaded = streamReader.byteLength();
-      const now = performance.now();
-      if (
-        !loadedOnce ||
-        now - lastDecodeAt >= STREAM_DELIVERY_INTERVAL_MS ||
-        downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES
-      ) {
-        lastDecodeLength = downloaded;
-        lastDecodeAt = now;
-        await applyStreamed(false);
+        streamReader.push(value.subarray(offset, offset + STREAM_DECODE_SLICE_BYTES));
+
+        const downloaded = streamReader.byteLength();
+        const now = performance.now();
+        if (
+          !loadedOnce ||
+          now - lastDecodeAt >= STREAM_DELIVERY_INTERVAL_MS ||
+          downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES
+        ) {
+          lastDecodeLength = downloaded;
+          lastDecodeAt = now;
+          await applyStreamed(false);
+        }
+        busyMs += performance.now() - sliceStartedAt;
       }
     }
 
+    if (!(await keepDecodingAfterYield())) return latestRecording;
     await applyStreamed(true);
   } catch (error) {
     // Stop the download rather than leave it stalled and open until garbage collection.

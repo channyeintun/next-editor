@@ -8,6 +8,7 @@ import {
   type RecordingLoadSink,
 } from "./recordingLoad";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";
+import { yieldToMain } from "../utils/idle";
 
 vi.mock("./recordingFetch", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./recordingFetch")>();
@@ -23,6 +24,12 @@ vi.mock("./recordingCodecClient", async (importOriginal) => {
       actual.decompressBinaryToRecording,
     ),
   };
+});
+
+// A pass-through spy, so a test can see where the streamed decode yields.
+vi.mock("../utils/idle", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/idle")>();
+  return { ...actual, yieldToMain: vi.fn<typeof actual.yieldToMain>(actual.yieldToMain) };
 });
 
 const LESSON_URL = "https://example.com/lesson.ne";
@@ -96,6 +103,17 @@ function streamedResponse(bytes: Uint8Array, failAfter = Infinity): Response {
   return { ok: true, status: 200, body } as unknown as Response;
 }
 
+/** A response whose whole body arrives in one read, as from the HTTP cache. */
+function oneChunkResponse(bytes: Uint8Array): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes.slice());
+      controller.close();
+    },
+  });
+  return { ok: true, status: 200, body } as unknown as Response;
+}
+
 /** A response without a readable body, which the loader reads whole. */
 function wholeResponse(bytes: Uint8Array): Response {
   return {
@@ -149,6 +167,7 @@ describe("loadRecordingFromUrl", () => {
   beforeEach(() => {
     vi.mocked(fetchNextEditorUrl).mockReset();
     vi.mocked(decompressBinaryToRecording).mockClear();
+    vi.mocked(yieldToMain).mockClear();
   });
 
   afterEach(() => {
@@ -351,6 +370,66 @@ describe("loadRecordingFromUrl", () => {
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+  });
+  describe("a body that arrives in one chunk", () => {
+    /** Makes every decode slice take longer than the budget, so the decode yields after each. */
+    function slowClock() {
+      let now = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => (now += 100));
+    }
+
+    it("is decoded a slice at a time, the first playable prefix loading first", async () => {
+      slowClock();
+      const recording = createRecording(80);
+      const bytes = await encodeRecordingToStream(recording);
+      expect(bytes.length).toBeGreaterThan(3 * 64 * 1024);
+      vi.mocked(fetchNextEditorUrl).mockResolvedValue(oneChunkResponse(bytes));
+      const sink = createSink();
+      const loadsAtEachYield: number[] = [];
+      vi.mocked(yieldToMain).mockImplementation(async () => {
+        loadsAtEachYield.push(sink.load.mock.calls.length);
+      });
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+
+      // One task per slice; the prefix loaded in the first, before the rest decoded.
+      expect(loadsAtEachYield.length).toBeGreaterThanOrEqual(3);
+      expect(loadsAtEachYield[0]).toBe(1);
+      expect(sink.load).toHaveBeenCalledTimes(1);
+      const [prefix] = sink.load.mock.calls[0] ?? [];
+      expect(prefix?.frames.length).toBeGreaterThan(0);
+      expect(prefix?.frames.length).toBeLessThan(80);
+      // The same recording as decoding the body whole.
+      const [final] = sink.extend.mock.calls.at(-1) ?? [];
+      expect(final?.streamFinalized).toBe(true);
+      const contents = (frames: Recording["frames"] = []) =>
+        frames.map((frame) => (frame.isKeyframe ? frame.state.content : null));
+      expect(contents(final?.frames)).toEqual(contents(recording.frames));
+      const appended = sink.appendDelta.mock.calls.reduce(
+        (count, [delta]) => count + delta.newFrames.length,
+        0,
+      );
+      expect((prefix?.frames.length ?? 0) + appended).toBe(80);
+    });
+
+    it("stops decoding once a newer load has started", async () => {
+      slowClock();
+      const bytes = await encodeRecordingToStream(createRecording(40));
+      vi.mocked(fetchNextEditorUrl).mockResolvedValue(oneChunkResponse(bytes));
+      const stale = { current: false };
+      const sink = createSink(() => stale.current);
+      sink.load.mockImplementation(() => {
+        // A dropped file starts a newer load right after the prefix lands.
+        stale.current = true;
+      });
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+
+      expect(sink.load).toHaveBeenCalledTimes(1);
+      expect(yieldToMain).toHaveBeenCalledTimes(1);
+      expect(sink.appendDelta).not.toHaveBeenCalled();
+      expect(sink.extend).not.toHaveBeenCalled();
     });
   });
 });

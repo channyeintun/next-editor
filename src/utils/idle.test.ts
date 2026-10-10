@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { runWhenIdle, runWhenIdleAfterLoad } from "./idle";
+import { runWhenIdle, runWhenIdleAfterLoad, yieldToMain } from "./idle";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -84,5 +84,38 @@ describe("runWhenIdleAfterLoad", () => {
 
     expect(beforeLoad).not.toHaveBeenCalled();
     expect(afterLoad).not.toHaveBeenCalled();
+  });
+});
+
+describe("yieldToMain", () => {
+  it("uses scheduler.yield where the browser has it", async () => {
+    const schedulerYield = vi.fn<() => Promise<void>>(async () => {});
+    vi.stubGlobal("scheduler", { yield: schedulerYield });
+
+    await yieldToMain();
+
+    expect(schedulerYield).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts a message, not a timer, where scheduler has no yield (Chrome 94-128)", async () => {
+    vi.stubGlobal("scheduler", { postTask: vi.fn<() => Promise<void>>() });
+    let resumed = false;
+
+    const yielded = yieldToMain().then(() => {
+      resumed = true;
+    });
+    await Promise.resolve();
+    expect(resumed).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await yielded;
+    expect(resumed).toBe(true);
+  });
+
+  it("posts a message where there is no scheduler at all", async () => {
+    vi.stubGlobal("scheduler", undefined);
+
+    await expect(yieldToMain()).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
