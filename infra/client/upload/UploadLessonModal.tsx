@@ -78,6 +78,7 @@ export default function UploadLessonModal({
   const { isSignedIn, isLoading: authLoading } = useAuth();
   // Titles whichever of the modal's views is showing; only one renders at a time.
   const titleId = useId();
+  const titleErrorId = useId();
   const [title, setTitle] = useState(initialTitle ?? defaultTitle(recording.createdAt));
   const [description, setDescription] = useState(initialDescription ?? "");
   const [tagsInput, setTagsInput] = useState(initialTags ?? "");
@@ -384,7 +385,11 @@ export default function UploadLessonModal({
           <p className="text-xs text-slate-400">
             Sign in to save and share this recording — {formatDuration(recording.duration)} long.
           </p>
-          {signInError ? <p className="text-xs text-rose-300">{signInError}</p> : null}
+          {signInError ? (
+            <p role="alert" className="text-xs text-rose-300">
+              {signInError}
+            </p>
+          ) : null}
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
@@ -444,27 +449,42 @@ export default function UploadLessonModal({
         </div>
       ) : (
         <div className="space-y-5 overflow-y-auto p-5">
+          {/* Mounted with the form so the change to "Uploading…" is announced;
+              the visible percentage below would be read out on every tick. */}
+          <p role="status" className="sr-only">
+            {isUploading ? "Uploading…" : ""}
+          </p>
           <h2 id={titleId} className="text-sm font-medium text-slate-100">
             Share this recording
           </h2>
 
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-300">Title</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(event) => {
-                setTitle(event.target.value);
-                if (titleError) setTitleError(null);
-                setLimitError(null);
-              }}
-              maxLength={MAX_TITLE_CHARS}
-              disabled={isUploading}
-              autoFocus={!!titleError}
-              className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
-            />
-            {titleError ? <p className="text-xs text-rose-300">{titleError}</p> : null}
-          </label>
+          {/* The error sits outside the label so it describes the field
+              instead of becoming part of its name. */}
+          <div className="space-y-1">
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-slate-300">Title</span>
+              <input
+                type="text"
+                value={title}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  if (titleError) setTitleError(null);
+                  setLimitError(null);
+                }}
+                maxLength={MAX_TITLE_CHARS}
+                disabled={isUploading}
+                autoFocus={!!titleError}
+                aria-invalid={titleError ? true : undefined}
+                aria-describedby={titleError ? titleErrorId : undefined}
+                className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
+              />
+            </label>
+            {titleError ? (
+              <p id={titleErrorId} role="alert" className="text-xs text-rose-300">
+                {titleError}
+              </p>
+            ) : null}
+          </div>
 
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-400">Description (optional)</span>
@@ -545,7 +565,11 @@ export default function UploadLessonModal({
                 </div>
               )}
             </div>
-            {thumbnailError ? <p className="text-xs text-rose-300">{thumbnailError}</p> : null}
+            {thumbnailError ? (
+              <p role="alert" className="text-xs text-rose-300">
+                {thumbnailError}
+              </p>
+            ) : null}
             <input
               ref={thumbnailInputRef}
               type="file"
@@ -590,7 +614,11 @@ export default function UploadLessonModal({
               <Captions size={14} aria-hidden="true" />
               Add caption file (.vtt / .srt)
             </button>
-            {captionError ? <p className="text-xs text-rose-300">{captionError}</p> : null}
+            {captionError ? (
+              <p role="alert" className="text-xs text-rose-300">
+                {captionError}
+              </p>
+            ) : null}
             <input
               ref={captionInputRef}
               type="file"
@@ -602,11 +630,15 @@ export default function UploadLessonModal({
           </div>
 
           {limitError ? (
-            <p className="text-sm text-rose-300">{limitError}</p>
+            <p role="alert" className="text-sm text-rose-300">
+              {limitError}
+            </p>
           ) : signInError ? (
-            <p className="text-sm text-rose-300">{signInError}</p>
+            <p role="alert" className="text-sm text-rose-300">
+              {signInError}
+            </p>
           ) : error ? (
-            <p className="text-sm text-rose-300">
+            <p role="alert" className="text-sm text-rose-300">
               {axios.isAxiosError(error) && error.response?.status === 409
                 ? "That recording was already uploaded — try again."
                 : "Upload failed. Your details are still here — try again."}

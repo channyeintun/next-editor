@@ -162,6 +162,41 @@ describe("UploadLessonModal text limits", () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  // The message appears after an async action the user started, so it has to
+  // be announced, not just painted.
+  it("announces a limit error as an alert", async () => {
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+
+    typeTags(Array.from({ length: MAX_TAGS + 1 }, (_, i) => `tag${i}`).join(", "));
+    clickUpload();
+
+    expect((await screen.findByRole("alert")).textContent).toBe("at most 30 tags");
+  });
+
+  it("announces a missing title and ties it to the title field", async () => {
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+    const titleInput = screen.getByLabelText<HTMLInputElement>(/^Title/);
+    expect(titleInput.getAttribute("aria-invalid")).toBeNull();
+
+    fireEvent.change(titleInput, { target: { value: "   " } });
+    clickUpload();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Title is required");
+    expect(titleInput.getAttribute("aria-invalid")).toBe("true");
+    expect(titleInput.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(screen.getByRole("textbox", { name: "Title" })).toBe(titleInput);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  // One region mounted with the form: text changing inside a live region is
+  // announced, a region mounted already holding its text often is not.
+  it("mounts an empty upload status region with the form", () => {
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
   it("refuses a tag longer than the Worker accepts before uploading anything", async () => {
     render(<UploadLessonModal recording={recording} onClose={() => {}} />);
 
