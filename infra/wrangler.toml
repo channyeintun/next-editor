@@ -118,9 +118,10 @@ migrations_dir = "./db/migrations"
 binding = "BUCKET"
 bucket_name = "next-editor-tube-media"
 
-# Fail-open cache for public lesson and playlist reads. With no account-specific
-# ID checked in, Wrangler creates a persistent local namespace for development
-# and automatically provisions/attaches one on the first deployment.
+# Result cache for the playground routes (fail-open; omit it to run them
+# uncached), see worker/cache.ts. With no account-specific ID checked in,
+# Wrangler creates a persistent local namespace for development and
+# automatically provisions/attaches one on the first deployment.
 [[kv_namespaces]]
 binding = "CACHE"
 

@@ -10,8 +10,8 @@ import { isUniqueViolation } from "./uniqueViolation";
 // Shared subquery for PlaylistRowWithCount's first_lesson_thumbnail — the
 // lowest-position currently-published member's thumbnail, used as the
 // playlist's own cover image in the My Library card grid. Kept as one
-// constant (not copy-pasted) since all three call sites below must produce
-// the exact same PlaylistRowWithCount shape.
+// constant (not copy-pasted) since every PlaylistRowWithCount producer below
+// must produce the exact same shape.
 const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
   SELECT lessons.thumbnail FROM playlist_lessons
   JOIN lessons ON lessons.id = playlist_lessons.lesson_id
@@ -19,6 +19,13 @@ const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
   ORDER BY playlist_lessons.position ASC
   LIMIT 1
 ) AS first_lesson_thumbnail`;
+
+// PlaylistRowWithCount's lesson_count for the owner's own views: every member,
+// published or not. The public profile counts published members only
+// (publishedPlaylistsByOwnerStatement).
+const LESSON_COUNT_SUBQUERY = `(
+         SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
+       ) AS lesson_count`;
 
 export interface InsertPlaylistParams {
   id: string;
@@ -122,9 +129,7 @@ export async function getOwnedPlaylistById(
 ): Promise<PlaylistRowWithCount | null> {
   const row = await db
     .prepare(
-      `SELECT playlists.*, (
-         SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
-       ) AS lesson_count,
+      `SELECT playlists.*, ${LESSON_COUNT_SUBQUERY},
        ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
        WHERE id = ? AND owner_id = ?`,
@@ -144,9 +149,7 @@ export async function listOwnedPlaylists(
 ): Promise<PlaylistRowWithCount[]> {
   const result = await db
     .prepare(
-      `SELECT playlists.*, (
-         SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
-       ) AS lesson_count,
+      `SELECT playlists.*, ${LESSON_COUNT_SUBQUERY},
        ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
        WHERE owner_id = ?
@@ -201,9 +204,7 @@ export async function listOwnedPlaylistsForLesson(
 ): Promise<PlaylistRowWithMembership[]> {
   const result = await db
     .prepare(
-      `SELECT playlists.*, (
-         SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
-       ) AS lesson_count,
+      `SELECT playlists.*, ${LESSON_COUNT_SUBQUERY},
        EXISTS(
          SELECT 1 FROM playlist_lessons
          WHERE playlist_lessons.playlist_id = playlists.id AND playlist_lessons.lesson_id = ?

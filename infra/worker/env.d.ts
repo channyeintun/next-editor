@@ -60,8 +60,8 @@ export interface Env {
   ATHANLAB_API_RATE_LIMITER?: RateLimit;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
-  // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type
-  // so self-hosted/test environments can omit it and fall through to D1.
+  // Workers KV result cache for the playground routes (infra/worker/cache.ts).
+  // Fail-open and optional: an environment that omits it runs them uncached.
   CACHE?: KVNamespace;
   // Optional in local development. When configured together, QStash handles
   // delayed room cleanup outside the edit path.

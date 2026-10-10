@@ -31,9 +31,6 @@ const RENDERABLE_CONTENT_TYPES: ReadonlySet<string> = new Set([
   ...SLIDE_IMAGE_CONTENT_TYPES,
 ]);
 
-// Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically
-// against a running dev server — it came back undefined); ":key{.+}" is the
-// form that actually captures the tail into c.req.param("key").
 // The bucket is shared with namespaces that are NOT public. Collaboration room
 // assets live at collaboration/rooms/<roomId>/assets/<sha256> and have their own
 // read route (routes/collaboration.ts) which requires a session, checks room
@@ -88,6 +85,9 @@ function writeOnceEdgeCache(request: Request): { cache: Cache; key: string } | n
   };
 }
 
+// Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically
+// against a running dev server — it came back undefined); ":key{.+}" is the
+// form that actually captures the tail into c.req.param("key").
 mediaRoute.get("/:key{.+}", async (c) => {
   const key = c.req.param("key");
   if (!key) {
