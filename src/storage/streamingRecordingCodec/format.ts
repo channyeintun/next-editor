@@ -97,6 +97,9 @@ export const MAX_COMPRESSED_META_BYTES = 4 * 1024 * 1024;
 const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
 const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
 const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
+// fflate emits one output chunk per push, so slicing the input bounds the largest
+// allocation made before a decoded-size limit is checked (~1000x a slice).
+const BOUNDED_INFLATE_SLICE_BYTES = 4096;
 // The asset bytes plus a fixed allowance for the payload header (lengths, id, MIME).
 const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = MAX_WORKSPACE_ASSET_BYTES + 64 * 1024;
 export const MAX_DECODED_RECORDS = 1_000_000;
@@ -423,7 +426,15 @@ function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Ui
     }
     chunks.push(chunk);
   });
-  inflater.push(payload, true);
+  if (payload.byteLength === 0) {
+    inflater.push(payload, true);
+  }
+  for (let offset = 0; offset < payload.byteLength; offset += BOUNDED_INFLATE_SLICE_BYTES) {
+    inflater.push(
+      payload.subarray(offset, offset + BOUNDED_INFLATE_SLICE_BYTES),
+      offset + BOUNDED_INFLATE_SLICE_BYTES >= payload.byteLength,
+    );
+  }
   return concatChunks(chunks, total);
 }
 
