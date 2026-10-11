@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import ChaptersMenu, { CurrentChapterTitle, linkToMoment } from "./ChaptersMenu";
+import ChaptersMenu, { linkToMoment } from "./ChaptersMenu";
 import type { Recording, RecordingChapter } from "../core/src";
 
 const actions = vi.hoisted(() => ({
@@ -248,38 +248,5 @@ describe("linkToMoment", () => {
   it("keeps the page's own parameters and drops the embed flag", () => {
     window.history.replaceState(null, "", "/code?url=%2Flesson.ne&embed=true&t=5");
     expect(linkToMoment(95_500)).toBe(`${window.location.origin}/code?url=%2Flesson.ne&t=95`);
-  });
-});
-
-describe("CurrentChapterTitle", () => {
-  const chapters = [
-    { time: 5_000, title: "Setup" },
-    { time: 60_000, title: "A much longer chapter title about routing" },
-  ];
-
-  // The progress bar beside it takes the row's free width, so a title sized
-  // to its text would resize the bar, and move every control after it, at
-  // each chapter boundary. jsdom has no layout: the classes are the contract.
-  it("keeps one fixed-width box for the whole lesson, before the first chapter too", () => {
-    const boxAt = (time: number) => {
-      playhead.time = time;
-      const { container, unmount } = render(<CurrentChapterTitle chapters={chapters} />);
-      const box = container.firstElementChild;
-      const result = { className: box?.className, text: box?.textContent };
-      unmount();
-      return result;
-    };
-
-    const before = boxAt(1_000);
-    const first = boxAt(10_000);
-    const second = boxAt(65_400);
-
-    expect(before.text).toBe("");
-    expect(first.text).toBe("Setup");
-    expect(second.text).toBe("A much longer chapter title about routing");
-    expect(first.className).toMatch(/(^|\s)w-48(\s|$)/);
-    expect(first.className).toMatch(/(^|\s)shrink-0(\s|$)/);
-    expect(before.className).toBe(first.className);
-    expect(second.className).toBe(first.className);
   });
 });

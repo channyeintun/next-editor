@@ -26,33 +26,6 @@ export function linkToMoment(timeMs: number): string {
   return url.toString();
 }
 
-/** The title of the chapter playing now, beside the timer. */
-export function CurrentChapterTitle({
-  chapters,
-  large = false,
-}: {
-  chapters: readonly RecordingChapter[];
-  large?: boolean;
-}) {
-  // The chapter, not the time: the title re-renders at chapter boundaries, not every tick.
-  const chapterIndex = useLiveTimeValue((time) => findChapterIndexAt(chapters, time));
-  const chapter = chapters[chapterIndex];
-  return (
-    // One fixed width for the whole lesson, kept (empty) before the first
-    // chapter: the progress bar beside it takes the row's free width, so a
-    // title sized to its text would resize the bar, and move every control
-    // after it, at each chapter boundary. Right-aligned, so it hugs the time.
-    <span
-      className={`hidden w-48 shrink-0 truncate text-right text-slate-300 pointer-events-auto md:block ${
-        large ? "text-2xl" : "text-xs"
-      }`}
-      title={chapter?.title}
-    >
-      {chapter?.title}
-    </span>
-  );
-}
-
 /**
  * The recording's chapters: jump to one, or copy a link that opens the lesson there.
  * The author (record mode) can also add a chapter at the playhead, rename and delete.

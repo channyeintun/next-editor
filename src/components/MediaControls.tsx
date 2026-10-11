@@ -20,7 +20,7 @@ import {
   useTimelineDurationMs,
 } from "../hooks/useNextEditorContext";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
-import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
+import ChaptersMenu from "./ChaptersMenu";
 import type { RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
@@ -726,10 +726,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             </div>
           </>
         )}
-
-        {!isRecording && currentRecording?.chapters?.length ? (
-          <CurrentChapterTitle chapters={currentRecording.chapters} large={large} />
-        ) : null}
 
         {isRecording ? <RecordingMicrophoneLevel /> : null}
 
