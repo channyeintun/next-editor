@@ -360,7 +360,7 @@ export default function NarratorVoicePanel({
                 type="button"
                 disabled={disabled || voiceBusy !== null || voiceRecording}
                 onClick={() => {
-                  void removeVoice();
+                  removeVoice().catch((error: unknown) => onError(messageOf(error)));
                 }}
                 aria-label="Delete voice"
                 className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"

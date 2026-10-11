@@ -8,6 +8,7 @@ const library = vi.hoisted(() => ({
   voices: [] as SavedCustomVoice[],
   synthesizePocket: vi.fn<() => Promise<Uint8Array>>(),
   saveVoice: vi.fn<(name: string, samples: Float32Array) => Promise<SavedCustomVoice>>(),
+  deleteVoice: vi.fn<(id: string) => Promise<void>>(),
 }));
 
 vi.mock("./tts/pocketSynth", () => ({ synthesizePocketWav: library.synthesizePocket }));
@@ -17,7 +18,7 @@ vi.mock("./tts/modalVoxCpm2Synth", () => ({
 vi.mock("./tts/customVoices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tts/customVoices")>()),
   listCustomVoices: () => Promise.resolve(library.voices),
-  deleteCustomVoice: () => Promise.resolve(),
+  deleteCustomVoice: library.deleteVoice,
   prepareVoiceSample: () => Promise.resolve(new Float32Array(24_000 * 6)),
   saveCustomVoice: library.saveVoice,
 }));
@@ -59,6 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   library.voices = [narrator];
+  library.deleteVoice.mockResolvedValue(undefined);
   localStorage.setItem(VOICE_CHOICE_KEY, narrator.id);
 });
 
@@ -163,6 +165,19 @@ describe("NarratorVoicePanel voice focus", () => {
     );
     expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
     expect(onSelectedVoiceChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("sends a failed delete to onError and keeps the voice listed", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    library.deleteVoice.mockRejectedValueOnce(new Error("The storage quota was exceeded"));
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete voice" }));
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith("The storage quota was exceeded"));
+    expect(library.deleteVoice).toHaveBeenCalledWith(narrator.id);
+    expect(screen.getByRole("option", { name: "voice: Narrator (cloned)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete voice" })).toBeInTheDocument();
   });
 });
 
