@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { useModalFocus } from "@app/hooks/useModalFocus";
+import LangText from "@app/components/LangText";
 import {
   usePlaylistLessons,
   useRemoveLessonFromPlaylist,
@@ -102,7 +103,9 @@ export default function PlaylistManagePanel({
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
           <h3 id={titleId} className="min-w-0 truncate text-sm font-semibold text-white">
-            Manage &ldquo;{playlist.title}&rdquo;
+            Manage &ldquo;
+            <LangText text={playlist.title} />
+            &rdquo;
           </h3>
           <button
             type="button"
@@ -155,7 +158,7 @@ export default function PlaylistManagePanel({
                       lesson.status === "published" ? "text-slate-300" : "text-slate-400"
                     }`}
                   >
-                    {lesson.title}
+                    <LangText text={lesson.title} />
                     {lesson.status !== "published" && (
                       <span
                         className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400"

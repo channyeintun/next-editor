@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
+import LangText from "@app/components/LangText";
 import {
   MAX_TITLE_CHARS,
   useAddLessonToPlaylist,
@@ -181,7 +182,9 @@ export default function AddToPlaylistPopover({
                 >
                   {playlist.containsLesson && <Check className="size-3 text-white" />}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{playlist.title}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  <LangText text={playlist.title} />
+                </span>
               </button>
             ))
           )}

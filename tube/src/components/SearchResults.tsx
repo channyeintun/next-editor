@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import LangText from "@app/components/LangText";
 import { avatarProxyUrl, type SearchResults as SearchResultsData } from "@next-editor/infra";
 import { busyFadeClass, RESULTS_ENTER_CLASS } from "../lib/busyFade";
 import LessonCard from "./LessonCard";
@@ -81,7 +82,7 @@ export default function SearchResults({ data, isError, isBusy, onRetry }: Search
                     {(author.name || author.username)[0]}
                   </span>
                 )}
-                {author.name || author.username}
+                <LangText text={author.name || author.username} />
               </Link>
             ))}
           </div>

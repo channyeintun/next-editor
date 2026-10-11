@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ListMusic } from "lucide-react";
 import type { Playlist } from "../types";
 import Breadcrumb from "@app/components/Breadcrumb";
+import LangText from "@app/components/LangText";
 import { useOnScreenThumbnailsSettled, useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
 import LessonCard from "./LessonCard";
 
@@ -21,9 +22,13 @@ export default function PlaylistDetail({ playlist }: { playlist: Playlist }) {
           <ListMusic className="size-3.5" />
           Playlist · {count} {count === 1 ? "lesson" : "lessons"}
         </p>
-        <h1 className="mt-1.5 text-2xl font-semibold text-white">{playlist.title}</h1>
+        <h1 className="mt-1.5 text-2xl font-semibold text-white">
+          <LangText text={playlist.title} />
+        </h1>
         {playlist.description && (
-          <p className="mt-2 max-w-2xl text-sm text-slate-300">{playlist.description}</p>
+          <p className="mt-2 max-w-2xl text-sm text-slate-300">
+            <LangText text={playlist.description} />
+          </p>
         )}
       </div>
 

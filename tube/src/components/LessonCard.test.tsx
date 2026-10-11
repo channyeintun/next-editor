@@ -60,6 +60,22 @@ describe("LessonCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks the Burmese part of the author link as lang=my", () => {
+    renderCard(lesson({ author: "Chan ချမ်း", authorUrl: "/learn/@chan" }));
+
+    const link = screen.getByRole("link", { name: "Chan ချမ်း" });
+    const burmese = link.querySelectorAll('span[lang="my"]');
+    expect(burmese).toHaveLength(1);
+    expect(burmese[0].textContent).toBe("ချမ်း");
+  });
+
+  it("marks the Burmese part of an unlinked author as lang=my", () => {
+    renderCard(lesson({ author: "Chan ချမ်း", authorUrl: undefined }));
+
+    const burmese = screen.getByText("ချမ်း");
+    expect(burmese).toHaveAttribute("lang", "my");
+  });
+
   it("renders an English title with no lang override", () => {
     renderCard(lesson({ title: "Rust from zero: Ownership" }));
 

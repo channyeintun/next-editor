@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import GalleryShell from "@app/components/GalleryShell";
 import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-editor/infra";
 import Breadcrumb from "@app/components/Breadcrumb";
+import LangText from "@app/components/LangText";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
@@ -119,7 +120,9 @@ function PublicAuthorProfile({ username }: { username: string }) {
           </span>
         )}
         <div>
-          <h1 className="text-lg font-semibold text-white">{displayName}</h1>
+          <h1 className="text-lg font-semibold text-white">
+            <LangText text={displayName} />
+          </h1>
           <p className="text-sm text-slate-300">@{data.user.username}</p>
         </div>
       </div>

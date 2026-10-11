@@ -84,10 +84,12 @@ export default function LessonCard({
                   to={lesson.authorUrl}
                   className="rounded outline-none hover:text-white hover:underline focus-visible:text-white focus-visible:underline"
                 >
-                  {lesson.author}
+                  <LangText text={lesson.author} />
                 </Link>
               ) : (
-                <span>{lesson.author}</span>
+                <span>
+                  <LangText text={lesson.author} />
+                </span>
               ))}
             {lesson.author && published && " · "}
             {published && <span>{published}</span>}

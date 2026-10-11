@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { ListMusic } from "lucide-react";
+import LangText from "@app/components/LangText";
 import type { PlaylistSummary } from "@next-editor/infra";
 import { resolveThumb } from "../lib/links";
 import ThumbnailTile from "./ThumbnailTile";
@@ -36,7 +37,7 @@ export default function PlaylistSummaryCard({ playlist }: { playlist: PlaylistSu
             to={href}
             className="rounded text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-pinata-purple focus-visible:ring-offset-2 focus-visible:ring-offset-[#11141c]"
           >
-            {playlist.title}
+            <LangText text={playlist.title} />
             <span className="sr-only">
               {`, ${playlist.lessonCount} ${playlist.lessonCount === 1 ? "lesson" : "lessons"}`}
             </span>

@@ -31,6 +31,14 @@ describe("PlaylistSummaryCard", () => {
     expect(link).toHaveAttribute("href", "/learn/playlist/rust-from-zero");
   });
 
+  it("marks the Burmese part of the title as lang=my", () => {
+    renderCard({ title: "Rust တွေ" });
+
+    const burmese = screen.getByRole("link").querySelectorAll('span[lang="my"]');
+    expect(burmese).toHaveLength(1);
+    expect(burmese[0].textContent).toBe("တွေ");
+  });
+
   it("uses the singular for a one-lesson playlist", () => {
     renderCard({ lessonCount: 1 });
 

@@ -47,6 +47,16 @@ describe("SearchResults", () => {
     );
   });
 
+  // The page is lang="en"; a Burmese name must switch the screen reader's voice.
+  it("marks the Burmese part of an author's name as lang=my", () => {
+    render(ui({ data: results({ authors: [{ ...author, name: "Chan ချမ်း" }] }) }));
+
+    const link = screen.getByRole("link", { name: "Chan ချမ်း" });
+    const burmese = link.querySelectorAll('span[lang="my"]');
+    expect(burmese).toHaveLength(1);
+    expect(burmese[0].textContent).toBe("ချမ်း");
+  });
+
   it("heads the matching lessons with their own section, not the Authors one", () => {
     render(
       ui({
