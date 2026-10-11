@@ -129,6 +129,7 @@ const playedFill = () =>
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -240,6 +241,41 @@ describe("MediaControls", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       'No captions found in "notes.vtt" — expected WebVTT or SRT.',
     );
+  });
+
+  it("does not reopen the edit panel for the next take after starting over", async () => {
+    // jsdom cannot measure or draw the panel's waveform.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    render(
+      <Providers>
+        <Player recordMode />
+      </Providers>,
+    );
+    act(() => seen.actions!.loadRecording(lesson));
+    await waitFor(() => expect(seen.loaded?.id).toBe("lesson"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cut or mute stretches of this recording" }),
+    );
+    expect(await screen.findByRole("dialog", { name: "Edit recording" })).toBeInTheDocument();
+
+    // New Recording clears the take; the panel goes with it.
+    act(() => seen.actions!.clearRecording());
+    await waitFor(() => expect(seen.loaded).toBeNull());
+    expect(screen.queryByRole("dialog", { name: "Edit recording" })).not.toBeInTheDocument();
+
+    act(() => seen.actions!.loadRecording({ ...lesson, id: "next-take" }));
+    await waitFor(() => expect(seen.loaded?.id).toBe("next-take"));
+    expect(screen.queryByRole("dialog", { name: "Edit recording" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cut or mute stretches of this recording" }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("announces captioning that failed", async () => {

@@ -163,6 +163,9 @@ export default function RecordingEditPanel({
   const [narration, setNarration] = useState<{ blob: Blob; peaks: AudioPeaks } | null>(null);
   const [narrationState, setNarrationState] = useState<NarrationState>("loading");
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  // The recording the edits were marked on: the panel is open beside the player, so
+  // another one can be loaded under it.
+  const [originId] = useState(recording.id);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,6 +231,12 @@ export default function RecordingEditPanel({
     onApplied(currentRecording);
     onClose();
   }, [applyingId, currentRecording, onApplied, onClose]);
+
+  // Any other recording loaded under the panel closes it: its edits name stretches of the
+  // one they were marked on, and applied to this one they would cut the wrong content.
+  useEffect(() => {
+    if (recording.id !== originId && recording.id !== applyingId) onClose();
+  }, [recording.id, originId, applyingId, onClose]);
 
   const timeAt = (clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();

@@ -224,6 +224,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   // is loaded; the menu is as it was left when the button comes back.
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
+  // With no take loaded the panel is gone, and it must not open again on the next one.
+  if (!currentRecording && showEditPanel) setShowEditPanel(false);
   const captionGeneration = useCaptionGeneration(currentRecording?.id ?? null);
   const {
     inputRef: captionFileInputRef,

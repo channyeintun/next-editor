@@ -136,6 +136,91 @@ describe("RecordingEditPanel", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  describe("on the loaded recording, as the player bar shows it", () => {
+    const loaded: { actions: NextEditorActions | null; current: Recording | null } = {
+      actions: null,
+      current: null,
+    };
+    const onApplied = vi.fn<(recording: Recording) => void>();
+    const onClose = vi.fn<() => void>();
+
+    /** The player bar's panel: open on whatever is loaded, until onClose closes it. */
+    function LoadedPanel() {
+      loaded.actions = useNextEditorActions();
+      loaded.current = useNextEditorMetadata().currentRecording;
+      const [open, setOpen] = useState(true);
+      return open && loaded.current ? (
+        <RecordingEditPanel
+          recording={loaded.current}
+          onClose={() => {
+            onClose();
+            setOpen(false);
+          }}
+          onApplied={onApplied}
+        />
+      ) : null;
+    }
+
+    /** Loads the take with the panel open on it, and cuts 0:02–0:07. */
+    async function openWithACut() {
+      render(
+        <Providers>
+          <LoadedPanel />
+        </Providers>,
+      );
+      act(() => loaded.actions!.loadRecording(take));
+      await screen.findByText(/No narration/);
+      act(() => loaded.actions!.seekTo(2_000));
+      fireEvent.click(screen.getByRole("button", { name: "Start at playhead" }));
+      act(() => loaded.actions!.seekTo(7_000));
+      fireEvent.click(screen.getByRole("button", { name: "End at playhead" }));
+      fireEvent.click(screen.getByRole("button", { name: /Cut selection/ }));
+      expect(screen.getByText(/Removes 0:05/)).toBeInTheDocument();
+    }
+
+    afterEach(() => {
+      onApplied.mockReset();
+      onClose.mockReset();
+    });
+
+    it("closes, dropping its edits, when another recording is loaded", async () => {
+      await openWithACut();
+
+      // The take's cuts would be applied to this one.
+      act(() => loaded.actions!.loadRecording({ ...take, id: "another-take" }));
+      await waitFor(() => expect(loaded.current?.id).toBe("another-take"));
+
+      expect(onClose).toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Edit recording" })).not.toBeInTheDocument();
+      expect(onApplied).not.toHaveBeenCalled();
+    });
+
+    it("stays open when the same recording changes", async () => {
+      await openWithACut();
+
+      // A new chapter makes a new recording object with the same id.
+      const before = loaded.current;
+      act(() => loaded.actions!.setChapters("take", [{ time: 0, title: "Intro" }]));
+      await waitFor(() => expect(loaded.current).not.toBe(before));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByText(/Removes 0:05/)).toBeInTheDocument();
+    });
+
+    it("hands on the recording its own Apply loaded before it closes", async () => {
+      await openWithACut();
+
+      fireEvent.click(screen.getByRole("button", { name: /Apply edits/ }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      // Closed once, by the hand-on: the new id is the panel's own result, not another take.
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onApplied).toHaveBeenCalledTimes(1);
+      expect(onApplied.mock.calls[0][0].id).toBe(loaded.current?.id);
+      expect(loaded.current?.id).not.toBe("take");
+    });
+  });
+
   it("selects a stretch from the keyboard by marking its edges at the playhead", async () => {
     const captured: { actions: NextEditorActions | null; current: Recording | null } = {
       actions: null,
