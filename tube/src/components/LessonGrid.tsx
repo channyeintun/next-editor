@@ -5,6 +5,7 @@ import { useLessonsInfinite } from "../hooks/useLessons";
 import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
 import { GALLERY_COLUMN_QUERIES } from "../lib/galleryColumns";
 import { flattenLessonPages } from "../lib/lessons";
+import { busyFadeClass } from "../lib/busyFade";
 import {
   observeFirstRowThumbnails,
   settleWithoutFirstRow,
@@ -14,10 +15,7 @@ import LessonCard from "./LessonCard";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
 import SearchResults from "./SearchResults";
-
-// How long to wait after the last keystroke before firing the backend search
-// request — avoids a request per keystroke while still feeling responsive.
-const SEARCH_DEBOUNCE_MS = 300;
+import LangText from "@app/components/LangText";
 
 function readColumns(): number {
   if (typeof window === "undefined") return 1;
@@ -54,20 +52,65 @@ export default function LessonGrid() {
     isFetchNextPageError,
     refetch,
   } = useLessonsInfinite();
+  // What the field holds, and what was last searched for: typing changes only
+  // the first; Enter copies it into the second, which is what the page shows.
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [query]);
-  // Same query key as SearchResults' call, so React Query dedupes the request.
-  const search = useSearch(debouncedQuery);
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  // The page's one search observer; SearchResults draws what it holds.
+  const search = useSearch(submittedQuery);
+  // Placeholder data is the last search that had an answer, not what is on
+  // screen: it may stand in for a loading search only when results were
+  // showing when Enter was pressed. After Escape the gallery was showing, so
+  // the gallery stays (dimmed) until the new search answers.
+  const [fromResults, setFromResults] = useState(false);
+  const showResults =
+    Boolean(submittedQuery) && !search.isPending && (!search.isPlaceholderData || fromResults);
+  const isSearching = Boolean(submittedQuery) && (search.isPending || search.isPlaceholderData);
+  // The query whose own answer is on screen. The results remount when it
+  // changes, so a new answer comes in whole instead of moving kept cards around
+  // (a layout shift); while a newer search loads it stays, keeping the dimmed
+  // results mounted.
+  const [answeredQuery, setAnsweredQuery] = useState("");
+  if (search.data && !search.isPlaceholderData && submittedQuery !== answeredQuery) {
+    setAnsweredQuery(submittedQuery);
+  }
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // A retry replaces the failure with a loading search, so nothing older may
+  // stand in for it, and focus goes back to the field the button leaves.
+  const retrySearch = () => {
+    setFromResults(false);
+    if (!search.isFetching) void search.refetch();
+  };
+  const searchBar = (
+    <SearchBar
+      inputRef={searchInputRef}
+      value={query}
+      onChange={setQuery}
+      onSubmit={() => {
+        const next = query.trim();
+        // Enter on the query that just failed tries it again; setting the same
+        // value would change nothing.
+        if (next && next === submittedQuery && search.isError) {
+          retrySearch();
+          return;
+        }
+        setFromResults(showResults && !search.isError);
+        setSubmittedQuery(next);
+      }}
+      onClear={() => {
+        setFromResults(false);
+        setQuery("");
+        setSubmittedQuery("");
+      }}
+      isDirty={query.trim() !== submittedQuery}
+    />
+  );
   const columns = useColumns();
 
   const lessons = flattenLessonPages(data?.pages);
   // The first row's thumbnails are what the page waits for (its LCP); when the
   // gallery has no such row to show, there is nothing to wait for.
-  const waitsForFirstRow = !debouncedQuery && (isPending || lessons.length > 0);
+  const waitsForFirstRow = !showResults && (isPending || lessons.length > 0);
   useEffect(() => {
     if (!waitsForFirstRow) settleWithoutFirstRow();
   }, [waitsForFirstRow]);
@@ -106,7 +149,7 @@ export default function LessonGrid() {
   // Auto-load the next page when the sentinel nears the viewport. Suppressed
   // while searching: the query bar switches to backend search results
   // instead (see the render below), so there's no infinite list to page.
-  const canPage = hasNextPage && !debouncedQuery;
+  const canPage = hasNextPage && !showResults;
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = sentinelRef.current;
@@ -126,21 +169,24 @@ export default function LessonGrid() {
   // readers announce its text changes (a region mounted together with its text
   // is not reliably read). Errors are announced by their own role="alert".
   let statusText = "";
-  if (debouncedQuery) {
-    if (search.isPending) statusText = "Searching…";
+  if (submittedQuery) {
+    if (isSearching || (search.isError && search.isFetching)) statusText = "Searching…";
     else if (search.data && !search.isError) {
       const authorCount = search.data.authors.length;
       const lessonCount = search.data.lessons.length;
-      statusText =
+      const counts =
         authorCount + lessonCount === 0
           ? "No authors or lessons match your search."
           : `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"} and ${authorCount} ${authorCount === 1 ? "author" : "authors"} found`;
+      // Naming the query makes each search's text new, so it is announced even
+      // when two searches find the same counts.
+      statusText = `Results for “${submittedQuery}”: ${counts}`;
     }
   } else if (isPending) statusText = "Loading lessons…";
   else if (isFetchingNextPage) statusText = "Loading more lessons…";
   const status = (
     <p role="status" className="sr-only">
-      {statusText}
+      <LangText text={statusText} />
     </p>
   );
 
@@ -150,33 +196,47 @@ export default function LessonGrid() {
   // scroll position and the search bar over one paging blip. Full-page error is
   // for "we have nothing to show" (page 0 itself failed); a paging failure gets
   // the inline retry row below the grid instead. A search runs its own query, so
-  // a failed gallery page 0 never replaces search results.
-  if (isError && lessons.length === 0 && !debouncedQuery) {
+  // a failed gallery page 0 never replaces search results. The field keeps its
+  // child slot (after the status) in every branch, so a query being typed, or a
+  // search still loading, keeps its field and focus.
+  if (isError && lessons.length === 0 && !showResults) {
     return (
-      <div className="flex flex-col items-center gap-4 py-20 text-center">
+      <div>
         {status}
-        <p role="alert" className="text-red-300">
-          {error instanceof Error ? error.message : "Failed to load lessons"}
-        </p>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
-        >
-          Try again
-        </button>
+        {(query || submittedQuery) && searchBar}
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <p role="alert" className="text-red-300">
+            {error instanceof Error ? error.message : "Failed to load lessons"}
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
 
   // Page 0 is a network fetch, so a search can start before it lands (or after
   // it fails). The box stays either way: it is what the search is typed into.
-  if (debouncedQuery) {
+  if (showResults) {
     return (
       <div>
         {status}
-        <SearchBar value={query} onChange={setQuery} />
-        <SearchResults query={debouncedQuery} />
+        {searchBar}
+        <SearchResults
+          key={answeredQuery}
+          data={search.data}
+          isError={search.isError}
+          isBusy={search.isPlaceholderData}
+          onRetry={() => {
+            retrySearch();
+            searchInputRef.current?.focus();
+          }}
+        />
       </div>
     );
   }
@@ -184,67 +244,70 @@ export default function LessonGrid() {
   return (
     <div>
       {status}
-      {(lessons.length > 0 || isPending) && <SearchBar value={query} onChange={setQuery} />}
+      {(lessons.length > 0 || isPending || submittedQuery) && searchBar}
 
-      {isPending ? (
-        <div
-          className="grid gap-5 py-5"
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-        >
-          {Array.from({ length: columns }).map((_, i) => (
-            <LessonCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : lessons.length === 0 ? (
-        <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
-      ) : (
-        <>
-          <div ref={setListNode}>
-            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualizer.getVirtualItems().map((vi) => (
-                <div
-                  key={vi.key}
-                  data-index={vi.index}
-                  ref={virtualizer.measureElement}
-                  className="absolute left-0 top-0 w-full"
-                  style={{ transform: `translateY(${vi.start - scrollMargin}px)` }}
-                >
-                  <div
-                    ref={vi.index === 0 ? observeFirstRowThumbnails : undefined}
-                    className="grid gap-5 pb-5"
-                    style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-                  >
-                    {rows[vi.index].map((lesson, idx) =>
-                      lesson ? (
-                        <LessonCard key={lesson.slug} lesson={lesson} priority={vi.index === 0} />
-                      ) : (
-                        <LessonCardSkeleton key={`skel-${idx}`} />
-                      ),
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Inert while dimmed: what is about to be replaced is not to be reached. */}
+      <div aria-busy={isSearching} inert={isSearching} className={busyFadeClass(isSearching)}>
+        {isPending ? (
+          <div
+            className="grid gap-5 py-5"
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: columns }).map((_, i) => (
+              <LessonCardSkeleton key={i} />
+            ))}
           </div>
-
-          {isFetchNextPageError ? (
-            <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
-              <p role="alert" className="text-sm text-red-300">
-                {error instanceof Error ? error.message : "Failed to load more lessons"}
-              </p>
-              <button
-                type="button"
-                onClick={() => fetchNextPage()}
-                className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
-              >
-                Load more
-              </button>
+        ) : lessons.length === 0 ? (
+          <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
+        ) : (
+          <>
+            <div ref={setListNode}>
+              <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+                {virtualizer.getVirtualItems().map((vi) => (
+                  <div
+                    key={vi.key}
+                    data-index={vi.index}
+                    ref={virtualizer.measureElement}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${vi.start - scrollMargin}px)` }}
+                  >
+                    <div
+                      ref={vi.index === 0 ? observeFirstRowThumbnails : undefined}
+                      className="grid gap-5 pb-5"
+                      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+                    >
+                      {rows[vi.index].map((lesson, idx) =>
+                        lesson ? (
+                          <LessonCard key={lesson.slug} lesson={lesson} priority={vi.index === 0} />
+                        ) : (
+                          <LessonCardSkeleton key={`skel-${idx}`} />
+                        ),
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            canPage && <div ref={sentinelRef} className="pb-10 pt-5" />
-          )}
-        </>
-      )}
+
+            {isFetchNextPageError ? (
+              <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
+                <p role="alert" className="text-sm text-red-300">
+                  {error instanceof Error ? error.message : "Failed to load more lessons"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => fetchNextPage()}
+                  className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+                >
+                  Load more
+                </button>
+              </div>
+            ) : (
+              canPage && <div ref={sentinelRef} className="pb-10 pt-5" />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -42,4 +42,25 @@ describe("useSearch", () => {
     expect(queryClient.getQueryData(lessonKeys.detail("ownership"))).toEqual(lesson("ownership"));
     expect(queryClient.getQueryData(lessonKeys.detail("borrowing"))).toEqual(lesson("borrowing"));
   });
+
+  // A newer search must not blank the page while it loads.
+  it("keeps the last search's results as placeholder data while the next one loads", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const rust = { authors: [], lessons: [lesson("ownership")] };
+    search.mockResolvedValueOnce(rust).mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result, rerender } = renderHook(({ q }) => useSearch(q), {
+      initialProps: { q: "rust" },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    rerender({ q: "go" });
+    await waitFor(() => expect(search).toHaveBeenCalledWith("go"));
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.data).toBe(rust);
+  });
 });

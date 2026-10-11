@@ -1,9 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { primeLessonDetails } from "../../lessons/queryKeys";
 import { search } from "./searchApi";
 
 // Searches every published lesson and every author, not just what the
-// gallery has paged in. `q` should already be debounced by the caller.
+// gallery has paged in. `q` is a query the reader submitted, not each keystroke.
 export function useSearch(q: string) {
   const queryClient = useQueryClient();
 
@@ -18,5 +18,8 @@ export function useSearch(q: string) {
     },
     enabled: q.length > 0,
     staleTime: 30_000,
+    // While the next search loads, the last one's results stay (isPlaceholderData),
+    // so the page dims them instead of blanking.
+    placeholderData: keepPreviousData,
   });
 }

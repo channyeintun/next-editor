@@ -1,20 +1,26 @@
 import { Link } from "react-router";
-import { avatarProxyUrl, useSearch } from "@next-editor/infra";
+import { avatarProxyUrl, type SearchResults as SearchResultsData } from "@next-editor/infra";
+import { busyFadeClass, RESULTS_ENTER_CLASS } from "../lib/busyFade";
 import LessonCard from "./LessonCard";
+
+interface SearchResultsProps {
+  /** The submitted search's answer, or the last one while a newer search loads. */
+  data: SearchResultsData | undefined;
+  isError: boolean;
+  /** A newer search is loading and `data` is the previous answer. */
+  isBusy: boolean;
+  onRetry: () => void;
+}
 
 // Renders authors before lessons, per the product requirement that search
 // surface matching authors first. Unlike the empty-query gallery, results
 // here come from the backend (every published lesson/author, not just
 // what's been paged into the client) so they're not virtualized — result
 // counts are capped server-side (see infra/worker/routes/search.ts).
-export default function SearchResults({ query }: { query: string }) {
-  const { data, isPending, isError, refetch } = useSearch(query);
-
-  if (isPending) {
-    return <div className="flex justify-center py-20 text-slate-300">Searching…</div>;
-  }
-
-  if (isError) {
+// LessonGrid owns the one search query and shows the gallery until the first
+// answer, so there is no "Searching…" step here.
+export default function SearchResults({ data, isError, isBusy, onRetry }: SearchResultsProps) {
+  if (isError && !isBusy) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
         <p role="alert" className="text-red-300">
@@ -22,7 +28,7 @@ export default function SearchResults({ query }: { query: string }) {
         </p>
         <button
           type="button"
-          onClick={() => refetch()}
+          onClick={onRetry}
           className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
         >
           Try again
@@ -31,18 +37,23 @@ export default function SearchResults({ query }: { query: string }) {
     );
   }
 
+  if (!data) return null;
+
   const { authors, lessons } = data;
 
-  if (authors.length === 0 && lessons.length === 0) {
-    return (
-      <div className="flex justify-center py-20 text-slate-300">
-        No authors or lessons match your search.
-      </div>
-    );
-  }
-
+  // A newer search is loading: the last answer (results or "no match") stays,
+  // dimmed and inert, until it lands.
   return (
-    <div>
+    <div
+      aria-busy={isBusy}
+      inert={isBusy}
+      className={`${busyFadeClass(isBusy)} ${RESULTS_ENTER_CLASS}`}
+    >
+      {authors.length === 0 && lessons.length === 0 && (
+        <div className="flex justify-center py-20 text-slate-300">
+          No authors or lessons match your search.
+        </div>
+      )}
       {authors.length > 0 && (
         <div className="mb-8">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-300">

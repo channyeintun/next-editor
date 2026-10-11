@@ -4,17 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 // The gallery's infinite query, as each test sets it.
 let gallery: Record<string, unknown>;
-// The backend search query, as each test sets it.
+// The backend search query, as each test sets it, and every query it was asked for.
 let searchState: Record<string, unknown>;
+const searchedFor = vi.hoisted(() => [] as string[]);
 
 vi.mock("../hooks/useLessons", () => ({
   useLessonsInfinite: () => gallery,
 }));
 vi.mock("@next-editor/infra", () => ({
-  useSearch: () => searchState,
+  useSearch: (query: string) => {
+    searchedFor.push(query);
+    return searchState;
+  },
 }));
 vi.mock("./SearchResults", () => ({
-  default: ({ query }: { query: string }) => <p>results for {query}</p>,
+  default: () => <p>search results</p>,
 }));
 // Warming the lesson route would import the whole lesson player.
 vi.mock("../hooks/useWarmLessonRoute", () => ({ useWarmLessonRoute: () => {} }));
@@ -64,6 +68,7 @@ beforeEach(() => {
   firstRow.observe.mockClear();
   firstRow.settleWithout.mockClear();
   searchState = { isPending: true, isError: false, data: undefined };
+  searchedFor.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal(
     "matchMedia",
@@ -80,33 +85,30 @@ afterEach(() => {
 describe("LessonGrid search while page 0 is a network fetch", () => {
   it("keeps the search box when a search starts before the first page lands", () => {
     gallery = galleryState({ isPending: true });
-    render(<LessonGrid />);
+    const view = render(<LessonGrid />);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search authors and lessons" }), {
-      target: { value: "rust" },
-    });
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
+    typeQuery("rust");
 
-    expect(screen.getByText("results for rust")).toBeInTheDocument();
+    // Until the search answers, the (loading) gallery stays on screen, dimmed.
+    expect(screen.queryByText("search results")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search authors and lessons" })).toHaveValue("rust");
+
+    searchState = { isPending: false, isError: false, data: { authors: [], lessons: [] } };
+    view.rerender(<LessonGrid />);
+    expect(screen.getByText("search results")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Search authors and lessons" })).toHaveValue("rust");
   });
 
   it("does not replace search results with the gallery's page-0 error", () => {
     gallery = galleryState({ isPending: true });
+    searchState = { isPending: false, isError: false, data: { authors: [], lessons: [] } };
     const view = render(<LessonGrid />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search authors and lessons" }), {
-      target: { value: "rust" },
-    });
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
+    typeQuery("rust");
 
     gallery = galleryState({ isError: true, error: new Error("Request failed") });
     view.rerender(<LessonGrid />);
 
-    expect(screen.getByText("results for rust")).toBeInTheDocument();
+    expect(screen.getByText("search results")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
@@ -119,13 +121,12 @@ describe("LessonGrid search while page 0 is a network fetch", () => {
   });
 });
 
+/** Types `value` into the search field and presses Enter. */
 function typeQuery(value: string) {
   fireEvent.change(screen.getByRole("textbox", { name: "Search authors and lessons" }), {
     target: { value },
   });
-  act(() => {
-    vi.advanceTimersByTime(300);
-  });
+  fireEvent.submit(screen.getByRole("search"));
 }
 
 describe("LessonGrid status messages", () => {
@@ -224,14 +225,94 @@ describe("LessonGrid clear search", () => {
     expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
     expect(field).toHaveValue("");
     expect(field).toHaveFocus();
-
-    // The debounced query then empties and the gallery branch takes over; the
-    // field is the same element, so it keeps focus.
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-    expect(screen.queryByText("results for rust")).not.toBeInTheDocument();
+    // The gallery is back at once, and the field is the same element, so it keeps focus.
+    expect(screen.queryByText("search results")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Search authors and lessons" })).toHaveFocus();
+  });
+});
+
+describe("LessonGrid search on Enter", () => {
+  const introPage = { pages: [{ lessons: [{ slug: "intro", title: "Intro" }], nextPage: null }] };
+  const found = { isPending: false, isError: false, data: { authors: [], lessons: [] } };
+
+  it("does not search while the reader types, only when they press Enter", () => {
+    gallery = galleryState({ data: introPage });
+    searchState = found;
+    render(<LessonGrid />);
+    const field = screen.getByRole("textbox", { name: "Search authors and lessons" });
+
+    for (const value of ["r", "ru", "rus", "rust"]) {
+      fireEvent.change(field, { target: { value } });
+    }
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(searchedFor.filter(Boolean)).toEqual([]);
+    expect(screen.getByText("Intro")).toBeInTheDocument();
+
+    fireEvent.submit(screen.getByRole("search"));
+    expect(searchedFor.at(-1)).toBe("rust");
+    expect(screen.getByText("search results")).toBeInTheDocument();
+  });
+
+  it("keeps the gallery on screen, dimmed and busy, until the first search answers", () => {
+    gallery = galleryState({ data: introPage });
+    render(<LessonGrid />);
+
+    typeQuery("rust");
+
+    const intro = screen.getByText("Intro");
+    expect(intro.closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
+    expect(intro.closest("[aria-busy]")).toHaveClass("opacity-50");
+    expect(screen.getByRole("status")).toHaveTextContent("Searching…");
+  });
+
+  it("keeps the results until Enter is pressed again after editing the query", () => {
+    gallery = galleryState({ data: introPage });
+    searchState = found;
+    render(<LessonGrid />);
+    typeQuery("rust");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search authors and lessons" }), {
+      target: { value: "go" },
+    });
+    expect(searchedFor.at(-1)).toBe("rust");
+    expect(screen.getByText("search results")).toBeInTheDocument();
+
+    fireEvent.submit(screen.getByRole("search"));
+    expect(searchedFor.at(-1)).toBe("go");
+  });
+
+  it("goes back to the gallery on Escape, or on Enter with an empty field", () => {
+    gallery = galleryState({ data: introPage });
+    searchState = found;
+    render(<LessonGrid />);
+    const field = () => screen.getByRole("textbox", { name: "Search authors and lessons" });
+
+    typeQuery("rust");
+    fireEvent.keyDown(field(), { key: "Escape" });
+    expect(field()).toHaveValue("");
+    expect(screen.getByText("Intro")).toBeInTheDocument();
+
+    typeQuery("rust");
+    typeQuery("  ");
+    expect(screen.getByText("Intro")).toBeInTheDocument();
+  });
+
+  it("ignores the Enter that ends an input method's composition", () => {
+    gallery = galleryState({ data: introPage });
+    searchState = found;
+    render(<LessonGrid />);
+    const field = screen.getByRole("textbox", { name: "Search authors and lessons" });
+    fireEvent.change(field, { target: { value: "rust" } });
+
+    fireEvent.keyDown(field, { key: "Enter", keyCode: 229 });
+    fireEvent.submit(screen.getByRole("search"));
+    expect(screen.queryByText("search results")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(field, { key: "Enter", keyCode: 13 });
+    fireEvent.submit(screen.getByRole("search"));
+    expect(screen.getByText("search results")).toBeInTheDocument();
   });
 });
 
@@ -281,10 +362,20 @@ describe("LessonGrid first-row thumbnails", () => {
 
   it("has nothing to wait for once search results replace the gallery", () => {
     gallery = galleryState({ isPending: true });
+    searchState = { isPending: false, isError: false, data: { authors: [], lessons: [] } };
     render(<LessonGrid />);
 
     typeQuery("rust");
 
     expect(firstRow.settleWithout).toHaveBeenCalled();
+  });
+
+  it("keeps waiting on the gallery while a search it stays up for is still loading", () => {
+    gallery = galleryState({ isPending: true });
+    render(<LessonGrid />);
+
+    typeQuery("rust");
+
+    expect(firstRow.settleWithout).not.toHaveBeenCalled();
   });
 });
