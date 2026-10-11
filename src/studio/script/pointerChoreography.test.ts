@@ -8,6 +8,7 @@ import {
   POINTER_SETTLE_MS,
 } from "../../core/src/utils/pointerMotion";
 import { STUDIO_DOCK_TOGGLE_TARGET_ID } from "../targets";
+import { CompileError } from "./errors";
 import { planPointerChoreography, type PlacedAction } from "./pointerChoreography";
 import { parseLessonScript, type LessonScript, type ScriptAction } from "./schema";
 
@@ -37,6 +38,30 @@ const typeCube: ScriptAction = {
   target: { file: "main.go", after: "", occurrence: 1 },
   cadence: "natural",
   text: "x",
+};
+
+const typeSquare: ScriptAction = {
+  id: "type-square",
+  type: "editor.type",
+  at,
+  timeoutMs: 10_000,
+  target: { file: "square.go", after: "", occurrence: 1 },
+  cadence: "natural",
+  text: "x",
+};
+const selectSquare: ScriptAction = {
+  id: "select-square",
+  type: "editor.select",
+  at,
+  timeoutMs: 10_000,
+  target: { file: "square.go", text: "value", occurrence: 1 },
+};
+const expectOutput: ScriptAction = {
+  id: "expect-output",
+  type: "expect.output",
+  at,
+  timeoutMs: 10_000,
+  contains: "cubed",
 };
 
 function choreograph(
@@ -99,5 +124,54 @@ describe("planPointerChoreography", () => {
         /^Skipped the pointer click before "open-square" — only 100ms clear before it/,
       ),
     ]);
+  });
+
+  // Only workspace.openFile changes the file on screen during a performance;
+  // the driver refuses to edit any other one, so the render used to fail at
+  // this action after the recording had started.
+  it("rejects typing into or selecting in a file that is not open", () => {
+    for (const edit of [typeSquare, selectSquare]) {
+      const compile = () => choreograph(goCube(), [{ action: edit, at: 3_000 }]);
+      expect(compile).toThrow(CompileError);
+      expect(compile).toThrow(
+        new RegExp(
+          `^${edit.type} "${edit.id}" edits "square\\.go" while "main\\.go" is open — add a workspace\\.openFile of "square\\.go" before it$`,
+        ),
+      );
+    }
+  });
+
+  it("accepts typing into and selecting in a file once it is open", () => {
+    expect(() =>
+      choreograph(goCube(), [
+        { action: typeCube, at: 1_000 },
+        { action: openSquare, at: 3_000 },
+        { action: typeSquare, at: 5_000 },
+        { action: selectSquare, at: 9_000 },
+      ]),
+    ).not.toThrow();
+  });
+
+  // With no run yet the console is empty, so the expectation waited out its
+  // whole timeout and then failed the render.
+  it("rejects an expect.output before the lesson's first run", () => {
+    const compile = () =>
+      choreograph(goCube(), [
+        { action: expectOutput, at: 3_000 },
+        { action: run, at: 5_000 },
+      ]);
+    expect(compile).toThrow(CompileError);
+    expect(compile).toThrow(
+      /^expect\.output "expect-output" comes before the lesson's first runtime\.run — there is no output on the console to check yet$/,
+    );
+  });
+
+  it("accepts an expect.output after the lesson's first run", () => {
+    expect(() =>
+      choreograph(goCube(), [
+        { action: run, at: 3_000 },
+        { action: expectOutput, at: 5_000 },
+      ]),
+    ).not.toThrow();
   });
 });

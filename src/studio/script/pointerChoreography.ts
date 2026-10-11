@@ -127,7 +127,8 @@ function advancePointerUiState(action: ScriptAction, ui: PointerUiState): void {
  * Derive the click before every action that has a control on screen, and the
  * dock opening before a run whose dock is shut. A click that has no room is
  * skipped with a warning; a `console.point` with no output to land on, or with
- * the dock shut, is a CompileError.
+ * the dock shut, is a CompileError, as is an edit to a file that is not open
+ * or an `expect.output` before the first run.
  */
 export function planPointerChoreography({
   script,
@@ -150,6 +151,23 @@ export function planPointerChoreography({
   let hasRunOutput = false;
 
   for (const entry of authored) {
+    // Only workspace.openFile changes the file on screen, and the driver
+    // refuses to edit any other one — the render would fail here mid-recording.
+    if (
+      (entry.action.type === "editor.type" || entry.action.type === "editor.select") &&
+      entry.action.target.file !== ui.activeFile
+    ) {
+      throw new CompileError(
+        `${entry.action.type} "${entry.action.id}" edits "${entry.action.target.file}" while "${ui.activeFile}" is open — add a workspace.openFile of "${entry.action.target.file}" before it`,
+      );
+    }
+    // With nothing run yet the console is empty, so the check would wait out
+    // its whole timeout and fail the render.
+    if (entry.action.type === "expect.output" && !hasRunOutput) {
+      throw new CompileError(
+        `expect.output "${entry.action.id}" comes before the lesson's first ${runActionType} — there is no output on the console to check yet`,
+      );
+    }
     if (entry.action.type === "console.point") {
       if (!hasRunOutput) {
         throw new CompileError(
