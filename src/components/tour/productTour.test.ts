@@ -5,7 +5,14 @@ const mocks = vi.hoisted(() => ({
   driver: vi.fn<(options?: unknown) => { drive: () => void; isActive: () => boolean }>(),
 }));
 
+const recovery = vi.hoisted(() => ({
+  importWithChunkRecovery: vi.fn<(importer: () => Promise<unknown>, chunkName: string) => unknown>(
+    (importer) => importer(),
+  ),
+}));
+
 vi.mock("driver.js", () => ({ driver: mocks.driver }));
+vi.mock("../../routeRecovery", () => recovery);
 
 import { isProductTourActive, startTour } from "./productTour";
 
@@ -37,6 +44,18 @@ describe("product tour", () => {
         popover: { title: "Settings" },
       },
     ]);
+    expect(mocks.drive).toHaveBeenCalledOnce();
+  });
+
+  it("loads driver.js with the stale-chunk recovery", async () => {
+    document.body.innerHTML = '<button data-tour="record">Record</button>';
+
+    await startTour({ force: true });
+
+    expect(recovery.importWithChunkRecovery).toHaveBeenCalledWith(
+      expect.any(Function),
+      "product-tour",
+    );
     expect(mocks.drive).toHaveBeenCalledOnce();
   });
 

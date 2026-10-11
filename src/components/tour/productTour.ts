@@ -1,4 +1,5 @@
 import type { DriveStep, Driver } from "driver.js";
+import { importWithChunkRecovery } from "../../routeRecovery";
 
 const TOUR_SEEN_KEY = "next-editor.tour.v1.seen";
 
@@ -156,13 +157,18 @@ export function markTourSeen(): void {
 /**
  * driver.js and its CSS load here, on demand: the auto-start skips read-only
  * lessons and anyone who has seen the tour, so almost no editor load needs them.
+ * A tab opened before a deploy asks for a chunk that is gone, so the load
+ * reloads the page once, as the other late chunks do.
  */
 export async function startTour({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (!force && hasSeenTour()) {
     return;
   }
 
-  const { driver } = await import("./driverWithStyles");
+  const { driver } = await importWithChunkRecovery(
+    () => import("./driverWithStyles"),
+    "product-tour",
+  );
   const steps = buildTourSteps();
 
   if (steps.length === 0) {
