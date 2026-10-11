@@ -72,7 +72,9 @@ export function sanitizeTerminalChunk(chunk: string): string {
   const withoutOsc = chunk.replace(OSC_PATTERN, "");
   const normalized = withoutOsc.replace(/\r/g, "");
 
-  if (/^[\\|/-]$/.test(normalized.trim())) {
+  // A spinner frame is a redraw with no newline; a program that prints a
+  // line holding only one of these characters still ends it with "\n".
+  if (!withoutOsc.includes("\n") && /^[\\|/-]$/.test(normalized.trim())) {
     return "";
   }
 
