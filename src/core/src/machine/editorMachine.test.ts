@@ -2270,8 +2270,7 @@ describe("editorMachine actor lifecycle", () => {
       actor.send({ type: "TICK", currentTime: 150 });
 
       // Opening another file pauses first (useOpenWorkspaceFile): the pause copies the
-      // frame on screen into a.ts while it is still the active file. A WORKSPACE_EVENT
-      // straight from `playing` detaches before that copy, and a.ts would keep "a".
+      // frame on screen into a.ts, the file the recording has open.
       actor.send({ type: "PAUSE" });
       workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
       actor.send({ type: "WORKSPACE_EVENT" });
@@ -2304,6 +2303,53 @@ describe("editorMachine actor lifecycle", () => {
       expect(workspace.current.project.files["b.ts"].content).toBe("b-user");
 
       actor.stop();
+    });
+
+    // A sidebar drag, New File, an upload or a drop while the lesson plays pauses it.
+    // paused's entry adopts the frame on screen and only then detaches, so nothing may
+    // detach on the way in: the code on screen would revert to the last recorded snapshot.
+    describe("a workspace event while the lesson plays", () => {
+      const playTo150 = async () => {
+        const loaded = await loadReady(recordingOnOneFile());
+        loaded.actor.send({ type: "PLAY" });
+        loaded.actor.send({ type: "TICK", currentTime: 150 });
+        expect(loaded.editor.getValue()).toBe("ab");
+        expect(loaded.workspace.current.project.files["a.ts"].content).toBe("a");
+        return loaded;
+      };
+
+      it("keeps the code on screen when a sidebar drag pauses the lesson", async () => {
+        const { actor, workspace } = await playTo150();
+
+        actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 12 });
+
+        const { context } = actor.getSnapshot();
+        expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+        expect(context.hasManualWorkspaceOverride).toBe(true);
+        expect(workspace.current.activeFilePath).toBe("a.ts");
+        expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+        // Handed over as shown, so the lesson's own code is never saved as the viewer's.
+        expect(context.learnerWorkspaceBaseline?.project.files["a.ts"].content).toBe("ab");
+
+        actor.stop();
+      });
+
+      // New File and an upload make their file active before the event goes out, as the
+      // explorer's old switch-then-event click did.
+      it("copies the frame into the recording's file, not the one the event opened", async () => {
+        const { actor, workspace } = await playTo150();
+
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        actor.send({ type: "WORKSPACE_EVENT" });
+
+        expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+        expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+        expect(workspace.current.activeFilePath).toBe("b.ts");
+        expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+        expect(workspace.current.project.files["b.ts"].content).toBe("b");
+
+        actor.stop();
+      });
     });
 
     describe("playing on after the viewer opened another file", () => {

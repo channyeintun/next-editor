@@ -922,9 +922,10 @@ export const editorMachine = setup({
             PAUSE: {
               target: "paused",
             },
+            // No transition action: one runs before paused's entry, so a detach here
+            // dropped the frame before the entry could adopt it.
             WORKSPACE_EVENT: {
               target: "paused",
-              actions: "detachPlaybackWorkspace",
             },
             USER_INTERACTION: {
               target: "paused",

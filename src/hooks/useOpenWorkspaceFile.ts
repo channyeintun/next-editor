@@ -13,16 +13,18 @@ import { useWorkspaceActions } from "./useWorkspace";
  *   open, as any other local navigation does.
  * - The file that is already open is left alone: no pause, and no workspace
  *   event that would detach a replay for nothing.
- * - PAUSE goes first. It only acts while a lesson plays, and its entry copies
- *   what the replay is showing into the file being left while that file is
- *   still the active one. A WORKSPACE_EVENT sent straight from `playing`
- *   detaches the replay before that copy, so the learner would come back to
- *   older code than was on screen.
+ * - PAUSE goes first. It only acts while a lesson plays, its entry copies the
+ *   frame on screen into the file the recording has open, and it is the raw
+ *   actor sender, never behind the workspace-event gate, so the lesson stops
+ *   even when the workspace event below is swallowed.
  * - The workspace event goes out in the same handler as the switch (cd6987ae):
  *   it detaches a replay before React renders the new file, so no playback
  *   model is built for it, and a take stamps the switch before Monaco binds
- *   the new model. After a pause it is dropped, harmlessly, as the pause has
- *   already detached the replay.
+ *   the new model. After a pause the event is either swallowed by
+ *   useWorkspaceRecordingAdapter's one-task suppression (armed when the paused
+ *   entry re-applied the snapshot) or, when no frame was on screen and that
+ *   entry applied nothing, reaches the machine in `paused` and runs
+ *   detachPlaybackWorkspace again, a no-op after the entry already ran it.
  */
 export function useOpenWorkspaceFile(): (path: string) => void {
   const collaboration = useOptionalCollaboration();
