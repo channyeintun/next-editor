@@ -367,12 +367,14 @@ export class CollaborationRoomProvider {
       if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
         // The room refuses an update this large, and nothing here can split one:
         // y-monaco writes a whole Monaco change event (a large paste) in one
-        // transaction, and Y.UndoManager restores a large delete in one. The
-        // change is already in `doc` and every later local edit builds on it, so
-        // this document can never match the room again. Drop every local edit
-        // the room has not acknowledged, including ones queued before this change
-        // that a resume could still deliver, and fail, so a retry rebuilds from
-        // the room. This is the same trade as a role change (applyRoomSession).
+        // transaction, and Y.UndoManager restores a whole undo step in one
+        // (undo.ts keeps one oversize deletion off its stack, but not several
+        // small ones merged into a step). The change is already in `doc` and
+        // every later local edit builds on it, so this document can never
+        // match the room again. Drop every local edit the room has not
+        // acknowledged, including ones queued before this change that a resume
+        // could still deliver, and fail, so a retry rebuilds from the room.
+        // This is the same trade as a role change (applyRoomSession).
         this.dropLocalChanges();
         const message = `A change was larger than a live room accepts (${MAX_YJS_UPDATE_BYTES / 1024} KiB). Copy any local work before rejoining.`;
         this.onRejectedLocalChanges?.(message);

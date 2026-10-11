@@ -8,6 +8,7 @@ import {
   projectCollaborationDocument,
   seedCollaborationProject,
 } from "./projectDocument";
+import { MAX_YJS_UPDATE_BYTES } from "./protocol";
 import { createCollaborationUndoManager, trackCollaborationUndoOrigin } from "./undo";
 
 // CodeEditor's binding hook registers this at module load; undo.ts itself
@@ -77,6 +78,88 @@ describe("collaboration undo", () => {
 
     manager.destroy();
     doc.destroy();
+  });
+
+  // The room refuses a single update over MAX_YJS_UPDATE_BYTES, and the
+  // provider ends the session on one. Undoing a deletion re-inserts all of it
+  // in one update, so a deletion too large for that is not undoable.
+  describe("a change too large to restore in one room update", () => {
+    function largestUpdateDuring(doc: Y.Doc, run: () => void): number {
+      let largest = 0;
+      const onUpdate = (update: Uint8Array) => {
+        largest = Math.max(largest, update.byteLength);
+      };
+      doc.on("update", onUpdate);
+      run();
+      doc.off("update", onUpdate);
+      return largest;
+    }
+
+    function insertInChunks(text: Y.Text, content: string, origin: unknown) {
+      for (let offset = 0; offset < content.length; offset += 10_000) {
+        text.doc!.transact(
+          () => text.insert(text.length, content.slice(offset, offset + 10_000)),
+          origin,
+        );
+      }
+    }
+
+    for (const [label, content] of [
+      ["70,000 ASCII characters", "x".repeat(70_000)],
+      ["30,000 CJK characters (about 90 KB of UTF-8)", "\u4e00".repeat(30_000)],
+    ] as const) {
+      it(`leaves a deletion of ${label} deleted instead of failing the room`, () => {
+        const { doc, text } = seedEntryText();
+        const initial = text.toString();
+        insertInChunks(text, content, COLLABORATION_ORIGIN.remoteProvider);
+        const manager = createCollaborationUndoManager(doc);
+
+        doc.transact(
+          () => text.delete(initial.length, content.length),
+          COLLABORATION_ORIGIN.localEditor,
+        );
+        expect(largestUpdateDuring(doc, () => manager.undo())).toBeLessThanOrEqual(
+          MAX_YJS_UPDATE_BYTES,
+        );
+        expect(text.toString()).toBe(initial);
+
+        manager.destroy();
+        doc.destroy();
+      });
+    }
+
+    it("does not offer a redo that would re-insert a large chunked insertion", () => {
+      const { doc, text } = seedEntryText();
+      const initial = text.toString();
+      const manager = createCollaborationUndoManager(doc);
+      insertInChunks(text, "x".repeat(70_000), COLLABORATION_ORIGIN.localEditor);
+
+      manager.undo();
+      expect(text.toString()).toBe(initial);
+      expect(largestUpdateDuring(doc, () => manager.redo())).toBeLessThanOrEqual(
+        MAX_YJS_UPDATE_BYTES,
+      );
+      expect(text.toString()).toBe(initial);
+
+      manager.destroy();
+      doc.destroy();
+    });
+
+    it("still undoes and redoes an ordinary deletion", () => {
+      const { doc, text } = seedEntryText();
+      const initial = text.toString();
+      insertInChunks(text, "y".repeat(1_000), COLLABORATION_ORIGIN.remoteProvider);
+      const manager = createCollaborationUndoManager(doc);
+
+      doc.transact(() => text.delete(initial.length, 1_000), COLLABORATION_ORIGIN.localEditor);
+      manager.undo();
+      expect(text.toString()).toBe(`${initial}${"y".repeat(1_000)}`);
+      manager.redo();
+      expect(text.toString()).toBe(initial);
+
+      manager.destroy();
+      doc.destroy();
+    });
   });
 
   it("stops updating a manager once it is destroyed", () => {
