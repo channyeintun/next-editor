@@ -64,9 +64,6 @@ export default function EditorShellSkeleton({
           <div aria-hidden="true" className={HEADER_ICON_CLASS}>
             {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </div>
-          <div aria-hidden="true" className={HEADER_ICON_CLASS}>
-            <FileSearch size={16} />
-          </div>
           {breadcrumb ?? (
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               Editor
@@ -104,17 +101,22 @@ export default function EditorShellSkeleton({
           >
             <div className="border-b border-slate-800 px-3 py-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  Files
-                </p>
-                <div className="flex items-center gap-1 text-slate-400">
-                  <span className="inline-flex size-5 items-center justify-center">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    Files
+                  </p>
+                  <span className="-my-1 inline-flex size-7 items-center justify-center text-slate-400">
+                    <FileSearch size={14} />
+                  </span>
+                </div>
+                <div className="flex items-center gap-0.5 text-slate-400">
+                  <span className="-my-1 inline-flex size-7 items-center justify-center">
                     <FilePlus2 size={14} />
                   </span>
-                  <span className="inline-flex size-5 items-center justify-center">
+                  <span className="-my-1 inline-flex size-7 items-center justify-center">
                     <FolderPlus size={14} />
                   </span>
-                  <span className="inline-flex size-5 items-center justify-center">
+                  <span className="-my-1 inline-flex size-7 items-center justify-center">
                     <Upload size={14} />
                   </span>
                 </div>
@@ -144,7 +146,7 @@ export function EditorPlayerBarSkeleton() {
       className="relative w-full max-h-10 border-t border-[#0f131a] bg-[#11141c] px-4 py-1"
     >
       <div className="flex min-h-8 w-full items-center gap-3">
-        <div className="size-6 shrink-0 rounded-full bg-white/5" />
+        <div className="size-7 shrink-0 rounded-full bg-white/5" />
         <div className="h-1 flex-1 rounded-full bg-white/5" />
         <div className="h-3 w-20 shrink-0 rounded bg-white/5" />
       </div>
