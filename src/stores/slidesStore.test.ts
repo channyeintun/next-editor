@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
+  areSlideDecksEqual,
   createSlidesStore,
   DEFAULT_PREVIEW_STATE,
   isSlide,
@@ -53,6 +54,36 @@ describe("isSlide", () => {
     expect(
       isSlide({ id: "e", content: "x", contentType: "google-svg", order: 0, steps: "nope" }),
     ).toBe(false);
+  });
+});
+
+describe("areSlideDecksEqual", () => {
+  it("matches the same array, and a copy of it field for field", () => {
+    const deck = [makeHtmlSlide("a"), makeGoogleSlide("b", 10)];
+    expect(areSlideDecksEqual(deck, deck)).toBe(true);
+    expect(areSlideDecksEqual(deck, structuredClone(deck))).toBe(true);
+    expect(areSlideDecksEqual([], [])).toBe(true);
+  });
+
+  it("tells decks of different lengths apart", () => {
+    expect(areSlideDecksEqual([makeHtmlSlide("a")], [])).toBe(false);
+    expect(areSlideDecksEqual([makeHtmlSlide("a")], [makeHtmlSlide("a"), makeHtmlSlide("b")])).toBe(
+      false,
+    );
+  });
+
+  it("tells a slide with different content apart", () => {
+    const edited = { ...makeHtmlSlide("a"), content: "<h1>edited</h1>" };
+    expect(areSlideDecksEqual([makeHtmlSlide("a")], [edited])).toBe(false);
+  });
+
+  it("tells a slide with different build steps apart", () => {
+    const slide = makeGoogleSlide("a", 10);
+    const otherSteps: Slide = {
+      ...slide,
+      steps: [[{ elementId: "e2", durationMs: 500, delayMs: 0, tracks: [] }]],
+    };
+    expect(areSlideDecksEqual([slide], [otherSteps])).toBe(false);
   });
 });
 

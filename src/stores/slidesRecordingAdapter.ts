@@ -1,6 +1,10 @@
 import type { Slide, SlidePreviewState } from "../types/slides";
 import type { SlideStateSnapshot } from "../core/src/machine/types";
-import { setSlidesStoreDeckBorrowed, type SlidesStoreInstance } from "./slidesStore";
+import {
+  areSlideDecksEqual,
+  setSlidesStoreDeckBorrowed,
+  type SlidesStoreInstance,
+} from "./slidesStore";
 
 // How the editor machine records and replays the slide deck: NextEditorProvider's
 // getSlideState, applySlideState and applySlides hooks, over the app's slides store.
@@ -50,9 +54,17 @@ export function applySlideRecordingState(
   }
 }
 
-/** Shows a loaded recording's own deck. */
+/**
+ * Shows a loaded recording's own deck. A loaded deck is borrowed unless it is
+ * the user's own current deck: the take they just stopped, which records the
+ * store's deck and loads straight back.
+ */
 export function applyRecordingSlides(store: SlidesStoreInstance, slides: Slide[]): void {
-  // These slides come from a loaded recording, not from this user. Marking
+  // A just-stopped take carries the author's own deck. Borrowing it kept every
+  // later slide edit in the session from being saved.
+  const { slides: current, deckBorrowed } = store.getSnapshot().context;
+  if (!deckBorrowed && areSlideDecksEqual(current, slides)) return;
+  // Any other deck comes from a loaded recording, not from this user. Marking
   // the deck borrowed keeps `subscribeSlidesPersistence` from writing the
   // lesson's deck over the viewer's own in the shared localStorage key —
   // which simply opening a published lesson used to do, unrecoverably.

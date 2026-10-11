@@ -229,6 +229,32 @@ export function setSlidesStoreDeckBorrowed(store: SlidesStoreInstance, borrowed:
   store.trigger.setDeckBorrowed({ borrowed });
 }
 
+/**
+ * Whether two decks hold the same slides, field for field. A recording may carry
+ * a copy of the deck it was taken from rather than the array itself, so identity
+ * alone cannot say a loaded deck is the user's own. Runs once per recording load.
+ */
+export function areSlideDecksEqual(a: readonly Slide[], b: readonly Slide[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((slide, index) => {
+    const other = b[index];
+    return (
+      slide === other ||
+      (slide.id === other.id &&
+        slide.content === other.content &&
+        slide.contentType === other.contentType &&
+        slide.name === other.name &&
+        slide.order === other.order &&
+        slide.background === other.background &&
+        slide.title === other.title &&
+        slide.sourceUrl === other.sourceUrl &&
+        (slide.steps === other.steps ||
+          JSON.stringify(slide.steps) === JSON.stringify(other.steps)))
+    );
+  });
+}
+
 /** Persist only when the slides array identity changes; preview state stays ephemeral. */
 export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => void {
   let previousSlides = store.getSnapshot().context.slides;

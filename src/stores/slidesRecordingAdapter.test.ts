@@ -121,4 +121,65 @@ describe("applyRecordingSlides", () => {
     expect(loadSlidesFromStorage()).toEqual(own);
     unsubscribe();
   });
+
+  // Stopping a take records the store's own deck and loads the take straight back.
+  // Borrowing that deck stopped every later slide edit in the session from saving.
+  it("keeps the author's own deck theirs when the take they just recorded loads", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const own = [makeSlide("my own deck")];
+    store.trigger.setSlides({ slides: own });
+
+    applyRecordingSlides(store, store.getSnapshot().context.slides);
+
+    expect(store.getSnapshot().context.deckBorrowed).toBe(false);
+    const edited = [...own, makeSlide("added after the take")];
+    store.trigger.setSlides({ slides: edited });
+    expect(loadSlidesFromStorage()).toEqual(edited);
+    unsubscribe();
+  });
+
+  it("keeps the author's own deck theirs when the take's deck is a copy of it", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const own = [makeSlide("my own deck")];
+    store.trigger.setSlides({ slides: own });
+
+    applyRecordingSlides(store, structuredClone(own));
+
+    expect(store.getSnapshot().context.deckBorrowed).toBe(false);
+    expect(store.getSnapshot().context.slides).toBe(own);
+    const edited = [...own, makeSlide("added after the take")];
+    store.trigger.setSlides({ slides: edited });
+    expect(loadSlidesFromStorage()).toEqual(edited);
+    unsubscribe();
+  });
+
+  it("keeps an empty own deck theirs, so the first slide added after a take saves", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+
+    applyRecordingSlides(store, []);
+
+    expect(store.getSnapshot().context.deckBorrowed).toBe(false);
+    const added = [makeSlide("first slide")];
+    store.trigger.setSlides({ slides: added });
+    expect(loadSlidesFromStorage()).toEqual(added);
+    unsubscribe();
+  });
+
+  it("still borrows a deck already borrowed, even when it matches", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const own = [makeSlide("my own deck")];
+    store.trigger.setSlides({ slides: own });
+    const lessonDeck = [makeSlide("lesson deck")];
+    applyRecordingSlides(store, lessonDeck);
+
+    applyRecordingSlides(store, structuredClone(lessonDeck));
+
+    expect(store.getSnapshot().context.deckBorrowed).toBe(true);
+    expect(loadSlidesFromStorage()).toEqual(own);
+    unsubscribe();
+  });
 });
