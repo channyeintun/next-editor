@@ -3,6 +3,7 @@ import { useSelector } from "@xstate/store-react";
 import { Bot } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
+import HoverRing from "./hoverRing/HoverRing";
 import RuntimeDockHeader, { type RuntimeDockTabConfig } from "./terminalPanel/RuntimeDockHeader";
 import {
   ANSI,
@@ -327,6 +328,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                 title="Clear the console"
               >
                 Clear
+                <HoverRing />
               </button>
               {format ? (
                 <>

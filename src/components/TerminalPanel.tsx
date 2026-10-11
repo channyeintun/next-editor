@@ -13,6 +13,7 @@ import {
   setTerminalScrollLineIfChanged,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
+import HoverRing from "./hoverRing/HoverRing";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import {
@@ -374,11 +375,14 @@ function TerminalPanel() {
                       setActiveTab("runner");
                     }
                   }}
-                  className="pr-3 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
+                  // A 24px box (the minimum target size) for the hover ring; the margin keeps
+                  // the icon 12px from the tab's edge.
+                  className="mr-1.5 inline-flex size-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
                   aria-label={`Close ${session.title}`}
                   title={`Close ${session.title}`}
                 >
                   <X size={12} />
+                  <HoverRing />
                 </button>
               </div>
             );
@@ -394,11 +398,12 @@ function TerminalPanel() {
                 setIsCreatingTerminal(false);
               });
             }}
-            className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+            className="inline-flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
             aria-label="New terminal"
             title="New terminal"
           >
             <Plus size={15} />
+            <HoverRing />
           </button>
         </RuntimeDockHeader>
 
@@ -438,6 +443,7 @@ function TerminalPanel() {
                       title="Clear the console"
                     >
                       Clear
+                      <HoverRing />
                     </button>
                     <button
                       type="button"
@@ -453,11 +459,12 @@ function TerminalPanel() {
                       type="button"
                       onClick={() => setIsSettingsOpen(true)}
                       disabled={isPlaybackSnapshotActive}
-                      className="inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-default disabled:hover:text-slate-500"
+                      className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-default disabled:hover:text-slate-500"
                       aria-label="Open runner settings"
                       title="Open runner settings"
                     >
                       <Settings size={18} />
+                      <HoverRing />
                     </button>
                   </div>
                 </div>
@@ -529,6 +536,7 @@ function TerminalPanel() {
                     className="rounded-md border border-[#303746] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-default disabled:opacity-50 disabled:hover:border-[#303746] disabled:hover:text-slate-300"
                   >
                     Ctrl+C
+                    <HoverRing />
                   </button>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useId } from "react";
 import type { RunnerConfig } from "../../runtime/webcontainer/types";
 import ModalShell from "../ModalShell";
+import HoverRing from "../hoverRing/HoverRing";
 
 interface RunnerToggleProps {
   checked: boolean;
@@ -116,9 +117,10 @@ export default function RunnerSettingsDialog({
             type="button"
             onClick={onClose}
             aria-label="Close runner settings"
-            className="-my-1.5 -mr-2 inline-flex size-8 items-center justify-center text-slate-400 hover:text-white"
+            className="-my-1.5 -mr-2 inline-flex size-8 items-center justify-center rounded-md text-slate-400 hover:text-white"
           >
             <X size={16} />
+            <HoverRing />
           </button>
         )}
       </div>

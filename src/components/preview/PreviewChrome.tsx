@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { PreviewActiveMode, PreviewPanelMode, PreviewSize } from "../../types/slides";
 import { isCustomPreviewSize } from "./previewSizeUtils";
+import HoverRing from "../hoverRing/HoverRing";
 
 interface PreviewChromeProps {
   children: ReactNode;
@@ -203,6 +204,7 @@ function PreviewWindowMenu({
         title="Preview options"
       >
         <MoreVertical size={16} />
+        <HoverRing />
       </button>
 
       {isMenuOpen ? (
@@ -337,35 +339,43 @@ function PreviewToolbar({
             hasPanelBar ? " border-t border-slate-800/60" : ""
           }`}
         >
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-            aria-label="Go back in preview"
-            title="Go back in preview"
-          >
-            <ArrowLeft size={18} />
-          </button>
+          {/* 26px boxes, as on the console and options buttons, leave room for the hover
+              ring; the tight gap keeps the group narrow, so a small floating preview keeps
+              its options trigger. */}
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Go back in preview"
+              title="Go back in preview"
+            >
+              <ArrowLeft size={18} />
+              <HoverRing />
+            </button>
 
-          <button
-            type="button"
-            onClick={onForward}
-            className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-            aria-label="Go forward in preview"
-            title="Go forward in preview"
-          >
-            <ArrowRight size={18} />
-          </button>
+            <button
+              type="button"
+              onClick={onForward}
+              className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Go forward in preview"
+              title="Go forward in preview"
+            >
+              <ArrowRight size={18} />
+              <HoverRing />
+            </button>
 
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-            aria-label="Refresh preview"
-            title="Refresh preview"
-          >
-            <RotateCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
-          </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Refresh preview"
+              title="Refresh preview"
+            >
+              <RotateCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
+              <HoverRing />
+            </button>
+          </div>
 
           <div
             className="flex h-6 min-w-0 flex-1 items-center rounded-lg border border-slate-950/70 bg-[#1e2430] px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
@@ -385,6 +395,7 @@ function PreviewToolbar({
             title="Open preview console"
           >
             <SquareTerminal size={16} />
+            <HoverRing />
           </button>
 
           {hasPanelBar ? null : windowMenu}

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import type { RuntimeDockLayout } from "../../hooks/useRuntimeDockLayout";
 import type { RuntimeDockTab } from "../../types/runtime";
 import { dockTabStateClassName } from "./runtimeDockHelpers";
+import HoverRing from "../hoverRing/HoverRing";
 
 export interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
@@ -91,7 +92,8 @@ function RuntimeDockHeader({
         // on screen without reaching the recording (see useRuntimeDockLayout).
         disabled={displayIsCollapsed}
         onClick={toggleFullHeight}
-        className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
+        // The hover ring traces the whole 40px touch target, so its corner is rounded.
+        className="inline-flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
         aria-label="Full-height runtime dock"
         aria-pressed={displayIsFullHeight}
         title={
@@ -99,6 +101,7 @@ function RuntimeDockHeader({
         }
       >
         {displayIsFullHeight ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        <HoverRing />
       </button>
 
       <button
@@ -107,12 +110,13 @@ function RuntimeDockHeader({
         {...collapseToggleAttributes}
         disabled={disabled}
         onClick={toggleCollapsed}
-        className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+        className="inline-flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
         aria-label="Runtime dock"
         aria-expanded={!displayIsCollapsed}
         title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
       >
         {displayIsCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <HoverRing />
       </button>
     </div>
   );

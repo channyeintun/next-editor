@@ -21,6 +21,7 @@ import {
   type HttpMethod,
 } from "../../stores/apiClientStore";
 import type { ApiClientRequestTab } from "../../types/slides";
+import HoverRing from "../hoverRing/HoverRing";
 
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "QUERY"];
 
@@ -276,10 +277,12 @@ export default function ApiClientPanel({
             <button
               type="button"
               onClick={() => store.trigger.clearHistory()}
-              className="text-slate-400 transition-colors hover:text-slate-200"
+              // A box round the icon for the hover ring; the negative margin keeps the row's height.
+              className="-m-1 inline-flex items-center justify-center rounded-md p-1 text-slate-400 transition-colors hover:text-slate-200"
               title="Clear history"
             >
               <Trash2 size={12} />
+              <HoverRing />
             </button>
           </div>
           <div className="max-h-28 overflow-y-auto px-1 pb-1.5">
@@ -387,9 +390,11 @@ function HeadersEditor({
             onClick={() => onRemove(i)}
             aria-label={`Remove header ${i + 1}`}
             title="Remove header"
-            className="text-slate-400 transition-colors hover:text-red-400"
+            // As tall as the inputs beside it, with room round the icon for the hover ring.
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-red-400"
           >
             <Minus size={14} />
+            <HoverRing />
           </button>
         </div>
       ))}
@@ -400,6 +405,7 @@ function HeadersEditor({
       >
         <Plus size={12} />
         Add header
+        <HoverRing />
       </button>
     </div>
   );
@@ -473,9 +479,11 @@ function SuccessfulResponseView({
             onClick={() => setShowHeaders((v) => !v)}
             aria-expanded={showHeaders}
             aria-controls="api-response-headers"
-            className="ml-auto text-[11px] text-slate-300 transition-colors hover:text-white"
+            // A box round the label for the hover ring; the negative margin keeps the label in place.
+            className="-mr-1.5 ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-slate-300 transition-colors hover:text-white"
           >
             Headers ({response.headers.length})
+            <HoverRing />
           </button>
         ) : null}
       </div>
