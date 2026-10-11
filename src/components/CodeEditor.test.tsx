@@ -167,6 +167,21 @@ describe("CodeEditor accessible name", { timeout: 30_000 }, () => {
   });
 });
 
+describe("CodeEditor save shortcut", { timeout: 30_000 }, () => {
+  it("takes Ctrl+S on a layout whose S key types no Latin letter", async () => {
+    await renderWorkspace();
+
+    // Cyrillic: Chrome on Windows and Linux reports the layout's letter with Ctrl held.
+    // A key press left unprevented opens the browser's Save Page dialog instead.
+    expect(fireEvent.keyDown(document.body, { key: "ы", code: "KeyS", ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(document.body, { key: "s", code: "KeyS", ctrlKey: true })).toBe(false);
+    // Polish AltGr+S types ś, which stays the layout's.
+    expect(
+      fireEvent.keyDown(document.body, { key: "ś", code: "KeyS", ctrlKey: true, altKey: true }),
+    ).toBe(true);
+  });
+});
+
 describe("CodeEditor workspace under an overlay", { timeout: 30_000 }, () => {
   it("is inert while the whiteboard covers it", async () => {
     const workspace = await renderWorkspace();

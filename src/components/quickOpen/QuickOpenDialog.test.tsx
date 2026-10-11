@@ -153,6 +153,9 @@ describe("QuickOpenDialog", () => {
     expect(activeOption()).toHaveTextContent("App.tsx");
     press({ key: "p", code: "KeyP", metaKey: true });
     expect(activeOption()).toHaveTextContent("FileSidebar.tsx");
+    // A Russian layout types з on the physical P.
+    press({ key: "з", code: "KeyP", ctrlKey: true });
+    expect(activeOption()).toHaveTextContent("App.tsx");
   });
 
   it("chooses the active file on Enter, but not while an input method composes", () => {

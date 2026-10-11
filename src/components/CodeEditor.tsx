@@ -41,6 +41,7 @@ import {
   workspacePathFromMonacoModelUri,
 } from "../monaco";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
+import { isLetterKey } from "../utils/keyboardPlatform";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useIsEditorCovered, useIsWorkspaceCovered } from "../hooks/useIsWorkspaceCovered";
@@ -258,7 +259,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   });
 
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
-    const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
+    const isSaveShortcut = (event.metaKey || event.ctrlKey) && isLetterKey(event, "s");
 
     if (!isSaveShortcut) {
       return;
@@ -275,9 +276,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
     if (!editorNode?.contains(editorNode.ownerDocument.activeElement)) return;
     if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
 
-    const key = event.key.toLowerCase();
-    const isUndo = key === "z" && !event.shiftKey;
-    const isRedo = key === "y" || (key === "z" && event.shiftKey);
+    const isZ = isLetterKey(event, "z");
+    const isUndo = isZ && !event.shiftKey;
+    const isRedo = isLetterKey(event, "y") || (isZ && event.shiftKey);
     if (!isUndo && !isRedo) return;
     event.preventDefault();
     event.stopPropagation();

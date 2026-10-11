@@ -3,7 +3,7 @@
 // VS Code. The one home of the binding, its label and its aria-keyshortcuts.
 // ============================================================================
 
-import { isImeComposingKey } from "../../utils/keyboardPlatform";
+import { isImeComposingKey, isLetterKey } from "../../utils/keyboardPlatform";
 
 type GoToFileKeyPress = Pick<
   KeyboardEvent,
@@ -14,15 +14,13 @@ type GoToFileKeyPress = Pick<
  * Whether a key press asks for Go to File. Only the platform's command
  * modifier counts, so Monaco keeps Ctrl+P on a Mac (caret up, previous
  * suggestion) and its find widget keeps Alt+P; Shift+P stays free for a
- * command palette. Letters are read from `key`, so Caps Lock and Dvorak work;
- * a layout whose key for P types no Latin letter (Burmese, Cyrillic) falls
- * back to the physical key.
+ * command palette. The P is read as isLetterKey reads letters, so Dvorak and
+ * Burmese or Cyrillic layouts work.
  */
 export function isGoToFileShortcut(event: GoToFileKeyPress, isApple: boolean): boolean {
   if (isImeComposingKey(event) || event.altKey || event.shiftKey) return false;
   if (!(isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return false;
-  const key = event.key.toLowerCase();
-  return key === "p" || (!/^[a-z]$/.test(key) && event.code === "KeyP");
+  return isLetterKey(event, "p");
 }
 
 /** The shortcut as a person reads it: "⌘P" or "Ctrl+P". */

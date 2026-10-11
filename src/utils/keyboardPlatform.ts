@@ -1,5 +1,5 @@
-// Keyboard rules shared across the app: the command key, and keys an input
-// method owns.
+// Keyboard rules shared across the app: the command key, keys an input method
+// owns, and which letter a shortcut key is.
 
 /**
  * Whether the keyboard's command key is Cmd (macOS, iOS, iPadOS), so app
@@ -25,4 +25,20 @@ export function isApplePlatform(): boolean {
  */
 export function isImeComposingKey(event: Pick<KeyboardEvent, "isComposing" | "keyCode">): boolean {
   return event.isComposing || event.keyCode === 229;
+}
+
+/**
+ * Whether a key press is `letter` (lowercase) for a shortcut. The letter is read
+ * from `key`, so Caps Lock, Dvorak and AZERTY work; a layout whose key types no
+ * Latin letter (Burmese, Cyrillic, Greek) falls back to the physical key. A
+ * character picked with AltGr or Option keeps to the layout: Polish AltGr+S
+ * types ś, which Windows reports with Ctrl held.
+ */
+export function isLetterKey(
+  event: Pick<KeyboardEvent, "key" | "code" | "altKey">,
+  letter: string,
+): boolean {
+  const key = event.key.toLowerCase();
+  if (key === letter) return true;
+  return !event.altKey && !/^[a-z]$/.test(key) && event.code === `Key${letter.toUpperCase()}`;
 }

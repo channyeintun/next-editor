@@ -13,7 +13,7 @@ import LangText from "../LangText";
 import { getFileIcon } from "../fileSidebar/fileIcons";
 import { useWorkspaceActiveFilePath, useWorkspaceTreeFiles } from "../../hooks/useWorkspace";
 import type { WorkspaceTreeFile } from "../../types/workspace";
-import { isImeComposingKey } from "../../utils/keyboardPlatform";
+import { isImeComposingKey, isLetterKey } from "../../utils/keyboardPlatform";
 import { isGoToFileShortcut } from "./goToFileShortcut";
 import {
   highlightRuns,
@@ -118,9 +118,8 @@ export default function QuickOpenDialog({
     // Ctrl+P on a Mac, where Ctrl is not the command key.
     else if (isGoToFileShortcut(event.nativeEvent, isApple)) next = wrap(selected + 1);
     else if (isApple && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-      const key = event.key.toLowerCase();
-      if (key === "n") next = wrap(selected + 1);
-      else if (key === "p") next = wrap(selected - 1);
+      if (isLetterKey(event.nativeEvent, "n")) next = wrap(selected + 1);
+      else if (isLetterKey(event.nativeEvent, "p")) next = wrap(selected - 1);
     }
     if (next === null) return;
     event.preventDefault();
