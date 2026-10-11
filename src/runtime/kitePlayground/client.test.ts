@@ -204,6 +204,30 @@ describe("KitePlaygroundClient", () => {
     expect(engine.format).toHaveBeenCalledWith(["fn main() {}  ", "fn area() {}  "]);
   });
 
+  // `kite_format` lays out what it can parse and silently drops what it cannot,
+  // such as a block comment, and the dock writes a sibling file's answer back
+  // with no undo.
+  it("refuses a format that would remove code, naming the file", async () => {
+    const engine = fakeEngine(async () => ok);
+    engine.format.mockImplementation(async (sources) =>
+      sources.map((source) => source.replace(" /* ok */", "")),
+    );
+    const client = new KitePlaygroundClient({ engines: engineSource(engine) });
+
+    await expect(
+      client.format({
+        files: [
+          { path: "main.kite", content: "fn main() {}\n" },
+          { path: "shapes.kite", content: "fn area() {} /* ok */\n" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: "KitePlaygroundServiceError",
+      kind: "invalid-source",
+      message: expect.stringContaining("shapes.kite"),
+    });
+  });
+
   describe("without a Worker", () => {
     const WASM = "../../core/kite/build/kite-compiler.wasm";
 
@@ -224,6 +248,24 @@ describe("KitePlaygroundClient", () => {
           files: [{ path: "main.kite", content: 'fn main() {\n    io.print("in page")\n}\n' }],
         }),
       ).resolves.toEqual({ status: "success", stdout: "in page\n", stderr: "" });
+    });
+
+    it("refuses a format that drops everything after an open block comment", async () => {
+      vi.resetModules();
+      const exports = (await WebAssembly.instantiate(readFileSync(wasmPath))).instance.exports;
+      vi.doMock(WASM, () => ({ default: exports }));
+      const { KitePlaygroundClient: PageClient } = await import("./client");
+
+      await expect(
+        new PageClient().format({
+          files: [
+            {
+              path: "main.kite",
+              content: 'fn main() {\n    io.print("hi")\n    /* TODO\n    io.print("bye")\n}\n',
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ kind: "invalid-source" });
     });
   });
 });

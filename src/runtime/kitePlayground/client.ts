@@ -154,6 +154,11 @@ const pageEngines: KiteEngineSource = {
   },
 };
 
+/** A source with its layout taken out, which is all a formatter may change. */
+function withoutWhitespace(text: string): string {
+  return text.replace(/\s+/g, "");
+}
+
 function supersededError(): KitePlaygroundServiceError {
   return new KitePlaygroundServiceError("aborted", "Superseded by a newer operation");
 }
@@ -284,6 +289,20 @@ export class KitePlaygroundClient {
     const formatted = await this.#exclusive((engine) =>
       engine.format(request.files.map((file) => file.content)),
     );
+    // `kite_format` lays out what it can parse and silently drops what it
+    // cannot: an open block comment takes the rest of the file with it. The
+    // dock writes a sibling file's answer straight to the workspace, with no
+    // undo, so an answer that changed more than layout is refused here, for
+    // whichever engine produced it, before anything is written.
+    const damaged = request.files.find(
+      (file, index) => withoutWhitespace(formatted[index]) !== withoutWhitespace(file.content),
+    );
+    if (damaged) {
+      throw new KitePlaygroundServiceError(
+        "invalid-source",
+        `Format would remove code from ${damaged.path}; fix the errors first`,
+      );
+    }
     const files = request.files.map((file, index) => ({
       path: file.path,
       content: formatted[index],

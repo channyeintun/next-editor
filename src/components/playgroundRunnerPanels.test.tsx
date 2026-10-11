@@ -192,6 +192,7 @@ import {
 } from "../studio/targets";
 import { GoPlaygroundServiceError } from "../runtime/goPlayground/client";
 import { HaskellPlaygroundServiceError } from "../runtime/haskellPlayground/client";
+import { KitePlaygroundServiceError } from "../runtime/kitePlayground/client";
 import AsmPlaygroundRunnerPanel, { ASM_RUNNER } from "./AsmPlaygroundRunnerPanel";
 import GoPlaygroundRunnerPanel, { GO_RUNNER } from "./GoPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel, { HASKELL_RUNNER } from "./HaskellPlaygroundRunnerPanel";
@@ -1036,6 +1037,28 @@ describe("playground runner panels", () => {
       "[gofmt error] Files changed while formatting; no formatting was applied",
     ]);
     expect(harness.client.format).not.toHaveBeenCalled();
+  });
+
+  it("kite: leaves every file as it was when Format would remove code", async () => {
+    const kite = CASES.find((panel) => panel.kind === "kite-playground")!;
+    setFiles({ "main.kite": SOURCE, "shapes.kite": "fn area() {} /* ok */\n" });
+    harness.client.format.mockRejectedValue(
+      new KitePlaygroundServiceError(
+        "invalid-source",
+        "Format would remove code from shapes.kite; fix the errors first",
+      ),
+    );
+    await renderPanel(kite);
+
+    await click(screen.getByRole("button", { name: "Format" }));
+
+    expect(harness.client.format).toHaveBeenCalledTimes(1);
+    expect(harness.workspace.updateFileContent).not.toHaveBeenCalled();
+    expect(consoleLines()).toEqual([
+      "[kitefmt] kitec fmt main.kite",
+      "[kitefmt error] kitec could not format this program",
+      "Format would remove code from shapes.kite; fix the errors first",
+    ]);
   });
 
   it.each(CASES)("$kind: replays the recorded dock during playback", async (panel) => {
