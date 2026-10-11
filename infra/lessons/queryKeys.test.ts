@@ -1,10 +1,12 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vite-plus/test";
 import {
+  authorKeys,
   lessonKeys,
   ownerScopedLessonQueryKeys,
   playlistKeys,
   primeLessonDetails,
+  searchKeys,
 } from "./queryKeys";
 import type { Lesson } from "./types";
 
@@ -12,6 +14,7 @@ import type { Lesson } from "./types";
 // invalidation between tube and infra, both depend on these exact values.
 describe("lesson and playlist query keys", () => {
   it("keeps the lesson keys' values", () => {
+    expect(lessonKeys.all).toEqual(["lessons"]);
     expect(lessonKeys.infinite).toEqual(["lessons", "infinite"]);
     expect(lessonKeys.mine).toEqual(["lessons", "mine"]);
     expect(lessonKeys.detail("rust-ownership")).toEqual(["lessons", "detail", "rust-ownership"]);
@@ -24,6 +27,28 @@ describe("lesson and playlist query keys", () => {
     expect(playlistKeys.allMembers).toEqual(["playlists", "members"]);
     expect(playlistKeys.members("p1")).toEqual(["playlists", "members", "p1"]);
     expect(playlistKeys.detail("intro")).toEqual(["playlists", "detail", "intro"]);
+  });
+
+  it("keeps the author profile and search keys' values", () => {
+    expect(authorKeys.all).toEqual(["authors"]);
+    expect(authorKeys.profile("chan")).toEqual(["authors", "chan"]);
+    expect(searchKeys.all).toEqual(["search"]);
+    expect(searchKeys.query("rust")).toEqual(["search", "rust"]);
+  });
+
+  // A lesson mutation invalidates these prefixes and relies on React Query's
+  // prefix match to reach the public gallery, details, profiles and searches.
+  it("puts every lesson, author and search key under its prefix", () => {
+    const groups = [
+      [lessonKeys.all, [lessonKeys.infinite, lessonKeys.mine, lessonKeys.detail("a")]],
+      [authorKeys.all, [authorKeys.profile("chan")]],
+      [searchKeys.all, [searchKeys.query("rust")]],
+    ] as const;
+    for (const [prefix, keys] of groups) {
+      for (const key of keys) {
+        expect(key.slice(0, prefix.length)).toEqual(prefix);
+      }
+    }
   });
 
   // A playlist mutation invalidates playlistKeys.all and relies on React Query's
@@ -57,7 +82,13 @@ describe("lesson and playlist query keys", () => {
     ]) {
       expect(isOwnerScoped(key)).toBe(true);
     }
-    for (const key of [lessonKeys.infinite, lessonKeys.detail("a"), playlistKeys.detail("intro")]) {
+    for (const key of [
+      lessonKeys.infinite,
+      lessonKeys.detail("a"),
+      playlistKeys.detail("intro"),
+      authorKeys.profile("chan"),
+      searchKeys.query("rust"),
+    ]) {
       expect(isOwnerScoped(key)).toBe(false);
     }
   });

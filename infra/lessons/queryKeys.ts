@@ -2,14 +2,18 @@ import type { QueryClient } from "@tanstack/react-query";
 import { lessonDetailQueryKey } from "../../src/shared/serverQueryState";
 import type { Lesson } from "./types";
 
-// React Query keys for lesson and playlist data. tube's public reads and
-// infra's owner-scoped reads and mutations share one QueryClient, and the
-// mutations reach tube's queries by key prefix (a playlist edit invalidates
+// React Query keys for lesson and playlist data, and for the author profiles
+// and search results that list lessons. tube's public reads and infra's
+// owner-scoped reads and mutations share one QueryClient, and the mutations
+// reach tube's queries by key prefix (a playlist edit invalidates
 // playlistKeys.all, which covers tube's playlistKeys.detail). A key renamed on
 // one side alone would silently stop that invalidation, so both sides build
 // their keys here.
 
 export const lessonKeys = {
+  /** The prefix every lesson key below starts with: invalidating it reaches the
+   *  public gallery and every lesson's detail as well as the owner's list. */
+  all: ["lessons"] as const,
   /** The public gallery's pages (tube's useLessonsInfinite). */
   infinite: ["lessons", "infinite"] as const,
   /** The signed-in owner's lessons, drafts included (My Library). */
@@ -33,6 +37,20 @@ export const playlistKeys = {
   members: (playlistId: string | undefined) => ["playlists", "members", playlistId] as const,
   /** One public playlist by slug (tube's usePlaylist). */
   detail: (slug: string | undefined) => ["playlists", "detail", slug] as const,
+};
+
+export const authorKeys = {
+  /** The prefix every author key below starts with. */
+  all: ["authors"] as const,
+  /** One author's public profile, with their published lessons (useAuthorProfile). */
+  profile: (username: string | undefined) => ["authors", username] as const,
+};
+
+export const searchKeys = {
+  /** The prefix every search key below starts with. */
+  all: ["search"] as const,
+  /** The lessons and authors matching one submitted query (useSearch). */
+  query: (q: string) => ["search", q] as const,
 };
 
 /**

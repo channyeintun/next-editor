@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { publishLesson, updateLessonName, updateLessonThumbnail } from "../upload/uploadLesson";
-import { lessonKeys, playlistKeys } from "../../lessons/queryKeys";
+import { authorKeys, lessonKeys, playlistKeys, searchKeys } from "../../lessons/queryKeys";
 import { deleteLesson, fetchMyLessons, unpublishLesson } from "./myLessonsApi";
 
 export function useMyLessons() {
@@ -21,22 +21,30 @@ function useMyLessonMutation(mutationFn: (lessonId: string) => Promise<void>) {
   });
 }
 
-// Playlist cards are derived from lessons: `lesson_count` follows the
-// playlist_lessons cascade on delete, and the cover thumbnail comes from the
-// playlist's first *published* member. Every lesson mutation therefore changes
-// playlist-rendered data, and with `staleTime: Infinity` in queryClient a stale
-// playlist card never refetches on its own — My Library would show the lesson
-// disappear while the playlist beside it kept the old count and cover for the
-// rest of the session. So the whole playlistKeys.all prefix goes stale too
-// (`usePlaylists` already invalidates in the other direction).
+// A lesson mutation (publish, unpublish, delete, rename, new thumbnail, upload)
+// changes the row every query that shows the lesson renders, so all of them go
+// stale. Inactive ones are only marked stale and refetch on the next visit.
+//
+// - The public gallery, each lesson's detail, author profiles and search
+//   results keep fresh data for up to a minute, and primeLessonDetails marks
+//   every listed lesson's detail fresh. Without this an author who unpublished
+//   a lesson and opened /learn still saw it listed, and its page still opened.
+// - Playlist cards are derived from lessons: `lesson_count` follows the
+//   playlist_lessons cascade on delete, and the cover thumbnail comes from the
+//   playlist's first *published* member. With `staleTime: Infinity` in
+//   queryClient a stale playlist card never refetches on its own — My Library
+//   would show the lesson disappear while the playlist beside it kept the old
+//   count and cover for the rest of the session (`usePlaylists` already
+//   invalidates in the other direction).
 //
 // Exported for useUploadLesson too: a newly uploaded draft belongs in My
 // Library the next time it mounts.
 export function invalidateLessonDerivedQueries(queryClient: QueryClient) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: lessonKeys.mine }),
-    queryClient.invalidateQueries({ queryKey: playlistKeys.all }),
-  ]);
+  return Promise.all(
+    [lessonKeys.all, authorKeys.all, searchKeys.all, playlistKeys.all].map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey }),
+    ),
+  );
 }
 
 export function usePublishFromLibrary() {

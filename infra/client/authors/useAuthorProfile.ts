@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { primeLessonDetails } from "../../lessons/queryKeys";
+import { authorKeys, primeLessonDetails } from "../../lessons/queryKeys";
 import { fetchAuthorProfile } from "./authorsApi";
 
 // Public author profile (published lessons only) for /learn/@username, for
@@ -8,7 +8,7 @@ export function useAuthorProfile(username: string | undefined) {
   const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ["authors", username],
+    queryKey: authorKeys.profile(username),
     queryFn: async () => {
       const profile = await fetchAuthorProfile(username!);
       // Each lesson is the same whole row /api/lessons/:slug returns, so

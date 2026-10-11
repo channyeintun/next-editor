@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { primeLessonDetails } from "../../lessons/queryKeys";
+import { primeLessonDetails, searchKeys } from "../../lessons/queryKeys";
 import { search } from "./searchApi";
 
 // Searches every published lesson and every author, not just what the
@@ -8,7 +8,7 @@ export function useSearch(q: string) {
   const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ["search", q],
+    queryKey: searchKeys.query(q),
     queryFn: async () => {
       const results = await search(q);
       // Each result is the same whole lesson /api/lessons/:slug returns, so

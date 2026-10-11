@@ -38,9 +38,9 @@ export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
  * `published_at` values cannot straddle a page boundary) removes the cause
  * this was written for. It stays because OFFSET paging is racy for a reason
  * no ORDER BY can fix: pages are fetched as separate requests, minutes apart,
- * and routes/lessons.ts caches each page independently for 60s. If a lesson is
- * published between two of those fetches, every later row shifts down one and
- * the boundary row is genuinely returned twice.
+ * as the reader scrolls. If a lesson is published between two of those
+ * fetches, every later row shifts down one and the boundary row is genuinely
+ * returned twice.
  *
  * It also covers the D1→seed seam on the last page, where a slug present in
  * both catalogs would otherwise be rendered twice.
