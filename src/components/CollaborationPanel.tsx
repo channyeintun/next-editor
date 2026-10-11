@@ -696,12 +696,22 @@ export default function CollaborationPanel() {
                 <button
                   type="button"
                   disabled={isBusy}
-                  onClick={() =>
+                  onClick={() => {
+                    // Ending the room disconnects everyone and cannot be
+                    // undone; leaving only takes this member out.
+                    if (
+                      collaboration.isHost &&
+                      !window.confirm(
+                        "End this live room for everyone? Everyone will be disconnected and the room cannot be reopened.",
+                      )
+                    ) {
+                      return;
+                    }
                     void run(async () => {
                       if (collaboration.isHost) await collaboration.closeRoom();
                       else await collaboration.leaveRoom();
-                    })
-                  }
+                    });
+                  }}
                   className="w-full rounded-lg border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
                 >
                   {collaboration.isHost ? "End live room" : "Leave room"}

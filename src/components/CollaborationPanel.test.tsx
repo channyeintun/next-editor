@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
@@ -705,5 +705,55 @@ describe("CollaborationPanel invitation prompt", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Sign in to accept this collaboration invitation.",
     );
+  });
+});
+
+describe("CollaborationPanel ending or leaving the room", () => {
+  let confirm: MockInstance<typeof window.confirm>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    collaborationState = makeCollaborationState();
+    confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    confirm.mockRestore();
+  });
+
+  it("ends the room for everyone only after the host confirms", async () => {
+    collaborationState = { ...makeCollaborationState(), role: "owner", isHost: true };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "End live room" }));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    await waitFor(() => expect(collaborationState.closeRoom).toHaveBeenCalledOnce());
+    expect(collaborationState.leaveRoom).not.toHaveBeenCalled();
+  });
+
+  it("keeps the room open when the host cancels", () => {
+    confirm.mockReturnValue(false);
+    collaborationState = { ...makeCollaborationState(), role: "owner", isHost: true };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "End live room" }));
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(collaborationState.closeRoom).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "End live room" })).toBeEnabled();
+  });
+
+  it("lets a member leave without asking", async () => {
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Leave room" }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(collaborationState.leaveRoom).toHaveBeenCalledOnce());
+    expect(collaborationState.closeRoom).not.toHaveBeenCalled();
   });
 });
