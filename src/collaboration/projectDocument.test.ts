@@ -314,6 +314,53 @@ describe("collaboration project document", () => {
     expect(projectCollaborationDocument(peer).project.files[path].content).toBe(next);
   });
 
+  // The host projects every local transaction into the workspace, runtime and
+  // recording, so a delete in its own transaction exposed prefix+suffix there.
+  it("replaces a span in one transaction without exposing the truncated file", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    project.files[path] = { path, name: path, language: "html", content: "start middle end" };
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, { idFactory: idFactory() });
+    const projected: unknown[] = [];
+    doc.on("afterTransaction", () => {
+      projected.push(projectCollaborationDocument(doc).project.files[path].content);
+    });
+
+    new CollaborationProjectController(doc, { canWrite: () => true }).replaceFileContent(
+      path,
+      "start centre end",
+    );
+
+    expect(projected).toEqual(["start centre end"]);
+  });
+
+  it("replaces a span with text longer than one chunk in updates the room accepts", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    project.files[path] = { path, name: path, language: "html", content: "head-old-tail" };
+    const local = new Y.Doc();
+    seedCollaborationProject(local, project, { idFactory: idFactory() });
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(local));
+    const updateSizes: number[] = [];
+    local.on("update", (update: Uint8Array) => {
+      updateSizes.push(update.byteLength);
+      Y.applyUpdate(peer, update);
+    });
+    const next = `head-${"é".repeat(30_000)}-tail`;
+
+    new CollaborationProjectController(local, { canWrite: () => true }).replaceFileContent(
+      path,
+      next,
+    );
+
+    expect(projectCollaborationDocument(local).project.files[path].content).toBe(next);
+    expect(projectCollaborationDocument(peer).project.files[path].content).toBe(next);
+    expect(updateSizes.length).toBeGreaterThan(1);
+    expect(Math.max(...updateSizes)).toBeLessThanOrEqual(MAX_YJS_UPDATE_BYTES);
+  });
+
   // The provider cannot split one update, and fails the whole room session on
   // one larger than MAX_YJS_UPDATE_BYTES.
   it("creates a large text file in updates the room accepts", () => {

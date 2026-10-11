@@ -674,17 +674,20 @@ export class CollaborationProjectController {
     }
     const replacement = sharedTextReplacement(text, content);
     if (!replacement) return;
-    if (replacement.deleteLength > 0) {
-      this.doc.transact(
-        () => text.delete(replacement.prefixLength, replacement.deleteLength),
-        COLLABORATION_ORIGIN.localEditor,
-      );
-    }
+    const { prefixLength, deleteLength, insertion } = replacement;
+    // The delete shares a transaction with the first chunk, as in createNode: the
+    // host projects every local transaction, and a delete on its own would expose
+    // the file without the replaced span.
+    const firstEnd = textChunkEnd(insertion, 0);
+    this.doc.transact(() => {
+      if (deleteLength > 0) text.delete(prefixLength, deleteLength);
+      if (firstEnd > 0) text.insert(prefixLength, insertion.slice(0, firstEnd));
+    }, COLLABORATION_ORIGIN.localEditor);
     this.insertTextInChunks(
       text,
-      replacement.prefixLength,
-      replacement.insertion,
-      0,
+      prefixLength,
+      insertion,
+      firstEnd,
       COLLABORATION_ORIGIN.localEditor,
     );
   }
