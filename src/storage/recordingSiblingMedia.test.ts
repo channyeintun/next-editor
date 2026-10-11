@@ -38,17 +38,46 @@ describe("loadRecordingNarration", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("downloads a linked narration", async () => {
-    const linked = new Blob(["linked"], { type: "audio/ogg" });
-    const fetchMock = vi.fn<typeof fetch>(
-      async () => ({ ok: true, status: 200, blob: async () => linked }) as Response,
-    );
-    vi.stubGlobal("fetch", fetchMock);
+  const linked = new Blob(["linked"], { type: "audio/ogg" });
+  const linkedResponse = () =>
+    ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "audio/ogg" }),
+      blob: async () => linked,
+    }) as Response;
 
-    await expect(
-      loadRecordingNarration(recordingWith({ audioUrl: "https://example.test/narration.ogg" })),
-    ).resolves.toBe(linked);
-    expect(fetchMock).toHaveBeenCalledWith("https://example.test/narration.ogg");
+  it("downloads a narration this site hosts directly", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => linkedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const audioUrl = `${window.location.origin}/lessons/narration.ogg`;
+
+    await expect(loadRecordingNarration(recordingWith({ audioUrl }))).resolves.toBe(linked);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(audioUrl);
+  });
+
+  it("downloads another host's narration through the proxy, as the lesson's other files", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => linkedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const audioUrl = "https://cdn.other.test/narration.ogg";
+
+    await expect(loadRecordingNarration(recordingWith({ audioUrl }))).resolves.toBe(linked);
+    // A host without CORS is reachable only through the proxy.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requested = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(`${requested.origin}${requested.pathname}`).toBe(`${window.location.origin}/api/proxy`);
+    expect(requested.searchParams.get("url")).toBe(audioUrl);
+  });
+
+  it("reads a narration held at a blob URL directly", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => linkedResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const audioUrl = `blob:${window.location.origin}/narration`;
+
+    await expect(loadRecordingNarration(recordingWith({ audioUrl }))).resolves.toBe(linked);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(audioUrl);
   });
 
   it("throws with the status when the download fails", async () => {

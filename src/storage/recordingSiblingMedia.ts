@@ -271,7 +271,11 @@ export async function loadRecordingNarration(
 ): Promise<Blob | null> {
   if (recording.audioBlob instanceof Blob) return recording.audioBlob;
   if (!recording.audioUrl) return null;
-  const response = await fetch(recording.audioUrl);
+  // A web URL is fetched as the lesson's other files are (another host through the proxy,
+  // since it may not allow CORS); anything else, such as a blob: URL, directly.
+  const response = /^https?:\/\//i.test(recording.audioUrl)
+    ? await fetchNextEditorUrl(recording.audioUrl)
+    : await fetch(recording.audioUrl);
   if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
   return response.blob();
 }
