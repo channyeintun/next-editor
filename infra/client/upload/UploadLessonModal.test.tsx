@@ -10,6 +10,7 @@ import {
   MAX_TITLE_CHARS,
 } from "../../lessons/metadataLimits";
 import type * as UploadLessonModule from "./uploadLesson";
+import { UploadLimitError } from "./uploadLesson";
 import type { UploadedLesson, UploadLessonInput } from "./useUploadLesson";
 
 const auth = vi.hoisted(() => ({ isSignedIn: false }));
@@ -17,6 +18,9 @@ const auth = vi.hoisted(() => ({ isSignedIn: false }));
 const upload = vi.hoisted(() =>
   vi.fn<(args: { lessonId: string; input: UploadLessonInput }) => Promise<UploadedLesson>>(),
 );
+
+// What the mutation last failed with, as useUploadLesson reports it.
+const uploadState = vi.hoisted(() => ({ error: null as Error | null }));
 
 // "Publish now" goes through My Library's publish mutation, which calls this.
 const publishLesson = vi.hoisted(() => vi.fn<(lessonId: string) => Promise<void>>());
@@ -38,7 +42,7 @@ vi.mock("./useUploadLesson", () => ({
     cancel: vi.fn<() => void>(),
     progress: 0,
     isUploading: false,
-    error: null,
+    error: uploadState.error,
     reset: vi.fn<() => void>(),
   }),
   formatDuration: () => "0:01",
@@ -238,6 +242,50 @@ describe("UploadLessonModal text limits", () => {
     typeTags("intro");
 
     expect(screen.queryByText("each tag must be at most 50 characters")).toBeNull();
+  });
+});
+
+describe("UploadLessonModal upload errors", () => {
+  beforeEach(() => {
+    auth.isSignedIn = true;
+  });
+
+  afterEach(() => {
+    auth.isSignedIn = false;
+    uploadState.error = null;
+  });
+
+  // Retrying cannot help, so the only useful thing to show is which file is
+  // too big and by how much.
+  it("shows which file is over the upload limit", () => {
+    uploadState.error = new UploadLimitError("x.webm is 120.0 MB, over the 100.0 MB upload limit");
+
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "x.webm is 120.0 MB, over the 100.0 MB upload limit",
+    );
+  });
+
+  it("shows why a recording too large to save cannot be uploaded", () => {
+    const refusal = new Error("Recording is too large to save: the .ne file would exceed 512 MiB");
+    // How the codec worker's refusal arrives: comlink keeps only its name.
+    refusal.name = "UnreadableRecordingError";
+    uploadState.error = refusal;
+
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+
+    expect(screen.getByRole("alert").textContent).toBe(refusal.message);
+  });
+
+  it("keeps the generic message for any other failure", () => {
+    uploadState.error = new Error("Network Error");
+
+    render(<UploadLessonModal recording={recording} onClose={() => {}} />);
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Upload failed. Your details are still here — try again.",
+    );
   });
 });
 

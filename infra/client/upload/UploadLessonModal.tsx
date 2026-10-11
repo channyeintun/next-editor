@@ -5,9 +5,11 @@ import ModalShell from "@app/components/ModalShell";
 import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
 import { getRecordingStorage } from "@app/storage/RecordingStorage";
+import { isUnreadableRecordingError } from "@app/storage/streamingRecordingCodec";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { usePublishFromLibrary } from "../library/useMyLessons";
 import { useUploadLesson, formatDuration, type UploadLessonInput } from "./useUploadLesson";
+import { UploadLimitError } from "./uploadLesson";
 import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
 import UploadThumbnailField, { type ThumbnailSelection } from "./UploadThumbnailField";
 import UploadCaptionsField, { type SelectedCaption } from "./UploadCaptionsField";
@@ -410,9 +412,13 @@ export default function UploadLessonModal({
             </p>
           ) : error ? (
             <p role="alert" className="text-sm text-rose-300">
-              {axios.isAxiosError(error) && error.response?.status === 409
-                ? "That recording was already uploaded — try again."
-                : "Upload failed. Your details are still here — try again."}
+              {/* A file over the limit, or a take too large to save, fails the
+                  same way on every retry: only its own message says what to change. */}
+              {error instanceof UploadLimitError || isUnreadableRecordingError(error)
+                ? error.message
+                : axios.isAxiosError(error) && error.response?.status === 409
+                  ? "That recording was already uploaded — try again."
+                  : "Upload failed. Your details are still here — try again."}
             </p>
           ) : null}
 

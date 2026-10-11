@@ -41,6 +41,17 @@ interface UploadTarget {
   blob: Blob;
 }
 
+/**
+ * A file over MAX_MEDIA_BYTES, refused before any bytes go up. Its message names
+ * the file and its size for the author to read: retrying fails the same way.
+ */
+export class UploadLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UploadLimitError";
+  }
+}
+
 // The upload route's filename allow-list only recognizes these extensions, so a name-derived
 // guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
 // to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
@@ -141,7 +152,7 @@ export async function uploadLesson(
   // that lost.
   const oversized = targets.find((target) => target.blob.size > MAX_MEDIA_BYTES);
   if (oversized) {
-    throw new Error(
+    throw new UploadLimitError(
       `${oversized.filename} is ${formatMediaBytes(oversized.blob.size)}, over the ` +
         `${formatMediaBytes(MAX_MEDIA_BYTES)} upload limit`,
     );

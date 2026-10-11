@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import type { Recording } from "@app/core/src";
 import { inferLanguageFromFilename } from "@app/captions/parseCaptions";
 import { apiClient } from "../apiClient";
+import { MAX_MEDIA_BYTES } from "../../lessons/uploadLimits";
 import {
   formatDuration,
   thumbnailExtension,
   updateLessonThumbnail,
   uploadLesson,
+  UploadLimitError,
 } from "./uploadLesson";
 
 vi.mock("../apiClient", () => ({
@@ -352,6 +354,31 @@ describe("uploadLesson", () => {
       ),
     ).rejects.toThrow("network error");
 
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+
+  // The modal shows this error's own message, so it must be told apart from a
+  // network failure: the generic copy hid which file was too big.
+  it("refuses an over-limit file with an UploadLimitError before any PUT", async () => {
+    const cameraBlob = new Blob(["camera-bytes"], { type: "video/webm" });
+    Object.defineProperty(cameraBlob, "size", { value: MAX_MEDIA_BYTES + 1 });
+
+    const failure = uploadLesson(
+      "lesson-4",
+      {
+        recording: createRecording({ cameraBlob }),
+        title: "Too big",
+        description: "",
+        tags: [],
+      },
+      () => {},
+    );
+
+    await expect(failure).rejects.toBeInstanceOf(UploadLimitError);
+    await expect(failure).rejects.toThrow(
+      "lesson-4.webm is 100.0 MB, over the 100.0 MB upload limit",
+    );
+    expect(mockedPut).not.toHaveBeenCalled();
     expect(mockedPost).not.toHaveBeenCalled();
   });
 });
