@@ -61,6 +61,21 @@ describe("useDismissOnOutsideInteraction", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["window", "document"] as const)(
+    "leaves an Escape that ends an input method's composition alone (%s)",
+    (listenOn) => {
+      const { onDismiss } = renderHarness({ listenOn });
+      const inside = screen.getByRole("button", { name: "Inside" });
+
+      fireEvent.keyDown(inside, { key: "Escape", isComposing: true });
+      fireEvent.keyDown(inside, { key: "Escape", keyCode: 229 });
+      expect(onDismiss).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(inside, { key: "Escape" });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("leaves Escape alone unless asked to close on it", () => {
     const { onDismiss } = renderHarness({ dismissOnEscape: false });
 

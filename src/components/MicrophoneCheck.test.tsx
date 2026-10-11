@@ -195,6 +195,24 @@ describe("MicrophoneCheck", () => {
     expect(code).toHaveFocus();
   });
 
+  it("stays open on an Escape that ends an input method's composition", async () => {
+    stubAudio(0.3);
+    render(<MicrophoneCheck />);
+    fireEvent.click(screen.getByTitle("Check the microphone"));
+    await screen.findByText("Sounds good.");
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape", isComposing: true });
+      fireEvent.keyDown(window, { key: "Escape", keyCode: 229 });
+    });
+    expect(screen.getByRole("dialog", { name: "Microphone check" })).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("explains a blocked microphone", async () => {
     stubAudio(0.3);
     Object.defineProperty(navigator, "mediaDevices", {

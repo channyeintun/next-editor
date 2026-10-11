@@ -7,6 +7,7 @@ import { useRecordingMicrophoneStream } from "../hooks/useNextEditorContext";
 import { useRecordingSettings } from "../hooks/useRecordingSettings";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import type { MicrophoneVerdict } from "../utils/audioLevel";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 
 const VERDICT_TEXT: Record<MicrophoneVerdict, string> = {
   listening: "Listening…",
@@ -84,7 +85,8 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // An Escape that ends a composition elsewhere belongs to the input method.
+      if (event.key === "Escape" && !isImeComposingKey(event)) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

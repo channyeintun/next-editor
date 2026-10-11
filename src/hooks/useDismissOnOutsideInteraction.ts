@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, type RefObject } from "react";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 
 export interface DismissOnOutsideInteractionOptions {
   /** Whether the popup is showing. Nothing is listened to while it is not. */
@@ -42,7 +43,9 @@ export function useDismissOnOutsideInteraction({
       }
     };
     const handleKeyDown = (event: Event) => {
-      if ((event as KeyboardEvent).key === "Escape") {
+      const keyEvent = event as KeyboardEvent;
+      // An Escape that ends a composition belongs to the input method.
+      if (keyEvent.key === "Escape" && !isImeComposingKey(keyEvent)) {
         dismiss();
       }
     };
