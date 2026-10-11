@@ -312,6 +312,11 @@ Provisioning, secrets, and the custom domain are covered in
 - [docs/modal-voxcpm2-burmese.md](docs/modal-voxcpm2-burmese.md): the private VoxCPM2 Burmese
   narration on Modal
 
+## Code of Conduct
+
+Everyone taking part in this repository is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
