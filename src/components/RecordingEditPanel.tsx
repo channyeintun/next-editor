@@ -19,6 +19,7 @@ import { normalizeMediaSpans, type MediaSpan } from "../core/src/utils/mediaSpan
 import { relinkRecordingDraft } from "../storage/recordingDrafts/recordingDraftJournal";
 import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
+import HoverRing from "./hoverRing/HoverRing";
 
 type EditKind = "cut" | "mute";
 
@@ -354,9 +355,10 @@ export default function RecordingEditPanel({
           type="button"
           onClick={onClose}
           aria-label="Close the editor"
-          className="ml-auto rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+          className="ml-auto rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
         >
           <X size={14} aria-hidden="true" />
+          <HoverRing />
         </button>
       </div>
 
@@ -404,6 +406,7 @@ export default function RecordingEditPanel({
           className={EDIT_BUTTON_CLASS}
         >
           Start at playhead
+          <HoverRing />
         </button>
         <button
           type="button"
@@ -412,6 +415,7 @@ export default function RecordingEditPanel({
           className={EDIT_BUTTON_CLASS}
         >
           End at playhead
+          <HoverRing />
         </button>
         <button
           type="button"
@@ -421,6 +425,7 @@ export default function RecordingEditPanel({
         >
           <Scissors size={12} aria-hidden="true" />
           Cut selection
+          <HoverRing />
         </button>
         <button
           type="button"
@@ -430,6 +435,7 @@ export default function RecordingEditPanel({
         >
           <VolumeX size={12} aria-hidden="true" />
           Mute selection
+          <HoverRing />
         </button>
         <button
           type="button"
@@ -440,6 +446,7 @@ export default function RecordingEditPanel({
         >
           <Sparkles size={12} aria-hidden="true" />
           Suggest dead-air cuts
+          <HoverRing />
         </button>
         {/* Always mounted, so each edge marked at the playhead is announced. */}
         <span role="status" className="text-xs text-slate-400">
@@ -472,9 +479,11 @@ export default function RecordingEditPanel({
                 aria-label={`Remove this ${edit.kind}`}
                 disabled={applying}
                 onClick={() => removeEdit(index)}
-                className="rounded-full p-0.5 text-slate-500 transition-colors hover:text-white"
+                // Room for the ring; the negative margin keeps the chip's height.
+                className="-my-0.5 rounded-full p-1 text-slate-500 transition-colors hover:text-white"
               >
                 <X size={11} aria-hidden="true" />
+                <HoverRing />
               </button>
             </li>
           ))}
