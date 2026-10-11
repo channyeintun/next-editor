@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
 import { selectIsPlaying, type EditorActorRef, type EditorMachineSnapshot } from "../useNextEditor";
+import { isLetterKey } from "../utils/letterKey";
 import { isPressableTarget, isTypingTarget } from "../utils/playerKeyTargets";
 
 // ============================================================================
@@ -39,6 +40,28 @@ const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
   "F12",
 ]);
 
+/**
+ * Copy, select all, and find next or previous: Cmd/Ctrl chords that leave the text as
+ * it is. Many other chords change it (Cmd+/, Cmd+], Cmd+Backspace), so the chords that
+ * keep playing are listed rather than the ones that pause.
+ */
+const NON_MUTATING_CHORD_LETTERS = ["c", "a", "f", "g"];
+
+/**
+ * Whether a key pressed in the editor may change the text, so it pauses a playing
+ * lesson. Navigation and modifier keys, and the chords above, do not. With Alt held the
+ * chord is not a command: Ctrl+Alt is AltGr on Windows, which types a character.
+ */
+export function shouldPauseOnEditorKey(
+  event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "altKey">,
+): boolean {
+  if (IGNORED_PLAYBACK_INPUT_KEYS.has(event.key)) return false;
+  const isCommandChord = (event.ctrlKey || event.metaKey) && !event.altKey;
+  return !(
+    isCommandChord && NON_MUTATING_CHORD_LETTERS.some((letter) => isLetterKey(event, letter))
+  );
+}
+
 const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 
 /** Pauses playback on editor input or the Space key while a lesson plays. */
@@ -55,8 +78,8 @@ export const usePlaybackInteractionPause = (actorRef: EditorActorRef): void => {
       // Listen for user keyboard input during replay
       disposables.push(
         editor.onKeyDown((e) => {
-          // Ignore navigation/modifier keys to only pause on potential value changes
-          if (!IGNORED_PLAYBACK_INPUT_KEYS.has(e.browserEvent.key)) {
+          // Pause only on keys that may change the text
+          if (shouldPauseOnEditorKey(e.browserEvent)) {
             actorRef.send({ type: "USER_INTERACTION" });
           }
         }),
