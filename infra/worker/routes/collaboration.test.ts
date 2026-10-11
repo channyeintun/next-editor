@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
@@ -6,6 +6,7 @@ import {
 } from "../../../src/collaboration/protocol";
 import {
   createCollaborationInvitation,
+  createProvisioningCollaborationRoom,
   getCollaborationRoomAccess,
   recordCollaborationAuditEvent,
   setCollaborationRoomStatus,
@@ -26,6 +27,7 @@ vi.mock("../auth/session", () => ({
 vi.mock("../../db/collaborationQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/collaborationQueries")>()),
   createCollaborationInvitation: vi.fn<typeof createCollaborationInvitation>(),
+  createProvisioningCollaborationRoom: vi.fn<typeof createProvisioningCollaborationRoom>(),
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
   setCollaborationRoomStatus: vi.fn<typeof setCollaborationRoomStatus>(),
   recordCollaborationAuditEvent: vi.fn<typeof recordCollaborationAuditEvent>(async () => {}),
@@ -72,21 +74,30 @@ function ownerAccess(overrides: Partial<CollaborationRoomRow> = {}): Collaborati
   return { ...room(overrides), member_role: "owner" };
 }
 
-/** POSTs /close and waits for everything the route handed to waitUntil. */
-async function closeRoom(): Promise<Response> {
+/** An execution context that keeps what the route hands to waitUntil. */
+function collectingExecutionContext() {
   const pending: Promise<unknown>[] = [];
   const executionContext = {
     waitUntil: (promise: Promise<unknown>) => pending.push(promise),
     passThroughOnException: () => undefined,
     props: {},
   };
+  return {
+    executionContext: executionContext as unknown as ExecutionContext,
+    settled: () => Promise.all(pending),
+  };
+}
+
+/** POSTs /close and waits for everything the route handed to waitUntil. */
+async function closeRoom(): Promise<Response> {
+  const { executionContext, settled } = collectingExecutionContext();
   const response = await collaborationRoute.request(
     `https://nexteditor.dev/rooms/${ROOM_ID}/close`,
     { method: "POST" },
     { DB: {} } as Env,
-    executionContext as unknown as ExecutionContext,
+    executionContext,
   );
-  await Promise.all(pending);
+  await settled();
   return response;
 }
 
@@ -130,6 +141,84 @@ describe("signed-out callers", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "not signed in" });
     expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /rooms", () => {
+  /**
+   * POSTs a new room whose Durable Object answers each SQLite request with
+   * `statusFor(path)`, and waits for everything handed to waitUntil.
+   * `requests` lists what the room object was asked, in order.
+   */
+  async function createRoom(statusFor: (path: string) => number) {
+    const requests: string[] = [];
+    const stub = {
+      fetch: vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
+        async (input, init) => {
+          const path = new URL(input).pathname;
+          requests.push(`${init?.method ?? "GET"} ${path}`);
+          return new Response(null, { status: statusFor(path) });
+        },
+      ),
+    };
+    const env = { DB: {}, COLLABORATION_ROOMS: { getByName: () => stub } } as unknown as Env;
+    const { executionContext, settled } = collectingExecutionContext();
+    const response = await collaborationRoute.request(
+      "https://nexteditor.dev/rooms",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+          documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+          clientId: OWNER_ID,
+          updateId: ROOM_ID,
+          snapshot: "AAAA",
+        }),
+      },
+      env,
+      executionContext,
+    );
+    await settled();
+    return { response, requests };
+  }
+
+  beforeEach(() => {
+    vi.mocked(createProvisioningCollaborationRoom).mockResolvedValue(
+      room({ status: "provisioning" }),
+    );
+    vi.mocked(setCollaborationRoomStatus).mockResolvedValue(room({ status: "failed" }));
+    // The route logs the failed seed, and the second test a failed purge.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The room object may have stored the creator's snapshot even though the
+  // Worker saw the call fail. A failed room is never joined, closed or swept,
+  // so without this purge that copy of their project stayed for good.
+  it("purges the room's document after answering when seeding it fails", async () => {
+    const { response, requests } = await createRoom((path) =>
+      path === "/sqlite/initialize" ? 500 : 204,
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "failed to initialize collaboration room" });
+    expect(setCollaborationRoomStatus).toHaveBeenCalledWith(expect.anything(), ROOM_ID, "failed");
+    expect(requests).toEqual(["POST /sqlite/initialize", "POST /sqlite/purge"]);
+  });
+
+  it("only logs a purge that fails too", async () => {
+    const { response, requests } = await createRoom(() => 500);
+
+    expect(response.status).toBe(503);
+    expect(requests).toEqual(["POST /sqlite/initialize", "POST /sqlite/purge"]);
+    expect(console.error).toHaveBeenCalledWith(
+      "Failed to purge failed collaboration room",
+      expect.objectContaining({ roomId: ROOM_ID }),
+    );
   });
 });
 

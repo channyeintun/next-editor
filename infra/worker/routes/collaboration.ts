@@ -47,6 +47,7 @@ import { sha256Hex } from "../../../src/shared/sha256Hex";
 import type { Env } from "../env";
 import { readJsonWithLimit } from "../httpBody";
 import {
+  deleteCollaborationRoomSqliteDocument,
   exportCollaborationRoomSqliteDocument,
   forwardCollaborationWebSocket,
   hasCollaborationRoomBinding,
@@ -185,6 +186,20 @@ collaborationRoute.post("/rooms", requireUser, async (c) => {
     if (!initialized) throw new Error("collaboration room SQLite binding unavailable");
   } catch (error) {
     await setCollaborationRoomStatus(c.env.DB, room.id, "failed");
+    // The room object may have stored the snapshot even though this call
+    // failed (a lost response, say). A failed room is never joined, closed or
+    // swept by maintenance, so purge it now rather than keep the creator's
+    // project for good. Requests to one object run in order, so this lands
+    // after the initialize it follows; after the response, so the 503 is not
+    // delayed, and an unreachable object is only logged.
+    c.executionCtx.waitUntil(
+      deleteCollaborationRoomSqliteDocument(c.env, room.id).catch((purgeError: unknown) => {
+        console.error("Failed to purge failed collaboration room", {
+          roomId: room.id,
+          error: purgeError instanceof Error ? purgeError.message : String(purgeError),
+        });
+      }),
+    );
     console.error("Failed to seed collaboration room", {
       roomId: room.id,
       updateId: parsed.data.updateId,
