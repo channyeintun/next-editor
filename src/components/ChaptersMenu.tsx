@@ -172,7 +172,9 @@ export default function ChaptersMenu({
                         );
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
+                        if (event.key === "Enter" && !isImeComposingKey(event.nativeEvent)) {
+                          event.currentTarget.blur();
+                        }
                       }}
                       className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-slate-200 outline-none hover:border-slate-700 focus:border-sky-500"
                     />

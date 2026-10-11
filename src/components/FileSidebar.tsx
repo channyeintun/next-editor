@@ -14,6 +14,7 @@ import {
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useOpenWorkspaceFile } from "../hooks/useOpenWorkspaceFile";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 import {
   STUDIO_TARGET_AIM_ATTRIBUTE,
   STUDIO_TARGET_ATTRIBUTE,
@@ -336,6 +337,11 @@ function FileSidebarPanel() {
   };
 
   const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // The Enter or Escape that picks or drops a candidate belongs to an input method.
+    if (isImeComposingKey(event.nativeEvent)) {
+      return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       inlineEditFocusReturnRef.current = { path: commitInlineEdit() };

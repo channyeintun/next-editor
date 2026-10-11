@@ -340,6 +340,25 @@ describe("FileSidebar name field", () => {
     expect(row("notes.md")).toHaveFocus();
   });
 
+  it("leaves Enter and Escape to an input method that is composing a name", () => {
+    render(<FileSidebar />);
+    fireEvent.click(row("Create file"));
+    const field = screen.getByRole("textbox", { name: "New file name" });
+    fireEvent.change(field, { target: { value: "ノート.md" } });
+
+    // The key that picks or drops a candidate belongs to the input method.
+    expect(fireEvent.keyDown(field, { key: "Enter", isComposing: true })).toBe(true);
+    // Safari's key that ends a composition comes after compositionend.
+    expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 229 })).toBe(true);
+    expect(fireEvent.keyDown(field, { key: "Escape", isComposing: true })).toBe(true);
+    expect(actions.createFile).not.toHaveBeenCalled();
+    expect(field).toBeInTheDocument();
+    expect(field).toHaveValue("ノート.md");
+
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(actions.createFile).toHaveBeenCalledWith("ノート.md", expect.any(String));
+  });
+
   it("leaves focus alone when a blur closes the field", () => {
     render(<FileSidebar />);
     const createFile = row("Create file");

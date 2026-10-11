@@ -115,6 +115,29 @@ describe("ChaptersMenu", () => {
     ]);
   });
 
+  it("leaves Enter in a chapter title to an input method that is composing it", () => {
+    render(<ChaptersMenu recording={lesson} editable iconSize={16} buttonClassName="" />);
+    openMenu();
+
+    const title = screen.getByLabelText("Title of the chapter at 1:00");
+    title.focus();
+    fireEvent.change(title, { target: { value: "ルーティング" } });
+
+    // The Enter that picks a candidate belongs to the input method, not the field.
+    fireEvent.keyDown(title, { key: "Enter", isComposing: true });
+    // Safari's key that ends a composition comes after compositionend.
+    fireEvent.keyDown(title, { key: "Enter", keyCode: 229 });
+    expect(title).toHaveFocus();
+    expect(actions.setChapters).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(title, { key: "Enter" });
+    expect(title).not.toHaveFocus();
+    expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", [
+      { time: 0, title: "Setup" },
+      { time: 60_000, title: "ルーティング" },
+    ]);
+  });
+
   it("keeps a chapter's title when the author adds one at the moment it starts", () => {
     // Paused on a chapter's start, as clicking its time or opening the lesson at 0:00 leaves it.
     playhead.time = 0;
