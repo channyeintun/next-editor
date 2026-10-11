@@ -273,6 +273,33 @@ describe("CollaborationPanel follow actions", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("closes on Escape from inside the panel and returns focus to the header button", () => {
+    render(<CollaborationPanel />);
+    const trigger = screen.getByRole("button", { name: /^Live/ });
+    fireEvent.click(trigger);
+
+    const follow = screen.getByRole("button", { name: "Following Ada" });
+    follow.focus();
+    expect(fireEvent.keyDown(follow, { key: "Escape" })).toBe(false);
+
+    expect(screen.queryByRole("dialog", { name: "Live collaboration" })).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("stays open on an Escape that ends an input method composition", () => {
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const follow = screen.getByRole("button", { name: "Following Ada" });
+    follow.focus();
+    expect(fireEvent.keyDown(follow, { key: "Escape", isComposing: true })).toBe(true);
+    expect(fireEvent.keyDown(follow, { key: "Escape", keyCode: 229 })).toBe(true);
+
+    expect(screen.getByRole("dialog", { name: "Live collaboration" })).toBeInTheDocument();
+    expect(follow).toHaveFocus();
+  });
+
   it("offers asset retry only for a retryable hydration failure", () => {
     collaborationState = {
       ...makeCollaborationState(),

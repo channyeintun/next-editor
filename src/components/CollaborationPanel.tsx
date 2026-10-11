@@ -18,6 +18,7 @@ import {
 } from "./CollaborationVoiceControls";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { downloadBlob } from "../utils/downloadBlob";
+import { isImeComposingKey } from "../utils/keyboardPlatform";
 
 const STATUS_LABELS = {
   disconnected: "Disconnected",
@@ -515,6 +516,13 @@ export default function CollaborationPanel() {
         <div
           role="dialog"
           aria-labelledby={titleId}
+          onKeyDown={(event) => {
+            // Not while an input method is composing: Escape cancels that.
+            if (event.key !== "Escape" || isImeComposingKey(event.nativeEvent)) return;
+            event.preventDefault();
+            setIsOpen(false);
+            triggerRef.current?.focus();
+          }}
           className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] text-left shadow-2xl"
         >
           <div className="flex items-center justify-between border-b border-slate-700/80 px-4 py-3">
