@@ -9,6 +9,7 @@ import {
 } from "@next-editor/infra";
 import LangText from "@app/components/LangText";
 import PopoverMenu from "@app/components/PopoverMenu";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import { resolveThumb } from "../lib/links";
 import ThumbnailTile from "./ThumbnailTile";
 
@@ -127,18 +128,20 @@ export default function PlaylistCard({
                   aria-label="Save playlist name"
                   onClick={submitRename}
                   disabled={update.isPending}
-                  className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+                  className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
                 >
                   <Check className="size-4" />
+                  <HoverRing />
                 </button>
                 <button
                   type="button"
                   aria-label="Cancel rename"
                   onClick={closeRename}
                   disabled={update.isPending}
-                  className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+                  className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
                 >
                   <X className="size-4" />
+                  <HoverRing />
                 </button>
               </div>
             ) : (
@@ -172,6 +175,7 @@ export default function PlaylistCard({
               className="-mr-1.5 -mt-1.5 flex size-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
             >
               <MoreVertical className="size-4" />
+              <HoverRing />
             </button>
 
             <PopoverMenu

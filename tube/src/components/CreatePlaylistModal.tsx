@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS, useCreatePlaylist } from "@next-editor/infra";
 import { useModalFocus } from "@app/hooks/useModalFocus";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 
 const ghostButton =
   "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
@@ -80,9 +81,10 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
             aria-label="Close"
             onClick={onClose}
             disabled={createPlaylist.isPending}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+            className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
           >
             <X className="size-4" />
+            <HoverRing />
           </button>
         </div>
 

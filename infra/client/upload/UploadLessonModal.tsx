@@ -4,6 +4,7 @@ import type { Recording } from "@app/core/src";
 import ModalShell from "@app/components/ModalShell";
 import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import { getRecordingStorage } from "@app/storage/RecordingStorage";
 import { isUnreadableRecordingError } from "@app/storage/streamingRecordingCodec";
 import { useAuth, signInUrl } from "../auth/useAuth";
@@ -295,9 +296,12 @@ export default function UploadLessonModal({
             <button
               type="button"
               onClick={() => void handleCopyLink()}
-              className="shrink-0 text-xs font-semibold text-slate-300 hover:text-white"
+              // A box round the label for the hover ring; the negative margins keep
+              // the row's height and the label's place.
+              className="-my-1 -mr-1.5 shrink-0 rounded-md px-1.5 py-1 text-xs font-semibold text-slate-300 hover:text-white"
             >
               {copied ? "Copied" : "Copy"}
+              <HoverRing />
             </button>
           </div>
           {publish.isError ? (

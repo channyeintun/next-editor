@@ -14,6 +14,7 @@ import {
 import GoogleOneTap from "./GoogleOneTap";
 import GoogleIcon from "@app/components/icon/Google";
 import PopoverMenu from "@app/components/PopoverMenu";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import { analytics } from "@app/utils/analytics";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
@@ -74,6 +75,7 @@ export default function AuthMenu() {
           </span>
         )}
         <span className="hidden max-w-32 truncate sm:inline">{user.name || user.email}</span>
+        <HoverRing />
       </button>
 
       <PopoverMenu
@@ -154,6 +156,7 @@ function PasskeySignInButton() {
         className="flex items-center justify-center size-9 rounded-full border border-white/10 bg-white/10 text-white transition-all hover:bg-white hover:text-slate-950 disabled:opacity-60"
       >
         <KeyRound className="size-4" />
+        <HoverRing />
       </button>
       {error && (
         <div

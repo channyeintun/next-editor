@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { useModalFocus } from "@app/hooks/useModalFocus";
 import LangText from "@app/components/LangText";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import {
   usePlaylistLessons,
   useRemoveLessonFromPlaylist,
@@ -112,9 +113,10 @@ export default function PlaylistManagePanel({
             autoFocus
             aria-label="Close"
             onClick={onClose}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white"
+            className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white"
           >
             <X className="size-4" />
+            <HoverRing />
           </button>
         </div>
 
@@ -139,18 +141,20 @@ export default function PlaylistManagePanel({
                       aria-label="Move up"
                       disabled={index <= 0 || reorder.isPending}
                       onClick={() => moveMember(index, -1)}
-                      className="rounded p-1 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:opacity-30"
+                      className="rounded-md p-1 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:opacity-30"
                     >
                       <ArrowUp className="size-3.5" />
+                      <HoverRing />
                     </button>
                     <button
                       type="button"
                       aria-label="Move down"
                       disabled={index >= orderedMembers.length - 1 || reorder.isPending}
                       onClick={() => moveMember(index, 1)}
-                      className="rounded p-1 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:opacity-30"
+                      className="rounded-md p-1 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:opacity-30"
                     >
                       <ArrowDown className="size-3.5" />
+                      <HoverRing />
                     </button>
                   </span>
                   <span
@@ -175,6 +179,7 @@ export default function PlaylistManagePanel({
                     className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-default disabled:opacity-60"
                   >
                     Remove
+                    <HoverRing />
                   </button>
                 </li>
               ))}

@@ -1,6 +1,7 @@
 import { useId, useRef, type RefObject } from "react";
 import { CornerDownLeft, Search, X } from "lucide-react";
 import { isImeComposingKey } from "@app/utils/keyboardPlatform";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 
 interface SearchBarProps {
   /** The field, for the page to give focus back to (after Try again). */
@@ -100,6 +101,7 @@ export default function SearchBar({
             className="pointer-events-auto rounded-full p-1 text-slate-400 transition-colors hover:text-white"
           >
             <X className="size-4" />
+            <HoverRing />
           </button>
         )}
       </div>

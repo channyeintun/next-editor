@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import axios from "axios";
 import { Check, Pencil, X } from "lucide-react";
 import { useUpdateUsername } from "@next-editor/infra";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 
 // Own-profile-only control (see AuthorProfilePage) for renaming the
 // signed-in user's own username. On success it navigates to the new
@@ -36,9 +37,10 @@ export default function UsernameEditor({ username }: { username: string }) {
             setError(null);
             setEditing(true);
           }}
-          className="rounded p-1 text-slate-500 transition-colors hover:text-white"
+          className="rounded-md p-1 text-slate-500 transition-colors hover:text-white"
         >
           <Pencil className="size-3.5" />
+          <HoverRing />
         </button>
       </div>
     );
@@ -97,18 +99,20 @@ export default function UsernameEditor({ username }: { username: string }) {
           aria-label="Save username"
           onClick={submit}
           disabled={mutation.isPending}
-          className="rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+          className="rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
         >
           <Check className="size-4" />
+          <HoverRing />
         </button>
         <button
           type="button"
           aria-label="Cancel"
           onClick={() => setEditing(false)}
           disabled={mutation.isPending}
-          className="rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+          className="rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
         >
           <X className="size-4" />
+          <HoverRing />
         </button>
       </div>
       {error && (

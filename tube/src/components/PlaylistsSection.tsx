@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { ListMusic } from "lucide-react";
 import type { OwnedPlaylist } from "@next-editor/infra";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import CreatePlaylistModal from "./CreatePlaylistModal";
 import PlaylistCard from "./PlaylistCard";
 import PlaylistManagePanel from "./PlaylistManagePanel";
 
 const ghostButton =
-  "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
+  "rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
 
 // A lightweight management surface for the owner's playlists, mounted inside
 // MyLibraryGrid above the lessons grid. Playlists render as YouTube-style
@@ -33,6 +34,7 @@ export default function PlaylistsSection({ playlists }: { playlists: OwnedPlayli
         </h2>
         <button type="button" onClick={() => setCreating(true)} className={ghostButton}>
           New playlist
+          <HoverRing />
         </button>
       </div>
 

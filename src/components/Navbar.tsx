@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import HoverRing from "./hoverRing/HoverRing";
 
 export interface NavbarProps {
   /** Extra controls rendered after "Start creating" (e.g. infra's <AuthMenu />).
@@ -44,6 +45,7 @@ const Navbar = ({ actions, minimal = false }: NavbarProps = {}) => {
                   clipRule="evenodd"
                 />
               </svg>
+              <HoverRing />
             </a>
             <Link
               to="/code"

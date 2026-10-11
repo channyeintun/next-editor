@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { prepareThumbnail } from "./prepareThumbnail";
 import { THUMBNAIL_ACCEPT } from "./thumbnailConstraints";
@@ -92,6 +93,7 @@ export default function UploadThumbnailField({
               className="absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               <X size={12} />
+              <HoverRing />
             </button>
           </div>
         ) : (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import LangText from "@app/components/LangText";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import {
   MAX_TITLE_CHARS,
   useAddLessonToPlaylist,
@@ -216,18 +217,20 @@ export default function AddToPlaylistPopover({
                 aria-label="Create playlist"
                 onClick={submitCreate}
                 disabled={createPlaylist.isPending}
-                className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+                className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
               >
                 <Check className="size-4" />
+                <HoverRing />
               </button>
               <button
                 type="button"
                 aria-label="Cancel"
                 onClick={() => setCreatingNew(false)}
                 disabled={createPlaylist.isPending}
-                className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+                className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
               >
                 <X className="size-4" />
+                <HoverRing />
               </button>
             </div>
           ) : (

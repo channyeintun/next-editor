@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Captions, X } from "lucide-react";
 import type { CaptionCue } from "@app/core/src";
+import HoverRing from "@app/components/hoverRing/HoverRing";
 import { MAX_CAPTION_BYTES } from "../../lessons/uploadLimits";
 import { CAPTION_ACCEPT } from "./captionConstraints";
 
@@ -107,6 +108,7 @@ export default function UploadCaptionsField({
                 className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <X size={12} />
+                <HoverRing />
               </button>
             </li>
           ))}
