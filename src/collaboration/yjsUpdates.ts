@@ -6,6 +6,7 @@ import {
   collaborationTeachingInitializationInputSchema,
   encodedYjsSnapshotSchema,
   encodedYjsUpdateSchema,
+  MAX_YJS_SNAPSHOT_BYTES,
   type CollaborationCreateRoomInput,
   type CollaborationTeachingInitializationInput,
 } from "./protocol";
@@ -24,6 +25,13 @@ export function decodeYjsSnapshot(encoded: string): Uint8Array {
 }
 
 export function encodeYjsSnapshotUpdate(update: Uint8Array): string {
+  // The schema still validates, but its failure message is a JSON dump of its
+  // issues, and the room panel shows this one to the user.
+  if (update.byteLength > MAX_YJS_SNAPSHOT_BYTES) {
+    throw new Error(
+      `This project is too large to share as a live room (limit ${MAX_YJS_SNAPSHOT_BYTES / 1024 / 1024} MiB).`,
+    );
+  }
   return encodedYjsSnapshotSchema.parse(bytesToBase64(update));
 }
 

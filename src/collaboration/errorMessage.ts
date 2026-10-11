@@ -8,7 +8,8 @@ export function requestErrorStatus(error: unknown): number | null {
 /**
  * The message to show for a failed collaboration call: the error string of an
  * axios-style `response.data.error` body, else the error's own message, else
- * `fallback`.
+ * `fallback`. A schema failure's message is a JSON dump of its issues, so it
+ * gets `fallback` too.
  */
 export function messageFromError(error: unknown, fallback: string): string {
   if (typeof error === "object" && error !== null) {
@@ -16,5 +17,6 @@ export function messageFromError(error: unknown, fallback: string): string {
       ?.error;
     if (typeof responseMessage === "string") return responseMessage;
   }
+  if (error instanceof Error && error.name === "ZodError") return fallback;
   return error instanceof Error && error.message ? error.message : fallback;
 }

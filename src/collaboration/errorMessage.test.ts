@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import * as z from "zod";
 import { messageFromError, requestErrorStatus } from "./errorMessage";
 
 /** What axios rejects with for a failed request: its own status line, the body on `response`. */
@@ -39,5 +40,13 @@ describe("messageFromError", () => {
     expect(messageFromError(new Error(""), "fallback")).toBe("fallback");
     expect(messageFromError({ response: { status: 503 } }, "fallback")).toBe("fallback");
     expect(messageFromError(undefined, "fallback")).toBe("fallback");
+  });
+
+  it("falls back instead of showing a schema failure's JSON issue dump", () => {
+    const result = z.string().max(2).safeParse("too long");
+    if (result.success) throw new Error("Expected the schema to reject the value");
+    expect(result.error.message).toMatch(/^\[/);
+
+    expect(messageFromError(result.error, "fallback")).toBe("fallback");
   });
 });
