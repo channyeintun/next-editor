@@ -5,6 +5,7 @@ import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleCo
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
 import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
+import { analytics } from "../utils/analytics";
 
 const mocks = vi.hoisted(() => {
   // The order the workspace swap's steps ran in, across all four spies.
@@ -342,6 +343,32 @@ describe("WorkspaceSettingsButton", () => {
       expect(mocks.reconcileExternalProject).toHaveBeenCalledWith(mocks.project);
       expect(mocks.swapCalls).toEqual(RESET_THEN_SWAP);
       expect(mocks.updateRunnerConfig).toHaveBeenCalledWith({ enabled: true });
+    });
+
+    it("says so and leaves the workspace and runtime alone when a starter cannot load", async () => {
+      // A tab opened before a deploy asks for a starter chunk that is gone, or the device is offline.
+      mocks.createStarterWorkspaceForLessonType.mockRejectedValueOnce(
+        new TypeError("Failed to fetch dynamically imported module"),
+      );
+      const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const capture = vi.spyOn(analytics, "capture");
+      openMenuAndFocus("Starter Template");
+      fireEvent.click(screen.getByRole("menuitem", { name: "Starter Template" }));
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitemradio", { name: "Vue" }));
+      });
+
+      expect(alert).toHaveBeenCalledExactlyOnceWith(
+        "That starter could not be loaded. Check your connection or reload the page, then try again.",
+      );
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(mocks.swapCalls).toEqual([]);
+      expect(capture).not.toHaveBeenCalledWith("lesson_type_selected", expect.anything());
+      alert.mockRestore();
+      error.mockRestore();
+      capture.mockRestore();
     });
 
     it("swaps a fresh starter of the same framework in for New Editor without a reset", async () => {

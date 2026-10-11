@@ -86,12 +86,27 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
   };
 
   // Starter templates are split into per-framework chunks, so the starter is
-  // fetched on demand before it replaces the workspace.
+  // fetched on demand before it replaces the workspace. A chunk that cannot load
+  // (offline, or gone after a deploy) gets an alert, as the other actions here
+  // do, and leaves the workspace and runtime as they were. Returns whether the
+  // workspace was replaced.
   const replaceWithStarter = async (
     starterLessonType: WorkspaceLessonType,
     options: { resetRuntimeFirst?: boolean } = {},
-  ) => {
-    await swapInWorkspace(await createStarterWorkspaceForLessonType(starterLessonType), options);
+  ): Promise<boolean> => {
+    let project: WorkspaceProject;
+    try {
+      project = await createStarterWorkspaceForLessonType(starterLessonType);
+    } catch (error) {
+      console.error("Starter load failed:", error);
+      window.alert(
+        "That starter could not be loaded. Check your connection or reload the page, then try again.",
+      );
+      return false;
+    }
+
+    await swapInWorkspace(project, options);
+    return true;
   };
 
   // Every action runs from a menu item, which unmounts as the menu closes and
@@ -263,8 +278,9 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
 
     // Each framework ships different dependencies, so the runtime is torn down
     // for a fresh mount + `pnpm install` of the new project.
-    await replaceWithStarter(nextOption.value, { resetRuntimeFirst: true });
-    analytics.capture("lesson_type_selected", { lesson_type: nextLessonType });
+    if (await replaceWithStarter(nextOption.value, { resetRuntimeFirst: true })) {
+      analytics.capture("lesson_type_selected", { lesson_type: nextLessonType });
+    }
   };
 
   return (
