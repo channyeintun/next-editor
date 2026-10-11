@@ -27,6 +27,12 @@ const UNAVAILABLE_STATE: VoiceUiState = {
   isLocalSpeaking: false,
 };
 
+// Module scope so getState hands useSyncExternalStore one stable snapshot.
+const LOAD_FAILED_STATE: VoiceUiState = {
+  ...UNAVAILABLE_STATE,
+  unavailableReason: "load-failed",
+};
+
 interface CollaborationVoiceContextValue extends VoiceCommands {
   subscribe: (listener: () => void) => () => void;
   getState: () => VoiceUiState;
@@ -72,6 +78,10 @@ export function CollaborationVoiceProvider({
   const activeRoomId = roomStatus === "active" ? roomId : null;
 
   const [engine, setEngine] = useState<VoiceEngine | null>(null);
+  // The room whose engine chunk failed to load. Voice says so instead of
+  // vanishing; a page reload is left to the user so a live room never loses
+  // unsent edits to restore an optional feature.
+  const [loadFailedRoomId, setLoadFailedRoomId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeRoomId || !collaborationSessionId) return;
@@ -110,10 +120,15 @@ export function CollaborationVoiceProvider({
     if (createEngine) {
       startEngine(createEngine(options));
     } else {
-      void loadBrowserVoiceEngine().then(({ createBrowserVoiceEngine }) => {
-        // The room may have changed or closed while the chunk loaded.
-        if (!cancelled) startEngine(createBrowserVoiceEngine(options));
-      });
+      void loadBrowserVoiceEngine().then(
+        ({ createBrowserVoiceEngine }) => {
+          // The room may have changed or closed while the chunk loaded.
+          if (!cancelled) startEngine(createBrowserVoiceEngine(options));
+        },
+        () => {
+          if (!cancelled) setLoadFailedRoomId(activeRoomId);
+        },
+      );
     }
     return () => {
       // A room change or collaboration leave always tears voice down fully
@@ -125,7 +140,11 @@ export function CollaborationVoiceProvider({
 
   const value: CollaborationVoiceContextValue = {
     subscribe: (listener) => engine?.subscribe(listener) ?? (() => undefined),
-    getState: () => engine?.getUiState() ?? UNAVAILABLE_STATE,
+    getState: () =>
+      engine?.getUiState() ??
+      (activeRoomId !== null && loadFailedRoomId === activeRoomId
+        ? LOAD_FAILED_STATE
+        : UNAVAILABLE_STATE),
     join: () => engine?.join(),
     leave: () => engine?.leave(),
     mute: () => engine?.mute(),

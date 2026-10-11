@@ -45,6 +45,13 @@ export function VoiceControls() {
         </p>
       );
     }
+    if (state.unavailableReason === "load-failed") {
+      return (
+        <p className="rounded-lg border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-300">
+          Voice could not load. Reload the page to use voice. Document collaboration still works.
+        </p>
+      );
+    }
     return null;
   }
 

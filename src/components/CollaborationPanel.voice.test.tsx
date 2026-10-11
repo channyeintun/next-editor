@@ -241,6 +241,20 @@ describe("voice controls", () => {
     expect(screen.queryByRole("button", { name: "Join voice" })).not.toBeInTheDocument();
   });
 
+  it("says voice could not load instead of hiding it", () => {
+    voiceState = idleVoiceState({
+      state: "unavailable",
+      unavailableReason: "load-failed",
+    });
+    openPanel();
+    expect(
+      screen.getByText(
+        "Voice could not load. Reload the page to use voice. Document collaboration still works.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Join voice" })).not.toBeInTheDocument();
+  });
+
   it("hides voice entirely when the server disables the feature", () => {
     voiceState = idleVoiceState({
       state: "unavailable",

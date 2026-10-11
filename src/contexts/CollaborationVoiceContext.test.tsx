@@ -1,5 +1,5 @@
-import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { VoiceEngine } from "../voice/engine";
 import type { VoiceUnavailableReason } from "../voice/machine";
 
@@ -15,13 +15,16 @@ vi.mock("@next-editor/infra", () => ({
 
 // The production engine, which the provider imports on demand.
 const browserEngines: FakeEngine[] = [];
-vi.mock("../voice/browserVoiceEngine", () => ({
-  createBrowserVoiceEngine: (options: { roomId: string; collaborationSessionId: string }) => {
-    const engine = new FakeEngine(options);
-    browserEngines.push(engine);
-    return engine;
-  },
-}));
+function fakeBrowserVoiceEngineModule() {
+  return {
+    createBrowserVoiceEngine: (options: { roomId: string; collaborationSessionId: string }) => {
+      const engine = new FakeEngine(options);
+      browserEngines.push(engine);
+      return engine;
+    },
+  };
+}
+vi.mock("../voice/browserVoiceEngine", () => fakeBrowserVoiceEngineModule());
 
 import {
   CollaborationVoiceProvider,
@@ -92,6 +95,11 @@ function StateProbe() {
   return null;
 }
 
+function UnavailableReasonProbe() {
+  const state = useCollaborationVoiceState();
+  return <p data-testid="voice-reason">{`${state.state}:${state.unavailableReason}`}</p>;
+}
+
 describe("CollaborationVoiceProvider", () => {
   const engines: FakeEngine[] = [];
   const createEngine = (options: { roomId: string; collaborationSessionId: string }) => {
@@ -104,6 +112,10 @@ describe("CollaborationVoiceProvider", () => {
     engines.length = 0;
     browserEngines.length = 0;
     collaborationState = null;
+  });
+
+  afterEach(() => {
+    vi.doMock("../voice/browserVoiceEngine", () => fakeBrowserVoiceEngineModule());
   });
 
   it("creates no engine without an active room", () => {
@@ -242,6 +254,24 @@ describe("CollaborationVoiceProvider", () => {
     );
     view.unmount();
     await act(() => import("../voice/browserVoiceEngine"));
+    expect(browserEngines).toHaveLength(0);
+  });
+
+  it("says voice could not load when the engine chunk fails to load", async () => {
+    // A tab still on an old bundle after a deploy: the hashed chunk is gone.
+    vi.doMock("../voice/browserVoiceEngine", () => {
+      throw new TypeError("Failed to fetch dynamically imported module");
+    });
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    render(
+      <CollaborationVoiceProvider>
+        <UnavailableReasonProbe />
+      </CollaborationVoiceProvider>,
+    );
+    expect(screen.getByTestId("voice-reason")).toHaveTextContent("unavailable:no-room");
+    await waitFor(() =>
+      expect(screen.getByTestId("voice-reason")).toHaveTextContent("unavailable:load-failed"),
+    );
     expect(browserEngines).toHaveLength(0);
   });
 

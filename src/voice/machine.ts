@@ -16,7 +16,13 @@ export type VoiceConnectionState =
   | "failed"
   | "leaving";
 
-export type VoiceUnavailableReason = "unsupported-browser" | "feature-disabled" | "no-room";
+// "load-failed": the voice engine's code chunk could not be fetched (a tab
+// still on an old bundle after a deploy).
+export type VoiceUnavailableReason =
+  | "unsupported-browser"
+  | "feature-disabled"
+  | "no-room"
+  | "load-failed";
 
 // UI-facing failure codes: the sanitized server codes plus client-local
 // conditions the engine detects itself.
