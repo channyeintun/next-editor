@@ -102,6 +102,11 @@ function detectLanguage(headers: [string, string][], body: string): string {
 interface ApiClientPanelProps {
   onSend: () => void;
   runtimeReady: boolean;
+  /**
+   * False while a lesson replays over the server: the replay has no live frame to carry a
+   * request, so Send would do nothing or wait out its timeout.
+   */
+  liveSendAvailable?: boolean;
   onRequestTabChange?: (tab: ApiClientRequestTab) => void;
   onInspectHistory?: (entry: ApiClientHistoryEntry) => void;
 }
@@ -109,6 +114,7 @@ interface ApiClientPanelProps {
 export default function ApiClientPanel({
   onSend,
   runtimeReady,
+  liveSendAvailable = true,
   onRequestTabChange,
   onInspectHistory,
 }: ApiClientPanelProps) {
@@ -132,7 +138,7 @@ export default function ApiClientPanel({
     onRequestTabChange?.(tab);
   };
 
-  const canSend = runtimeReady && !sending;
+  const canSend = runtimeReady && liveSendAvailable && !sending;
 
   // Spoken summary of the request lifecycle for the persistent status region.
   // The response body stays out of it; only the outcome is announced.
@@ -196,7 +202,13 @@ export default function ApiClientPanel({
           type="button"
           onClick={onSend}
           disabled={!canSend}
-          title={runtimeReady ? undefined : "Waiting for the server to start"}
+          title={
+            !runtimeReady
+              ? "Waiting for the server to start"
+              : !liveSendAvailable
+                ? "Pause the lesson to send a request"
+                : undefined
+          }
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-700 px-3 font-semibold text-white transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}

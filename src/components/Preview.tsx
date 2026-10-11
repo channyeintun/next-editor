@@ -86,6 +86,7 @@ function Preview() {
           <ApiClientPanel
             onSend={controller.sendApiClientRequest}
             runtimeReady={controller.isRuntimeReady}
+            liveSendAvailable={controller.canSendApiRequest}
             onRequestTabChange={controller.recordApiClientTab}
             onInspectHistory={controller.recordApiClientInspect}
           />

@@ -407,6 +407,47 @@ describe("usePreviewController rrweb replay surface", () => {
   });
 });
 
+describe("usePreviewController API client sending", () => {
+  const readyRuntime = {
+    ...idleRuntimeMetadata,
+    status: "ready",
+    previewUrl: "https://runtime.example/",
+    previewPort: 3000,
+  } as unknown as WebContainerRuntimeMetadata;
+  const recordedReady = {
+    id: "recording-1",
+    runtimeSnapshot: { status: "ready", previewUrl: "https://runtime.example/", previewPort: 3000 },
+  };
+
+  it("does not offer Send while a lesson plays over the server it recorded as ready", () => {
+    editor.metadata = {
+      currentRecording: recordedReady,
+      isPlaying: true,
+      isRecording: false,
+      usesPlaybackModel: true,
+    };
+    const { result } = renderController();
+
+    // The panel still shows the recorded server as ready; only a live send is blocked.
+    expect(result.current.isRuntimeReady).toBe(true);
+    expect(result.current.canSendApiRequest).toBe(false);
+  });
+
+  it("offers Send once the lesson is paused with the live server ready", () => {
+    runtimeMetadata = readyRuntime;
+    editor.metadata = {
+      currentRecording: recordedReady,
+      isPlaying: false,
+      isRecording: false,
+      usesPlaybackModel: true,
+    };
+    const { result } = renderController();
+
+    expect(result.current.isRuntimeReady).toBe(true);
+    expect(result.current.canSendApiRequest).toBe(true);
+  });
+});
+
 describe("usePreviewController runtime placeholder", () => {
   // Mirrors Preview.tsx: the frame exists only while the panel is open, so every
   // reopen mounts a new, empty iframe.

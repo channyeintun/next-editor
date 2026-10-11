@@ -146,6 +146,40 @@ describe("ApiClientPanel request controls", () => {
   });
 });
 
+describe("ApiClientPanel sending", () => {
+  function renderSendable(props: { liveSendAvailable?: boolean }) {
+    const onSend = vi.fn<() => void>();
+    render(
+      <ApiClientStoreProvider>
+        <ApiClientPanel onSend={onSend} runtimeReady {...props} />
+      </ApiClientStoreProvider>,
+    );
+    return onSend;
+  }
+
+  it("does not send while a lesson plays over a server it recorded as ready", () => {
+    // The replay has no live frame to carry the request: Send did nothing, or spun 30 s.
+    const onSend = renderSendable({ liveSendAvailable: false });
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute("title", "Pause the lesson to send a request");
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Request path" }), { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("sends from the button and from Enter in the path once the server is live", () => {
+    const onSend = renderSendable({});
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeEnabled();
+    expect(send).not.toHaveAttribute("title");
+
+    fireEvent.click(send);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Request path" }), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("ApiClientPanel toggle states", () => {
   it("exposes which request tab is selected", () => {
     const store = renderPanel();

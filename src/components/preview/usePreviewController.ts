@@ -85,6 +85,8 @@ export interface PreviewController {
   activeMode: PreviewActiveMode;
   showModeToggle: boolean;
   isRuntimeReady: boolean;
+  /** A request can reach the live server: it is ready and no lesson replays over it. */
+  canSendApiRequest: boolean;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
@@ -375,6 +377,7 @@ export function usePreviewController(): PreviewController {
   // runtime is ready (see `isRuntimeReady`).
   const showModeToggle = lessonRunsInWebContainer(lessonType) && isRuntimeSupported;
   const isRuntimeReady = effectiveRuntimeStatus === "ready";
+  const canSendApiRequest = isRuntimeReady && !isPlaybackPreviewActive;
 
   useEffect(() => {
     if (!showModeToggle && activeMode !== "browser") {
@@ -1038,6 +1041,7 @@ export function usePreviewController(): PreviewController {
     activeMode,
     showModeToggle,
     isRuntimeReady,
+    canSendApiRequest,
     handleClose,
     handleFloat,
     handleDock,
