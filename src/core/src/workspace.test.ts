@@ -11,6 +11,7 @@ import {
   type WorkspaceProject,
   type WorkspaceRecordingSnapshot,
   type WorkspaceTextFile,
+  withFileContent,
 } from "./workspace";
 
 describe("MAX_WORKSPACE_ASSET_BYTES", () => {
@@ -175,5 +176,35 @@ describe("areWorkspaceSnapshotsEqual", () => {
     expect(areWorkspaceSnapshotsEqual(snapshot, { ...snapshot, activeFilePath: "a.ts" })).toBe(
       false,
     );
+  });
+});
+
+describe("withFileContent", () => {
+  const snapshot: WorkspaceRecordingSnapshot = {
+    project: project({
+      "index.html": textFile("index.html", "<p>"),
+      "logo.png": {
+        path: "logo.png",
+        name: "logo.png",
+        language: "binary",
+        content: descriptor,
+        encoding: "asset",
+      },
+    }),
+    activeFilePath: "index.html",
+  };
+
+  it("writes the text into that file only", () => {
+    const next = withFileContent(snapshot, "index.html", "<p>hi</p>");
+
+    expect(next.project.files["index.html"].content).toBe("<p>hi</p>");
+    expect(next.project.files["logo.png"]).toBe(snapshot.project.files["logo.png"]);
+    expect(snapshot.project.files["index.html"].content).toBe("<p>");
+  });
+
+  it("returns the same snapshot when the file holds the text, is missing or is no text file", () => {
+    expect(withFileContent(snapshot, "index.html", "<p>")).toBe(snapshot);
+    expect(withFileContent(snapshot, "missing.ts", "x")).toBe(snapshot);
+    expect(withFileContent(snapshot, "logo.png", "x")).toBe(snapshot);
   });
 });

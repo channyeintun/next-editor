@@ -1,6 +1,6 @@
 import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
-import { areWorkspaceProjectsEqual, isWorkspaceTextFile } from "../workspace";
+import { areWorkspaceProjectsEqual, withFileContent } from "../workspace";
 import { getRecordedActiveFilePath } from "./replayState";
 
 // ============================================================================
@@ -63,25 +63,7 @@ export const adoptPlaybackWorkspaceAtPause = ({ context }: EditorActionArgs): vo
     return;
   }
 
-  const frameFile = currentSnapshot.project.files[framePath];
-  if (!frameFile || !isWorkspaceTextFile(frameFile) || frameFile.content === pausedContent) {
-    context.applyWorkspaceSnapshot(currentSnapshot);
-    return;
-  }
-
-  context.applyWorkspaceSnapshot({
-    ...currentSnapshot,
-    project: {
-      ...currentSnapshot.project,
-      files: {
-        ...currentSnapshot.project.files,
-        [framePath]: {
-          ...frameFile,
-          content: pausedContent,
-        },
-      },
-    },
-  });
+  context.applyWorkspaceSnapshot(withFileContent(currentSnapshot, framePath, pausedContent));
 };
 
 /**

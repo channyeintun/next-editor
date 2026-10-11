@@ -1,11 +1,12 @@
 import type { EditorFrame } from "../types";
-import type { WorkspaceRecordingSnapshot } from "../workspace";
+import { withFileContent, type WorkspaceRecordingSnapshot } from "../workspace";
 import {
   applyWhiteboardEvent,
   EMPTY_WHITEBOARD_SCENE,
   type WhiteboardSceneState,
 } from "../whiteboard";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
+import { findTimedEventIndexAtOrBefore } from "../utils/timedIndex";
 import { resumeFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
 import { RUNTIME_CHECKPOINT_DUE, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
@@ -119,6 +120,11 @@ export interface RetakeRestore {
   /** The editor state at the safe point: the last kept frame. */
   frame: EditorFrame | null;
   /**
+   * The file `frame` is the text of, when the take records the workspace; otherwise
+   * the file open at the safe point.
+   */
+  frameFilePath?: string;
+  /**
    * The workspace at the safe point, when the discarded stretch changed it. Its panel
    * offsets undo the resizes that were discarded, the way a backward seek does.
    */
@@ -202,6 +208,14 @@ export function rewindSessionToSafePoint(
       ? reconstructFrameAtIndex(session.frames, session.frames.length - 1)
       : null;
   session.encoder = resumeFrameStreamEncoder(session.frames, frame);
+  // Frames carry no file path. A file switch is a workspace event, so the frame is the
+  // text of the file the last workspace event at or before it had open: the rule replay
+  // reads frames by.
+  const frameEventIndex =
+    frame && kept.workspaceEvents.length > 0
+      ? findTimedEventIndexAtOrBefore(kept.workspaceEvents, frame.timestamp, -1)
+      : -1;
+  const frameFilePath = kept.workspaceEvents[frameEventIndex]?.snapshot.activeFilePath;
   // Nothing captured since the safe point may be reused for the next frame.
   session.lastCapturedViewStateRef = undefined;
   session.lastCapturedContent = undefined;
@@ -215,6 +229,7 @@ export function rewindSessionToSafePoint(
 
   return {
     frame,
+    frameFilePath,
     workspace,
     whiteboard: whiteboardChanged
       ? session.whiteboardEvents.reduce(applyWhiteboardEvent, EMPTY_WHITEBOARD_SCENE)
@@ -278,7 +293,22 @@ export const retakeRecording = ({
   // Put the editor back the way it was at the safe point. These write to the app's
   // stores, whose own capture records any remaining difference at that moment.
   enqueue(() => {
-    if (restore.workspace) context.applyWorkspaceSnapshot?.(restore.workspace);
+    // Typing is no workspace event, so the workspace (cut back or live) can hold text
+    // the frames do not: the last kept frame's text is what the file held at the safe
+    // point. Applied only when something differs, since applying re-saves the workspace
+    // to a started runtime.
+    const base = restore.workspace ?? context.getWorkspaceSnapshot?.();
+    const target =
+      base && restore.frame
+        ? withFileContent(
+            base,
+            restore.frameFilePath ?? base.activeFilePath,
+            restore.frame.state.content,
+          )
+        : base;
+    if (target && (restore.workspace || target !== base)) {
+      context.applyWorkspaceSnapshot?.(target);
+    }
     if (restore.whiteboard) context.applyWhiteboardState?.(restore.whiteboard);
     const state = restore.frame?.state;
     if (state?.slideState) {

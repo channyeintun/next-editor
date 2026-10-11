@@ -276,6 +276,33 @@ export function areWorkspaceSnapshotsEqual(
   );
 }
 
+/**
+ * `snapshot` with its text file at `path` holding `content`: how a frame's text, which
+ * carries no file path, is written into the file it belongs to. The same object when
+ * there is no such text file or it already holds that text.
+ */
+export function withFileContent(
+  snapshot: WorkspaceRecordingSnapshot,
+  path: string,
+  content: string,
+): WorkspaceRecordingSnapshot {
+  const file = snapshot.project.files[path];
+  if (!file || !isWorkspaceTextFile(file) || file.content === content) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    project: {
+      ...snapshot.project,
+      files: {
+        ...snapshot.project.files,
+        [path]: { ...file, content },
+      },
+    },
+  };
+}
+
 export function toSidebarWidthDeltaSnapshot(
   snapshot: WorkspaceRecordingSnapshot,
   sidebarWidthDelta: number | undefined,

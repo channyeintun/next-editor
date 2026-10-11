@@ -45,6 +45,79 @@ afterEach(() => {
   audioDuration.measureAudioDurationSeconds.mockClear();
 });
 
+/** A workspace of text files, `activeFilePath` open. */
+function textWorkspace(
+  activeFilePath: string,
+  contents: Record<string, string>,
+): WorkspaceRecordingSnapshot {
+  return {
+    activeFilePath,
+    project: {
+      id: "p",
+      name: "P",
+      lessonType: "typescript",
+      entryFilePath: Object.keys(contents)[0],
+      folders: [],
+      files: Object.fromEntries(
+        Object.entries(contents).map(([path, content]) => [
+          path,
+          { path, name: path, language: "typescript", content },
+        ]),
+      ),
+    },
+  };
+}
+
+function textOf(snapshot: WorkspaceRecordingSnapshot, path: string): unknown {
+  return snapshot.project.files[path]?.content;
+}
+
+/**
+ * The app's workspace store as a take sees it, kept in step with `editor` the way the
+ * app keeps the store and Monaco in step: typing changes the open file's text (and is
+ * no workspace event), switching files shows the other file, and applying a snapshot
+ * loads it and shows its open file.
+ */
+function liveWorkspace(
+  editor: RecordingEditor,
+  activeFilePath: string,
+  contents: Record<string, string>,
+) {
+  let live = textWorkspace(activeFilePath, contents);
+  editor.setContent(String(textOf(live, activeFilePath)));
+  const show = (snapshot: WorkspaceRecordingSnapshot) => {
+    live = snapshot;
+    editor.setContent(String(textOf(snapshot, snapshot.activeFilePath)));
+  };
+  const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>(show);
+  return {
+    applyWorkspaceSnapshot,
+    input: { getWorkspaceSnapshot: () => live, applyWorkspaceSnapshot },
+    type(text: string) {
+      editor.setContent(text);
+      const file = live.project.files[live.activeFilePath];
+      live = {
+        ...live,
+        project: {
+          ...live.project,
+          files: {
+            ...live.project.files,
+            [live.activeFilePath]: {
+              path: file.path,
+              name: file.name,
+              language: file.language,
+              content: text,
+            },
+          },
+        },
+      };
+    },
+    open(path: string) {
+      show({ ...live, activeFilePath: path });
+    },
+  };
+}
+
 describe("retaking", () => {
   // A retake from `paused` lands in `paused` again, which changes no state. React's
   // useSelector reuses its last result while the snapshot object is the same, so the
@@ -97,14 +170,14 @@ describe("retaking", () => {
   it("carries on from the safe point, diffing the next frame against it", () => {
     const { advance } = pinClocks();
     const editor = new RecordingEditor();
-    const actor = startTake(editor);
+    const workspace = liveWorkspace(editor, "main.ts", { "main.ts": "const a = 1;" });
+    const actor = startTake(editor, workspace.input);
 
     advance(1_000);
-    editor.setContent("const a = 1; // oops");
+    workspace.type("const a = 1; // oops");
     actor.send({ type: "CAPTURE_FRAME" });
     actor.send({ type: "RETAKE_RECORDING" });
-    // The app puts the editor back the way it was at the safe point.
-    editor.setContent("const a = 1;");
+    expect(editor.getValue()).toBe("const a = 1;");
     actor.send({ type: "RESUME_RECORDING" });
 
     advance(500);
@@ -166,11 +239,19 @@ describe("retaking", () => {
     },
   });
 
+  // The editor shows the open file's text, as in the app, so the safe-point frame and the
+  // workspace agree on it.
+  const editorShowing = (content: string) => {
+    const editor = new RecordingEditor();
+    editor.setContent(content);
+    return editor;
+  };
+
   it("puts the workspace back, undoing the panel moves it discards", () => {
     const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
-    const actor = startTake(new RecordingEditor(), {
+    const actor = startTake(editorShowing("<p>kept</p>"), {
       getWorkspaceSnapshot: () => live,
       applyWorkspaceSnapshot,
     });
@@ -193,7 +274,7 @@ describe("retaking", () => {
     const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
-    const actor = startTake(new RecordingEditor(), {
+    const actor = startTake(editorShowing("<p>kept</p>"), {
       getWorkspaceSnapshot: () => live,
       applyWorkspaceSnapshot,
     });
@@ -220,7 +301,7 @@ describe("retaking", () => {
     const { advance } = pinClocks();
     let live = project("<p>kept</p>");
     const applyWorkspaceSnapshot = vi.fn<(snapshot: WorkspaceRecordingSnapshot) => void>();
-    const actor = startTake(new RecordingEditor(), {
+    const actor = startTake(editorShowing("<p>kept</p>"), {
       getWorkspaceSnapshot: () => live,
       applyWorkspaceSnapshot,
     });
@@ -239,6 +320,113 @@ describe("retaking", () => {
     expect(restored.sidebarWidthDelta ?? 0).toBe(0);
     expect(restored.previewDockWidthDelta ?? 0).toBe(0);
     actor.stop();
+  });
+
+  describe("the editor's text", () => {
+    // Typing is no workspace event, so a stretch of discarded typing cuts nothing off the
+    // workspace track: only the frames say what the text was at the safe point.
+    it("puts the text back when the stretch it discards only typed", () => {
+      const { advance } = pinClocks();
+      const editor = new RecordingEditor();
+      const workspace = liveWorkspace(editor, "main.ts", { "main.ts": "const a = 1;" });
+      const actor = startTake(editor, workspace.input);
+
+      advance(1_000);
+      workspace.type("const a = 1; // oops");
+      actor.send({ type: "CAPTURE_FRAME" });
+      actor.send({ type: "RETAKE_RECORDING" });
+
+      expect(workspace.applyWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+      const restored = workspace.applyWorkspaceSnapshot.mock.calls[0][0];
+      expect(restored.activeFilePath).toBe("main.ts");
+      expect(textOf(restored, "main.ts")).toBe("const a = 1;");
+      actor.stop();
+    });
+
+    // The workspace event the safe point keeps was recorded before the typing that
+    // followed it, so its project holds that file's text from before the typing.
+    it("keeps the text typed after the last kept workspace event", () => {
+      const { advance } = pinClocks();
+      const editor = new RecordingEditor();
+      const workspace = liveWorkspace(editor, "a.ts", { "a.ts": "a", "b.ts": "b" });
+      const actor = startTake(editor, workspace.input);
+
+      advance(1_000);
+      workspace.open("b.ts");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      actor.send({ type: "CAPTURE_FRAME" });
+      advance(500);
+      workspace.type("b typed");
+      actor.send({ type: "CAPTURE_FRAME" });
+      actor.send({ type: "PAUSE_RECORDING" });
+      actor.send({ type: "RESUME_RECORDING" });
+      advance(1_000);
+      workspace.open("a.ts");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      workspace.type("a oops");
+      actor.send({ type: "CAPTURE_FRAME" });
+      advance(500);
+      actor.send({ type: "RETAKE_RECORDING" });
+
+      expect(getRecordingTimestamp(sessionOf(actor))).toBe(1_500);
+      expect(workspace.applyWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+      const restored = workspace.applyWorkspaceSnapshot.mock.calls[0][0];
+      expect(restored.activeFilePath).toBe("b.ts");
+      expect(textOf(restored, "b.ts")).toBe("b typed");
+      expect(textOf(restored, "a.ts")).toBe("a");
+      expect(editor.getValue()).toBe("b typed");
+      actor.stop();
+    });
+
+    // Frames carry no file path: a frame is the text of the file the last workspace event
+    // at or before it had open, the rule replay reads them by.
+    it("writes a frame from before the last kept file switch into the file it was typed in", () => {
+      const { advance } = pinClocks();
+      const editor = new RecordingEditor();
+      const workspace = liveWorkspace(editor, "a.ts", { "a.ts": "a", "b.ts": "b" });
+      const actor = startTake(editor, workspace.input);
+
+      advance(500);
+      workspace.type("a typed");
+      actor.send({ type: "CAPTURE_FRAME" });
+      advance(500);
+      workspace.open("b.ts");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      actor.send({ type: "PAUSE_RECORDING" });
+      actor.send({ type: "RESUME_RECORDING" });
+      advance(1_000);
+      workspace.open("a.ts");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      workspace.type("a typed oops");
+      actor.send({ type: "CAPTURE_FRAME" });
+      advance(500);
+      actor.send({ type: "RETAKE_RECORDING" });
+
+      expect(getRecordingTimestamp(sessionOf(actor))).toBe(1_000);
+      expect(workspace.applyWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+      const restored = workspace.applyWorkspaceSnapshot.mock.calls[0][0];
+      expect(restored.activeFilePath).toBe("b.ts");
+      expect(textOf(restored, "a.ts")).toBe("a typed");
+      expect(textOf(restored, "b.ts")).toBe("b");
+      actor.stop();
+    });
+
+    // Applying a workspace re-saves it to a started runtime, which re-runs a finished
+    // run-on-save runner whose files changed: nothing to put back, nothing to apply.
+    it("applies nothing when the text and the workspace are as they were", () => {
+      const { advance } = pinClocks();
+      const editor = new RecordingEditor();
+      const workspace = liveWorkspace(editor, "main.ts", { "main.ts": "const a = 1;" });
+      const actor = startTake(editor, workspace.input);
+
+      advance(1_000);
+      actor.send({ type: "CAPTURE_FRAME" });
+      actor.send({ type: "RETAKE_RECORDING" });
+
+      expect(getRecordingTimestamp(sessionOf(actor))).toBe(0);
+      expect(workspace.applyWorkspaceSnapshot).not.toHaveBeenCalled();
+      actor.stop();
+    });
   });
 
   it("records the live terminal whole at the safe point", () => {
