@@ -20,7 +20,7 @@ import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { ChatCheckpoint } from "../chat";
 import type { PreviewEvent } from "../preview";
-import type { WhiteboardSceneState } from "../whiteboard";
+import { EMPTY_WHITEBOARD_SCENE, type WhiteboardSceneState } from "../whiteboard";
 import {
   ContentEditBaseMismatchError,
   createContentDelta,
@@ -1172,6 +1172,46 @@ describe("editorMachine actor lifecycle", () => {
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
     expect(applied).toEqual([{ items: [], status: "idle" }]);
+    actor.stop();
+  });
+
+  // Same rule for the board: the recorder writes a whiteboard track only when the board was
+  // open or drawn on, so a lesson loaded in place after one with a drawing must not keep it.
+  it("empties the whiteboard when the loaded recording has no whiteboard track", async () => {
+    const applyWhiteboardState = vi.fn<(state: WhiteboardSceneState) => void>();
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyWhiteboardState,
+      },
+    }).start();
+
+    const lessonA: Recording = {
+      ...createRecording(),
+      id: "lesson-A",
+      whiteboardEvents: [
+        {
+          timestamp: 0,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+      ],
+    };
+    actor.send({ type: "LOAD_RECORDING", recording: lessonA });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "SEEK", time: 100 });
+    // A recording with a track starts from its own first event, not the empty board.
+    expect(applyWhiteboardState).not.toHaveBeenCalledWith(EMPTY_WHITEBOARD_SCENE);
+    expect(applyWhiteboardState.mock.lastCall?.[0]).toMatchObject({ isOpen: true });
+
+    actor.send({ type: "LOAD_RECORDING", recording: { ...createRecording(), id: "lesson-B" } });
+    await waitFor(
+      actor,
+      (snapshot) =>
+        snapshot.matches({ playback: "ready" }) && snapshot.context.recording?.id === "lesson-B",
+    );
+
+    expect(applyWhiteboardState.mock.lastCall?.[0]).toBe(EMPTY_WHITEBOARD_SCENE);
     actor.stop();
   });
 

@@ -5,6 +5,7 @@ import { areWorkspaceProjectsEqual, areWorkspaceSnapshotsEqual } from "../worksp
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
+import { EMPTY_WHITEBOARD_SCENE } from "../whiteboard";
 import {
   EMPTY_CHAT_CHECKPOINT,
   getChatReplayResult,
@@ -147,6 +148,13 @@ export const setRecording = (
   // checkpoint; a chat-less recording must not show a previous replay's transcript.
   if (context.applyChatSnapshot) {
     context.applyChatSnapshot(EMPTY_CHAT_CHECKPOINT);
+  }
+
+  // Same for the board: the recorder writes a whiteboard track only when the board was
+  // open or drawn on, so a board-less recording must not show a previous replay's board.
+  // A recording with a track starts from its own first event (or the empty scene before it).
+  if (!recording.whiteboardEvents?.length) {
+    context.applyWhiteboardState?.(EMPTY_WHITEBOARD_SCENE);
   }
 
   return {

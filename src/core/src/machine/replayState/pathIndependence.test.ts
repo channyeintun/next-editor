@@ -26,10 +26,11 @@ import type { Slide, SlideEvent } from "../../slides";
 import type { Recording, RecordingStreamDelta } from "../../types";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { createContentDelta } from "../../utils/contentDelta";
-import type {
-  WhiteboardElementJSON,
-  WhiteboardEvent,
-  WhiteboardSceneState,
+import {
+  EMPTY_WHITEBOARD_SCENE,
+  type WhiteboardElementJSON,
+  type WhiteboardEvent,
+  type WhiteboardSceneState,
 } from "../../whiteboard";
 import { editorMachine } from "../editorMachine";
 import { setRecording } from "../replayActions";
@@ -998,7 +999,7 @@ const whiteboardTrack: ReplayTrack<WhiteboardEvent> = {
   },
   // An interpolated scene depends only on the time and the events around it,
   // and ticks only move forward, so the walk matches inside animation windows too.
-  // Without whiteboard events the machine applies nothing.
+  // Without whiteboard events the load shows the empty board, as before the first event.
   cold: (events, time) =>
     events.length
       ? getWhiteboardReplayResult({
@@ -1006,7 +1007,7 @@ const whiteboardTrack: ReplayTrack<WhiteboardEvent> = {
           currentTime: time,
           lastAppliedIndex: -1,
         }).stateToApply
-      : undefined,
+      : EMPTY_WHITEBOARD_SCENE,
 };
 
 // ============================================================================
