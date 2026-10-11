@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   areSlideDecksEqual,
   createSlidesStore,
@@ -9,6 +9,7 @@ import {
   openedSlidePreviewState,
   restoreSlidesStore,
   saveSlidesToStorage,
+  selectSlidesSaveFailed,
   setSlidesStoreDeckBorrowed,
   snapshotSlidesStore,
   subscribeSlidesPersistence,
@@ -18,6 +19,7 @@ import type { IframeInteractionEvent, Slide, SlideEvent, SlidePreviewState } fro
 const STORAGE_KEY = "next-editor-slides";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
@@ -310,5 +312,72 @@ describe("slides storage round-trip", () => {
     const loaded = loadSlidesFromStorage();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].id).toBe("ok");
+  });
+});
+
+describe("slides save failures", () => {
+  const failNextSave = () =>
+    vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+  const saveFailed = (store: ReturnType<typeof createSlidesStore>) =>
+    selectSlidesSaveFailed(store.getSnapshot().context);
+
+  // The old payload stayed in storage while the author kept editing, so a
+  // reload brought back an older deck with nothing on screen to say so.
+  it("records a save the browser refused until a later save succeeds", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const saved = [makeHtmlSlide("saved")];
+    store.trigger.setSlides({ slides: saved });
+    expect(saveFailed(store)).toBe(false);
+
+    failNextSave();
+    store.trigger.setSlides({ slides: [makeHtmlSlide("too big")] });
+    expect(saveFailed(store)).toBe(true);
+    expect(loadSlidesFromStorage()).toEqual(saved);
+
+    const smaller = [makeHtmlSlide("smaller")];
+    store.trigger.setSlides({ slides: smaller });
+    expect(saveFailed(store)).toBe(false);
+    expect(loadSlidesFromStorage()).toEqual(smaller);
+    unsubscribe();
+  });
+
+  // A room borrows the store and hands the user's deck back on leaving, still
+  // unsaved if storage had refused it.
+  it("puts the flag back with the deck a room hands back", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    failNextSave();
+    store.trigger.setSlides({ slides: [makeHtmlSlide("unsaved")] });
+    const own = snapshotSlidesStore(store);
+    const lendToRoom = () => {
+      setSlidesStoreDeckBorrowed(store, true);
+      store.trigger.setSlides({ slides: [] });
+    };
+
+    lendToRoom();
+    restoreSlidesStore(store, own);
+    expect(saveFailed(store)).toBe(true);
+    expect(loadSlidesFromStorage()).toEqual([]);
+
+    lendToRoom();
+    restoreSlidesStore(store, { ...own, saveFailed: false });
+    expect(saveFailed(store)).toBe(false);
+    unsubscribe();
+  });
+
+  it("does not record anything for a borrowed deck, which is never saved", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    setSlidesStoreDeckBorrowed(store, true);
+    store.trigger.setSlides({ slides: [makeHtmlSlide("lesson deck")] });
+
+    expect(setItem).not.toHaveBeenCalled();
+    expect(saveFailed(store)).toBe(false);
+    unsubscribe();
   });
 });

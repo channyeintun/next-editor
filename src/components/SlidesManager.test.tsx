@@ -67,6 +67,9 @@ function renderLiveManager(initial: Slide[]) {
 const LINK_HINT =
   "In Google Slides: File → Share → Publish to web, then paste the published link here.";
 
+/** The region that reports a removal. The save warning's region comes first, under the header. */
+const removalStatus = () => screen.getAllByRole("status")[1];
+
 /** A slide row's thumbnail opens its editor; its corner label names the slide's type. */
 function clickThumbnail(typeLabel: string) {
   fireEvent.click(screen.getByText(typeLabel));
@@ -340,10 +343,31 @@ describe("SlidesManager", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("warns in its own status region while the deck could not be saved", () => {
+    const props = {
+      slides: [slide("a", 0)],
+      onSlidesChange: () => {},
+      onStartPresentation: () => {},
+      onClose: () => {},
+    };
+    const { rerender } = render(<SlidesManager {...props} />);
+    const [saveStatus] = screen.getAllByRole("status");
+    expect(saveStatus).toBeEmptyDOMElement();
+
+    rerender(<SlidesManager {...props} saveFailed />);
+    expect(saveStatus).toHaveTextContent(
+      "Slides could not be saved: browser storage is full. Remove a custom background or large deck, and keep this tab open.",
+    );
+    expect(removalStatus()).toBeEmptyDOMElement();
+
+    rerender(<SlidesManager {...props} saveFailed={false} />);
+    expect(saveStatus).toBeEmptyDOMElement();
+  });
+
   it("undoes a slide deletion", () => {
     const given = [slide("a", 0), slide("b", 1)];
     const emitted = renderLiveManager(given);
-    const status = screen.getByRole("status");
+    const status = removalStatus();
     expect(status).toBeEmptyDOMElement();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
@@ -372,7 +396,7 @@ describe("SlidesManager", () => {
 
     expect(emitted).toEqual([[slide("a", 0)]]);
     expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent("2 slides removed");
+    expect(removalStatus()).toHaveTextContent("2 slides removed");
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 
     expect(emitted.at(-1)).toBe(given);
@@ -387,7 +411,7 @@ describe("SlidesManager", () => {
     fireEvent.click(screen.getByText("Create Slide"));
 
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(removalStatus()).toBeEmptyDOMElement();
   });
 
   it("does not open an imported Google slide for editing", () => {

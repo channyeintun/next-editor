@@ -82,6 +82,14 @@ describe("useSlidesController", () => {
     });
   });
 
+  it("reports whether the last save of the deck failed", () => {
+    const { store, controller } = renderController();
+    expect(controller().saveFailed).toBe(false);
+
+    act(() => store.trigger.setSaveFailed({ failed: true }));
+    expect(controller().saveFailed).toBe(true);
+  });
+
   it("writes a close once, keeping the retained slide, and none when already closed", () => {
     const { store, written, controller } = renderController({ retainSlideOnClose: true });
     act(() => controller().startPresentation());

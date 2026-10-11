@@ -5,6 +5,7 @@ import {
   nextSlidePreviewState,
   selectPreviewState,
   selectSlides,
+  selectSlidesSaveFailed,
   type SlidesStoreInstance,
 } from "../stores/slidesStore";
 
@@ -30,6 +31,7 @@ export const useSlidesController = ({
 }: UseSlidesControllerConfig) => {
   const slides = useSelector(store, (snapshot) => selectSlides(snapshot.context));
   const previewState = useSelector(store, (snapshot) => selectPreviewState(snapshot.context));
+  const saveFailed = useSelector(store, (snapshot) => selectSlidesSaveFailed(snapshot.context));
 
   const setSlides = (update: SlidesUpdate) => {
     const next =
@@ -131,6 +133,7 @@ export const useSlidesController = ({
     slides,
     previewState,
     currentSlideIndex: Math.max(0, currentSlideIndex),
+    saveFailed,
 
     setSlides,
     openPresentation,

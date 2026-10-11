@@ -43,6 +43,8 @@ function isHttpsUrl(value: string | undefined): value is string {
 
 interface SlidesManagerProps {
   slides: Slide[];
+  /** The last save of the deck failed, so a reload would bring back an older one. */
+  saveFailed?: boolean;
   onSlidesChange: (update: SlidesUpdate) => void;
   onStartPresentation?: () => void;
   onClose?: () => void;
@@ -466,6 +468,7 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
 
 export default function SlidesManager({
   slides,
+  saveFailed = false,
   onSlidesChange,
   onStartPresentation,
   onClose,
@@ -599,6 +602,17 @@ export default function SlidesManager({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Always mounted, so the warning is announced when a save fails, and it stays until
+          one succeeds. Empty, it takes no space. */}
+      <div role="status">
+        {saveFailed && (
+          <p className="border-b border-rose-500/30 bg-rose-500/10 px-5 py-2 text-xs text-rose-200">
+            Slides could not be saved: browser storage is full. Remove a custom background or large
+            deck, and keep this tab open.
+          </p>
+        )}
       </div>
 
       <div className="editor-scrollbar flex-1 space-y-5 overflow-y-auto p-5">

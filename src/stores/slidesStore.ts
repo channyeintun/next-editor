@@ -51,7 +51,8 @@ export const loadSlidesFromStorage = (): Slide[] => {
   return [];
 };
 
-export const saveSlidesToStorage = (slides: Slide[]): void => {
+/** Whether the deck was written; false when the browser refused it, most often for a full quota. */
+export const saveSlidesToStorage = (slides: Slide[]): boolean => {
   let payloadSize = 0;
   try {
     const json = JSON.stringify(slides);
@@ -61,8 +62,10 @@ export const saveSlidesToStorage = (slides: Slide[]): void => {
         : json;
     payloadSize = payload.length;
     localStorage.setItem(SLIDES_STORAGE_KEY, payload);
+    return true;
   } catch (e) {
     console.warn(`Failed to save slides to localStorage (payload ${payloadSize} chars):`, e);
+    return false;
   }
 };
 
@@ -76,6 +79,11 @@ export interface SlidesContext {
    * along with the deck on leaving.
    */
   deckBorrowed: boolean;
+  /**
+   * The last save of the user's deck failed, so storage still holds an older
+   * deck that a reload would bring back. The next save that succeeds clears it.
+   */
+  saveFailed: boolean;
 }
 
 /** A closed slide panel. Spread it (`{ ...DEFAULT_PREVIEW_STATE }`) for a fresh closed state. */
@@ -186,6 +194,7 @@ export function createSlidesStore() {
       slides: loadSlidesFromStorage(),
       previewState: DEFAULT_PREVIEW_STATE,
       deckBorrowed: false,
+      saveFailed: false,
     } as SlidesContext,
     on: {
       setSlides: (context, event: { slides: Slide[] }) =>
@@ -198,6 +207,8 @@ export function createSlidesStore() {
         event.borrowed === context.deckBorrowed
           ? context
           : { ...context, deckBorrowed: event.borrowed },
+      setSaveFailed: (context, event: { failed: boolean }) =>
+        event.failed === context.saveFailed ? context : { ...context, saveFailed: event.failed },
     },
   });
 }
@@ -212,6 +223,9 @@ export function restoreSlidesStore(
   store: SlidesStoreInstance,
   snapshot: SlidesStoreSnapshot,
 ): void {
+  // First: if putting the deck back does save it (the store's deck was not
+  // borrowed), the result of that save is what the flag should say.
+  store.trigger.setSaveFailed({ failed: snapshot.saveFailed });
   // The deck goes back while the current one is still marked borrowed, so
   // restoring the user's own deck does not write it to storage a second time.
   store.trigger.setSlides({ slides: structuredClone(snapshot.slides) });
@@ -262,7 +276,7 @@ export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => vo
     if (snapshot.context.slides === previousSlides) return;
     previousSlides = snapshot.context.slides;
     if (snapshot.context.deckBorrowed) return;
-    saveSlidesToStorage(previousSlides);
+    store.trigger.setSaveFailed({ failed: !saveSlidesToStorage(previousSlides) });
   });
   return () => subscription.unsubscribe();
 }
@@ -270,3 +284,4 @@ export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => vo
 export const selectSlides = (context: SlidesContext): Slide[] => context.slides;
 export const selectPreviewState = (context: SlidesContext): SlidePreviewState =>
   context.previewState;
+export const selectSlidesSaveFailed = (context: SlidesContext): boolean => context.saveFailed;

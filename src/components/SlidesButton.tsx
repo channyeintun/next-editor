@@ -41,6 +41,7 @@ export default function SlidesButton({
   const {
     slides,
     previewState,
+    saveFailed,
     setSlides,
     openPresentation,
     startPresentation,
@@ -165,6 +166,7 @@ export default function SlidesButton({
             <Suspense fallback={null}>
               <SlidesManager
                 slides={slides}
+                saveFailed={saveFailed}
                 onSlidesChange={setSlides}
                 onStartPresentation={() => {
                   startPresentation();
