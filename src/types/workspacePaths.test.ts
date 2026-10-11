@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { normalizeProject, WorkspaceProjectValidationError } from "../stores/workspaceStore";
 import type { WorkspaceProject } from "./workspace";
-import { normalizeWorkspacePath, parseWorkspacePath, WorkspacePathError } from "./workspacePaths";
+import {
+  isReservedWorkspacePathSegment,
+  isWorkspacePathControlCharacter,
+  normalizeWorkspacePath,
+  parseWorkspacePath,
+  tryParseWorkspacePath,
+  WorkspacePathError,
+} from "./workspacePaths";
 
 function projectWithFiles(files: WorkspaceProject["files"]): WorkspaceProject {
   return {
@@ -26,6 +33,26 @@ describe("workspace path canonicalization", () => {
     expect(() => parseWorkspacePath("src/App.tsx/")).toThrow(/empty terminal name/i);
     expect(normalizeWorkspacePath("../outside.ts")).toBe("");
     expect(normalizeWorkspacePath("src/App.tsx/")).toBe("");
+  });
+
+  // The collaboration projection renames a peer's node name with these, so a
+  // name they pass must be one parseWorkspacePath accepts.
+  it("exports name predicates that agree with the path parser", () => {
+    const characters = Array.from({ length: 0xa1 }, (_, codePoint) =>
+      String.fromCodePoint(codePoint),
+    ).filter((character) => character !== "/" && character !== "\\");
+    const controls = characters.filter((character) => isWorkspacePathControlCharacter(character));
+    expect(controls).toEqual(
+      characters.filter((character) => tryParseWorkspacePath(`a${character}b`) === null),
+    );
+    expect(controls).toHaveLength(33);
+
+    const segments = ["__proto__", "prototype", "constructor", "proto", "Constructor"];
+    const reserved = segments.filter((segment) => isReservedWorkspacePathSegment(segment));
+    expect(reserved).toEqual(
+      segments.filter((segment) => tryParseWorkspacePath(`src/${segment}`) === null),
+    );
+    expect(reserved).toEqual(["__proto__", "prototype", "constructor"]);
   });
 
   it("rebuilds canonical file metadata", () => {

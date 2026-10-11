@@ -5,11 +5,19 @@ export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 
 const RESERVED_WORKSPACE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
 
+/** A name unsafe as a JavaScript record key, which no path segment may use. */
+export function isReservedWorkspacePathSegment(segment: string): boolean {
+  return RESERVED_WORKSPACE_PATH_SEGMENTS.has(segment);
+}
+
+/** A control character, which no path segment may contain. */
+export function isWorkspacePathControlCharacter(character: string): boolean {
+  const codePoint = character.codePointAt(0) ?? 0;
+  return codePoint <= 0x1f || codePoint === 0x7f;
+}
+
 function containsWorkspacePathControlCharacter(value: string): boolean {
-  return Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 0x1f || codePoint === 0x7f;
-  });
+  return Array.from(value).some(isWorkspacePathControlCharacter);
 }
 
 export class WorkspacePathError extends Error {
@@ -70,7 +78,7 @@ export function parseWorkspacePath(
       throw new WorkspacePathError("Workspace path contains a control character", input);
     }
 
-    if (RESERVED_WORKSPACE_PATH_SEGMENTS.has(segment)) {
+    if (isReservedWorkspacePathSegment(segment)) {
       throw new WorkspacePathError(`Workspace path uses the reserved name "${segment}"`, input);
     }
 

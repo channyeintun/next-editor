@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { isWorkspaceTextFile } from "../types/workspace";
+import { parseWorkspacePath } from "../types/workspacePaths";
 import { MAX_YJS_UPDATE_BYTES } from "./protocol";
 import {
   assertCollaborationProjectStructure,
@@ -143,6 +144,47 @@ describe("collaboration project document", () => {
     expect(firstProjection.issues).toEqual(secondProjection.issues);
     expect(firstProjection.issues.map((issue) => issue.kind)).toContain("invalid-parent");
     expect(firstProjection.issues.map((issue) => issue.kind)).toContain("parent-cycle");
+  });
+
+  // A peer's node name reaches the projection as is, and the workspace rejects
+  // a path with a reserved segment or a control character, which would stop the
+  // whole room from projecting.
+  it("renames node names a workspace path cannot hold", () => {
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+    let commandId = 0;
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      idFactory: () => `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
+    });
+    const names: Record<string, string> = {
+      "one.txt": "__proto__",
+      "two.txt": "a\u0001b.txt",
+      "three.txt": "c/d.txt",
+      "four.txt": "\u007fe\\f.txt",
+    };
+    for (const path of Object.keys(names)) controller.createFile(path, path);
+    controller.createFolder("five");
+    controller.createFile("five/inner.txt", "inner");
+    const nodes = getCollaborationNodes(doc);
+    const created = projectCollaborationDocument(doc).nodeIdByPath;
+    for (const [path, name] of Object.entries(names)) {
+      nodes.get(created.get(path) ?? "")?.set("name", name);
+    }
+    nodes.get(created.get("five") ?? "")?.set("name", "constructor");
+
+    const projection = projectCollaborationDocument(doc);
+
+    expect(projection.issues).toEqual([]);
+    const files = projection.project.files;
+    expect(files["untitled.txt"]?.content).toBe("one.txt");
+    expect(files["ab.txt"]?.content).toBe("two.txt");
+    expect(files["cd.txt"]?.content).toBe("three.txt");
+    expect(files["ef.txt"]?.content).toBe("four.txt");
+    expect(files["untitled/inner.txt"]?.content).toBe("inner");
+    for (const path of [...Object.keys(files), ...projection.project.folders]) {
+      expect(parseWorkspacePath(path)).toBe(path);
+    }
   });
 
   it("keeps colliding siblings with deterministic stable-ID suffixes", () => {

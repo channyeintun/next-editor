@@ -15,6 +15,8 @@ import { isWorkspaceLessonType } from "../types/lessonTypes";
 import {
   DEFAULT_WORKSPACE_ENTRY_PATH,
   collectWorkspaceFolders,
+  isReservedWorkspacePathSegment,
+  isWorkspacePathControlCharacter,
   parseWorkspacePath,
 } from "../types/workspacePaths";
 import { getWorkspaceFileMimeType, inferLanguageFromPath } from "../types/workspaceFiles";
@@ -290,16 +292,23 @@ function readNode(id: string, value: Y.Map<unknown>): CollaborationNodeSnapshot 
   };
 }
 
-const UNSAFE_NODE_NAMES = new Set(["", ".", "..", "__proto__", "prototype", "constructor"]);
+const EMPTY_OR_DOT_NODE_NAMES = new Set(["", ".", ".."]);
 
+/**
+ * A peer's node name as one path segment that parseWorkspacePath keeps as is,
+ * by its own rules for reserved names and control characters.
+ */
 function safeNodeName(node: CollaborationNodeSnapshot): string {
   const withoutControls = Array.from(node.name.trim())
-    .filter((character) => {
-      const point = character.codePointAt(0) ?? 0;
-      return point > 0x1f && point !== 0x7f && character !== "/" && character !== "\\";
-    })
+    .filter(
+      (character) =>
+        !isWorkspacePathControlCharacter(character) && character !== "/" && character !== "\\",
+    )
     .join("");
-  if (UNSAFE_NODE_NAMES.has(withoutControls)) {
+  if (
+    EMPTY_OR_DOT_NODE_NAMES.has(withoutControls) ||
+    isReservedWorkspacePathSegment(withoutControls)
+  ) {
     return node.kind === "file" ? "untitled.txt" : "untitled";
   }
   return withoutControls;
