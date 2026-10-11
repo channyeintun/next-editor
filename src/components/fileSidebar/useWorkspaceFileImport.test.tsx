@@ -64,7 +64,10 @@ function renderHarness(existingPaths: string[] = []) {
     ),
     saveProject: vi.fn<WorkspaceActions["saveProject"]>(() => Promise.resolve()),
   };
-  const editorActions = { handleWorkspaceEvent: vi.fn<() => void>() };
+  const editorActions = {
+    handleWorkspaceEvent: vi.fn<NextEditorActions["handleWorkspaceEvent"]>(),
+    pause: vi.fn<NextEditorActions["pause"]>(),
+  };
   render(
     <WorkspaceActionsContext value={actions as unknown as WorkspaceActions}>
       <NextEditorActionsContext value={editorActions as unknown as NextEditorActions}>
@@ -97,7 +100,9 @@ function dragEvent(
 
 describe("useWorkspaceFileImport", () => {
   it("opens the picker and adds what it picks under that folder, under unused names", async () => {
-    const { createFile, saveProject, handleWorkspaceEvent } = renderHarness(["src/notes.txt"]);
+    const { createFile, saveProject, handleWorkspaceEvent, pause } = renderHarness([
+      "src/notes.txt",
+    ]);
     const picker = screen.getByTestId<HTMLInputElement>("picker");
     const click = vi.spyOn(picker, "click");
 
@@ -112,13 +117,19 @@ describe("useWorkspaceFileImport", () => {
       ["src/todo.txt", "contents of todo.txt", undefined],
     ]);
     expect(handleWorkspaceEvent).toHaveBeenCalledTimes(1);
+    // A lesson playing on would replay its frame into the file the import opened; the
+    // workspace event can be swallowed by the replay's suppression gate, the pause cannot.
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(pause.mock.invocationCallOrder[0]).toBeLessThan(
+      handleWorkspaceEvent.mock.invocationCallOrder[0],
+    );
     expect(picker.value).toBe("");
   });
 
   it("skips files that are too large or unreadable, and names them in one alert", async () => {
     const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { createFile, saveProject, handleWorkspaceEvent } = renderHarness();
+    const { createFile, saveProject, handleWorkspaceEvent, pause } = renderHarness();
     const huge = new File(["x"], "huge.mov");
     Object.defineProperty(huge, "size", { value: MAX_WORKSPACE_ASSET_BYTES + 1 });
     reader.readUploadedWorkspaceFile.mockRejectedValue(new Error("unreadable"));
@@ -134,6 +145,7 @@ describe("useWorkspaceFileImport", () => {
     expect(createFile).not.toHaveBeenCalled();
     expect(saveProject).not.toHaveBeenCalled();
     expect(handleWorkspaceEvent).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
   });
 
   it("claims file drags, shows them until they leave, and adds dropped files at the root", async () => {

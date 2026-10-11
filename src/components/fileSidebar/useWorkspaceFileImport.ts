@@ -13,7 +13,7 @@ import { readUploadedWorkspaceFile } from "../../utils/workspaceFileUpload";
  */
 export function useWorkspaceFileImport() {
   const { createFile, getProject, saveProject } = useWorkspaceActions();
-  const { handleWorkspaceEvent } = useNextEditorActions();
+  const { handleWorkspaceEvent, pause } = useNextEditorActions();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const uploadTargetPathRef = useRef("");
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -62,6 +62,9 @@ export function useWorkspaceFileImport() {
 
     if (firstCreatedPath) {
       void saveProject();
+      // Pause first, as useOpenWorkspaceFile does: the workspace event may be swallowed
+      // by the replay's suppression gate, the pause never is.
+      pause();
       handleWorkspaceEvent();
     }
 

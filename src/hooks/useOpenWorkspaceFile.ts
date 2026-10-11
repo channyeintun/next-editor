@@ -35,6 +35,9 @@ export function useOpenWorkspaceFile(): (path: string) => void {
     collaboration?.stopFollowing("local-file-navigation");
     const target = normalizeWorkspacePath(path);
     if (!target || target === getActiveFilePath() || !getFile(target)) return;
+    // The raw actor sender, never behind NextEditorProvider's suppressWorkspaceEventsRef gate:
+    // a click inside the replay's one-task suppression window must still pause
+    // (editorMachine.test.ts "keeps what the replay showed…").
     pause();
     setActiveFilePath(target);
     handleWorkspaceEvent();

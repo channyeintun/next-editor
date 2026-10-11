@@ -2251,34 +2251,29 @@ describe("editorMachine actor lifecycle", () => {
     });
 
     it("keeps what the replay showed in a file the viewer leaves after pausing", async () => {
-      const editor = new MockEditor(new MockTextModel("outside"));
-      const workspace = {
-        current: createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b"),
-      };
-      const actor = createActor(editorMachine, {
-        input: {
-          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
-          getWorkspaceSnapshot: () => workspace.current,
-          applyWorkspaceSnapshot: (snapshot) => {
-            workspace.current = snapshot;
-          },
-        },
-      }).start();
-      actor.send({ type: "LOAD_RECORDING", recording: recordingOnOneFile() });
-      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      const { actor, editor, workspace } = await loadReady(recordingOnOneFile());
       actor.send({ type: "PLAY" });
       actor.send({ type: "TICK", currentTime: 150 });
 
       // Opening another file pauses first (useOpenWorkspaceFile): the pause copies the
-      // frame on screen into a.ts, the file the recording has open.
+      // frame on screen into a.ts, the file the recording has open. The app then switches
+      // to b.ts and CodeEditor binds its model, but sends no WORKSPACE_EVENT here: the app
+      // swallows it after a pause (the replay's one-task suppression gate). What matters is
+      // that PAUSE, the raw actor sender, is never behind that gate and hands over alone.
       actor.send({ type: "PAUSE" });
       workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
-      actor.send({ type: "WORKSPACE_EVENT" });
+      const bModel = new MockTextModel("outside-b");
+      editor.setModel(bModel as unknown as monaco.editor.ITextModel);
+      actor.send({
+        type: "SET_EDITOR_REF",
+        editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+      });
 
-      expect(workspace.current.project.files["a.ts"].content).toBe("ab");
-      expect(workspace.current.activeFilePath).toBe("b.ts");
       expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
       expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+      expect(bModel.getValue()).toBe("outside-b");
+      expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+      expect(workspace.current.activeFilePath).toBe("b.ts");
 
       actor.stop();
     });
