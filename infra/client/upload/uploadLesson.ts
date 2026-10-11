@@ -4,7 +4,8 @@ import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { formatMediaBytes, MAX_MEDIA_BYTES } from "../../lessons/uploadLimits";
-import { THUMBNAIL_EXTENSIONS, thumbnailFilename } from "../../lessons/thumbnailFiles";
+import { thumbnailExtension, thumbnailFilename } from "../../lessons/thumbnailFiles";
+import { uploadFile, type UploadTarget } from "./uploadFile";
 
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
@@ -36,11 +37,6 @@ export interface UploadedLesson {
   slug: string;
 }
 
-interface UploadTarget {
-  filename: string;
-  blob: Blob;
-}
-
 /**
  * A file over MAX_MEDIA_BYTES, refused before any bytes go up. Its message names
  * the file and its size for the author to read: retrying fails the same way.
@@ -50,45 +46,6 @@ export class UploadLimitError extends Error {
     super(message);
     this.name = "UploadLimitError";
   }
-}
-
-// The upload route's filename allow-list only recognizes these extensions, so a name-derived
-// guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
-// to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
-// svg is deliberately not one of them — see worker/lessonMediaFiles.ts.
-export function thumbnailExtension(file: File): (typeof THUMBNAIL_EXTENSIONS)[number] {
-  const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
-  const known = THUMBNAIL_EXTENSIONS.find((extension) => extension === fromName);
-  if (known) {
-    return known;
-  }
-
-  const fromMime: Record<string, (typeof THUMBNAIL_EXTENSIONS)[number]> = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-    "image/webp": "webp",
-  };
-  return fromMime[file.type] ?? "png";
-}
-
-async function uploadFile(
-  lessonId: string,
-  target: UploadTarget,
-  onLoaded: (loaded: number) => void,
-  signal?: AbortSignal,
-): Promise<string> {
-  const res = await apiClient.put<{ path: string }>(
-    `/uploads/${lessonId}/media/${target.filename}`,
-    target.blob,
-    {
-      headers: {
-        "Content-Type": target.blob.type || "application/octet-stream",
-      },
-      onUploadProgress: (event) => onLoaded(event.loaded),
-      signal,
-    },
-  );
-  return res.data.path;
 }
 
 // Uploads .ne + audio/camera (if present) sequentially, then creates the D1
@@ -199,29 +156,4 @@ export async function uploadLesson(
   );
 
   return { id: res.data.id, slug: res.data.slug };
-}
-
-export async function publishLesson(lessonId: string): Promise<void> {
-  await apiClient.post(`/lessons/${lessonId}/publish`);
-}
-
-// The replacement goes up under a new write-once name (thumbnailFiles.ts), so
-// the lesson gets a fresh URL rather than browsers and the edge keeping the
-// previous image's cached bytes at the old one.
-export async function updateLessonThumbnail(
-  lessonId: string,
-  thumbnail: File | "default",
-): Promise<void> {
-  let thumbnailPath: string;
-  if (thumbnail === "default") {
-    thumbnailPath = DEFAULT_THUMBNAIL_PATH;
-  } else {
-    const filename = thumbnailFilename(lessonId, thumbnailExtension(thumbnail));
-    thumbnailPath = await uploadFile(lessonId, { filename, blob: thumbnail }, () => {});
-  }
-  await apiClient.patch(`/lessons/${lessonId}`, { thumbnail: thumbnailPath });
-}
-
-export async function updateLessonName(lessonId: string, title: string): Promise<void> {
-  await apiClient.patch(`/lessons/${lessonId}`, { title });
 }

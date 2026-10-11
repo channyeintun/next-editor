@@ -9,7 +9,7 @@ import {
   MAX_TAGS,
   MAX_TITLE_CHARS,
 } from "../../lessons/metadataLimits";
-import type * as UploadLessonModule from "./uploadLesson";
+import type * as MyLessonsApiModule from "../library/myLessonsApi";
 import { UploadLimitError } from "./uploadLesson";
 import type { UploadedLesson, UploadLessonInput } from "./useUploadLesson";
 
@@ -48,8 +48,8 @@ vi.mock("./useUploadLesson", () => ({
   formatDuration: () => "0:01",
 }));
 
-vi.mock("./uploadLesson", async (importOriginal) => ({
-  ...(await importOriginal<typeof UploadLessonModule>()),
+vi.mock("../library/myLessonsApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof MyLessonsApiModule>()),
   publishLesson: (lessonId: string) => publishLesson(lessonId),
 }));
 

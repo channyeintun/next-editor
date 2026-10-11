@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { publishLesson, updateLessonName, updateLessonThumbnail } from "../upload/uploadLesson";
 import { authorKeys, lessonKeys, playlistKeys, searchKeys } from "../../lessons/queryKeys";
-import { deleteLesson, fetchMyLessons, unpublishLesson } from "./myLessonsApi";
+import {
+  deleteLesson,
+  fetchMyLessons,
+  publishLesson,
+  unpublishLesson,
+  updateLessonName,
+  updateLessonThumbnail,
+} from "./myLessonsApi";
 
 export function useMyLessons() {
   return useQuery({

@@ -240,7 +240,7 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     previousThumbnail !== row.thumbnail &&
     previousThumbnail !== DEFAULT_THUMBNAIL_PATH
   ) {
-    // updateLessonThumbnail() (infra/client/upload/uploadLesson.ts) always
+    // updateLessonThumbnail() (infra/client/library/myLessonsApi.ts) always
     // uploads the replacement to a fresh R2 key (timestamped, to dodge CDN
     // caching of the old bytes) rather than overwriting the old one in
     // place, so the superseded object is now orphaned — clean it up here.
