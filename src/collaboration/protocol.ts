@@ -18,7 +18,10 @@ export const MAX_COLLABORATION_ROOM_ASSETS = 100;
 export const MAX_COLLABORATION_SLIDE_ID_LENGTH = 256;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+// One character class, so V8 matches it in a loop. A grouped quantifier such
+// as (?:[A-Za-z0-9+/]{4})* recurses per group and overflows the regexp stack
+// above ~4.4M characters, well inside the snapshot limit.
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SLIDE_ID_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
 
@@ -126,6 +129,10 @@ export const claimCollaborationInvitationInputSchema = z
   })
   .strict();
 
+function isBase64(value: string): boolean {
+  return value.length % 4 === 0 && BASE64_PATTERN.test(value);
+}
+
 function decodedBase64ByteLength(value: string): number {
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
   return (value.length / 4) * 3 - padding;
@@ -135,7 +142,7 @@ export const encodedYjsUpdateSchema = z
   .string()
   .min(4)
   .max(MAX_ENCODED_YJS_UPDATE_LENGTH)
-  .refine((value) => value.length % 4 === 0 && BASE64_PATTERN.test(value), "invalid base64")
+  .refine(isBase64, "invalid base64")
   .refine((value) => decodedBase64ByteLength(value) <= MAX_YJS_UPDATE_BYTES, {
     message: `Yjs update exceeds ${MAX_YJS_UPDATE_BYTES} bytes`,
   });
@@ -144,7 +151,7 @@ export const encodedYjsSnapshotSchema = z
   .string()
   .min(4)
   .max(MAX_ENCODED_YJS_SNAPSHOT_LENGTH)
-  .refine((value) => value.length % 4 === 0 && BASE64_PATTERN.test(value), "invalid base64")
+  .refine(isBase64, "invalid base64")
   .refine((value) => decodedBase64ByteLength(value) <= MAX_YJS_SNAPSHOT_BYTES, {
     message: `Yjs snapshot exceeds ${MAX_YJS_SNAPSHOT_BYTES} bytes`,
   });
@@ -204,7 +211,7 @@ export const encodedRelativePositionSchema = z
   .string()
   .min(4)
   .max(2048)
-  .regex(BASE64_PATTERN, "invalid relative position");
+  .refine(isBase64, "invalid relative position");
 
 export const collaborationCursorSchema = z
   .object({
