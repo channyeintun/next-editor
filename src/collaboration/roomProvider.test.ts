@@ -495,6 +495,60 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  // A persistence failure closes with 1011 so the client retries, but a sync
+  // that succeeds does not show the refused update can now be stored.
+  it("fails once reconnects run out when the room keeps refusing the same update", async () => {
+    vi.useFakeTimers();
+    const { sockets, factory } = socketRecorder();
+    const server = new Y.Doc();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      maxReconnectAttempts: 2,
+      batchWindowMs: 0,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    const syncAndRefuseHead = async (socket: FakeWebSocket, edit?: () => void) => {
+      socket.open();
+      await vi.advanceTimersByTimeAsync(0);
+      const request = sentFrames(socket)[0];
+      if (request?.kind !== "sync") throw new Error("state-vector sync was not requested");
+      socket.message(exactArrayBuffer(encodeCollaborationSyncStep2(server, request.payload)));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.connectionState).toBe("live");
+      edit?.();
+      await vi.advanceTimersByTimeAsync(0);
+      const update = sentFrames(socket).findLast((frame) => frame.kind === "client-update");
+      if (update?.kind !== "client-update") throw new Error("no client update was sent");
+      socket.message({
+        type: "error",
+        code: "persistence-failed",
+        message: "Collaboration update could not be persisted",
+        fatal: false,
+        updateId: update.updateId,
+      });
+      socket.close(1011, "Collaboration update could not be persisted");
+    };
+
+    await provider.start();
+    await syncAndRefuseHead(sockets[0]!, () => provider.doc.getText("source").insert(0, "x"));
+    await vi.advanceTimersByTimeAsync(500);
+    await syncAndRefuseHead(sockets[1]!);
+    expect(provider.connectionState).toBe("reconnecting");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await syncAndRefuseHead(sockets[2]!);
+
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toBe(
+      "Collaboration reconnect attempts were exhausted",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(3);
+    provider.stop();
+  });
+
   it("stays failed with the host's reason after a 4001 close, even with an update in flight", async () => {
     const { sockets, factory } = socketRecorder();
     const provider = new CollaborationRoomProvider({

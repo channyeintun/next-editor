@@ -740,8 +740,13 @@ export class CollaborationRoomProvider {
       for (const frame of buffered) this.applyBinaryServerUpdate(frame);
       this.hasCompletedSync = true;
       this.actor.send({ type: "SYNCED", sessionId: this.sessionId, attemptId });
-      this.reconnectAttempt = 0;
       await this.flushOutbox();
+      // A sync alone does not show the queued edits can be delivered: a room
+      // that keeps refusing the head update closes after every resend. Only a
+      // flush that leaves this attempt live restores the reconnect budget.
+      if (!this.isStopped && attemptId === this.attemptId && this.connectionState === "live") {
+        this.reconnectAttempt = 0;
+      }
     } catch (error) {
       synchronizationOutcome = "failure";
       if (this.isStopped || attemptId !== this.attemptId) return;
