@@ -6,6 +6,7 @@ import {
   getAgentCredentialStore,
   selectApiKey,
   selectCredentialStorage,
+  selectPersistFailed,
 } from "../../agent/credentials";
 import { filterModelOptions } from "../../agent/modelCatalog";
 import type { CredentialStorage } from "../../agent/types";
@@ -185,6 +186,7 @@ function ApiKeySection({
 function KeyStorageSection() {
   const credentialStore = getAgentCredentialStore();
   const credentialStorage = useSelector(credentialStore, (s) => selectCredentialStorage(s.context));
+  const persistFailed = useSelector(credentialStore, (s) => selectPersistFailed(s.context));
 
   return (
     <fieldset className="min-w-0">
@@ -206,6 +208,15 @@ function KeyStorageSection() {
           </label>
         ))}
       </div>
+      {/* Always mounted (and empty, so zero height, until needed), so the
+          warning is announced when the browser refuses to store the key. */}
+      <p role="status" className="text-[11px] text-amber-400">
+        {persistFailed ? (
+          <span className="mt-2 block">
+            This browser blocked saving, so the key will be forgotten when you reload.
+          </span>
+        ) : null}
+      </p>
     </fieldset>
   );
 }

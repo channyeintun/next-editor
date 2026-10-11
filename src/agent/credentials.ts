@@ -9,6 +9,11 @@ const CREDENTIAL_STORAGE_KEY = "next-editor-agent-credentials";
 export interface CredentialContext {
   apiKey: string;
   storage: CredentialStorage;
+  /**
+   * True when the chosen browser storage refused the key (site data blocked or
+   * the quota full): it is kept in memory only and is gone after a reload.
+   */
+  persistFailed: boolean;
 }
 
 function getBrowserStorage(storage: CredentialStorage): Storage | null {
@@ -35,24 +40,33 @@ function readPersistedApiKey(storage: CredentialStorage): string {
   }
 }
 
-function writePersistedApiKey(storage: CredentialStorage, apiKey: string): void {
+/**
+ * Stores the key in the chosen storage, removing it from the other. Returns
+ * false only when a non-empty key was meant to persist and the browser refused,
+ * so the caller can say it will not survive a reload.
+ */
+function writePersistedApiKey(storage: CredentialStorage, apiKey: string): boolean {
+  const wantsPersist = storage !== "memory" && apiKey !== "";
+
   try {
     window.localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
     window.sessionStorage.removeItem(CREDENTIAL_STORAGE_KEY);
   } catch {
-    return;
+    return !wantsPersist;
   }
 
   const target = getBrowserStorage(storage);
 
   if (!target || !apiKey) {
-    return;
+    return true;
   }
 
   try {
     target.setItem(CREDENTIAL_STORAGE_KEY, apiKey);
+    return true;
   } catch (error) {
     console.warn("Failed to persist agent API key:", error);
+    return false;
   }
 }
 
@@ -74,7 +88,7 @@ function detectInitialStorage(): CredentialStorage {
 
 function initialContext(): CredentialContext {
   const storage = detectInitialStorage();
-  return { apiKey: readPersistedApiKey(storage), storage };
+  return { apiKey: readPersistedApiKey(storage), storage, persistFailed: false };
 }
 
 export function createCredentialStore() {
@@ -82,16 +96,16 @@ export function createCredentialStore() {
     context: initialContext(),
     on: {
       setApiKey: (context, event: { apiKey: string }) => {
-        writePersistedApiKey(context.storage, event.apiKey);
-        return { ...context, apiKey: event.apiKey };
+        const persisted = writePersistedApiKey(context.storage, event.apiKey);
+        return { ...context, apiKey: event.apiKey, persistFailed: !persisted };
       },
       setStorage: (context, event: { storage: CredentialStorage }) => {
-        writePersistedApiKey(event.storage, context.apiKey);
-        return { ...context, storage: event.storage };
+        const persisted = writePersistedApiKey(event.storage, context.apiKey);
+        return { ...context, storage: event.storage, persistFailed: !persisted };
       },
       clear: (context) => {
         writePersistedApiKey(context.storage, "");
-        return { ...context, apiKey: "" };
+        return { ...context, apiKey: "", persistFailed: false };
       },
     },
   });
@@ -102,6 +116,7 @@ export type CredentialStoreInstance = ReturnType<typeof createCredentialStore>;
 export const selectApiKey = (context: CredentialContext): string => context.apiKey;
 export const selectCredentialStorage = (context: CredentialContext): CredentialStorage =>
   context.storage;
+export const selectPersistFailed = (context: CredentialContext): boolean => context.persistFailed;
 
 let sharedCredentialStore: CredentialStoreInstance | null = null;
 

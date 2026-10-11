@@ -46,6 +46,7 @@ function Dialog({
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   const credentialStore = getAgentCredentialStore();
   credentialStore.trigger.clear();
   credentialStore.trigger.setStorage({ storage: "memory" });
@@ -170,6 +171,35 @@ describe("AgentSettingsDialog", () => {
 
     expect(getAgentCredentialStore().getSnapshot().context.storage).toBe("session");
     expect(screen.getByLabelText(/This tab/)).toBeChecked();
+  });
+
+  // The dialog said "A key is saved" even when the browser refused to store
+  // it, so the key vanished on the next reload with no warning.
+  it("announces when the browser refused to remember the key", () => {
+    render(<Dialog />);
+    const storageGroup = screen.getByRole("group", { name: "Remember key" });
+    // Mounted empty, so a screen reader hears the warning when it appears.
+    const saveStatus = within(storageGroup).getByRole("status");
+    expect(saveStatus).toBeEmptyDOMElement();
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+    try {
+      fireEvent.click(screen.getByLabelText(/This device/));
+      fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-or-v1-secret" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(saveStatus).toHaveTextContent(
+        "This browser blocked saving, so the key will be forgotten when you reload.",
+      );
+    } finally {
+      setItem.mockRestore();
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(saveStatus).toBeEmptyDOMElement();
   });
 
   it("is a modal dialog titled Agent settings that starts on its Close button", () => {
