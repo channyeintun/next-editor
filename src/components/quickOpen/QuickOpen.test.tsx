@@ -2,7 +2,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceTreeFile } from "../../types/workspace";
 import { EDITOR_MAIN_ID } from "../editorTabFocus";
+import QuickOpen from "./QuickOpen";
 import QuickOpenButton from "./QuickOpenButton";
+import { quickOpenStore } from "./quickOpenState";
 
 const mocks = vi.hoisted(() => ({
   isApple: false,
@@ -52,6 +54,7 @@ function treeFile(path: string): WorkspaceTreeFile {
 let rafCallbacks: FrameRequestCallback[] = [];
 
 beforeEach(() => {
+  quickOpenStore.trigger.closed();
   mocks.isApple = false;
   mocks.isCovered = false;
   mocks.isPlaying = false;
@@ -72,9 +75,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-// A new element each time, so a rerender reads the changed mocks.
+// A new element each time, so a rerender reads the changed mocks. The picker
+// sits in the editor header and the button in the file explorer's header.
 const ui = () => (
   <main id={EDITOR_MAIN_ID} tabIndex={-1}>
+    <QuickOpen />
     <QuickOpenButton />
   </main>
 );
@@ -101,7 +106,7 @@ function flushFrames() {
   });
 }
 
-describe("QuickOpenButton", () => {
+describe("Go to File", () => {
   it("opens on Ctrl+P, pausing a playing lesson, and never lets the browser print", () => {
     // The pause stops the lesson, so the re-pause effect sees it stopped once
     // the picker is up and sends no second pause.
@@ -302,6 +307,37 @@ describe("QuickOpenButton", () => {
 
     expect(dialog()).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Go to file" })).toHaveFocus();
+  });
+
+  it("opens on the shortcut while the file explorer, and so the button, is collapsed", () => {
+    render(
+      <main id={EDITOR_MAIN_ID} tabIndex={-1}>
+        <QuickOpen />
+      </main>,
+    );
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    pressKey(ctrlP, opener);
+    expect(dialog()).toBeInTheDocument();
+    opener.remove();
+
+    // Neither the opener nor the button is there to take focus back.
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+
+    expect(dialog()).not.toBeInTheDocument();
+    expect(document.getElementById(EDITOR_MAIN_ID)).toHaveFocus();
+  });
+
+  it("does not reopen the picker for an editor mounted after one left with it open", () => {
+    const { unmount } = renderButton();
+    pressKey(ctrlP);
+    expect(dialog()).toBeInTheDocument();
+
+    unmount();
+    renderButton();
+
+    expect(dialog()).not.toBeInTheDocument();
   });
 
   it("names its shortcut", () => {

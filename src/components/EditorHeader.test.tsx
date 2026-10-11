@@ -107,7 +107,7 @@ vi.mock("../starters", () => ({
 // collaboration and slides controls (or the providers behind them).
 vi.mock("./CollaborationPanel", () => ({ default: () => null }));
 vi.mock("./SlidesButton", () => ({ default: () => null }));
-vi.mock("./quickOpen/QuickOpenButton", () => ({ default: () => null }));
+vi.mock("./quickOpen/QuickOpen", () => ({ default: () => null }));
 vi.mock("./tour/productTour", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tour/productTour")>()),
   startTour: mocks.startTour,

@@ -24,6 +24,7 @@ import {
   studioTargetIdForFile,
 } from "../studio/targets";
 import FileContextMenu from "./fileSidebar/FileContextMenu";
+import QuickOpenButton from "./quickOpen/QuickOpenButton";
 import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
 import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
 import { FolderIcon, getFileIcon } from "./fileSidebar/fileIcons";
@@ -626,12 +627,15 @@ function FileSidebarPanel() {
     >
       <div className="border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
-          <h2
-            id={titleId}
-            className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300"
-          >
-            Files
-          </h2>
+          <div className="flex items-center gap-1.5">
+            <h2
+              id={titleId}
+              className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300"
+            >
+              Files
+            </h2>
+            <QuickOpenButton />
+          </div>
           <div className="flex items-center gap-1">
             <button
               type="button"

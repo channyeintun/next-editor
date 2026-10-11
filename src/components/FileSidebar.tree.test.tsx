@@ -96,6 +96,8 @@ const room = vi.hoisted(() => ({
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => room.collaboration,
 }));
+// Go to File's own tests live beside it; it needs the slides and whiteboard providers.
+vi.mock("./quickOpen/QuickOpenButton", () => ({ default: () => null }));
 
 beforeEach(() => {
   workspace.store.state = { ...INITIAL_STATE };
