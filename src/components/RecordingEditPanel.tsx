@@ -192,9 +192,12 @@ export default function RecordingEditPanel({
     };
   }, []);
 
+  // Keyed on the narration itself: a chapter or caption track changes the recording object
+  // but not its audio, and each read is a download and a full decode.
+  const { audioBlob, audioUrl } = recording;
   useEffect(() => {
     let cancelled = false;
-    loadRecordingNarration(recording)
+    loadRecordingNarration({ audioBlob, audioUrl })
       .then(async (blob) => {
         if (!blob) {
           if (!cancelled) setNarrationState("none");
@@ -212,7 +215,7 @@ export default function RecordingEditPanel({
     return () => {
       cancelled = true;
     };
-  }, [recording]);
+  }, [audioBlob, audioUrl]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

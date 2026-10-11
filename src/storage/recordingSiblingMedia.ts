@@ -266,7 +266,9 @@ export async function findWorkingAudioBlob(
  * link it by `audioUrl`. Null when it has neither; a failed download throws with its status.
  * The edit panel draws its waveform from this and caption generation transcribes it.
  */
-export async function loadRecordingNarration(recording: Recording): Promise<Blob | null> {
+export async function loadRecordingNarration(
+  recording: Pick<Recording, "audioBlob" | "audioUrl">,
+): Promise<Blob | null> {
   if (recording.audioBlob instanceof Blob) return recording.audioBlob;
   if (!recording.audioUrl) return null;
   const response = await fetch(recording.audioUrl);

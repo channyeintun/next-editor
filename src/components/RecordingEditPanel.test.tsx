@@ -11,8 +11,31 @@ import { WhiteboardStoreProvider } from "../contexts/WhiteboardStoreContext";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { compressFrames } from "../core/src/utils/frameStreamEncoder";
+import { computeAudioPeaks } from "../core/src/utils/audioPeaks";
+import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 import type { Recording } from "../core/src/types";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
+
+vi.mock("../storage/recordingSiblingMedia", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../storage/recordingSiblingMedia")>();
+  return {
+    ...actual,
+    loadRecordingNarration: vi.fn<typeof actual.loadRecordingNarration>(
+      actual.loadRecordingNarration,
+    ),
+  };
+});
+// jsdom cannot decode audio: a narration's waveform is a flat second of silence.
+vi.mock("../core/src/utils/audioPeaks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../core/src/utils/audioPeaks")>();
+  return {
+    ...actual,
+    computeAudioPeaks: vi.fn<typeof actual.computeAudioPeaks>(async () => ({
+      peaks: new Float32Array(20),
+      bucketMs: 50,
+    })),
+  };
+});
 
 const selection = {
   startLineNumber: 1,
@@ -372,6 +395,32 @@ describe("RecordingEditPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Suggest dead-air cuts/ }));
 
     expect(region).toHaveTextContent("No stretch of dead air long enough to cut.");
+  });
+
+  it("reads the narration again only when it is replaced", async () => {
+    vi.mocked(loadRecordingNarration).mockClear();
+    vi.mocked(computeAudioPeaks).mockClear();
+    const narrated: Recording = { ...take, audioBlob: new Blob(["take"], { type: "audio/webm" }) };
+    const panel = (recording: Recording) => (
+      <Providers>
+        <RecordingEditPanel recording={recording} onClose={() => {}} onApplied={() => {}} />
+      </Providers>
+    );
+
+    const { rerender } = render(panel(narrated));
+    await waitFor(() => expect(screen.queryByText("Reading the narration…")).toBeNull());
+    expect(computeAudioPeaks).toHaveBeenCalledTimes(1);
+
+    // A new chapter or caption track is a new recording object with the same narration.
+    rerender(panel({ ...narrated, chapters: [{ time: 0, title: "Intro" }] }));
+    await act(async () => {});
+    expect(loadRecordingNarration).toHaveBeenCalledTimes(1);
+    expect(computeAudioPeaks).toHaveBeenCalledTimes(1);
+
+    // An audio edit finishing replaces the narration, which is drawn anew.
+    rerender(panel({ ...narrated, audioBlob: new Blob(["edited"], { type: "audio/webm" }) }));
+    await waitFor(() => expect(computeAudioPeaks).toHaveBeenCalledTimes(2));
+    expect(loadRecordingNarration).toHaveBeenCalledTimes(2);
   });
 
   it("says while it reads the narration, and when it cannot", async () => {
