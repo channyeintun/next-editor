@@ -16,6 +16,7 @@ import {
   type AthanLabVoice,
   type AthanLabVoiceList,
 } from "@next-editor/infra";
+import HoverRing from "../components/hoverRing/HoverRing";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import { ATHANLAB_RECONNECT_CODES } from "./tts/athanlab/protocol";
 
@@ -362,6 +363,7 @@ export default function AthanLabPanel({
           className={BUTTON_CLASS}
         >
           Retry
+          <HoverRing />
         </button>
       </div>
     ) : (
@@ -391,6 +393,7 @@ export default function AthanLabPanel({
               className={BUTTON_CLASS}
             >
               Change
+              <HoverRing />
             </button>
           )}
         </div>
@@ -554,6 +557,7 @@ export default function AthanLabPanel({
               className={BUTTON_CLASS}
             >
               ↻
+              <HoverRing />
             </button>
             <button
               type="button"
@@ -563,6 +567,7 @@ export default function AthanLabPanel({
               className={BUTTON_CLASS}
             >
               {samplePlaying ? "Stop" : "Listen"}
+              <HoverRing />
             </button>
           </div>
           {voicesError ? (

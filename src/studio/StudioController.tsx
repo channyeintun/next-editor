@@ -22,6 +22,7 @@ import {
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
+import HoverRing from "../components/hoverRing/HoverRing";
 import { useRecordingSettings } from "../hooks/useRecordingSettings";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
@@ -762,6 +763,7 @@ export default function StudioController() {
             ) : (
               <ChevronUp aria-hidden="true" className="size-4" />
             )}
+            <HoverRing />
           </button>
         </div>
       </div>
@@ -792,6 +794,7 @@ export default function StudioController() {
             title="Import a LessonScript YAML (validated and critiqued here in the page)"
           >
             Import…
+            <HoverRing />
           </button>
           <input
             ref={importInputRef}

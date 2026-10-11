@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import HoverRing from "../components/hoverRing/HoverRing";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import type { StudioNarrationProvider } from "./narrationLanguage";
 import {
@@ -326,6 +327,7 @@ export default function NarratorVoicePanel({
             title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
           >
             {provider === "voxcpm2" ? "Reference…" : "Clone…"}
+            <HoverRing />
           </button>
           <button
             type="button"
@@ -339,6 +341,7 @@ export default function NarratorVoicePanel({
             title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
           >
             {voiceRecording ? "Stop" : "Record"}
+            <HoverRing />
           </button>
           {selectedVoice ? (
             <>
@@ -355,6 +358,7 @@ export default function NarratorVoicePanel({
                 title="Synthesize a short preview sentence with this voice"
               >
                 Preview
+                <HoverRing />
               </button>
               <button
                 type="button"
@@ -367,6 +371,7 @@ export default function NarratorVoicePanel({
                 title="Delete this reference voice from the browser"
               >
                 <span aria-hidden="true">✕</span>
+                <HoverRing />
               </button>
             </>
           ) : null}
