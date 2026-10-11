@@ -1,10 +1,7 @@
 // The WASM-only build: since onnxruntime-web 1.30 the package root loads the
 // WebGPU/WebNN build, whose loader pair differs from the plain one below.
 import * as ort from "onnxruntime-web/wasm";
-// The studio self-hosts the threaded-wasm loader pair (no CDN). `?url` keeps
-// them as served assets, outside vite-plugin-wasm's path.
-import ortWasmThreadedMjs from "onnxruntime-web/ort-wasm-simd-threaded.mjs?url";
-import ortWasmThreadedWasm from "onnxruntime-web/ort-wasm-simd-threaded.wasm?url";
+import { ortWasmThreadedMjs, ortWasmThreadedWasm } from "./ortWasmAssets";
 import {
   fetchBundleAsset,
   fetchBundleMetadata,
@@ -231,6 +228,20 @@ export interface PocketSynthesisResult {
   cappedChunkCount: number;
 }
 
+/**
+ * Release the sessions a failed load created. onnxruntime-web keeps each
+ * session's model in WASM memory until release(), and a failed load is retried
+ * with a fresh engine, so nothing else would. A release error is ignored:
+ * the load's own error is the one to report.
+ */
+async function releaseQuietly(sessions: Array<ort.InferenceSession | undefined>): Promise<void> {
+  await Promise.allSettled(
+    sessions
+      .filter((session): session is ort.InferenceSession => session !== undefined)
+      .map((session) => session.release()),
+  );
+}
+
 export class PocketTtsEngine {
   private metadata!: PocketBundleMetadata;
   private tokenizer!: PocketTokenizer;
@@ -266,7 +277,9 @@ export class PocketTtsEngine {
       executionProviders: ["wasm"],
       graphOptimizationLevel: "all",
     };
-    const [textCond, flowMain, flowFlow, decoder] = await Promise.all([
+    // allSettled, not all: after one model fails the others still finish
+    // creating, and each must be released.
+    const settled = await Promise.allSettled([
       fetchBundleAsset(base, "text_conditioner_int8.onnx").then((bytes) =>
         ort.InferenceSession.create(new Uint8Array(bytes), sessionOptions),
       ),
@@ -280,44 +293,62 @@ export class PocketTtsEngine {
         ort.InferenceSession.create(new Uint8Array(bytes), sessionOptions),
       ),
     ]);
+    const sessions = settled.map((result) =>
+      result.status === "fulfilled" ? result.value : undefined,
+    );
+    const failure = settled.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failure) {
+      await releaseQuietly(sessions);
+      throw failure.reason;
+    }
+    const [textCond, flowMain, flowFlow, decoder] = sessions as ort.InferenceSession[];
     engine.textConditioner = textCond;
     engine.flowLmMain = flowMain;
     engine.flowLmFlow = flowFlow;
     engine.mimiDecoder = decoder;
 
-    onPhase?.("tts-tokenizer");
-    const tokenizerBytes = new Uint8Array(
-      await fetchBundleAsset(base, engine.metadata.tokenizer_file),
-    );
-    const spModule = await import("./vendor/sentencepiece.js");
-    const processor = new spModule.SentencePieceProcessor();
-    await processor.loadFromB64StringModel(bytesToBase64(tokenizerBytes));
-    engine.tokenizer = processor;
-
-    onPhase?.("tts-voice");
-    if (config.customVoiceSamples) {
-      engine.voiceState = await engine.cloneVoiceState(
-        base,
-        config.customVoiceSamples,
-        sessionOptions,
-        onPhase,
+    // Anything after this point that fails leaves four live sessions only the
+    // discarded engine could reach.
+    try {
+      onPhase?.("tts-tokenizer");
+      const tokenizerBytes = new Uint8Array(
+        await fetchBundleAsset(base, engine.metadata.tokenizer_file),
       );
-      return engine;
-    }
+      const spModule = await import("./vendor/sentencepiece.js");
+      const processor = new spModule.SentencePieceProcessor();
+      await processor.loadFromB64StringModel(bytesToBase64(tokenizerBytes));
+      engine.tokenizer = processor;
 
-    const voices = parseVoiceStatesBin(await fetchBundleAsset(base, "voices.bin"));
-    const record = voices[config.voice];
-    if (!record) {
-      throw new Error(
-        `Voice "${config.voice}" not in bundle — available: ${Object.keys(voices).join(", ")}`,
-      );
+      onPhase?.("tts-voice");
+      if (config.customVoiceSamples) {
+        engine.voiceState = await engine.cloneVoiceState(
+          base,
+          config.customVoiceSamples,
+          sessionOptions,
+          onPhase,
+        );
+        return engine;
+      }
+
+      const voices = parseVoiceStatesBin(await fetchBundleAsset(base, "voices.bin"));
+      const record = voices[config.voice];
+      if (!record) {
+        throw new Error(
+          `Voice "${config.voice}" not in bundle — available: ${Object.keys(voices).join(", ")}`,
+        );
+      }
+      // bos_before_voice is folded into voice records for built-in voices; parse
+      // it only to fail fast if the bundle layout changes underneath us.
+      if (engine.metadata.insert_bos_before_voice && engine.metadata.bos_before_voice_file) {
+        parseNpyFloat32(await fetchBundleAsset(base, engine.metadata.bos_before_voice_file));
+      }
+      engine.voiceState = engine.stateFromVoiceRecord(record);
+    } catch (error) {
+      await releaseQuietly(sessions);
+      throw error;
     }
-    // bos_before_voice is folded into voice records for built-in voices; parse
-    // it only to fail fast if the bundle layout changes underneath us.
-    if (engine.metadata.insert_bos_before_voice && engine.metadata.bos_before_voice_file) {
-      parseNpyFloat32(await fetchBundleAsset(base, engine.metadata.bos_before_voice_file));
-    }
-    engine.voiceState = engine.stateFromVoiceRecord(record);
 
     return engine;
   }
