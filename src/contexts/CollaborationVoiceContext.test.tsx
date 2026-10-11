@@ -116,6 +116,7 @@ describe("CollaborationVoiceProvider", () => {
 
   afterEach(() => {
     vi.doMock("../voice/browserVoiceEngine", () => fakeBrowserVoiceEngineModule());
+    vi.useRealTimers();
   });
 
   it("creates no engine without an active room", () => {
@@ -166,6 +167,98 @@ describe("CollaborationVoiceProvider", () => {
       await Promise.resolve();
     });
     expect(engines[0].availability).toEqual(["feature-disabled"]);
+  });
+
+  it("probes availability once more after a network error", async () => {
+    vi.useFakeTimers();
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const checkAvailability = vi
+      .fn<(roomId: string) => Promise<boolean>>()
+      .mockRejectedValueOnce(new Error("Network Error"))
+      .mockResolvedValueOnce(true);
+    render(
+      <CollaborationVoiceProvider createEngine={createEngine} checkAvailability={checkAvailability}>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // A blip at room entry does not hide voice for the whole visit.
+    expect(engines[0].availability).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(checkAvailability).toHaveBeenCalledTimes(2);
+    expect(engines[0].availability).toEqual([null]);
+  });
+
+  it("marks the feature disabled when the retry after a server fault fails too", async () => {
+    vi.useFakeTimers();
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const serverFault = Object.assign(new Error("Bad Gateway"), { response: { status: 502 } });
+    const checkAvailability = vi
+      .fn<(roomId: string) => Promise<boolean>>()
+      .mockRejectedValue(serverFault);
+    render(
+      <CollaborationVoiceProvider createEngine={createEngine} checkAvailability={checkAvailability}>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(checkAvailability).toHaveBeenCalledTimes(2);
+    expect(engines[0].availability).toEqual(["feature-disabled"]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(checkAvailability).toHaveBeenCalledTimes(2);
+  });
+
+  it("takes a 4xx availability answer as final", async () => {
+    vi.useFakeTimers();
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const forbidden = Object.assign(new Error("Forbidden"), { response: { status: 403 } });
+    const checkAvailability = vi
+      .fn<(roomId: string) => Promise<boolean>>()
+      .mockRejectedValue(forbidden);
+    render(
+      <CollaborationVoiceProvider createEngine={createEngine} checkAvailability={checkAvailability}>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(engines[0].availability).toEqual(["feature-disabled"]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(checkAvailability).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a pending availability retry when the room ends", async () => {
+    vi.useFakeTimers();
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const checkAvailability = vi
+      .fn<(roomId: string) => Promise<boolean>>()
+      .mockRejectedValueOnce(new Error("Network Error"))
+      .mockResolvedValue(true);
+    const view = render(
+      <CollaborationVoiceProvider createEngine={createEngine} checkAvailability={checkAvailability}>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    view.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(checkAvailability).toHaveBeenCalledTimes(1);
+    expect(engines[0].availability).toEqual([]);
   });
 
   it("disposes the engine when the room changes and builds a fresh one", async () => {

@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { getCollaborationVoiceAvailability } from "@next-editor/infra";
+import { requestErrorStatus } from "../collaboration/errorMessage";
 import type { VoiceEngine } from "../voice/engine";
 import { isVoiceJoined, setVoiceJoinedForRecording } from "../voice/recorderBridge";
 import type { VoiceCommands, VoiceUiState } from "../voice/types";
@@ -26,6 +27,10 @@ const UNAVAILABLE_STATE: VoiceUiState = {
   roster: [],
   isLocalSpeaking: false,
 };
+
+// A failed availability probe that may be transient (no response, or a
+// server fault) is asked once more after this delay before voice is hidden.
+const AVAILABILITY_RETRY_DELAY_MS = 2_000;
 
 // Module scope so getState hands useSyncExternalStore one stable snapshot.
 const LOAD_FAILED_STATE: VoiceUiState = {
@@ -87,6 +92,7 @@ export function CollaborationVoiceProvider({
     if (!activeRoomId || !collaborationSessionId) return;
     let cancelled = false;
     let teardown: (() => void) | null = null;
+    let availabilityRetry: ReturnType<typeof setTimeout> | null = null;
     const startEngine = (nextEngine: VoiceEngine) => {
       setEngine(nextEngine);
       // Recorder privacy bridge: while voice is joined, tab/display audio is
@@ -100,14 +106,25 @@ export function CollaborationVoiceProvider({
         nextEngine.setAvailability("unsupported-browser");
       } else {
         const probe = checkAvailability ?? getCollaborationVoiceAvailability;
-        probe(activeRoomId).then(
-          (enabled) => {
-            if (!cancelled) nextEngine.setAvailability(enabled ? null : "feature-disabled");
-          },
-          () => {
-            if (!cancelled) nextEngine.setAvailability("feature-disabled");
-          },
-        );
+        // A network blip or 5xx at room entry gets one retry, so it does not
+        // hide voice for the whole visit; a 4xx answer is final.
+        const runProbe = (attempt: number) => {
+          probe(activeRoomId).then(
+            (enabled) => {
+              if (!cancelled) nextEngine.setAvailability(enabled ? null : "feature-disabled");
+            },
+            (error: unknown) => {
+              if (cancelled) return;
+              const status = requestErrorStatus(error);
+              if (attempt === 0 && (status === null || status >= 500)) {
+                availabilityRetry = setTimeout(() => runProbe(1), AVAILABILITY_RETRY_DELAY_MS);
+                return;
+              }
+              nextEngine.setAvailability("feature-disabled");
+            },
+          );
+        };
+        runProbe(0);
       }
       teardown = () => {
         unsubscribeRecorderBridge();
@@ -134,6 +151,7 @@ export function CollaborationVoiceProvider({
       // A room change or collaboration leave always tears voice down fully
       // before any new room's engine exists.
       cancelled = true;
+      if (availabilityRetry !== null) clearTimeout(availabilityRetry);
       teardown?.();
     };
   }, [activeRoomId, collaborationSessionId, createEngine, checkAvailability]);
