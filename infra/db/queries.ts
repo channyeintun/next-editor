@@ -1,3 +1,4 @@
+import { firstFreeCandidate } from "./firstFreeCandidate";
 import type { LessonRow, SessionRow, UserRow } from "./types";
 import { isUniqueViolation } from "./uniqueViolation";
 
@@ -47,11 +48,11 @@ function slugifyUsername(base: string): string {
   return slug || "user";
 }
 
-// Bounds the probe loop, as MAX_SLUG_SUFFIX_PROBES does in slug.ts: every name
-// with no ASCII alphanumerics (a display name written entirely in Burmese,
-// Chinese, Cyrillic, Arabic…) slugifies to the same "user" base, so without a
-// ceiling each new member of that cohort walks the whole series one sequential
-// D1 round-trip at a time inside a single OAuth-callback invocation.
+// Bounds the probe, as MAX_SLUG_SUFFIX_PROBES does in slug.ts: every name with
+// no ASCII alphanumerics (a display name written entirely in Burmese, Chinese,
+// Cyrillic, Arabic…) slugifies to the same "user" base, so without a ceiling
+// each new member of that cohort would grow the lookup with the series, past
+// D1's 100 bound parameters, inside a single OAuth-callback invocation.
 const MAX_USERNAME_SUFFIX_PROBES = 50;
 
 // Generates a username unique against the DB by appending -1, -2, ... on
@@ -60,19 +61,18 @@ const MAX_USERNAME_SUFFIX_PROBES = 50;
 // in sync, unlike this initial assignment).
 async function generateUniqueUsername(db: D1Database, base: string): Promise<string> {
   const slug = slugifyUsername(base);
+  const candidates: string[] = [];
   for (let suffix = 0; suffix <= MAX_USERNAME_SUFFIX_PROBES; suffix++) {
     const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
     // A one- or two-letter name ("Jo") is too short on its own; it starts at "-1".
-    if (!USERNAME_PATTERN.test(candidate)) continue;
-    const existing = await db
-      .prepare("SELECT 1 FROM users WHERE username = ?")
-      .bind(candidate)
-      .first();
-    if (!existing) return candidate;
+    if (USERNAME_PATTERN.test(candidate)) candidates.push(candidate);
   }
   // Past the ceiling, stop probing and take a random suffix. The caller's
   // INSERT retry still covers the (vanishingly unlikely) collision.
-  return `${slug}-${crypto.randomUUID().slice(0, 8)}`;
+  return (
+    (await firstFreeCandidate(db, "users.username", candidates)) ??
+    `${slug}-${crypto.randomUUID().slice(0, 8)}`
+  );
 }
 
 // Bounds the retry loop below: a persistent, unrelated failure should surface

@@ -145,19 +145,22 @@ describe("listPublishedLessons", () => {
 
 /**
  * The first-sign-in path at the production schema: `taken` are the usernames
- * already in the users table, and every candidate the loop probes is recorded.
+ * already in the users table, and `probes` holds the candidates of each
+ * username lookup that ran, one entry per query. `onStatement` sees every
+ * statement just before it runs.
  */
-function makeUserDb(taken: string[]) {
-  const probed: string[] = [];
+function makeUserDb(taken: string[], onStatement?: (sql: string, sqlite: DatabaseSync) => void) {
+  const probes: string[][] = [];
   const { db, sqlite } = openSqliteD1({
     onStatement: (sql, args) => {
-      if (sql.includes("SELECT 1 FROM users WHERE username")) probed.push(args[0] as string);
+      if (/FROM users WHERE username (=|IN)/.test(sql)) probes.push(args as string[]);
+      onStatement?.(sql, sqlite);
     },
   });
   for (const [index, username] of taken.entries()) {
     insertUser(sqlite, `taken-${index}`, username);
   }
-  return { db, probed };
+  return { db, probes };
 }
 
 describe("upsertUserByGoogleSub", () => {
@@ -201,7 +204,7 @@ describe("upsertUserByGoogleSub", () => {
   // inside a single OAuth-callback invocation.
   it("stops probing usernames and takes a random suffix on a long collision run", async () => {
     const taken = ["user", ...Array.from({ length: 60 }, (_, index) => `user-${index + 1}`)];
-    const { db, probed } = makeUserDb(taken);
+    const { db, probes } = makeUserDb(taken);
 
     const row = await upsertUserByGoogleSub(db, {
       googleSub: "sub-1",
@@ -212,7 +215,58 @@ describe("upsertUserByGoogleSub", () => {
 
     expect(row.username).toMatch(/^user-[0-9a-f]{8}$/);
     expect(row.username).toMatch(USERNAME_PATTERN);
-    expect(probed.length, "unbounded username probing").toBeLessThanOrEqual(51);
+    expect(probes.flat().length, "unbounded username probing").toBeLessThanOrEqual(51);
+  });
+
+  it("gives that cohort the bare base while it is free", async () => {
+    const { db } = makeUserDb(["user-1", "user-2", "user-3"]);
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-new",
+      email: "someone@example.com",
+      name: "မောင်မောင်",
+      avatarUrl: null,
+    });
+
+    expect(row.username).toBe("user");
+  });
+
+  // Each candidate used to be its own awaited SELECT, so the Nth member of that
+  // cohort waited on N sequential D1 round trips before their session began.
+  it("finds the first free suffix with one lookup", async () => {
+    const { db, probes } = makeUserDb(["user", "user-1"]);
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-new",
+      email: "someone@example.com",
+      name: "မောင်မောင်",
+      avatarUrl: null,
+    });
+
+    expect(row.username).toBe("user-2");
+    expect(probes).toHaveLength(1);
+  });
+
+  // Another brand-new sign-in takes the same username between this one's
+  // lookup and its INSERT: the INSERT hits UNIQUE(username), and the retry
+  // looks again and takes the next free suffix.
+  it("looks again and takes the next suffix when a concurrent sign-in wins the name", async () => {
+    let raced = false;
+    const { db, probes } = makeUserDb(["user", "user-1"], (sql, sqlite) => {
+      if (raced || !sql.includes("INSERT INTO users")) return;
+      raced = true;
+      insertUser(sqlite, "rival", "user-2");
+    });
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-new",
+      email: "someone@example.com",
+      name: "မောင်မောင်",
+      avatarUrl: null,
+    });
+
+    expect(row.username).toBe("user-3");
+    expect(probes).toHaveLength(2);
   });
 
   // A returning user is the common sign-in, so the refresh is the only

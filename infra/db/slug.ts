@@ -1,8 +1,10 @@
 // Shared slug helpers for the lessons and playlists create routes.
-// Mirrors generateUniqueUsername in queries.ts: the bare slug is preferred and
-// a numeric suffix is appended only when that slug is already taken.
+// The bare slug is preferred and a numeric suffix is appended only when that
+// slug is already taken; firstFreeCandidate.ts owns that lookup, which
+// generateUniqueUsername in queries.ts uses too.
 
 import seedManifest from "../../tube/data/lessons.json";
+import { firstFreeCandidate } from "./firstFreeCandidate";
 import { isUniqueViolation } from "./uniqueViolation";
 
 type SluggedTable = "lessons" | "playlists";
@@ -65,10 +67,10 @@ function isReservedSlug(table: SluggedTable, candidate: string): boolean {
   );
 }
 
-// Bounds the probe loop: the caller's title is attacker-controlled, so without a
-// ceiling a run of same-titled lessons makes every later create walk the whole
-// series one D1 round-trip at a time. Past the ceiling, fall back to a random
-// suffix instead of probing forever.
+// Bounds the probe: the caller's title is attacker-controlled, so without a
+// ceiling a run of same-titled lessons would grow every later create's lookup
+// with the series, past D1's 100 bound parameters. Past the ceiling, fall back
+// to a random suffix instead.
 const MAX_SLUG_SUFFIX_PROBES = 50;
 
 export async function generateUniqueSlug(
@@ -76,16 +78,15 @@ export async function generateUniqueSlug(
   table: SluggedTable,
   base: string,
 ): Promise<string> {
+  const candidates: string[] = [];
   for (let suffix = 0; suffix <= MAX_SLUG_SUFFIX_PROBES; suffix++) {
     const candidate = suffix === 0 ? base : `${base}-${suffix}`;
-    if (isReservedSlug(table, candidate)) continue;
-    const existing = await db
-      .prepare(`SELECT 1 FROM ${table} WHERE slug = ?`)
-      .bind(candidate)
-      .first();
-    if (!existing) return candidate;
+    if (!isReservedSlug(table, candidate)) candidates.push(candidate);
   }
-  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
+  return (
+    (await firstFreeCandidate(db, `${table}.slug`, candidates)) ??
+    `${base}-${crypto.randomUUID().slice(0, 8)}`
+  );
 }
 
 export function isSlugUniqueViolation(error: unknown, table: SluggedTable): boolean {
