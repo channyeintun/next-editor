@@ -507,6 +507,10 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
           return;
         }
 
+        // Taken before the flush: an edit made before this point is flushed
+        // below, and one made while the flush waits on a busy queue moves the
+        // revision, though its own file-sync window may not have written it yet.
+        const workspaceRevision = getWorkspaceRevision();
         await flushWorkspaceSync({ instance });
         await runSerializedRuntimeTask({
           instance,
@@ -518,7 +522,13 @@ export function useWebContainerWorkspaceSync(options: WorkspaceSyncOptions) {
               return;
             }
 
-            const workspaceRevision = getWorkspaceRevision();
+            // An edit landed after the flush, so the container lacks it and a
+            // reconcile now would revert it. Let its forward sync finish first.
+            if (workspaceRevision !== getWorkspaceRevision()) {
+              requestReverseSync(instance, generation);
+              return;
+            }
+
             const currentProject = getProject();
             const nextProject = await readWorkspaceProject(instance, currentProject);
 

@@ -475,6 +475,101 @@ describe("useWebContainerWorkspaceSync", () => {
     expect(reconcileExternalProject).toHaveBeenCalledWith(containerProject);
   });
 
+  it("keeps an edit typed while the reverse sync's flush waits on the queue", async () => {
+    vi.useFakeTimers();
+    // What the container's files hold: forward writes land here, and the
+    // reverse sync reads it back. A process has written gen.ts.
+    const container: Record<string, string> = {
+      "index.html": "<main>Hello</main>",
+      "gen.ts": "generated",
+    };
+    const heldWrite: { release: (() => void) | null } = { release: null };
+    let writeCount = 0;
+    const instance = {
+      mount: vi.fn<() => Promise<void>>(async () => {}),
+      fs: {
+        writeFile: vi.fn<(path: string, content: string) => Promise<void>>(
+          async (path, content) => {
+            writeCount += 1;
+            // The first forward write holds the sync queue open.
+            if (writeCount === 1) {
+              await new Promise<void>((resolve) => {
+                heldWrite.release = resolve;
+              });
+            }
+            container[path] = content;
+          },
+        ),
+      },
+    } as unknown as WebContainer;
+    vi.mocked(readWorkspaceProject).mockImplementation(async () => ({
+      ...project,
+      files: {
+        "index.html": { ...project.files["index.html"], content: container["index.html"] },
+        "gen.ts": {
+          path: "gen.ts",
+          name: "gen.ts",
+          language: "typescript",
+          content: container["gen.ts"],
+        },
+      },
+    }));
+
+    // The editor's store: each edit moves its revision and queues a file sync,
+    // and a reconcile replaces its project, whose mutation queues a project sync.
+    const store = { project: project as WorkspaceProject, revision: 0 };
+    const captured: { hook: ReturnType<typeof useWebContainerWorkspaceSync> | null } = {
+      hook: null,
+    };
+    const reconcileExternalProject = vi.fn<WorkspaceSyncOptions["reconcileExternalProject"]>(
+      (nextProject) => {
+        store.project = nextProject;
+        store.revision += 1;
+        void captured.hook?.queueProjectSync({ instance, project: nextProject });
+      },
+    );
+    const hook = renderWorkspaceSyncHook({
+      getProject: () => store.project,
+      getWorkspaceRevision: () => store.revision,
+      reconcileExternalProject,
+    });
+    captured.hook = hook;
+    await act(async () => {
+      await hook.ensureProjectMounted({ instance, project });
+    });
+    const edit = (content: string) => {
+      const file = { ...project.files["index.html"], content };
+      store.project = { ...store.project, files: { ...store.project.files, [file.path]: file } };
+      store.revision += 1;
+      void hook.queueFileSync({ instance, file });
+    };
+
+    // A forward write is in flight when the reverse sync comes due, so its
+    // flush waits on the queue.
+    edit("<main>first</main>");
+    await advanceTimers(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+    expect(heldWrite.release).not.toBeNull();
+    hook.requestReverseSync(instance, 0);
+    await advanceTimers(WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+
+    // The learner types while it waits; the queue frees before that edit's
+    // own file-sync window ends.
+    edit("<main>second</main>");
+    await act(async () => {
+      heldWrite.release?.();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await advanceTimers(WEBCONTAINER_FILE_SYNC_WINDOW_MS + WEBCONTAINER_REVERSE_SYNC_DEBOUNCE_MS);
+
+    for (const [reconciled] of reconcileExternalProject.mock.calls) {
+      expect(reconciled.files["index.html"].content).toBe("<main>second</main>");
+    }
+    expect(reconcileExternalProject).toHaveBeenCalledTimes(1);
+    expect(store.project.files["gen.ts"].content).toBe("generated");
+    expect(store.project.files["index.html"].content).toBe("<main>second</main>");
+    expect(container["index.html"]).toBe("<main>second</main>");
+  });
+
   it("cancels a pending reverse sync and ignores requests while it is off", async () => {
     vi.useFakeTimers();
     const hook = renderWorkspaceSyncHook();
