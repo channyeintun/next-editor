@@ -119,7 +119,10 @@ describe("useWorkspaceFileImport", () => {
     expect(handleWorkspaceEvent).toHaveBeenCalledTimes(1);
     // A lesson playing on would replay its frame into the file the import opened; the
     // workspace event can be swallowed by the replay's suppression gate, the pause cannot.
+    // The pause also comes before the first file lands, so the project it hands the viewer
+    // is the one from before the import, which is then kept as the viewer's change.
     expect(pause).toHaveBeenCalledTimes(1);
+    expect(pause.mock.invocationCallOrder[0]).toBeLessThan(createFile.mock.invocationCallOrder[0]);
     expect(pause.mock.invocationCallOrder[0]).toBeLessThan(
       handleWorkspaceEvent.mock.invocationCallOrder[0],
     );

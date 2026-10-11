@@ -13,6 +13,7 @@ import {
 } from "../hooks/useWorkspace";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useOpenWorkspaceFile } from "../hooks/useOpenWorkspaceFile";
+import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   STUDIO_TARGET_AIM_ATTRIBUTE,
   STUDIO_TARGET_ATTRIBUTE,
@@ -82,6 +83,7 @@ function FileSidebarPanel() {
     setPreviewFilePath,
   } = useWorkspaceActions();
   const openFile = useOpenWorkspaceFile();
+  const { pause } = useNextEditorActions();
   const {
     activeFilePath,
     collapsedFolders: collapsedFolderPaths,
@@ -278,7 +280,11 @@ function FileSidebarPanel() {
       return null;
     }
 
+    // Each change to the project pauses a playing lesson first, as useOpenWorkspaceFile
+    // does: the pause remembers the project it hands the viewer, so the change differs
+    // from it and is kept as the viewer's own.
     if (editState.mode === "create") {
+      pause();
       if (editState.kind === "file") {
         createFile(nextPath, getDefaultFileContent(nextPath));
       } else {
@@ -290,6 +296,7 @@ function FileSidebarPanel() {
     }
 
     if (nextPath !== editState.path) {
+      pause();
       if (editState.kind === "file") {
         renameFile(editState.path, nextPath);
       } else {
@@ -312,6 +319,8 @@ function FileSidebarPanel() {
       return;
     }
 
+    // Before the change, as in commitInlineEdit, so the lesson keeps it as the viewer's.
+    pause();
     if (kind === "folder") {
       deleteFolder(path);
       return;

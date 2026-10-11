@@ -39,6 +39,18 @@ describe("editorMachine learner workspace", () => {
       edit: (content: string) => {
         workspace = createWorkspaceSnapshot(content, workspace.sidebarScrollTop);
       },
+      addFile: (path: string) => {
+        workspace = {
+          ...workspace,
+          project: {
+            ...workspace.project,
+            files: {
+              ...workspace.project.files,
+              [path]: { path, name: path, language: "plaintext", content: "" },
+            },
+          },
+        };
+      },
       look: () => {
         // Scrolling the file tree is not an edit.
         workspace = { ...workspace, sidebarScrollTop: (workspace.sidebarScrollTop ?? 0) + 40 };
@@ -67,6 +79,24 @@ describe("editorMachine learner workspace", () => {
     // The recording owns the workspace again.
     actor.send({ type: "SEEK", time: 0 });
     expect(content()).toBe("recorded-0");
+    actor.stop();
+  });
+
+  // The baseline is the live workspace when the pause lands, so the file sidebar pauses
+  // before it changes the project (FileSidebar, useWorkspaceFileImport): the new file then
+  // differs from the baseline and is kept when the lesson takes the workspace back.
+  it("keeps a file the viewer adds once the lesson paused", async () => {
+    const { actor, saves, addFile } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    addFile("notes.md");
+    actor.send({ type: "WORKSPACE_EVENT" });
+
+    actor.send({ type: "PLAY" });
+
+    expect(saves.map((save) => Object.keys(save.snapshot.project.files))).toEqual([
+      ["index.html", "notes.md"],
+    ]);
     actor.stop();
   });
 

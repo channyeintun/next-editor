@@ -455,6 +455,82 @@ describe("FileSidebar opening a file", () => {
   });
 });
 
+// A lesson hands the workspace to the viewer when it pauses, and remembers the project
+// it handed over to tell the viewer's own changes from the lesson's. A change that
+// reached the store first would be taken for the lesson's and never kept.
+describe("FileSidebar changing the project while a lesson plays", () => {
+  const callOrder = (named: Record<string, { mock: { invocationCallOrder: number[] } }>) =>
+    Object.entries(named)
+      .flatMap(([call, fn]) => fn.mock.invocationCallOrder.map((order) => ({ order, call })))
+      .sort((left, right) => left.order - right.order)
+      .map(({ call }) => call);
+
+  const commitName = (name: string) => {
+    const field = screen.getByRole("textbox");
+    fireEvent.change(field, { target: { value: name } });
+    fireEvent.keyDown(field, { key: "Enter" });
+  };
+
+  it("pauses before it creates a file or a folder", () => {
+    render(<FileSidebar />);
+
+    fireEvent.click(row("Create file"));
+    commitName("notes.md");
+    fireEvent.click(row("Create folder"));
+    commitName("docs");
+
+    expect(
+      callOrder({
+        pause: editorActions.pause,
+        createFile: actions.createFile,
+        createFolder: actions.createFolder,
+      }),
+    ).toEqual(["pause", "createFile", "pause", "createFolder"]);
+  });
+
+  it("pauses before a rename, and not for a name left as it was", () => {
+    render(<FileSidebar />);
+
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+    commitName("app.ts");
+    expect(editorActions.pause).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+    commitName("main.ts");
+    fireEvent.keyDown(row("lib"), { key: "F2" });
+    commitName("core");
+
+    expect(
+      callOrder({
+        pause: editorActions.pause,
+        renameFile: actions.renameFile,
+        renameFolder: actions.renameFolder,
+      }),
+    ).toEqual(["pause", "renameFile", "pause", "renameFolder"]);
+  });
+
+  it("pauses before a confirmed delete, and not for a cancelled one", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<FileSidebar />);
+
+    fireEvent.keyDown(row("app.ts"), { key: "Delete" });
+    expect(editorActions.pause).not.toHaveBeenCalled();
+    expect(actions.deleteFile).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.keyDown(row("app.ts"), { key: "Delete" });
+    fireEvent.keyDown(row("lib"), { key: "Delete" });
+
+    expect(
+      callOrder({
+        pause: editorActions.pause,
+        deleteFile: actions.deleteFile,
+        deleteFolder: actions.deleteFolder,
+      }),
+    ).toEqual(["pause", "deleteFile", "pause", "deleteFolder"]);
+  });
+});
+
 describe("FileSidebar scroll position", () => {
   // jsdom has no layout: give the scroll container a 153px scroll range and a
   // scrollTop the browser clamps into it, and run animation frames by hand.

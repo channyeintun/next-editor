@@ -56,15 +56,20 @@ export function useWorkspaceFileImport() {
         continue;
       }
 
+      if (!firstCreatedPath) {
+        // Pause before the first file lands, as useOpenWorkspaceFile does. The pause
+        // hands the workspace to the viewer and remembers the project it handed over,
+        // so the import differs from it and is kept as the viewer's change. The pause
+        // is also never swallowed by the replay's suppression gate, as the workspace
+        // event below may be.
+        pause();
+      }
       createFile(targetPath, uploaded.content, uploaded.encoding);
       firstCreatedPath = firstCreatedPath ?? targetPath;
     }
 
     if (firstCreatedPath) {
       void saveProject();
-      // Pause first, as useOpenWorkspaceFile does: the workspace event may be swallowed
-      // by the replay's suppression gate, the pause never is.
-      pause();
       handleWorkspaceEvent();
     }
 
