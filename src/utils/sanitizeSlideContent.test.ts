@@ -41,3 +41,42 @@ describe("sanitizeSlideContent inline images", () => {
     expect(sanitized).not.toContain("href=");
   });
 });
+
+describe("sanitizeSlideContent XLink attributes", () => {
+  // SVG honors any prefix bound to the XLink namespace, so `x:href` is the
+  // same link as `xlink:href` and has to face the same URL check.
+  const CUSTOM_XLINK = 'xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xlink"';
+
+  it("removes an unsafe href written under a custom XLink prefix", () => {
+    const sanitized = sanitizeSlideContent(
+      `<svg ${CUSTOM_XLINK}><a x:href="javascript:alert(1)"><rect/></a><a x:href="data:text/html,x"><rect/></a></svg>`,
+      "image/svg+xml",
+    );
+
+    expect(sanitized).not.toContain("javascript:");
+    expect(sanitized).not.toContain("data:");
+    expect(sanitized).not.toContain("x:href=");
+  });
+
+  it("keeps a safe href under a custom XLink prefix and an inlined image href", () => {
+    const sanitized = sanitizeSlideContent(
+      `<svg ${CUSTOM_XLINK}><a x:href="https://example.com"><rect/></a><image x:href="/media/a"/></svg>`,
+      "image/svg+xml",
+      new Map([["/media/a", PNG_DATA_URL]]),
+    );
+
+    expect(sanitized).toContain('<a x:href="https://example.com"');
+    expect(sanitized).toContain(`<image x:href="${PNG_DATA_URL}"`);
+  });
+
+  it("still checks plain href and xlink:href", () => {
+    const sanitized = sanitizeSlideContent(
+      `<svg ${SVG_NS}><a href="javascript:alert(1)"><rect/></a><a xlink:href="data:text/html,x"><rect/></a><a href="https://example.com"><rect/></a></svg>`,
+      "image/svg+xml",
+    );
+
+    expect(sanitized).not.toContain("javascript:");
+    expect(sanitized).not.toContain("data:");
+    expect(sanitized).toContain('<a href="https://example.com"');
+  });
+});

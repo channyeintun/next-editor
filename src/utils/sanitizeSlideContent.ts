@@ -55,7 +55,11 @@ function sanitizeElement(element: Element, inlineImages?: ReadonlyMap<string, st
       element.removeAttribute(attribute.name);
       continue;
     }
-    if (URL_ATTRIBUTES.has(name)) {
+    // URL attributes match on the local name: SVG honors any prefix bound to
+    // the XLink namespace, so `x:href` links exactly like `xlink:href`. The
+    // literal "xlink:href" entry stays for the HTML parser, which keeps that
+    // name whole, local name included, on an HTML element.
+    if (URL_ATTRIBUTES.has(attribute.localName.toLowerCase())) {
       const elementName = element.localName.toLowerCase();
       if (!isSafeUrl(attribute.value, elementName)) {
         element.removeAttribute(attribute.name);
