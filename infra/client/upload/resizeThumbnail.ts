@@ -31,7 +31,18 @@ export async function resizeThumbnail(file: File): Promise<File> {
 
     const webp = await encodeCanvas(canvas, "image/webp", THUMBNAIL_WEBP_QUALITY);
     const isWebp = webp?.type === "image/webp";
-    const blob = isWebp ? webp : await encodeCanvas(canvas, "image/jpeg", THUMBNAIL_JPEG_QUALITY);
+    let blob: Blob | null;
+    if (isWebp) {
+      blob = webp;
+    } else {
+      // JPEG has no alpha, so transparent pixels would encode as black: paint
+      // white behind the drawn image first.
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = "source-over";
+      blob = await encodeCanvas(canvas, "image/jpeg", THUMBNAIL_JPEG_QUALITY);
+    }
     if (!blob) return file;
 
     const name = `${file.name.replace(/\.[^./]+$/, "")}.${isWebp ? "webp" : "jpg"}`;
