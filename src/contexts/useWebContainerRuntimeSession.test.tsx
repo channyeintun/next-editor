@@ -1,6 +1,7 @@
 import { act, render } from "@testing-library/react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { EnvironmentVariables } from "../runtime/webcontainer/types";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 
@@ -39,14 +40,19 @@ function createFakeInstance() {
   return { instance, listeners };
 }
 
-function renderRuntimeSessionHook(options: { onServerReady?: () => void } = {}) {
+function renderRuntimeSessionHook(
+  options: {
+    getEnvironmentVariables?: () => EnvironmentVariables;
+    onServerReady?: () => void;
+  } = {},
+) {
   const captured: {
     hook: ReturnType<typeof useWebContainerRuntimeSession> | null;
   } = { hook: null };
 
   function Harness() {
     captured.hook = useWebContainerRuntimeSession({
-      environmentVariables: {},
+      getEnvironmentVariables: options.getEnvironmentVariables ?? (() => ({})),
       onServerReady: options.onServerReady,
     });
     return null;
@@ -100,7 +106,7 @@ function renderTrackedRuntimeSession() {
   } = { hook: null, renders: 0 };
 
   function Harness() {
-    tracked.hook = useWebContainerRuntimeSession({ environmentVariables: {} });
+    tracked.hook = useWebContainerRuntimeSession({ getEnvironmentVariables: () => ({}) });
     tracked.renders += 1;
     return null;
   }
@@ -256,6 +262,27 @@ describe("useWebContainerRuntimeSession", () => {
       port: 3000,
       pathname: "/about",
     });
+  });
+
+  // The variables dialog saves and reruns in one handler, before the caller
+  // renders the new variables, so each spawn asks for them as it happens.
+  it("spawns with the variables as they are at the spawn, not at the last render", async () => {
+    const { instance } = createFakeInstance();
+    let variables: EnvironmentVariables = {};
+    const hook = renderRuntimeSessionHook({ getEnvironmentVariables: () => variables });
+    variables = { API_KEY: "new" };
+
+    await act(async () => {
+      void hook.runForegroundCommand(instance, "npm install");
+      await hook.startRunnerProcess(instance, "npm run dev");
+      await hook.createTerminalSession(instance);
+    });
+
+    expect(vi.mocked(instance.spawn).mock.calls).toEqual([
+      ["sh", ["-lc", "npm install"], { env: { API_KEY: "new" } }],
+      ["sh", ["-lc", "npm run dev"], { env: { API_KEY: "new" } }],
+      ["jsh", [], { env: { API_KEY: "new" }, terminal: { cols: 96, rows: 18 } }],
+    ]);
   });
 
   it("invokes onServerReady when the dev server reports ready with an active runner", async () => {

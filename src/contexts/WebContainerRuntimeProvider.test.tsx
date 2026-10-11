@@ -697,6 +697,40 @@ describe("WebContainerRuntimeProvider runner control", () => {
     expect(runners[0]?.kill).toHaveBeenCalled();
   });
 
+  // The variables dialog saves and reruns in one click handler, through the
+  // actions of the render before the save. The rerun used to spawn with that
+  // render's variables, so a newly added key reached only the next Run.
+  it("reruns on variables saved in the same handler", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { runtime } = renderProviders(false);
+    const runnerSpawns = () =>
+      (vi.mocked(instance.spawn).mock.calls as unknown as [string, string[], unknown][]).filter(
+        ([, args]) => args.join(" ").includes("pnpm dev"),
+      );
+
+    try {
+      await act(async () => {
+        await runtime.startRuntime();
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(runnerSpawns()).toHaveLength(1);
+
+      await act(async () => {
+        runtime.updateEnvironmentVariables({ API_KEY: "new" });
+        await runtime.rerunRunner();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(runnerSpawns()).toHaveLength(2);
+      expect(runnerSpawns()[1]?.[2]).toEqual({ env: { API_KEY: "new" } });
+    } finally {
+      window.localStorage.removeItem("next-editor-runtime-environment");
+    }
+  });
+
   // Output has a context of its own: the preview controller and the other
   // metadata consumers must not re-render for each chunk a dev server prints.
   it("streams runner output without re-rendering metadata consumers", async () => {

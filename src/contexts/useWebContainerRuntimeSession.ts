@@ -23,7 +23,12 @@ import {
 } from "../runtime/webcontainer/sharedContainer";
 
 interface UseWebContainerRuntimeSessionOptions {
-  environmentVariables: EnvironmentVariables;
+  /**
+   * The user's variables as they are now, read when a process spawns. A value
+   * from the last render would miss variables saved in the same handler that
+   * reruns the runner, the way the variables dialog's Save does.
+   */
+  getEnvironmentVariables: () => EnvironmentVariables;
   onTerminalOutput?: () => void;
   onServerReady?: () => void;
 }
@@ -154,7 +159,7 @@ function useMirroredState<T>(initialValue: T) {
 }
 
 export function useWebContainerRuntimeSession({
-  environmentVariables,
+  getEnvironmentVariables,
   onTerminalOutput,
   onServerReady,
 }: UseWebContainerRuntimeSessionOptions) {
@@ -498,7 +503,7 @@ export function useWebContainerRuntimeSession({
       const spawned = await instance.spawn(
         parsedCommand.command,
         parsedCommand.args,
-        getSpawnOptions(environmentVariables),
+        getSpawnOptions(getEnvironmentVariables()),
       );
       process = spawned;
 
@@ -615,7 +620,7 @@ export function useWebContainerRuntimeSession({
     setStatus("starting");
     appendOutput(`$ ${commandLine}\n`);
 
-    const spawnOptions = getSpawnOptions(environmentVariables);
+    const spawnOptions = getSpawnOptions(getEnvironmentVariables());
     let process: WebContainerProcess;
 
     try {
@@ -737,7 +742,7 @@ export function useWebContainerRuntimeSession({
 
         try {
           process = await instance.spawn(candidate.command, [...candidate.args], {
-            env: environmentVariables,
+            env: getEnvironmentVariables(),
             terminal: terminalSizeRef.current,
           });
         } catch (error) {

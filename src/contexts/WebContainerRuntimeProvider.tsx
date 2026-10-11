@@ -159,7 +159,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     terminalSessions,
     writeTerminalInput,
   } = useWebContainerRuntimeSession({
-    environmentVariables,
+    // Through the ref, which a save writes at once: the Save of the variables
+    // dialog reruns the runner before this provider renders the new variables.
+    getEnvironmentVariables: () => environmentVariablesRef.current,
     onTerminalOutput: () => {
       const instance = instanceRef.current;
 
@@ -335,10 +337,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const project = getProject();
     const commandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
+    // The variables the runner spawns with, read from the ref as the spawn reads
+    // them, so a save's identity check compares against what actually ran.
+    const spawnedVariables = environmentVariablesRef.current;
     // Only a start that is still the current one spawns. A superseded start resolves
     // false, possibly after the newer start recorded its run, so it must not clear that.
     if (await startRunnerProcess(instance, commandLine)) {
-      lastRunRef.current = { project, commandLine, environmentVariables };
+      lastRunRef.current = { project, commandLine, environmentVariables: spawnedVariables };
     }
   };
 
