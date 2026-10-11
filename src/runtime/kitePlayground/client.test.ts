@@ -184,6 +184,33 @@ describe("KitePlaygroundClient", () => {
     await expect(client.run({ files })).resolves.toEqual(ok);
   });
 
+  // A Kite module is a directory, so `use helper` in main.kite names the
+  // helper.kite beside it. The engine used to be handed main.kite alone.
+  it("runs the entry with the files beside it, keyed by module name", async () => {
+    const engine = fakeEngine(async () => ok);
+    const client = new KitePlaygroundClient({ engines: engineSource(engine) });
+
+    await client.run({
+      files: [
+        { path: "main.kite", content: "use helper\n" },
+        { path: "helper.kite", content: "pub fn greet() {}\n" },
+      ],
+    });
+    await client.run({
+      files: [
+        { path: "src/main.kite", content: "use shapes\n" },
+        { path: "notes/draft.kite", content: "fn draft() {}\n" },
+        { path: "src/shapes.kite", content: "pub fn area() {}\n" },
+      ],
+    });
+
+    expect(engine.run.mock.calls).toEqual([
+      ["use helper\n", { helper: "pub fn greet() {}\n" }],
+      // Only the entry's own directory is its module.
+      ["use shapes\n", { shapes: "pub fn area() {}\n" }],
+    ]);
+  });
+
   it("formats every file through the engine, keeping each path", async () => {
     const engine = fakeEngine(async () => ok);
     const client = new KitePlaygroundClient({ engines: engineSource(engine) });
@@ -321,6 +348,14 @@ describe("runKiteSource", () => {
       stdout: "trapezoid area: 12\n",
       stderr: "",
     });
+  });
+
+  it("runs a program that uses a sibling module", () => {
+    expect(
+      runKiteSource(kite, "use helper\n\nfn main() {\n    io.print(helper.greet())\n}\n", {
+        helper: 'pub fn greet() -> str { return "hi from helper" }\n',
+      }),
+    ).toEqual({ status: "success", stdout: "hi from helper\n", stderr: "" });
   });
 
   it("reports a program that does not compile as a compile error", () => {

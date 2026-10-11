@@ -29,8 +29,8 @@ import type { KitePlaygroundRunResult } from "./types";
  *
  * A Kite module is a directory, so every `.kite` file in the workspace is part
  * of the same program: Format touches all of them, and a run compiles
- * `main.kite` (the client says so plainly when several files exist and none is
- * named that).
+ * `main.kite` together with the files beside it (the client says so plainly
+ * when several files exist and none is named that).
  */
 export const KITE_PLAYGROUND: PlaygroundLanguage<
   KitePlaygroundClient,

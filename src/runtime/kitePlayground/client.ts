@@ -35,11 +35,11 @@ export class KitePlaygroundServiceError extends Error {
  * Pick the file to compile.
  *
  * A Kite module is a *directory*, so every `.kite` file beside the entry is
- * part of the same program — but the compiler running here is handed one
- * source, so a lesson with siblings would compile only part of itself. Rather
- * than compile the wrong thing quietly, a workspace with more than one file
- * and none named `main.kite` says so. Exported as the language's `pickEntry`
- * (runner.ts), so the studio's fixture run refuses the same workspaces.
+ * part of the same program, and a run compiles them together. Which file is
+ * the program is a guess with several files and none named `main.kite`, so
+ * rather than run the wrong one quietly, such a workspace says so. Exported as
+ * the language's `pickEntry` (runner.ts), so the studio's fixture run refuses
+ * the same workspaces.
  */
 export function pickKiteRunEntry(files: readonly KitePlaygroundFile[]): KitePlaygroundFile {
   const { entryPath } = PLAYGROUND_SOURCE_RULES.kite;
@@ -55,6 +55,28 @@ export function pickKiteRunEntry(files: readonly KitePlaygroundFile[]): KitePlay
     );
   }
   return entry;
+}
+
+/** The folder part of a workspace path, "" at the root. */
+function directoryOf(path: string): string {
+  return path.slice(0, path.lastIndexOf("/") + 1);
+}
+
+/**
+ * The rest of the entry's module: every other `.kite` file in its directory,
+ * keyed by module name — `helper`, not `helper.kite`, because that is what
+ * `use` names. A file in another folder is not part of this module.
+ */
+function kiteModuleSiblings(
+  files: readonly KitePlaygroundFile[],
+  entry: KitePlaygroundFile,
+): Record<string, string> {
+  const directory = directoryOf(entry.path);
+  return Object.fromEntries(
+    files
+      .filter((file) => file !== entry && directoryOf(file.path) === directory)
+      .map((file) => [file.path.slice(directory.length).replace(/\.kite$/, ""), file.content]),
+  );
 }
 
 /**
@@ -109,7 +131,7 @@ function workerKiteEngine(): KiteEngine | null {
   const api = wrap<KiteOperations>(worker);
   return {
     load: () => Promise.race([api.load(), failed]),
-    run: (source) => Promise.race([api.run(source), failed]),
+    run: (source, siblings) => Promise.race([api.run(source, siblings), failed]),
     format: (sources) => Promise.race([api.format(sources), failed]),
     terminate: () => worker.terminate(),
   };
@@ -263,7 +285,8 @@ export class KitePlaygroundClient {
     // one before it.
     this.#supersedeInFlight();
     const entry = pickKiteRunEntry(request.files);
-    const result = await this.#exclusive((engine) => engine.run(entry.content));
+    const siblings = kiteModuleSiblings(request.files, entry);
+    const result = await this.#exclusive((engine) => engine.run(entry.content, siblings));
 
     const parsed = parseKitePlaygroundRunResult(result);
     if (!parsed) {

@@ -13,22 +13,27 @@ import type { KitePlaygroundRunResult } from "./types";
 const TRAP_TRAILER = /\nerror: ([^\n]*)\nnote: traps are not catchable[^\n]*\n?$/;
 
 /**
- * Compile and run one source, and say which of the three outcomes it was.
+ * Compile and run a program — its entry and the module siblings it may `use`,
+ * keyed by module name — and say which of the three outcomes it was.
  *
- * The compiler's own verdict decides compile-versus-run: `kite_check` answers
- * with nothing for a program that compiles and with exactly the diagnostics
- * `kite_run` would print for one that does not. Reading `kite_run`'s answer
- * instead cannot tell them apart — a program is free to print a line that
- * starts with `error:` — so a program that does not compile is never run, and
- * a trap is recognised only by the trailer the compiler writes for one.
+ * The compiler's own verdict decides compile-versus-run: `kite_check_module`
+ * answers with nothing for a program that compiles and with exactly the
+ * diagnostics `kite_run_module` would print for one that does not. Reading the
+ * run's answer instead cannot tell them apart — a program is free to print a
+ * line that starts with `error:` — so a program that does not compile is never
+ * run, and a trap is recognised only by the trailer the compiler writes for one.
  */
-export function runKiteSource(compiler: KiteCompiler, source: string): KitePlaygroundRunResult {
-  const diagnostics = compiler.check(source);
+export function runKiteSource(
+  compiler: KiteCompiler,
+  source: string,
+  siblings: Record<string, string> = {},
+): KitePlaygroundRunResult {
+  const diagnostics = compiler.checkModule(source, siblings);
   if (diagnostics) {
     return { status: "compile-error", stdout: "", stderr: "", compileErrors: diagnostics };
   }
 
-  const answer = compiler.run(source);
+  const answer = compiler.runModule(source, siblings);
   const trap = TRAP_TRAILER.exec(answer);
   if (trap) {
     return {
@@ -47,8 +52,12 @@ export const kiteOperations = {
   async load(): Promise<void> {
     await loadKiteCompiler();
   },
-  async run(source: string): Promise<KitePlaygroundRunResult> {
-    return runKiteSource(await loadKiteCompiler(), source);
+  /** `siblings`: the other files of the entry's module, keyed by module name. */
+  async run(
+    source: string,
+    siblings: Record<string, string> = {},
+  ): Promise<KitePlaygroundRunResult> {
+    return runKiteSource(await loadKiteCompiler(), source, siblings);
   },
   /** Every source laid out the one way, in order: `kitec fmt` takes one file at a time. */
   async format(sources: readonly string[]): Promise<string[]> {

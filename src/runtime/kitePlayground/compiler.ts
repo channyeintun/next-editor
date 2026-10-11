@@ -14,6 +14,7 @@
 //   kite_check(ptr, len) -> ptr   diagnostics, or nothing at all
 //   kite_format(ptr, len) -> ptr  the source, laid out the one way
 //   kite_check_module(ptr, len)   as `kite_check`, over a whole module
+//   kite_run_module(ptr, len)     as `kite_run`, over a whole module
 //   kite_answer_length() -> len   how long the last answer is
 //   kite_free(ptr, len)           give a buffer back
 //
@@ -30,6 +31,7 @@ interface KiteCompilerExports {
   kite_check(pointer: number, length: number): number;
   kite_format(pointer: number, length: number): number;
   kite_check_module(pointer: number, length: number): number;
+  kite_run_module(pointer: number, length: number): number;
 }
 
 export interface KiteCompiler {
@@ -45,9 +47,12 @@ export interface KiteCompiler {
    * A Kite module is a *directory*, so a program that says `use checkout` has
    * a sibling the checker has to see. `check` takes one file and would report
    * that sibling missing. `siblings` is keyed by module name — `checkout`,
-   * not `checkout.kite`, because that is what `use` names.
+   * not `checkout.kite`, because that is what `use` names. Diagnostics name
+   * the entry `main.kite`.
    */
   checkModule(entry: string, siblings?: Record<string, string>): string;
+  /** As `run`, over a whole module: `siblings` as in `checkModule`. */
+  runModule(entry: string, siblings?: Record<string, string>): string;
 }
 
 const encoder = new TextEncoder();
@@ -86,11 +91,13 @@ function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompiler {
     format: (source) => callWithBytes(exports, exports.kite_format, encoder.encode(source)),
     checkModule: (entry, siblings = {}) =>
       callWithBytes(exports, exports.kite_check_module, frameModule(entry, siblings)),
+    runModule: (entry, siblings = {}) =>
+      callWithBytes(exports, exports.kite_run_module, frameModule(entry, siblings)),
   };
 }
 
 /**
- * The framing `kite_check_module` reads:
+ * The framing `kite_check_module` and `kite_run_module` read:
  *
  *     u32 count, then per entry: u32 name length, name, u32 body length, body
  *
