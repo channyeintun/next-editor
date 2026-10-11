@@ -771,6 +771,47 @@ describe("lessonScriptSchema", () => {
     );
   });
 
+  // The fixture sits inside the runtime block, whose own keys were already
+  // strict; its nested objects were not, so a misspelled key there was dropped
+  // and the lesson replayed a console with no warning, register or retry.
+  it("rejects a misspelled key inside a runtime fixture and names it", () => {
+    const kotlinPath = resolve(process.cwd(), "src/studio/scripts/kotlin-crash-course.yaml");
+    const asmPath = resolve(process.cwd(), "src/studio/scripts/x86-64-assembly-crash-course.yaml");
+    const cases: [string, string, string, (fixture: Record<string, any>) => void][] = [
+      [
+        kotlinPath,
+        "runtime.fixture",
+        "transientErrorKind",
+        (f) => (f.transientErrorKind = ["timeout"]),
+      ],
+      [kotlinPath, "runtime.fixture.result", "warning", (f) => (f.result.warning = "w: unused")],
+      [asmPath, "runtime.fixture.result", "register", (f) => (f.result.register = [])],
+      [
+        asmPath,
+        "runtime.fixture.result.registers.0",
+        "nmae",
+        (f) => (f.result.registers[0].nmae = "rax"),
+      ],
+      [asmPath, "runtime.fixture.result.flags", "cary", (f) => (f.result.flags.cary = true)],
+    ];
+    for (const [path, at, key, mutate] of cases) {
+      const raw = YAML.parse(readFileSync(path, "utf8"));
+      mutate(raw.runtime.fixture);
+      expect(() => parseLessonScript(raw)).toThrow(
+        new RegExp(`${at.replace(/\./g, "\\.")}: Unrecognized key: "${key}"`),
+      );
+    }
+
+    const raw = YAML.parse(readFileSync(kotlinPath, "utf8"));
+    raw.runtime.fixture.transientErrorKinds = ["timeout"];
+    raw.runtime.fixture.result.warnings = "w: unused";
+    const runtime = parseLessonScript(raw).runtime;
+    if (runtime.kind !== "kotlin-playground")
+      throw new Error("expected a kotlin-playground runtime");
+    expect(runtime.fixture.transientErrorKinds).toEqual(["timeout"]);
+    expect(runtime.fixture.result.warnings).toBe("w: unused");
+  });
+
   // Both schemas build an action's payload from the plan's shared field shapes;
   // only the script passes strict nested schemas in, so a typo inside an
   // authored preview target still fails here while the plan keeps zod's default.

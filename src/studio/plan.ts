@@ -625,12 +625,19 @@ export const PLAYGROUND_TRANSIENT_ERROR_KINDS = ["rate-limited", "timeout", "una
  * Playground would return for the pinned sources. Fixture renders replay it
  * through the same console formatting path after `latencyMs`. Each language
  * keeps its own result schema; this factory owns the fields they all share.
+ *
+ * The fixture and every result object inside it are strict even on the plan
+ * side. An author writes them verbatim, and the script's `.strict()` reaches
+ * only the runtime block's own keys, so in zod's default mode a misspelled
+ * `warning:` or `transientErrorKind:` was stripped and the lesson replayed a
+ * console without the line or the retry. A plan is only ever parsed from
+ * compile output, which carries no extra keys, so this rejects nothing stored.
  */
 function playgroundFixture<
   TransientKinds extends readonly [string, ...string[]],
   Result extends z.ZodType,
 >(transientKinds: TransientKinds, result: Result) {
-  return z.object({
+  return z.strictObject({
     latencyMs: positiveMs,
     /**
      * Transient service failures to simulate before the result, one per attempt
@@ -645,7 +652,7 @@ function playgroundFixture<
 export const goRunFixtureSchema = playgroundFixture(
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
       output: z.string(),
       compileErrors: z.string().optional(),
@@ -659,7 +666,7 @@ export const goRunFixtureSchema = playgroundFixture(
 export const kotlinRunFixtureSchema = playgroundFixture(
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       output: z.string(),
       compileErrors: z.string().optional(),
@@ -678,7 +685,7 @@ export const kotlinRunFixtureSchema = playgroundFixture(
 export const zigRunFixtureSchema = playgroundFixture(
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       output: z.string(),
       compileErrors: z.string().optional(),
@@ -691,7 +698,7 @@ export const zigRunFixtureSchema = playgroundFixture(
 export const rustRunFixtureSchema = playgroundFixture(
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
       stderr: z.string(),
@@ -720,7 +727,7 @@ export const rustRunFixtureSchema = playgroundFixture(
 export const haskellRunFixtureSchema = playgroundFixture(
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
       stderr: z.string(),
@@ -751,7 +758,7 @@ export const haskellRunFixtureSchema = playgroundFixture(
 export const asmRunFixtureSchema = playgroundFixture(
   ["unavailable"] as const,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "assemble-error", "runtime-error"]),
       stdout: z.string(),
       stderr: z.string(),
@@ -760,10 +767,10 @@ export const asmRunFixtureSchema = playgroundFixture(
       exitDetail: z.string().optional(),
       instructions: z.number().int().nonnegative().optional(),
       registers: z
-        .array(z.object({ name: z.string().min(1), value: z.string().regex(/^\d+$/) }))
+        .array(z.strictObject({ name: z.string().min(1), value: z.string().regex(/^\d+$/) }))
         .optional(),
       flags: z
-        .object({
+        .strictObject({
           carry: z.boolean(),
           zero: z.boolean(),
           sign: z.boolean(),
@@ -786,7 +793,7 @@ export const asmRunFixtureSchema = playgroundFixture(
 export const kiteRunFixtureSchema = playgroundFixture(
   ["unavailable"] as const,
   z
-    .object({
+    .strictObject({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
       stderr: z.string(),
@@ -799,11 +806,11 @@ export const kiteRunFixtureSchema = playgroundFixture(
 /**
  * One Playground runtime variant, so every kind carries the same fields.
  *
- * `dockStartsCollapsed` in particular is not optional per kind: these objects
- * are not strict, so a variant that omitted it would have an authored
- * `dockStartsCollapsed: true` stripped by zod and render with the dock open —
- * no error, no diagnostic, exactly the invisible failure
- * `runtimeDockStartsCollapsed` exists to prevent.
+ * `dockStartsCollapsed` in particular is not optional per kind: these variant
+ * objects are not strict on the plan side (only their fixtures are), so a
+ * variant that omitted it would have an authored `dockStartsCollapsed: true`
+ * stripped by zod and render with the dock open — no error, no diagnostic,
+ * exactly the invisible failure `runtimeDockStartsCollapsed` exists to prevent.
  */
 function playgroundRuntime<Kind extends string, Fixture extends z.ZodType>(
   kind: Kind,
