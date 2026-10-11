@@ -51,7 +51,11 @@ import {
   projectCollaborationDocument,
 } from "../../../src/collaboration/projectDocument";
 import { decodeYjsSnapshot, decodeYjsUpdate } from "../../../src/collaboration/yjsUpdates";
-import { getCollaborationAsset, getCollaborationRoomAccess } from "../../db/collaborationQueries";
+import {
+  getCollaborationAsset,
+  getCollaborationRoomAccess,
+  type CollaborationRoomAccess,
+} from "../../db/collaborationQueries";
 import {
   CollaborationRoomSqliteQuotaError,
   RoomSqliteDocumentStore,
@@ -560,11 +564,27 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     ) {
       return attachment;
     }
-    const access = await getCollaborationRoomAccess(
-      this.env.DB,
-      attachment.roomId,
-      attachment.userId,
-    );
+    let access: CollaborationRoomAccess | null;
+    try {
+      access = await getCollaborationRoomAccess(this.env.DB, attachment.roomId, attachment.userId);
+    } catch (error) {
+      console.error("collaboration_access_check_failed", {
+        roomId: attachment.roomId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fail closed, but say so: unanswered, the frame would leave the client
+      // waiting out its 15 s timer. The 1011 close makes it reconnect at once.
+      if (isOpen(socket)) {
+        this.rejectSocket(
+          socket,
+          "persistence-failed",
+          "Collaboration access check is unavailable",
+          false,
+          1011,
+        );
+      }
+      return null;
+    }
     // D1 is not this object's storage, so other events ran while it answered:
     // /control may have changed the role or closed the socket, and awareness
     // frames may have updated the attachment. Build on what is stored now.

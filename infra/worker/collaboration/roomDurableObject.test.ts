@@ -895,6 +895,28 @@ describe("CollaborationRoomDurableObject access revalidation", () => {
     expect(await persistedText()).toBe("seed");
   });
 
+  // Without an answer the client would wait out its 15 s ack timer; the 1011
+  // close makes it reconnect at once, and the update stays in its outbox.
+  it("closes with 1011 when the D1 recheck fails instead of dropping the frame", async () => {
+    const { room, connect, edit, persistedText } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockRejectedValue(new Error("D1 unavailable"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await room.webSocketMessage(member as never, edit("+edit"));
+
+    expect(errors(member)).toEqual([
+      expect.objectContaining({ code: "persistence-failed", fatal: false }),
+    ]);
+    expect(member.closeCode).toBe(1011);
+    expect(acks(member)).toEqual([]);
+    expect(logged).toHaveBeenCalledWith(
+      "collaboration_access_check_failed",
+      expect.objectContaining({ roomId: ROOM_ID }),
+    );
+    expect(await persistedText()).toBe("seed");
+  });
+
   it("relays awareness from a socket whose access check is still fresh", async () => {
     const { room, connect } = await createRoom();
     const member = connect(MEMBER_ID, "viewer");
