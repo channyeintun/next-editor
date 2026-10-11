@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import * as z from "zod";
+import { MAX_CUSTOM_BACKGROUND_LENGTH } from "../config/slideBackgrounds";
 import { sha256Hex } from "../shared/sha256Hex";
 import type { Slide } from "../types/slides";
 import {
@@ -135,7 +136,7 @@ function parseSlidePayloadValue(value: unknown): CollaborationSlidePayload {
     ...(optionalBoundedString(object, "name", 512) === undefined
       ? {}
       : { name: object.name as string }),
-    ...(optionalBoundedString(object, "background", 2_048) === undefined
+    ...(optionalBoundedString(object, "background", MAX_CUSTOM_BACKGROUND_LENGTH) === undefined
       ? {}
       : { background: object.background as string }),
     ...(optionalBoundedString(object, "title", 2_048) === undefined

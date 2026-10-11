@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { MAX_CUSTOM_BACKGROUND_LENGTH } from "../config/slideBackgrounds";
 import {
   collaborationSlidePayloadAssetId,
   decodeCollaborationSlidePayload,
@@ -28,6 +29,31 @@ describe("collaboration teaching slides", () => {
         asset: { ...ASSET, size: payload.byteLength },
       }),
     ).toMatchObject({ id: "manifest-slide", order: 0, content: normalized[0].slide.content });
+  });
+
+  it("shares a custom background image as large as the slide editor accepts", () => {
+    const manifest = (payload: Uint8Array) => ({
+      id: "manifest-slide",
+      contentType: "html" as const,
+      asset: { ...ASSET, size: payload.byteLength },
+    });
+    const dataUrl = (length: number) => {
+      const prefix = "data:image/jpeg;base64,";
+      return prefix + "A".repeat(length - prefix.length);
+    };
+
+    for (const background of [dataUrl(1_900_000), "texture-1"]) {
+      const payload = encodeCollaborationSlidePayload({ ...slide("custom", 0), background });
+      expect(decodeCollaborationSlidePayload(payload, manifest(payload)).background).toBe(
+        background,
+      );
+    }
+    expect(() =>
+      encodeCollaborationSlidePayload({
+        ...slide("too-large", 0),
+        background: dataUrl(MAX_CUSTOM_BACKGROUND_LENGTH + 1),
+      }),
+    ).toThrow("A slide has an invalid background");
   });
 
   it("verifies hydrated slide bytes against their content-addressed manifest", async () => {

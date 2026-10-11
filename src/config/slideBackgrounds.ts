@@ -27,6 +27,11 @@ export function isCustomSlideBackground(id?: string): boolean {
 const MAX_CUSTOM_IMAGE_DIMENSION = 1920;
 const CUSTOM_IMAGE_QUALITY = 0.8;
 const MAX_CUSTOM_IMAGE_BYTES = 1.5 * 1024 * 1024;
+/**
+ * The longest custom background (a base64 data URL) a slide may carry: the
+ * encoded length of MAX_CUSTOM_IMAGE_BYTES. Live rooms share slides with it.
+ */
+export const MAX_CUSTOM_BACKGROUND_LENGTH = Math.ceil((MAX_CUSTOM_IMAGE_BYTES * 4) / 3);
 
 export class CustomBackgroundError extends Error {}
 
@@ -62,8 +67,7 @@ export async function readCustomBackgroundImage(file: File): Promise<string> {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL("image/jpeg", CUSTOM_IMAGE_QUALITY);
-    const approxBytes = (dataUrl.length * 3) / 4;
-    if (approxBytes > MAX_CUSTOM_IMAGE_BYTES) {
+    if (dataUrl.length > MAX_CUSTOM_BACKGROUND_LENGTH) {
       throw new CustomBackgroundError("Couldn't use that image — try a smaller file.");
     }
 
