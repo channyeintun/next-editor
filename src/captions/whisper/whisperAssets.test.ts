@@ -123,6 +123,38 @@ describe("loadWhisperAssets", () => {
     expect(calls).toHaveLength(downloads);
   });
 
+  it("downloads the model where the cache cannot be opened", async () => {
+    vi.useFakeTimers();
+    // Storage blocked (a private window, a denied context).
+    vi.stubGlobal("caches", {
+      open: () => Promise.reject(new DOMException("The operation is insecure.", "SecurityError")),
+    });
+    serve();
+
+    const assets = await load();
+
+    expect(new Uint8Array(assets.decoder)).toEqual(FILES["decoder_model_merged_quantized.onnx"]);
+    expect(new Uint8Array(assets.encoder)).toEqual(FILES["encoder_model_quantized.onnx"]);
+    expect(assets.config).toEqual({ vocab_size: 3 });
+  });
+
+  it("keeps the downloaded model when the cache has no room for it", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("caches", {
+      open: async () => ({
+        match: async () => undefined,
+        put: () => Promise.reject(new DOMException("Quota exceeded.", "QuotaExceededError")),
+      }),
+    });
+    serve();
+
+    const assets = await load();
+
+    expect(new Uint8Array(assets.decoder)).toEqual(FILES["decoder_model_merged_quantized.onnx"]);
+    expect(new Uint8Array(assets.encoder)).toEqual(FILES["encoder_model_quantized.onnx"]);
+    expect(assets.tokenizer).toEqual({ added_tokens: [] });
+  });
+
   it("does not retry a missing file", async () => {
     vi.useFakeTimers();
     const calls = serve((file) =>

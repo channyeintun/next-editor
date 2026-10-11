@@ -121,8 +121,11 @@ async function fetchFile(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   const url = `${BASE_URL}/${path}`;
-  const cache = typeof caches === "undefined" ? null : await caches.open(CACHE_NAME);
-  const cached = await cache?.match(url);
+  // The cache only saves a download, so a cache that fails (storage blocked, or full) is
+  // skipped: the model is still downloaded and used.
+  const cache =
+    typeof caches === "undefined" ? null : await caches.open(CACHE_NAME).catch(() => null);
+  const cached = await cache?.match(url).catch(() => undefined);
   if (cached) {
     const buffer = await cached.arrayBuffer();
     onBytes(buffer.byteLength);
@@ -131,7 +134,7 @@ async function fetchFile(
   const buffer = await download(url, path, onBytes, signal);
   // Only a complete file is cached, so an interrupted run never leaves a broken model.
   // A Response copies the bytes it is given, so the buffer stays whole for the caller.
-  await cache?.put(url, new Response(buffer));
+  await cache?.put(url, new Response(buffer)).catch(() => {});
   return buffer;
 }
 
