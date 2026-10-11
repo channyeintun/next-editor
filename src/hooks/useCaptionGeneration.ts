@@ -5,6 +5,7 @@ import { useCaptionStoreTrigger } from "./useCaptionStore";
 import type { CaptionGenerationProgress } from "../captions/generateCaptions";
 import { createCaptionTrack } from "../captions/captionTracks";
 import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
+import { importWithChunkRecovery } from "../routeRecovery";
 
 export type CaptionGenerationState =
   | { status: "idle" }
@@ -27,8 +28,12 @@ async function runCaptionJob(
   },
 ): Promise<void> {
   try {
-    // Loaded on demand: the model code is only paid for by authors who caption.
-    const { generateCaptions } = await import("../captions/generateCaptions");
+    // Loaded on demand: the model code is only paid for by authors who caption. A chunk
+    // gone after a deploy reloads the page once, like the panels' chunks.
+    const { generateCaptions } = await importWithChunkRecovery(
+      () => import("../captions/generateCaptions"),
+      "generateCaptions",
+    );
     const narration = await loadRecordingNarration(recording);
     if (!narration) throw new Error("This recording has no narration to caption.");
     const { language, cues } = await generateCaptions(recording, narration, {

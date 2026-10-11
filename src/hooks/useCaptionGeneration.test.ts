@@ -17,12 +17,18 @@ const whisper = vi.hoisted(() => ({ generateCaptions: vi.fn<GenerateCaptions>() 
 const actions = vi.hoisted(() => ({
   addCaptionTrack: vi.fn<(recordingId: string, track: CaptionTrack) => void>(),
 }));
+const recovery = vi.hoisted(() => ({
+  importWithChunkRecovery: vi.fn<(importer: () => Promise<unknown>, chunkName: string) => unknown>(
+    (importer) => importer(),
+  ),
+}));
 const captionStore = vi.hoisted(() => ({
   selectTrack: vi.fn<(event: { trackId: string; language: string }) => void>(),
   setEnabled: vi.fn<(event: { enabled: boolean }) => void>(),
 }));
 
 vi.mock("../captions/generateCaptions", () => whisper);
+vi.mock("../routeRecovery", () => recovery);
 vi.mock("./useNextEditorContext", () => ({ useNextEditorActions: () => actions }));
 vi.mock("./useCaptionStore", () => ({ useCaptionStoreTrigger: () => captionStore }));
 
@@ -60,6 +66,10 @@ describe("useCaptionGeneration", () => {
       "Downloading the speech model… 40%",
     );
     expect(whisper.generateCaptions).toHaveBeenCalledWith(lesson, narration, expect.anything());
+    expect(recovery.importWithChunkRecovery).toHaveBeenCalledWith(
+      expect.any(Function),
+      "generateCaptions",
+    );
 
     await act(async () => {
       finish();
@@ -114,6 +124,21 @@ describe("useCaptionGeneration", () => {
       status: "failed",
       message: "The model could not be loaded.",
     });
+  });
+
+  it("says why when the captioning code cannot load after its one reload", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    recovery.importWithChunkRecovery.mockRejectedValueOnce(
+      new TypeError("Failed to fetch dynamically imported module"),
+    );
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
+
+    await act(() => result.current.start(lesson));
+    expect(result.current.state).toEqual({
+      status: "failed",
+      message: "Failed to fetch dynamically imported module",
+    });
+    expect(whisper.generateCaptions).not.toHaveBeenCalled();
   });
 
   it("says so when a linked narration cannot be fetched", async () => {

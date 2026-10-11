@@ -1,4 +1,5 @@
 import type { CaptionCue } from "../core/src/types";
+import { importWithChunkRecovery } from "../routeRecovery";
 
 export type ParsedCaptionFile = { cues: CaptionCue[]; language: string } | { error: string };
 
@@ -16,7 +17,9 @@ export async function parseCaptionFile(file: File): Promise<ParsedCaptionFile> {
   let parseCaptions: typeof import("./parseCaptions");
   let text: string;
   try {
-    parseCaptions = await import("./parseCaptions");
+    // A parser chunk gone after a deploy reloads the page once; only a second
+    // failure in the session reaches the catch.
+    parseCaptions = await importWithChunkRecovery(() => import("./parseCaptions"), "parseCaptions");
     text = await file.text();
   } catch {
     return { error: `Couldn't read "${file.name}" — try selecting it again.` };
