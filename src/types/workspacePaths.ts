@@ -3,7 +3,14 @@
 
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 
-const RESERVED_WORKSPACE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
+// The one "unsafe as a record key" rule: every Object.prototype member name
+// (constructor, __proto__, toString, valueOf, hasOwnProperty, ...) plus
+// "prototype". project.files is a plain object, so any of these as a path
+// would look up an inherited member instead of a missing file.
+const RESERVED_WORKSPACE_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+  "prototype",
+  ...Object.getOwnPropertyNames(Object.prototype),
+]);
 
 /** A name unsafe as a JavaScript record key, which no path segment may use. */
 export function isReservedWorkspacePathSegment(segment: string): boolean {

@@ -72,6 +72,13 @@ describe("read tool", () => {
     expect(result).toContain("File not found");
   });
 
+  // project.files["valueOf"] is the inherited Object.prototype.valueOf, which
+  // read treated as a text file instead of a missing one.
+  it("reports a file named after an Object.prototype member as missing", async () => {
+    const result = await read([makeFile("index.html", "")])({ path: "valueOf" });
+    expect(result).toBe("File not found: valueOf");
+  });
+
   // A minified bundle, a source map or an inline data URI sits on one line.
   // read returned it whole, so one call could overflow the model's context.
   it("clips a very long line and says how much was left out", async () => {

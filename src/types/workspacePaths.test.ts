@@ -55,6 +55,18 @@ describe("workspace path canonicalization", () => {
     expect(reserved).toEqual(["__proto__", "prototype", "constructor"]);
   });
 
+  // Only three names were reserved, so "toString" or "valueOf" looked up an
+  // inherited Object.prototype member in project.files and an agent write
+  // stored a malformed file record under it.
+  it("rejects every Object.prototype member name as a segment", () => {
+    for (const path of ["toString", "a/valueOf", "hasOwnProperty", "__defineGetter__"]) {
+      expect(() => parseWorkspacePath(path)).toThrow(WorkspacePathError);
+    }
+    expect(parseWorkspacePath("toString.ts")).toBe("toString.ts");
+    expect(parseWorkspacePath("valueOf.js")).toBe("valueOf.js");
+    expect(parseWorkspacePath("src/constructors")).toBe("src/constructors");
+  });
+
   it("rebuilds canonical file metadata", () => {
     const project = normalizeProject(
       projectWithFiles({

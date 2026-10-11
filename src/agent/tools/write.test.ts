@@ -25,6 +25,18 @@ describe("write tool", () => {
     expect(getProject(store)?.files["a.txt"]?.content).toBe("new");
   });
 
+  // "toString" resolved to Object.prototype.toString in project.files, so the
+  // write took the update path, reported "Updated toString" and stored a file
+  // record with no path, name or language.
+  it("rejects a path named after an Object.prototype member", () => {
+    const store = makeStore([makeFile("index.html", "")]);
+
+    expect(() =>
+      makeWriteTool(makeCtx(store)).function.execute({ path: "toString", content: "x" }),
+    ).toThrow(/reserved name/);
+    expect(Object.hasOwn(getProject(store)?.files ?? {}, "toString")).toBe(false);
+  });
+
   it("does not overwrite a binary asset with text", () => {
     const store = makeStore([makeAssetFile("asset.bin")]);
 
