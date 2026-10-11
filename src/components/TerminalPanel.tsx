@@ -375,8 +375,8 @@ function TerminalPanel() {
                     }
                   }}
                   className="pr-3 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
-                  aria-label="Close terminal"
-                  title="Close terminal"
+                  aria-label={`Close ${session.title}`}
+                  title={`Close ${session.title}`}
                 >
                   <X size={12} />
                 </button>

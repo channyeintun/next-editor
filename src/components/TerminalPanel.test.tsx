@@ -163,8 +163,26 @@ describe("TerminalPanel", () => {
     expect(screen.getByRole("button", { name: "Terminal 2", pressed: false })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Runner", pressed: false })).toBeInTheDocument();
     // The close button beside each session stays a plain button.
-    expect(screen.getAllByRole("button", { name: "Close terminal" })[0]).not.toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Close Terminal 1" })).not.toHaveAttribute(
       "aria-pressed",
     );
+  });
+
+  // Every session used to be "Terminal" with a "Close terminal" button, so
+  // neither a sighted nor a screen reader user could tell which shell a close
+  // button ended.
+  it("names each terminal session and its close button apart", () => {
+    render(
+      dock("ready", [
+        { id: "terminal-1", title: "Terminal 1", output: "" },
+        { id: "terminal-2", title: "Terminal 2", output: "" },
+      ]),
+    );
+
+    for (const title of ["Terminal 1", "Terminal 2"]) {
+      expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
+      const close = screen.getByRole("button", { name: `Close ${title}` });
+      expect(close).toHaveAttribute("title", `Close ${title}`);
+    }
   });
 });

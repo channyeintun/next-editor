@@ -914,13 +914,15 @@ describe("WebContainerRuntimeProvider terminal", () => {
       workspace: WorkspaceActions | null;
       status: string | null;
       errorMessage: string | null;
-    } = { runtime: null, workspace: null, status: null, errorMessage: null };
+      terminalSessions: WebContainerRuntimeOutput["terminalSessions"];
+    } = { runtime: null, workspace: null, status: null, errorMessage: null, terminalSessions: [] };
     function Capture() {
       captured.runtime = useWebContainerRuntimeActions();
       captured.workspace = useWorkspaceActions();
       const metadata = useWebContainerRuntimeMetadata();
       captured.status = metadata.status;
       captured.errorMessage = metadata.errorMessage;
+      captured.terminalSessions = useWebContainerRuntimeOutput().terminalSessions;
       return null;
     }
     render(
@@ -956,6 +958,23 @@ describe("WebContainerRuntimeProvider terminal", () => {
     expect(captured.status).toBe("error");
     expect(spawned.filter((line) => line.includes("install"))).toHaveLength(1);
     expect(spawned.filter((line) => line === "jsh")).toHaveLength(1);
+  });
+
+  // The tab strip names each session by its title, so two sessions titled
+  // "Terminal" could not be told apart.
+  it("numbers each new terminal session in its title", async () => {
+    const { captured } = await startRuntimeWithRunnerExit(0);
+
+    await act(async () => {
+      await captured.runtime?.createTerminalSession();
+      await captured.runtime?.createTerminalSession();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(captured.terminalSessions.map(({ id, title }) => ({ id, title }))).toEqual([
+      { id: "terminal-1", title: "Terminal 1" },
+      { id: "terminal-2", title: "Terminal 2" },
+    ]);
   });
 
   it("does not re-sync the project per keystroke", async () => {

@@ -312,11 +312,13 @@ export function useWebContainerRuntimeSession({
   };
 
   const createTerminalSessionHandle = (): TerminalSessionHandle => {
-    terminalSessionCounterRef.current += 1;
+    const sessionNumber = (terminalSessionCounterRef.current += 1);
 
+    // Numbered like the id, so the tab strip and each close button name a
+    // session no other one shares.
     return {
-      id: `terminal-${terminalSessionCounterRef.current}`,
-      title: "Terminal",
+      id: `terminal-${sessionNumber}`,
+      title: `Terminal ${sessionNumber}`,
       output: "",
       inputWriter: null,
       process: null,
