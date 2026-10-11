@@ -4,6 +4,18 @@ import { useNextEditorActions } from "./useNextEditorContext";
 import { useWorkspaceActions } from "./useWorkspace";
 
 /**
+ * A file the viewer opened, created or imported ends a collaboration follow:
+ * the viewer is acting locally, and the followed member's next update would
+ * otherwise switch the editor back to their file. The one home of that rule,
+ * used here and by the sidebar's file create and its import of local files.
+ * Outside a room it does nothing.
+ */
+export function useLeaveFollowOnLocalFileSwitch(): () => void {
+  const collaboration = useOptionalCollaboration();
+  return () => collaboration?.stopFollowing("local-file-navigation");
+}
+
+/**
  * Opening a workspace file because the viewer asked for it: a click in the
  * file explorer, or a pick in Go to File. The one home of that rule, so every
  * way in records, pauses and leaves a followed member the same way.
@@ -27,12 +39,12 @@ import { useWorkspaceActions } from "./useWorkspace";
  *   detachPlaybackWorkspace again, a no-op after the entry already ran it.
  */
 export function useOpenWorkspaceFile(): (path: string) => void {
-  const collaboration = useOptionalCollaboration();
+  const leaveFollow = useLeaveFollowOnLocalFileSwitch();
   const { pause, handleWorkspaceEvent } = useNextEditorActions();
   const { getActiveFilePath, getFile, setActiveFilePath } = useWorkspaceActions();
 
   return (path: string) => {
-    collaboration?.stopFollowing("local-file-navigation");
+    leaveFollow();
     const target = normalizeWorkspacePath(path);
     if (!target || target === getActiveFilePath() || !getFile(target)) return;
     // The raw actor sender, never behind NextEditorProvider's suppressWorkspaceEventsRef gate:

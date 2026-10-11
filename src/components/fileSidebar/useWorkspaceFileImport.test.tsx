@@ -14,9 +14,18 @@ vi.mock("../../utils/workspaceFileUpload", async (importOriginal) => ({
   ...reader,
 }));
 
+// A room is only joined where a test sets one.
+const room = vi.hoisted(() => ({
+  collaboration: null as { stopFollowing: (reason: string) => void } | null,
+}));
+vi.mock("../../contexts/CollaborationContext", () => ({
+  useOptionalCollaboration: () => room.collaboration,
+}));
+
 afterEach(() => {
   vi.restoreAllMocks();
   reader.readUploadedWorkspaceFile.mockReset();
+  room.collaboration = null;
 });
 
 function Harness() {
@@ -149,6 +158,36 @@ describe("useWorkspaceFileImport", () => {
     expect(saveProject).not.toHaveBeenCalled();
     expect(handleWorkspaceEvent).not.toHaveBeenCalled();
     expect(pause).not.toHaveBeenCalled();
+  });
+
+  it("ends a follow when a file lands, since the import opens it", async () => {
+    const stopFollowing = vi.fn<(reason: string) => void>();
+    room.collaboration = { stopFollowing };
+    const { createFile, saveProject } = renderHarness();
+
+    fireEvent.change(screen.getByTestId("picker"), {
+      target: { files: [textFile("a.txt"), textFile("b.txt")] },
+    });
+
+    await waitFor(() => expect(saveProject).toHaveBeenCalledTimes(1));
+    expect(stopFollowing).toHaveBeenCalledExactlyOnceWith("local-file-navigation");
+    expect(stopFollowing.mock.invocationCallOrder[0]).toBeLessThan(
+      createFile.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("keeps a follow when no file lands", async () => {
+    const stopFollowing = vi.fn<(reason: string) => void>();
+    room.collaboration = { stopFollowing };
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    renderHarness();
+    const huge = new File(["x"], "huge.mov");
+    Object.defineProperty(huge, "size", { value: MAX_WORKSPACE_ASSET_BYTES + 1 });
+
+    fireEvent.change(screen.getByTestId("picker"), { target: { files: [huge] } });
+
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    expect(stopFollowing).not.toHaveBeenCalled();
   });
 
   it("claims file drags, shows them until they leave, and adds dropped files at the root", async () => {

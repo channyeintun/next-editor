@@ -89,8 +89,12 @@ vi.mock("../hooks/useWorkspace", async () => {
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => editorActions as unknown as NextEditorActions,
 }));
+// A room is only joined where a test sets one.
+const room = vi.hoisted(() => ({
+  collaboration: null as { stopFollowing: (reason: string) => void } | null,
+}));
 vi.mock("../contexts/CollaborationContext", () => ({
-  useOptionalCollaboration: () => null,
+  useOptionalCollaboration: () => room.collaboration,
 }));
 
 beforeEach(() => {
@@ -135,6 +139,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  room.collaboration = null;
   for (const action of Object.values(actions)) {
     action.mockReset();
   }
@@ -357,6 +362,28 @@ describe("FileSidebar name field", () => {
 
     fireEvent.keyDown(field, { key: "Enter" });
     expect(actions.createFile).toHaveBeenCalledWith("ノート.md", expect.any(String));
+  });
+
+  it("ends a follow when it creates a file, which then opens, and not for a folder", () => {
+    const stopFollowing = vi.fn<(reason: string) => void>();
+    room.collaboration = { stopFollowing };
+    render(<FileSidebar />);
+
+    fireEvent.click(row("Create folder"));
+    let field = screen.getByRole("textbox", { name: "New folder name" });
+    fireEvent.change(field, { target: { value: "docs" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(actions.createFolder).toHaveBeenCalledWith("docs");
+    expect(stopFollowing).not.toHaveBeenCalled();
+
+    fireEvent.click(row("Create file"));
+    field = screen.getByRole("textbox", { name: "New file name" });
+    fireEvent.change(field, { target: { value: "notes.md" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(stopFollowing).toHaveBeenCalledExactlyOnceWith("local-file-navigation");
+    expect(stopFollowing.mock.invocationCallOrder[0]).toBeLessThan(
+      actions.createFile.mock.invocationCallOrder[0],
+    );
   });
 
   it("leaves focus alone when a blur closes the field", () => {

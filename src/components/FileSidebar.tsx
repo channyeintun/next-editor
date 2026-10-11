@@ -12,7 +12,10 @@ import {
   useWorkspaceSidebarWidth,
 } from "../hooks/useWorkspace";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
-import { useOpenWorkspaceFile } from "../hooks/useOpenWorkspaceFile";
+import {
+  useLeaveFollowOnLocalFileSwitch,
+  useOpenWorkspaceFile,
+} from "../hooks/useOpenWorkspaceFile";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { isImeComposingKey } from "../utils/keyboardPlatform";
 import {
@@ -84,6 +87,7 @@ function FileSidebarPanel() {
     setPreviewFilePath,
   } = useWorkspaceActions();
   const openFile = useOpenWorkspaceFile();
+  const leaveFollow = useLeaveFollowOnLocalFileSwitch();
   const { pause } = useNextEditorActions();
   const {
     activeFilePath,
@@ -287,6 +291,8 @@ function FileSidebarPanel() {
     if (editState.mode === "create") {
       pause();
       if (editState.kind === "file") {
+        // The new file opens, so a followed member's next update must not switch away from it.
+        leaveFollow();
         createFile(nextPath, getDefaultFileContent(nextPath));
       } else {
         createFolder(nextPath);

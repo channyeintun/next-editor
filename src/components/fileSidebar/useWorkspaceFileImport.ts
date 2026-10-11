@@ -2,6 +2,7 @@ import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { getUniqueWorkspacePath, joinWorkspacePath } from "../../types/workspacePaths";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import { useNextEditorActions } from "../../hooks/useNextEditorContext";
+import { useLeaveFollowOnLocalFileSwitch } from "../../hooks/useOpenWorkspaceFile";
 import { MAX_WORKSPACE_ASSET_BYTES } from "../../types/workspace";
 import { readUploadedWorkspaceFile } from "../../utils/workspaceFileUpload";
 
@@ -14,6 +15,7 @@ import { readUploadedWorkspaceFile } from "../../utils/workspaceFileUpload";
 export function useWorkspaceFileImport() {
   const { createFile, getProject, saveProject } = useWorkspaceActions();
   const { handleWorkspaceEvent, pause } = useNextEditorActions();
+  const leaveFollow = useLeaveFollowOnLocalFileSwitch();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const uploadTargetPathRef = useRef("");
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -61,7 +63,8 @@ export function useWorkspaceFileImport() {
         // hands the workspace to the viewer and remembers the project it handed over,
         // so the import differs from it and is kept as the viewer's change. The pause
         // is also never swallowed by the replay's suppression gate, as the workspace
-        // event below may be.
+        // event below may be. The first file opens, so a follow ends here too.
+        leaveFollow();
         pause();
       }
       createFile(targetPath, uploaded.content, uploaded.encoding);
