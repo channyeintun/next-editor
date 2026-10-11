@@ -43,6 +43,8 @@ export interface VoiceEngineDeps {
     track: MediaStreamTrack,
     onChange: (isSpeaking: boolean) => void,
   ) => SpeakingDetectorHandle;
+  /** Resumes the audio the speaking detectors read, from a user gesture. */
+  resumeSpeakingDetection: () => void;
   setTimer: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
 }
@@ -203,6 +205,9 @@ export class VoiceEngine {
   }
 
   enableAudio(): void {
+    // This runs from the Enable audio click, which can also start the speaking
+    // detectors' context if it is still suspended.
+    this.deps.resumeSpeakingDetection();
     for (const entry of this.remotes.values()) entry.sink.retryPlayback();
   }
 

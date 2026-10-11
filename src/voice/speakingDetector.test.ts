@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createSpeakingDetector } from "./speakingDetector";
 
 class FakeMediaStream {
   readonly tracks: MediaStreamTrack[];
@@ -21,9 +20,13 @@ class FakeAnalyser {
   }
 }
 
+// Starts suspended, as WebKit starts a context made outside a user gesture.
 class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
+  state: AudioContextState = "suspended";
   readonly analysers: FakeAnalyser[] = [];
+  readonly sources: Array<{ disconnect: () => void }> = [];
+  resume = vi.fn<() => Promise<void>>(() => Promise.resolve());
   close = vi.fn<() => Promise<void>>(() => Promise.resolve());
 
   constructor() {
@@ -31,7 +34,9 @@ class FakeAudioContext {
   }
 
   createMediaStreamSource() {
-    return { connect: vi.fn<() => void>(), disconnect: vi.fn<() => void>() };
+    const source = { connect: vi.fn<() => void>(), disconnect: vi.fn<() => void>() };
+    this.sources.push(source);
+    return source;
   }
 
   createAnalyser(): FakeAnalyser {
@@ -45,6 +50,11 @@ function fakeTrack(): MediaStreamTrack {
   return { readyState: "live" } as MediaStreamTrack;
 }
 
+// The shared context lives in core's module, so each test loads a fresh copy.
+async function loadDetector() {
+  return import("./speakingDetector");
+}
+
 beforeEach(() => {
   FakeAudioContext.instances = [];
   vi.stubGlobal("AudioContext", FakeAudioContext);
@@ -54,32 +64,43 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.resetModules();
 });
 
 describe("speaking detector", () => {
-  it("shares one AudioContext and closes it when the last detector stops", () => {
-    const first = createSpeakingDetector(fakeTrack(), () => undefined);
-    const second = createSpeakingDetector(fakeTrack(), () => undefined);
+  it("reads the page's one shared context and resumes it now or on the next gesture", async () => {
+    const addListener = vi.spyOn(window, "addEventListener");
+    const { createSpeakingDetector } = await loadDetector();
+    const { resumeSharedAudioContext } = await import("../core/src/utils/audioContext");
+
+    createSpeakingDetector(fakeTrack(), () => undefined);
+    createSpeakingDetector(fakeTrack(), () => undefined);
+
     expect(FakeAudioContext.instances).toHaveLength(1);
     const [context] = FakeAudioContext.instances;
     expect(context.analysers).toHaveLength(2);
-
-    first.stop();
-    expect(context.close).not.toHaveBeenCalled();
-    // A repeated stop does not release the context on the other's behalf.
-    first.stop();
-    expect(context.close).not.toHaveBeenCalled();
-
-    second.stop();
-    expect(context.close).toHaveBeenCalledOnce();
-
-    const third = createSpeakingDetector(fakeTrack(), () => undefined);
-    expect(FakeAudioContext.instances).toHaveLength(2);
-    third.stop();
-    expect(FakeAudioContext.instances[1].close).toHaveBeenCalledOnce();
+    expect(context.resume).toHaveBeenCalled();
+    expect(addListener.mock.calls.map(([type]) => type)).toEqual(
+      expect.arrayContaining(["mousedown", "touchstart", "keydown", "click"]),
+    );
+    expect(resumeSharedAudioContext()).toBe(context);
   });
 
-  it("returns a no-op detector when the context cannot be created", () => {
+  it("disconnects its nodes on stop and never closes the shared context", async () => {
+    const { createSpeakingDetector } = await loadDetector();
+    const detector = createSpeakingDetector(fakeTrack(), () => undefined);
+    const [context] = FakeAudioContext.instances;
+
+    detector.stop();
+    detector.stop();
+
+    expect(context.sources[0].disconnect).toHaveBeenCalledOnce();
+    expect(context.analysers[0].disconnect).toHaveBeenCalledOnce();
+    expect(context.close).not.toHaveBeenCalled();
+  });
+
+  it("returns a no-op detector when the context cannot be created", async () => {
     vi.stubGlobal(
       "AudioContext",
       class {
@@ -88,11 +109,13 @@ describe("speaking detector", () => {
         }
       },
     );
+    const { createSpeakingDetector } = await loadDetector();
     const detector = createSpeakingDetector(fakeTrack(), () => undefined);
     expect(() => detector.stop()).not.toThrow();
   });
 
-  it("reports speaking after the attack time and silence after the release time", () => {
+  it("reports speaking after the attack time and silence after the release time", async () => {
+    const { createSpeakingDetector } = await loadDetector();
     vi.useFakeTimers();
     const onChange = vi.fn<(isSpeaking: boolean) => void>();
     const detector = createSpeakingDetector(fakeTrack(), onChange);
@@ -115,5 +138,25 @@ describe("speaking detector", () => {
     detector.stop();
     expect(onChange.mock.calls).toEqual([[true], [false], [true], [false]]);
     expect(analyser.disconnect).toHaveBeenCalledOnce();
+  });
+});
+
+describe("resumeSpeakingDetection", () => {
+  it("resumes the shared context the detectors read from", async () => {
+    const { createSpeakingDetector, resumeSpeakingDetection } = await loadDetector();
+    createSpeakingDetector(fakeTrack(), () => undefined);
+    const [context] = FakeAudioContext.instances;
+    context.resume.mockClear();
+
+    resumeSpeakingDetection();
+
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(context.resume).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing where the page cannot make an AudioContext", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    const { resumeSpeakingDetection } = await loadDetector();
+    expect(() => resumeSpeakingDetection()).not.toThrow();
   });
 });

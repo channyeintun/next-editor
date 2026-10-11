@@ -1,6 +1,8 @@
 // Local speaking detection with a Web Audio analyser. Levels never leave the
 // page: no WebSocket, storage, or logging (plan §8.5).
 
+import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
+
 const SPEAKING_THRESHOLD = 0.02;
 const ATTACK_MS = 120;
 const RELEASE_MS = 600;
@@ -10,24 +12,27 @@ export interface SpeakingDetectorHandle {
   stop: () => void;
 }
 
-// Every detector (the local microphone and one per remote speaker) shares one
-// AudioContext: browsers cap how many a page may hold, and a failed
-// construction would silently drop that speaker's indicator. Each detector
-// keeps its own source and analyser; the last one to stop closes the context.
-let shared: { context: AudioContext; users: number } | null = null;
+// Every detector (the local microphone and one per remote speaker) reads from
+// the page's one shared AudioContext: browsers cap how many a page may hold,
+// and a failed construction would silently drop that speaker's indicator.
+// Detectors are made from async callbacks, outside any user gesture, where
+// WebKit starts a context suspended and an analyser reads only silence, so
+// taking the context through resumeSharedAudioContext resumes it now or on the
+// next gesture. Analysers never connect to the destination, so nothing is
+// heard through it. Each detector keeps its own source and analyser and
+// disconnects them on stop; the shared context is never closed or suspended.
 
-function acquireContext(): AudioContext {
-  shared ??= { context: new AudioContext(), users: 0 };
-  shared.users += 1;
-  return shared.context;
-}
-
-function releaseContext(): void {
-  if (!shared) return;
-  shared.users -= 1;
-  if (shared.users > 0) return;
-  void shared.context.close().catch(() => undefined);
-  shared = null;
+/**
+ * Resumes the context the detectors read from. The engine calls it from the
+ * Enable audio click, which can resume a context no earlier gesture did.
+ */
+export function resumeSpeakingDetection(): void {
+  if (typeof AudioContext === "undefined") return;
+  try {
+    resumeSharedAudioContext();
+  } catch {
+    // No context could be made; detectors are already no-ops.
+  }
 }
 
 export function createSpeakingDetector(
@@ -35,18 +40,15 @@ export function createSpeakingDetector(
   onChange: (isSpeaking: boolean) => void,
 ): SpeakingDetectorHandle {
   if (typeof AudioContext === "undefined") return { stop: () => undefined };
-  let acquired = false;
   let source: MediaStreamAudioSourceNode;
   let analyser: AnalyserNode;
   try {
-    const context = acquireContext();
-    acquired = true;
+    const context = resumeSharedAudioContext();
     source = context.createMediaStreamSource(new MediaStream([track]));
     analyser = context.createAnalyser();
     analyser.fftSize = 512;
     source.connect(analyser);
   } catch {
-    if (acquired) releaseContext();
     return { stop: () => undefined };
   }
 
@@ -86,7 +88,7 @@ export function createSpeakingDetector(
   let stopped = false;
   return {
     stop() {
-      // A second stop must not release the shared context a second time.
+      // A second stop must not report silence a second time.
       if (stopped) return;
       stopped = true;
       clearInterval(interval);
@@ -96,7 +98,6 @@ export function createSpeakingDetector(
       } catch {
         // Nodes may already be disconnected.
       }
-      releaseContext();
       if (speaking) onChange(false);
     },
   };

@@ -131,6 +131,7 @@ function createHarness() {
   const mediaConfigs: VoiceMediaSessionConfig[] = [];
   const sinks: MockSink[] = [];
   const detectors: Array<{ stopped: boolean }> = [];
+  const resumeSpeakingDetection = vi.fn<() => void>();
   const timers: Array<{ callback: () => void; delayMs: number; cleared: boolean }> = [];
 
   const deps: VoiceEngineDeps = {
@@ -159,6 +160,7 @@ function createHarness() {
         },
       };
     },
+    resumeSpeakingDetection,
     setTimer: (callback, delayMs) => {
       const timer = {
         callback: () => {
@@ -182,7 +184,16 @@ function createHarness() {
     deps,
   );
   engine.setAvailability(null);
-  return { engine, sockets, mediaSessions, mediaConfigs, sinks, detectors, timers };
+  return {
+    engine,
+    sockets,
+    mediaSessions,
+    mediaConfigs,
+    sinks,
+    detectors,
+    resumeSpeakingDetection,
+    timers,
+  };
 }
 
 function activeTimer(harness: ReturnType<typeof createHarness>, maxDelayMs = Infinity) {
@@ -667,6 +678,18 @@ describe("voice engine autoplay", () => {
     sendSnapshot(harness.sockets[0], [selfParticipant(), remoteParticipant()]);
     harness.engine.enableAudio();
     expect(harness.sinks[0].retries).toBe(1);
+  });
+
+  it("resumes the speaking detectors' audio on enableAudio", () => {
+    const harness = createHarness();
+    harness.engine.join();
+    sendReady(harness.sockets[0]);
+    sendSnapshot(harness.sockets[0], [selfParticipant(), remoteParticipant()]);
+    expect(harness.resumeSpeakingDetection).not.toHaveBeenCalled();
+
+    harness.engine.enableAudio();
+
+    expect(harness.resumeSpeakingDetection).toHaveBeenCalledOnce();
   });
 
   it("reflects blocked sinks in the ui state", () => {

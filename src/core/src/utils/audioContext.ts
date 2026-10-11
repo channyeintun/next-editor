@@ -3,6 +3,8 @@
  * so no audio is routed through this context. Its state is how Editor tells whether
  * the page has had the user gesture the autoplay policy asks for before it autoplays
  * a lesson with audio, and play/seek clicks resume it to keep that answer current.
+ * Voice speaking detectors also read their analysers from it; those never connect to
+ * the destination, so still no audio is routed through it.
  */
 
 // Gestures that grant user activation. mousedown, touchstart and keydown bubble to

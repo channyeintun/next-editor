@@ -1,7 +1,7 @@
 import { VoiceEngine, type VoiceEngineDeps, type VoiceEngineOptions } from "./engine";
 import { createVoiceMediaSession } from "./partyTracksAdapter";
 import { createRemoteAudioSink } from "./remoteAudioSink";
-import { createSpeakingDetector } from "./speakingDetector";
+import { createSpeakingDetector, resumeSpeakingDetection } from "./speakingDetector";
 
 function browserVoiceEngineDeps(): VoiceEngineDeps {
   return {
@@ -9,6 +9,7 @@ function browserVoiceEngineDeps(): VoiceEngineDeps {
     createMediaSession: createVoiceMediaSession,
     createSink: (onBlockedChange) => createRemoteAudioSink({ onBlockedChange }),
     createSpeakingDetector,
+    resumeSpeakingDetection,
     setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
     clearTimer: (timer) => clearTimeout(timer),
   };
