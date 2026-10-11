@@ -62,6 +62,9 @@ const STATUS_ANNOUNCEMENT: Partial<Record<ChatStatus, string>> = {
   done: "Agent finished",
 };
 
+// How close to the bottom (px) the transcript must be to keep following new output.
+const TRANSCRIPT_PIN_THRESHOLD_PX = 48;
+
 function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const workspaceStore = useContext(WorkspaceStoreContext);
   const agentStore = getAgentStore();
@@ -101,7 +104,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const [keyDraft, setKeyDraft] = useState("");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [modelQuery, setModelQuery] = useState("");
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  // Whether the transcript follows new output. Cleared when the reader scrolls
+  // up, so a streamed token no longer pulls them back down mid-run.
+  const pinnedToBottomRef = useRef(true);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const keyHintId = useId();
   const wasRecordingRef = useRef(false);
@@ -125,8 +131,19 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     wasRecordingRef.current = isRecording;
   }, [agentStore, handleChatEvent, isRecording]);
 
+  // Every streamed token is a new items array. Scrolls the region itself, not
+  // scrollIntoView, so the page and dock around it never move.
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ block: "end" });
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    const last = items.at(-1);
+    // A new chat, or the user's own message, brings the reader back to the end.
+    if (items.length === 0 || (last?.kind === "message" && last.role === "user")) {
+      pinnedToBottomRef.current = true;
+    }
+    if (pinnedToBottomRef.current) {
+      transcript.scrollTop = transcript.scrollHeight;
+    }
   }, [items]);
 
   // Called after the effects above so its fetch effect keeps its place in their order.
@@ -313,9 +330,16 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
               (Safari does not focus scroll containers on its own); the ring is drawn
               inside so the dock does not clip it. */}
           <div
+            ref={transcriptRef}
             tabIndex={0}
             role="region"
             aria-label="Agent conversation"
+            onScroll={(event) => {
+              const transcript = event.currentTarget;
+              pinnedToBottomRef.current =
+                transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight <
+                TRANSCRIPT_PIN_THRESHOLD_PX;
+            }}
             className="relative min-h-0 flex-1 overflow-y-auto p-3 focus-visible:outline-offset-[-2px]"
           >
             {items.length === 0 ? (
@@ -337,7 +361,6 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 onRetry={handleRetry}
               />
             ) : null}
-            <div ref={transcriptEndRef} />
           </div>
 
           {activeConfirmation ? (

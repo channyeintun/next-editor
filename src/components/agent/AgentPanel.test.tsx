@@ -1,18 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { getAgentStore } from "../../agent/agentStore";
 import { getAgentCredentialStore } from "../../agent/credentials";
 import { getAgentSessionStore, resolveConfirmation, startAgentRun } from "../../agent/agentSession";
 import { MAX_CHAT_IMAGES } from "../../agent/imageAttachments";
+import { createContentDelta } from "../../core/src/utils/contentDelta";
 import type { ChatStatus } from "../../types/chat";
 import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
 import { WorkspaceStoreContext } from "../../contexts/WorkspaceContext";
@@ -64,7 +56,6 @@ vi.mock("../../agent/agentSession", async (importOriginal) => {
 });
 
 const workspace = {} as WorkspaceStoreInstance;
-const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 function renderPanel() {
   return render(
@@ -76,15 +67,6 @@ function renderPanel() {
 
 const composer = () => screen.getByRole("textbox", { name: "Message the agent" });
 const endRun = () => act(() => getAgentSessionStore().trigger.setRunning({ isRunning: false }));
-
-beforeAll(() => {
-  // jsdom has no scrollIntoView; the panel scrolls the transcript end into view.
-  Element.prototype.scrollIntoView = () => {};
-});
-
-afterAll(() => {
-  Element.prototype.scrollIntoView = originalScrollIntoView;
-});
 
 beforeEach(() => {
   const credentialStore = getAgentCredentialStore();
@@ -349,6 +331,83 @@ describe("AgentPanel conversation region", () => {
     expect(conversation).toHaveTextContent("Ask the agent to build or fix something");
     conversation.focus();
     expect(conversation).toHaveFocus();
+  });
+});
+
+describe("AgentPanel transcript scrolling", () => {
+  // jsdom does no layout: give the region a fixed viewport and a content height
+  // the test can grow, and a scrollTop that keeps what is written to it.
+  function stubRegionLayout(region: HTMLElement, layout: { scrollHeight: number }) {
+    let scrollTop = 0;
+    Object.defineProperty(region, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(region, "scrollHeight", {
+      configurable: true,
+      get: () => layout.scrollHeight,
+    });
+    Object.defineProperty(region, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+  }
+
+  const applyDelta = (
+    delta: Parameters<ReturnType<typeof getAgentStore>["trigger"]["applyDelta"]>[0]["delta"],
+  ) => act(() => getAgentStore().trigger.applyDelta({ delta }));
+
+  function streamAnswer(prev: string, next: string) {
+    const delta = createContentDelta(prev, next);
+    if (!delta) throw new Error("expected a content delta");
+    applyDelta({ k: "content", delta });
+  }
+
+  function renderStreamingTranscript() {
+    applyDelta({ k: "message_start", id: "a1", role: "assistant" });
+    streamAnswer("", "First line");
+    renderPanel();
+    const region = screen.getByRole("region", { name: "Agent conversation" });
+    const layout = { scrollHeight: 1000 };
+    stubRegionLayout(region, layout);
+    return { region, layout };
+  }
+
+  function scrollTo(region: HTMLElement, top: number) {
+    region.scrollTop = top;
+    fireEvent.scroll(region);
+  }
+
+  // Every streamed token makes a new items array; the transcript used to be
+  // scrolled to its end on each one, pulling a reader back down mid-run.
+  it("leaves the reader where they are when they have scrolled up", () => {
+    const { region, layout } = renderStreamingTranscript();
+    scrollTo(region, 100);
+
+    layout.scrollHeight = 1100;
+    streamAnswer("First line", "First line and more");
+
+    expect(region.scrollTop).toBe(100);
+  });
+
+  it("follows new output while the reader is at the bottom", () => {
+    const { region, layout } = renderStreamingTranscript();
+    scrollTo(region, 800);
+
+    layout.scrollHeight = 1100;
+    streamAnswer("First line", "First line and more");
+
+    expect(region.scrollTop).toBe(1100);
+  });
+
+  it("goes back to the bottom when the user sends a new message", () => {
+    const { region, layout } = renderStreamingTranscript();
+    scrollTo(region, 100);
+
+    layout.scrollHeight = 1100;
+    applyDelta({ k: "message_start", id: "u2", role: "user" });
+
+    expect(region.scrollTop).toBe(1100);
   });
 });
 
