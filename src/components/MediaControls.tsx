@@ -36,6 +36,7 @@ import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
 import ProgressBar, { LIVE_PROGRESS_VARIABLE } from "./ProgressBar";
+import HoverRing from "./hoverRing/HoverRing";
 import Switch from "./Switch";
 import type { Recording } from "../core/src";
 import {
@@ -394,7 +395,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const containerPadding = large ? "px-10 py-8" : "px-4 py-1";
   const containerHeight = large ? "" : "max-h-10";
   const rowSizing = large ? "gap-8 min-h-20" : "gap-3 min-h-8";
-  const transportButtonWidth = large ? "w-[72px]" : "w-6";
+  // A box with room round the icon, for the hover ring to trace.
+  const controlButtonClass = large ? "size-[72px] rounded-xl" : "size-7 rounded-md";
   const transportIconSize = large ? 72 : 24;
   const controlIconSize = large ? 52 : 16;
   const recordIconSize = large ? 44 : 14;
@@ -442,12 +444,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             disabled={isPlaying}
             iconSize={recordIconSize}
             plusSize={recordPlusSize}
+            className={controlButtonClass}
             onClick={handleRecordButtonClick}
           />
         )}
 
         {effectiveRecordMode && isRecording ? (
-          <RecordingTransportControls iconSize={controlIconSize} className={transportButtonWidth} />
+          <RecordingTransportControls iconSize={controlIconSize} className={controlButtonClass} />
         ) : null}
 
         {showAudioSourceControls ? (
@@ -467,6 +470,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               >
                 <Mic size={13} aria-hidden="true" />
                 <span className="hidden sm:inline">Mic</span>
+                {/* Inside each option, which touch in the track; not on the chosen one, whose
+                    light fill would hide it. */}
+                {recordingAudioSource === "microphone" ? null : <HoverRing gap={0} />}
               </button>
               <button
                 data-tour="audio-file"
@@ -482,6 +488,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               >
                 <FileMusic size={13} aria-hidden="true" />
                 <span className="hidden sm:inline">File</span>
+                {recordingAudioSource === "external" ? null : <HoverRing gap={0} />}
               </button>
             </div>
             {recordingAudioSource === "microphone" ? <MicrophoneCheck /> : null}
@@ -503,9 +510,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                   type="button"
                   onClick={handleClearSelectedAudio}
                   aria-label="Clear selected audio file"
-                  className="shrink-0 rounded-full text-slate-500 transition-colors hover:text-white"
+                  // Room for the ring, reaching into the pill's padding so its height stays.
+                  className="-my-1 -mr-1 shrink-0 rounded-full p-1 text-slate-500 transition-colors hover:text-white"
                 >
                   <X size={12} aria-hidden="true" />
+                  <HoverRing />
                 </button>
               </div>
             ) : null}
@@ -554,7 +563,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               type="button"
               onClick={handlePlayPause}
               aria-label={isPlaying ? "Pause" : hasEnded ? "Replay" : "Play"}
-              className={`flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer pointer-events-auto ${transportButtonWidth}`}
+              className={`flex items-center justify-center transition-colors cursor-pointer pointer-events-auto ${controlButtonClass}`}
             >
               {isPlaying ? (
                 <PauseIcon size={transportIconSize} />
@@ -563,6 +572,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               ) : (
                 <PlayIcon size={transportIconSize} />
               )}
+              <HoverRing />
             </button>
 
             <PlaybackProgress
@@ -576,7 +586,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               recording={currentRecording}
               editable={effectiveRecordMode}
               iconSize={controlIconSize}
-              buttonClassName={transportButtonWidth}
+              buttonClassName={controlButtonClass}
             />
 
             {hasCameraRecording ? (
@@ -586,20 +596,21 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 aria-pressed={isCameraOverlayVisible}
                 // One name in both states; aria-pressed and the icon say which.
                 title="Camera"
-                className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${transportButtonWidth}`}
+                className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${controlButtonClass}`}
               >
                 {isCameraOverlayVisible ? (
                   <Video size={controlIconSize} aria-hidden="true" />
                 ) : (
                   <VideoOff size={controlIconSize} aria-hidden="true" />
                 )}
+                <HoverRing />
               </button>
             ) : null}
 
             <LearnerVersionsMenu
               recordingId={currentRecording.id}
               iconSize={controlIconSize}
-              buttonClassName={transportButtonWidth}
+              buttonClassName={controlButtonClass}
             />
 
             {effectiveRecordMode ? (
@@ -612,9 +623,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 title="Cut or mute stretches of this recording"
                 className={`flex items-center justify-center transition-colors pointer-events-auto disabled:opacity-40 ${
                   showEditPanel ? "text-white" : "text-slate-300 hover:text-white"
-                } ${transportButtonWidth}`}
+                } ${controlButtonClass}`}
               >
                 <Scissors size={controlIconSize} aria-hidden="true" />
+                <HoverRing />
               </button>
             ) : null}
 
@@ -624,7 +636,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 menuOpen={showCaptionMenu}
                 setMenuOpen={setShowCaptionMenu}
                 iconSize={controlIconSize}
-                className={transportButtonWidth}
+                className={controlButtonClass}
               />
             ) : null}
 
@@ -636,12 +648,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 // Named for what it shows: a bare "40%" says nothing on its own.
                 aria-label={describeCaptionGeneration(captionGeneration.state)}
                 title={describeCaptionGeneration(captionGeneration.state)}
-                className="inline-flex shrink-0 items-center gap-1 text-[11px] text-slate-400 pointer-events-auto"
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1 text-[11px] text-slate-400 pointer-events-auto"
               >
                 <Loader2 size={12} className="animate-spin" aria-hidden="true" />
                 {captionGeneration.state.status === "running" && captionGeneration.state.progress
                   ? `${Math.round(captionGeneration.state.progress.fraction * 100)}%`
                   : ""}
+                <HoverRing />
               </button>
             ) : null}
 
@@ -653,9 +666,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 aria-label="Settings"
                 aria-expanded={showSettings}
                 title="Settings"
-                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer"
+                className={`flex items-center justify-center transition-colors cursor-pointer ${controlButtonClass}`}
               >
                 <SettingIcon size={controlIconSize} />
+                <HoverRing />
               </button>
 
               {showSettings && (

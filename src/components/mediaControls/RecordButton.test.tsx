@@ -12,6 +12,7 @@ const renderButton = (props: Partial<Parameters<typeof RecordButton>[0]> = {}) =
       disabled={false}
       iconSize={14}
       plusSize={10}
+      className="size-7 rounded-md"
       onClick={onClick}
       {...props}
     />,

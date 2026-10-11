@@ -8,6 +8,7 @@ import { useRecordingSettings } from "../hooks/useRecordingSettings";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import type { MicrophoneVerdict } from "../utils/audioLevel";
 import { isImeComposingKey } from "../utils/keyboardPlatform";
+import HoverRing from "./hoverRing/HoverRing";
 
 const VERDICT_TEXT: Record<MicrophoneVerdict, string> = {
   listening: "Listening…",
@@ -111,9 +112,11 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={onClose}
           aria-label="Close the microphone check"
-          className="text-slate-500 transition-colors hover:text-white"
+          // Room for the ring; the negative margin keeps the header row's height.
+          className="-m-1 rounded-md p-1 text-slate-500 transition-colors hover:text-white"
         >
           <X size={14} aria-hidden="true" />
+          <HoverRing />
         </button>
       </div>
       <select
@@ -178,6 +181,7 @@ export default function MicrophoneCheck() {
         }`}
       >
         <AudioLines size={13} aria-hidden="true" />
+        <HoverRing />
       </button>
       {open ? <MicrophoneCheckPanel onClose={close} /> : null}
     </div>

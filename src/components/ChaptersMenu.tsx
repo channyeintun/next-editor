@@ -14,6 +14,7 @@ import {
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { isImeComposingKey } from "../utils/keyboardPlatform";
+import HoverRing from "./hoverRing/HoverRing";
 
 /** How long a copied-link check mark stays. */
 const COPIED_MS = 1_500;
@@ -86,6 +87,7 @@ export default function ChaptersMenu({
         className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white ${buttonClassName}`}
       >
         <ListVideo size={iconSize} aria-hidden="true" />
+        <HoverRing />
       </button>
 
       {open ? (

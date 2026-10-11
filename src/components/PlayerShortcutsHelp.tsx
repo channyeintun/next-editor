@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { PLAYER_SHORTCUTS } from "../hooks/usePlayerShortcuts";
 import { isApplePlatform, isImeComposingKey } from "../utils/keyboardPlatform";
 import { goToFileShortcutLabel } from "./quickOpen/goToFileShortcut";
+import HoverRing from "./hoverRing/HoverRing";
 
 /** The player's keyboard shortcuts, opened with "?" or from the settings. */
 export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }) {
@@ -48,9 +49,12 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
           type="button"
           onClick={onClose}
           aria-label="Close keyboard shortcuts"
-          className="text-slate-500 transition-colors hover:text-white"
+          // A box round the icon for the hover ring; the negative margin keeps the header
+          // row's height.
+          className="-m-1 rounded-md p-1 text-slate-500 transition-colors hover:text-white"
         >
           <X size={14} aria-hidden="true" />
+          <HoverRing />
         </button>
       </div>
       <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">

@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import HoverRing from "../hoverRing/HoverRing";
 
 /**
  * A pill beside the audio source that switches something else the next take records, such as
@@ -39,6 +40,7 @@ const RecordingOptionToggle = ({
     >
       {on ? <OnIcon size={13} aria-hidden="true" /> : <OffIcon size={13} aria-hidden="true" />}
       <span className="hidden sm:inline">{label}</span>
+      <HoverRing />
     </button>
   );
 };

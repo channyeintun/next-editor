@@ -10,6 +10,7 @@ import {
 } from "../stores/learnerVersionsStore";
 import type { LearnerWorkspaceVersion } from "../storage/learnerWorkspaceVersions";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
+import HoverRing from "./hoverRing/HoverRing";
 
 const NO_VERSIONS: LearnerWorkspaceVersion[] = [];
 
@@ -149,9 +150,11 @@ export default function LearnerVersionsMenu({
           className={`relative flex items-center justify-center text-slate-300 transition-colors hover:text-white ${buttonClassName}`}
         >
           <History size={iconSize} aria-hidden="true" />
+          {/* Before the count, which sits over the ring's corner. */}
+          <HoverRing />
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-1 min-w-3.5 rounded-full bg-blue-400 px-0.5 text-center text-[10px] leading-3.5 font-semibold text-slate-950"
+            className="absolute top-0.5 -right-0.5 min-w-3.5 rounded-full bg-blue-400 px-0.5 text-center text-[10px] leading-3.5 font-semibold text-slate-950"
           >
             {versions.length}
           </span>

@@ -8,6 +8,7 @@ import {
   useRetakeTargetTime,
 } from "../../hooks/useNextEditorContext";
 import { formatPlaybackTime } from "../../utils/formatPlaybackTime";
+import HoverRing from "../hoverRing/HoverRing";
 
 /** Marks a chapter where the take is now; a retake can also rewind to it. */
 const AddChapterButton = ({ iconSize, className }: { iconSize: number; className: string }) => {
@@ -24,6 +25,7 @@ const AddChapterButton = ({ iconSize, className }: { iconSize: number; className
       className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${className}`}
     >
       <BookmarkPlus size={iconSize} aria-hidden="true" />
+      <HoverRing />
     </button>
   );
 };
@@ -72,9 +74,11 @@ const RetakeButton = ({ iconSize, className }: { iconSize: number; className: st
       disabled={targetTime === null}
       aria-label={label}
       title={label}
+      // Armed, it stays the bar's 28px tall: the pointer that armed it is still on it,
+      // and the confirming click must land on it too.
       className={`flex items-center justify-center gap-1.5 transition-colors pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40 ${
         armed
-          ? "rounded-full bg-amber-500/15 px-2 text-amber-200"
+          ? "min-h-7 rounded-full bg-amber-500/15 px-2 text-amber-200"
           : `text-slate-300 hover:text-white ${className}`
       }`}
     >
@@ -82,6 +86,8 @@ const RetakeButton = ({ iconSize, className }: { iconSize: number; className: st
       {armed ? (
         <span className="whitespace-nowrap text-xs font-semibold">Discard {discarded}?</span>
       ) : null}
+      {/* Armed, the amber pill is its own feedback, and its corner is not the box's. */}
+      {armed ? null : <HoverRing />}
     </button>
   );
 };
@@ -116,6 +122,7 @@ const RecordingTransportControls = ({
         ) : (
           <Pause size={iconSize} className="fill-current" aria-hidden="true" />
         )}
+        <HoverRing />
       </button>
       <RetakeButton iconSize={iconSize} className={className} />
       <AddChapterButton iconSize={iconSize} className={className} />

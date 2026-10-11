@@ -3,6 +3,7 @@ import { Captions, CaptionsOff, Check } from "lucide-react";
 import type { CaptionTrack } from "../../core/src/types";
 import { useCaptionStore, useCaptionStoreTrigger } from "../../hooks/useCaptionStore";
 import { captionTrackLabel, selectCaptionTrack } from "../../captions/captionTracks";
+import HoverRing from "../hoverRing/HoverRing";
 
 /**
  * Turns the lesson's captions on and off or, when it has several tracks, opens a menu to
@@ -63,6 +64,7 @@ const CaptionsMenuButton = ({
         ) : (
           <CaptionsOff size={iconSize} aria-hidden="true" />
         )}
+        <HoverRing />
       </button>
 
       {menuOpen && hasMultipleTracks && (

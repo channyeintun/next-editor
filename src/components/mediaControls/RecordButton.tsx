@@ -1,5 +1,6 @@
 import { Circle, Plus, Square } from "lucide-react";
 import IdleRecordButton from "../IdleRecordButton";
+import HoverRing from "../hoverRing/HoverRing";
 
 /** What a press does: stop the running take, clear a finished one to start over, or start one. */
 type RecordButtonAction = "stop" | "new" | "start";
@@ -56,6 +57,7 @@ const RecordButton = ({
   disabled,
   iconSize,
   plusSize,
+  className,
   onClick,
 }: {
   isRecording: boolean;
@@ -65,6 +67,8 @@ const RecordButton = ({
   disabled: boolean;
   iconSize: number;
   plusSize: number;
+  /** Its size and corner, shared with the bar's other controls. */
+  className: string;
   onClick: () => void;
 }) => {
   const action = recordButtonAction(isRecording, hasRecording);
@@ -73,9 +77,11 @@ const RecordButton = ({
       data-tour="record"
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center transition-colors relative pointer-events-auto ${disabled ? "opacity-50 cursor-not-allowed" : "hover:opacity-80 cursor-pointer"}`}
+      className={`flex items-center justify-center transition-colors relative pointer-events-auto ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${className}`}
       title={TITLES[action]}
     >
+      {/* Before the icon, whose "new" badge sits over the ring. */}
+      <HoverRing />
       <RecordButtonIcon
         action={action}
         isRecordingPaused={isRecordingPaused}
