@@ -123,7 +123,9 @@ export interface EditorProps {
   /**
    * Save the workspace to the one persisted project every tab shares. Off for
    * studio renders, whose performed workspace is not the user's project and
-   * would overwrite it on Ctrl-S. Defaults to on.
+   * would overwrite it on Ctrl-S. Defaults to on. A read-only editor (a /learn
+   * lesson, an embed, a `?readOnly=true` link) never saves, whatever this says:
+   * its workspace is a lesson's, not the viewer's. Read once, at mount.
    */
   persistWorkspace?: boolean;
 }
@@ -329,8 +331,14 @@ export default function Editor({
   persistWorkspace = true,
   ...props
 }: EditorProps = {}) {
+  // Resolved as EditorLayout resolves it, so the read-only rule reaches the provider.
+  const [searchParams] = useSearchParams();
+  const readOnly = props.readOnly ?? isReadOnlyView(searchParams);
   return (
-    <WorkspaceProvider pendingRecordingUrl={props.recordingUrl} persist={persistWorkspace}>
+    <WorkspaceProvider
+      pendingRecordingUrl={props.recordingUrl}
+      persist={persistWorkspace && !readOnly}
+    >
       <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>

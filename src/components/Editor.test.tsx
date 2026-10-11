@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { Dispatch, SetStateAction } from "react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 
 // Monaco and the rest of the workspace are not under test here; the loading
 // overlay and its status region live in Editor's own layout.
@@ -146,5 +148,78 @@ describe("Editor recording-load error", () => {
     act(() => loader.setIsLoading?.(true));
 
     expect(screen.getByTestId("player-bar-skeleton")).toBeInTheDocument();
+  });
+});
+
+describe("Editor workspace persistence", () => {
+  const STORAGE_KEY = "next-editor-workspace";
+  const SEEDED = JSON.stringify({
+    activeFilePath: "index.js",
+    project: {
+      entryFilePath: "index.js",
+      files: { "index.js": { path: "index.js", content: "// the viewer's own project" } },
+    },
+  });
+
+  /** Renders an Editor whose workspace actions the test drives, as Ctrl+S would. */
+  function renderPersistingEditor({
+    readOnly,
+    route = "/",
+  }: {
+    readOnly?: boolean;
+    route?: string;
+  }) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const captured: { actions: WorkspaceActions | null } = { actions: null };
+    function CaptureWorkspaceActions() {
+      captured.actions = useWorkspaceActions();
+      return null;
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[route]}>
+          <Editor
+            readOnly={readOnly}
+            runtimeAutoStart={false}
+            recordingDrafts={false}
+            overlay={<CaptureWorkspaceActions />}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const actions = captured.actions;
+    if (!actions) throw new Error("The workspace actions were not captured");
+    return actions;
+  }
+
+  async function editAndSave(actions: WorkspaceActions) {
+    actions.updateFileContent("index.js", "// a lesson's file");
+    await act(() => actions.saveProject());
+  }
+
+  beforeEach(() => {
+    window.localStorage.setItem(STORAGE_KEY, SEEDED);
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(STORAGE_KEY);
+  });
+
+  it("never saves a read-only editor's workspace over the viewer's own project", async () => {
+    await editAndSave(renderPersistingEditor({ readOnly: true }));
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(SEEDED);
+  });
+
+  it("never saves a ?readOnly=true editor's workspace over the viewer's own project", async () => {
+    await editAndSave(renderPersistingEditor({ route: "/?readOnly=true" }));
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(SEEDED);
+  });
+
+  it("still saves the workspace of an editor the viewer authors in", async () => {
+    await editAndSave(renderPersistingEditor({}));
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toContain("// a lesson's file");
   });
 });
