@@ -36,6 +36,7 @@ import EnvironmentVariablesDialog from "./EnvironmentVariablesDialog";
 import SettingsMenuItem from "./SettingsMenuItem";
 import StarterTemplateSubmenu, { type LessonTypeOption } from "./StarterTemplateSubmenu";
 import { HEADER_ICON_BUTTON_CLASS, HEADER_ICON_BUTTON_NEUTRAL_CLASS } from "./headerButtonClasses";
+import HoverRing from "../hoverRing/HoverRing";
 
 const LESSON_TYPE_OPTIONS: LessonTypeOption[] = WORKSPACE_LESSON_TYPES.map((value) => ({
   value,
@@ -305,6 +306,7 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
           className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
         >
           <Settings size={16} aria-hidden="true" />
+          <HoverRing />
         </button>
 
         {isMenuOpen ? (

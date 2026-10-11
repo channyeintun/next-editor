@@ -10,6 +10,7 @@ import {
 import { Search, X } from "lucide-react";
 import ModalShell from "../ModalShell";
 import LangText from "../LangText";
+import HoverRing from "../hoverRing/HoverRing";
 import { getFileIcon } from "../fileSidebar/fileIcons";
 import { useWorkspaceActiveFilePath, useWorkspaceTreeFiles } from "../../hooks/useWorkspace";
 import type { WorkspaceTreeFile } from "../../types/workspace";
@@ -192,6 +193,7 @@ export default function QuickOpenDialog({
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
           >
             <X size={16} aria-hidden="true" />
+            <HoverRing />
           </button>
         </div>
 

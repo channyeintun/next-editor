@@ -19,6 +19,7 @@ import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
 import WorkspaceSettingsButton from "./editorHeader/WorkspaceSettingsButton";
 import QuickOpen from "./quickOpen/QuickOpen";
+import HoverRing from "./hoverRing/HoverRing";
 import {
   HEADER_ICON_BUTTON_CLASS,
   HEADER_ICON_BUTTON_NEUTRAL_CLASS,
@@ -46,6 +47,7 @@ export function FileSidebarToggleButton() {
       className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       {isOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+      <HoverRing />
     </button>
   );
 }
@@ -64,6 +66,7 @@ export function PreviewHeaderButton() {
       className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       {isOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+      <HoverRing />
     </button>
   );
 }
@@ -90,6 +93,7 @@ export function WhiteboardHeaderButton() {
       className={`${HEADER_ICON_BUTTON_CLASS} ${isOpen ? "bg-[#273449] text-white" : HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       <PenTool size={16} />
+      <HoverRing />
     </button>
   );
 }

@@ -5,6 +5,7 @@ import { useSlidesContext } from "../contexts/SlidesContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { lazyWithRecovery } from "../routeRecovery";
+import HoverRing from "./hoverRing/HoverRing";
 
 // Only an author opens the deck manager (never in playback, a take or a room), so a
 // learner's editor does not load it, or the Google Slides import behind it.
@@ -145,6 +146,7 @@ export default function SlidesButton({
             {slides.length}
           </span>
         )}
+        <HoverRing />
       </button>
 
       {/* Recording indicator for slides */}

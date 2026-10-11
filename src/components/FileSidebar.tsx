@@ -24,6 +24,7 @@ import {
   studioTargetIdForFile,
 } from "../studio/targets";
 import FileContextMenu from "./fileSidebar/FileContextMenu";
+import HoverRing from "./hoverRing/HoverRing";
 import QuickOpenButton from "./quickOpen/QuickOpenButton";
 import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
 import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
@@ -636,33 +637,39 @@ function FileSidebarPanel() {
             </h2>
             <QuickOpenButton />
           </div>
-          <div className="flex items-center gap-1">
+          {/* Boxes with room round each icon for the hover ring, as on Go to File; the
+              negative margin keeps the header's row height, and the narrow gap keeps
+              the row inside the narrowest sidebar. */}
+          <div className="flex items-center gap-0.5">
             <button
               type="button"
               onClick={handleCreateFile}
-              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              className="-my-1 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-white"
               aria-label="Create file"
               title="Create file"
             >
               <FilePlus2 size={14} />
+              <HoverRing />
             </button>
             <button
               type="button"
               onClick={handleCreateFolder}
-              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              className="-my-1 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-white"
               aria-label="Create folder"
               title="Create folder"
             >
               <FolderPlus size={14} />
+              <HoverRing />
             </button>
             <button
               type="button"
               onClick={() => openUploadDialog("")}
-              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              className="-my-1 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-white"
               aria-label="Upload files"
               title="Upload local files (images, video, assets)"
             >
               <Upload size={14} />
+              <HoverRing />
             </button>
           </div>
         </div>
