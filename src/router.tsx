@@ -43,9 +43,13 @@ function getRouteErrorMessage(error: unknown) {
 // the start of the navigation, in parallel. A failed fetch is left to Editor's
 // own lazy import, which reports it. PostHog waits for that chunk (Monaco text
 // is these routes' LCP) instead of taking a share of its download.
+function prefetchCodeEditor() {
+  deferAnalyticsUntil(import("./components/CodeEditor"));
+}
+
 function withCodeEditorPrefetch<T>(importer: () => Promise<T>) {
   return () => {
-    deferAnalyticsUntil(import("./components/CodeEditor"));
+    prefetchCodeEditor();
     return importer();
   };
 }
@@ -74,9 +78,14 @@ function prefetchLessonGallery() {
 // /learn/:slug renders a lesson or an author profile, each behind its own
 // chunk (see LearnSlugRoute). A route's lazy() can't see the slug, but its
 // loader can, and runs alongside it, so this starts the right view's chunk in
-// the same batch as the route's. Like prefetchLessonGallery, it returns at once.
-function prefetchLearnSlugRouteView({ params }: LoaderFunctionArgs) {
+// the same batch as the route's. A lesson also starts the CodeEditor import
+// here; a profile renders no editor, so it skips Monaco and never holds
+// PostHog back for it. Like prefetchLessonGallery, it returns at once.
+export function prefetchLearnSlugRouteView({ params }: LoaderFunctionArgs) {
   prefetchLearnSlugView(params.slug);
+  if (!isAuthorProfileSlug(params.slug)) {
+    prefetchCodeEditor();
+  }
   return null;
 }
 
@@ -221,10 +230,10 @@ export const router = createBrowserRouter([
     // profiles (/learn/@username) — see LearnSlugRoute for why these can't
     // be split into two router-level routes.
     path: "/learn/:slug",
+    // The loader, not lazy(), starts the CodeEditor import: only the loader
+    // sees the slug, so lessons start it and author profiles do not.
     loader: prefetchLearnSlugRouteView,
-    // Author profiles share this route and also start the CodeEditor import:
-    // a route's lazy() can't see the slug.
-    lazy: lazyRoute(withCodeEditorPrefetch(loadLearnSlugRoute), "/learn/:slug"),
+    lazy: lazyRoute(loadLearnSlugRoute, "/learn/:slug"),
     HydrateFallback: LearnSlugHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
