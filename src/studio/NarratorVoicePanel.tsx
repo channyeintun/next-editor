@@ -186,6 +186,10 @@ export default function NarratorVoicePanel({
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSelectRef = useRef<HTMLSelectElement | null>(null);
   const voiceTakeRef = useRef<VoiceTake | null>(null);
+  // True while a take waits for the microphone (the permission prompt or the
+  // device opening). A Record click then does nothing, so it cannot start a
+  // second take that Stop never reaches.
+  const startingTakeRef = useRef(false);
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -247,6 +251,8 @@ export default function NarratorVoicePanel({
       active.recorder.stop();
       return;
     }
+    if (startingTakeRef.current) return;
+    startingTakeRef.current = true;
     startVoiceTake(
       () => mountedRef.current,
       (take) => {
@@ -261,7 +267,11 @@ export default function NarratorVoicePanel({
           .then((bytes) => saveVoiceFromAudio(bytes, "My voice"))
           .catch((error: unknown) => onError(messageOf(error)));
       },
-    ).catch((error: unknown) => onError(messageOf(error)));
+    )
+      .catch((error: unknown) => onError(messageOf(error)))
+      .finally(() => {
+        startingTakeRef.current = false;
+      });
   };
 
   const previewVoice = () => {

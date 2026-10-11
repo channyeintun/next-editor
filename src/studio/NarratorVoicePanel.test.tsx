@@ -254,6 +254,51 @@ describe("NarratorVoicePanel recording", () => {
     expect(await screen.findByRole("button", { name: "Record" })).toBeInTheDocument();
   });
 
+  it("starts one take when Record is clicked again before the microphone opens", async () => {
+    let grantMicrophone: (stream: MediaStream) => void = () => {};
+    const getUserMedia = vi.fn<MediaDevices["getUserMedia"]>(
+      () =>
+        new Promise((resolve) => {
+          grantMicrophone = resolve;
+        }),
+    );
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    renderPanel();
+
+    // A double click, or a click while the permission prompt is still open.
+    const record = screen.getByRole("button", { name: "Record" });
+    fireEvent.click(record);
+    fireEvent.click(record);
+    grantMicrophone({ getTracks: () => [track] } as unknown as MediaStream);
+    await screen.findByRole("button", { name: "Stop" });
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+  });
+
+  it("lets Record start a take again after the microphone was refused", async () => {
+    const getUserMedia = vi
+      .fn<MediaDevices["getUserMedia"]>()
+      .mockRejectedValueOnce(new Error("Permission denied"))
+      .mockResolvedValueOnce({ getTracks: () => [track] } as unknown as MediaStream);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith("Permission denied"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    await screen.findByRole("button", { name: "Stop" });
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+  });
+
   it("stops the microphone and discards the take when the console unmounts mid-take", async () => {
     const { unmount } = renderPanel();
 
