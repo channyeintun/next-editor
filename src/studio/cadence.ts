@@ -179,11 +179,20 @@ export function compileTypingChunks(
   while (index < chunkSource.length) {
     const newlineIndex = chunkSource.indexOf("\n", index);
     const lineEnd = newlineIndex === -1 ? chunkSource.length : newlineIndex + 1;
-    const chunkEnd = Math.min(index + cadence.maxChunkChars, lineEnd);
+    let chunkEnd = Math.min(index + cadence.maxChunkChars, lineEnd);
+    // Keep a surrogate pair (an emoji) in one chunk. A lone high surrogate
+    // left in the editor between keystrokes is recorded as U+FFFD, so replay
+    // would flash a replacement character before the real glyph. codePointAt
+    // passes 0xffff only on a high surrogate followed by its low half.
+    if (chunkEnd < lineEnd && (chunkSource.codePointAt(chunkEnd - 1) ?? 0) > 0xffff) {
+      chunkEnd += 1;
+    }
     const chunkText = chunkSource.slice(index, chunkEnd);
 
     const jitterFactor = 1 + (random() * 2 - 1) * cadence.jitter;
-    const scaledDelay = baseDelayMs * (chunkText.length / cadence.maxChunkChars) * jitterFactor;
+    // Scaled by code points, so an emoji costs one keystroke, not two.
+    const keystrokes = [...chunkText].length;
+    const scaledDelay = baseDelayMs * (keystrokes / cadence.maxChunkChars) * jitterFactor;
     const endsLine = chunkText.endsWith("\n");
 
     // Word starts type slower: the reference recording shows the first key

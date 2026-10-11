@@ -105,6 +105,37 @@ describe("compileTypingChunks (chars mode)", () => {
   it("returns no chunks for empty text", () => {
     expect(compileTypingChunks("", NATURAL_CADENCE, 1)).toEqual([]);
   });
+
+  it("types an emoji as one keystroke, never half of its surrogate pair", () => {
+    const line = 'fmt.Println("\u{1F680} launch")\n';
+    const chunked = [
+      compileTypingChunks(line, NATURAL_CADENCE, 7),
+      compileTypingChunks(
+        "abc\u{1F680}d\n",
+        { mode: "chars", charsPerSecond: 16, maxChunkChars: 4, lineBreakPauseMs: 200, jitter: 0 },
+        7,
+      ),
+    ];
+    for (const chunks of chunked) {
+      for (const { text } of chunks) {
+        // A lone surrogate would reach the recorder's TextEncoder as U+FFFD.
+        expect(text).not.toMatch(/[\uD800-\uDBFF]$/);
+        expect(text).not.toMatch(/^[\uDC00-\uDFFF]/);
+      }
+    }
+    expect(reassembled(chunked[0])).toBe(line);
+    expect(chunked[1].map((chunk) => chunk.text).join("")).toBe("abc\u{1F680}d\n");
+  });
+
+  it("charges an emoji the delay of one keystroke", () => {
+    if (NATURAL_CADENCE.mode !== "chars") throw new Error("cadence changed mode");
+    const noJitter = { ...NATURAL_CADENCE, jitter: 0, thinkChance: 0 };
+    // The opening Enter comes first, then "a", "b" and the emoji.
+    const [, , plain, emoji] = compileTypingChunks("ab\u{1F680}\n", noJitter, 7);
+    expect(plain.text).toBe("b");
+    expect(emoji.text).toBe("\u{1F680}");
+    expect(emoji.delayMs).toBe(plain.delayMs);
+  });
 });
 
 describe("compileTypingChunks (lines mode)", () => {
