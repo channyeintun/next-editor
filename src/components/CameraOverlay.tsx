@@ -20,6 +20,7 @@ import {
 import { useCameraPreviewStream } from "./cameraOverlay/useCameraPreviewStream";
 import { useDraggableOverlayPosition } from "./cameraOverlay/useDraggableOverlayPosition";
 import { useTimelineSyncedVideo } from "./cameraOverlay/useTimelineSyncedVideo";
+import HoverRing from "./hoverRing/HoverRing";
 
 const CameraOverlay: React.FC = () => {
   const actorRef = NextEditorActorContext.useActorRef();
@@ -163,6 +164,7 @@ const CameraOverlay: React.FC = () => {
         className="absolute left-1/2 top-1.5 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950/60 text-white opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
       >
         <Move size={16} aria-hidden="true" />
+        <HoverRing />
       </button>
       <button
         type="button"
@@ -179,6 +181,7 @@ const CameraOverlay: React.FC = () => {
         ) : (
           <ChevronRight size={18} aria-hidden="true" />
         )}
+        <HoverRing />
       </button>
     </div>
   );

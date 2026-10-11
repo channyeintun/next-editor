@@ -19,6 +19,7 @@ import {
 import { copyTextToClipboard } from "../utils/clipboard";
 import { downloadBlob } from "../utils/downloadBlob";
 import { isImeComposingKey } from "../utils/keyboardPlatform";
+import HoverRing from "./hoverRing/HoverRing";
 
 const STATUS_LABELS = {
   disconnected: "Disconnected",
@@ -143,6 +144,7 @@ function ParticipantRow({
           }`}
         >
           {isFollowed ? "Following" : "Follow"}
+          <HoverRing />
         </button>
       ) : null}
     </li>
@@ -301,9 +303,10 @@ function RoomOwnerSection({
                     aria-label={`Remove ${collaboratorDisplayName(member)}`}
                     disabled={isBusy}
                     onClick={() => void run(() => collaboration.removeMember(member.userId))}
-                    className="rounded p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
+                    className="rounded-md p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
                   >
                     <UserMinus size={13} />
+                    <HoverRing />
                   </button>
                 </>
               )}
@@ -336,6 +339,7 @@ function RoomOwnerSection({
                     className="inline-flex min-h-6 items-center rounded px-1.5 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 disabled:opacity-50"
                   >
                     Revoke
+                    <HoverRing />
                   </button>
                 </li>
               ))}
@@ -510,6 +514,7 @@ export default function CollaborationPanel() {
             {presence.participants.length}
           </span>
         ) : null}
+        <HoverRing />
       </button>
 
       {isOpen ? (
@@ -544,9 +549,10 @@ export default function CollaborationPanel() {
                 setIsOpen(false);
                 triggerRef.current?.focus();
               }}
-              className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-white"
+              className="rounded-md p-1 text-slate-400 hover:bg-white/5 hover:text-white"
             >
               <X size={16} />
+              <HoverRing />
             </button>
           </div>
 

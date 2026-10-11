@@ -5,6 +5,7 @@ import {
   useCollaborationVoiceState,
 } from "../contexts/CollaborationVoiceContext";
 import type { VoiceClientErrorCode } from "../voice/machine";
+import HoverRing from "./hoverRing/HoverRing";
 
 const VOICE_STATUS_LABELS = {
   idle: "Not in voice",
@@ -117,6 +118,7 @@ export function VoiceControls() {
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25"
           >
             <Headphones size={13} aria-hidden="true" /> Join voice
+            <HoverRing />
           </button>
         ) : null}
         {micToggle ? (
@@ -127,6 +129,7 @@ export function VoiceControls() {
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${micToggle.className}`}
           >
             <micToggle.Icon size={13} aria-hidden="true" /> {micToggle.label}
+            <HoverRing />
           </button>
         ) : null}
         {state.state === "failed" ? (
@@ -136,6 +139,7 @@ export function VoiceControls() {
             className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25"
           >
             <RefreshCw size={13} aria-hidden="true" /> Retry voice
+            <HoverRing />
           </button>
         ) : null}
         {inVoice && state.state !== "leaving" ? (
@@ -145,6 +149,7 @@ export function VoiceControls() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
           >
             <LogOut size={13} aria-hidden="true" /> Leave voice
+            <HoverRing />
           </button>
         ) : null}
       </div>
@@ -156,6 +161,7 @@ export function VoiceControls() {
           className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/25"
         >
           <Volume2 size={13} aria-hidden="true" /> Enable audio
+          <HoverRing />
         </button>
       ) : null}
 

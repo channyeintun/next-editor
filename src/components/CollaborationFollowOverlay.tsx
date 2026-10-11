@@ -8,6 +8,7 @@ import {
   collaboratorColorIndex,
   collaboratorDisplayName,
 } from "./collaboratorAppearance";
+import HoverRing from "./hoverRing/HoverRing";
 
 function followedSurfaceLabel(
   target: CollaborationParticipant,
@@ -57,6 +58,7 @@ export default function CollaborationFollowOverlay() {
               onClick={() => collaboration.stopFollowing("user")}
             >
               Stop
+              <HoverRing />
             </button>
           </div>
         </div>
