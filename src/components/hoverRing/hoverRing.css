@@ -1,0 +1,56 @@
+/* The hover ring (see HoverRing.tsx and hoverRingMotion.ts, which sizes and places it).
+   Imported by src/index.css, after Tailwind, so the cascade layers keep Tailwind's order. */
+
+/* Its host is positioned for it: a host that sets its own position (a Tailwind utility, or
+   any unlayered rule) keeps it, as base yields to both. */
+@layer base {
+  :where(:has(> .hover-ring)) {
+    position: relative;
+  }
+}
+
+.hover-ring {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  /* indigo-300 (#a3b3ff), drawn one screen pixel wide: 9.2:1, APCA Lc -63, on the player bar
+     and header (#11141c); no less than 5.1:1, Lc -53, on any dark surface up to slate-700. */
+  --hover-ring-color: oklch(78.5% 0.115 274.713);
+}
+
+/* Placed, measured and drawn from script on the same frame: index.css's reduced-motion rule
+   would otherwise turn each change into a transition, so a read-back would get the old box. */
+.hover-ring,
+.hover-ring rect {
+  transition: none;
+}
+
+.hover-ring rect {
+  fill: none;
+  stroke: var(--hover-ring-color);
+  stroke-linecap: round;
+  stroke-dasharray: 0 100;
+  opacity: 0;
+}
+
+/* The hovered control brightens as its ring draws, as a lit surface; the ring outside it
+   keeps its contrast with the surface behind, and only gains from the filter. */
+@layer base {
+  @media (hover: hover) {
+    :where(:has(> .hover-ring)):hover:not(:disabled, [aria-disabled="true"]) {
+      filter: brightness(1.15);
+    }
+  }
+}
+
+/* Disabled while hovered (the record button once playback starts): no ring. */
+:disabled > .hover-ring,
+[aria-disabled="true"] > .hover-ring {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .hover-ring rect {
+    stroke: Highlight;
+  }
+}
