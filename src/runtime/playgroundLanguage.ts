@@ -56,6 +56,12 @@ export interface PlaygroundRun<Client, ErrorKind extends string, RunResult> {
   execute: (client: Client, files: PlaygroundFile[]) => Promise<RunResult>;
   startedLines: (files: readonly PlaygroundFile[]) => string[];
   resultLines: (result: RunResult) => string[];
+  /**
+   * The lines the dock's status region reads its summary from, for a language
+   * whose `resultLines` print more after the run's own ending (assembly's
+   * registers); `resultLines` otherwise.
+   */
+  statusLines?: (result: RunResult) => string[];
   serviceErrorLines: (kind: ServiceErrorKind<ErrorKind>, detail?: string) => string[];
 }
 

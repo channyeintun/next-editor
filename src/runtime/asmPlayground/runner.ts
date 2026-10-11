@@ -7,6 +7,7 @@ import {
 } from "./client";
 import {
   asmRunConsoleLines,
+  asmRunResultToConsoleLines,
   asmRunServiceErrorToConsoleLines,
   asmRunStartedConsoleLines,
 } from "./console";
@@ -51,6 +52,9 @@ export const ASM_PLAYGROUND: PlaygroundLanguage<
     execute: (client, files) => client.run({ files }),
     startedLines: asmRunStartedConsoleLines,
     resultLines: asmRunConsoleLines,
+    // The register rows print after the exit line; the status region says how
+    // the run ended, not what it left in rax.
+    statusLines: asmRunResultToConsoleLines,
     serviceErrorLines: asmRunServiceErrorToConsoleLines,
   },
   format: null,

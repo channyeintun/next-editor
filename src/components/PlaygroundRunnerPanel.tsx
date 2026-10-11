@@ -165,10 +165,11 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   }, [cancel, isPlaybackSnapshotActive]);
 
   // Prints how a Run or Format ended, refusals included, and says it in the
-  // status region.
-  const appendOutcomeLines = (lines: string[]) => {
+  // status region — from `statusLines` when the console's lines go on past
+  // the ending.
+  const appendOutcomeLines = (lines: string[], statusLines: readonly string[] = lines) => {
     appendRunnerConsoleLines(runtimePanelStore, lines);
-    setOutcomeText(describeOutcome(lines, consoleTags));
+    setOutcomeText(describeOutcome(statusLines, consoleTags));
   };
 
   const { handleFormat } = usePlaygroundFormatting(language, {
@@ -233,11 +234,13 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return;
     }
 
-    appendOutcomeLines(
-      outcome.kind === "result"
-        ? run.resultLines(outcome.result)
-        : run.serviceErrorLines(outcome.errorKind, outcome.message),
-    );
+    if (outcome.kind === "result") {
+      const lines = run.resultLines(outcome.result);
+      appendOutcomeLines(lines, run.statusLines?.(outcome.result) ?? lines);
+      return;
+    }
+
+    appendOutcomeLines(run.serviceErrorLines(outcome.errorKind, outcome.message));
   };
 
   const consoleContent = effectiveConsoleLines

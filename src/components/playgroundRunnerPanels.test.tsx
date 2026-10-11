@@ -232,8 +232,11 @@ interface PanelCase {
   runnerTab: string;
   command: string;
   entry: string;
-  /** The console lines a Run of `entry` prints before and after `result`. */
-  run: { result: unknown; lines: string[] };
+  /**
+   * The console lines a Run of `entry` prints before and after `result`, and
+   * what the status region then says when that is not the last line untagged.
+   */
+  run: { result: unknown; lines: string[]; status?: string };
   refusedRun: { files: Record<string, string>; line: string } | null;
   tags: { error: string; success: string; warning: string | null };
   format: FormatCase | null;
@@ -421,6 +424,8 @@ const CASES: PanelCase[] = [
         "[asm-run] Program exited with status 0",
         "[asm-run] rax=0x3c",
       ],
+      // The registers print after the exit line, but the run ended with its status.
+      status: "Program exited with status 0",
     },
     refusedRun: null,
     tags: { error: "[asm-run error]", success: "[asm-run]", warning: null },
@@ -744,7 +749,7 @@ describe("playground runner panels", () => {
     expect(harness.client.stop).not.toHaveBeenCalled();
     expect(consoleLines()).toEqual(panel.run.lines);
     expect(screen.getByRole("status").textContent).toBe(
-      panel.run.lines.at(-1)!.replace(/^\[[^\]]+\] /, ""),
+      panel.run.status ?? panel.run.lines.at(-1)!.replace(/^\[[^\]]+\] /, ""),
     );
   });
 
