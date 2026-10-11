@@ -62,6 +62,8 @@ function mapMicrophoneError(error: unknown): VoiceClientErrorCode {
   if (name === "NotFoundError" || name === "NotReadableError" || name === "OverconstrainedError") {
     return "microphone-unavailable";
   }
+  // The publish timed out: often a permission prompt left unanswered.
+  if (name === "TimeoutError") return "microphone-timeout";
   return "network";
 }
 

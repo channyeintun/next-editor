@@ -30,6 +30,7 @@ export type VoiceClientErrorCode =
   | VoiceErrorCode
   | "microphone-permission-denied"
   | "microphone-unavailable"
+  | "microphone-timeout"
   | "network";
 
 export interface VoiceMachineContext {

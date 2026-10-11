@@ -215,6 +215,14 @@ describe("voice controls", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Microphone access was denied");
   });
 
+  it("asks to allow the microphone when enabling it took too long", () => {
+    voiceState = idleVoiceState({ state: "listening", errorCode: "microphone-timeout" });
+    openPanel();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Turning on the microphone took too long. Allow the microphone in your browser, then select Unmute again.",
+    );
+  });
+
   it("offers Retry when voice failed without touching document status", () => {
     voiceState = idleVoiceState({ state: "failed", errorCode: "network" });
     openPanel();

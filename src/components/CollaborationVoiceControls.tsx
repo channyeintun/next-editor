@@ -22,6 +22,8 @@ const VOICE_ERROR_COPY: Partial<Record<VoiceClientErrorCode, string>> = {
   "microphone-permission-denied":
     "Microphone access was denied. Allow the microphone in your browser settings, then try again.",
   "microphone-unavailable": "No usable microphone was found. Check your device and try again.",
+  "microphone-timeout":
+    "Turning on the microphone took too long. Allow the microphone in your browser, then select Unmute again.",
   network: "The voice connection failed. Document collaboration is unaffected.",
   capacity: "The voice room is full.",
   "rate-limited": "Voice is briefly rate limited. Try again in a moment.",

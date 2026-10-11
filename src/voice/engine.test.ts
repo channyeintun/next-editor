@@ -354,6 +354,21 @@ describe("voice engine unmute/mute", () => {
     expect(harness.mediaSessions[0].releaseCalls).toBe(1);
   });
 
+  it("says enabling the microphone took too long when the publish times out", async () => {
+    // An unanswered permission prompt outlasts the adapter's publish timeout.
+    const harness = createHarness();
+    await joinListening(harness);
+    const timeout = new Error("Timeout has occurred");
+    timeout.name = "TimeoutError";
+    harness.mediaSessions[0].publishResult = Promise.reject(timeout);
+    harness.engine.unmute();
+    await flush();
+    const state = harness.engine.getUiState();
+    expect(state.state).toBe("listening");
+    expect(state.errorCode).toBe("microphone-timeout");
+    expect(harness.mediaSessions[0].releaseCalls).toBe(1);
+  });
+
   it("releases the physical capture on mute and keeps voice joined", async () => {
     const harness = createHarness();
     await joinListening(harness);
