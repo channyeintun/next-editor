@@ -12,6 +12,10 @@ const HANDSHAKE_COOKIE = "ne_oauth";
 const HANDSHAKE_MAX_AGE_SECONDS = 10 * 60; // just long enough for the Google round trip
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+// Bounds the code-for-token exchange, body included: a Worker waiting on a
+// subrequest has no wall-clock limit, so a stalled Google would otherwise
+// leave the sign-in redirect hanging with no message.
+const GOOGLE_TOKEN_EXCHANGE_TIMEOUT_MS = 10_000;
 // A One Tap request carries one Google ID token (a JWT of a couple of KB).
 const MAX_ONETAP_REQUEST_BYTES = 8 * 1024;
 
@@ -159,24 +163,35 @@ googleAuthRoute.get("/callback", async (c) => {
     return c.text("OAuth error: state mismatch. Please try signing in again.", 400);
   }
 
-  const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: c.env.GOOGLE_CLIENT_ID,
-      client_secret: c.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${c.env.PUBLIC_URL}/api/auth/google/callback`,
-      grant_type: "authorization_code",
-      code_verifier: handshake.codeVerifier,
-    }),
-  });
+  let tokens: { id_token?: string };
+  try {
+    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: c.env.GOOGLE_CLIENT_ID,
+        client_secret: c.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: `${c.env.PUBLIC_URL}/api/auth/google/callback`,
+        grant_type: "authorization_code",
+        code_verifier: handshake.codeVerifier,
+      }),
+      signal: AbortSignal.timeout(GOOGLE_TOKEN_EXCHANGE_TIMEOUT_MS),
+    });
 
-  if (!tokenResponse.ok) {
-    return c.text(`OAuth error: Google token exchange failed (${tokenResponse.status}).`, 502);
+    if (!tokenResponse.ok) {
+      return c.text(`OAuth error: Google token exchange failed (${tokenResponse.status}).`, 502);
+    }
+
+    tokens = (await tokenResponse.json()) as { id_token?: string };
+  } catch (error) {
+    // A timeout, a network error or an unreadable body: Google never answered
+    // usefully, which is this route's 502 rather than an unhandled 500.
+    console.error("Google token exchange failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.text("OAuth error: Google token exchange failed (unreachable).", 502);
   }
-
-  const tokens = (await tokenResponse.json()) as { id_token?: string };
   if (!tokens.id_token) {
     return c.text("OAuth error: Google's response had no id_token.", 502);
   }

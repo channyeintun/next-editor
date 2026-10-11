@@ -8,6 +8,10 @@ import { base64UrlDecodeToBytes } from "../base64url";
 
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const JWKS_CACHE_TTL_MS = 60 * 60 * 1000;
+// A Worker waiting on a subrequest has no wall-clock limit, so a stalled
+// Google endpoint would hold POST /onetap open until the browser gave up.
+// Aborting surfaces as the route's 401 instead, and caches nothing.
+const JWKS_FETCH_TIMEOUT_MS = 5_000;
 // Tolerated clock skew when checking exp (the only time claim checked), per
 // common JWT practice.
 const CLOCK_SKEW_MS = 60 * 1000;
@@ -51,7 +55,9 @@ const JWKS_MISS_REFETCH_MIN_AGE_MS = 30 * 1000;
 let cachedJwks: { keys: GoogleJwk[]; fetchedAt: number } | null = null;
 
 async function fetchGoogleJwks(): Promise<JwksResponse> {
-  const response = await fetch(GOOGLE_JWKS_URL);
+  const response = await fetch(GOOGLE_JWKS_URL, {
+    signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`Google JWKS fetch failed (${response.status})`);
   }

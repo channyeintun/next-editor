@@ -212,4 +212,27 @@ describe("verifyGoogleIdToken's JWKS cache", () => {
     });
     expect(fetchJwks).toHaveBeenCalledTimes(2);
   });
+
+  // Nothing bounded the fetch, so a stalled Google endpoint held POST /onetap
+  // open until the browser gave up, with no message to show.
+  it("bounds the JWKS fetch, and a timed-out fetch leaves nothing cached", async () => {
+    const { privateKey, jwks } = await makeSigningKey();
+    vi.resetModules();
+    const fetchJwks = vi
+      .fn<typeof fetch>(async () => Response.json(jwks))
+      .mockRejectedValueOnce(
+        new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      );
+    vi.stubGlobal("fetch", fetchJwks);
+    const { verifyGoogleIdToken: verify } = await import("./googleIdToken");
+    const token = await signToken(privateKey, defaultPayload());
+
+    await expect(verify(token, { clientId: CLIENT_ID, now: NOW })).rejects.toThrow(/timeout/);
+    expect(fetchJwks.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+
+    await expect(verify(token, { clientId: CLIENT_ID, now: NOW + 1 })).resolves.toMatchObject({
+      sub: "google-sub-123",
+    });
+    expect(fetchJwks).toHaveBeenCalledTimes(2);
+  });
 });
