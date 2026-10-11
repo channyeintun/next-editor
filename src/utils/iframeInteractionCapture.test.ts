@@ -150,6 +150,7 @@ function createCaptureHarness() {
     button,
     createInput,
     documentTarget,
+    frameDocument,
     frameWindow,
     hostWindow,
     windowTarget,
@@ -163,6 +164,27 @@ function createCaptureHarness() {
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** Frames run only when the test flushes them, as a browser runs them after its events. */
+function deferFrames(frameWindow: Record<string, unknown>) {
+  const frames: FrameRequestCallback[] = [];
+  frameWindow.requestAnimationFrame = vi.fn<(callback: FrameRequestCallback) => number>(
+    (callback) => frames.push(callback),
+  );
+  return {
+    pending: () => frames.length,
+    flush: () => frames.splice(0).forEach((callback) => callback(0)),
+  };
+}
+
+function postedScrolls(
+  parentPostMessage: ReturnType<typeof createCaptureHarness>["parentPostMessage"],
+) {
+  return parentPostMessage.mock.calls
+    .map(([message]) => (message as { payload: { type: string; data: object } }).payload)
+    .filter((payload) => payload.type === "scroll")
+    .map((payload) => payload.data);
+}
 
 describe("createIframeInteractionCaptureScript", () => {
   it("removes injected document listeners when the generated cleanup runs", () => {
@@ -371,5 +393,52 @@ describe("createIframeInteractionCaptureScript", () => {
         testId: "submit",
       });
     }
+  });
+
+  it("posts each scroller that moved in a frame, not only the first", () => {
+    const { button, documentTarget, frameDocument, frameWindow, install, parentPostMessage } =
+      createCaptureHarness();
+    const frames = deferFrames(frameWindow);
+    install();
+    const pane = Object.assign(button, { scrollTop: 120, scrollLeft: 0 });
+    frameDocument.scrollingElement.scrollTop = 300;
+
+    // A smooth scrollIntoView moves an inner pane and the page in the same frame.
+    documentTarget.emit("scroll", { target: pane });
+    documentTarget.emit("scroll", { target: frameDocument });
+    expect(frames.pending()).toBe(1);
+    frames.flush();
+
+    expect(postedScrolls(parentPostMessage)).toEqual([
+      expect.objectContaining({ scrollTop: 120, scrollLeft: 0, isDocument: false }),
+      expect.objectContaining({ scrollTop: 300, scrollLeft: 0, isDocument: true }),
+    ]);
+  });
+
+  it("posts a scroller once per frame, however often and under whichever name it scrolled", () => {
+    const { button, documentTarget, frameDocument, frameWindow, install, parentPostMessage } =
+      createCaptureHarness();
+    const frames = deferFrames(frameWindow);
+    install();
+    const pane = Object.assign(button, { scrollTop: 40, scrollLeft: 0 });
+
+    documentTarget.emit("scroll", { target: pane });
+    documentTarget.emit("scroll", { target: pane });
+    // The page scrolls as the document, the window, <body> or <html>.
+    documentTarget.emit("scroll", { target: frameDocument });
+    documentTarget.emit("scroll", { target: frameWindow });
+    documentTarget.emit("scroll", { target: frameDocument.body });
+    documentTarget.emit("scroll", { target: frameDocument.documentElement });
+    frames.flush();
+
+    expect(postedScrolls(parentPostMessage)).toEqual([
+      expect.objectContaining({ scrollTop: 40, isDocument: false }),
+      expect.objectContaining({ scrollTop: 0, isDocument: true }),
+    ]);
+
+    // The next frame starts empty.
+    documentTarget.emit("scroll", { target: pane });
+    frames.flush();
+    expect(postedScrolls(parentPostMessage)).toHaveLength(3);
   });
 });

@@ -35,9 +35,11 @@ export function createIframeInteractionCaptureScript(
       let pendingMouseMove = null;
       let mouseMoveFrame = 0;
       let lastMouseMoveSignature = '';
-      let pendingScrollTarget = null;
+      // Every target that scrolled since the last frame, the page as one: a frame posts
+      // each one, so a second scroller moving in the same frame (an inner pane and the page
+      // under a smooth scrollIntoView, or synced panes) is not dropped.
+      const pendingScrollTargets = new Set();
       let scrollFrame = 0;
-      let scrollTicking = false;
 
       function addWindowListener(type, listener, options) {
         window.addEventListener(type, listener, options);
@@ -73,8 +75,7 @@ export function createIframeInteractionCaptureScript(
         }
 
         pendingMouseMove = null;
-        pendingScrollTarget = null;
-        scrollTicking = false;
+        pendingScrollTargets.clear();
 
         try {
           delete window[marker];
@@ -333,44 +334,48 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
+      function isDocumentScrollTarget(target) {
+        return (
+          target === document ||
+          target === window ||
+          target === document.body ||
+          target === document.documentElement
+        );
+      }
+
+      function flushScroll() {
+        scrollFrame = 0;
+        const targets = Array.from(pendingScrollTargets);
+        pendingScrollTargets.clear();
+
+        for (const nextTarget of targets) {
+          if (nextTarget === document) {
+            const scrollElement =
+              document.scrollingElement || document.documentElement;
+            emit('scroll', document.body, {
+              scrollTop: scrollElement.scrollTop,
+              scrollLeft: scrollElement.scrollLeft,
+              isDocument: true,
+            });
+          } else if (nextTarget instanceof Element) {
+            emit('scroll', nextTarget, {
+              scrollTop: nextTarget.scrollTop,
+              scrollLeft: nextTarget.scrollLeft,
+              isDocument: false,
+            });
+          }
+        }
+      }
+
       addDocumentListener(
         'scroll',
         (event) => {
-          if (scrollTicking) {
-            return;
-          }
-
           const target = event.target;
-          pendingScrollTarget = target;
-          scrollTicking = true;
+          pendingScrollTargets.add(isDocumentScrollTarget(target) ? document : target);
 
-          scrollFrame = window.requestAnimationFrame(() => {
-            scrollFrame = 0;
-            scrollTicking = false;
-            const nextTarget = pendingScrollTarget;
-            pendingScrollTarget = null;
-
-            if (
-              nextTarget === document ||
-              nextTarget === window ||
-              nextTarget === document.body ||
-              nextTarget === document.documentElement
-            ) {
-              const scrollElement =
-                document.scrollingElement || document.documentElement;
-              emit('scroll', document.body, {
-                scrollTop: scrollElement.scrollTop,
-                scrollLeft: scrollElement.scrollLeft,
-                isDocument: true,
-              });
-            } else if (nextTarget instanceof Element) {
-              emit('scroll', nextTarget, {
-                scrollTop: nextTarget.scrollTop,
-                scrollLeft: nextTarget.scrollLeft,
-                isDocument: false,
-              });
-            }
-          });
+          if (!scrollFrame) {
+            scrollFrame = window.requestAnimationFrame(flushScroll);
+          }
         },
         true,
       );
