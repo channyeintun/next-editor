@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import app from "../index";
 import type { Env } from "../env";
-import { serveAppShell, serveLandingDocument } from "./staticDocuments";
+import { serveAppShell, serveLandingDocument, withoutValidators } from "./staticDocuments";
 
 const assetsFetch = vi.fn<(request: Request) => Promise<Response>>();
 const assets = { fetch: assetsFetch };
@@ -59,6 +59,27 @@ describe("static documents", () => {
     const [request] = assetsFetch.mock.calls[0];
     expect(request.url).toBe("https://nexteditor.dev/");
     expect(request.method).toBe("HEAD");
+  });
+});
+
+describe("withoutValidators", () => {
+  it("drops the conditional headers and keeps the rest of the request", () => {
+    const request = withoutValidators(
+      new Request("https://nexteditor.dev/learn/rust?x=1", {
+        method: "HEAD",
+        headers: {
+          "If-None-Match": '"shell"',
+          "If-Modified-Since": "Sat, 10 Oct 2026 00:00:00 GMT",
+          "Accept-Encoding": "br",
+        },
+      }),
+    );
+
+    expect(request.url).toBe("https://nexteditor.dev/learn/rust?x=1");
+    expect(request.method).toBe("HEAD");
+    expect(request.headers.has("If-None-Match")).toBe(false);
+    expect(request.headers.has("If-Modified-Since")).toBe(false);
+    expect(request.headers.get("Accept-Encoding")).toBe("br");
   });
 });
 

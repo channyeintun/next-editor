@@ -2,7 +2,7 @@ import type { Lesson } from "../../lessons/types";
 import type { Env } from "../env";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { renderLessonDetailResponse, renderMissingLessonResponse } from "./lessonDetail";
-import { serveAppShell } from "./staticDocuments";
+import { serveAppShell, withoutValidators } from "./staticDocuments";
 
 // A failed lookup is not a missing lesson: only a lookup that succeeded and
 // found nothing may answer 404 + noindex. A D1 hiccup must never tell crawlers
@@ -46,9 +46,10 @@ export async function serveLessonDetailDocument(
 
   // The shell and the row are independent, so the D1 lookup runs while the
   // shell is fetched instead of after it: the document waits for the slower
-  // of the two, not their sum.
+  // of the two, not their sum. The shell is fetched unconditionally (see
+  // withoutValidators), or a browser that kept a plain copy would keep it.
   const [assetResponse, lookup] = await Promise.all([
-    env.ASSETS.fetch(request),
+    env.ASSETS.fetch(withoutValidators(request)),
     lookUpLesson(env, slug),
   ]);
 

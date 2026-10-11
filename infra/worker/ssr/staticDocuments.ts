@@ -44,3 +44,16 @@ export function serveLandingDocument(assets: StaticAssets, request: Request): Pr
 export function serveAppShell(assets: StaticAssets, request: Request): Promise<Response> {
   return fetchDocument(assets, request, "/");
 }
+
+/**
+ * `request` without its validators (If-None-Match, If-Modified-Since), for a
+ * shell the Worker decorates. The decorated document has no validator of its
+ * own, and a 304 against a shell the browser cached plain (from a visit whose
+ * decoration failed) would keep that plain copy until the next deploy.
+ */
+export function withoutValidators(request: Request): Request {
+  const headers = new Headers(request.headers);
+  headers.delete("if-none-match");
+  headers.delete("if-modified-since");
+  return new Request(request, { headers });
+}

@@ -132,14 +132,33 @@ describe("lesson detail route", () => {
     },
   );
 
-  it("passes a shell revalidation through untouched", async () => {
-    assetsFetch.mockResolvedValue(
-      new Response(null, { status: 304, headers: { etag: '"shell"' } }),
+  // A browser can hold the plain shell from a visit whose lookup failed. If
+  // its validators reached Static Assets, the 304 would keep that copy.
+  it("asks for the shell without the browser's validators and decorates it", async () => {
+    assetsFetch.mockImplementation(async (request) =>
+      request.headers.has("if-none-match") || request.headers.has("if-modified-since")
+        ? new Response(null, { status: 304, headers: { etag: '"shell"' } })
+        : shellResponse(),
     );
     vi.mocked(findPublishedLessonBySlug).mockResolvedValue(LESSON);
 
-    const response = await serve(LESSON.slug);
+    const response = await serveLessonDetailDocument(
+      env(),
+      new Request(`https://nexteditor.dev/learn/${LESSON.slug}`, {
+        headers: {
+          "if-none-match": '"shell"',
+          "if-modified-since": "Sat, 10 Oct 2026 00:00:00 GMT",
+        },
+      }),
+      LESSON.slug,
+    );
 
-    expect(response.status).toBe(304);
+    const [request] = assetsFetch.mock.calls[0];
+    expect(request.headers.has("if-none-match")).toBe(false);
+    expect(request.headers.has("if-modified-since")).toBe(false);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(
+      "<title>Ownership &amp; Borrowing | Next Editor</title>",
+    );
   });
 });
