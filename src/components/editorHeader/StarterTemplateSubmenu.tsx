@@ -44,7 +44,10 @@ export default function StarterTemplateSubmenu({
         role="menuitem"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
+        // A pointer or touch click (detail >= 1) only opens: the hover just
+        // before it already did, so toggling would shut the flyout under the
+        // pointer. Enter or Space (detail 0) toggles, so the keyboard can close it.
+        onClick={(event) => setIsOpen((current) => (event.detail === 0 ? !current : true))}
         className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
           isOpen ? "bg-slate-700 text-white" : "text-slate-200 hover:bg-slate-700 hover:text-white"
         }`}

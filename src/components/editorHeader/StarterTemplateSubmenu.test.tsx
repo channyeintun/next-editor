@@ -47,10 +47,21 @@ describe("StarterTemplateSubmenu", () => {
     fireEvent.mouseLeave(entry().parentElement!);
     expect(flyout()).toBeNull();
 
+    // Enter or Space on the focused entry clicks with detail 0 and toggles.
     fireEvent.click(entry());
     expect(flyout()).not.toBeNull();
     fireEvent.click(entry());
     expect(flyout()).toBeNull();
+  });
+
+  it("keeps the flyout open when a pointer click follows the hover that opened it", () => {
+    const { entry, flyout } = renderSubmenu();
+
+    fireEvent.mouseEnter(entry().parentElement!);
+    fireEvent.click(entry(), { detail: 1 });
+
+    expect(entry()).toHaveAttribute("aria-expanded", "true");
+    expect(flyout()).not.toBeNull();
   });
 
   it("marks the active lesson type and reports the one picked", () => {
