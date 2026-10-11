@@ -60,6 +60,24 @@ export function rateWindowCount(
 }
 
 /**
+ * Frames per socket in the current second, for frames the socket's attachment
+ * does not count. It lives in memory, so it restarts when the object
+ * hibernates or is evicted; a socket that floods keeps the object awake.
+ */
+export class SocketFrameWindow {
+  private readonly windows = new WeakMap<WebSocket, { second: number; count: number }>();
+
+  /** Counts one frame from `socket`; false once it is over `limitPerSecond`. */
+  consume(socket: WebSocket, limitPerSecond: number, now = Date.now()): boolean {
+    const second = Math.floor(now / 1000);
+    const window = this.windows.get(socket);
+    const count = rateWindowCount(window?.second, window?.count, second);
+    this.windows.set(socket, { second, count });
+    return count <= limitPerSecond;
+  }
+}
+
+/**
  * Connection attempts per user in the current minute. It lives in memory, so
  * it restarts when the object hibernates or is evicted.
  */

@@ -71,6 +71,7 @@ import {
   isCurrentRoom,
   isOpen,
   rateWindowCount,
+  SocketFrameWindow,
 } from "./socketSupport";
 import type { Env } from "../env";
 
@@ -82,6 +83,9 @@ const MAX_BINARY_AWARENESS_MESSAGE_LENGTH = 16 * 1024;
 const MAX_SOCKET_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
+// Per socket, counted in memory: a client asks once per connection, and each
+// answer can carry the whole document.
+const MAX_SYNC_REQUESTS_PER_SECOND = 5;
 const MAX_USER_CONNECTIONS_PER_MINUTE = 30;
 
 const canonicalSocketSessionSchema = z
@@ -284,6 +288,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private roomUpdateWindowSecond = 0;
   private roomUpdateWindowCount = 0;
   private readonly connectionQuota = new ConnectionQuota(MAX_USER_CONNECTIONS_PER_MINUTE);
+  private readonly syncRequestWindow = new SocketFrameWindow();
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private readonly awarenessClientOwners: AwarenessClientOwners;
@@ -411,6 +416,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (frame.kind === "sync") {
       if (frame.messageType !== syncProtocol.messageYjsSyncStep1) {
         this.rejectSocket(socket, "invalid-message", "Invalid Yjs sync request", true, 1008);
+        return;
+      }
+      if (!this.syncRequestWindow.consume(socket, MAX_SYNC_REQUESTS_PER_SECOND)) {
+        this.rejectSocket(socket, "rate-limited", "Sync request rate limit exceeded", false);
         return;
       }
       const refreshed = await this.refreshAccess(socket, attachment);

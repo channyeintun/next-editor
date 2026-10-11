@@ -522,6 +522,43 @@ describe("CollaborationRoomDurableObject sync requests", () => {
   });
 });
 
+// A client sends one sync request per connection, and each answer can carry
+// the whole document, so a socket asking many times a second is flooding.
+describe("CollaborationRoomDurableObject sync request rate limits", () => {
+  const syncReplies = (socket: FakeSocket) =>
+    socket.frames().filter((frame) => frame.kind === "sync");
+
+  it.each(["editor", "viewer"] as const)(
+    "answers at most five sync requests a second from a socket with the %s role",
+    async (role) => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+      const { room, connect } = await createRoom();
+      const member = connect(MEMBER_ID, role);
+      const other = connect(PEER_ID, "viewer");
+      const request = toArrayBuffer(encodeCollaborationSyncStep1(new Y.Doc()));
+
+      for (let index = 0; index < 8; index += 1) {
+        await room.webSocketMessage(member as never, request);
+      }
+      await room.webSocketMessage(other as never, request);
+
+      expect(syncReplies(member)).toHaveLength(5);
+      expect(errors(member)).toEqual(
+        Array.from({ length: 3 }, () =>
+          expect.objectContaining({ code: "rate-limited", fatal: false }),
+        ),
+      );
+      expect(member.closeCode).toBeNull();
+      expect(syncReplies(other)).toHaveLength(1);
+
+      now.mockReturnValue(1_700_000_001_000);
+      await room.webSocketMessage(member as never, request);
+
+      expect(syncReplies(member)).toHaveLength(6);
+    },
+  );
+});
+
 describe("CollaborationRoomDurableObject teaching initialization", () => {
   function initializeTeaching(room: CollaborationRoomDurableObject, update: string) {
     return room.fetch(

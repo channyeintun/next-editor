@@ -4,6 +4,7 @@ import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { randomToken } from "./bytes";
 import {
   ConnectionQuota,
+  SocketFrameWindow,
   decodeHeaderJson,
   encodeHeaderJson,
   rateWindowCount,
@@ -57,6 +58,19 @@ describe("ConnectionQuota", () => {
     expect(quota.consume("b")).toBe(true);
     now.mockReturnValue(120_000);
     expect(quota.consume("a")).toBe(true);
+  });
+});
+
+describe("SocketFrameWindow", () => {
+  it("allows each socket its limit per second and starts over the next second", () => {
+    const window = new SocketFrameWindow();
+    const socket = {} as WebSocket;
+    const other = {} as WebSocket;
+
+    expect([1, 2, 3].map(() => window.consume(socket, 2, 5_000))).toEqual([true, true, false]);
+    expect(window.consume(other, 2, 5_999)).toBe(true);
+    expect(window.consume(socket, 2, 5_999)).toBe(false);
+    expect(window.consume(socket, 2, 6_000)).toBe(true);
   });
 });
 
