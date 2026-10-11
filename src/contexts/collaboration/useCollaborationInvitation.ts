@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { SetURLSearchParams } from "react-router";
 import { claimCollaborationInvitation } from "@next-editor/infra";
 import { messageFromError } from "../../collaboration/errorMessage";
@@ -13,6 +13,19 @@ interface CollaborationInvitationOptions {
   setError: (message: string | null) => void;
 }
 
+const SIGN_IN_HINT = "Sign in to accept this collaboration invitation.";
+
+/**
+ * Clears the sign-in hint once it no longer applies (the visitor signed in, or
+ * the invitation is gone). Only the hint: an error shown since, such as a
+ * failed claim, stays.
+ */
+function clearSignInHint(shownRef: RefObject<boolean>, setError: (message: string | null) => void) {
+  if (!shownRef.current) return;
+  shownRef.current = false;
+  setError(null);
+}
+
 /** Stages a `?invite=` token and claims it only through `acceptInvitation`. */
 export function useCollaborationInvitation({
   inviteToken,
@@ -24,6 +37,8 @@ export function useCollaborationInvitation({
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [isAcceptingInvitation, setIsAcceptingInvitation] = useState(false);
   const claimingTokenRef = useRef<string | null>(null);
+  // Whether the error on screen is this hook's sign-in hint.
+  const signInHintShownRef = useRef(false);
 
   // Claiming an invitation is a state-changing POST that permanently adds the
   // caller to someone else's room, and joining reprojects the room's document
@@ -36,13 +51,16 @@ export function useCollaborationInvitation({
   useEffect(() => {
     if (!inviteToken || isAuthLoading) {
       setPendingInviteToken(null);
+      clearSignInHint(signInHintShownRef, setError);
       return;
     }
     if (!isSignedIn) {
       setPendingInviteToken(null);
-      setError("Sign in to accept this collaboration invitation.");
+      signInHintShownRef.current = true;
+      setError(SIGN_IN_HINT);
       return;
     }
+    clearSignInHint(signInHintShownRef, setError);
     if (claimingTokenRef.current === inviteToken) return;
     setPendingInviteToken(inviteToken);
   }, [inviteToken, isAuthLoading, isSignedIn, setError]);
@@ -66,6 +84,7 @@ export function useCollaborationInvitation({
         { replace: true },
       );
     } catch (error: unknown) {
+      signInHintShownRef.current = false;
       setError(messageFromError(error, "The collaboration invitation could not be accepted."));
       claimingTokenRef.current = null;
     } finally {
@@ -75,6 +94,7 @@ export function useCollaborationInvitation({
 
   const declineInvitation = useCallback(() => {
     setPendingInviteToken(null);
+    clearSignInHint(signInHintShownRef, setError);
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -83,7 +103,7 @@ export function useCollaborationInvitation({
       },
       { replace: true },
     );
-  }, [setSearchParams]);
+  }, [setError, setSearchParams]);
 
   return { pendingInviteToken, isAcceptingInvitation, acceptInvitation, declineInvitation };
 }

@@ -34,11 +34,13 @@ vi.mock("@next-editor/infra", () => ({
   updateCollaborationMemberRole: vi.fn(),
   uploadCollaborationAsset: mocks.uploadAsset,
   useAuth: () => ({
-    user: { id: "10000000-0000-4000-8000-000000000001" },
-    isSignedIn: true,
-    isLoading: false,
+    user: auth.isSignedIn ? { id: "10000000-0000-4000-8000-000000000001" } : null,
+    isSignedIn: auth.isSignedIn,
+    isLoading: auth.isLoading,
   }),
 }));
+// Read by the useAuth mock on each render; a test flips it and rerenders.
+let auth = { isSignedIn: true, isLoading: false };
 
 const project = createStarterHtmlCssWorkspace();
 let currentProject = project;
@@ -154,6 +156,7 @@ describe("CollaborationProvider", () => {
     localStorage.clear();
     currentProject = project;
     usesPlaybackModel = false;
+    auth = { isSignedIn: true, isLoading: false };
     testSlidesStore = null;
     testWhiteboardController = null;
     mocks.closeRoom.mockResolvedValue(undefined);
@@ -252,6 +255,89 @@ describe("CollaborationProvider", () => {
     expect(collaboration!.pendingInviteToken).toBeNull();
     expect(claimCollaborationInvitation).not.toHaveBeenCalled();
     view.unmount();
+  });
+
+  describe("the sign-in hint for an invitation", () => {
+    const SIGN_IN_HINT = "Sign in to accept this collaboration invitation.";
+
+    function renderInvitation() {
+      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      let search = "";
+      function Probe() {
+        collaboration = useCollaboration();
+        search = useLocation().search;
+        return null;
+      }
+      const tree = () => (
+        <MemoryRouter initialEntries={["/code?invite=invite-token"]}>
+          <TestProviders>
+            <Probe />
+          </TestProviders>
+        </MemoryRouter>
+      );
+      const view = render(tree());
+      return {
+        collaboration: () => collaboration!,
+        search: () => search,
+        rerender: () => view.rerender(tree()),
+        unmount: () => view.unmount(),
+      };
+    }
+
+    it("goes away once the visitor signs in, and the invitation is offered", async () => {
+      auth = { isSignedIn: false, isLoading: false };
+      const view = renderInvitation();
+      await waitFor(() => expect(view.collaboration().error).toBe(SIGN_IN_HINT));
+      expect(view.collaboration().pendingInviteToken).toBeNull();
+
+      // One Tap signs in without a reload.
+      auth = { isSignedIn: true, isLoading: false };
+      view.rerender();
+
+      await waitFor(() => expect(view.collaboration().pendingInviteToken).toBe("invite-token"));
+      expect(view.collaboration().error).toBeNull();
+      view.unmount();
+    });
+
+    it("goes away when the invitation is declined", async () => {
+      auth = { isSignedIn: false, isLoading: false };
+      const view = renderInvitation();
+      await waitFor(() => expect(view.collaboration().error).toBe(SIGN_IN_HINT));
+
+      act(() => view.collaboration().declineInvitation());
+
+      expect(view.search()).toBe("");
+      expect(view.collaboration().error).toBeNull();
+      view.unmount();
+    });
+
+    it("never clears a failed claim's message", async () => {
+      const { claimCollaborationInvitation } = await import("@next-editor/infra");
+      vi.mocked(claimCollaborationInvitation).mockRejectedValueOnce({
+        response: { data: { error: "The invitation expired." } },
+      });
+      auth = { isSignedIn: false, isLoading: false };
+      const view = renderInvitation();
+      await waitFor(() => expect(view.collaboration().error).toBe(SIGN_IN_HINT));
+      auth = { isSignedIn: true, isLoading: false };
+      view.rerender();
+      await waitFor(() => expect(view.collaboration().pendingInviteToken).toBe("invite-token"));
+
+      await act(async () => {
+        await view.collaboration().acceptInvitation();
+      });
+      expect(view.collaboration().error).toBe("The invitation expired.");
+
+      // A refetch of the signed-in user runs the invitation effect again.
+      auth = { isSignedIn: true, isLoading: true };
+      view.rerender();
+      auth = { isSignedIn: true, isLoading: false };
+      view.rerender();
+
+      await waitFor(() => expect(view.collaboration().pendingInviteToken).toBe("invite-token"));
+      expect(view.collaboration().error).toBe("The invitation expired.");
+      view.unmount();
+    });
   });
 
   it("seeds the current workspace and moves the editor into the created room URL", async () => {
