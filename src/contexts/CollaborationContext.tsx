@@ -786,7 +786,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     updateRoomParam(null);
   }, [flushCurrentEdits, isRecording, roomId, stopFollowing, updateRoomParam, whiteboardStore]);
 
+  // Reads the user through its ref: the presence effect below depends on this
+  // callback, and a new user object (a username edit) re-running that effect
+  // would broadcast a leave. The active-file and role effect republishes a
+  // profile change instead.
   const publishAwarenessState = useCallback(async () => {
+    const user = userRef.current;
     const current = providerRef.current;
     const currentSession = current?.session;
     if (!current || !currentSession || current.connectionState !== "live") return;
@@ -826,7 +831,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       occurredAt: now,
       expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
     });
-  }, [applyAwarenessEvent, getNodeIdForPath, user]);
+  }, [applyAwarenessEvent, getNodeIdForPath]);
 
   const scheduleAwarenessPublish = useCallback(
     (delay = 75) => {
@@ -963,11 +968,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
   }, [liveRoomId, provider, publishAwarenessState, refreshRoomDataFor]);
 
-  // A new active file changes the published surface; a new role changes this
-  // member's own participant entry.
+  // A new active file changes the published surface; a new role or a profile
+  // change (username, name, avatar) changes this member's own participant entry.
   useEffect(() => {
     scheduleAwarenessPublish();
-  }, [activeFilePath, role, scheduleAwarenessPublish]);
+  }, [activeFilePath, role, scheduleAwarenessPublish, user?.username, user?.name, user?.avatarUrl]);
 
   useEffect(() => {
     const interval = setInterval(() => {

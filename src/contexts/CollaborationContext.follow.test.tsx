@@ -1317,6 +1317,50 @@ describe("CollaborationContext presence", () => {
       expect.objectContaining({ kind: "leave" }),
     );
   });
+
+  // Editing a username replaces the signed-in user object mid-room. Peers
+  // should see the new name, not this member leave and come back.
+  it("republishes a renamed member without leaving the room", async () => {
+    const signedIn = controls.auth;
+    let presence: ReturnType<typeof useRoomPresence> | null = null;
+    function Probe() {
+      presence = useRoomPresence();
+      return null;
+    }
+    const tree = () => (
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>
+    );
+    const view = render(tree());
+    try {
+      await waitFor(() => expect(controls.providers).toHaveLength(1));
+      const provider = controls.providers[0]!;
+      await ownPresenceSettled(provider);
+      provider.awarenessPublications.length = 0;
+
+      controls.auth = { ...signedIn, user: { ...signedIn.user, name: "Renamed" } };
+      view.rerender(tree());
+
+      await waitFor(() =>
+        expect(provider.awarenessPublications).toContainEqual(
+          expect.objectContaining({ kind: "state" }),
+        ),
+      );
+      expect(provider.awarenessPublications).not.toContainEqual(
+        expect.objectContaining({ kind: "leave" }),
+      );
+      const own = presence!.participants.find(
+        ({ sessionId }) => sessionId === provider.awarenessSessionId,
+      );
+      expect(own?.name).toBe("Renamed");
+    } finally {
+      controls.auth = signedIn;
+      view.unmount();
+    }
+  });
 });
 
 describe("CollaborationContext follow application", () => {
