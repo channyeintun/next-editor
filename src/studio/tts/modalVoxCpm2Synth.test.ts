@@ -136,6 +136,27 @@ describe("synthesizeModalVoxCpm2Wav", () => {
 
     await expect(synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1)).rejects.toThrow("non-WAV");
   });
+
+  // The Worker refuses longer text, so the page says how to fix it instead of
+  // uploading the reference voice for a request that cannot succeed.
+  it("refuses a dialog over the text limit without posting it", async () => {
+    const fetchSpy = vi.fn<FetchMock>(async () => wavResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(synthesizeModalVoxCpm2Wav(PROFILE, "x".repeat(2001), 1)).rejects.toThrow(
+      "VoxCPM2 narration: this dialog is 2001 characters long, and VoxCPM2 speaks at most 2000 per request — split it with a [[mark:…]]",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("counts the limit after trimming, as the Worker does", async () => {
+    const fetchSpy = vi.fn<FetchMock>(async () => wavResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await synthesizeModalVoxCpm2Wav(PROFILE, `  ${"x".repeat(2000)}\n`, 1);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
 });
 
 describe("voxCpm2SynthProvider", () => {

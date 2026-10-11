@@ -6,6 +6,9 @@
  * the other refuses.
  */
 
+/** The longest dialog text (after trim) any VoxCPM2 synthesizer accepts. */
+export const VOXCPM2_MAX_TEXT_CHARS = 2_000;
+
 /** Seeds are a signed 32-bit int: the largest one any synthesizer accepts. */
 export const VOXCPM2_MAX_SEED = 0x7fffffff;
 

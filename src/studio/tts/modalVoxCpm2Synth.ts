@@ -6,6 +6,7 @@ import {
 } from "./customVoices";
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
 import type { DialogSynthProvider } from "./synthProvider";
+import { VOXCPM2_MAX_TEXT_CHARS } from "./voxcpm2Protocol";
 import { decodeWavPcm16, encodeWavPcm16, floatTo16BitPcm, trimSilencePcm16 } from "./wav";
 import { DROPPED_CONNECTION_ATTEMPTS, postStudioTtsWav, retryDroppedConnection } from "./workerTts";
 import { bytesToBase64 } from "../../shared/base64";
@@ -59,6 +60,14 @@ export async function synthesizeModalVoxCpm2Wav(
   speechText: string,
   seed: number,
 ): Promise<Uint8Array> {
+  // The Worker counts the trimmed text; refusing here names the fix and skips
+  // uploading the reference voice for a request it would refuse.
+  const length = speechText.trim().length;
+  if (length > VOXCPM2_MAX_TEXT_CHARS) {
+    throw new Error(
+      `VoxCPM2 narration: this dialog is ${length} characters long, and VoxCPM2 speaks at most ${VOXCPM2_MAX_TEXT_CHARS} per request — split it with a [[mark:…]]`,
+    );
+  }
   const referenceAudioBase64 = await loadReferenceAudioBase64(profile);
   const body = JSON.stringify({ text: speechText, seed, referenceAudioBase64 });
 

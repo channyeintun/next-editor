@@ -11,6 +11,7 @@ import { DATA, FMT_, RIFF, WAVE } from "../../../src/core/src/utils/wavPcm16";
 import {
   VOXCPM2_MAX_REFERENCE_SECONDS,
   VOXCPM2_MAX_SEED,
+  VOXCPM2_MAX_TEXT_CHARS,
   VOXCPM2_MIN_REFERENCE_SECONDS,
   VOXCPM2_REFERENCE_SAMPLE_RATE,
 } from "../../../src/studio/tts/voxcpm2Protocol";
@@ -23,7 +24,6 @@ import {
 export const studioRoute = new Hono<{ Bindings: Env }>();
 
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
-const MAX_TEXT_CHARS = 2_000;
 const WAV_HEADER_BYTES = 44;
 const MAX_REFERENCE_WAV_BYTES =
   WAV_HEADER_BYTES + VOXCPM2_REFERENCE_SAMPLE_RATE * VOXCPM2_MAX_REFERENCE_SECONDS * 2;
@@ -258,11 +258,11 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
 
   const { text: rawText, seed, referenceAudioBase64: rawReferenceAudio } = body;
   const text = typeof rawText === "string" ? rawText.trim() : "";
-  if (!text || text.length > MAX_TEXT_CHARS) {
+  if (!text || text.length > VOXCPM2_MAX_TEXT_CHARS) {
     return {
       ok: false,
       status: 400,
-      error: `'text' must contain 1-${MAX_TEXT_CHARS} characters`,
+      error: `'text' must contain 1-${VOXCPM2_MAX_TEXT_CHARS} characters`,
     };
   }
   if (!Number.isSafeInteger(seed) || (seed as number) < 0 || (seed as number) > VOXCPM2_MAX_SEED) {
