@@ -72,6 +72,42 @@ describe("read tool", () => {
     expect(result).toContain("File not found");
   });
 
+  // A minified bundle, a source map or an inline data URI sits on one line.
+  // read returned it whole, so one call could overflow the model's context.
+  it("clips a very long line and says how much was left out", async () => {
+    const result = await read([makeFile("bundle.js", "x".repeat(100_000))])({ path: "bundle.js" });
+    expect(result).toBe(`1\t${"x".repeat(2_000)}… [98000 chars omitted]`);
+  });
+
+  it("does not split an emoji where it clips a line", async () => {
+    const line = `${"x".repeat(1_999)}😀${"x".repeat(10)}`;
+    const result = await read([makeFile("a.txt", line)])({ path: "a.txt" });
+    expect(result).toBe(`1\t${"x".repeat(1_999)}… [12 chars omitted]`);
+  });
+
+  it("still notes the lines left after the default line limit", async () => {
+    const content = Array.from({ length: 2_500 }, (_, i) => `line ${i}`).join("\n");
+    const result = String(await read([makeFile("long.txt", content)])({ path: "long.txt" }));
+    expect(result).toContain("\n2000\tline 1999\n… truncated (500 more lines)");
+    expect(result.endsWith("… truncated (500 more lines)")).toBe(true);
+  });
+
+  it("stops at the character budget and says where to continue", async () => {
+    const content = Array.from({ length: 100 }, () => "y".repeat(5_000)).join("\n");
+    const result = String(await read([makeFile("wide.txt", content)])({ path: "wide.txt" }));
+    const match =
+      /\n… truncated at 100000 characters \((\d+) more lines\); continue with offset=(\d+)$/.exec(
+        result,
+      );
+    expect(match).not.toBeNull();
+    const [, moreLines, offset] = match ?? [];
+    const body = result.slice(0, match?.index);
+    expect(body.length).toBeLessThanOrEqual(100_000);
+    // The last line shown (1-based) is the 0-based offset of the next one.
+    expect(body.split("\n").at(-1)?.split("\t")[0]).toBe(offset);
+    expect(Number(moreLines)).toBe(100 - Number(offset));
+  });
+
   it("returns embeddable images as an input_image content block", async () => {
     const asset = await registerWorkspaceAsset(new TextEncoder().encode("hello"), {
       mimeType: "image/png",

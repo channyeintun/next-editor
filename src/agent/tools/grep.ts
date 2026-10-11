@@ -3,6 +3,7 @@ import * as z from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
 import { globToRegex, matchesWorkspaceGlob, normalizeFolderPrefix } from "./workspaceGlob";
+import { capOutputLines, clipLine, MAX_TOOL_OUTPUT_CHARS } from "./outputLimits";
 import { isWorkspaceTextFile } from "../../types/workspace";
 import { isBinaryWorkspacePath } from "../../types/workspaceFiles";
 
@@ -112,15 +113,15 @@ export function makeGrepTool(ctx: ToolContext) {
             }
 
             for (let j = Math.max(lastEmitted + 1, i - context); j < i; j++) {
-              matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
+              matchLines.push(`${filePath}:${j + 1}:${clipLine(lines[j])}`);
             }
 
             if (i > lastEmitted) {
-              matchLines.push(`${filePath}:${lineNumber}:${line}`);
+              matchLines.push(`${filePath}:${lineNumber}:${clipLine(line)}`);
             }
 
             for (let j = Math.max(lastEmitted + 1, i + 1); j <= contextEnd; j++) {
-              matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
+              matchLines.push(`${filePath}:${j + 1}:${clipLine(lines[j])}`);
             }
             lastEmitted = contextEnd;
 
@@ -134,8 +135,15 @@ export function makeGrepTool(ctx: ToolContext) {
       }
 
       truncated ||= matchLines.length > limit;
-      const result = matchLines.slice(0, limit).join("\n");
-      return truncated ? `${result}\n\n(Results truncated; showing first ${limit} lines)` : result;
+      const shown = matchLines.slice(0, limit);
+      const { text, omittedLines } = capOutputLines(shown);
+      if (omittedLines > 0) {
+        return (
+          `${text}\n\n(Results truncated at ${MAX_TOOL_OUTPUT_CHARS} characters; ` +
+          `showing first ${shown.length - omittedLines} lines)`
+        );
+      }
+      return truncated ? `${text}\n\n(Results truncated; showing first ${limit} lines)` : text;
     },
   });
 }

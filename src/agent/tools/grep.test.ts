@@ -178,6 +178,28 @@ describe("grep tool", () => {
     expect(result).toBe("a.ts:1:x\na.ts:2:needle\na.ts:3:needle");
   });
 
+  // A minified line came back whole for every match, up to 200 times, which
+  // could overflow the model's context.
+  it("clips a very long matching line", async () => {
+    const store = makeStore([makeFile("a.min.js", `needle${"x".repeat(49_994)}`)]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "needle" });
+    expect(result).toBe(`a.min.js:1:needle${"x".repeat(1_994)}… [48000 chars omitted]`);
+  });
+
+  it("stops at the character budget and says how many lines it shows", async () => {
+    const content = Array.from({ length: 200 }, () => `needle${"x".repeat(1_994)}`).join("\n");
+    const store = makeStore([makeFile("a.ts", content)]);
+    const result = String(
+      await makeGrepTool(makeCtx(store)).function.execute({ pattern: "needle" }),
+    );
+    const [body, note] = result.split("\n\n");
+    expect(body.length).toBeLessThanOrEqual(100_000);
+    expect(body.split("\n").length).toBeLessThan(200);
+    expect(note).toBe(
+      `(Results truncated at 100000 characters; showing first ${body.split("\n").length} lines)`,
+    );
+  });
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "hello")]);
     const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "zzz" });

@@ -6,6 +6,12 @@ import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../../types/wor
 import { bytesToBase64 } from "../../shared/base64";
 import { getWorkspaceAssetBytes } from "../../storage/workspaceAssetStore";
 import { toRichToolModelOutput } from "./modelOutput";
+import {
+  capOutputLines,
+  clipLine,
+  MAX_TOOL_LINE_CHARS,
+  MAX_TOOL_OUTPUT_CHARS,
+} from "./outputLimits";
 import { readFile } from "./workspaceFs";
 
 const MAX_LINES = 2000;
@@ -21,11 +27,22 @@ function readText(content: string, offset?: number, limit?: number): string {
   const lines = content.split("\n");
   const start = Math.max(0, offset ?? 0);
   const end = Math.min(lines.length, start + (limit ?? MAX_LINES));
-  const sliced = lines.slice(start, end);
+  const numbered = lines
+    .slice(start, end)
+    .map((line, index) => `${start + index + 1}\t${clipLine(line)}`);
+  const { text, omittedLines } = capOutputLines(numbered);
+
+  if (omittedLines > 0) {
+    const nextLineIndex = end - omittedLines;
+    return (
+      `${text}\n… truncated at ${MAX_TOOL_OUTPUT_CHARS} characters ` +
+      `(${lines.length - nextLineIndex} more lines); continue with offset=${nextLineIndex}`
+    );
+  }
+
   const truncatedNote =
     end < lines.length ? `\n… truncated (${lines.length - end} more lines)` : "";
-
-  return sliced.map((line, index) => `${start + index + 1}\t${line}`).join("\n") + truncatedNote;
+  return text + truncatedNote;
 }
 
 export function makeReadTool(ctx: ToolContext) {
@@ -33,7 +50,9 @@ export function makeReadTool(ctx: ToolContext) {
     name: "read",
     description:
       "Read a workspace file's contents. Text files are returned with line numbers; images are " +
-      "returned inline; other binary files return a short note instead of their bytes.",
+      "returned inline; other binary files return a short note instead of their bytes. Lines " +
+      `longer than ${MAX_TOOL_LINE_CHARS} characters are clipped, so copy edit oldText from ` +
+      "short, unclipped lines.",
     inputSchema,
     execute: async (input): Promise<string | ToolOutputContent[]> => {
       const file = readFile(ctx.workspace, input.path);
