@@ -7,10 +7,15 @@ import {
   type CollaborationDocumentUpdateEvent,
 } from "../../../src/collaboration/protocol";
 import {
+  CollaborationProjectError,
+  seedCollaborationProject,
+} from "../../../src/collaboration/projectDocument";
+import {
   applyEncodedYjsSnapshot,
   encodeYjsDocument,
   encodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
+import { createStarterHtmlCssWorkspace } from "../../../src/starters/htmlCss";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
 import { RoomSqliteDocumentStore } from "./roomSqliteDocumentStore";
 
@@ -112,6 +117,45 @@ describe("RoomSqliteDocumentStore", () => {
     // Valid base64 of three 0xff bytes, which no Yjs decoder can read.
     expect(() => store.initialize("////", 100)).toThrow(/Unexpected end of array/);
     expect(() => store.createDocument()).toThrow(/not initialized/);
+  });
+
+  // Every update a client later sends is refused against these, so storing
+  // one would leave the room unusable from the moment it was created.
+  it.each([
+    [
+      "an unsupported schema version",
+      (doc: Y.Doc) => doc.getMap("project").set("schemaVersion", 2),
+    ],
+    [
+      "a nodes entry that is not a map",
+      (doc: Y.Doc) => doc.getMap("project").set("nodes", new Y.Text("x")),
+    ],
+  ])("refuses a creation snapshot with %s before writing it", (_, corrupt) => {
+    const { store } = createStore();
+    const source = new Y.Doc();
+    corrupt(source);
+
+    expect(() => store.initialize(encodeYjsDocument(source), 100)).toThrow(
+      CollaborationProjectError,
+    );
+    expect(() => store.createDocument()).toThrow(/not initialized/);
+    source.destroy();
+  });
+
+  it.each([
+    ["an unseeded", (doc: Y.Doc) => doc.getText("content").insert(0, "a")],
+    ["a seeded", (doc: Y.Doc) => seedCollaborationProject(doc, createStarterHtmlCssWorkspace())],
+  ])("accepts %s creation snapshot", (_, seed) => {
+    const { store } = createStore();
+    const source = new Y.Doc();
+    seed(source);
+
+    store.initialize(encodeYjsDocument(source), 100);
+
+    const restored = store.createDocument();
+    expect(Y.encodeStateVector(restored)).toEqual(Y.encodeStateVector(source));
+    restored.destroy();
+    source.destroy();
   });
 
   it("compacts the update tail into a new Yjs snapshot", () => {

@@ -7,6 +7,7 @@ import {
   type CollaborationBootstrapResponse,
   type CollaborationDocumentUpdateEvent,
 } from "../../../src/collaboration/protocol";
+import { assertCollaborationProjectStructure } from "../../../src/collaboration/projectDocument";
 import {
   applyEncodedYjsUpdate,
   decodeYjsSnapshot,
@@ -192,6 +193,15 @@ export class RoomSqliteDocumentStore {
     // Like append: refuse bytes Yjs cannot read before they become the room's
     // durable snapshot, which every later materialization would then fail on.
     Y.decodeUpdate(snapshotBytes);
+    // The same goes for a project root the room checks every later update
+    // against: a snapshot that already breaks it would refuse every edit.
+    const scratch = new Y.Doc();
+    try {
+      Y.applyUpdate(scratch, snapshotBytes);
+      assertCollaborationProjectStructure(scratch);
+    } finally {
+      scratch.destroy();
+    }
     this.storage.transactionSync(() => {
       const existing = this.storage.sql
         .exec<{ singleton: number }>(

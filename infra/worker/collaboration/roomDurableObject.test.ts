@@ -325,6 +325,40 @@ function errors(socket: FakeSocket) {
   return socket.messages().filter((message) => message.type === "error");
 }
 
+describe("CollaborationRoomDurableObject document initialization", () => {
+  // Every later update is checked against the project root's structure, so a
+  // creation snapshot that already breaks it would leave the room unusable.
+  it("refuses a creation snapshot whose project root is malformed, storing nothing", async () => {
+    const storage = new RoomTestStorage();
+    openStorages.push(storage);
+    const ctx = {
+      id: { name: ROOM_ID },
+      storage,
+      setWebSocketAutoResponse: () => undefined,
+      getWebSockets: () => [],
+    };
+    const room = new CollaborationRoomDurableObject(
+      ctx as unknown as DurableObjectState,
+      { DB: {} } as Env,
+    );
+    const doc = new Y.Doc();
+    doc.getMap("project").set("schemaVersion", 2);
+
+    const response = await room.fetch(
+      new Request(`${ROOM_ORIGIN}/sqlite/initialize`, {
+        method: "POST",
+        body: JSON.stringify({ roomId: ROOM_ID, snapshot: encodeYjsDocument(doc) }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid collaboration snapshot" });
+    await expect(
+      room.fetch(new Request(`${ROOM_ORIGIN}/sqlite/export`, { method: "POST" })),
+    ).rejects.toThrow(/not initialized/);
+  });
+});
+
 describe("CollaborationRoomDurableObject document updates", () => {
   it("persists an editor's update, acknowledges it and fans it out", async () => {
     const { room, connect, edit, persistedText } = await createRoom();
