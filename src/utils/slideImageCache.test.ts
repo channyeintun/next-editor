@@ -85,19 +85,42 @@ describe("loadSlideImages", () => {
   });
 
   it("leaves out an image it cannot inline, so the frame loads it itself", async () => {
-    fetchImage.mockImplementation(async (href) =>
-      href === PNG ? respond("application/octet-stream") : respond("image/png", false),
-    );
-    const failing = "/media/slide-images/ccc";
-    fetchImage.mockImplementationOnce(async () => {
-      throw new TypeError("offline");
-    });
+    fetchImage.mockImplementation(async () => respond("application/octet-stream"));
 
-    const images = await loadSlideImages([failing, PNG, JPEG]);
+    const images = await loadSlideImages([PNG]);
 
     expect(images.size).toBe(0);
     // Settled as not inlinable: the slide renders at once instead of waiting again.
-    expect(peekSlideImages([failing, PNG, JPEG])).toEqual(new Map());
+    expect(peekSlideImages([PNG])).toEqual(new Map());
+    await loadSlideImages([PNG]);
+    expect(fetchImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches again after a failed fetch instead of keeping the failure", async () => {
+    const failing = "/media/slide-images/ccc";
+    fetchImage
+      .mockImplementationOnce(async () => {
+        throw new TypeError("offline");
+      })
+      .mockImplementationOnce(async () => respond("image/png", false));
+
+    const [first, concurrent] = await Promise.all([
+      loadSlideImages([failing, JPEG]),
+      loadSlideImages([failing]),
+    ]);
+
+    // This display falls back to the frame, and a caller already waiting shares the one fetch.
+    expect(first.size).toBe(0);
+    expect(concurrent.size).toBe(0);
+    // Not settled: the next display asks again rather than downloading in the frame for good.
+    expect(peekSlideImages([failing])).toBeNull();
+    expect(peekSlideImages([JPEG])).toBeNull();
+
+    const retried = await loadSlideImages([failing, JPEG]);
+
+    expect(retried.get(failing)).toBe(`data:image/png;base64,${btoa("bytes")}`);
+    expect(retried.get(JPEG)).toMatch(/^data:image\/jpeg;base64,/);
+    expect(fetchImage).toHaveBeenCalledTimes(4);
   });
 
   it("forgets the images of a deck no longer shown", async () => {

@@ -23,7 +23,7 @@ const INLINABLE_TYPE = new RegExp(`^image/(?:${SLIDE_INLINE_IMAGE_TYPES})$`, "i"
 const MAX_CACHED_CHARS = 48 * 1024 * 1024;
 
 interface CachedImage {
-  /** The data: URL; null when the image cannot be inlined; undefined while loading. */
+  /** The data: URL; null when the image cannot be inlined or failed; undefined while loading. */
   dataUrl?: string | null;
   loaded: Promise<void>;
 }
@@ -31,10 +31,14 @@ interface CachedImage {
 const cache = new Map<string, CachedImage>();
 let cachedChars = 0;
 
-async function fetchAsDataUrl(href: string): Promise<string | null> {
+/**
+ * The image as a data: URL, null when it cannot be inlined, or false when the
+ * fetch failed (an error status or no network), which may pass on a retry.
+ */
+async function fetchAsDataUrl(href: string): Promise<string | null | false> {
   try {
     const response = await fetch(href);
-    if (!response.ok) return null;
+    if (!response.ok) return false;
     const blob = await response.blob();
     if (!INLINABLE_TYPE.test(blob.type)) return null;
     return await new Promise<string | null>((resolve) => {
@@ -44,7 +48,7 @@ async function fetchAsDataUrl(href: string): Promise<string | null> {
       reader.readAsDataURL(blob);
     });
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -66,9 +70,16 @@ function requestImage(href: string): CachedImage {
   if (cached) return cached;
   const entry: CachedImage = {
     loaded: fetchAsDataUrl(href).then((dataUrl) => {
-      entry.dataUrl = dataUrl;
+      const failed = dataUrl === false;
+      entry.dataUrl = failed ? null : dataUrl;
       // Evicted while loading (the deck changed): the caller still gets it, the cache does not.
       if (cache.get(href) !== entry) return;
+      // A failed fetch leaves this display to the frame but is not kept, or one
+      // offline moment would have the frame download the image on every display.
+      if (failed) {
+        cache.delete(href);
+        return;
+      }
       cachedChars += dataUrl?.length ?? 0;
       evictOverflow();
     }),
@@ -107,7 +118,8 @@ export function peekSlideImages(hrefs: readonly string[]): ReadonlyMap<string, s
 
 /**
  * Fetches each href once and resolves with its data: URL. An href that failed or
- * is not an inlinable image is left out, so the frame falls back to loading it.
+ * is not an inlinable image is left out, so the frame falls back to loading it;
+ * one that failed is fetched again on the next call.
  */
 export async function loadSlideImages(
   hrefs: readonly string[],
