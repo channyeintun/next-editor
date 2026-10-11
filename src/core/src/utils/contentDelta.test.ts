@@ -51,4 +51,21 @@ describe("content deltas", () => {
     if (!fallback) throw new Error("Expected a split-surrogate fallback delta");
     expect(applyContentDelta("split emoji: �", fallback)).toBe("split emoji: 🌍");
   });
+
+  it("keeps a leading U+FEFF so the next delta's base still matches", () => {
+    const prev = "\ufeffabc";
+    const next = "\ufeffabcd";
+    const first = createContentDelta(prev, next);
+    if (!first) throw new Error("Expected a content delta");
+    const folded = applyContentDelta(prev, first);
+    expect(folded).toBe(next);
+
+    const second = createContentDelta(next, "\ufeffabcde");
+    if (!second) throw new Error("Expected a second content delta");
+    expect(applyContentDelta(folded, second)).toBe("\ufeffabcde");
+
+    const appended = createAppendContentDelta("\ufeffx", "y");
+    if (!appended) throw new Error("Expected an append-only content delta");
+    expect(applyContentDelta("\ufeffx", appended)).toBe("\ufeffxy");
+  });
 });

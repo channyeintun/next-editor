@@ -15,7 +15,9 @@ import {
 } from "../textEdit";
 
 const contentTextEncoder = new TextEncoder();
-const contentTextDecoder = new TextDecoder();
+// A default decoder drops a leading U+FEFF that the encoder kept, which breaks
+// the base of the next delta.
+const contentTextDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
 const MAX_CONTENT_EDIT_CHANGES = 64;
 const MAX_CONTENT_EDIT_CODE_UNITS = 256 * 1024;
 // The content-edit integrity hash is 32-bit FNV-1a; recordings store it, so
