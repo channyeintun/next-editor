@@ -115,6 +115,19 @@ describe("ChaptersMenu", () => {
     ]);
   });
 
+  it("keeps a chapter's title when the author adds one at the moment it starts", () => {
+    // Paused on a chapter's start, as clicking its time or opening the lesson at 0:00 leaves it.
+    playhead.time = 0;
+    const intro = { ...lesson, chapters: [{ time: 0, title: "Intro" }] } as Recording;
+    render(<ChaptersMenu recording={intro} editable iconSize={16} buttonClassName="" />);
+    openMenu();
+
+    // A second chapter there would replace "Intro": the press goes to its title instead.
+    fireEvent.click(screen.getByRole("button", { name: "Add a chapter at 0:00" }));
+    expect(actions.setChapters).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Title of the chapter at 0:00")).toHaveFocus();
+  });
+
   it("copies a link to the playhead's second and keeps its check mark through that second", async () => {
     const { rerender } = render(
       <ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />,

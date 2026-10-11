@@ -75,6 +75,7 @@ export default function ChaptersMenu({
   const headingId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const addChapterRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const chapters = recording.chapters ?? [];
   // Only the open menu shows the playhead, and only what it shows: the whole second (the
   // labels and links floor to it) and the chapter playing. So it re-renders once a second
@@ -140,7 +141,7 @@ export default function ChaptersMenu({
               No chapters yet. Add one where the playhead is.
             </p>
           ) : (
-            <ul className="max-h-64 overflow-y-auto">
+            <ul ref={listRef} className="max-h-64 overflow-y-auto">
               {chapters.map((chapter, index) => (
                 // The chapter playing now: a bar at its edge (the tint alone is faint) and
                 // aria-current on its buttons. Every row has the border, so none shifts.
@@ -226,15 +227,17 @@ export default function ChaptersMenu({
               <button
                 ref={addChapterRef}
                 type="button"
-                onClick={() =>
-                  update([
-                    ...chapters,
-                    {
-                      time: selectLiveTime(editorActor.getSnapshot()),
-                      title: defaultChapterTitle(chapters.length),
-                    },
-                  ])
-                }
+                onClick={() => {
+                  const time = selectLiveTime(editorActor.getSnapshot());
+                  // A chapter already starts here, and a second one at its moment would
+                  // replace it (the later one wins): go to its title instead.
+                  const existing = chapters.findIndex((chapter) => chapter.time === time);
+                  if (existing !== -1) {
+                    listRef.current?.querySelectorAll("input")[existing]?.focus();
+                    return;
+                  }
+                  update([...chapters, { time, title: defaultChapterTitle(chapters.length) }]);
+                }}
                 className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
               >
                 <BookmarkPlus size={13} aria-hidden="true" />
