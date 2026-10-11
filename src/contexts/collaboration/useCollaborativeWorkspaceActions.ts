@@ -96,7 +96,16 @@ export function useCollaborativeWorkspaceActions({
             uploadCollaborationAsset(currentSession.room.id, bytes, content.mimeType),
           )
           .then((asset) => {
-            if (providerRef.current !== currentProvider || !canWriteRef.current) return;
+            // An error would be about a room this member already left.
+            if (providerRef.current !== currentProvider) return;
+            if (!canWriteRef.current) {
+              reportWriteError(
+                new Error(
+                  "The file finished uploading after your edit access ended, so it was not added.",
+                ),
+              );
+              return;
+            }
             controller.createAssetFile(path, asset);
             setError(null);
           })
