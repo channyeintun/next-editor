@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { NextEditorActionsContext, type NextEditorActions } from "../contexts/NextEditorContext";
 import { encodeRecordingToStream } from "../storage/streamingRecordingCodec";
@@ -232,6 +232,13 @@ function renderLoader(actions: NextEditorActions) {
 }
 
 describe("useUrlLoader", () => {
+  // The loader imports the caption parser on demand, inside the chain a caption test waits
+  // on. Loading it here keeps its first transform, which a busy run can stretch past
+  // waitFor's 1 s, out of those waits.
+  beforeAll(async () => {
+    await import("../captions/parseCaptions");
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
