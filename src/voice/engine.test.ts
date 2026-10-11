@@ -247,6 +247,31 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+interface DeferredPublish {
+  promise: Promise<VoicePublishedTrack>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
+// Hands each publishMicrophone call its own pending promise so a test can
+// settle overlapping unmute attempts in any order.
+function deferPublishes(media: MockMediaSession): DeferredPublish[] {
+  const publishes: DeferredPublish[] = [];
+  media.publishMicrophone = () => {
+    media.publishCalls += 1;
+    let resolve = () => {};
+    let reject: (error: Error) => void = () => {};
+    const promise = new Promise<VoicePublishedTrack>((onResolve, onReject) => {
+      resolve = () =>
+        onResolve({ sessionId: "sfu-session-self", trackName: "self-track", location: "remote" });
+      reject = onReject;
+    });
+    publishes.push({ promise, resolve, reject });
+    return promise;
+  };
+  return publishes;
+}
+
 describe("voice engine join", () => {
   it("joins in listening mode without acquiring the microphone", () => {
     const harness = createHarness();
@@ -347,6 +372,61 @@ describe("voice engine unmute/mute", () => {
       revision: 2,
       muted: true,
     });
+  });
+
+  it("releases the capture when muted while the publish was in flight", async () => {
+    const harness = createHarness();
+    await joinListening(harness);
+    const media = harness.mediaSessions[0];
+    const publishes = deferPublishes(media);
+    harness.engine.unmute();
+    harness.engine.mute();
+    expect(media.releaseCalls).toBe(1);
+    publishes[0].resolve();
+    await flush();
+    expect(harness.engine.getUiState().state).toBe("listening");
+    expect(media.releaseCalls).toBe(2);
+  });
+
+  it("keeps the newest unmute live when an earlier publish settles too", async () => {
+    const harness = createHarness();
+    await joinListening(harness);
+    const media = harness.mediaSessions[0];
+    const publishes = deferPublishes(media);
+    harness.engine.unmute();
+    harness.engine.mute();
+    harness.engine.unmute();
+    const releasesBeforeSettle = media.releaseCalls;
+    publishes[0].resolve();
+    publishes[1].resolve();
+    await flush();
+    expect(harness.engine.getUiState().state).toBe("live");
+    expect(media.releaseCalls).toBe(releasesBeforeSettle);
+    const unmutedFrames = harness.sockets[0]
+      .sentMessages()
+      .filter((message) => message["type"] === "voice.mute-changed" && message["muted"] === false);
+    expect(unmutedFrames).toHaveLength(1);
+  });
+
+  it("ignores a superseded publish that times out", async () => {
+    const harness = createHarness();
+    await joinListening(harness);
+    const media = harness.mediaSessions[0];
+    const publishes = deferPublishes(media);
+    harness.engine.unmute();
+    harness.engine.mute();
+    harness.engine.unmute();
+    const releasesBeforeSettle = media.releaseCalls;
+    const timeout = new Error("publish timed out");
+    timeout.name = "TimeoutError";
+    publishes[0].reject(timeout);
+    await flush();
+    publishes[1].resolve();
+    await flush();
+    const state = harness.engine.getUiState();
+    expect(state.state).toBe("live");
+    expect(state.errorCode).toBeNull();
+    expect(media.releaseCalls).toBe(releasesBeforeSettle);
   });
 
   it("degrades to listening when the device fails while live", async () => {

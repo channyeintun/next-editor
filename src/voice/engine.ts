@@ -88,6 +88,7 @@ export class VoiceEngine {
   private localSpeaking = false;
 
   private muteRevision = 0;
+  private unmuteAttempt = 0;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private cleaningUp = false;
@@ -162,8 +163,15 @@ export class VoiceEngine {
       this.actor.send({ type: "UNMUTE_FAILED", code: "network" });
       return;
     }
+    // Unmute, mute, unmute during a slow publish leaves two publishes on the
+    // same microphone. Only the newest attempt on the current media session
+    // may go live, fail or release the capture; mute() does not bump the
+    // attempt, so the release below still runs for the latest one.
+    const attempt = ++this.unmuteAttempt;
+    const superseded = () => attempt !== this.unmuteAttempt || this.media !== media;
     void media.publishMicrophone().then(
       () => {
+        if (superseded()) return;
         const state = this.actor.getSnapshot().value;
         if (state !== "unmuting" && state !== "reconnecting") {
           // The user muted or left while the publish was in flight; release
@@ -176,6 +184,7 @@ export class VoiceEngine {
         this.refreshLocalDetector();
       },
       (error: unknown) => {
+        if (superseded()) return;
         media.muteAndReleaseMicrophone();
         this.actor.send({ type: "UNMUTE_FAILED", code: mapMicrophoneError(error) });
       },
