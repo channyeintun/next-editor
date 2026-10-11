@@ -23,9 +23,10 @@ import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 // a wasm dmp apply against the growing message text.
 //
 // A fold that would apply far more item-list deltas than the recorder ever writes
-// between checkpoints throws instead (`MAX_ITEM_LIST_DELTAS_PER_FOLD`): the apply
-// action reports it and stops the chat track, rather than a crafted track with no
-// checkpoints freezing the tab.
+// between checkpoints throws instead (`MAX_ITEM_LIST_DELTAS_PER_FOLD`), rather than
+// a crafted track with no checkpoints freezing the tab. The apply action reports the
+// failure and skips that event, leaving the last good transcript on screen, until the
+// playhead reaches the next chat event.
 // ============================================================================
 
 export interface ChatReplayResult {

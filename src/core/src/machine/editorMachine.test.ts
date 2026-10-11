@@ -2176,6 +2176,40 @@ describe("editorMachine actor lifecycle", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       actor.stop();
     });
+
+    // The failed fold is never cached, so a cursor left anywhere but the failed event made
+    // every tick fold up to it again and report the same error at frame rate.
+    it("reports a failed fold once per crossed chat event, not once per tick", async () => {
+      const onError = vi.fn<(error: Error) => void>();
+      const damaged = createDamagedChatRecording();
+      const recording: Recording = {
+        ...damaged,
+        chatEvents: [
+          ...(damaged.chatEvents ?? []),
+          { timestamp: 900, event: { k: "status", status: "idle" } },
+        ],
+      };
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: null }, onError, applyChatSnapshot: () => {} },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+
+      for (const currentTime of [350, 400, 450, 500, 550]) {
+        actor.send({ type: "TICK", currentTime });
+      }
+
+      expect(actor.getSnapshot().status).toBe("active");
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(actor.getSnapshot().context.lastAppliedChatEventIndex).toBe(2);
+
+      // Crossing the next chat event folds through the damage again and reports it once more.
+      actor.send({ type: "TICK", currentTime: 950 });
+      actor.send({ type: "TICK", currentTime: 960 });
+      expect(onError).toHaveBeenCalledTimes(2);
+      actor.stop();
+    });
   });
 
   it("waits for Monaco model sync before applying frames after replayed file switches", async () => {

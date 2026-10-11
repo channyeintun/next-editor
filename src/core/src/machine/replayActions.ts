@@ -4,6 +4,7 @@ import type { WorkspaceRecordingSnapshot } from "../workspace";
 import { areWorkspaceProjectsEqual, areWorkspaceSnapshotsEqual } from "../workspace";
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
+import { findTimedEventIndexAtOrBefore } from "../utils/timedIndex";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
 import { EMPTY_WHITEBOARD_SCENE } from "../whiteboard";
 import {
@@ -681,11 +682,12 @@ const applyChatEventsAtTime = ({ context, event }: EditorActionArgs): EditorCont
   // Same exposure as applyFrameAtTime: the chat fold runs applyChatDelta ->
   // applyContentDelta, which throws on a damaged track — and a throw inside this
   // `assign` stops the actor outright.
+  const time = resolveBoundedReplayTime(context, event);
   let replayResult;
   try {
     replayResult = getChatReplayResult({
       chatEvents: recording.chatEvents,
-      currentTime: resolveBoundedReplayTime(context, event),
+      currentTime: time,
       lastAppliedIndex: lastAppliedChatEventIndex,
       isResync: isReplayResync(event, lastAppliedChatEventIndex),
     });
@@ -694,7 +696,16 @@ const applyChatEventsAtTime = ({ context, event }: EditorActionArgs): EditorCont
       context,
       error instanceof Error ? error : new Error("Could not replay the recorded agent chat"),
     );
-    return { lastAppliedChatEventIndex: recording.chatEvents.length - 1 };
+    // The cursor moves onto the event that failed, as frame replay does with a skipped
+    // frame. A failed fold is not cached, so any other index would make every later tick
+    // fold up to that event again and report the same error at frame rate.
+    return {
+      lastAppliedChatEventIndex: findTimedEventIndexAtOrBefore(
+        recording.chatEvents,
+        time,
+        lastAppliedChatEventIndex,
+      ),
+    };
   }
 
   if (replayResult.snapshotToApply) {
