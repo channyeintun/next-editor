@@ -87,13 +87,16 @@ function createFakeFs(initialFiles: Record<string, string>) {
     },
   );
 
-  const readFile = vi.fn<(path: string, encoding?: string) => Promise<string>>(async (path) => {
-    const content = files.get(path);
-    if (content === undefined) {
-      throw new Error(`ENOENT: ${path}`);
-    }
-    return content;
-  });
+  // As the container's Node fs reads: the text with an encoding, the bytes without.
+  const readFile = vi.fn<(path: string, encoding?: string) => Promise<string | Uint8Array>>(
+    async (path, encoding) => {
+      const content = files.get(path);
+      if (content === undefined) {
+        throw new Error(`ENOENT: ${path}`);
+      }
+      return encoding ? content : new TextEncoder().encode(content);
+    },
+  );
 
   return {
     fs: {
@@ -122,6 +125,7 @@ function createFakeFs(initialFiles: Record<string, string>) {
     addFile: (path: string, content: string) => {
       files.set(path, content);
     },
+    getFile: (path: string) => files.get(path),
   };
 }
 
@@ -461,12 +465,13 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
     if (!isWorkspaceTextFile(entryFile)) throw new Error("Expected a text entry file");
     fakeFs.addFile(entryPath, entryFile.content);
 
-    let releaseStaleRead: ((content: string) => void) | null = null;
+    let releaseStaleRead: ((content: Uint8Array) => void) | null = null;
+    // The reverse sync reads without an encoding, so the container hands back bytes.
     vi.mocked(instance.fs.readFile).mockImplementationOnce(
       () =>
-        new Promise<string>((resolve) => {
+        new Promise<Uint8Array>((resolve) => {
           releaseStaleRead = resolve;
-        }),
+        }) as unknown as Promise<string>,
     );
 
     await act(async () => {
@@ -480,7 +485,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
     });
 
     await act(async () => {
-      releaseStaleRead?.("stale runtime content");
+      releaseStaleRead?.(new TextEncoder().encode("stale runtime content"));
       await Promise.resolve();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(200);
@@ -532,7 +537,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
     const readFromFakeFs = readFile.getMockImplementation()!;
     readFile.mockImplementation(async (path, encoding) => {
       const content = await readFromFakeFs(path, encoding);
-      if (path === "gen.ts" && content === "v1") {
+      if (path === "gen.ts" && fakeFs.getFile(path) === "v1") {
         fakeFs.addFile("gen.ts", "v2");
         setTimeout(() => fireWatch("change", "gen.ts"), 0);
       }

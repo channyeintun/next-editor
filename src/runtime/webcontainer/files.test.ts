@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WebContainer } from "@webcontainer/api";
-import type { WorkspaceProject } from "../../types/workspace";
+import { isWorkspaceAssetDescriptor, type WorkspaceProject } from "../../types/workspace";
+import {
+  getWorkspaceAssetBytes,
+  resetWorkspaceAssetStoreForTests,
+} from "../../storage/workspaceAssetStore";
 import {
   createWorkspaceTree,
   readWorkspaceProject,
@@ -158,7 +162,9 @@ describe("readWorkspaceProject", () => {
         ? [entry("constructor", "directory"), entry("a\\b", "file"), entry("ok.txt", "file")]
         : [],
     );
-    const readFile = vi.fn<(path: string) => Promise<string>>(async (path) => `${path} contents`);
+    const readFile = vi.fn<(path: string) => Promise<Uint8Array>>(async (path) =>
+      new TextEncoder().encode(`${path} contents`),
+    );
     const instance = { fs: { readdir, readFile } } as unknown as WebContainer;
 
     const project = await readWorkspaceProject(instance, nodeProject("root"));
@@ -172,6 +178,50 @@ describe("readWorkspaceProject", () => {
     expect(readFile.mock.calls.map(([path]) => path)).toEqual(["ok.txt", "ok.txt"]);
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+
+  describe("a file whose extension does not mark it binary", () => {
+    afterEach(() => resetWorkspaceAssetStoreForTests());
+
+    it("keeps its bytes as an asset when they are not text", async () => {
+      const contents: Record<string, Uint8Array> = {
+        // Not valid UTF-8, which a text read turns into U+FFFD.
+        "cache.bin": new Uint8Array([0x61, 0xff, 0xfe, 0x80]),
+        // Valid UTF-8 that is still a binary: a bytecode header full of NULs.
+        "x.pyc": new Uint8Array([0x55, 0x0d, 0x0d, 0x0a, 0x00, 0x00, 0x00, 0x00]),
+        "main.py": new TextEncoder().encode("print('héllo')\n"),
+        "bom.txt": new Uint8Array([0xef, 0xbb, 0xbf, 0x68, 0x69]),
+      };
+      const readdir = vi.fn<() => Promise<unknown[]>>(async () =>
+        Object.keys(contents).map((name) => ({
+          name,
+          isFile: () => true,
+          isDirectory: () => false,
+        })),
+      );
+      // As the container's Node fs reads: bytes without an encoding, and a
+      // lossy decode that keeps a BOM with one.
+      const readFile = vi.fn<(path: string, encoding?: string) => Promise<Uint8Array | string>>(
+        async (path, encoding) =>
+          encoding
+            ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(contents[path])
+            : contents[path],
+      );
+      const instance = { fs: { readdir, readFile } } as unknown as WebContainer;
+
+      const { files } = await readWorkspaceProject(instance, nodeProject("root"));
+
+      for (const path of ["cache.bin", "x.pyc"]) {
+        const file = files[path];
+        expect(file.encoding).toBe("asset");
+        if (!isWorkspaceAssetDescriptor(file.content)) throw new Error(`${path} is not an asset`);
+        expect(file.content.mimeType).toBe("application/octet-stream");
+        expect(await getWorkspaceAssetBytes(file.content)).toEqual(contents[path]);
+      }
+      expect(files["main.py"]).toMatchObject({ content: "print('héllo')\n" });
+      expect(files["main.py"].encoding).toBeUndefined();
+      expect(files["bom.txt"]).toMatchObject({ content: "\uFEFFhi" });
+    });
   });
 });
 

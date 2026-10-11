@@ -22,6 +22,7 @@ import {
 } from "../../types/workspaceFiles";
 import { base64ToBytes } from "../../shared/base64";
 import { getWorkspaceAssetBytes, registerWorkspaceAsset } from "../../storage/workspaceAssetStore";
+import { decodeWorkspaceText } from "../../utils/workspaceFileUpload";
 
 const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 
@@ -191,22 +192,26 @@ async function readRuntimeDirectory(
       continue;
     }
 
-    if (isBinaryWorkspacePath(nextWorkspacePath)) {
-      const bytes = await instance.fs.readFile(nextRuntimePath);
-      const content = await registerWorkspaceAsset(bytes, {
-        mimeType: getWorkspaceFileMimeType(nextWorkspacePath),
-      });
+    // The extension decides most files. Any other file is text only if its
+    // bytes are: a process can write a .pyc, a .db or a packed .tgz, and
+    // reading one as text would store U+FFFD in place of its bytes.
+    const bytes = await instance.fs.readFile(nextRuntimePath);
+    const text = isBinaryWorkspacePath(nextWorkspacePath)
+      ? null
+      : decodeWorkspaceText(bytes, { keepByteOrderMark: true });
 
-      files[nextWorkspacePath] = createWorkspaceFile(nextWorkspacePath, content, "asset");
-      continue;
-    }
-
-    const content = stripRuntimeSnapshotScript(
-      await instance.fs.readFile(nextRuntimePath, "utf-8"),
-    );
-
-    files[nextWorkspacePath] = createWorkspaceFile(nextWorkspacePath, content);
+    files[nextWorkspacePath] =
+      text === null
+        ? await readRuntimeAssetFile(nextWorkspacePath, bytes)
+        : createWorkspaceFile(nextWorkspacePath, stripRuntimeSnapshotScript(text));
   }
+}
+
+async function readRuntimeAssetFile(path: string, bytes: Uint8Array): Promise<WorkspaceFile> {
+  const content = await registerWorkspaceAsset(bytes, {
+    mimeType: getWorkspaceFileMimeType(path),
+  });
+  return createWorkspaceFile(path, content, "asset");
 }
 
 export async function readWorkspaceProject(

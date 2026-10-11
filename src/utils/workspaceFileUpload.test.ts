@@ -13,6 +13,18 @@ describe("decodeWorkspaceText", () => {
     expect(decodeWorkspaceText(new Uint8Array(0))).toBe("");
   });
 
+  it("keeps a leading BOM when asked to", () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x68, 0x69]);
+    expect(decodeWorkspaceText(bytes, { keepByteOrderMark: true })).toBe("\uFEFFhi");
+  });
+
+  // A view on a SharedArrayBuffer is decoded, not refused as "not text".
+  it("decodes text held in a SharedArrayBuffer", () => {
+    const shared = new Uint8Array(new SharedArrayBuffer(2));
+    shared.set([0x68, 0x69]);
+    expect(decodeWorkspaceText(shared)).toBe("hi");
+  });
+
   it("refuses bytes with a NUL in them, even when they decode", () => {
     expect(decodeWorkspaceText(new Uint8Array([0x61, 0x00, 0x62]))).toBeNull();
   });

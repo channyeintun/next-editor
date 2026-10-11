@@ -10,20 +10,40 @@ export interface UploadedWorkspaceFile {
 // How far into a file the NUL check looks, as git's binary check does.
 const NUL_SCAN_BYTES = 8192;
 
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const byteOrderMarkKeepingTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+interface DecodeWorkspaceTextOptions {
+  /** Keeps a leading UTF-8 BOM in the text instead of dropping it. */
+  keepByteOrderMark?: boolean;
+}
+
 /**
  * The text of a file, or null when its bytes are not text: a NUL byte in the
- * first 8 KiB, or anything that is not valid UTF-8. The one rule both importers
- * (a picked or dropped file, and a project zip) apply to a file whose extension
- * does not already mark it binary, so neither decodes a binary into U+FFFD
- * text. A leading UTF-8 BOM is dropped, as the decoders before it did.
+ * first 8 KiB, or anything that is not valid UTF-8. The one rule every importer
+ * (a picked or dropped file, a project zip, and the reverse sync reading a
+ * WebContainer's files) applies to a file whose extension does not already
+ * mark it binary, so none decodes a binary into U+FFFD text. A leading UTF-8
+ * BOM is dropped, as the upload decoders before it did, unless the caller
+ * keeps it: the reverse sync does, as the container's own text read does.
  */
-export function decodeWorkspaceText(bytes: Uint8Array): string | null {
+export function decodeWorkspaceText(
+  bytes: Uint8Array,
+  { keepByteOrderMark = false }: DecodeWorkspaceTextOptions = {},
+): string | null {
   if (bytes.subarray(0, NUL_SCAN_BYTES).includes(0)) {
     return null;
   }
 
+  // A TextDecoder may refuse a view on a SharedArrayBuffer (Chrome's long
+  // did), and this cross-origin isolated app can be handed one; that refusal
+  // must not read as "not text".
+  const decodable =
+    typeof SharedArrayBuffer !== "undefined" && bytes.buffer instanceof SharedArrayBuffer
+      ? bytes.slice()
+      : bytes;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return (keepByteOrderMark ? byteOrderMarkKeepingTextDecoder : textDecoder).decode(decodable);
   } catch {
     return null;
   }
