@@ -5,7 +5,13 @@
 const BLOCKED_HOSTS = new Set(["localhost"]);
 export const MAX_PROXY_REDIRECTS = 5;
 export const MAX_PROXY_RESPONSE_BYTES = 200 * 1024 * 1024;
+// Headers (redirects included) must arrive within PROXY_TIMEOUT_MS. The body then
+// has its own budget: it must keep moving (no PROXY_BODY_IDLE_TIMEOUT_MS gap
+// without data) and finish within PROXY_BODY_MAX_MS, so a slow client still gets
+// a large lesson while a slow-drip upstream cannot hold a request open forever.
 export const PROXY_TIMEOUT_MS = 15_000;
+export const PROXY_BODY_IDLE_TIMEOUT_MS = 15_000;
+export const PROXY_BODY_MAX_MS = 300_000;
 
 function isBlockedIpv4(host: string): boolean {
   const parts = host.split(".");
@@ -95,22 +101,38 @@ function parseContentLength(response: Response): number | null {
 function limitBody(
   body: ReadableStream<Uint8Array>,
   abortController: AbortController,
-  onFinished: () => void,
 ): ReadableStream<Uint8Array> {
   let bytes = 0;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const ceiling = setTimeout(() => abortController.abort(), PROXY_BODY_MAX_MS);
+  const clearTimers = () => {
+    clearTimeout(idle);
+    clearTimeout(ceiling);
+  };
+  const armIdle = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => abortController.abort(), PROXY_BODY_IDLE_TIMEOUT_MS);
+  };
+  // However the body ends early (a timer, the size cap, the upstream request
+  // aborted), no timer stays armed behind it.
+  abortController.signal.addEventListener("abort", clearTimers, { once: true });
   return body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
+      start() {
+        armIdle();
+      },
       transform(chunk, controller) {
+        armIdle();
         bytes += chunk.byteLength;
         if (bytes > MAX_PROXY_RESPONSE_BYTES) {
+          clearTimers();
           abortController.abort();
-          onFinished();
           throw new Error("Upstream response exceeds the proxy size limit.");
         }
         controller.enqueue(chunk);
       },
       flush() {
-        onFinished();
+        clearTimers();
       },
     }),
   );
@@ -169,7 +191,6 @@ export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
 
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), PROXY_TIMEOUT_MS);
-  let responseStreamOwnsTimeout = false;
   try {
     for (let redirectCount = 0; redirectCount <= MAX_PROXY_REDIRECTS; redirectCount += 1) {
       let response: Response;
@@ -207,16 +228,17 @@ export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
         return { status: 413, error: "Upstream response exceeds the proxy size limit." };
       }
       if (!response.body) return { status: 502, error: "Upstream response had no body." };
-      responseStreamOwnsTimeout = true;
+      // The header phase is over: the body runs on limitBody's own timers.
+      clearTimeout(timeout);
       return {
         status: 200,
-        body: limitBody(response.body, abortController, () => clearTimeout(timeout)),
+        body: limitBody(response.body, abortController),
         // Absent stays absent, so each caller's own fallback type applies.
         contentType: response.headers.get("content-type") ?? undefined,
       };
     }
     return { status: 502, error: "Upstream exceeded the redirect limit." };
   } finally {
-    if (!responseStreamOwnsTimeout) clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 }
