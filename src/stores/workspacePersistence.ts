@@ -126,6 +126,19 @@ export function createInitialWorkspaceSnapshot(
 }
 
 /**
+ * Every text file goes into the one localStorage value, so a few MB of text can
+ * fill the origin's quota. The browser's own message for that is long and says
+ * nothing about how to recover, and the header cuts it off.
+ */
+function saveErrorMessage(error: unknown): string {
+  // Code 22 is QUOTA_EXCEEDED_ERR, for an engine that names the error otherwise.
+  if (error instanceof DOMException && (error.name === "QuotaExceededError" || error.code === 22)) {
+    return "Browser storage is full. Remove large text files from the project, then save again.";
+  }
+  return error instanceof Error ? error.message : "The workspace could not be saved";
+}
+
+/**
  * Makes one workspace generation durable: the assets first, then the
  * localStorage metadata that references them. A failure leaves the workspace
  * dirty and is reported through the store.
@@ -170,8 +183,7 @@ export async function persistWorkspace(
       console.warn("Failed to prune old workspace assets:", error);
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The workspace could not be saved";
-    workspaceStore.trigger.saveFailed({ message, workspaceLoadVersion });
+    workspaceStore.trigger.saveFailed({ message: saveErrorMessage(error), workspaceLoadVersion });
     console.warn("Failed to save workspace snapshot:", error);
   }
 }

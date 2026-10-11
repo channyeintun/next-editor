@@ -7,6 +7,7 @@ import {
 } from "./workspaceStore";
 import {
   createInitialWorkspaceSnapshot,
+  persistWorkspace,
   toPersistedSnapshot,
   WORKSPACE_STORAGE_KEY,
 } from "./workspacePersistence";
@@ -365,6 +366,53 @@ describe("persistWorkspaceAssets", () => {
         ]),
       ),
     ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: quotaError });
+  });
+});
+
+describe("persistWorkspace", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  async function saveWith(failure: Error) {
+    const store = createWorkspaceStore({
+      activeFilePath: "index.html",
+      project: makeProject([makeFile("index.html", "<html></html>")]),
+    });
+    store.trigger.createFile({ path: "data.json", content: "{}" });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw failure;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+
+    await persistWorkspace(store, context);
+
+    return store.getSnapshot().context;
+  }
+
+  // The header showed the browser's own setItem message, cut off after a few
+  // words, which said neither what was wrong nor how to recover.
+  it("explains a full browser storage in plain words", async () => {
+    const context = await saveWith(
+      new DOMException(
+        "Failed to execute 'setItem' on 'Storage': Setting the value of 'next-editor-workspace' exceeded the quota.",
+        "QuotaExceededError",
+      ),
+    );
+
+    expect(context.saveError).toBe(
+      "Browser storage is full. Remove large text files from the project, then save again.",
+    );
+    expect(context.isInitialized && context.dirtyState.hasUnsavedChanges).toBe(true);
+  });
+
+  it("keeps the message of any other failure", async () => {
+    const context = await saveWith(new Error("The storage is locked"));
+
+    expect(context.saveError).toBe("The storage is locked");
   });
 });
 
