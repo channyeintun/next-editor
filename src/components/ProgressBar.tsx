@@ -17,6 +17,11 @@ export interface ProgressBarProps {
    */
   currentTime: number;
   /**
+   * The live time in milliseconds, read when a key seeks, for a player that passes a
+   * rounded `currentTime` to render less often (otherwise the keys step from `currentTime`)
+   */
+  getCurrentTime?: () => number;
+  /**
    * Width of the progress bar (CSS value)
    */
   width?: string;
@@ -79,6 +84,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   duration,
   currentTime,
+  getCurrentTime,
   width = "100%",
   height = "2px",
   hoverHeight = "6px",
@@ -170,7 +176,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     if (!onSeek || !seekable || e.ctrlKey || e.metaKey || e.altKey) return;
     const step = SEEK_KEY_STEPS.get(e.key);
     let target: number | null = null;
-    if (step !== undefined) target = currentTime + step;
+    if (step !== undefined) target = (getCurrentTime?.() ?? currentTime) + step;
     else if (e.key === "Home") target = 0;
     else if (e.key === "End") target = duration;
     if (target === null) return;

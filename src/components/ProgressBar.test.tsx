@@ -97,6 +97,26 @@ describe("ProgressBar", () => {
     expect(seekFor("End")).toBe(60_000);
   });
 
+  it("steps from the live playhead, not the whole second the bar shows", () => {
+    const onSeek = vi.fn<(time: number) => void>();
+    render(
+      <ProgressBar
+        progress={25}
+        duration={60_000}
+        currentTime={10_000}
+        getCurrentTime={() => 10_900}
+        onSeek={onSeek}
+      />,
+    );
+    const bar = screen.getByRole("slider");
+    expect(bar).toHaveAttribute("aria-valuenow", "10");
+
+    fireEvent.keyDown(bar, { key: "ArrowRight" });
+    expect(onSeek).toHaveBeenLastCalledWith(15_900);
+    fireEvent.keyDown(bar, { key: "ArrowLeft" });
+    expect(onSeek).toHaveBeenLastCalledWith(5_900);
+  });
+
   it("keeps keyboard seeks within the lesson", () => {
     const onSeek = vi.fn<(time: number) => void>();
     const { rerender } = render(

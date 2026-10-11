@@ -137,6 +137,8 @@ const PlaybackProgress = ({
         progress={toProgressPercent(currentTime, progressDuration)}
         duration={progressDuration}
         currentTime={currentTime}
+        // The arrows step from the playhead itself, as the player's ←/→ do, not the whole second.
+        getCurrentTime={() => editorActor.getSnapshot().context.timeline.currentTime}
         onSeek={onSeek}
         chapters={chapters}
         height={large ? "10px" : "2px"}
