@@ -182,6 +182,33 @@ describe("a size keyword written on the immediate", () => {
   });
 });
 
+describe("a negative 64-bit number written as its unsigned bits", () => {
+  it.each([
+    ["and rsp, 0xFFFFFFFFFFFFFFF0", "48 83 e4 f0"],
+    ["xor rdi, 0xFFFFFFFFFFFFFFFF", "48 83 f7 ff"],
+    ["cmp rdi, 0xFFFFFFFFFFFFFFFF", "48 83 ff ff"],
+    ["push 0xFFFFFFFFFFFFFFF8", "6a f8"],
+    ["mov qword [rsp-8], 0xFFFFFFFFFFFFFFFF", "48 c7 44 24 f8 ff ff ff ff"],
+  ])("%s assembles like the same number written negative", (source, expected) => {
+    expect(bytesOf(source)).toBe(expected);
+  });
+
+  it("leaves the encodings that already assembled alone", () => {
+    expect(bytesOf("mov rax, 0xffffffffffffffff")).toBe("48 b8 ff ff ff ff ff ff ff ff");
+    expect(bytesOf("and eax, 0xFFFFFFF0")).toBe("25 f0 ff ff ff");
+    expect(bytesOf("and rsp, -16")).toBe("48 83 e4 f0");
+  });
+
+  it("still rejects a number the operand width cannot sign-extend to", () => {
+    // clang refuses this too: no 64-bit reading of 0x80000000 is a signed
+    // 32-bit number.
+    expect(assembleLine("and rax, 0x80000000")).toThrow(/does not fit in a signed 32-bit field/);
+    expect(assembleLine("and eax, 0xFFFFFFFFFFFFFFF0")).toThrow(
+      /cannot be used with these operands/,
+    );
+  });
+});
+
 describe("the did-you-mean suggestion", () => {
   it.each([
     ["mvo rax, 1", "mov"],

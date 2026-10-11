@@ -449,11 +449,43 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
     );
   }
 
-  const matching = candidates.filter((form) =>
+  let matching = candidates.filter((form) =>
     form.operands.every((pattern, position) =>
       patternMatches(pattern, sized.operands[position], resolved, position),
     ),
   );
+  let effectiveResolved = resolved;
+
+  // `and rsp, 0xFFFFFFFFFFFFFFF0` writes -16 as its 64-bit pattern, which no
+  // sign-extended field accepts as written. When nothing matched, read such a
+  // number as signed and try the 64-bit forms once more. It is a fallback only,
+  // so an instruction that already assembled keeps its bytes (`mov rax,
+  // 0xffffffffffffffff` stays the 10-byte form), and a narrower form never
+  // takes it.
+  if (matching.length === 0) {
+    const wrapped: ResolvedOperands = {
+      immediates: new Map(resolved.immediates),
+      displacements: resolved.displacements,
+    };
+    let rewrapped = false;
+    for (const [position, operand] of sized.operands.entries()) {
+      const value = resolved.immediates.get(position);
+      if (operand.kind !== "immediate" || value === undefined) continue;
+      if (value < 1n << 63n || value >= 1n << 64n) continue;
+      wrapped.immediates.set(position, BigInt.asIntN(64, value));
+      rewrapped = true;
+    }
+    if (rewrapped) {
+      matching = candidates.filter(
+        (form) =>
+          (form.opsize ?? 8) === 8 &&
+          form.operands.every((pattern, position) =>
+            patternMatches(pattern, sized.operands[position], wrapped, position),
+          ),
+      );
+      if (matching.length > 0) effectiveResolved = wrapped;
+    }
+  }
 
   if (matching.length === 0) {
     throw error(
@@ -498,7 +530,7 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
   const failures: AsmEncodeError[] = [];
   for (const form of eligible) {
     try {
-      encodings.push(encodeWithForm(form, sized, address, resolved, error));
+      encodings.push(encodeWithForm(form, sized, address, effectiveResolved, error));
     } catch (cause) {
       if (cause instanceof AsmEncodeError) {
         failures.push(cause);
