@@ -10,5 +10,6 @@ export const KITE_AGENT_STACK: PlaygroundAgentStack = {
   specifics:
     "A Kite module is a directory, so every .kite file beside the entry belongs to the " +
     "same program and a run compiles main.kite. Kite targets WasmGC and has no package " +
-    "ecosystem here: keep solutions to the language and its std/ modules.",
+    "ecosystem here: keep solutions to the language and its std/ modules. " +
+    "io.error output is not shown in the Runner; use io.print for anything the learner must see.",
 };

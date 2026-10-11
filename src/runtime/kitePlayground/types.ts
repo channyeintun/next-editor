@@ -37,8 +37,10 @@ export interface KitePlaygroundRunResult {
   /** Program stdout. Empty for compile errors. */
   stdout: string;
   /**
-   * Always empty: the in-page compiler answers with one stream, never split.
-   * It exists so the result has the proxied languages' shape.
+   * Always empty. This compiler build answers a run with the program's stdout
+   * alone: what it writes with `io.error` is not returned at all, so that text
+   * is lost rather than shown here. The field exists so the result has the
+   * proxied languages' shape; re-check `kite_run`'s streams on each compiler bump.
    */
   stderr: string;
   /**

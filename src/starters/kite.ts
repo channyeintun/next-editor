@@ -60,7 +60,7 @@ fn main() {
 
     let (half, err) = divide(10, 2)
     if err != nil {
-        io.error("failed: \\(err.message())")
+        io.print("failed: \\(err.message())")
         return
     }
     io.print("Ten halved is \\(half)")

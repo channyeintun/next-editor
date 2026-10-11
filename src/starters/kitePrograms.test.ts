@@ -88,4 +88,13 @@ describe("kite starter programs", () => {
     expect(output).not.toContain("error");
     expect(output.trim().length, "the starter printed nothing").toBeGreaterThan(0);
   });
+
+  it("never writes with io.error in the console starter, which the Runner never shows", () => {
+    // `kite_run` answers with stdout alone, so its failure branch printed
+    // nothing and the run looked successful.
+    const project = starters.find(([lessonType]) => lessonType === "kite")?.[1];
+    for (const [path, content] of Object.entries(kiteSources(project!))) {
+      expect(content, `kite: ${path} writes with io.error`).not.toMatch(/\bio\.error\(/);
+    }
+  });
 });
