@@ -30,8 +30,9 @@ export interface Token {
 }
 
 // `$` and `$$` are absent on purpose: they are recognised ahead of this set,
-// which is only ever consulted one character at a time.
-const PUNCTUATION = new Set(["[", "]", "(", ")", ",", "+", "-", "*", "/", ":"]);
+// which is only ever consulted one character at a time. `=` is here so a
+// section attribute such as `align=16` reaches the parser, which drops it.
+const PUNCTUATION = new Set(["[", "]", "(", ")", ",", "+", "-", "*", "/", ":", "="]);
 
 const UTF8 = new TextEncoder();
 

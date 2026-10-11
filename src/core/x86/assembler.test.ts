@@ -364,6 +364,31 @@ describe("the bits header", () => {
   });
 });
 
+describe("section attributes", () => {
+  it("reads and drops an attribute written with =", () => {
+    const result = assembleAndRun(`section .data align=8
+answer dq 7
+section .text align=16
+global _start
+_start:
+    mov rax, 60
+    mov rdi, [answer]
+    syscall
+`);
+    expect(result.status).toBe("success");
+    expect(result.exitCode).toBe(7);
+  });
+
+  it("still points at a stray = in an operand", () => {
+    expect(() => assemble("section .text\nglobal _start\n_start:\nmov eax, = 5\n")).toThrow(
+      expect.objectContaining({ line: 4, column: 10 }),
+    );
+    expect(() => assemble("section .text\nglobal _start\n_start:\nmov eax, = 5\n")).toThrow(
+      AsmError,
+    );
+  });
+});
+
 describe("default rel", () => {
   const relative = (operand: string): string =>
     bytesOf(`default rel\n mov rax, ${operand}`).split(" ").slice(0, 3).join(" ");
