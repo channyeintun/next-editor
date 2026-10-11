@@ -30,6 +30,7 @@ import {
 import { fetchPublishedDeck } from "../googleSlides/fetchPublishedDeck";
 import { GoogleSlidesParseError } from "../googleSlides/types";
 import { applyDeckToSlides } from "../googleSlides/importDeck";
+import HoverRing from "./hoverRing/HoverRing";
 
 /** Guards an href/fetch target that came out of deserialized slide data. */
 function isHttpsUrl(value: string | undefined): value is string {
@@ -416,6 +417,8 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
             <FileText className="size-3.5 text-cyan-300" />
             Markdown
           </span>
+          {/* Only on the option a press would switch to: the chosen one does nothing. */}
+          {contentType === "markdown" ? null : <HoverRing />}
         </button>
         <button
           type="button"
@@ -431,6 +434,7 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
             <Code className="size-3.5 text-sky-300" />
             HTML
           </span>
+          {contentType === "html" ? null : <HoverRing />}
         </button>
       </div>
 
@@ -599,6 +603,7 @@ export default function SlidesManager({
               title="Close"
             >
               <X className="size-4" />
+              <HoverRing />
             </button>
           )}
         </div>
@@ -784,6 +789,7 @@ export default function SlidesManager({
                             title="Move Up"
                           >
                             <ChevronUp className="size-3.5" />
+                            <HoverRing />
                           </button>
                           <button
                             type="button"
@@ -793,6 +799,7 @@ export default function SlidesManager({
                             title="Move Down"
                           >
                             <ChevronDown className="size-3.5" />
+                            <HoverRing />
                           </button>
                           <div className="mx-1 h-4 w-px bg-slate-800"></div>
                           <button
@@ -802,6 +809,7 @@ export default function SlidesManager({
                             title="Delete"
                           >
                             <Trash2 className="size-3.5" />
+                            <HoverRing />
                           </button>
                         </div>
                       </div>

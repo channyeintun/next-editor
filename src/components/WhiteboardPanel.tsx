@@ -12,6 +12,7 @@ import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
 import { clearTextMeasurements, fitTextElement } from "../utils/whiteboardTextFit";
+import HoverRing from "./hoverRing/HoverRing";
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
@@ -266,6 +267,7 @@ export default function WhiteboardPanel() {
               className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               {scene.isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <HoverRing />
             </button>
             <button
               ref={closeButtonRef}
@@ -275,6 +277,7 @@ export default function WhiteboardPanel() {
               className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               <X size={16} />
+              <HoverRing />
             </button>
           </div>
         </div>

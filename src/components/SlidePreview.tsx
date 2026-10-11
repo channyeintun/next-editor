@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Minimize2, RefreshCw, X } from "lucide-react
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import CustomSlideRenderer from "./CustomSlideRenderer";
+import HoverRing from "./hoverRing/HoverRing";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../core/src/utils/iframeInteractionProtocol";
 
@@ -296,6 +297,7 @@ function SlidePreview({
               className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
               <Minimize2 className="size-4" />
+              <HoverRing />
             </button>
             <button
               type="button"
@@ -305,6 +307,7 @@ function SlidePreview({
               className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
               <X className="size-4" />
+              <HoverRing />
             </button>
           </div>
 
@@ -318,6 +321,7 @@ function SlidePreview({
                 className="absolute left-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronLeft className="size-5" />
+                <HoverRing />
               </button>
               <button
                 type="button"
@@ -327,6 +331,7 @@ function SlidePreview({
                 className="absolute right-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronRight className="size-5" />
+                <HoverRing />
               </button>
             </>
           )}
