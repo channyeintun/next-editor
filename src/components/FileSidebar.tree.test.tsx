@@ -62,6 +62,7 @@ const actions = vi.hoisted(() => ({
   setActiveFilePath: vi.fn<WorkspaceActions["setActiveFilePath"]>(),
   setCollapsedFolders: vi.fn<WorkspaceActions["setCollapsedFolders"]>(),
   setSidebarScrollTop: vi.fn<WorkspaceActions["setSidebarScrollTop"]>(),
+  getSidebarScrollTop: vi.fn<WorkspaceActions["getSidebarScrollTop"]>(),
   setSidebarWidth: vi.fn<WorkspaceActions["setSidebarWidth"]>(),
   setPreviewFilePath: vi.fn<WorkspaceActions["setPreviewFilePath"]>(),
   getProject: vi.fn<WorkspaceActions["getProject"]>(),
@@ -111,6 +112,10 @@ beforeEach(() => {
     workspace.update({ activeFilePath: path }),
   );
   actions.getActiveFilePath.mockImplementation(() => workspace.store.state.activeFilePath);
+  actions.setSidebarScrollTop.mockImplementation((scrollTop) =>
+    workspace.update({ sidebarScrollTop: scrollTop }),
+  );
+  actions.getSidebarScrollTop.mockImplementation(() => workspace.store.state.sidebarScrollTop);
   actions.getFile.mockImplementation((path) =>
     workspace.store.state.files.some((file) => file.path === path)
       ? createWorkspaceFile(path, "")
@@ -447,5 +452,93 @@ describe("FileSidebar opening a file", () => {
 
     expect(calls()).toEqual(["pause", "setActiveFilePath", "handleWorkspaceEvent"]);
     expect(screen.getByRole("group", { name: "File actions" })).toBeInTheDocument();
+  });
+});
+
+describe("FileSidebar scroll position", () => {
+  // jsdom has no layout: give the scroll container a 153px scroll range and a
+  // scrollTop the browser clamps into it, and run animation frames by hand.
+  const MAX_SCROLL_TOP = 153;
+  let frames: FrameRequestCallback[] = [];
+
+  const renderScrollableSidebar = () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    render(<FileSidebar />);
+    const container = screen.getByRole("list", { name: "Files" }).parentElement!;
+    let scrollTop = 0;
+    Object.defineProperties(container, {
+      scrollHeight: { configurable: true, get: () => 300 + MAX_SCROLL_TOP },
+      clientHeight: { configurable: true, get: () => 300 },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = Math.min(Math.max(0, value), MAX_SCROLL_TOP);
+        },
+      },
+    });
+    return container;
+  };
+  // The browser fires a scroll whenever the position moves, the clamp included.
+  const scrollTo = (container: HTMLElement, scrollTop: number) => {
+    container.scrollTop = scrollTop;
+    fireEvent.scroll(container);
+  };
+  const runFrame = () =>
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+  beforeEach(() => {
+    frames = [];
+  });
+
+  it("leaves the store alone when the browser clamps a replayed position it cannot reach", () => {
+    const container = renderScrollableSidebar();
+
+    // The replay stores 201; the layout effect scrolls there and the browser
+    // clamps to 153, firing a scroll for it.
+    act(() => workspace.update({ sidebarScrollTop: 201 }));
+    expect(container.scrollTop).toBe(MAX_SCROLL_TOP);
+    fireEvent.scroll(container);
+    runFrame();
+
+    expect(actions.setSidebarScrollTop).not.toHaveBeenCalled();
+    expect(workspace.store.state.sidebarScrollTop).toBe(201);
+  });
+
+  it("still stores a real scroll up from the bottom, and a scroll down to it", () => {
+    const container = renderScrollableSidebar();
+    act(() => workspace.update({ sidebarScrollTop: 201 }));
+    fireEvent.scroll(container);
+    runFrame();
+
+    scrollTo(container, 100);
+    runFrame();
+    expect(actions.setSidebarScrollTop).toHaveBeenLastCalledWith(100);
+
+    scrollTo(container, MAX_SCROLL_TOP);
+    runFrame();
+    expect(actions.setSidebarScrollTop).toHaveBeenLastCalledWith(MAX_SCROLL_TOP);
+    expect(container.scrollTop).toBe(MAX_SCROLL_TOP);
+  });
+
+  it("stores nothing stale when a scroll up comes back to the bottom inside one frame", () => {
+    const container = renderScrollableSidebar();
+    act(() => workspace.update({ sidebarScrollTop: 201 }));
+    fireEvent.scroll(container);
+    runFrame();
+
+    scrollTo(container, 100);
+    scrollTo(container, MAX_SCROLL_TOP);
+    runFrame();
+
+    expect(actions.setSidebarScrollTop).not.toHaveBeenCalled();
+    expect(container.scrollTop).toBe(MAX_SCROLL_TOP);
   });
 });

@@ -72,6 +72,7 @@ function FileSidebarPanel() {
     deleteFile,
     deleteFolder,
     getProject,
+    getSidebarScrollTop,
     renameFile,
     renameFolder,
     saveProject,
@@ -350,7 +351,21 @@ function FileSidebarPanel() {
 
     sidebarScrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
       sidebarScrollAnimationFrameRef.current = null;
-      setSidebarScrollTop(pendingSidebarScrollTopRef.current);
+      const scrollTop = pendingSidebarScrollTopRef.current;
+      const container = sidebarScrollContainerRef.current;
+      // A replay can store a position this sidebar is too short to reach: the
+      // browser clamps it and fires a scroll. Writing the clamped value back
+      // is a workspace change after the replay's own, which pauses the lesson,
+      // so sitting at the bottom while the store holds a deeper position
+      // writes nothing. Checked per frame, not per event, so a scroll up and
+      // back down inside one frame cannot leave a stale position behind.
+      if (container) {
+        const maxScrollTop = container.scrollHeight - container.clientHeight;
+        if (getSidebarScrollTop() > maxScrollTop + 1 && scrollTop >= maxScrollTop - 1) {
+          return;
+        }
+      }
+      setSidebarScrollTop(scrollTop);
     });
   };
 
