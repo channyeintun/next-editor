@@ -118,6 +118,66 @@ describe("grep tool", () => {
     expect(result).toBe("a.ts:1:needle\na.ts:2:x\na.ts:4:z\na.ts:5:needle");
   });
 
+  // With the default context every match pushes one line, so the scan used to
+  // stop at exactly `limit` lines and the overshoot check never fired: a
+  // capped list came back with no note and read as the complete set.
+  it("notes truncation when more matches exist than the default limit", async () => {
+    const content = Array.from({ length: 250 }, (_, i) => `needle ${i}`).join("\n");
+    const store = makeStore([makeFile("a.ts", content)]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "needle" });
+    const [body, note] = String(result).split("\n\n");
+    expect(body.split("\n")).toHaveLength(200);
+    expect(note).toBe("(Results truncated; showing first 200 lines)");
+  });
+
+  it("does not note truncation when the matches fill the limit exactly", async () => {
+    const content = Array.from({ length: 200 }, (_, i) => `needle ${i}`).join("\n");
+    const store = makeStore([makeFile("a.ts", content)]);
+    const result = String(
+      await makeGrepTool(makeCtx(store)).function.execute({ pattern: "needle" }),
+    );
+    expect(result.split("\n")).toHaveLength(200);
+    expect(result).not.toContain("Results truncated");
+  });
+
+  it("notes truncation when the first match past the limit is in a later file", async () => {
+    const store = makeStore([
+      makeFile("a.ts", "needle\nneedle"),
+      makeFile("b.ts", "nothing\nneedle"),
+    ]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      limit: 2,
+    });
+    expect(result).toBe(
+      "a.ts:1:needle\na.ts:2:needle\n\n(Results truncated; showing first 2 lines)",
+    );
+  });
+
+  it("notes truncation when context lines overshoot the limit", async () => {
+    const store = makeStore([makeFile("a.ts", "a\nb\nneedle\nc\nd")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 2,
+      limit: 3,
+    });
+    expect(result).toBe(
+      "a.ts:1:a\na.ts:2:b\na.ts:3:needle\n\n(Results truncated; showing first 3 lines)",
+    );
+  });
+
+  // A match already printed in full as an earlier match's context adds no
+  // lines, so the output is not cut by it.
+  it("does not note truncation for a match already shown as context", async () => {
+    const store = makeStore([makeFile("a.ts", "x\nneedle\nneedle")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 1,
+      limit: 3,
+    });
+    expect(result).toBe("a.ts:1:x\na.ts:2:needle\na.ts:3:needle");
+  });
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "hello")]);
     const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "zzz" });

@@ -21,7 +21,10 @@ const inputSchema = z.object({
     .optional()
     .describe("Treat pattern as literal substring, not regex (default false)"),
   context: z.number().optional().describe("Context lines before/after each match (default 0)"),
-  limit: z.number().optional().describe("Maximum number of matching lines to return (default 200)"),
+  limit: z
+    .number()
+    .optional()
+    .describe("Maximum number of output lines, matches plus context (default 200)"),
 });
 
 export function makeGrepTool(ctx: ToolContext) {
@@ -59,12 +62,15 @@ export function makeGrepTool(ctx: ToolContext) {
       const globRegex = glob ? globToRegex(glob) : null;
 
       const matchLines: string[] = [];
+      // Set only when a match that would add lines is found after the output is
+      // full, or context overshoots it. Breaking as soon as `limit` lines were
+      // pushed left nothing to compare against, so with the default context a
+      // capped list carried no note and read as the complete set.
+      let truncated = false;
       const basePath = path ? normalizeFolderPrefix(path) : "";
       const sortedPaths = Object.keys(project.files).sort();
 
-      for (const filePath of sortedPaths) {
-        if (matchLines.length >= limit) break;
-
+      files: for (const filePath of sortedPaths) {
         const file = project.files[filePath];
 
         if (!isWorkspaceTextFile(file) || isBinaryWorkspacePath(file.path)) {
@@ -93,12 +99,18 @@ export function makeGrepTool(ctx: ToolContext) {
         // `limit`.
         let lastEmitted = -1;
         for (let i = 0; i < lines.length; i++) {
-          if (matchLines.length >= limit) break;
-
           const line = lines[i];
           const lineNumber = i + 1;
 
           if (regex.test(line)) {
+            const contextEnd = Math.min(lines.length - 1, i + context);
+            // A match whose whole window is already printed adds nothing.
+            if (matchLines.length >= limit && contextEnd > lastEmitted) {
+              truncated = true;
+              regex.lastIndex = 0;
+              break files;
+            }
+
             for (let j = Math.max(lastEmitted + 1, i - context); j < i; j++) {
               matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
             }
@@ -107,7 +119,6 @@ export function makeGrepTool(ctx: ToolContext) {
               matchLines.push(`${filePath}:${lineNumber}:${line}`);
             }
 
-            const contextEnd = Math.min(lines.length - 1, i + context);
             for (let j = Math.max(lastEmitted + 1, i + 1); j <= contextEnd; j++) {
               matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
             }
@@ -122,8 +133,8 @@ export function makeGrepTool(ctx: ToolContext) {
         return "No matches found.";
       }
 
+      truncated ||= matchLines.length > limit;
       const result = matchLines.slice(0, limit).join("\n");
-      const truncated = matchLines.length > limit;
       return truncated ? `${result}\n\n(Results truncated; showing first ${limit} lines)` : result;
     },
   });
