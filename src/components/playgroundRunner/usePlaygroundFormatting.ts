@@ -1,5 +1,8 @@
 import { useEffect, useEffectEvent } from "react";
-import type { PlaygroundRequestOutcome } from "../../hooks/usePlaygroundRunner";
+import type {
+  PlaygroundRequestOptions,
+  PlaygroundRequestOutcome,
+} from "../../hooks/usePlaygroundRunner";
 import { useNextEditorActions } from "../../hooks/useNextEditorContext";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import { monaco, workspacePathFromMonacoModelUri } from "../../monaco";
@@ -15,6 +18,7 @@ interface PlaygroundFormattingOptions<Client, ErrorKind extends string> {
   request: (
     operation: "format",
     execute: (client: Client) => Promise<FormatResult>,
+    options: PlaygroundRequestOptions,
   ) => Promise<PlaygroundRequestOutcome<FormatResult, ErrorKind>>;
   isPlaybackSnapshotActive: boolean;
   /** False in a shared lesson this viewer cannot edit: Format prints its read-only line. */
@@ -86,9 +90,17 @@ export function usePlaygroundFormatting<Client, ErrorKind extends string>(
       return [];
     }
 
-    setOutcomeText("");
-    beginRunnerOperation(runtimePanelStore, format.startedLines(submittedFiles));
-    const outcome = await request("format", (client) => format.execute(client, submittedFiles));
+    // A repeat on unchanged sources (a double click, or the shortcut twice)
+    // joins the Format in flight rather than replacing it, as a Run does, so it
+    // prints no second header and spends no second request.
+    const outcome = await request("format", (client) => format.execute(client, submittedFiles), {
+      files: submittedFiles,
+      onStart: () => {
+        setOutcomeText("");
+        beginRunnerOperation(runtimePanelStore, format.startedLines(submittedFiles));
+      },
+    });
+    // A newer request, or a repeat that joined this one, applies the result.
     if (outcome.kind === "superseded") {
       return [];
     }

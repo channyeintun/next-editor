@@ -934,6 +934,44 @@ describe("playground runner panels", () => {
     },
   );
 
+  // Like a repeated Run: the Worker charges a proxied Format's rate limit and
+  // calls upstream on arrival, and a second Kite Format reloads the compiler.
+  it.each(FORMAT_CASES)(
+    "$kind: keeps the Format in flight when Format is pressed again",
+    async (panel) => {
+      setFiles({ [panel.entry]: SOURCE });
+      let finishFormat: () => void = () => {};
+      harness.client.format.mockImplementation(
+        (_language, request) =>
+          new Promise((resolve) => {
+            const files = Array.isArray(request)
+              ? request
+              : (request as { files: { path: string; content: string }[] }).files;
+            finishFormat = () =>
+              resolve({
+                files: files.map((file) => ({ ...file, content: file.content.replace("  ", " ") })),
+              });
+          }),
+      );
+      await renderPanel(panel);
+      const formatButton = screen.getByRole("button", { name: "Format" });
+
+      await click(formatButton);
+      await click(formatButton);
+      expect(harness.client.format).toHaveBeenCalledTimes(1);
+      expect(consoleLines()).toEqual(panel.format.formattedLines.slice(0, 1));
+
+      await act(async () => {
+        finishFormat();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(harness.workspace.updateFileContent).toHaveBeenCalledTimes(1);
+      expect(harness.workspace.updateFileContent).toHaveBeenCalledWith(panel.entry, FORMATTED);
+      expect(consoleLines()).toEqual(panel.format.formattedLines);
+    },
+  );
+
   it.each(FORMAT_CASES)("$kind: shows the formatter while it works", async (panel) => {
     setFiles({ [panel.entry]: SOURCE });
     await renderPanel(panel);
