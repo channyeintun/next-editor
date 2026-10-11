@@ -159,10 +159,17 @@ lessonsRoute.post("/", requireUser, async (c) => {
         }
         continue;
       }
-      // `id` (the primary key) already exists: a retried request reusing an id
-      // from an earlier attempt, or a vanishingly unlikely UUID collision.
-      // Either way, ask the client to use a fresh id.
+      // `id` (the primary key) already exists. The upload modal reuses its id on
+      // Retry, so when an earlier attempt's insert committed but its response
+      // was lost, the row is this caller's own draft: return it, as that attempt
+      // would have. It keeps the first attempt's metadata, which the author can
+      // still rename. A row someone else owns (a vanishingly unlikely UUID
+      // collision) stays a 409 and is never shown.
       if (isUniqueViolation(error, "lessons.id")) {
+        const existing = await getOwnedLessonById(c.env.DB, body.id, user.id);
+        if (existing) {
+          return c.json(lessonRowToOwnedLesson(existing), 200);
+        }
         console.error("Draft lesson id already exists", error);
         return c.json({ error: "a lesson with this id already exists" }, 409);
       }

@@ -102,11 +102,38 @@ describe("lessonsRoute lesson ids", () => {
     },
   );
 
-  it("answers 409 when the lesson id is already taken", async () => {
+  // The upload modal reuses its lesson id on Retry, so when the first create
+  // committed but its response was lost, the retry must get that draft back
+  // rather than a 409 that every later Retry repeats.
+  it("returns the caller's own draft when a retry reuses its id", async () => {
+    vi.mocked(insertDraftLesson).mockRejectedValueOnce(
+      new Error("D1_ERROR: UNIQUE constraint failed: lessons.id: SQLITE_CONSTRAINT"),
+    );
+    vi.mocked(getOwnedLessonById).mockResolvedValueOnce({
+      ...lessonRow(LESSON_ID),
+      slug: "first-attempt",
+    });
+
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: LESSON_ID,
+      slug: "first-attempt",
+    });
+    expect(getOwnedLessonById).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
+  });
+
+  it("answers 409 when the lesson id is taken by a lesson the caller does not own", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(insertDraftLesson).mockRejectedValueOnce(
       new Error("D1_ERROR: UNIQUE constraint failed: lessons.id: SQLITE_CONSTRAINT"),
     );
+    vi.mocked(getOwnedLessonById).mockResolvedValueOnce(null);
 
     const response = await createLesson({
       id: LESSON_ID,
