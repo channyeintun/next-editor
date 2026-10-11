@@ -13,9 +13,10 @@ import type {
  * and which actions each runtime kind can perform. It lives here once so the
  * two schemas cannot drift apart. When each schema had its own copy, they did:
  * only the script's runtime-"none" list had runtime.collapseDock. It also holds
- * the per-action checks both schemas share (`actionContractIssues`) and the
+ * the per-action checks both schemas share (`actionContractIssues`), the
  * check that every file, slide and whiteboard asset an action names is pinned
- * (`pinnedReferenceIssues`).
+ * (`pinnedReferenceIssues`), and the check that each slide and whiteboard asset
+ * id is defined once (`duplicatePinnedIdIssues`).
  */
 
 /**
@@ -201,6 +202,30 @@ export interface LessonPins {
   files: Readonly<Record<string, string>>;
   slides: ReadonlyArray<{ id: string }>;
   whiteboardAssets: ReadonlyArray<{ id: string }>;
+}
+
+/**
+ * Every slide id and whiteboard asset id the lesson defines more than once.
+ * Actions resolve these ids with `find`, so a block copied without a new id
+ * would always show the first definition and never the second.
+ */
+export function duplicatePinnedIdIssues(pins: LessonPins): string[] {
+  const issues: string[] = [];
+  const slideIds = new Set<string>();
+  for (const slide of pins.slides) {
+    if (slideIds.has(slide.id)) {
+      issues.push(`Duplicate slide id "${slide.id}"`);
+    }
+    slideIds.add(slide.id);
+  }
+  const assetIds = new Set<string>();
+  for (const asset of pins.whiteboardAssets) {
+    if (assetIds.has(asset.id)) {
+      issues.push(`Duplicate whiteboard asset id "${asset.id}"`);
+    }
+    assetIds.add(asset.id);
+  }
+  return issues;
 }
 
 /**

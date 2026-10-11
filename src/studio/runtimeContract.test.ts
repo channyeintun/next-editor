@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { studioPlanSchema, type StudioPlanActionType } from "./plan";
+import { duplicatePinnedIdIssues } from "./runtimeContract";
 import { lessonScriptSchema } from "./script/schema";
 
 /**
@@ -282,14 +283,27 @@ const CASES: ContractCase[] = [
   },
 ];
 
+/** The slides and whiteboard assets a case pins beside its workspace. */
+interface CasePins {
+  slides?: Record<string, unknown>[];
+  whiteboardAssets?: Record<string, unknown>[];
+}
+
 function scriptIssues(
   workspace: Record<string, unknown>,
   runtime: Record<string, unknown>,
   actions: CaseAction[],
+  pins: CasePins = {},
 ): string[] {
   const result = lessonScriptSchema.safeParse({
     schemaVersion: 1,
-    lesson: { slug: "runtime-contract", title: "Runtime contract", locale: "en-US", workspace },
+    lesson: {
+      slug: "runtime-contract",
+      title: "Runtime contract",
+      locale: "en-US",
+      workspace,
+      ...pins,
+    },
     build: { voiceProfile: "pocket-alba-v1", seed: 7 },
     runtime,
     scenes: [
@@ -308,12 +322,14 @@ function planIssues(
   workspace: Record<string, unknown>,
   runtime: Record<string, unknown>,
   actions: CaseAction[],
+  pins: CasePins = {},
 ): string[] {
   const result = studioPlanSchema.safeParse({
     schemaVersion: 1,
     lesson: { slug: "runtime-contract", title: "Runtime contract", locale: "en-US" },
     seed: 7,
     workspace,
+    ...pins,
     narration: {
       audioPath: "studio-tts://runtime-contract",
       mimeType: "audio/wav",
@@ -336,5 +352,63 @@ describe.each([
 ])("$schema schema runtime contract", ({ issuesFor }) => {
   it.each(CASES)("$name", ({ workspace, runtime, actions, issues }) => {
     expect(issuesFor(workspace, runtime, actions)).toEqual(issues);
+  });
+});
+
+const slide = (id: string, content: string) => ({ id, contentType: "markdown", content });
+const box = (id: string, x: number) => ({
+  id,
+  kind: "rectangle",
+  x,
+  y: 100,
+  width: 200,
+  height: 80,
+});
+
+// Every reference resolves with find, so the first definition of a copied id
+// always wins and the second slide or shape the narration describes is never
+// shown, with nothing reporting it.
+describe("duplicatePinnedIdIssues", () => {
+  it("reports a repeated slide id and a repeated whiteboard asset id", () => {
+    expect(
+      duplicatePinnedIdIssues({
+        files: {},
+        slides: [{ id: "intro" }, { id: "outro" }, { id: "intro" }],
+        whiteboardAssets: [{ id: "box" }, { id: "box" }],
+      }),
+    ).toEqual(['Duplicate slide id "intro"', 'Duplicate whiteboard asset id "box"']);
+  });
+
+  it("accepts distinct ids, and a slide and an asset that share one", () => {
+    expect(
+      duplicatePinnedIdIssues({
+        files: {},
+        slides: [{ id: "intro" }, { id: "box" }],
+        whiteboardAssets: [{ id: "box" }, { id: "arrow" }],
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe.each([
+  { schema: "script", issuesFor: scriptIssues },
+  { schema: "plan", issuesFor: planIssues },
+])("$schema schema pinned ids", ({ issuesFor }) => {
+  it("rejects a slide or whiteboard asset id defined twice", () => {
+    expect(
+      issuesFor(GO_WORKSPACE, GO_RUNTIME, [run], {
+        slides: [slide("intro", "# One"), slide("intro", "# Two")],
+        whiteboardAssets: [box("box", 300), box("box", 600)],
+      }),
+    ).toEqual(['Duplicate slide id "intro"', 'Duplicate whiteboard asset id "box"']);
+  });
+
+  it("accepts distinct slide and whiteboard asset ids", () => {
+    expect(
+      issuesFor(GO_WORKSPACE, GO_RUNTIME, [run], {
+        slides: [slide("intro", "# One"), slide("outro", "# Two")],
+        whiteboardAssets: [box("box", 300), box("other-box", 600)],
+      }),
+    ).toEqual([]);
   });
 });

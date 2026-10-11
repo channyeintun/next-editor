@@ -14,6 +14,7 @@ import {
 } from "../plan";
 import {
   actionContractIssues,
+  duplicatePinnedIdIssues,
   pinnedReferenceIssues,
   runtimeContractIssues,
   type PinnedReference,
@@ -421,6 +422,9 @@ export const lessonScriptSchema = z
       slides: script.lesson.slides,
       whiteboardAssets: script.lesson.whiteboardAssets,
     };
+    for (const message of duplicatePinnedIdIssues(pins)) {
+      ctx.addIssue({ code: "custom", message });
+    }
     for (const scene of script.scenes) {
       for (const action of scene.actions) {
         if ("afterAction" in action.at && !actionIds.has(action.at.afterAction)) {

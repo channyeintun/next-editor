@@ -9,6 +9,7 @@ import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { totalTypingDurationMs } from "./cadence";
 import {
   actionContractIssues,
+  duplicatePinnedIdIssues,
   pinnedReferenceIssues,
   runtimeContractIssues,
   type PinnedReference,
@@ -1060,6 +1061,9 @@ export const studioPlanSchema = z
       slides: plan.slides,
       whiteboardAssets: plan.whiteboardAssets,
     };
+    for (const message of duplicatePinnedIdIssues(pins)) {
+      ctx.addIssue({ code: "custom", message });
+    }
     for (const action of plan.actions) {
       for (const message of pinnedReferenceIssues(pins, planPinnedReferences(action))) {
         ctx.addIssue({ code: "custom", message });
