@@ -29,7 +29,7 @@
  */
 
 import { AsmEncodeError } from "./errors";
-import type { InstructionStatement, MemoryOperand, Operand } from "./parser";
+import { sizeKeyword, type InstructionStatement, type MemoryOperand, type Operand } from "./parser";
 import {
   formsFor,
   isKnownMnemonic,
@@ -422,6 +422,24 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
   for (const operand of statement.operands) {
     if (operand.kind === "immediate" && operand.size !== null) {
       declaredSize = operand.size;
+      // The keyword is a hint that may shrink (`add rax, dword 1` takes the
+      // imm8 form, as in NASM), but a sibling that already states a narrower
+      // width contradicts it: `mov byte [rsp-8], word 1` is a mismatch, just
+      // as `mov byte [rax], bx` is.
+      for (const sibling of statement.operands) {
+        const width =
+          sibling.kind === "register"
+            ? sibling.register.size
+            : sibling.kind === "memory"
+              ? sibling.size
+              : null;
+        if (width === null || width >= declaredSize) continue;
+        throw new AsmEncodeError(
+          `${statement.mnemonic}: the number is marked ${sizeKeyword(declaredSize)} but the other operand is ${sizeKeyword(width)} wide — make the two sizes agree`,
+          operand.line,
+          operand.column,
+        );
+      }
       break;
     }
   }

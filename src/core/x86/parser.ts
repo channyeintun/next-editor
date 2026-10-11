@@ -146,6 +146,14 @@ const SIZE_KEYWORDS = new Map<string, OperandSize>([
   ["qword", 8],
 ]);
 
+/** The keyword that states a width: `byte` for 1, `qword` for 8. */
+export function sizeKeyword(size: OperandSize): string {
+  for (const [keyword, width] of SIZE_KEYWORDS) {
+    if (width === size) return keyword;
+  }
+  return `${size}-byte`;
+}
+
 const DATA_WIDTHS = new Map<string, DataWidth>([
   ["db", 1],
   ["dw", 2],

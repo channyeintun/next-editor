@@ -180,6 +180,25 @@ describe("a size keyword written on the immediate", () => {
   it("still asks for a width when nothing states one", () => {
     expect(assembleLine("mov [rax], 1")).toThrow(/size of this memory access is not stated/);
   });
+
+  it.each([
+    ["mov byte [rsp-8], word 1", "the number is marked word but the other operand is byte wide"],
+    ["mov al, word 1", "the number is marked word but the other operand is byte wide"],
+    ["add eax, qword 1", "the number is marked qword but the other operand is dword wide"],
+  ])("%s reports the two sizes that disagree", (source, message) => {
+    expect(assembleLine(source)).toThrow(message);
+  });
+
+  it.each([
+    ["mov word [rsp-8], word 1", "66 c7 44 24 f8 01 00"],
+    ["mov qword [rsp-8], word 1", "48 c7 44 24 f8 01 00 00 00"],
+    ["add rax, byte 1", "48 83 c0 01"],
+    ["add rax, dword 1", "48 83 c0 01"],
+    ["push dword 3", "6a 03"],
+    ["mov [rax], byte 1", "c6 00 01"],
+  ])("%s still takes a size no wider than its sibling", (source, expected) => {
+    expect(bytesOf(source)).toBe(expected);
+  });
 });
 
 describe("a negative 64-bit number written as its unsigned bits", () => {
