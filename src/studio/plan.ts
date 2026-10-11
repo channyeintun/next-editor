@@ -10,6 +10,7 @@ import { totalTypingDurationMs } from "./cadence";
 import {
   actionContractIssues,
   duplicatePinnedIdIssues,
+  isPinnedFile,
   pinnedReferenceIssues,
   runtimeContractIssues,
   type PinnedReference,
@@ -1069,7 +1070,7 @@ export const studioPlanSchema = z
         ctx.addIssue({ code: "custom", message });
       }
       if (action.type === "cursor.moveTo" && action.target.kind === "file") {
-        if (!(action.target.path in plan.workspace.files)) {
+        if (!isPinnedFile(plan.workspace.files, action.target.path)) {
           ctx.addIssue({
             code: "custom",
             message: `Action "${action.id}" points the cursor at missing file "${action.target.path}"`,

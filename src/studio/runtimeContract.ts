@@ -59,6 +59,15 @@ export type ContractAction =
     >
   | { id: string; type: Exclude<StudioPlanActionType, "preview.click" | "expect.preview"> };
 
+/**
+ * Whether the pinned workspace holds a file at `path`. An own-key check: an
+ * `in` lookup also finds the prototype's keys, so a file named `constructor`
+ * or `toString` counted as pinned.
+ */
+export function isPinnedFile(files: Readonly<Record<string, string>>, path: string): boolean {
+  return Object.hasOwn(files, path);
+}
+
 /** Every way the runtime and the actions break the runtime contract, in a fixed order. */
 export function runtimeContractIssues(
   workspace: StudioWorkspacePin,
@@ -66,6 +75,11 @@ export function runtimeContractIssues(
   actions: ReadonlyArray<ContractAction>,
 ): string[] {
   const issues: string[] = [];
+  // The render's prepare phase waits for the editor to show the entry file, so
+  // a typo here only surfaced as a timeout after the narration was synthesized.
+  if (!isPinnedFile(workspace.files, workspace.entryFilePath)) {
+    issues.push(`The entry file "${workspace.entryFilePath}" is not in the pinned workspace`);
+  }
   const expectedKind = RUNTIME_KIND_FOR_LESSON[workspace.lessonType];
   if (runtime.kind !== expectedKind) {
     issues.push(
@@ -99,7 +113,10 @@ export function runtimeContractIssues(
     // built-in pnpm is older than current pnpm and rejects a lockfile a newer
     // pnpm wrote, so lessons pin exact versions in package.json instead.
     const isPython = workspace.lessonType === "python";
-    if (runtime.lockfilePath !== undefined && !(runtime.lockfilePath in workspace.files)) {
+    if (
+      runtime.lockfilePath !== undefined &&
+      !isPinnedFile(workspace.files, runtime.lockfilePath)
+    ) {
       issues.push(`WebContainer lockfile "${runtime.lockfilePath}" is not in the pinned workspace`);
     }
     if (isPython) {
@@ -245,7 +262,7 @@ export function pinnedReferenceIssues(
   const issues: string[] = [];
   for (const ref of refs) {
     if (ref.kind === "file") {
-      if (!(ref.value in pins.files)) {
+      if (!isPinnedFile(pins.files, ref.value)) {
         issues.push(
           `Action "${ref.id}" ${ref.verb} "${ref.value}" which is not in the pinned workspace`,
         );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { studioPlanSchema, type StudioPlanActionType } from "./plan";
-import { duplicatePinnedIdIssues } from "./runtimeContract";
+import { duplicatePinnedIdIssues, pinnedReferenceIssues } from "./runtimeContract";
 import { lessonScriptSchema } from "./script/schema";
 
 /**
@@ -156,11 +156,28 @@ const CASES: ContractCase[] = [
     issues: [],
   },
   {
+    // The prepare phase waits for the editor to show the entry file, which
+    // never happens, so the render timed out after the narration was paid for.
+    name: "rejects an entry file that is not pinned",
+    workspace: { ...GO_WORKSPACE, entryFilePath: "absent.go" },
+    runtime: GO_RUNTIME,
+    actions: [run],
+    issues: ['The entry file "absent.go" is not in the pinned workspace'],
+  },
+  {
     name: "rejects a lockfile that is not pinned",
     workspace: JS_WORKSPACE,
     runtime: { ...JS_RUNTIME, lockfilePath: "pnpm-lock.yaml" },
     actions: [start],
     issues: ['WebContainer lockfile "pnpm-lock.yaml" is not in the pinned workspace'],
+  },
+  {
+    // Every object has a `constructor`, so an `in` lookup counted it as pinned.
+    name: "rejects a lockfile named like an Object property",
+    workspace: JS_WORKSPACE,
+    runtime: { ...JS_RUNTIME, lockfilePath: "constructor" },
+    actions: [start],
+    issues: ['WebContainer lockfile "constructor" is not in the pinned workspace'],
   },
   {
     name: "rejects Python runtime fields that need a server or an install",
@@ -352,6 +369,31 @@ describe.each([
 ])("$schema schema runtime contract", ({ issuesFor }) => {
   it.each(CASES)("$name", ({ workspace, runtime, actions, issues }) => {
     expect(issuesFor(workspace, runtime, actions)).toEqual(issues);
+  });
+});
+
+// Membership is an own-key check: an `in` lookup also finds the prototype's
+// keys, so a file named `constructor` or `toString` passed as pinned.
+describe("pinned file membership", () => {
+  it("reports an unpinned file named like an Object property", () => {
+    expect(
+      pinnedReferenceIssues({ files: { "main.go": "" }, slides: [], whiteboardAssets: [] }, [
+        { id: "open", kind: "file", value: "constructor", verb: "opens" },
+        { id: "check", kind: "file", value: "main.go", verb: "checks" },
+      ]),
+    ).toEqual(['Action "open" opens "constructor" which is not in the pinned workspace']);
+  });
+
+  it("reports a cursor pointed at an unpinned file named like an Object property", () => {
+    const cursor = {
+      id: "cursor",
+      type: "cursor.moveTo",
+      target: { kind: "file", path: "toString" },
+      durationMs: 500,
+    } as CaseAction;
+    expect(planIssues(GO_WORKSPACE, GO_RUNTIME, [run, cursor])).toEqual([
+      'Action "cursor" points the cursor at missing file "toString"',
+    ]);
   });
 });
 
