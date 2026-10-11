@@ -9,6 +9,7 @@ import {
   EMPTY_CHAT_CHECKPOINT,
   getChatReplayResult,
   getPreviewReplayResult,
+  getRecordedActiveFilePath,
   getRuntimeReplayResult,
   getSlideReplayResult,
   getWhiteboardReplayResult,
@@ -376,6 +377,40 @@ export const reattachPlaybackWorkspace = ({ context }: EditorActionArgs): Editor
   pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
 });
 
+/**
+ * Playing on after the viewer had the workspace (ready, paused, ended): put the file the
+ * recording has open back in front before any frame is applied. Frames carry no file
+ * path, and the workspace cursor survives the hand-over (panel-width deltas, see
+ * REPLAY_CURSORS_RESET), so applyWorkspaceEventsAtTime re-opens nothing until the playhead
+ * crosses the next workspace event. Until then a file the viewer opened stayed in front,
+ * the recorded file's frames replayed into it, and the next pause adopted them as its
+ * text. Only the open file moves: the viewer's files and edits, folders, scroll and panel
+ * widths stay as they are (no width delta is replayed), as a PLAY without a switch keeps
+ * them. The frame then waits for the editor to bind the reopened file's model.
+ *
+ * A cursor ahead of the playhead is a restart from `ended`: applyReplayStateAtTime moves
+ * it back and applies that interval's recorded snapshot, file included, itself.
+ */
+export const reopenRecordedFile = ({ context }: EditorActionArgs): EditorContextUpdate => {
+  const { recording, lastAppliedWorkspaceEventIndex, applyWorkspaceSnapshot } = context;
+  const recordedPath = getRecordedActiveFilePath(recording, lastAppliedWorkspaceEventIndex);
+  const cursorTime = recording?.workspaceEvents?.[lastAppliedWorkspaceEventIndex]?.timestamp;
+  if (
+    recordedPath === undefined ||
+    cursorTime === undefined ||
+    cursorTime > context.timeline.currentTime ||
+    !applyWorkspaceSnapshot
+  ) {
+    return {};
+  }
+  const live = context.getWorkspaceSnapshot?.();
+  if (!live || live.activeFilePath === recordedPath || !live.project.files[recordedPath]) {
+    return {};
+  }
+  applyWorkspaceSnapshot({ ...live, activeFilePath: recordedPath });
+  return { pendingPlaybackEditorSync: true, ...RENDERED_FRAME_RESET };
+};
+
 export const clearPendingPlaybackEditorSync = (): EditorContextUpdate => ({
   pendingPlaybackEditorSync: false,
 });
@@ -397,9 +432,10 @@ export const clearPendingPlaybackEditorSync = (): EditorContextUpdate => ({
 export const clearPendingEditorSyncForPausedSeek = ({
   context,
 }: EditorActionArgs): EditorContextUpdate => {
-  const recordedActiveFilePath =
-    context.recording?.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex]?.snapshot
-      .activeFilePath;
+  const recordedActiveFilePath = getRecordedActiveFilePath(
+    context.recording,
+    context.lastAppliedWorkspaceEventIndex,
+  );
   if (
     recordedActiveFilePath === undefined ||
     context.getWorkspaceSnapshot?.()?.activeFilePath !== recordedActiveFilePath

@@ -1,6 +1,7 @@
 import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
 import { areWorkspaceProjectsEqual, isWorkspaceTextFile } from "../workspace";
+import { getRecordedActiveFilePath } from "./replayState";
 
 // ============================================================================
 // Keeping the viewer's own edits to a lesson.
@@ -44,21 +45,26 @@ export type ApplyLearnerWorkspaceEvent = {
 
 export const adoptPlaybackWorkspaceAtPause = ({ context }: EditorActionArgs): void => {
   const currentSnapshot = context.getWorkspaceSnapshot?.();
-  const activeFilePath = currentSnapshot?.activeFilePath;
-  const currentFile = activeFilePath ? currentSnapshot?.project.files[activeFilePath] : undefined;
   const pausedContent = context.currentFrame?.state?.content;
+  // Frames carry no file path: the one on screen is the text of the file the recording
+  // has open at the workspace cursor, which need not be the file in front of the viewer
+  // (one opened while the lesson played, in a click the machine never heard of). Copy it
+  // into that file only, and leave the file the viewer has open as it is.
+  const framePath =
+    getRecordedActiveFilePath(context.recording, context.lastAppliedWorkspaceEventIndex) ??
+    currentSnapshot?.activeFilePath;
 
   if (
     !currentSnapshot ||
     !context.applyWorkspaceSnapshot ||
-    !activeFilePath ||
-    !currentFile ||
+    !framePath ||
     pausedContent === undefined
   ) {
     return;
   }
 
-  if (!isWorkspaceTextFile(currentFile) || currentFile.content === pausedContent) {
+  const frameFile = currentSnapshot.project.files[framePath];
+  if (!frameFile || !isWorkspaceTextFile(frameFile) || frameFile.content === pausedContent) {
     context.applyWorkspaceSnapshot(currentSnapshot);
     return;
   }
@@ -69,8 +75,8 @@ export const adoptPlaybackWorkspaceAtPause = ({ context }: EditorActionArgs): vo
       ...currentSnapshot.project,
       files: {
         ...currentSnapshot.project.files,
-        [activeFilePath]: {
-          ...currentFile,
+        [framePath]: {
+          ...frameFile,
           content: pausedContent,
         },
       },

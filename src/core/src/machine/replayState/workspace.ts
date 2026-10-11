@@ -3,6 +3,7 @@ import {
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
 } from "../../workspace";
+import type { Recording } from "../../types";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================
@@ -135,6 +136,20 @@ export function resolveWorkspaceSnapshotBetween(
     nextIndex: toIndex,
     lastAppliedIndex: fromIndex,
   });
+}
+
+/**
+ * The file the recording has open at the workspace cursor (the machine's
+ * `lastAppliedWorkspaceEventIndex`). Frames carry no file path, so every frame replayed
+ * since that event is this file's text, whichever file the viewer has in front.
+ * Undefined before the first workspace event, or for a recording without a workspace
+ * track.
+ */
+export function getRecordedActiveFilePath(
+  recording: Pick<Recording, "workspaceEvents"> | null | undefined,
+  workspaceEventIndex: number,
+): string | undefined {
+  return recording?.workspaceEvents?.[workspaceEventIndex]?.snapshot.activeFilePath;
 }
 
 export function getWorkspaceReplayResult({

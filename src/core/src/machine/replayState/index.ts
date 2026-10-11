@@ -13,7 +13,11 @@
 
 export { resolveReplayTime, isReplayResync } from "./cursor";
 export { getPreviewReplayResult } from "./preview";
-export { getWorkspaceReplayResult, resolveWorkspaceSnapshotBetween } from "./workspace";
+export {
+  getRecordedActiveFilePath,
+  getWorkspaceReplayResult,
+  resolveWorkspaceSnapshotBetween,
+} from "./workspace";
 export { getRuntimeReplayResult } from "./runtime";
 export { EMPTY_CHAT_CHECKPOINT, getChatReplayResult } from "./chat";
 export { getSlideReplayResult } from "./slide";

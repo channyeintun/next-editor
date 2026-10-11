@@ -2164,7 +2164,7 @@ describe("editorMachine actor lifecycle", () => {
       },
     });
 
-    const startPausedAt50 = async (recording: Recording) => {
+    const loadReady = async (recording: Recording) => {
       const editor = new MockEditor(new MockTextModel("outside"));
       const workspace = {
         current: createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b"),
@@ -2181,6 +2181,12 @@ describe("editorMachine actor lifecycle", () => {
 
       actor.send({ type: "LOAD_RECORDING", recording });
       await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+      return { actor, editor, workspace };
+    };
+
+    const startPausedAt50 = async (recording: Recording) => {
+      const { actor, editor, workspace } = await loadReady(recording);
       actor.send({ type: "PLAY" });
       actor.send({ type: "TICK", currentTime: 50 });
       actor.send({ type: "PAUSE" });
@@ -2298,6 +2304,152 @@ describe("editorMachine actor lifecycle", () => {
       expect(workspace.current.project.files["b.ts"].content).toBe("b-user");
 
       actor.stop();
+    });
+
+    describe("playing on after the viewer opened another file", () => {
+      type Loaded = Awaited<ReturnType<typeof loadReady>>;
+
+      // CodeEditor binds a model for the file in front and re-asserts the editor ref.
+      const bindModel = ({ actor, editor }: Loaded, content: string) => {
+        const model = new MockTextModel(content);
+        editor.setModel(model as unknown as monaco.editor.ITextModel);
+        actor.send({
+          type: "SET_EDITOR_REF",
+          editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+        });
+        return model;
+      };
+
+      // Frames carry no file path, and the workspace cursor survives the hand-over, so
+      // only PLAY itself can put a.ts back in front before the next frame is applied.
+      const expectRecordedFileReopened = (loaded: Loaded, bModel: MockTextModel) => {
+        const { actor, workspace } = loaded;
+        expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+        expect(workspace.current.activeFilePath).toBe("a.ts");
+        expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+
+        // The frame waits for a.ts's model: b.ts's, still bound, is never written.
+        actor.send({ type: "TICK", currentTime: 160 });
+        expect(bModel.getValue()).toBe("b");
+
+        const aModel = bindModel(loaded, "a");
+        actor.send({ type: "TICK", currentTime: 210 });
+        expect(aModel.getValue()).toBe("abc");
+        expect(bModel.getValue()).toBe("b");
+
+        actor.send({ type: "PAUSE" });
+        expect(workspace.current.activeFilePath).toBe("a.ts");
+        expect(workspace.current.project.files["a.ts"].content).toBe("abc");
+        expect(workspace.current.project.files["b.ts"].content).toBe("b");
+      };
+
+      it("returns to the recording's file when the viewer opened another while paused", async () => {
+        const loaded = await loadReady(recordingOnOneFile());
+        const { actor, editor, workspace } = loaded;
+        actor.send({ type: "PLAY" });
+        actor.send({ type: "TICK", currentTime: 150 });
+        expect(editor.getValue()).toBe("ab");
+
+        // useOpenWorkspaceFile pauses first, then opens b.ts (its workspace event changes
+        // nothing once paused).
+        actor.send({ type: "PAUSE" });
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        const bModel = bindModel(loaded, "b");
+
+        actor.send({ type: "PLAY" });
+
+        expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+        expectRecordedFileReopened(loaded, bModel);
+
+        actor.stop();
+      });
+
+      it("returns to the recording's file when the viewer opened another before the first play", async () => {
+        const loaded = await loadReady(recordingOnOneFile());
+        const { actor, workspace } = loaded;
+
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        actor.send({ type: "WORKSPACE_EVENT" });
+        expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+        const bModel = bindModel(loaded, "b");
+
+        actor.send({ type: "PLAY" });
+
+        expectRecordedFileReopened(loaded, bModel);
+
+        actor.stop();
+      });
+
+      it("returns to the recording's file when playing on from a scrub after the end", async () => {
+        const loaded = await loadReady(recordingOnOneFile());
+        const { actor, workspace } = loaded;
+        actor.send({ type: "PLAY" });
+        actor.send({ type: "TICK", currentTime: 210 });
+        actor.send({ type: "FINISHED" });
+        actor.send({ type: "SEEK", time: 150 });
+        expect(actor.getSnapshot().matches({ playback: "ended" })).toBe(true);
+
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        const bModel = bindModel(loaded, "b");
+
+        actor.send({ type: "PLAY" });
+
+        expect(actor.getSnapshot().context.timeline.currentTime).toBe(150);
+        expectRecordedFileReopened(loaded, bModel);
+
+        actor.stop();
+      });
+
+      // A restart rewinds the playhead behind the workspace cursor, and the replay applies
+      // the first interval's recorded snapshot itself. Reopening the cursor's file (b.ts)
+      // first would only flash it and hold back the frame a restart applies at once.
+      it("leaves a restart from the end to the replay's own rewind", async () => {
+        const loaded = await loadReady({
+          ...createRecording(),
+          frames: [keyframe(0, "a"), keyframe(100, "b")],
+          workspaceEvents: [
+            { timestamp: 0, snapshot: createTwoFileWorkspaceSnapshot("a.ts", "a", "b") },
+            { timestamp: 100, snapshot: createTwoFileWorkspaceSnapshot("b.ts", "a", "b") },
+          ],
+        });
+        const { actor, workspace } = loaded;
+        actor.send({ type: "PLAY" });
+        actor.send({ type: "TICK", currentTime: 150 });
+        bindModel(loaded, "b");
+        actor.send({ type: "FINISHED" });
+
+        workspace.current = { ...workspace.current, activeFilePath: "a.ts" };
+        const aModel = bindModel(loaded, "stale");
+
+        actor.send({ type: "PLAY" });
+
+        const { context } = actor.getSnapshot();
+        expect(context.timeline.currentTime).toBe(0);
+        expect(workspace.current.activeFilePath).toBe("a.ts");
+        expect(context.pendingPlaybackEditorSync).toBe(false);
+        expect(aModel.getValue()).toBe("a");
+
+        actor.stop();
+      });
+
+      it("copies the frame on pause into the recording's file, not the one in front", async () => {
+        const { actor, editor, workspace } = await loadReady(recordingOnOneFile());
+        actor.send({ type: "PLAY" });
+        actor.send({ type: "TICK", currentTime: 150 });
+        expect(editor.getValue()).toBe("ab");
+
+        // b.ts came to the front without the machine hearing of it (a workspace event
+        // swallowed by the replay's one-task suppression), so the frame on screen is
+        // still a.ts's text.
+        workspace.current = { ...workspace.current, activeFilePath: "b.ts" };
+        actor.send({ type: "PAUSE" });
+
+        expect(workspace.current.activeFilePath).toBe("b.ts");
+        expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+        expect(workspace.current.project.files["b.ts"].content).toBe("b");
+
+        actor.stop();
+      });
     });
   });
 });

@@ -84,6 +84,7 @@ import {
   invalidateAppliedPlaybackState,
   detachPlaybackWorkspace,
   reattachPlaybackWorkspace,
+  reopenRecordedFile,
   clearPendingPlaybackEditorSync,
   clearPendingEditorSyncForPausedSeek,
   invalidateRenderedPlaybackState,
@@ -345,6 +346,7 @@ export const editorMachine = setup({
     invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),
     detachPlaybackWorkspace: assign(detachPlaybackWorkspace),
     reattachPlaybackWorkspace: assign(reattachPlaybackWorkspace),
+    reopenRecordedFile: assign(reopenRecordedFile),
     clearPendingPlaybackEditorSync: assign(clearPendingPlaybackEditorSync),
     clearPendingEditorSyncForPausedSeek: assign(clearPendingEditorSyncForPausedSeek),
     invalidateRenderedPlaybackState: assign(invalidateRenderedPlaybackState),
@@ -911,6 +913,7 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "invalidateAppliedPlaybackState",
+            "reopenRecordedFile",
             "applyReplayStateAtTime",
             "startPlaybackActors",
           ],
