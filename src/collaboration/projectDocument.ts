@@ -64,6 +64,11 @@ export interface CollaborationProjectProjection {
   pathByNodeId: ReadonlyMap<string, string>;
   textIdByType: ReadonlyMap<object, string>;
   assetsByNodeId: ReadonlyMap<string, CollaborationAssetDescriptor>;
+  /**
+   * The folder that shows nodes whose parent is gone, or null while there are
+   * none. No node backs it, so it is absent from nodeIdByPath.
+   */
+  recoveryFolderPath: string | null;
   issues: readonly CollaborationProjectionIssue[];
 }
 
@@ -578,6 +583,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
     pathByNodeId,
     textIdByType,
     assetsByNodeId,
+    recoveryFolderPath: recoveryChildren.length > 0 ? recoveryPath : null,
     issues,
   };
 }
@@ -653,8 +659,19 @@ export class CollaborationProjectController {
     return { id, node };
   }
 
+  /** The recovery folder has no node to hold new children or a new name. */
+  private assertNotRecoveryFolder(normalizedPath: string): void {
+    const { recoveryFolderPath } = this.project();
+    if (normalizedPath === recoveryFolderPath) {
+      throw new CollaborationProjectError(
+        `${recoveryFolderPath} is read-only. Move files out of it instead.`,
+      );
+    }
+  }
+
   private parentIdForPath(parentPath: string): string | null {
     if (!parentPath) return null;
+    this.assertNotRecoveryFolder(parentPath);
     const parent = this.nodeAtPath(parentPath);
     if (parent.node.get("kind") !== "folder" || parent.node.get("deleted") === true) {
       throw new CollaborationProjectError(`Collaboration folder not found: ${parentPath}`);
@@ -816,6 +833,7 @@ export class CollaborationProjectController {
 
   private renameNode(kind: CollaborationNodeKind, currentPath: string, nextPath: string): void {
     this.assertWritable();
+    this.assertNotRecoveryFolder(parseWorkspacePath(currentPath));
     const current = this.nodeAtPath(currentPath);
     if (current.node.get("kind") !== kind || current.node.get("deleted") === true) {
       throw new CollaborationProjectError(`Collaboration ${kind} not found: ${currentPath}`);
@@ -857,20 +875,25 @@ export class CollaborationProjectController {
   private deleteNode(kind: CollaborationNodeKind, path: string): void {
     this.assertWritable();
     const normalized = parseWorkspacePath(path);
-    const target = this.nodeAtPath(normalized);
-    if (target.node.get("kind") !== kind) {
+    const projection = this.project();
+    // The recovery folder has no node of its own: deleting it deletes the nodes
+    // it shows.
+    const target =
+      kind === "folder" && normalized === projection.recoveryFolderPath
+        ? null
+        : this.nodeAtPath(normalized);
+    if (target && target.node.get("kind") !== kind) {
       throw new CollaborationProjectError(`Collaboration ${kind} not found: ${normalized}`);
     }
-    const projection = this.project();
     const ids =
-      kind === "folder"
-        ? Array.from(projection.nodeIdByPath.entries())
+      kind === "file" && target
+        ? [target.id]
+        : Array.from(projection.nodeIdByPath.entries())
             .filter(
               ([candidatePath]) =>
                 candidatePath === normalized || candidatePath.startsWith(`${normalized}/`),
             )
-            .map(([, id]) => id)
-        : [target.id];
+            .map(([, id]) => id);
     this.doc.transact(() => {
       const nodes = getCollaborationNodes(this.doc);
       for (const id of ids) nodes.get(id)?.set("deleted", true);

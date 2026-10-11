@@ -191,6 +191,61 @@ describe("collaboration project document", () => {
     expect(projectCollaborationDocument(doc).project.files["examples/renamed.ts"]).toBeUndefined();
   });
 
+  // A member deletes a folder while another creates inside it: the merged
+  // document holds files whose parent is gone, shown under "Recovered items",
+  // which no node backs.
+  function roomWithRecoveredItems() {
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+    let commandId = 0;
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      idFactory: () => `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
+    });
+    controller.createFolder("lost");
+    controller.createFile("lost/a.txt", "a");
+    controller.createFile("lost/b.txt", "b");
+    const folderId = projectCollaborationDocument(doc).nodeIdByPath.get("lost");
+    if (!folderId) throw new Error("Expected the lost folder");
+    getCollaborationNodes(doc).get(folderId)?.set("deleted", true);
+    return { doc, controller };
+  }
+
+  it("deletes the recovery folder by deleting the orphans it holds", () => {
+    const { doc, controller } = roomWithRecoveredItems();
+    const before = projectCollaborationDocument(doc);
+    expect(before.recoveryFolderPath).toBe("Recovered items");
+    expect(before.project.folders).toContain("Recovered items");
+    expect(before.project.files["Recovered items/a.txt"]?.content).toBe("a");
+
+    controller.deleteFolder("Recovered items");
+
+    const after = projectCollaborationDocument(doc);
+    expect(after.recoveryFolderPath).toBeNull();
+    expect(after.project.folders).not.toContain("Recovered items");
+    expect(Object.keys(after.project.files).some((path) => path.startsWith("Recovered"))).toBe(
+      false,
+    );
+  });
+
+  it("refuses to create, move or rename into the recovery folder with a plain message", () => {
+    const { doc, controller } = roomWithRecoveredItems();
+    const updates: Uint8Array[] = [];
+    doc.on("update", (update: Uint8Array) => updates.push(update));
+    const readOnly = "Recovered items is read-only. Move files out of it instead.";
+
+    expect(() => controller.createFile("Recovered items/new.txt", "")).toThrow(readOnly);
+    expect(() => controller.createFolder("Recovered items/new")).toThrow(readOnly);
+    expect(() => controller.renameFile("index.html", "Recovered items/index.html")).toThrow(
+      readOnly,
+    );
+    expect(() => controller.renameFolder("Recovered items", "found")).toThrow(readOnly);
+    expect(updates).toHaveLength(0);
+
+    controller.renameFile("Recovered items/a.txt", "a.txt");
+    expect(projectCollaborationDocument(doc).project.files["a.txt"]?.content).toBe("a");
+  });
+
   it("refuses a rename onto a path another node holds and ignores a rename to itself", () => {
     const project = createStarterHtmlCssWorkspace();
     const doc = new Y.Doc();
