@@ -11,6 +11,7 @@ import {
 import { filterModelOptions } from "../../agent/modelCatalog";
 import type { CredentialStorage } from "../../agent/types";
 import ModalShell from "../ModalShell";
+import HoverRing from "../hoverRing/HoverRing";
 import type { OpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
@@ -251,10 +252,12 @@ export default function AgentSettingsDialog({
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-500 hover:text-white"
+          // Padded (and pulled back by the margin) so the hover ring has a box to trace.
+          className="-m-1 rounded-md p-1 text-slate-500 hover:text-white"
           aria-label="Close settings"
         >
           <X size={16} />
+          <HoverRing />
         </button>
       </div>
       <div className="space-y-5 overflow-y-auto p-5">

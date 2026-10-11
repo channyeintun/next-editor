@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import type { ChatImage } from "../../types/chat";
+import HoverRing from "../hoverRing/HoverRing";
 
 /** Thumbnails of the images pasted into the message box; renders nothing without any. */
 export default function DraftImageStrip({
@@ -30,6 +31,7 @@ export default function DraftImageStrip({
             title="Remove image"
           >
             <X size={12} />
+            <HoverRing />
           </button>
         </div>
       ))}

@@ -36,6 +36,7 @@ import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
 import { isImeComposingKey } from "../../utils/keyboardPlatform";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import { dockContentSizeClassName } from "../terminalPanel/runtimeDockHelpers";
+import HoverRing from "../hoverRing/HoverRing";
 import AgentErrorNotice from "./AgentErrorNotice";
 import AgentSettingsDialog from "./AgentSettingsDialog";
 import TranscriptItem from "./AgentTranscript";
@@ -305,21 +306,23 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
             type="button"
             onClick={handleNewChat}
             disabled={isBusy || isReplayActive}
-            className="ml-auto inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ml-auto inline-flex size-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="New chat"
             title="New chat"
           >
             <Plus size={16} />
+            <HoverRing />
           </button>
           <button
             data-tour="agent-settings"
             type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200"
+            className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-slate-200"
             aria-label="Open agent settings"
             title="Agent settings"
           >
             <Settings size={16} />
+            <HoverRing />
           </button>
         </div>
 
@@ -412,6 +415,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   title="Choose agent model"
                 >
                   {selectedModelLabel}
+                  <HoverRing />
                 </button>
                 {/* Keyed so the swap really unmounts the focused button rather than
                     turning a focused Stop into a disabled Send in place. */}
