@@ -35,9 +35,20 @@ export function useCollapseTransition(
   const previousCollapsedRef = useRef(isCollapsed);
 
   useEffect(() => {
+    const snap = () => {
+      setIsAnimating(false);
+      setIsExpanded(!isCollapsed);
+      setIsMounted(!isCollapsed);
+    };
+
     // Ignore the initial mount (and StrictMode's remount); only react to a real
-    // open/close toggle so the panel doesn't animate on first paint.
+    // open/close toggle so the panel doesn't animate on first paint. When
+    // transitions turn off mid-slide, the cleanup has just cancelled its frame
+    // and settle timer, so finish it here (a no-op when nothing was in flight).
     if (previousCollapsedRef.current === isCollapsed) {
+      if (!enabled) {
+        snap();
+      }
       return;
     }
     previousCollapsedRef.current = isCollapsed;
@@ -45,9 +56,7 @@ export function useCollapseTransition(
     // Snap without animating when transitions are disabled (e.g. during replay,
     // where an animated width would mismap proportionally-scaled cursor targets).
     if (!enabled) {
-      setIsAnimating(false);
-      setIsExpanded(!isCollapsed);
-      setIsMounted(!isCollapsed);
+      snap();
       return;
     }
 
