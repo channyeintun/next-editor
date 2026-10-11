@@ -256,6 +256,19 @@ class Parser {
     if (this.#atLineEnd()) return;
 
     const head = this.#peek();
+    // `[bits 64]` is the primitive form that NASM's `bits` macro expands to.
+    if (
+      head.kind === "punct" &&
+      head.value === "[" &&
+      this.#peek(1).kind === "word" &&
+      this.#peek(1).value.toLowerCase() === "bits"
+    ) {
+      this.#next();
+      this.#parseBits();
+      this.#expectPunct("]");
+      this.#endOfLine();
+      return;
+    }
     if (head.kind !== "word") {
       throw this.#error("Expected an instruction, a directive, or a label", head);
     }
@@ -313,6 +326,16 @@ class Parser {
         line: head.line,
         column: head.column,
       });
+      this.#endOfLine();
+      return;
+    }
+
+    // `bits equ 8` names a symbol, which the equ branch below reads.
+    if (
+      keyword === "bits" &&
+      !(this.#peek(1).kind === "word" && this.#peek(1).value.toLowerCase() === "equ")
+    ) {
+      this.#parseBits();
       this.#endOfLine();
       return;
     }
@@ -383,6 +406,20 @@ class Parser {
 
     // Anything left is an instruction.
     this.#parseInstruction(head, keyword, statements);
+  }
+
+  /**
+   * `bits 64`, the header many NASM examples open with. This runner assembles
+   * 64-bit code only, so 64 changes nothing and adds no statement, and any
+   * other width is refused here rather than read as a misspelt instruction.
+   */
+  #parseBits(): void {
+    this.#next();
+    const width = this.#peek();
+    if (width.kind !== "number" || width.number !== 64n) {
+      throw this.#error("This runner assembles 64-bit code only, so bits must be 64", width);
+    }
+    this.#next();
   }
 
   /**

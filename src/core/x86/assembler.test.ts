@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { assemble } from "./assembler";
 import { AsmError } from "./errors";
 import { parseIntegerLiteral, tokenize } from "./lexer";
-import { formatListing } from "./run";
+import { assembleAndRun, formatListing } from "./run";
 
 /**
  * Encoding fidelity. Every expectation here is the byte sequence NASM produces
@@ -330,6 +330,37 @@ top: SIZE equ 16
       `section .bss\n buffer resb 0x100000\nsection .text\nglobal _start\n_start:\n ret\n`,
     );
     expect(oneMegabyte.bssEnd - oneMegabyte.bssStart).toBe(0x100000n);
+  });
+});
+
+describe("the bits header", () => {
+  const EXIT_7 = "section .text\nglobal _start\n_start:\n mov rax, 60\n mov rdi, 7\n syscall\n";
+
+  it.each(["BITS 64", "bits 64", "[bits 64]", "[BITS 64]"])(
+    "takes %s as the 64-bit code it already assembles",
+    (header) => {
+      const result = assembleAndRun(`${header}\n${EXIT_7}`);
+      expect(result.status).toBe("success");
+      expect(result.exitCode).toBe(assembleAndRun(EXIT_7).exitCode);
+      expect(result.exitCode).toBe(7);
+    },
+  );
+
+  it.each(["bits 32", "bits 16", "bits", "[bits 32]"])("refuses %s on line 1", (header) => {
+    expect(() => assemble(`${header}\n${EXIT_7}`)).toThrow(
+      expect.objectContaining({
+        line: 1,
+        message: "This runner assembles 64-bit code only, so bits must be 64",
+      }),
+    );
+  });
+
+  it("still reads a symbol named bits", () => {
+    const program = assemble(
+      "bits equ 8\nsection .text\nglobal _start\n_start:\n mov eax, bits\n ret\n",
+    );
+    expect(program.symbols.get("bits")).toBe(8n);
+    expect(program.listing[0].bytes).toEqual([0xb8, 0x08, 0x00, 0x00, 0x00]);
   });
 });
 
