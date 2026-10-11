@@ -109,6 +109,15 @@ function makeFakeInstance(process: WebContainerProcess): WebContainer {
 
 const run = (ctx: ToolContext) => makeBashTool(ctx).function.execute;
 
+// Starts a command without awaiting it, so a test can see that it never settles.
+function startCommand(ctx: ToolContext, input: { command: string; timeout?: number }) {
+  const state: { result: string | null } = { result: null };
+  void Promise.resolve(run(ctx)(input)).then((value) => {
+    state.result = value;
+  });
+  return state;
+}
+
 describe("bash tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -297,6 +306,166 @@ describe("bash tool", () => {
       expect(result).toContain("Command timed out after 10ms");
       expect(result).toContain("output truncated (30000 omitted characters)");
       expect(result.length).toBeLessThan(20_300);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A pipeline or child can keep the pty open after kill, so exit never comes.
+  // Waiting on it forever held the per-container task queue, and every later
+  // bash call and editor sync on that container queued behind it.
+  it("gives up on a process that does not exit after kill and frees the task queue", async () => {
+    vi.useFakeTimers();
+    try {
+      const { runSerializedWebContainerTask } = await vi.importActual<
+        typeof import("../../runtime/webcontainer/sharedContainer")
+      >("../../runtime/webcontainer/sharedContainer");
+      support.runSerializedWebContainerTask.mockImplementationOnce(runSerializedWebContainerTask);
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      const process = createFakeProcess(["partial output"], 0);
+      Object.defineProperty(process, "exit", { value: new Promise<number>(() => {}) });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+
+      const command = startCommand(makeCtx(store), { command: "yes | head", timeout: 10 });
+      await vi.advanceTimersByTimeAsync(10 + 5_000);
+
+      expect(process.kill).toHaveBeenCalledTimes(1);
+      expect(command.result).toBe(
+        "Command timed out after 10ms; the process did not exit after kill and may still be running.\npartial output",
+      );
+      let didNextTaskRun = false;
+      void runSerializedWebContainerTask(instance, async () => {
+        didNextTaskRun = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(didNextTaskRun).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up on a process that ignores Stop", async () => {
+    vi.useFakeTimers();
+    try {
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      const process = createFakeProcess([], 0);
+      Object.defineProperty(process, "exit", { value: new Promise<number>(() => {}) });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+      const controller = new AbortController();
+
+      const command = startCommand(
+        { ...makeCtx(store), signal: controller.signal },
+        {
+          command: "serve",
+        },
+      );
+      await vi.waitFor(() => expect(instance.spawn).toHaveBeenCalledTimes(1));
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(process.kill).toHaveBeenCalledTimes(1);
+      expect(command.result).toBe("Command aborted.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // sh can exit while a background descendant keeps the output stream open;
+  // the timeout was already cleared by then, so nothing ever ended the wait.
+  it("stops waiting for output a background process keeps open after exit", async () => {
+    vi.useFakeTimers();
+    try {
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      const cancelOutput = vi.fn<() => void>();
+      const process = createFakeProcess([], 0);
+      Object.defineProperty(process, "output", {
+        value: new ReadableStream<string>({
+          start(controller) {
+            controller.enqueue("server started");
+          },
+          cancel: cancelOutput,
+        }),
+      });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+
+      const command = startCommand(makeCtx(store), { command: "serve &" });
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(cancelOutput).toHaveBeenCalledTimes(1);
+      expect(process.kill).not.toHaveBeenCalled();
+      expect(command.result).toBe(
+        "exit code 0\nserver started\n(output stream did not close; a background process may still be running)",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The graces count from the kill and the exit, not from the spawn.
+  it("waits the full kill grace when the timeout is longer than it", async () => {
+    vi.useFakeTimers();
+    try {
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      let resolveExit: ((exitCode: number) => void) | null = null;
+      const process = createFakeProcess(["slow"], 0);
+      Object.defineProperty(process, "exit", {
+        value: new Promise<number>((resolve) => {
+          resolveExit = resolve;
+        }),
+      });
+      Object.defineProperty(process, "kill", {
+        value: vi.fn<() => void>(() => setTimeout(() => resolveExit?.(143), 1_000)),
+      });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+
+      const command = run(makeCtx(store))({ command: "slow", timeout: 6_000 });
+      await vi.advanceTimersByTimeAsync(7_000);
+
+      expect(await command).toBe("Command timed out after 6000ms.\nslow");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits the full drain grace when a long command exits", async () => {
+    vi.useFakeTimers();
+    try {
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      const process = createFakeProcess([], 0);
+      Object.defineProperty(process, "exit", {
+        value: new Promise<number>((resolve) => setTimeout(() => resolve(0), 3_000)),
+      });
+      Object.defineProperty(process, "output", {
+        value: new ReadableStream<string>({
+          start(controller) {
+            setTimeout(() => {
+              controller.enqueue("built");
+              controller.close();
+            }, 3_100);
+          },
+        }),
+      });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+
+      const command = run(makeCtx(store))({ command: "build" });
+      await vi.advanceTimersByTimeAsync(3_100);
+
+      expect(await command).toBe("exit code 0\nbuilt");
     } finally {
       vi.useRealTimers();
     }

@@ -21,6 +21,13 @@ const MAX_TIMEOUT_MS = 5 * 60_000;
 const MAX_OUTPUT_LENGTH = 20_000;
 const OUTPUT_HEAD_LENGTH = Math.floor(MAX_OUTPUT_LENGTH / 2);
 const OUTPUT_TAIL_LENGTH = MAX_OUTPUT_LENGTH - OUTPUT_HEAD_LENGTH;
+// How long to wait for exit once a kill was requested, and then for the output
+// stream to close. WebContainer's kill does not always end a pipeline or a
+// background child, and its output includes descendants'. Waiting without a
+// bound held the container's task queue, so every later bash call and editor
+// sync on it queued behind a command that would never settle.
+const KILL_GRACE_MS = 5_000;
+const OUTPUT_DRAIN_GRACE_MS = 2_000;
 
 const inputSchema = z.object({
   command: z.string().describe("Shell command to run (via `sh -c`)"),
@@ -95,6 +102,14 @@ class BoundedCommandOutput {
     const omitted = this.totalLength - retained.length;
     return `${this.head}\n… output truncated (${omitted} omitted characters) …\n${this.tail}`;
   }
+}
+
+function delay(ms: number): { promise: Promise<void>; cancel: () => void } {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<void>((resolve) => {
+    timeoutId = setTimeout(resolve, ms);
+  });
+  return { promise, cancel: () => clearTimeout(timeoutId) };
 }
 
 async function foldContainerChangesIntoStore(
@@ -219,10 +234,10 @@ async function runCommand(
   // Registered up front so an abort fired while waiting on confirmation or a
   // container boot — both can take a while — is still observed.
   let aborted = false;
-  let runningProcess: Awaited<ReturnType<WebContainer["spawn"]>> | null = null;
+  let killRunningProcess: (() => void) | null = null;
   const abortHandler = () => {
     aborted = true;
-    runningProcess?.kill();
+    killRunningProcess?.();
   };
   ctx.signal.addEventListener("abort", abortHandler);
 
@@ -257,21 +272,36 @@ async function runCommand(
       }
 
       const process = await instance.spawn("sh", ["-c", command]);
-      runningProcess = process;
+      let resolveKillRequested = () => {};
+      const killRequested = new Promise<void>((resolve) => {
+        resolveKillRequested = resolve;
+      });
+      let isKillRequested = false;
+      const requestKill = () => {
+        if (isKillRequested) return;
+        isKillRequested = true;
+        process.kill();
+        resolveKillRequested();
+      };
+      killRunningProcess = requestKill;
 
       if (aborted) {
-        process.kill();
+        requestKill();
       }
 
       const output = new BoundedCommandOutput();
       const reader = process.output.getReader();
       const readOutput = (async () => {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            return;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              return;
+            }
+            output.append(value);
           }
-          output.append(value);
+        } catch {
+          // The stream errored, or was cancelled after the drain grace below.
         }
       })();
 
@@ -282,30 +312,59 @@ async function runCommand(
       let timedOut = false;
       const timeoutId = setTimeout(() => {
         timedOut = true;
-        process.kill();
+        requestKill();
       }, timeoutMs);
+      // Each grace starts when its wait does: the kill grace at the kill, the
+      // drain grace at the exit.
+      const graceCancels: Array<() => void> = [];
+      const startGrace = (ms: number) => {
+        const grace = delay(ms);
+        graceCancels.push(grace.cancel);
+        return grace.promise;
+      };
 
-      let exitCode: number;
       try {
-        exitCode = await process.exit;
-      } finally {
+        const exitResult = await Promise.race([
+          process.exit.then((code) => ({ code })),
+          killRequested.then(() => startGrace(KILL_GRACE_MS)).then(() => null),
+        ]);
         clearTimeout(timeoutId);
+
+        const drained = await Promise.race([
+          readOutput.then(() => true),
+          startGrace(OUTPUT_DRAIN_GRACE_MS).then(() => false),
+        ]);
+        if (!drained) {
+          void reader.cancel().catch(() => {});
+        }
+
+        await foldContainerChangesIntoStore(ctx, instance, project);
+
+        if (aborted) {
+          return "Command aborted.";
+        }
+
+        const truncated = output.toString().trim();
+        const shownOutput = drained
+          ? truncated
+          : `${truncated}\n(output stream did not close; a background process may still be running)`;
+
+        // Only a requested kill ends the exit wait early, and an abort has
+        // returned above, so this is the timeout's kill.
+        if (!exitResult) {
+          return `Command timed out after ${timeoutMs}ms; the process did not exit after kill and may still be running.\n${shownOutput}`;
+        }
+
+        if (timedOut) {
+          return `Command timed out after ${timeoutMs}ms.\n${shownOutput}`;
+        }
+
+        return `exit code ${exitResult.code}\n${shownOutput}`;
+      } finally {
+        killRunningProcess = null;
+        clearTimeout(timeoutId);
+        for (const cancel of graceCancels) cancel();
       }
-      await readOutput;
-
-      await foldContainerChangesIntoStore(ctx, instance, project);
-
-      if (aborted) {
-        return "Command aborted.";
-      }
-
-      const truncated = output.toString().trim();
-
-      if (timedOut) {
-        return `Command timed out after ${timeoutMs}ms.\n${truncated}`;
-      }
-
-      return `exit code ${exitCode}\n${truncated}`;
     });
   } finally {
     ctx.signal.removeEventListener("abort", abortHandler);
