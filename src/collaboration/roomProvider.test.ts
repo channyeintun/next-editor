@@ -161,7 +161,7 @@ describe("CollaborationRoomProvider", () => {
     }
     expect(decodeCollaborationAwarenessProtocolUpdate(awarenessFrame.update)).toHaveLength(1);
 
-    const standardPosition = { type: null, tname: "source", item: null, assoc: 0 };
+    const standardPosition = { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 };
     provider.setAwarenessPublicationSuppressed(true);
     const beforeSuppressedSelection = socket.binarySent.length;
     provider.awareness.setLocalStateField("selection", {
@@ -756,7 +756,7 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
           : [],
       );
     const selection = (clock: number) => ({
-      anchor: { type: null, tname: "source", item: null, assoc: 0 },
+      anchor: { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 },
       head: { type: null, tname: null, item: { client: 1, clock }, assoc: 0 },
     });
     await provider.publishAwareness({

@@ -102,9 +102,9 @@ const canonicalSocketSessionSchema = z
 type CanonicalSocketSession = z.infer<typeof canonicalSocketSessionSchema>;
 
 // serializeAttachment refuses more than 16,384 bytes. A maximal schema-valid
-// attachment (two-byte selection type names and display name) serializes to
-// about 16.2 KB, fewer than 200 bytes under that; the test "stores and relays
-// a maximal schema-valid awareness state" pins it. Check that budget before
+// attachment (a two-byte display name) serializes to about 12.1 KB, about
+// 4.2 KB under that; the test "stores and relays a maximal schema-valid
+// awareness state" pins it. Check that budget before
 // adding a field here or to the awareness schemas. If more room is needed,
 // stop storing the session's username, name and avatarUrl a second time
 // inside awarenessState rather than capping the wire schema.

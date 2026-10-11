@@ -12,7 +12,7 @@ import type { CollaborationAwarenessEvent } from "./protocol";
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const ACTOR_ID = "30000000-0000-4000-8000-000000000001";
 const SESSION_ID = "50000000-0000-4000-8000-000000000001";
-const POSITION = { type: null, tname: "source", item: null, assoc: 0 };
+const POSITION = { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 };
 
 function selection(assoc: number) {
   return { anchor: POSITION, head: { ...POSITION, assoc } };

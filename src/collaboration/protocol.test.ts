@@ -14,6 +14,7 @@ import {
   collaborationCreateRoomInputSchema,
   collaborationAwarenessClientStateSchema,
   collaborationAwarenessInputSchema,
+  collaborationAwarenessServerStateSchema,
   collaborationCurrentSlideCommandSchema,
   collaborationSurfaceSchema,
   collaborationWebSocketServerMessageSchema,
@@ -136,8 +137,8 @@ describe("collaboration protocol", () => {
           cursor: null,
         },
         selection: {
-          anchor: { type: null, tname: "source", item: null, assoc: 0 },
-          head: { type: null, tname: "source", item: null, assoc: 0 },
+          anchor: { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 },
+          head: { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 },
         },
       }).success,
     ).toBe(false);
@@ -175,6 +176,48 @@ describe("collaboration protocol", () => {
         revision: Number.MAX_SAFE_INTEGER + 1,
       }).success,
     ).toBe(false);
+  });
+
+  // A position with a type name resolves through Y.Doc.get, which creates that
+  // root (see relativePosition.ts), so the wire refuses any name at all.
+  it("refuses an editor selection whose position names a root type", () => {
+    const state = {
+      kind: "state",
+      sessionId: CLIENT_ID,
+      revision: 1,
+      surface: { kind: "editor", fileNodeId: ROOM_ID, viewport: null },
+      cursor: null,
+    } as const;
+    const event = {
+      ...state,
+      roomId: ROOM_ID,
+      actorId: CLIENT_ID,
+      role: "viewer",
+      username: "peer",
+      name: null,
+      avatarUrl: null,
+      isHost: false,
+      occurredAt: 1,
+      expiresAt: 2,
+    } as const;
+    const nested = { type: { client: 1, clock: 0 }, tname: null, item: null, assoc: 0 };
+    const named = { type: null, tname: "injected-root", item: null, assoc: 0 };
+
+    for (const selection of [
+      { anchor: nested, head: nested },
+      { anchor: named, head: nested },
+      { anchor: nested, head: named },
+    ]) {
+      const accepted = selection.anchor === nested && selection.head === nested;
+      expect(
+        collaborationAwarenessClientStateSchema.safeParse({ collaboration: state, selection })
+          .success,
+      ).toBe(accepted);
+      expect(
+        collaborationAwarenessServerStateSchema.safeParse({ collaboration: event, selection })
+          .success,
+      ).toBe(accepted);
+    }
   });
 
   it("rejects every out-of-bounds or mixed-surface awareness field", () => {

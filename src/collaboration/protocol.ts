@@ -226,7 +226,8 @@ const yjsRelativePositionIdSchema = z
 const yjsRelativePositionSchema = z
   .object({
     type: yjsRelativePositionIdSchema.nullable(),
-    tname: z.string().max(1024).nullable(),
+    // Never a name: resolving one creates that root (see relativePosition.ts).
+    tname: z.null(),
     item: yjsRelativePositionIdSchema.nullable(),
     assoc: z.number().int().min(-1).max(1),
   })

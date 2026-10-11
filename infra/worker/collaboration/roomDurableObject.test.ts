@@ -739,10 +739,45 @@ describe("CollaborationRoomDurableObject awareness", () => {
     expect(peer.closeCode).toBe(1008);
   });
 
-  // The largest state the schemas accept, with the display name and the
-  // selection's type names in two-byte text, which V8 stores at two bytes a
-  // character. Its attachment is about 16.2 KB, fewer than 200 bytes under
-  // the 16,384 that serializeAttachment takes. This is the worst case and
+  // A position that names a type resolves through Y.Doc.get, which creates
+  // that root in every peer's document (y-monaco resolves remote selections
+  // itself), so the room refuses the frame instead of relaying it.
+  it("refuses a selection whose position names a root type, from any role", async () => {
+    const { room, connect } = await createRoom();
+    const viewer = connect(MEMBER_ID, "viewer");
+    const peer = connect(PEER_ID, "editor");
+    const { sessionId } = viewer.deserializeAttachment() as { sessionId: string };
+    const named = { type: null, tname: "injected-root", item: null, assoc: 0 };
+    const message = encodeCollaborationAwarenessUpdate(
+      encodeCollaborationAwarenessProtocolUpdate([
+        {
+          clientId: 7,
+          clock: 1,
+          state: {
+            collaboration: {
+              kind: "state",
+              sessionId,
+              revision: 1,
+              surface: { kind: "editor", fileNodeId: uuid(), viewport: null },
+              cursor: null,
+            },
+            selection: { anchor: named, head: named },
+          },
+        },
+      ]),
+    );
+
+    await room.webSocketMessage(viewer as never, toArrayBuffer(message));
+
+    expect(errors(viewer)).toEqual([expect.objectContaining({ code: "invalid-message" })]);
+    expect(viewer.closeCode).toBe(1008);
+    expect(peer.frames()).toEqual([]);
+  });
+
+  // The largest state the schemas accept, with the display name in two-byte
+  // text, which V8 stores at two bytes a character. Its attachment is about
+  // 12.1 KB, about 4.2 KB under the 16,384 that serializeAttachment takes.
+  // This is the worst case and
   // must stay green: a schema change that turns it red drops real members'
   // awareness.
   it("stores and relays a maximal schema-valid awareness state", async () => {
@@ -757,7 +792,7 @@ describe("CollaborationRoomDurableObject awareness", () => {
     const fileNodeId = uuid();
     const position = "A".repeat(2048);
     const id = { client: 0xffff_ffff, clock: Number.MAX_SAFE_INTEGER };
-    const end = { type: id, tname: "\u4e00".repeat(1024), item: id, assoc: -1 };
+    const end = { type: id, tname: null, item: id, assoc: -1 };
     const message = encodeCollaborationAwarenessUpdate(
       encodeCollaborationAwarenessProtocolUpdate([
         {
