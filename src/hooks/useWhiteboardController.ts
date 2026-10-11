@@ -273,7 +273,12 @@ export const useWhiteboardController = ({
     }
   };
 
+  // setOpen, setMaximized and applyView each save a change still waiting out the
+  // throttle first. The panel answers their new scene by pushing it into the canvas
+  // (markCanvasSynced), which would otherwise rebase the pending change onto that
+  // scene and lose the end of the stroke. Its event is recorded before theirs.
   const setOpen = (isOpen: boolean) => {
+    flushPendingChange();
     const current = store.getSnapshot().context.scene;
     if (current.isOpen === isOpen) return;
 
@@ -282,6 +287,7 @@ export const useWhiteboardController = ({
   };
 
   const setMaximized = (isMaximized: boolean) => {
+    flushPendingChange();
     const current = store.getSnapshot().context.scene;
     if (current.isMaximized === isMaximized) return;
     store.trigger.setScene({ scene: { ...current, isMaximized } });
@@ -289,6 +295,7 @@ export const useWhiteboardController = ({
   };
 
   const applyView = (view: WhiteboardView, isMaximized: boolean) => {
+    flushPendingChange();
     const current = store.getSnapshot().context.scene;
     const viewChanged = !areWhiteboardViewsEqual(current.view, view);
     const maximizedChanged = current.isMaximized !== isMaximized;

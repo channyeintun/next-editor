@@ -434,3 +434,56 @@ describe("useWhiteboardController", () => {
     expect(store.getSnapshot().context.playbackViewerView).toBeNull();
   });
 });
+
+// The panel answers every scene change by pushing the store's scene into the canvas and
+// marking the canvas synced with it. A stroke still waiting out the 100 ms throttle was
+// rebased onto that scene, so the flush found nothing and the stroke's end was lost.
+describe("useWhiteboardController scene changes during a pending stroke", () => {
+  afterEach(() => vi.useRealTimers());
+
+  type Controller = ReturnType<typeof useWhiteboardController>;
+  const followedView = { scrollX: 40, scrollY: -20, zoom: 2 };
+
+  it.each([
+    { change: "closing", run: (c: Controller) => c.setOpen(false), event: { isOpen: false } },
+    {
+      change: "maximizing",
+      run: (c: Controller) => c.setMaximized(true),
+      event: { isMaximized: true },
+    },
+    {
+      change: "a followed view",
+      run: (c: Controller) => c.applyView(followedView, false),
+      event: { view: followedView },
+    },
+  ])("records the stroke before $change replaces the scene", ({ run, event }) => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
+    const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
+    act(() => result.current.setOpen(true));
+    onWhiteboardEvent.mockClear();
+
+    act(() => {
+      result.current.handleExcalidrawChange(
+        [element("stroke")],
+        { scrollX: 0, scrollY: 0, zoom: 1 },
+        false,
+      );
+      run(result.current);
+      // What the panel's scene effect does next.
+      const given = store.getSnapshot().context.scene.elements;
+      result.current.markCanvasSynced(given, given);
+      vi.advanceTimersByTime(100);
+    });
+
+    const events = onWhiteboardEvent.mock.calls.map(([recorded]) => recorded);
+    expect(events).toEqual([
+      expect.objectContaining({ upserts: [expect.objectContaining({ id: "stroke" })] }),
+      expect.objectContaining(event),
+    ]);
+    expect(store.getSnapshot().context.scene.elements).toEqual([
+      expect.objectContaining({ id: "stroke" }),
+    ]);
+  });
+});

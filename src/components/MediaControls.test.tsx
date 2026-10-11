@@ -135,11 +135,11 @@ afterEach(() => {
 
 describe("MediaControls", () => {
   // Importing a caption file loads the parser on first use (importCaptionFile's
-  // dynamic import). Load it once up front so the alert tests time the player,
-  // not Vite transforming the module inside findByRole's 1 s window, which
-  // missed that window on a loaded machine.
+  // dynamic import), and the edit panel is a lazy chunk too. Load both once up
+  // front so the tests time the player, not Vite transforming a module inside
+  // findByRole's 1 s window, which missed that window on a loaded machine.
   beforeAll(async () => {
-    await import("../captions/parseCaptions");
+    await Promise.all([import("../captions/parseCaptions"), import("./RecordingEditPanel")]);
   });
 
   // The bar renders neither value (PlaybackSpeedVolume, inside Settings, does), so a drag
