@@ -64,13 +64,18 @@ describe("agent workspace scope", () => {
 });
 
 describe("agent retry", () => {
-  it("repeats a failed run with the same observers the Send carried", async () => {
+  // The observers carry the image gate for the model they were built for, so a
+  // Retry after a model switch must run with the panel's current ones, not the
+  // ones built for the model at Send.
+  it("repeats a failed run with the observers Retry passes", async () => {
     const workspace = createWorkspaceStore(createStarterSnapshot());
-    const observers: AgentObservers = {
+    const makeObservers = (): AgentObservers => ({
       getRuntimeDiagnostics: vi.fn<NonNullable<AgentObservers["getRuntimeDiagnostics"]>>(),
       getPreviewInspection: vi.fn<NonNullable<AgentObservers["getPreviewInspection"]>>(),
       capturePreviewScreenshot: vi.fn<NonNullable<AgentObservers["capturePreviewScreenshot"]>>(),
-    };
+    });
+    const sendObservers = makeObservers();
+    const retryObservers = makeObservers();
     runAgentLoop.mockRejectedValueOnce(new Error("Provider unavailable"));
     runAgentLoop.mockResolvedValueOnce(undefined);
 
@@ -80,15 +85,20 @@ describe("agent retry", () => {
       workspace,
       prompt: "Add a footer",
       handleChatEvent: () => {},
-      observers,
+      observers: sendObservers,
     });
     expect(selectCanRetry(getAgentSessionStore().getSnapshot().context)).toBe(true);
 
-    await retryAgentRun({ apiKey: "sk-or-retry", model: "test/other", workspace });
+    await retryAgentRun({
+      apiKey: "sk-or-retry",
+      model: "test/other",
+      workspace,
+      observers: retryObservers,
+    });
 
     expect(runAgentLoop).toHaveBeenCalledTimes(2);
     const retried = runAgentLoop.mock.calls[1]?.[0];
-    expect(retried?.observers).toBe(observers);
+    expect(retried?.observers).toBe(retryObservers);
     expect(retried?.prompt).toBe("Add a footer");
     expect(retried?.apiKey).toBe("sk-or-retry");
     expect(retried?.model).toBe("test/other");

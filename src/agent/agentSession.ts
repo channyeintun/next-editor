@@ -27,8 +27,9 @@ interface AgentSessionContext {
 let abortController: AbortController | null = null;
 const resolvers = new Map<number, (approved: boolean) => void>();
 let nextConfirmationId = 0;
-let retryOptions: (Omit<StartAgentRunOptions, "apiKey" | "model"> & { fromId?: string }) | null =
-  null;
+let retryOptions:
+  | (Omit<StartAgentRunOptions, "apiKey" | "model" | "observers"> & { fromId?: string })
+  | null = null;
 
 const agentSessionStore = createStore({
   context: { pending: [], isRunning: false, canRetry: false } as AgentSessionContext,
@@ -174,6 +175,7 @@ export async function retryAgentRun(options: {
   apiKey: string;
   model: AgentModelId;
   workspace: WorkspaceStoreInstance;
+  observers: AgentObservers;
 }): Promise<void> {
   if (
     synchronizeAgentWorkspace(options.workspace) ||
@@ -259,9 +261,11 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       message: formatAgentError(error),
     });
     const firstTurnItem = agentStore.getSnapshot().context.items[history.length];
-    // Everything the Send carried except the key and model, which Retry takes
-    // fresh from the panel, so no option can be dropped from the repeat.
-    const { apiKey: _apiKey, model: _model, ...repeatOptions } = options;
+    // Everything the Send carried except the key, the model and the observers,
+    // which Retry takes fresh from the panel, so no option can be dropped from
+    // the repeat. The observers gate capture_preview on the model they were
+    // built for, so reusing the Send's would follow the old model.
+    const { apiKey: _apiKey, model: _model, observers: _observers, ...repeatOptions } = options;
     retryOptions = {
       ...repeatOptions,
       ...(firstTurnItem ? { fromId: firstTurnItem.id } : {}),

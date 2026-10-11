@@ -2,8 +2,14 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { getAgentStore } from "../../agent/agentStore";
 import { getAgentCredentialStore } from "../../agent/credentials";
-import { getAgentSessionStore, resolveConfirmation, startAgentRun } from "../../agent/agentSession";
+import {
+  getAgentSessionStore,
+  resolveConfirmation,
+  retryAgentRun,
+  startAgentRun,
+} from "../../agent/agentSession";
 import { MAX_CHAT_IMAGES } from "../../agent/imageAttachments";
+import { DEFAULT_AGENT_MODEL } from "../../agent/types";
 import { createContentDelta } from "../../core/src/utils/contentDelta";
 import type { ChatStatus } from "../../types/chat";
 import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
@@ -49,6 +55,7 @@ vi.mock("../../agent/agentSession", async (importOriginal) => {
       actual.getAgentSessionStore().trigger.setRunning({ isRunning: true });
     }),
     stopAgentRun: vi.fn<typeof actual.stopAgentRun>(),
+    retryAgentRun: vi.fn<typeof actual.retryAgentRun>(async () => {}),
     resolveConfirmation: vi.fn<typeof actual.resolveConfirmation>((id) => {
       actual.getAgentSessionStore().trigger.remove({ id });
     }),
@@ -79,6 +86,7 @@ afterEach(() => {
   getAgentCredentialStore().trigger.clear();
   getAgentStore().trigger.reset();
   getAgentStore().trigger.applyReplaySnapshot({ snapshot: null });
+  getAgentStore().trigger.setModel({ model: DEFAULT_AGENT_MODEL });
   getAgentSessionStore().trigger.setRunning({ isRunning: false });
   getAgentSessionStore().trigger.clear();
   metadata.isPlaying = false;
@@ -408,6 +416,32 @@ describe("AgentPanel transcript scrolling", () => {
     applyDelta({ k: "message_start", id: "u2", role: "user" });
 
     expect(region.scrollTop).toBe(1100);
+  });
+});
+
+describe("AgentPanel retry", () => {
+  // The observers decide whether capture_preview may return a screenshot, from
+  // the model they were built for. Retry used to reuse the ones built at Send,
+  // so after a model switch the image gate followed the old model.
+  it("retries with observers built for the model selected now", async () => {
+    act(() => getAgentStore().trigger.setModel({ model: "test/send-model" }));
+    renderPanel();
+    fireEvent.change(composer(), { target: { value: "Add a footer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    endRun();
+    act(() => {
+      getAgentStore().trigger.setModel({ model: "test/retry-model" });
+      getAgentStore().trigger.setError({ message: "Provider unavailable" });
+      getAgentSessionStore().trigger.setCanRetry({ canRetry: true });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(retryAgentRun).toHaveBeenCalledTimes(1);
+    const observers = vi.mocked(retryAgentRun).mock.calls[0]?.[0].observers;
+    await expect(observers?.capturePreviewScreenshot?.()).rejects.toThrow(
+      "test/retry-model does not advertise image input support",
+    );
   });
 });
 

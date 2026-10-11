@@ -222,7 +222,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     if (isBusy || !canRetry || !apiKey || !workspaceStore || isReplayActive) {
       return;
     }
-    void retryAgentRun({ apiKey, model, workspace: workspaceStore });
+    void retryAgentRun({ apiKey, model, workspace: workspaceStore, observers });
   };
 
   const handleNewChat = () => {

@@ -10,8 +10,8 @@ import { isWebContainerRuntimeSupported } from "../../runtime/webcontainer/share
  * from the same environment check the runtime provider makes, not from its
  * metadata context, which changes on every runtime status and preview event.
  *
- * `modelLabel` and `supportsImages` describe the model selected at Send, which
- * decides whether capture_preview may return a screenshot.
+ * `modelLabel` and `supportsImages` describe the model selected at Send or
+ * Retry, which decides whether capture_preview may return a screenshot.
  */
 export function useAgentObservers(modelLabel: string, supportsImages: boolean): AgentObservers {
   const previewHandle = usePreviewAdapterHandle();
