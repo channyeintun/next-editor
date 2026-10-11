@@ -30,6 +30,7 @@ import RecordingOptionToggle from "./mediaControls/RecordingOptionToggle";
 import CaptionsMenuButton from "./mediaControls/CaptionsMenuButton";
 import CaptionSettings from "./mediaControls/CaptionSettings";
 import { useCaptionFileImport } from "./mediaControls/useCaptionFileImport";
+import CaptionStatus from "./mediaControls/CaptionStatus";
 import PlaybackSpeedVolume from "./mediaControls/PlaybackSpeedVolume";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
@@ -232,6 +233,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const {
     inputRef: captionFileInputRef,
     importError: captionImportError,
+    importNotice: captionImportNotice,
     openPicker: openCaptionPicker,
     onFileChange: handleCaptionFileChange,
   } = useCaptionFileImport();
@@ -418,6 +420,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         onChange={(event) => void handleCaptionFileChange(event)}
       />
       <PlayerShortcutFeedback feedback={playerShortcuts.feedback} />
+      <CaptionStatus notices={[captionGeneration.notice, captionImportNotice]} />
       {playerShortcuts.helpOpen ? (
         <PlayerShortcutsHelp onClose={playerShortcuts.closeHelp} />
       ) : null}

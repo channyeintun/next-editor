@@ -14,11 +14,14 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import { compressFrames } from "../core/src/utils/frameStreamEncoder";
 import type { Recording } from "../core/src/types";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
-import type { CaptionGenerationState } from "../hooks/useCaptionGeneration";
+import type { CaptionGenerationState, CaptionNotice } from "../hooks/useCaptionGeneration";
 import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 
-// Captioning runs a speech model; here it only needs to end the way a failed job does.
-const generation = vi.hoisted(() => ({ fail: null as ((message: string) => void) | null }));
+// Captioning runs a speech model; here it only needs to end the way a job does.
+const generation = vi.hoisted(() => ({
+  fail: null as ((message: string) => void) | null,
+  succeed: null as ((notice: string) => void) | null,
+}));
 vi.mock("../hooks/useCaptionGeneration", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../hooks/useCaptionGeneration")>();
   const { useState } = await import("react");
@@ -26,8 +29,10 @@ vi.mock("../hooks/useCaptionGeneration", async (importOriginal) => {
     ...actual,
     useCaptionGeneration: () => {
       const [state, setState] = useState<CaptionGenerationState>({ status: "idle" });
+      const [notice, setNotice] = useState<CaptionNotice | null>(null);
       generation.fail = (message) => setState({ status: "failed", message });
-      return { state, start: async () => {}, cancel: () => setState({ status: "idle" }) };
+      generation.succeed = (text) => setNotice({ text, at: performance.now() });
+      return { state, notice, start: async () => {}, cancel: () => setState({ status: "idle" }) };
     },
   };
 });
@@ -241,6 +246,30 @@ describe("MediaControls", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       'No captions found in "notes.vtt" — expected WebVTT or SRT.',
     );
+  });
+
+  it("announces captions it generated or imported, with the Settings menu closed", async () => {
+    const { container } = await renderPlayer();
+    // Already in the page: words inserted into a region added with them are often not heard.
+    const regions = screen.getAllByRole("status");
+    const announced = () => regions.map((region) => region.textContent);
+    expect(announced().filter((text) => text?.startsWith("Captions"))).toEqual([]);
+
+    act(() => generation.succeed!("Captions generated: English (auto)"));
+    expect(announced()).toContain("Captions generated: English (auto)");
+
+    const vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
+    const captions = Object.assign(new File([vtt], "lesson.my.vtt", { type: "text/vtt" }), {
+      text: async () => vtt,
+    });
+    fireEvent.change(filePicker(container, ".vtt"), { target: { files: [captions] } });
+    // The latest outcome is the one heard.
+    await waitFor(() => expect(announced()).toContain("Captions imported: Burmese"));
+    expect(announced()).not.toContain("Captions generated: English (auto)");
+
+    act(() => generation.succeed!("Captions generated: Burmese (auto)"));
+    expect(announced()).toContain("Captions generated: Burmese (auto)");
+    expect(announced()).not.toContain("Captions imported: Burmese");
   });
 
   it("does not reopen the edit panel for the next take after starting over", async () => {

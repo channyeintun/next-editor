@@ -3,7 +3,7 @@ import type { CaptionCue, Recording } from "../core/src";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { useCaptionStoreTrigger } from "./useCaptionStore";
 import type { CaptionGenerationProgress } from "../captions/generateCaptions";
-import { createCaptionTrack } from "../captions/captionTracks";
+import { captionTrackLabel, createCaptionTrack } from "../captions/captionTracks";
 import { loadRecordingNarration } from "../storage/recordingSiblingMedia";
 import { importWithChunkRecovery } from "../routeRecovery";
 
@@ -11,6 +11,15 @@ export type CaptionGenerationState =
   | { status: "idle" }
   | { status: "running"; progress: CaptionGenerationProgress | null }
   | { status: "failed"; message: string };
+
+/**
+ * Captions that were generated or imported, for the player's status region. A new `at`
+ * makes the same words heard again.
+ */
+export interface CaptionNotice {
+  text: string;
+  at: number;
+}
 
 /**
  * One captioning job: transcribes the narration, reports each state it goes through to
@@ -72,6 +81,8 @@ export function useCaptionGeneration(recordingId: string | null) {
   const { addCaptionTrack } = useNextEditorActions();
   const captionTrigger = useCaptionStoreTrigger();
   const [state, setState] = useState<CaptionGenerationState>({ status: "idle" });
+  // A finished job is otherwise silent: its menu row is in Settings, usually closed by then.
+  const [notice, setNotice] = useState<CaptionNotice | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // A job outliving the player would keep its worker (and the model) alive. One outliving
@@ -82,6 +93,7 @@ export function useCaptionGeneration(recordingId: string | null) {
       abortRef.current?.abort();
       abortRef.current = null;
       setState({ status: "idle" });
+      setNotice(null);
     },
     [recordingId],
   );
@@ -91,6 +103,7 @@ export function useCaptionGeneration(recordingId: string | null) {
     const controller = new AbortController();
     abortRef.current = controller;
     setState({ status: "running", progress: null });
+    setNotice(null);
     await runCaptionJob(recording, controller, {
       // A cancelled or replaced job settles later; cancel() has already set idle, and
       // its late write must not reset the job that replaced it.
@@ -99,19 +112,21 @@ export function useCaptionGeneration(recordingId: string | null) {
       },
       onCaptions: (language, cues) => {
         const trackId = `auto-${language}-${Date.now()}`;
-        addCaptionTrack(
-          recording.id,
-          createCaptionTrack({
-            id: trackId,
-            language,
-            cues,
-            generated: true,
-            isDefault: !recording.captions?.length,
-          }),
-        );
+        const track = createCaptionTrack({
+          id: trackId,
+          language,
+          cues,
+          generated: true,
+          isDefault: !recording.captions?.length,
+        });
+        addCaptionTrack(recording.id, track);
         // By id: the lesson may already have a track in this language.
         captionTrigger.selectTrack({ trackId, language });
         captionTrigger.setEnabled({ enabled: true });
+        setNotice({
+          text: `Captions generated: ${captionTrackLabel(track)}`,
+          at: performance.now(),
+        });
       },
       onSettled: () => {
         if (abortRef.current === controller) abortRef.current = null;
@@ -123,9 +138,10 @@ export function useCaptionGeneration(recordingId: string | null) {
     abortRef.current?.abort();
     abortRef.current = null;
     setState({ status: "idle" });
+    setNotice(null);
   };
 
-  return { state, start, cancel };
+  return { state, notice, start, cancel };
 }
 
 /** One player's captioning job, as useCaptionGeneration hands it out. */

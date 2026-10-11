@@ -19,6 +19,7 @@ const english: CaptionTrack = {
 
 const idle: CaptionGeneration = {
   state: { status: "idle" },
+  notice: null,
   start: vi.fn<CaptionGeneration["start"]>(async () => {}),
   cancel: vi.fn<CaptionGeneration["cancel"]>(),
 };

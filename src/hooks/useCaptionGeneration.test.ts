@@ -88,6 +88,37 @@ describe("useCaptionGeneration", () => {
     });
     expect(captionStore.setEnabled).toHaveBeenCalledWith({ enabled: true });
     expect(result.current.state).toEqual({ status: "idle" });
+    // Named as the captions menu names the track, for the player's status region.
+    expect(result.current.notice).toEqual({
+      text: "Captions generated: German (auto)",
+      at: expect.any(Number),
+    });
+  });
+
+  it("clears what it last announced when a job starts, is cancelled or its lesson goes", async () => {
+    whisper.generateCaptions.mockResolvedValue({ language: "en", cues: hello });
+    const { result, rerender } = renderHook(
+      ({ recordingId }: { recordingId: string | null }) => useCaptionGeneration(recordingId),
+      { initialProps: { recordingId: "lesson" } },
+    );
+    expect(result.current.notice).toBeNull();
+
+    await act(() => result.current.start(lesson));
+    expect(result.current.notice?.text).toBe("Captions generated: English (auto)");
+    whisper.generateCaptions.mockImplementation(() => new Promise(() => {}));
+    act(() => {
+      void result.current.start(lesson);
+    });
+    expect(result.current.notice).toBeNull();
+
+    whisper.generateCaptions.mockResolvedValue({ language: "en", cues: hello });
+    await act(() => result.current.start(lesson));
+    act(() => result.current.cancel());
+    expect(result.current.notice).toBeNull();
+
+    await act(() => result.current.start(lesson));
+    rerender({ recordingId: "another-lesson" });
+    expect(result.current.notice).toBeNull();
   });
 
   it("adds a track beside the lesson's own captions without making it the default", async () => {
