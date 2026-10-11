@@ -224,7 +224,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   // is loaded; the menu is as it was left when the button comes back.
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
-  const captionGeneration = useCaptionGeneration();
+  const captionGeneration = useCaptionGeneration(currentRecording?.id ?? null);
   const {
     inputRef: captionFileInputRef,
     importError: captionImportError,

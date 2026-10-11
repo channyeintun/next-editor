@@ -44,7 +44,7 @@ describe("useCaptionGeneration", () => {
         finish = () => resolve({ language: "de", cues: hello });
       });
     });
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     let job: Promise<void> = Promise.resolve();
     act(() => {
@@ -83,7 +83,7 @@ describe("useCaptionGeneration", () => {
   it("adds a track beside the lesson's own captions without making it the default", async () => {
     whisper.generateCaptions.mockResolvedValue({ language: "en", cues: hello });
     const captioned = { ...lesson, captions: [{ id: "en", language: "en", cues: [] }] };
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     await act(() => result.current.start(captioned as Recording));
     expect(actions.addCaptionTrack).toHaveBeenCalledWith(
@@ -94,7 +94,7 @@ describe("useCaptionGeneration", () => {
 
   it("says so when the narration has no speech", async () => {
     whisper.generateCaptions.mockResolvedValue({ language: "en", cues: [] });
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     await act(() => result.current.start(lesson));
     expect(result.current.state).toEqual({
@@ -107,7 +107,7 @@ describe("useCaptionGeneration", () => {
   it("says why when captioning fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     whisper.generateCaptions.mockRejectedValue(new Error("The model could not be loaded."));
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     await act(() => result.current.start(lesson));
     expect(result.current.state).toEqual({
@@ -120,7 +120,7 @@ describe("useCaptionGeneration", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
     const linked = { id: "lesson", audioUrl: "https://example.com/lesson.ogg" } as Recording;
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     await act(() => result.current.start(linked));
     expect(result.current.state).toEqual({
@@ -138,7 +138,7 @@ describe("useCaptionGeneration", () => {
         }),
     );
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     let job: Promise<void> = Promise.resolve();
     act(() => {
@@ -164,7 +164,7 @@ describe("useCaptionGeneration", () => {
           }),
       )
       .mockImplementationOnce(() => new Promise(() => {}));
-    const { result } = renderHook(() => useCaptionGeneration());
+    const { result } = renderHook(() => useCaptionGeneration("lesson"));
 
     let cancelled: Promise<void> = Promise.resolve();
     act(() => {
@@ -181,13 +181,70 @@ describe("useCaptionGeneration", () => {
     expect(result.current.state).toEqual({ status: "running", progress: null });
   });
 
+  it("stops a job when another recording is loaded, leaving the captions as they were", async () => {
+    let signal: AbortSignal | undefined;
+    let finish: () => void = () => {};
+    whisper.generateCaptions.mockImplementation(
+      (_recording, _audio, options) =>
+        new Promise((resolve, reject) => {
+          signal = options.signal;
+          signal?.addEventListener("abort", () => reject(new DOMException("Aborted")));
+          finish = () => resolve({ language: "en", cues: hello });
+        }),
+    );
+    const { result, rerender } = renderHook(
+      ({ recordingId }: { recordingId: string | null }) => useCaptionGeneration(recordingId),
+      { initialProps: { recordingId: "lesson" } },
+    );
+
+    let job: Promise<void> = Promise.resolve();
+    act(() => {
+      job = result.current.start(lesson);
+    });
+    await waitFor(() => expect(signal).toBeDefined());
+    rerender({ recordingId: "another-lesson" });
+    // A job left running would finish here and switch captions on in the other lesson.
+    await act(async () => {
+      finish();
+      await job;
+    });
+
+    expect(captionStore.selectTrack).not.toHaveBeenCalled();
+    expect(captionStore.setEnabled).not.toHaveBeenCalled();
+    expect(actions.addCaptionTrack).not.toHaveBeenCalled();
+    expect(signal?.aborted).toBe(true);
+    expect(result.current.state).toEqual({ status: "idle" });
+  });
+
+  it("keeps a job running while the same recording changes", async () => {
+    let signal: AbortSignal | undefined;
+    whisper.generateCaptions.mockImplementation((_recording, _audio, options) => {
+      signal = options.signal;
+      return new Promise(() => {});
+    });
+    const { result, rerender } = renderHook(
+      ({ recordingId }: { recordingId: string | null }) => useCaptionGeneration(recordingId),
+      { initialProps: { recordingId: "lesson" } },
+    );
+
+    act(() => {
+      void result.current.start(lesson);
+    });
+    await waitFor(() => expect(signal).toBeDefined());
+    // A new chapter or caption track is a new recording object with the same id.
+    rerender({ recordingId: "lesson" });
+
+    expect(signal?.aborted).toBe(false);
+    expect(result.current.state).toEqual({ status: "running", progress: null });
+  });
+
   it("stops a job still running when the player goes away", async () => {
     let signal: AbortSignal | undefined;
     whisper.generateCaptions.mockImplementation((_recording, _audio, options) => {
       signal = options.signal;
       return new Promise(() => {});
     });
-    const { result, unmount } = renderHook(() => useCaptionGeneration());
+    const { result, unmount } = renderHook(() => useCaptionGeneration("lesson"));
 
     act(() => {
       void result.current.start(lesson);

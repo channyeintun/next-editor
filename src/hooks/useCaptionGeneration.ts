@@ -60,16 +60,26 @@ async function runCaptionJob(
 
 /**
  * Generates captions for a recording's narration on this device (see
- * captions/generateCaptions.ts) and adds them as a track, shown at once.
+ * captions/generateCaptions.ts) and adds them as a track, shown at once. A job belongs to
+ * the recording loaded as `recordingId`: loading another one (or none) stops it.
  */
-export function useCaptionGeneration() {
+export function useCaptionGeneration(recordingId: string | null) {
   const { addCaptionTrack } = useNextEditorActions();
   const captionTrigger = useCaptionStoreTrigger();
   const [state, setState] = useState<CaptionGenerationState>({ status: "idle" });
   const abortRef = useRef<AbortController | null>(null);
 
-  // A job outliving the player would keep its worker (and the model) alive.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // A job outliving the player would keep its worker (and the model) alive. One outliving
+  // its recording would switch captions on in whichever lesson is loaded when it ends, and
+  // its track would be dropped. A stopped job's own idle write is ignored, so this sets it.
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setState({ status: "idle" });
+    },
+    [recordingId],
+  );
 
   const start = async (recording: Recording) => {
     abortRef.current?.abort();
