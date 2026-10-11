@@ -2,6 +2,9 @@
  * Pocket-tts ONNX bundle metadata + asset loading. Assets stream from the
  * pinned upstream revision (immutable URL) through a Cache-storage bucket, so
  * the ~125MB bundle downloads once per browser profile.
+ *
+ * The cache is an optimization only, so it never fails a load: storage that is
+ * blocked or over quota is skipped and the asset comes from the network.
  */
 
 export interface StateManifestEntry {
@@ -39,26 +42,44 @@ export interface PocketBundleMetadata {
 
 const ASSET_CACHE_NAME = "next-editor-studio-pocket-assets-v1";
 
+/** The asset cache, or null where Cache storage is missing or refuses to open. */
+async function openAssetCache(): Promise<Cache | null> {
+  if (typeof caches === "undefined") {
+    return null;
+  }
+  try {
+    return await caches.open(ASSET_CACHE_NAME);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBundleAsset(baseUrl: string, filename: string): Promise<ArrayBuffer> {
   const url = `${baseUrl}/${filename}`;
-  if (typeof caches !== "undefined") {
-    const cache = await caches.open(ASSET_CACHE_NAME);
-    const hit = await cache.match(url);
+  const cache = await openAssetCache();
+  if (cache) {
+    let hit: Response | undefined;
+    try {
+      hit = await cache.match(url);
+    } catch {
+      hit = undefined;
+    }
     if (hit) {
       return hit.arrayBuffer();
     }
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${filename}: HTTP ${response.status}`);
-    }
-    // Clone into the cache before consuming the body.
-    await cache.put(url, response.clone());
-    return response.arrayBuffer();
   }
 
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch ${filename}: HTTP ${response.status}`);
+  }
+  if (cache) {
+    // Clone into the cache before consuming the body.
+    try {
+      await cache.put(url, response.clone());
+    } catch {
+      // Best-effort: the cache only saves a re-download.
+    }
   }
   return response.arrayBuffer();
 }
