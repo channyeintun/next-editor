@@ -444,15 +444,22 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
     }
 
     syncEditorRef(editor);
+  }, [editorModelPath, editorRef, syncEditorRef]);
+
+  // Presence goes quiet while slides or the whiteboard cover the editor, so it is published
+  // again as they open and close. Without a SET_EDITOR_REF: in playback that rebuilds the
+  // replay at the playhead, which put the recorded surfaces back over the learner's own
+  // toggle (paused at 0, Whiteboard and Slides in the header did nothing).
+  useEffect(() => {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
     presence.publishCursor(editor);
     presence.publishViewport(editor);
-  }, [
-    editorModelPath,
-    editorRef,
-    slidesContext.previewState.isOpen,
-    syncEditorRef,
-    whiteboardContext.isOpen,
-  ]);
+  }, [editorModelPath, editorRef, slidesContext.previewState.isOpen, whiteboardContext.isOpen]);
 
   // The room's side of the editor. These hooks sit here, after the playback
   // layout effects above, so their effects keep their place in each commit;
