@@ -73,6 +73,7 @@ describe("ModalShell", () => {
     const { backdrop, onDismiss } = renderShell();
 
     fireEvent.mouseDown(backdrop);
+    fireEvent.mouseUp(backdrop);
     fireEvent.click(backdrop);
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -82,6 +83,19 @@ describe("ModalShell", () => {
     const { backdrop, onDismiss } = renderShell();
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "Inside" }));
+    fireEvent.mouseUp(backdrop);
+    fireEvent.click(backdrop);
+
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("keeps a drag that starts on the backdrop and ends in the card from dismissing", () => {
+    const { backdrop, onDismiss } = renderShell();
+
+    // A drag-select into a field: the browser clicks the nearest element both
+    // the press and the release were on, which is the backdrop itself.
+    fireEvent.mouseDown(backdrop);
+    fireEvent.mouseUp(screen.getByRole("button", { name: "Inside" }));
     fireEvent.click(backdrop);
 
     expect(onDismiss).not.toHaveBeenCalled();

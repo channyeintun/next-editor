@@ -14,9 +14,9 @@ interface ModalShellProps {
    */
   modal?: boolean;
   /**
-   * Called for a click on the backdrop whose press also started there and,
-   * while the dialog is modal, for Escape. A click inside the card never
-   * reaches it.
+   * Called for a click on the backdrop whose press and release were both
+   * there and, while the dialog is modal, for Escape. A click inside the card
+   * never reaches it.
    */
   onDismiss: () => void;
   /** Where focus goes on close, ahead of the element that had it on open. */
@@ -42,8 +42,9 @@ export default function ModalShell({
     onEscape: onDismiss,
     returnFocusTo,
   });
-  // A drag that starts in the card and is released on the backdrop still makes
-  // the browser click the backdrop, so the press itself has to start there.
+  // The browser clicks the nearest element under both the press and the
+  // release, so a drag between the card and the backdrop, either way, clicks
+  // the backdrop. Only a press and a release both on the backdrop dismiss.
   const pressedBackdrop = useRef(false);
 
   return (
@@ -51,6 +52,9 @@ export default function ModalShell({
       className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
       onMouseDown={(event) => {
         pressedBackdrop.current = event.target === event.currentTarget;
+      }}
+      onMouseUp={(event) => {
+        if (event.target !== event.currentTarget) pressedBackdrop.current = false;
       }}
       onClick={(event) => {
         if (pressedBackdrop.current && event.target === event.currentTarget) onDismiss();
