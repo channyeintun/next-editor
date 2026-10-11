@@ -13,6 +13,7 @@ import {
   collectWorkspaceFolders,
   normalizeWorkspacePath,
   parseWorkspacePath,
+  tryParseWorkspacePath,
 } from "../../types/workspacePaths";
 import {
   createWorkspaceFile,
@@ -131,6 +132,30 @@ export function stripRuntimeSnapshotScript(content: string): string {
   return stripped;
 }
 
+// The container entries already reported as skipped, so a reverse sync on
+// every save does not repeat the same warning.
+const warnedUnreadableRuntimePaths = new Set<string>();
+
+/**
+ * The workspace path of a container entry, or null for a name no workspace
+ * path can hold exactly: a reserved name such as `constructor`, a control
+ * character, or one that parsing would change, like a backslash read as a
+ * separator. Such an entry can sync in neither direction, so it is skipped
+ * rather than failing the whole read.
+ */
+function getRuntimeEntryWorkspacePath(workspacePath: string, name: string): string | null {
+  const joined = workspacePath ? `${workspacePath}/${name}` : name;
+  if (tryParseWorkspacePath(joined) === joined) {
+    return joined;
+  }
+
+  if (!warnedUnreadableRuntimePaths.has(joined)) {
+    warnedUnreadableRuntimePaths.add(joined);
+    console.warn(`Skipped the runtime file "${joined}": it has no exact workspace path.`);
+  }
+  return null;
+}
+
 export function shouldIgnoreRuntimeImportPath(path: string): boolean {
   const normalizedPath = normalizeWorkspacePath(path);
   const rootSegment = normalizedPath.split("/")[0];
@@ -149,12 +174,10 @@ async function readRuntimeDirectory(
   const orderedEntries = [...entries].sort((left, right) => left.name.localeCompare(right.name));
 
   for (const entry of orderedEntries) {
-    const nextWorkspacePath = parseWorkspacePath(
-      workspacePath ? `${workspacePath}/${entry.name}` : entry.name,
-    );
+    const nextWorkspacePath = getRuntimeEntryWorkspacePath(workspacePath, entry.name);
     const nextRuntimePath = runtimePath === "." ? entry.name : `${runtimePath}/${entry.name}`;
 
-    if (shouldIgnoreRuntimeImportPath(nextWorkspacePath)) {
+    if (nextWorkspacePath === null || shouldIgnoreRuntimeImportPath(nextWorkspacePath)) {
       continue;
     }
 

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { WebContainer } from "@webcontainer/api";
 import type { WorkspaceProject } from "../../types/workspace";
-import { createWorkspaceTree, stripRuntimeSnapshotScript, syncWorkspaceProject } from "./files";
+import {
+  createWorkspaceTree,
+  readWorkspaceProject,
+  stripRuntimeSnapshotScript,
+  syncWorkspaceProject,
+} from "./files";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
   return {
@@ -135,6 +140,38 @@ describe("syncWorkspaceProject", () => {
     expect(writeFile).toHaveBeenCalledWith("src/components/Button.tsx", "button");
     // Each level is reported so its fs.watch event is recognized as our own write.
     expect(written).toEqual(["src", "src/components", "src/components/Button.tsx"]);
+  });
+});
+
+describe("readWorkspaceProject", () => {
+  it("skips a container entry that has no exact workspace path", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // A learner's `mkdir constructor`, and a name whose backslash a workspace
+    // path would read as a separator, beside an ordinary file.
+    const entry = (name: string, kind: "file" | "directory") => ({
+      name,
+      isFile: () => kind === "file",
+      isDirectory: () => kind === "directory",
+    });
+    const readdir = vi.fn<(path: string) => Promise<ReturnType<typeof entry>[]>>(async (path) =>
+      path === "."
+        ? [entry("constructor", "directory"), entry("a\\b", "file"), entry("ok.txt", "file")]
+        : [],
+    );
+    const readFile = vi.fn<(path: string) => Promise<string>>(async (path) => `${path} contents`);
+    const instance = { fs: { readdir, readFile } } as unknown as WebContainer;
+
+    const project = await readWorkspaceProject(instance, nodeProject("root"));
+    // A later reverse sync reads the same entries but warns about them only once.
+    await readWorkspaceProject(instance, nodeProject("root"));
+
+    expect(Object.keys(project.files)).toEqual(["ok.txt"]);
+    expect(project.files["ok.txt"].content).toBe("ok.txt contents");
+    expect(project.folders).toEqual([]);
+    expect(readdir.mock.calls.map(([path]) => path)).toEqual([".", "."]);
+    expect(readFile.mock.calls.map(([path]) => path)).toEqual(["ok.txt", "ok.txt"]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 });
 
