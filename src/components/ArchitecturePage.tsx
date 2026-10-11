@@ -418,7 +418,7 @@ const edgeItems: DiagramItem[] = [
     title: "/api/proxy",
     lines: ["SSRF-guarded https fetch: slide", "images, avatars, remote .ne"],
     detail:
-      "https-only fetch that blocks loopback and private hosts; serves slide-image fallbacks, avatars, and cross-origin .ne files.",
+      "https-only fetch that blocks loopback and private hosts, rate-limited per user (or per IP when signed out); serves slide-image fallbacks, avatars, and cross-origin .ne files.",
   },
 ];
 
@@ -457,9 +457,9 @@ const storageItems: DiagramItem[] = [
   },
   {
     title: "Rate Limiting",
-    lines: ["playground + AthanLab budgets,", "per user or per IP; fail closed"],
+    lines: ["playground, proxy + AthanLab", "budgets, per user or IP; fail closed"],
     detail:
-      "budgets for the playground proxies (per user, or per IP when signed out) and for AthanLab key checks and narration calls (per user); a route whose binding is missing refuses the request instead of calling out.",
+      "budgets for the playground proxies and the generic /api/proxy (per user, or per IP when signed out) and for AthanLab key checks and narration calls (per user); a route whose binding is missing refuses the request instead of calling out.",
   },
 ];
 
