@@ -15,6 +15,7 @@ import {
   getWhiteboardReplayResult,
   getWorkspaceReplayResult,
   isReplayResync,
+  withReplayedSidebarPreference,
 } from "./replayState";
 import {
   normalizePlaybackSpeed,
@@ -119,7 +120,9 @@ export const setRecording = (
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
 
   // The workspace track's first snapshot, or the recording's one snapshot when it has no track.
-  const initialWorkspaceSnapshot = initialWorkspaceEvent?.snapshot ?? recording.workspaceSnapshot;
+  const recordedWorkspaceSnapshot = initialWorkspaceEvent?.snapshot ?? recording.workspaceSnapshot;
+  const initialWorkspaceSnapshot =
+    recordedWorkspaceSnapshot && withReplayedSidebarPreference(recordedWorkspaceSnapshot, true);
   if (
     initialWorkspaceSnapshot &&
     context.applyWorkspaceSnapshot &&

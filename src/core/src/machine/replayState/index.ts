@@ -17,6 +17,7 @@ export {
   getRecordedActiveFilePath,
   getWorkspaceReplayResult,
   resolveWorkspaceSnapshotBetween,
+  withReplayedSidebarPreference,
 } from "./workspace";
 export { getRuntimeReplayResult } from "./runtime";
 export { EMPTY_CHAT_CHECKPOINT, getChatReplayResult } from "./chat";

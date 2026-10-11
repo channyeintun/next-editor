@@ -1766,6 +1766,74 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // The recorder writes the explorer's open/closed state on every workspace event, as the
+  // author had it. Only a lesson's opening snapshot that shuts the explorer may touch the
+  // viewer's; every other event leaves it to them.
+  describe("the viewer's file explorer during replay", () => {
+    const twoFiles = (
+      activeFilePath: string,
+      sidebarCollapsed: boolean,
+    ): WorkspaceRecordingSnapshot => {
+      const base = createWorkspaceSnapshot("hello");
+      return {
+        ...base,
+        activeFilePath,
+        sidebarCollapsed,
+        project: {
+          ...base.project,
+          files: {
+            ...base.project.files,
+            "main.js": { path: "main.js", name: "main.js", language: "javascript", content: "" },
+          },
+        },
+      };
+    };
+
+    async function playAcrossFileSwitch(initiallyCollapsed: boolean) {
+      const applied: WorkspaceRecordingSnapshot[] = [];
+      let currentWorkspace = createWorkspaceSnapshot("outside");
+      const recording: Recording = {
+        ...createRecording(),
+        workspaceEvents: [
+          { timestamp: 0, snapshot: twoFiles("index.html", initiallyCollapsed) },
+          { timestamp: 100, snapshot: twoFiles("main.js", false) },
+        ],
+      };
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: null },
+          getWorkspaceSnapshot: () => currentWorkspace,
+          applyWorkspaceSnapshot: (snapshot) => {
+            applied.push(snapshot);
+            currentWorkspace = snapshot;
+          },
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "TICK", currentTime: 50 });
+      actor.send({ type: "TICK", currentTime: 150 });
+      actor.stop();
+      return applied;
+    }
+
+    it("leaves the explorer alone at load and across a replayed file switch", async () => {
+      const applied = await playAcrossFileSwitch(false);
+
+      expect(applied.map((snapshot) => snapshot.activeFilePath)).toEqual(["index.html", "main.js"]);
+      for (const snapshot of applied) expect(snapshot).not.toHaveProperty("sidebarCollapsed");
+    });
+
+    it("shuts it at load for a lesson that starts with it shut, and only then", async () => {
+      const applied = await playAcrossFileSwitch(true);
+
+      expect(applied[0].sidebarCollapsed).toBe(true);
+      expect(applied[1].activeFilePath).toBe("main.js");
+      expect(applied[1]).not.toHaveProperty("sidebarCollapsed");
+    });
+  });
+
   describe("a damaged frame skipped during replay", () => {
     // An edit recorded against other base text: replaying it on "hello" is a base mismatch.
     const createDamagedRecording = (): Recording => {

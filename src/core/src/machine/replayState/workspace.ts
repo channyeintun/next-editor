@@ -68,6 +68,30 @@ function getWorkspaceWidthDelta(
   return { delta, hasDelta };
 }
 
+/**
+ * A replayed snapshot as the viewer's explorer may take it. The recorder writes the
+ * explorer's open/closed state on every event, as the author had it, but only a
+ * recording's initial snapshot that shuts the explorer decides anything: where the
+ * lesson starts it. A recorded false cannot tell "the lesson asks for an open tree" from
+ * "the author had it open", and every later event would undo the viewer's own toggle,
+ * so both leave the viewer's preference alone. The same object when there is nothing to
+ * drop.
+ */
+export function withReplayedSidebarPreference(
+  snapshot: WorkspaceRecordingSnapshot,
+  isInitial: boolean,
+): WorkspaceRecordingSnapshot {
+  if (
+    snapshot.sidebarCollapsed === undefined ||
+    (isInitial && snapshot.sidebarCollapsed === true)
+  ) {
+    return snapshot;
+  }
+
+  const { sidebarCollapsed: _sidebarCollapsed, ...snapshotWithoutSidebarCollapsed } = snapshot;
+  return snapshotWithoutSidebarCollapsed;
+}
+
 function resolveWorkspaceSnapshotForReplay({
   workspaceEvents,
   nextIndex,
@@ -78,6 +102,7 @@ function resolveWorkspaceSnapshotForReplay({
   lastAppliedIndex: number;
 }): WorkspaceRecordingSnapshot {
   const snapshot = workspaceEvents[nextIndex].snapshot;
+  const isInitial = nextIndex === 0;
   const sidebarWidthDelta = getWorkspaceWidthDelta(
     workspaceEvents,
     nextIndex,
@@ -98,7 +123,7 @@ function resolveWorkspaceSnapshotForReplay({
     snapshot.sidebarWidthDelta !== undefined || snapshot.previewDockWidthDelta !== undefined;
 
   if (!sidebarWidthDelta.hasDelta && !previewDockWidthDelta.hasDelta && !carriesWidthDelta) {
-    return snapshot;
+    return withReplayedSidebarPreference(snapshot, isInitial);
   }
 
   const {
@@ -117,7 +142,7 @@ function resolveWorkspaceSnapshotForReplay({
     resolved.previewDockWidthDelta = previewDockWidthDelta.delta;
   }
 
-  return resolved;
+  return withReplayedSidebarPreference(resolved, isInitial);
 }
 
 /**

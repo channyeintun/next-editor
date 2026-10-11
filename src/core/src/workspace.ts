@@ -122,12 +122,14 @@ export interface WorkspaceRecordingSnapshot {
   /**
    * File explorer shut for this lesson.
    *
-   * Only ever set on a recording's *initial* snapshot, and only by a lesson
-   * that asks for it (a one-file lesson spends the tree's width on nothing).
-   * Absent — which is every recording made before this and every lesson that
-   * does not ask — leaves the viewer's own preference exactly as it was. The
-   * toggle keeps working mid-replay either way: this decides where playback
-   * starts, not what the viewer is allowed to do.
+   * The recorder writes the live value on every snapshot, but replay keeps it
+   * only on a recording's *initial* snapshot, and only when it is true: a lesson
+   * that asks for a shut tree (a one-file lesson spends the tree's width on
+   * nothing). Anything else (absent, false, or on a later event) leaves the
+   * viewer's own preference exactly as it was (withReplayedSidebarPreference in
+   * machine/replayState/workspace.ts). The toggle keeps working mid-replay
+   * either way: this decides where playback starts, not what the viewer is
+   * allowed to do.
    */
   sidebarCollapsed?: boolean;
   /** File-sidebar width change since the previous recorded workspace event. */
