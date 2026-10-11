@@ -1,4 +1,4 @@
-import { unzipSync, strFromU8 } from "fflate";
+import { unzipSync } from "fflate";
 import {
   isWorkspaceTextFile,
   type WorkspaceFile,
@@ -18,6 +18,7 @@ import {
   isBinaryWorkspacePath,
 } from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
+import { decodeWorkspaceText } from "./workspaceFileUpload";
 import {
   PLAYGROUND_SOURCE_RULES,
   type PlaygroundSourceLanguage,
@@ -419,13 +420,16 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
       );
     }
 
-    if (isBinaryWorkspacePath(workspacePath)) {
+    // The same text-or-binary rule as a picked or dropped file.
+    const text = isBinaryWorkspacePath(workspacePath) ? null : decodeWorkspaceText(bytes);
+
+    if (text === null) {
       const descriptor = await registerWorkspaceAsset(bytes, {
         mimeType: getWorkspaceFileMimeType(workspacePath),
       });
       files.set(workspacePath, createWorkspaceFile(workspacePath, descriptor, "asset"));
     } else {
-      files.set(workspacePath, createWorkspaceFile(workspacePath, strFromU8(bytes)));
+      files.set(workspacePath, createWorkspaceFile(workspacePath, text));
     }
   }
 

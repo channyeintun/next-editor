@@ -312,6 +312,41 @@ describe("importWorkspaceProjectFromZip", () => {
     expect(await getWorkspaceAssetBytes(assetFile.content)).toEqual(pngBytes);
   });
 
+  // Only the extension list said binary; any other file was decoded as text, its
+  // invalid bytes became U+FFFD, and the next export wrote that text back.
+  it("keeps the bytes of a binary file whose extension is not on the list", async () => {
+    const bytes = new Uint8Array([0xff, 0x00, 0xfe, 0x80]);
+    const file = createZipFile("model.zip", [
+      { path: "index.html", content: "<!doctype html>" },
+      { path: "data.bin", content: bytes },
+    ]);
+
+    const project = await importWorkspaceProjectFromZip(file);
+
+    const assetFile = project.files["data.bin"];
+    expect(isWorkspaceAssetFile(assetFile)).toBe(true);
+    if (!isWorkspaceAssetFile(assetFile)) throw new Error("Expected asset file");
+    expect(assetFile.content.mimeType).toBe("application/octet-stream");
+    expect(await getWorkspaceAssetBytes(assetFile.content)).toEqual(bytes);
+  });
+
+  it("still imports UTF-8 source and extensionless files as text, without a BOM", async () => {
+    const file = createZipFile("text.zip", [
+      { path: "value.ts", content: 'export const greeting = "héllo";\n' },
+      { path: "LICENSE", content: "MIT License\n" },
+      {
+        path: "bom.txt",
+        content: new Uint8Array([0xef, 0xbb, 0xbf, ...strToU8("with a BOM")]),
+      },
+    ]);
+
+    const project = await importWorkspaceProjectFromZip(file);
+
+    expect(project.files["value.ts"].content).toBe('export const greeting = "héllo";\n');
+    expect(project.files["LICENSE"].content).toBe("MIT License\n");
+    expect(project.files["bom.txt"].content).toBe("with a BOM");
+  });
+
   it("rejects a zip without importable files", async () => {
     const file = createZipFile("empty.zip", [{ path: "node_modules/dep/index.js", content: "x" }]);
 

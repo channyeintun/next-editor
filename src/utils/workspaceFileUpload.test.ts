@@ -4,26 +4,21 @@ import {
   getWorkspaceAssetBytes,
   resetWorkspaceAssetStoreForTests,
 } from "../storage/workspaceAssetStore";
-import { readUploadedWorkspaceFile, shouldReadAsBinary } from "./workspaceFileUpload";
+import { decodeWorkspaceText, readUploadedWorkspaceFile } from "./workspaceFileUpload";
 
-describe("shouldReadAsBinary", () => {
-  it("reads known binary extensions as bytes", () => {
-    expect(shouldReadAsBinary({ name: "logo.png", type: "image/png" })).toBe(true);
-    expect(shouldReadAsBinary({ name: "clip.mp4", type: "" })).toBe(true);
+describe("decodeWorkspaceText", () => {
+  it("decodes UTF-8 text, dropping a leading BOM", () => {
+    expect(decodeWorkspaceText(new TextEncoder().encode("héllo"))).toBe("héllo");
+    expect(decodeWorkspaceText(new Uint8Array([0xef, 0xbb, 0xbf, 0x68, 0x69]))).toBe("hi");
+    expect(decodeWorkspaceText(new Uint8Array(0))).toBe("");
   });
 
-  it("reads source and SVG files as text", () => {
-    expect(shouldReadAsBinary({ name: "value.ts", type: "text/plain" })).toBe(false);
-    expect(shouldReadAsBinary({ name: "icon.svg", type: "image/svg+xml" })).toBe(false);
-    expect(shouldReadAsBinary({ name: "data.json", type: "application/json" })).toBe(false);
+  it("refuses bytes with a NUL in them, even when they decode", () => {
+    expect(decodeWorkspaceText(new Uint8Array([0x61, 0x00, 0x62]))).toBeNull();
   });
 
-  it("defaults extensionless files to text", () => {
-    expect(shouldReadAsBinary({ name: "LICENSE", type: "" })).toBe(false);
-  });
-
-  it("falls back to binary for unknown non-text mime types", () => {
-    expect(shouldReadAsBinary({ name: "data.bin", type: "application/octet-stream" })).toBe(true);
+  it("refuses bytes that are not valid UTF-8", () => {
+    expect(decodeWorkspaceText(new Uint8Array([0x61, 0xff, 0xfe, 0x80]))).toBeNull();
   });
 });
 
@@ -62,6 +57,48 @@ describe("readUploadedWorkspaceFile", () => {
 
     expect(result.encoding).toBeUndefined();
     expect(result.content).toBe(source);
+  });
+
+  // Chrome on macOS reports a .ts file as an MPEG transport stream.
+  it("reads a TypeScript file the browser calls video/mp2t as text", async () => {
+    const source = "export const value: number = 1;\n";
+    const result = await readUploadedWorkspaceFile(
+      createFileStub("value.ts", "video/mp2t", source),
+    );
+
+    expect(result.encoding).toBeUndefined();
+    expect(result.content).toBe(source);
+  });
+
+  it("reads SVG and JSON files as text", async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+    const json = '{"a":1}';
+
+    expect(
+      (await readUploadedWorkspaceFile(createFileStub("icon.svg", "image/svg+xml", svg))).content,
+    ).toBe(svg);
+    expect(
+      (await readUploadedWorkspaceFile(createFileStub("data.json", "application/json", json)))
+        .content,
+    ).toBe(json);
+  });
+
+  // Chromium reports no type for many unknown extensions; such a file was read as text.
+  it("keeps the bytes of an unknown binary the browser gives no type", async () => {
+    const bytes = new Uint8Array([0x08, 0x01, 0xff, 0xfe, 0x80, 0x12]);
+    const result = await readUploadedWorkspaceFile(createFileStub("model.onnx", "", bytes));
+
+    expect(result.encoding).toBe("asset");
+    if (!isWorkspaceAssetDescriptor(result.content)) throw new Error("Expected descriptor");
+    expect(result.content.mimeType).toBe("application/octet-stream");
+    expect(await getWorkspaceAssetBytes(result.content)).toEqual(bytes);
+  });
+
+  it("reads an extensionless text file as text", async () => {
+    const result = await readUploadedWorkspaceFile(createFileStub("LICENSE", "", "MIT License\n"));
+
+    expect(result.encoding).toBeUndefined();
+    expect(result.content).toBe("MIT License\n");
   });
 
   it("preserves byte content for a non-trivial buffer", async () => {
