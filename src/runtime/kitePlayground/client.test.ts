@@ -184,6 +184,54 @@ describe("KitePlaygroundClient", () => {
     await expect(client.run({ files })).resolves.toEqual(ok);
   });
 
+  // A program that grows a list without bound exhausts the engine's memory, and
+  // the Wasm call traps out of the worker as a plain Error. It used to reach the
+  // runner as "the compiler could not be loaded", and the bloated engine was kept.
+  it("reports a run that stops the engine as the program's error, on a fresh engine next", async () => {
+    const trapped = fakeEngine(async () => {
+      throw new Error("unreachable");
+    });
+    const fresh = fakeEngine(async () => ok);
+    const engines = engineSource(trapped, fresh);
+    const client = new KitePlaygroundClient({ engines });
+
+    const result = await client.run({ files });
+    expect(result).toEqual({
+      status: "runtime-error",
+      stdout: "",
+      stderr: "",
+      exitDetail: expect.stringMatching(/stopped unexpectedly/),
+    });
+    expect(kiteRunResultToConsoleLines(result)).toEqual([
+      "[kite-run] (no output)",
+      `[kite-run error] ${result.exitDetail}`,
+    ]);
+    expect(trapped.terminate).toHaveBeenCalledTimes(1);
+
+    await expect(client.run({ files })).resolves.toEqual(ok);
+    expect(engines.acquire).toHaveBeenCalledTimes(2);
+    // The stopped engine is never parked as the page's spare.
+    client.dispose();
+    expect(engines.release).toHaveBeenCalledWith(fresh);
+    expect(engines.release).not.toHaveBeenCalledWith(trapped);
+  });
+
+  it("reports a format that stops the engine as a source it could not format", async () => {
+    const trapped = fakeEngine(async () => ok);
+    trapped.format.mockRejectedValueOnce(new Error("unreachable"));
+    const fresh = fakeEngine(async () => ok);
+    const engines = engineSource(trapped, fresh);
+    const client = new KitePlaygroundClient({ engines });
+
+    await expect(client.format({ files })).rejects.toMatchObject({
+      name: "KitePlaygroundServiceError",
+      kind: "invalid-source",
+    });
+    expect(trapped.terminate).toHaveBeenCalledTimes(1);
+    await expect(client.format({ files })).resolves.toEqual({ files });
+    expect(engines.acquire).toHaveBeenCalledTimes(2);
+  });
+
   // A Kite module is a directory, so `use helper` in main.kite names the
   // helper.kite beside it. The engine used to be handed main.kite alone.
   it("runs the entry with the files beside it, keyed by module name", async () => {

@@ -92,6 +92,13 @@ export interface KiteEngine extends KiteOperations {
 class KiteEngineFailedError extends Error {}
 
 /**
+ * The engine's compiler stopped partway through an operation: in practice a
+ * program that grew without bound and ran the Wasm memory out, which traps out
+ * of the call as a plain Error. The program's doing, not the compiler's load.
+ */
+class KiteOperationStoppedError extends Error {}
+
+/**
  * The compiler in a module worker of its own, or null where one cannot start.
  *
  * Comlink settles a call only on a reply message, so a worker whose module
@@ -185,6 +192,18 @@ function supersededError(): KitePlaygroundServiceError {
   return new KitePlaygroundServiceError("aborted", "Superseded by a newer operation");
 }
 
+/**
+ * A run whose engine stopped partway, told as the program's own error rather
+ * than a compiler that would not load: retrying the same program stops it again.
+ * What it printed before is lost with the call.
+ */
+const STOPPED_RUN_RESULT: KitePlaygroundRunResult = {
+  status: "runtime-error",
+  stdout: "",
+  stderr: "",
+  exitDetail: "The program stopped unexpectedly — it may have run out of memory",
+};
+
 function unavailableError(cause: unknown): KitePlaygroundServiceError {
   return new KitePlaygroundServiceError(
     "unavailable",
@@ -259,7 +278,19 @@ export class KitePlaygroundClient {
     const work = engine.load().then(
       () => {
         if (superseded) throw supersededError();
-        return operation(engine);
+        return operation(engine).catch((cause: unknown) => {
+          if (
+            cause instanceof KiteEngineFailedError ||
+            cause instanceof KitePlaygroundServiceError
+          ) {
+            throw cause;
+          }
+          // Wasm memory never shrinks, so an engine a program ran out of memory
+          // is dropped rather than kept, or parked as the page's spare.
+          engine.terminate();
+          if (this.#engine === engine) this.#engine = null;
+          throw new KiteOperationStoppedError("the compiler stopped partway", { cause });
+        });
       },
       (cause: unknown) => {
         throw cause instanceof KiteEngineFailedError ? cause : unavailableError(cause);
@@ -286,7 +317,12 @@ export class KitePlaygroundClient {
     this.#supersedeInFlight();
     const entry = pickKiteRunEntry(request.files);
     const siblings = kiteModuleSiblings(request.files, entry);
-    const result = await this.#exclusive((engine) => engine.run(entry.content, siblings));
+    const result = await this.#exclusive((engine) => engine.run(entry.content, siblings)).catch(
+      (cause: unknown) => {
+        if (cause instanceof KiteOperationStoppedError) return STOPPED_RUN_RESULT;
+        throw cause;
+      },
+    );
 
     const parsed = parseKitePlaygroundRunResult(result);
     if (!parsed) {
@@ -311,7 +347,15 @@ export class KitePlaygroundClient {
     // and a lesson's siblings deserve the same treatment as its entry.
     const formatted = await this.#exclusive((engine) =>
       engine.format(request.files.map((file) => file.content)),
-    );
+    ).catch((cause: unknown) => {
+      if (cause instanceof KiteOperationStoppedError) {
+        throw new KitePlaygroundServiceError(
+          "invalid-source",
+          "kitec stopped while formatting this program",
+        );
+      }
+      throw cause;
+    });
     // `kite_format` lays out what it can parse and silently drops what it
     // cannot: an open block comment takes the rest of the file with it. The
     // dock writes a sibling file's answer straight to the workspace, with no
