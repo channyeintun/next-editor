@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
+import { playgroundRateLimitKey } from "../playgroundProxy";
+import { checkRateLimit } from "../rateLimit";
 import { proxyUrl } from "../../../src/shared/proxy";
 
 // Mounted at /api/proxy in worker/index.ts — the same canonical route name
@@ -10,6 +12,12 @@ import { proxyUrl } from "../../../src/shared/proxy";
 // COEP:require-corp blocks from a direct <img src>/fetch()), it now forwards
 // any public https URL for whatever needs that same treatment.
 //
+// Every call is charged to PROXY_RATE_LIMITER first (infra/wrangler.toml),
+// keyed like the playground routes ("user:<id>" or "ip:<address>",
+// playgroundRateLimitKey), so anonymous callers cannot use it as an
+// unthrottled open relay. Like them it fails closed: a missing binding
+// answers 502 instead of proxying without a limit.
+//
 // Deliberately NOT added to the vite dev proxy: the existing proxyPlugin
 // already intercepts this path directly in the vite dev server, independent
 // of whether the Worker is running, so plain `bun run dev` (no
@@ -17,6 +25,19 @@ import { proxyUrl } from "../../../src/shared/proxy";
 export const proxyRoute = new Hono<{ Bindings: Env }>();
 
 proxyRoute.get("/", async (c) => {
+  const decision = await checkRateLimit(c.env.PROXY_RATE_LIMITER, {
+    key: await playgroundRateLimitKey(c),
+    label: "proxy",
+  });
+  if (decision === "limited") {
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429, {
+      "Retry-After": "60",
+    });
+  }
+  if (decision === "unavailable") {
+    return c.json({ error: "the proxy is temporarily unavailable" }, 502);
+  }
+
   const result = await proxyUrl(c.req.query("url") ?? null);
 
   if (result.status !== 200 || !result.body) {

@@ -145,8 +145,8 @@ binding = "CACHE"
 # `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
 # "retry in a minute". `namespace_id` names the counter across the whole
 # Cloudflare account: never reuse one for a different budget, and keep this
-# 7101-7109 block (playgrounds 7101-7107, AthanLab 7108-7109) clear of other
-# Workers' ids, or they would share counters.
+# 7101-7110 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110)
+# clear of other Workers' ids, or they would share counters.
 [[ratelimits]]
 name = "GO_RUN_RATE_LIMITER"
 namespace_id = "7101"
@@ -215,6 +215,17 @@ simple = { limit = 5, period = 60 }
 name = "ATHANLAB_API_RATE_LIMITER"
 namespace_id = "7109"
 simple = { limit = 30, period = 60 }
+
+# The generic /api/proxy (worker/routes/proxy.ts), keyed "user:<id>" or
+# "ip:<address>" like the playgrounds, so anonymous callers cannot use it as an
+# unthrottled open relay. Sized for Google Slides images that fall back to the
+# proxy plus lessons loaded from a URL (their .ne and audio), with room for
+# several signed-out viewers behind one shared address. A refusal answers 429,
+# which a viewer sees as an error rather than a fallback, so keep it generous.
+[[ratelimits]]
+name = "PROXY_RATE_LIMITER"
+namespace_id = "7110"
+simple = { limit = 120, period = 60 }
 
 # One hibernating WebSocket coordinator per live-collaboration room. Every room
 # keeps its durable Yjs log in this object's SQLite storage.

@@ -58,6 +58,9 @@ export interface Env {
   // stored key to AthanLab. A missing binding fails closed with a 503.
   ATHANLAB_KEY_RATE_LIMITER?: RateLimit;
   ATHANLAB_API_RATE_LIMITER?: RateLimit;
+  // Per-caller budget for the generic /api/proxy (routes/proxy.ts), keyed like
+  // the playground budgets. A missing binding fails closed with a 502.
+  PROXY_RATE_LIMITER?: RateLimit;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Workers KV result cache for the playground routes (infra/worker/cache.ts).
