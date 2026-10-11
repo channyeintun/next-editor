@@ -17,7 +17,9 @@ import type { CollaborationRoomProvider } from "../../collaboration/roomProvider
 /**
  * The room's members and invitations, and the changes an owner makes to them.
  * A list request applies only while it is the latest one and, when it names a
- * provider generation, while `providerGenerationRef` still holds it.
+ * provider generation, while `providerGenerationRef` still holds it. A change
+ * applies its result only while the generation it started in is current, so a
+ * reply that lands after a room switch never edits the next room's lists.
  */
 export function useCollaborationRoster(
   providerRef: RefObject<CollaborationRoomProvider | null>,
@@ -63,23 +65,29 @@ export function useCollaborationRoster(
       if (!current || current.membership.role !== "owner") {
         throw new Error("Only the room owner can create invitations.");
       }
+      const generation = providerGenerationRef.current;
       const invitation = await createCollaborationInvitation(current.room.id, {
         role: inviteRole,
       });
-      setInvitations((existing) => [invitation, ...existing]);
+      if (providerGenerationRef.current === generation) {
+        setInvitations((existing) => [invitation, ...existing]);
+      }
       return invitation;
     },
-    [providerRef],
+    [providerGenerationRef, providerRef],
   );
 
   const revokeInvitation = useCallback(
     async (invitationId: string) => {
       const current = providerRef.current?.session;
       if (!current) return;
+      const generation = providerGenerationRef.current;
       await revokeCollaborationInvitation(current.room.id, invitationId);
-      setInvitations((existing) => existing.filter((item) => item.id !== invitationId));
+      if (providerGenerationRef.current === generation) {
+        setInvitations((existing) => existing.filter((item) => item.id !== invitationId));
+      }
     },
-    [providerRef],
+    [providerGenerationRef, providerRef],
   );
 
   const updateMemberRole = useCallback(
@@ -87,13 +95,16 @@ export function useCollaborationRoster(
       const currentProvider = providerRef.current;
       const current = currentProvider?.session;
       if (!currentProvider || !current) return;
+      const generation = providerGenerationRef.current;
       await flushCurrentEdits(currentProvider);
       const member = await updateCollaborationMemberRole(current.room.id, userId, nextRole);
-      setMembers((existing) =>
-        existing.map((item) => (item.userId === member.userId ? member : item)),
-      );
+      if (providerGenerationRef.current === generation) {
+        setMembers((existing) =>
+          existing.map((item) => (item.userId === member.userId ? member : item)),
+        );
+      }
     },
-    [flushCurrentEdits, providerRef],
+    [flushCurrentEdits, providerGenerationRef, providerRef],
   );
 
   const removeMember = useCallback(
@@ -101,11 +112,14 @@ export function useCollaborationRoster(
       const currentProvider = providerRef.current;
       const current = currentProvider?.session;
       if (!currentProvider || !current) return;
+      const generation = providerGenerationRef.current;
       await flushCurrentEdits(currentProvider);
       await removeCollaborationMember(current.room.id, userId);
-      setMembers((existing) => existing.filter((item) => item.userId !== userId));
+      if (providerGenerationRef.current === generation) {
+        setMembers((existing) => existing.filter((item) => item.userId !== userId));
+      }
     },
-    [flushCurrentEdits, providerRef],
+    [flushCurrentEdits, providerGenerationRef, providerRef],
   );
 
   /** Empties both lists; part of resetting the state of one room. */
