@@ -118,6 +118,12 @@ export interface ElementStyle {
  * directly, so when an entry has both, the one that appears later in
  * `entry.tracks` simply overwrites the earlier one (matching the reference's
  * plain overwrite-in-iteration-order behavior).
+ *
+ * Across entries on one element, the latest entry that has started (t >= start)
+ * wins. An entry that has not started yet sets a property only when no earlier
+ * entry set it, so its from-value never covers a running or finished earlier
+ * entry: a fade-in in step 0 followed by a fade-out in step 1 stays hidden
+ * until step 0 reveals it. Self-contained, because the slide frame inlines it.
  */
 export function sampleStyles(timeline: DeckTimeline, t: number): Map<string, ElementStyle> {
   function easeInOutCubic(x: number): number {
@@ -125,28 +131,41 @@ export function sampleStyles(timeline: DeckTimeline, t: number): Map<string, Ele
   }
 
   const styles = new Map<string, ElementStyle>();
+  // The properties earlier entries set on each element.
+  const written = new Map<string, { opacity?: true; transform?: true }>();
   for (const { entry, start, end } of timeline.entries) {
     const duration = end - start;
     const linear =
       duration <= 0 ? (t >= end ? 1 : 0) : Math.min(Math.max((t - start) / duration, 0), 1);
     const eased = easeInOutCubic(linear);
+    const started = t >= start;
 
     const style: ElementStyle = styles.get(entry.elementId) ?? {};
+    // Read before this entry's own tracks, so they still overwrite each other.
+    const earlier = written.get(entry.elementId) ?? {};
+    const wrote = { ...earlier };
 
     for (const track of entry.tracks) {
       if (track.kind === "opacity") {
+        if (!started && earlier.opacity) continue;
         style.opacity = track.from + (track.to - track.from) * linear;
+        wrote.opacity = true;
       } else if (track.kind === "scale") {
+        if (!started && earlier.transform) continue;
         const scale = track.from + (track.to - track.from) * eased;
         style.transform = `scale(${scale})`;
+        wrote.transform = true;
       } else if (track.kind === "translate") {
+        if (!started && earlier.transform) continue;
         const x = track.fromX + (track.toX - track.fromX) * eased;
         const y = track.fromY + (track.toY - track.fromY) * eased;
         style.transform = `translate(${x * 100}%, ${y * 100}%)`;
+        wrote.transform = true;
       }
     }
 
     styles.set(entry.elementId, style);
+    written.set(entry.elementId, wrote);
   }
   return styles;
 }

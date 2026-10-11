@@ -81,6 +81,34 @@ describe("slide animation bridge", () => {
     raf.mockRestore();
   });
 
+  it("keeps an element faded in, then out, hidden until its first step", () => {
+    const inThenOut = [
+      [
+        {
+          elementId: "a",
+          delayMs: 0,
+          durationMs: 500,
+          tracks: [{ kind: "opacity", from: 0, to: 1 }],
+        },
+      ],
+      [
+        {
+          elementId: "a",
+          delayMs: 0,
+          durationMs: 500,
+          tracks: [{ kind: "opacity", from: 1, to: 0 }],
+        },
+      ],
+    ];
+    runBridge();
+    post({ type: SLIDE_ANIMATION_INIT_MESSAGE_TYPE, steps: inThenOut, stepsRevealed: 0 });
+    expect(styleOf("a").opacity).toBe("0");
+    post({ type: SLIDE_ANIMATION_INIT_MESSAGE_TYPE, steps: inThenOut, stepsRevealed: 1 });
+    expect(styleOf("a").opacity).toBe("1");
+    post({ type: SLIDE_ANIMATION_INIT_MESSAGE_TYPE, steps: inThenOut, stepsRevealed: 2 });
+    expect(styleOf("a").opacity).toBe("0");
+  });
+
   it("ignores messages from anything but the parent", () => {
     runBridge();
     post({ type: SLIDE_ANIMATION_INIT_MESSAGE_TYPE, steps, stepsRevealed: 0 });

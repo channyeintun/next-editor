@@ -195,3 +195,110 @@ describe("sampleStyles", () => {
     expect(s.get("x")?.transform).toBe("scale(0.0625)");
   });
 });
+
+// An element animated in two steps: a not-yet-started entry wrote its from-value
+// over what the earlier, running entry had set, so the element showed early.
+describe("sampleStyles with two entries on one element", () => {
+  it("fades in during step 0 and out during step 1, hidden before its reveal", () => {
+    const tl = buildTimeline([
+      [
+        {
+          elementId: "b",
+          durationMs: 400,
+          delayMs: 0,
+          tracks: [{ kind: "opacity", from: 0, to: 1 }],
+        },
+      ],
+      [
+        {
+          elementId: "b",
+          durationMs: 400,
+          delayMs: 0,
+          tracks: [{ kind: "opacity", from: 1, to: 0 }],
+        },
+      ],
+    ]);
+
+    expect(sampleStyles(tl, 0).get("b")?.opacity).toBe(0);
+    expect(sampleStyles(tl, 200).get("b")?.opacity).toBeCloseTo(0.5, 5);
+    expect(sampleStyles(tl, 400).get("b")?.opacity).toBe(1);
+    expect(sampleStyles(tl, 600).get("b")?.opacity).toBeCloseTo(0.5, 5);
+    expect(sampleStyles(tl, 800).get("b")?.opacity).toBe(0);
+  });
+
+  it("flies in during step 0 and scales only from step 1's start", () => {
+    const tl = buildTimeline([
+      [
+        {
+          elementId: "el",
+          durationMs: 400,
+          delayMs: 0,
+          tracks: [{ kind: "translate", fromX: -1, fromY: 0, toX: 0, toY: 0 }],
+        },
+      ],
+      [
+        {
+          elementId: "el",
+          durationMs: 200,
+          delayMs: 0,
+          tracks: [{ kind: "scale", from: 1, to: 1.1 }],
+        },
+      ],
+    ]);
+
+    expect(sampleStyles(tl, 0).get("el")?.transform).toBe("translate(-100%, 0%)");
+    expect(sampleStyles(tl, 200).get("el")?.transform).toBe("translate(-50%, 0%)");
+    expect(sampleStyles(tl, 399).get("el")?.transform).toMatch(/^translate\(/);
+    expect(sampleStyles(tl, 400).get("el")?.transform).toBe("scale(1)");
+    expect(sampleStyles(tl, 600).get("el")?.transform).toBe("scale(1.1)");
+  });
+
+  it("still shows a later step's only entry at its from-value before it starts", () => {
+    const tl = buildTimeline([
+      [
+        {
+          elementId: "a",
+          durationMs: 400,
+          delayMs: 0,
+          tracks: [{ kind: "opacity", from: 0, to: 1 }],
+        },
+      ],
+      [
+        {
+          elementId: "z",
+          durationMs: 400,
+          delayMs: 0,
+          tracks: [{ kind: "scale", from: 0, to: 1 }],
+        },
+      ],
+    ]);
+
+    expect(sampleStyles(tl, 0).get("z")?.transform).toBe("scale(0)");
+  });
+
+  it("keeps the within-entry overwrite for an entry that has not started", () => {
+    const tl = buildTimeline([
+      [
+        {
+          elementId: "a",
+          durationMs: 100,
+          delayMs: 0,
+          tracks: [{ kind: "opacity", from: 0, to: 1 }],
+        },
+      ],
+      [
+        {
+          elementId: "x",
+          durationMs: 100,
+          delayMs: 0,
+          tracks: [
+            { kind: "scale", from: 0, to: 1 },
+            { kind: "translate", fromX: 0, fromY: 1, toX: 0, toY: 0 },
+          ],
+        },
+      ],
+    ]);
+
+    expect(sampleStyles(tl, 0).get("x")?.transform).toBe("translate(0%, 100%)");
+  });
+});
