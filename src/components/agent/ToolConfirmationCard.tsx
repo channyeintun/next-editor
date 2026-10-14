@@ -18,7 +18,7 @@ export default function ToolConfirmationCard({
     >
       <div className="flex items-start gap-2.5">
         <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[#64a3ff]/10 text-[#64a3ff]">
-          <ShieldCheck size={15} />
+          <ShieldCheck size={16} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#82b4ff]">
@@ -52,7 +52,7 @@ export default function ToolConfirmationCard({
           onClick={() => onResolve(true)}
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#173925] px-3 text-xs font-semibold text-[#58d88d] transition-colors hover:bg-[#1f4a31]"
         >
-          <Check size={13} />
+          <Check size={14} />
           Allow
         </button>
       </div>

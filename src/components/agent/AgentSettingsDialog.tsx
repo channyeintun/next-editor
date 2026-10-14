@@ -54,7 +54,7 @@ function ModelSection({
     <fieldset className="min-w-0">
       <legend className="text-sm font-medium text-slate-100">Model</legend>
       <div className="relative mt-2">
-        <Search size={14} className="pointer-events-none absolute left-3 top-2.5 text-slate-500" />
+        <Search size={16} className="pointer-events-none absolute left-3 top-2.5 text-slate-500" />
         <input
           type="search"
           value={query}

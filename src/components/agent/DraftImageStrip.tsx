@@ -30,7 +30,7 @@ export default function DraftImageStrip({
             aria-label={`Remove ${image.name ?? "pasted image"}`}
             title="Remove image"
           >
-            <X size={12} />
+            <X size={14} />
             <HoverRing />
           </button>
         </div>

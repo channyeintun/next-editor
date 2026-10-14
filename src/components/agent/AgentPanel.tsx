@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, Plus, Send, Settings, Square } from "lucide-react";
+import { Bot, LoaderCircle, Send, Settings, Square, SquarePen } from "lucide-react";
 import { WorkspaceStoreContext } from "../../contexts/WorkspaceContext";
 import {
   getAgentStore,
@@ -297,10 +297,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
             {isReplayActive ? "" : (STATUS_ANNOUNCEMENT[status] ?? "")}
           </span>
           {isActiveStatus ? (
-            <span
-              aria-hidden="true"
-              className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#64a3ff] border-t-transparent"
-            />
+            <LoaderCircle size={14} className="shrink-0 animate-spin text-[#64a3ff]" />
           ) : null}
           <button
             type="button"
@@ -310,7 +307,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
             aria-label="New chat"
             title="New chat"
           >
-            <Plus size={16} />
+            <SquarePen size={16} />
             <HoverRing />
           </button>
           <button
@@ -428,7 +425,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                     aria-label="Stop agent"
                     title="Stop agent"
                   >
-                    <Square size={12} fill="currentColor" />
+                    <Square size={14} fill="currentColor" />
                   </button>
                 ) : (
                   <button
@@ -445,7 +442,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                     aria-describedby={isKeyHintShown ? keyHintId : undefined}
                     title="Send message"
                   >
-                    <Send size={14} />
+                    <Send size={16} />
                   </button>
                 )}
               </div>
