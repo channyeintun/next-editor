@@ -266,7 +266,7 @@ export default function WhiteboardPanel() {
               }}
               className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
             >
-              {scene.isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              {scene.isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               <HoverRing />
             </button>
             <button

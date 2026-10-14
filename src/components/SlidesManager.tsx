@@ -1,22 +1,21 @@
 import { useId, useRef, useState, type ReactElement } from "react";
 import {
   Plus,
-  Trash2,
+  Trash,
   ChevronUp,
   ChevronDown,
-  Edit3,
+  Pencil,
   Play,
   X,
   Code,
   FileText,
   Save,
-  RotateCcw,
-  Monitor,
   Upload,
-  Loader2,
+  LoaderCircle,
   Presentation,
   Download,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import type { Slide, SlideContentType } from "../types/slides";
 import type { SlidesUpdate } from "../hooks/useSlidesController";
@@ -179,9 +178,9 @@ function BackgroundPicker({
           }`}
         >
           {isUploading ? (
-            <Loader2 className="size-3.5 animate-spin text-slate-400" />
+            <LoaderCircle className="size-4 animate-spin text-slate-400" />
           ) : (
-            !customImage && <Upload className="size-3.5 text-slate-500" />
+            !customImage && <Upload className="size-4 text-slate-500" />
           )}
         </button>
         <input
@@ -286,7 +285,7 @@ function GoogleSlidesImport({
               rel="noreferrer"
               className="inline-flex items-center gap-0.5 text-cyan-300 hover:underline"
             >
-              Google Slides <ExternalLink className="size-3" />
+              Google Slides <ExternalLink className="size-3.5" />
             </a>
           </p>
         </div>
@@ -298,9 +297,9 @@ function GoogleSlidesImport({
             className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-[#1d1f29] py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 disabled:opacity-60"
           >
             {isLoading ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <LoaderCircle className="size-3.5 animate-spin text-slate-400" />
             ) : (
-              <Download className="size-3.5" />
+              <RefreshCw className="size-3.5 text-slate-400" />
             )}
             Update
           </button>
@@ -308,8 +307,9 @@ function GoogleSlidesImport({
             type="button"
             onClick={removeDeck}
             disabled={isLoading}
-            className="rounded-md border border-slate-700 bg-[#1d1f29] px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:border-rose-500/50 disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-[#1d1f29] px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:border-rose-500/50 disabled:opacity-60"
           >
+            <Trash className="size-3.5" />
             Remove deck
           </button>
         </div>
@@ -354,7 +354,7 @@ function GoogleSlidesImport({
           className="flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#5da4ff]/40 bg-[#273449] px-3 py-1.5 text-xs font-semibold text-slate-100 transition-colors hover:border-[#5da4ff] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
-            <Loader2 className="size-3.5 animate-spin" />
+            <LoaderCircle className="size-3.5 animate-spin" />
           ) : (
             <Download className="size-3.5" />
           )}
@@ -582,7 +582,7 @@ export default function SlidesManager({
       <div className="flex items-center justify-between border-b border-slate-800 bg-[#151821] px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center rounded-md border border-slate-700 bg-[#1d1f29] size-8">
-            <Monitor className="text-cyan-300 size-4" />
+            <Presentation className="text-cyan-300 size-4" />
           </div>
           <div>
             <h3 className="text-sm font-semibold tracking-tight text-slate-100">
@@ -662,7 +662,7 @@ export default function SlidesManager({
           {slides.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-700 bg-[#11141c] px-6 py-10 text-center">
               <div className="mx-auto mb-4 flex items-center justify-center rounded-lg border border-slate-700 bg-[#1d1f29] size-12">
-                <Monitor className="text-slate-500 size-6" />
+                <Presentation className="text-slate-500 size-6" />
               </div>
               <p className="text-xs font-medium leading-relaxed text-slate-400">
                 Your presentation deck is empty.
@@ -722,7 +722,7 @@ export default function SlidesManager({
                             onClick={saveEdit}
                             className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-[#10c776] py-1.5 text-xs font-semibold text-slate-950 transition-colors hover:bg-[#39f39a]"
                           >
-                            <Save className="size-3" />
+                            <Save className="size-3.5" />
                             Update
                           </button>
                           <button
@@ -732,7 +732,7 @@ export default function SlidesManager({
                             aria-label="Cancel editing slide"
                             title="Cancel"
                           >
-                            <RotateCcw className="size-3" />
+                            <X className="size-3.5" />
                           </button>
                         </div>
                       </div>
@@ -757,7 +757,7 @@ export default function SlidesManager({
                           >
                             {thumbContent}
                             <span className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100">
-                              <Edit3 className="text-white size-3" />
+                              <Pencil className="text-white size-3.5" />
                             </span>
                           </button>
                         ) : (
@@ -788,7 +788,7 @@ export default function SlidesManager({
                             className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                             title="Move Up"
                           >
-                            <ChevronUp className="size-3.5" />
+                            <ChevronUp className="size-4" />
                             <HoverRing />
                           </button>
                           <button
@@ -798,7 +798,7 @@ export default function SlidesManager({
                             className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                             title="Move Down"
                           >
-                            <ChevronDown className="size-3.5" />
+                            <ChevronDown className="size-4" />
                             <HoverRing />
                           </button>
                           <div className="mx-1 h-4 w-px bg-slate-800"></div>
@@ -808,7 +808,7 @@ export default function SlidesManager({
                             className="rounded-md p-1.5 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
                             title="Delete"
                           >
-                            <Trash2 className="size-3.5" />
+                            <Trash className="size-4" />
                             <HoverRing />
                           </button>
                         </div>

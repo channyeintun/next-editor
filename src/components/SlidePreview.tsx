@@ -235,7 +235,7 @@ function SlidePreview({
                   onClick={() => collaboration.retryAssets()}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
                 >
-                  <RefreshCw size={13} /> Retry
+                  <RefreshCw size={14} className="text-slate-400" /> Retry
                 </button>
               ) : null}
               <button
@@ -244,7 +244,7 @@ function SlidePreview({
                 data-slides-initial-focus
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
               >
-                <X size={13} /> Close
+                <X size={14} className="text-slate-400" /> Close
               </button>
             </div>
           </div>
@@ -296,7 +296,7 @@ function SlidePreview({
               aria-label="Minimize slides"
               className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
-              <Minimize2 className="size-4" />
+              <Minimize2 className="size-4.5" />
               <HoverRing />
             </button>
             <button
@@ -306,7 +306,7 @@ function SlidePreview({
               data-slides-initial-focus
               className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
-              <X className="size-4" />
+              <X className="size-4.5" />
               <HoverRing />
             </button>
           </div>
