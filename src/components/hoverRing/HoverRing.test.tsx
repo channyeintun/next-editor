@@ -170,6 +170,31 @@ describe("HoverRing", () => {
     expect(ring(button)).toHaveAttribute("rx", "7.5");
   });
 
+  it("draws inside the edge beside a ringed control two pixels away", () => {
+    render(
+      <>
+        <button type="button" style={{ width: "28px", height: "28px" }}>
+          New file
+          <HoverRing />
+        </button>
+        <button type="button" style={{ width: "28px", height: "28px" }}>
+          New folder
+          <HoverRing />
+        </button>
+      </>,
+    );
+    const [file, folder] = screen.getAllByRole("button");
+    const at = (left: number) => () => DOMRect.fromRect({ x: left, y: 0, width: 28, height: 28 });
+    vi.spyOn(file, "getBoundingClientRect").mockImplementation(at(0));
+    vi.spyOn(folder, "getBoundingClientRect").mockImplementation(at(30));
+
+    fireEvent.pointerEnter(file, { pointerType: "mouse" });
+    const svg = file.querySelector<SVGSVGElement>(".hover-ring")!;
+    // Half of the two pixels, less one between the lines, rounds down to none at 1x.
+    expect(svg.style.left).toBe("0px");
+    expect(svg.style.width).toBe("28px");
+  });
+
   it("clears the ring it drew when it detaches", () => {
     const { rerender } = render(
       <button type="button">

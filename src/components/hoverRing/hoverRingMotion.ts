@@ -231,6 +231,57 @@ export function fitsWithin(
   );
 }
 
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * How far outside `host` its ring may reach, from the `reach` it asks for, without meeting
+ * the ring of a neighbouring control: two controls set closer than their rings reach (a
+ * toolbar's icons a couple of pixels apart) split the space between them, leaving
+ * `separation` between the lines, so one ring fading out as the next draws never runs into
+ * it. Each neighbour gives its box and the reach its own ring asks for, in the same pixels;
+ * a box that overlaps the host's (a badge on its button) is no neighbour.
+ */
+export function neighbourReach(
+  reach: number,
+  host: Box,
+  neighbours: { box: Box; reach: number }[],
+  separation: number,
+) {
+  let room = reach;
+  for (const { box, reach: theirs } of neighbours) {
+    const dx = Math.max(box.left - host.right, host.left - box.right);
+    const dy = Math.max(box.top - host.bottom, host.top - box.bottom);
+    if (dx < 0 && dy < 0) continue;
+    const distance = Math.max(dx, dy);
+    if (distance >= reach + theirs + separation) continue;
+    // The neighbour keeps to its half, as it works this out the same way.
+    const their = Math.min(theirs, Math.max(0, (distance - separation) / 2));
+    room = Math.min(room, distance - separation - their);
+  }
+  return Math.max(0, room);
+}
+
+/** Every attached ring's host, with the gap it asks for: one another's neighbours. */
+const ringHosts = new Map<HTMLElement, number>();
+
+/** The hosts round `host` that draw a ring, with how far (host pixels × scale) each reaches. */
+function neighbourRings(host: HTMLElement, scale: number) {
+  const neighbours: { box: Box; reach: number }[] = [];
+  for (const [other, gap] of ringHosts) {
+    if (other === host || other.ownerDocument !== host.ownerDocument) continue;
+    const box = other.getBoundingClientRect();
+    // Hidden, or under a modal (whose page is inert): not beside this control on screen.
+    if (!(box.width > 0 && box.height > 0) || other.closest("[inert]")) continue;
+    neighbours.push({ box, reach: gap * scale });
+  }
+  return neighbours;
+}
+
 /**
  * The area a ring outside the host can draw in: the padding boxes of the host and the
  * ancestors that clip what overflows them, intersected.
@@ -295,7 +346,8 @@ const isDisabled = (host: HTMLElement) => host.matches(':disabled, [aria-disable
 /**
  * Animates the ring in `svg` (whose rect has pathLength 100) as the pointer enters and
  * leaves `host`. `gap` is how far outside the host's border edge the ring's outer edge
- * sits, where it would not be clipped (0 otherwise). Returns the cleanup.
+ * sits: less beside a neighbouring control's ring (see neighbourReach), and 0 where it
+ * would be clipped. Returns the cleanup.
  */
 export function attachHoverRing(host: HTMLElement, svg: SVGSVGElement, gap: number) {
   const rect = svg.querySelector("rect");
@@ -329,17 +381,26 @@ export function attachHoverRing(host: HTMLElement, svg: SVGSVGElement, gap: numb
   const reshape = () => {
     const framed = frameScale(host.ownerDocument.defaultView);
     const metrics = measureHost(host, framed);
-    // Outside the host where there is room; just inside its edge where an overflowing
-    // ancestor (or the host itself) would clip the ring.
-    const reach = gap * (metrics.scale / framed);
+    // In the document's pixels: a transformed ancestor scales the host's.
+    const scale = metrics.scale / framed;
     const hostBox = host.getBoundingClientRect();
+    // Outside the host, as far as its neighbours' rings leave room for (a screen pixel
+    // between the lines); just inside its edge where an overflowing ancestor (or the host
+    // itself) would clip the ring.
+    let reach =
+      gap > 0 ? neighbourReach(gap * scale, hostBox, neighbourRings(host, scale), 1 / framed) : 0;
+    // On whole device pixels, which the svg's box is nudged onto below.
+    if (framed === 1) {
+      const dpr = window.devicePixelRatio || 1;
+      reach = Math.floor(reach * dpr + 0.001) / dpr;
+    }
     const outside = {
       left: hostBox.left - reach,
       top: hostBox.top - reach,
       right: hostBox.right + reach,
       bottom: hostBox.bottom + reach,
     };
-    const ringGap = gap > 0 && !fitsWithin(outside, clipArea(host)) ? 0 : gap;
+    const ringGap = reach > 0 && fitsWithin(outside, clipArea(host)) ? reach / scale : 0;
     place(ringShape(metrics, ringGap));
     // A scaled frame's pixels don't line up with the screen's: no grid to snap to.
     if (framed !== 1) return;
@@ -452,7 +513,9 @@ export function attachHoverRing(host: HTMLElement, svg: SVGSVGElement, gap: numb
 
   host.addEventListener("pointerenter", onEnter);
   host.addEventListener("pointerleave", onLeave);
+  ringHosts.set(host, gap);
   return () => {
+    ringHosts.delete(host);
     host.removeEventListener("pointerenter", onEnter);
     host.removeEventListener("pointerleave", onLeave);
     cancelAnimationFrame(frame);

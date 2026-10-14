@@ -12,9 +12,11 @@ import { attachHoverRing } from "./hoverRingMotion";
  * control is disabled.
  *
  * `gap` sets how far outside the control's border edge the ring's outer edge sits, in
- * pixels: by default a 1px line with a 1px dark strip between it and the control. Where an
- * overflowing parent (or the control itself) would clip that, the ring draws just inside
- * the edge instead, as `gap={0}` always does (for options that touch, in a segmented track).
+ * pixels: by default a 1px line with a 1px dark strip between it and the control. Beside
+ * another ringed control closer than that allows, the two rings split the space between
+ * them, so they never run into each other. Where an overflowing parent (or the control
+ * itself) would clip the ring, it draws just inside the edge instead, as `gap={0}` always
+ * does (for options that touch, in a segmented track).
  *
  * Its stylesheet, hoverRing.css, is imported by src/index.css rather than here: the landing
  * page's build-time prerender renders this component and cannot load a stylesheet import.

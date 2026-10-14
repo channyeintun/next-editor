@@ -4,6 +4,7 @@ import {
   edgePoint,
   fitsWithin,
   HOVER_RING_WIDTH,
+  neighbourReach,
   perimeterPercent,
   pixelNudge,
   ringRadius,
@@ -171,5 +172,41 @@ describe("fitsWithin", () => {
   it("does not where the clip would cut it", () => {
     expect(fitsWithin({ left: -2, top: 4, right: 40, bottom: 36 }, clip)).toBe(false);
     expect(fitsWithin({ left: 8, top: 4, right: 40, bottom: 42 }, clip)).toBe(false);
+  });
+});
+
+describe("neighbourReach", () => {
+  const host = { left: 0, top: 0, right: 28, bottom: 28 };
+  const beside = (space: number, reach = 2) => ({
+    box: { left: 28 + space, top: 0, right: 56 + space, bottom: 28 },
+    reach,
+  });
+
+  it("keeps the whole reach where the next control is two rings and a pixel away", () => {
+    expect(neighbourReach(2, host, [beside(5)], 1)).toBe(2);
+    expect(neighbourReach(2, host, [beside(12)], 1)).toBe(2);
+  });
+
+  it("splits a narrower space with the neighbour's ring, a pixel between the lines", () => {
+    // gap-1 and gap-0.5 toolbars: 4px and 2px between the icons.
+    expect(neighbourReach(2, host, [beside(4)], 1)).toBe(1.5);
+    expect(neighbourReach(2, host, [beside(2)], 1)).toBe(0.5);
+    // Touching options: inside.
+    expect(neighbourReach(2, host, [beside(0)], 1)).toBe(0);
+  });
+
+  it("takes the room an inside ring leaves", () => {
+    expect(neighbourReach(2, host, [beside(2, 0)], 1)).toBe(1);
+  });
+
+  it("minds a neighbour above or below, and the nearest of several", () => {
+    const below = { box: { left: 0, top: 30, right: 28, bottom: 58 }, reach: 2 };
+    expect(neighbourReach(2, host, [below], 1)).toBe(0.5);
+    expect(neighbourReach(2, host, [beside(8), beside(4), below], 1)).toBe(0.5);
+  });
+
+  it("ignores a box over the host, as a badge on its button", () => {
+    const badge = { box: { left: 20, top: -4, right: 32, bottom: 8 }, reach: 2 };
+    expect(neighbourReach(2, host, [badge], 1)).toBe(2);
   });
 });
