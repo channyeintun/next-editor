@@ -134,7 +134,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
       <div className="flex max-h-[60%] max-w-full items-center justify-center">
         {isAwaitingSharedAsset ? (
           <div className="flex size-28 items-center justify-center rounded-2xl border border-amber-700/50 bg-amber-950/20">
-            <FileBox size={44} className="text-amber-500" />
+            <FileBox size={44} aria-hidden="true" className="text-amber-500" />
           </div>
         ) : mediaKind === "image" && mediaUrl ? (
           <img
@@ -148,7 +148,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
           <audio src={mediaUrl} controls className="w-80 max-w-full" />
         ) : (
           <div className="flex size-28 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900">
-            <FileBox size={44} className="text-slate-500" />
+            <FileBox size={44} aria-hidden="true" className="text-slate-500" />
           </div>
         )}
       </div>
@@ -176,9 +176,13 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
             setRetryVersion((version) => version + 1);
             collaboration?.retryAssets();
           }}
-          className="inline-flex items-center gap-2 rounded-md border border-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-950/40"
+          className="group inline-flex items-center gap-2 rounded-md border border-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-950/40"
         >
-          <RefreshCw size={14} />
+          <RefreshCw
+            size={14}
+            aria-hidden="true"
+            className="text-amber-300 transition-colors group-hover:text-amber-200"
+          />
           Retry asset
         </button>
       ) : mediaUrl ? (
@@ -186,9 +190,13 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
           ref={downloadLinkRef}
           href={mediaUrl}
           download={file.name}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+          className="group inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
         >
-          <Download size={14} aria-hidden="true" />
+          <Download
+            size={14}
+            aria-hidden="true"
+            className="text-slate-400 transition-colors group-hover:text-slate-200"
+          />
           Download <span className="sr-only">{file.name}</span>
         </a>
       ) : null}

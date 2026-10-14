@@ -130,7 +130,7 @@ describe("FileContextMenu", () => {
 
     const notShown = renderMenu(fileMenu, { canOpenInPreview: true });
     expect(item("Open in Preview")).not.toHaveAttribute("aria-current");
-    expect(item("Open in Preview").querySelector("svg")).toBeNull();
+    expect(item("Open in Preview").querySelector(".lucide-check")).toBeNull();
     notShown.unmount();
 
     const { onOpenInPreview } = renderMenu(fileMenu, { canOpenInPreview: true, isInPreview: true });
@@ -139,9 +139,25 @@ describe("FileContextMenu", () => {
     // Not by hue alone: the state is exposed, and a check (hidden from the
     // accessibility tree, so the name stays the same) shows it.
     expect(openInPreview).toHaveAttribute("aria-current", "true");
-    expect(openInPreview.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(openInPreview.querySelector(".lucide-check")).toHaveAttribute("aria-hidden", "true");
     fireEvent.click(openInPreview);
     expect(onOpenInPreview).toHaveBeenCalledWith("src/index.html");
+  });
+
+  it("leads every action with its own icon, hidden from its name", () => {
+    renderMenu(fileMenu, { canOpenInPreview: true });
+
+    const items = screen
+      .getAllByRole("button")
+      .filter((button) => button.textContent !== "Outside");
+    const icons = items.map((button) => {
+      const slot = button.firstElementChild;
+      expect(slot).toHaveAttribute("aria-hidden", "true");
+      return slot?.querySelector("svg")?.getAttribute("class");
+    });
+    expect(icons).toHaveLength(8);
+    expect(new Set(icons).size).toBe(icons.length);
+    expect(item("Copy Relative Path")).toHaveAccessibleName("Copy Relative Path");
   });
 
   it("names its group of actions after the entry kind", () => {

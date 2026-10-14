@@ -25,7 +25,7 @@ export default function QuickOpenButton() {
       // keeps the explorer header's row height.
       className="-my-1 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-white"
     >
-      <FileSearch size={14} aria-hidden="true" />
+      <FileSearch size={16} aria-hidden="true" />
       <HoverRing />
     </button>
   );

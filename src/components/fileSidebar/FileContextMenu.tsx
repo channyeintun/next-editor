@@ -1,4 +1,15 @@
-import { Check } from "lucide-react";
+import {
+  AppWindow,
+  Check,
+  ClipboardCopy,
+  Copy,
+  FilePlusCorner,
+  FolderPlus,
+  Pencil,
+  Trash,
+  Upload,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDismissOnOutsideInteraction } from "../../hooks/useDismissOnOutsideInteraction";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -10,7 +21,27 @@ import {
 import type { SidebarContextMenuState, SidebarEntryKind } from "./sidebarModel";
 
 const MENU_ITEM_CLASS =
-  "flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800";
+  "group flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800";
+
+const MENU_ICON_CLASS = "text-slate-400 transition-colors group-hover:text-slate-200";
+
+/** An item's icon, in the column every item of the menu lines up on. */
+function MenuItemIcon({
+  icon: Icon,
+  className = MENU_ICON_CLASS,
+}: {
+  icon: LucideIcon;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`flex size-4 shrink-0 items-center justify-center ${className}`}
+      aria-hidden="true"
+    >
+      <Icon size={16} />
+    </span>
+  );
+}
 
 interface FileContextMenuProps {
   /** The entry the menu was opened on, and where; null while it is closed. */
@@ -143,6 +174,7 @@ export default function FileContextMenu({
         onClick={() => onCreate("file", createParentPath)}
         className={MENU_ITEM_CLASS}
       >
+        <MenuItemIcon icon={FilePlusCorner} />
         New File
       </button>
       <button
@@ -150,9 +182,11 @@ export default function FileContextMenu({
         onClick={() => onCreate("folder", createParentPath)}
         className={MENU_ITEM_CLASS}
       >
+        <MenuItemIcon icon={FolderPlus} />
         New Folder
       </button>
       <button type="button" onClick={() => onUpload(createParentPath)} className={MENU_ITEM_CLASS}>
+        <MenuItemIcon icon={Upload} />
         Upload Files Here
       </button>
       {canOpenInPreview ? (
@@ -162,12 +196,18 @@ export default function FileContextMenu({
           type="button"
           aria-current={isInPreview ? "true" : undefined}
           onClick={() => onOpenInPreview(menu.path)}
-          className={`flex w-full items-center px-4 py-2 text-sm transition-colors ${
+          className={`group flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
             isInPreview ? "text-sky-200 hover:bg-slate-800" : "text-slate-200 hover:bg-slate-800"
           }`}
         >
+          <MenuItemIcon
+            icon={AppWindow}
+            className={
+              isInPreview ? "text-sky-300 transition-colors group-hover:text-sky-200" : undefined
+            }
+          />
           Open in Preview
-          {isInPreview ? <Check size={14} className="ml-auto text-sky-200" /> : null}
+          {isInPreview ? <Check size={16} className="ml-auto text-sky-200" /> : null}
         </button>
       ) : null}
       <div className="my-2 border-t border-slate-700" />
@@ -179,6 +219,7 @@ export default function FileContextMenu({
         }}
         className={MENU_ITEM_CLASS}
       >
+        <MenuItemIcon icon={Copy} />
         Copy Path
       </button>
       <button
@@ -189,6 +230,7 @@ export default function FileContextMenu({
         }}
         className={MENU_ITEM_CLASS}
       >
+        <MenuItemIcon icon={ClipboardCopy} />
         Copy Relative Path
       </button>
       <div className="my-2 border-t border-slate-700" />
@@ -197,6 +239,7 @@ export default function FileContextMenu({
         onClick={() => onRename(menu.kind, menu.path)}
         className={MENU_ITEM_CLASS}
       >
+        <MenuItemIcon icon={Pencil} />
         Rename
       </button>
       <button
@@ -204,8 +247,12 @@ export default function FileContextMenu({
         disabled={isDeleteRefused}
         title={isDeleteRefused ? "A project needs at least one file" : undefined}
         onClick={() => onDelete(menu.kind, menu.path)}
-        className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-slate-500 disabled:hover:bg-transparent"
+        className="group flex w-full items-center gap-2.5 px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-slate-500 disabled:hover:bg-transparent"
       >
+        <MenuItemIcon
+          icon={Trash}
+          className="text-rose-300 transition-colors group-hover:text-rose-200 group-disabled:text-slate-500"
+        />
         {menu.kind === "folder" ? "Delete Folder" : "Delete File"}
       </button>
       {isDeleteRefused ? (

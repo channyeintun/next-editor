@@ -1,5 +1,5 @@
 import { type UIEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FilePlus2, FolderPlus, Upload } from "lucide-react";
+import { FilePlusCorner, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
   getWorkspaceBaseName,
@@ -472,9 +472,9 @@ function FileSidebarPanel() {
   const renderInlineInput = (kind: "file" | "folder", depth: number) => {
     const icon =
       kind === "folder" ? (
-        <FolderPlus size={13} className="text-slate-400" />
+        <FolderPlus size={14} className="text-slate-400" />
       ) : (
-        <FilePlus2 size={13} className="text-slate-400" />
+        <FilePlusCorner size={14} className="text-slate-400" />
       );
     // The placeholder is the only visible label, and a rename never shows it, so
     // the field is named for its action and, when renaming, for its item.
@@ -492,7 +492,9 @@ function FileSidebarPanel() {
           }`}
           style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
         >
-          <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
+          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+            {icon}
+          </span>
           <input
             ref={editInputRef}
             value={draftName}
@@ -648,7 +650,7 @@ function FileSidebarPanel() {
               aria-label="Create file"
               title="Create file"
             >
-              <FilePlus2 size={14} />
+              <FilePlusCorner size={16} aria-hidden="true" />
               <HoverRing />
             </button>
             <button
@@ -658,7 +660,7 @@ function FileSidebarPanel() {
               aria-label="Create folder"
               title="Create folder"
             >
-              <FolderPlus size={14} />
+              <FolderPlus size={16} aria-hidden="true" />
               <HoverRing />
             </button>
             <button
@@ -668,7 +670,7 @@ function FileSidebarPanel() {
               aria-label="Upload files"
               title="Upload local files (images, video, assets)"
             >
-              <Upload size={14} />
+              <Upload size={16} aria-hidden="true" />
               <HoverRing />
             </button>
           </div>
@@ -686,7 +688,7 @@ function FileSidebarPanel() {
         // sidebar shows the correct "add as asset" hint while dragging.
         <div className="pointer-events-none absolute inset-0 z-110 flex items-center justify-center bg-[#11141c]/80 px-4">
           <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-sky-400/70 bg-[#11141c] px-6 py-5 text-center">
-            <Upload size={22} className="text-sky-300" />
+            <Upload size={22} aria-hidden="true" className="text-sky-300" />
             <p className="text-xs font-medium text-slate-200">Drop files to add to the workspace</p>
           </div>
         </div>

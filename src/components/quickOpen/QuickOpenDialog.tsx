@@ -154,7 +154,7 @@ export default function QuickOpenDialog({
         <div className="flex items-center gap-2 border-b border-slate-800 p-3">
           <div className="relative min-w-0 flex-1">
             <Search
-              size={14}
+              size={16}
               aria-hidden="true"
               className="pointer-events-none absolute left-3 top-2.5 text-slate-500"
             />
