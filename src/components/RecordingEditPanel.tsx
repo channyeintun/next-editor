@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Loader2, Scissors, Sparkles, VolumeX, X } from "lucide-react";
+import {
+  ArrowRightFromLine,
+  ArrowRightToLine,
+  LoaderCircle,
+  Scissors,
+  Sparkles,
+  VolumeX,
+  X,
+} from "lucide-react";
 import type { Recording } from "../core/src";
 import {
   useLiveTime,
@@ -46,7 +54,9 @@ const NARRATION_NOTICE: Record<Exclude<NarrationState, "ready">, string> = {
 
 /** The Cut, Mute and Suggest buttons under the waveform. */
 const EDIT_BUTTON_CLASS =
-  "inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40";
+  "group inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40";
+
+const EDIT_ICON_CLASS = "text-slate-400 transition-colors group-enabled:group-hover:text-slate-200";
 
 /** When anything was recorded happening, for telling dead air from a quiet demo. */
 function activityTimes(recording: Recording): number[] {
@@ -346,7 +356,7 @@ export default function RecordingEditPanel({
       className="pointer-events-auto absolute bottom-full left-0 z-46 mb-2 w-full rounded-lg border border-slate-700 bg-[#151821] p-3 text-sm text-slate-200 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
     >
       <div className="mb-2 flex items-center gap-2">
-        <Scissors size={14} className="text-slate-400" aria-hidden="true" />
+        <Scissors size={16} className="text-slate-400" aria-hidden="true" />
         <span className="font-semibold text-slate-100">Edit recording</span>
         <span className="text-xs text-slate-400">
           Drag across the waveform, or set a start and end at the playhead; click to jump there
@@ -357,7 +367,7 @@ export default function RecordingEditPanel({
           aria-label="Close the editor"
           className="ml-auto rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
         >
-          <X size={14} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
           <HoverRing />
         </button>
       </div>
@@ -405,6 +415,7 @@ export default function RecordingEditPanel({
           onClick={() => markSelection("start")}
           className={EDIT_BUTTON_CLASS}
         >
+          <ArrowRightFromLine size={14} className={EDIT_ICON_CLASS} aria-hidden="true" />
           Start at playhead
           <HoverRing />
         </button>
@@ -414,6 +425,7 @@ export default function RecordingEditPanel({
           onClick={() => markSelection("end")}
           className={EDIT_BUTTON_CLASS}
         >
+          <ArrowRightToLine size={14} className={EDIT_ICON_CLASS} aria-hidden="true" />
           End at playhead
           <HoverRing />
         </button>
@@ -423,7 +435,7 @@ export default function RecordingEditPanel({
           onClick={() => addEdit("cut")}
           className={EDIT_BUTTON_CLASS}
         >
-          <Scissors size={12} aria-hidden="true" />
+          <Scissors size={14} className={EDIT_ICON_CLASS} aria-hidden="true" />
           Cut selection
           <HoverRing />
         </button>
@@ -433,7 +445,7 @@ export default function RecordingEditPanel({
           onClick={() => addEdit("mute")}
           className={EDIT_BUTTON_CLASS}
         >
-          <VolumeX size={12} aria-hidden="true" />
+          <VolumeX size={14} className={EDIT_ICON_CLASS} aria-hidden="true" />
           Mute selection
           <HoverRing />
         </button>
@@ -444,7 +456,7 @@ export default function RecordingEditPanel({
           title="Suggest cuts for long stretches where nobody spoke and nothing happened"
           className={EDIT_BUTTON_CLASS}
         >
-          <Sparkles size={12} aria-hidden="true" />
+          <Sparkles size={14} className={EDIT_ICON_CLASS} aria-hidden="true" />
           Suggest dead-air cuts
           <HoverRing />
         </button>
@@ -480,9 +492,9 @@ export default function RecordingEditPanel({
                 disabled={applying}
                 onClick={() => removeEdit(index)}
                 // Room for the ring; the negative margin keeps the chip's height.
-                className="-my-0.5 rounded-full p-1 text-slate-500 transition-colors hover:text-white"
+                className="-my-1 rounded-full p-1 text-slate-500 transition-colors hover:text-white"
               >
-                <X size={11} aria-hidden="true" />
+                <X size={14} aria-hidden="true" />
                 <HoverRing />
               </button>
             </li>
@@ -518,7 +530,7 @@ export default function RecordingEditPanel({
           disabled={edits.length === 0 || applying || narrationState === "loading"}
           className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-950 transition-colors hover:bg-white disabled:opacity-40"
         >
-          {applying ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+          {applying ? <LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> : null}
           {applying ? "Applying…" : "Apply edits"}
         </button>
       </div>

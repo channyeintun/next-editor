@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { History, Trash2 } from "lucide-react";
+import { LoaderCircle, RotateCcw, RotateCcwClock, Trash } from "lucide-react";
 import type { Recording } from "../core/src";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -118,7 +118,7 @@ export default function RecordingDraftRecovery({
       className="absolute bottom-3 left-3 z-30 w-[min(22rem,calc(100%-1.5rem))] rounded-lg border border-slate-700 bg-[#151821] p-3 text-sm text-slate-200 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
     >
       <div className="flex items-start gap-2.5">
-        <History size={16} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
+        <RotateCcwClock size={16} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p id="recording-draft-recovery-title" className="font-semibold text-slate-100">
             {draft.finished ? "Unsaved recording" : "Interrupted recording"}
@@ -145,7 +145,7 @@ export default function RecordingDraftRecovery({
                   onClick={() => void handleDiscard()}
                   className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
                 >
-                  <Trash2 size={12} aria-hidden="true" />
+                  <Trash size={14} aria-hidden="true" />
                   Delete
                 </button>
                 {/* Mounts only after a press (Discard, or a Recover that found nothing), so it
@@ -169,8 +169,13 @@ export default function RecordingDraftRecovery({
                   type="button"
                   disabled={busy}
                   onClick={() => void handleRecover()}
-                  className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-950 transition-colors hover:bg-white disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-950 transition-colors hover:bg-white disabled:opacity-60"
                 >
+                  {busy ? (
+                    <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RotateCcw size={14} aria-hidden="true" />
+                  )}
                   {busy ? "Recovering…" : "Recover"}
                 </button>
                 <button
