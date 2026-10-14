@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileSearch } from "lucide-react";
+import { Search } from "lucide-react";
 import { isApplePlatform } from "../../utils/keyboardPlatform";
 import { goToFileAriaKeyShortcuts, goToFileShortcutLabel } from "./goToFileShortcut";
 import { GO_TO_FILE_BUTTON_ID, useIsQuickOpenShowing, useOpenQuickOpen } from "./quickOpenState";
@@ -25,7 +25,7 @@ export default function QuickOpenButton() {
       // keeps the explorer header's row height.
       className="-my-1 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-white"
     >
-      <FileSearch size={16} aria-hidden="true" />
+      <Search size={16} aria-hidden="true" />
       <HoverRing />
     </button>
   );

@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import {
   FilePlusCorner,
-  FileSearch,
   FolderPlus,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
   PenTool,
   Presentation,
+  Search,
   Settings,
   Upload,
   Users,
@@ -106,7 +106,7 @@ export default function EditorShellSkeleton({
                     Files
                   </p>
                   <span className="-my-1 inline-flex size-7 items-center justify-center text-slate-400">
-                    <FileSearch size={16} />
+                    <Search size={16} />
                   </span>
                 </div>
                 <div className="flex items-center gap-0.5 text-slate-400">
