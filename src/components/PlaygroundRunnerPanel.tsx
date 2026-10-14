@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot } from "lucide-react";
+import { Bot, LoaderCircle } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
 import HoverRing from "./hoverRing/HoverRing";
@@ -256,12 +256,12 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     {
       id: "runner",
       label: runnerTab.label,
-      icon: <RunnerIcon size={15} strokeWidth={2.25} />,
+      icon: <RunnerIcon size={16} />,
     },
     {
       id: "agent",
       label: "Agent",
-      icon: <Bot size={14} />,
+      icon: <Bot size={16} />,
     },
   ] as const satisfies readonly RuntimeDockTabConfig[];
 
@@ -311,9 +311,10 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
                 {toolLabel}
               </p>
               {isRunning || isFormatting ? (
-                <span
+                <LoaderCircle
+                  size={14}
                   aria-hidden="true"
-                  className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
+                  className="shrink-0 animate-spin text-[#d48a37]"
                 />
               ) : null}
             </div>

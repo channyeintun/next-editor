@@ -13,16 +13,21 @@ import {
   ArrowRight,
   Maximize2,
   Minimize2,
-  MoreVertical,
+  EllipsisVertical,
   PanelRight,
   PictureInPicture2,
-  RotateCw,
+  RefreshCw,
   SquareTerminal,
   X,
 } from "lucide-react";
 import type { PreviewActiveMode, PreviewPanelMode, PreviewSize } from "../../types/slides";
 import { isCustomPreviewSize } from "./previewSizeUtils";
 import HoverRing from "../hoverRing/HoverRing";
+
+const PREVIEW_MENU_ITEM_CLASS =
+  "group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700";
+const PREVIEW_MENU_ICON_CLASS =
+  "flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors group-hover:text-slate-200 group-focus-visible:text-slate-200";
 
 interface PreviewChromeProps {
   children: ReactNode;
@@ -203,7 +208,7 @@ function PreviewWindowMenu({
         aria-haspopup="menu"
         title="Preview options"
       >
-        <MoreVertical size={16} />
+        <EllipsisVertical size={16} />
         <HoverRing />
       </button>
 
@@ -218,9 +223,11 @@ function PreviewWindowMenu({
             type="button"
             role="menuitem"
             onClick={handleDockMode}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+            className={PREVIEW_MENU_ITEM_CLASS}
           >
-            {mode === "floating" ? <PanelRight size={15} /> : <PictureInPicture2 size={15} />}
+            <span className={PREVIEW_MENU_ICON_CLASS} aria-hidden="true">
+              {mode === "floating" ? <PanelRight size={16} /> : <PictureInPicture2 size={16} />}
+            </span>
             {mode === "floating" ? "Unfloat" : "Float"}
           </button>
 
@@ -229,9 +236,11 @@ function PreviewWindowMenu({
             type="button"
             role="menuitem"
             onClick={() => onResizeStep(1)}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+            className={PREVIEW_MENU_ITEM_CLASS}
           >
-            <Maximize2 size={15} />
+            <span className={PREVIEW_MENU_ICON_CLASS} aria-hidden="true">
+              <Maximize2 size={16} />
+            </span>
             Larger
           </button>
 
@@ -239,9 +248,11 @@ function PreviewWindowMenu({
             type="button"
             role="menuitem"
             onClick={() => onResizeStep(-1)}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+            className={PREVIEW_MENU_ITEM_CLASS}
           >
-            <Minimize2 size={15} />
+            <span className={PREVIEW_MENU_ICON_CLASS} aria-hidden="true">
+              <Minimize2 size={16} />
+            </span>
             Smaller
           </button>
 
@@ -249,9 +260,11 @@ function PreviewWindowMenu({
             type="button"
             role="menuitem"
             onClick={handleClose}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+            className={PREVIEW_MENU_ITEM_CLASS}
           >
-            <X size={15} />
+            <span className={PREVIEW_MENU_ICON_CLASS} aria-hidden="true">
+              <X size={16} />
+            </span>
             Close
           </button>
         </div>
@@ -350,7 +363,7 @@ function PreviewToolbar({
               aria-label="Go back in preview"
               title="Go back in preview"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
               <HoverRing />
             </button>
 
@@ -361,7 +374,7 @@ function PreviewToolbar({
               aria-label="Go forward in preview"
               title="Go forward in preview"
             >
-              <ArrowRight size={18} />
+              <ArrowRight size={16} />
               <HoverRing />
             </button>
 
@@ -372,7 +385,7 @@ function PreviewToolbar({
               aria-label="Refresh preview"
               title="Refresh preview"
             >
-              <RotateCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
+              <RefreshCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
               <HoverRing />
             </button>
           </div>
@@ -426,6 +439,7 @@ function PreviewResizeHandle({ onResizeStart }: PreviewResizeHandleProps) {
       <svg
         className="absolute bottom-0 left-0 -z-10 text-slate-600/30 transition-colors group-hover:text-blue-500/20 size-10"
         viewBox="0 0 40 40"
+        aria-hidden="true"
       >
         <path d="M0 40 L40 40 L0 0 Z" fill="currentColor" />
       </svg>

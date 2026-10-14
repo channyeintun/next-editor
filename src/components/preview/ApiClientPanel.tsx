@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Clock, Loader2, Minus, Plus, Send, Trash2 } from "lucide-react";
+import { Clock, LoaderCircle, Plus, Send, Trash } from "lucide-react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   MonacoEditor,
@@ -169,7 +169,7 @@ export default function ApiClientPanel({
       {/* Waiting banner — the server isn't listening yet, so requests can't be sent. */}
       {!runtimeReady ? (
         <div className="flex items-center gap-2 border-b border-slate-800 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-300">
-          <Loader2 size={12} className="animate-spin" />
+          <LoaderCircle size={14} className="shrink-0 animate-spin" />
           Waiting for the server to start…
         </div>
       ) : null}
@@ -212,7 +212,7 @@ export default function ApiClientPanel({
           }
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-700 px-3 font-semibold text-white transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          {sending ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}
           Send
         </button>
       </div>
@@ -255,7 +255,7 @@ export default function ApiClientPanel({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {sending ? (
           <div className="flex flex-1 items-center justify-center gap-2 text-slate-300">
-            <Loader2 size={16} className="animate-spin" />
+            <LoaderCircle size={16} className="animate-spin" />
             Sending request…
           </div>
         ) : result ? (
@@ -281,7 +281,7 @@ export default function ApiClientPanel({
               className="-m-1 inline-flex items-center justify-center rounded-md p-1 text-slate-400 transition-colors hover:text-slate-200"
               title="Clear history"
             >
-              <Trash2 size={12} />
+              <Trash size={14} />
               <HoverRing />
             </button>
           </div>
@@ -393,7 +393,7 @@ function HeadersEditor({
             // As tall as the inputs beside it, with room round the icon for the hover ring.
             className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-red-400"
           >
-            <Minus size={14} />
+            <Trash size={14} />
             <HoverRing />
           </button>
         </div>
@@ -401,9 +401,9 @@ function HeadersEditor({
       <button
         type="button"
         onClick={onAdd}
-        className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+        className="group mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
       >
-        <Plus size={12} />
+        <Plus size={14} className="text-slate-400 transition-colors group-hover:text-slate-200" />
         Add header
         <HoverRing />
       </button>
@@ -420,7 +420,7 @@ function ResponseView({ result }: { result: NonNullable<ReturnType<typeof select
         </span>
         <span className="text-xs text-slate-300">{result.error.error}</span>
         <span className="flex items-center gap-1 text-[11px] text-slate-300">
-          <Clock size={11} />
+          <Clock size={14} className="text-slate-400" />
           {formatDuration(result.error.durationMs)}
         </span>
       </div>
@@ -456,7 +456,7 @@ function SuccessfulResponseView({
           {response.status} {response.statusText}
         </span>
         <span className="flex items-center gap-1 text-[11px] text-slate-300">
-          <Clock size={11} />
+          <Clock size={14} className="text-slate-400" />
           {formatDuration(response.durationMs)}
         </span>
         <span className="text-[11px] text-slate-300">

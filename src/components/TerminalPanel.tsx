@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
+import { Bot, Diamond, LoaderCircle, Plus, Settings, SquareTerminal, X } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import RunnerSettingsDialog from "./terminalPanel/RunnerSettingsDialog";
 import RuntimeDockHeader, { type RuntimeDockTabConfig } from "./terminalPanel/RuntimeDockHeader";
@@ -87,17 +87,17 @@ const DOCK_TABS: RuntimeDockTabConfig[] = [
   {
     id: "runner",
     label: "Runner",
-    icon: <Diamond size={15} strokeWidth={2.25} />,
+    icon: <Diamond size={16} />,
   },
   {
     id: "console",
     label: "Console",
-    icon: <SquareTerminal size={13} />,
+    icon: <SquareTerminal size={16} />,
   },
   {
     id: "agent",
     label: "Agent",
-    icon: <Bot size={14} />,
+    icon: <Bot size={16} />,
   },
 ];
 
@@ -376,12 +376,12 @@ function TerminalPanel() {
                     }
                   }}
                   // A 24px box (the minimum target size) for the hover ring; the margin keeps
-                  // the icon 12px from the tab's edge.
+                  // the icon 11px from the tab's edge.
                   className="mr-1.5 inline-flex size-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
                   aria-label={`Close ${session.title}`}
                   title={`Close ${session.title}`}
                 >
-                  <X size={12} />
+                  <X size={14} />
                   <HoverRing />
                 </button>
               </div>
@@ -402,7 +402,7 @@ function TerminalPanel() {
             aria-label="New terminal"
             title="New terminal"
           >
-            <Plus size={15} />
+            <Plus size={16} />
             <HoverRing />
           </button>
         </RuntimeDockHeader>
@@ -417,9 +417,10 @@ function TerminalPanel() {
                       {runnerConfig.enabled ? runnerCommand : "Runner disabled"}
                     </p>
                     {isBusy ? (
-                      <span
+                      <LoaderCircle
+                        size={14}
                         aria-hidden="true"
-                        className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
+                        className="shrink-0 animate-spin text-[#d48a37]"
                       />
                     ) : null}
                   </div>
@@ -463,7 +464,7 @@ function TerminalPanel() {
                       aria-label="Open runner settings"
                       title="Open runner settings"
                     >
-                      <Settings size={18} />
+                      <Settings size={16} />
                       <HoverRing />
                     </button>
                   </div>

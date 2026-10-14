@@ -73,11 +73,20 @@ function RuntimeDockHeader({
               aria-pressed={isActive}
               disabled={disabled}
               onClick={() => onSelectTab(tab.id)}
-              className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
+              className={`group inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
                 isActive,
               )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-300`}
             >
-              {tab.icon}
+              <span
+                aria-hidden="true"
+                className={`flex shrink-0 items-center transition-colors ${
+                  isActive
+                    ? "text-slate-300"
+                    : "text-slate-400 group-enabled:group-hover:text-slate-200"
+                }`}
+              >
+                {tab.icon}
+              </span>
               {tab.label}
             </button>
           );
@@ -100,7 +109,7 @@ function RuntimeDockHeader({
           displayIsFullHeight ? "Restore runtime dock height" : "Expand runtime dock to full height"
         }
       >
-        {displayIsFullHeight ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        {displayIsFullHeight ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         <HoverRing />
       </button>
 
