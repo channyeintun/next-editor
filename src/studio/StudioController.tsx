@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAthanLabAccount,
@@ -965,7 +965,10 @@ export default function StudioController() {
         {buildWarnings.length > 0 ? (
           <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
             {buildWarnings.map((warning) => (
-              <li key={warning}>⚠ {warning}</li>
+              <li key={warning} className="flex items-start gap-1.5">
+                <TriangleAlert aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
+                <span className="min-w-0">{warning}</span>
+              </li>
             ))}
           </ul>
         ) : null}
@@ -975,7 +978,13 @@ export default function StudioController() {
             <p className="font-semibold">Critic notes (advisory)</p>
             <ul className="mt-1 space-y-0.5">
               {criticNotes.map((note) => (
-                <li key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}>✎ {note.message}</li>
+                <li
+                  key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}
+                  className="flex items-start gap-1.5"
+                >
+                  <Info aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
+                  <span className="min-w-0">{note.message}</span>
+                </li>
               ))}
             </ul>
           </div>

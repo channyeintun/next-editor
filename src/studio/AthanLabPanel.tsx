@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import {
   athanLabErrorOf,
   athanLabVoiceSampleUrl,
@@ -556,7 +557,7 @@ export default function AthanLabPanel({
               title="Reload the voice list and your balance from AthanLab"
               className={BUTTON_CLASS}
             >
-              ↻
+              <RefreshCw aria-hidden="true" className="inline-block size-3.5" />
               <HoverRing />
             </button>
             <button

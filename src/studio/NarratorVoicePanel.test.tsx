@@ -147,8 +147,8 @@ describe("NarratorVoicePanel voice focus", () => {
     renderPanel();
 
     const remove = await screen.findByRole("button", { name: "Delete voice" });
-    expect(remove).toHaveTextContent("✕");
-    expect(remove.querySelector('[aria-hidden="true"]')).toHaveTextContent("✕");
+    expect(remove).toHaveTextContent("");
+    expect(remove.querySelector(".lucide-trash")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("keeps focus on the voice select after deleting the selected voice", async () => {
@@ -160,11 +160,13 @@ describe("NarratorVoicePanel voice focus", () => {
     remove.focus();
     fireEvent.click(remove);
 
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
-    );
-    expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
-    expect(onSelectedVoiceChange).toHaveBeenLastCalledWith(null);
+    // Focus moves before the delete commits, and the selection is reported from an effect
+    // after it: wait for all three, or a check between them sees the voice still selected.
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus();
+      expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
+      expect(onSelectedVoiceChange).toHaveBeenLastCalledWith(null);
+    });
   });
 
   it("sends a failed delete to onError and keeps the voice listed", async () => {

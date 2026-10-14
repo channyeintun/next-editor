@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trash } from "lucide-react";
 import HoverRing from "../components/hoverRing/HoverRing";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import type { StudioNarrationProvider } from "./narrationLanguage";
@@ -370,7 +371,7 @@ export default function NarratorVoicePanel({
                 className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
                 title="Delete this reference voice from the browser"
               >
-                <span aria-hidden="true">✕</span>
+                <Trash aria-hidden="true" className="inline-block size-3.5" />
                 <HoverRing />
               </button>
             </>

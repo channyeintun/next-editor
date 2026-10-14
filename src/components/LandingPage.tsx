@@ -3,7 +3,7 @@ import {
   Minimize,
   Pause,
   Play,
-  SquareArrowOutUpRight,
+  ExternalLink,
   BookOpen,
   GraduationCap,
   FileText,
@@ -187,12 +187,18 @@ function RotatingFrameworkHeading() {
         <button
           type="button"
           onClick={() => setRotationPaused((paused) => !paused)}
-          className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+          className="group mb-6 inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
         >
           {rotationPaused ? (
-            <Play className="size-3.5" aria-hidden="true" />
+            <Play
+              className="size-4 text-slate-400 transition-colors group-hover:text-white"
+              aria-hidden="true"
+            />
           ) : (
-            <Pause className="size-3.5" aria-hidden="true" />
+            <Pause
+              className="size-4 text-slate-400 transition-colors group-hover:text-white"
+              aria-hidden="true"
+            />
           )}
           {rotationPaused ? "Play animation" : "Pause animation"}
           <HoverRing />
@@ -457,9 +463,9 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                             className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
                           >
                             {isFullscreen ? (
-                              <Minimize className="size-4" aria-hidden="true" />
+                              <Minimize className="size-4.5" aria-hidden="true" />
                             ) : (
-                              <Maximize className="size-4" aria-hidden="true" />
+                              <Maximize className="size-4.5" aria-hidden="true" />
                             )}
                             <HoverRing />
                           </button>
@@ -472,7 +478,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           title="Open in new tab"
                           className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
                         >
-                          <SquareArrowOutUpRight className="size-4" aria-hidden="true" />
+                          <ExternalLink className="size-4.5" aria-hidden="true" />
                           <HoverRing />
                         </a>
                       </div>
@@ -492,9 +498,9 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           onClick={toggleFullscreen}
                           aria-label="Exit full screen"
                           title="Exit full screen"
-                          className="absolute left-4 top-4 z-10 inline-flex items-center justify-center rounded-full border border-white/15 bg-slate-950/80 p-2.5 text-white backdrop-blur transition-colors hover:bg-slate-950"
+                          className="absolute left-4 top-4 z-10 inline-flex items-center justify-center rounded-full border border-white/15 bg-slate-950/80 p-2.25 text-white backdrop-blur transition-colors hover:bg-slate-950"
                         >
-                          <Minimize className="size-4" aria-hidden="true" />
+                          <Minimize className="size-4.5" aria-hidden="true" />
                           <HoverRing />
                         </button>
                       )}
@@ -687,7 +693,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                   style={{ backgroundColor: uc.color }}
                   className="rounded-2xl mb-6 flex items-center justify-center size-12"
                 >
-                  <uc.icon className="size-6 text-slate-950" />
+                  <uc.icon className="size-6 text-slate-950" aria-hidden="true" />
                 </div>
                 <h3 className="text-2xl font-machina mb-4">{uc.title}</h3>
                 <p className="text-slate-300 leading-relaxed">{uc.desc}</p>
@@ -780,7 +786,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
               <path fillRule="evenodd" d={GITHUB_SVG_PATH} clipRule="evenodd" />
             </svg>
             <span>Star on GitHub</span>
-            <Star className="size-5 fill-pinata-yellow text-pinata-yellow" />
+            <Star className="size-5 fill-pinata-yellow text-pinata-yellow" aria-hidden="true" />
             {starCount !== null && (
               <span className="ml-1 px-2.5 py-0.5 rounded-full bg-slate-950/10 text-sm font-bold">
                 {formatStarCount(starCount)}
