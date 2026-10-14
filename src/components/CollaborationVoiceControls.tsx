@@ -93,7 +93,7 @@ export function VoiceControls() {
     >
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="inline-flex items-center gap-1.5 text-slate-300">
-          <Headphones size={13} aria-hidden="true" /> Voice
+          <Headphones size={14} className="text-slate-400" aria-hidden="true" /> Voice
         </span>
         {/* Not a live region: VoiceStatusLine announces voice changes from the
             panel's persistent status region, which is heard with the panel closed. */}
@@ -117,7 +117,7 @@ export function VoiceControls() {
             onClick={voice.join}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25"
           >
-            <Headphones size={13} aria-hidden="true" /> Join voice
+            <Headphones size={14} aria-hidden="true" /> Join voice
             <HoverRing />
           </button>
         ) : null}
@@ -128,7 +128,7 @@ export function VoiceControls() {
             onClick={micToggle.onClick}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${micToggle.className}`}
           >
-            <micToggle.Icon size={13} aria-hidden="true" /> {micToggle.label}
+            <micToggle.Icon size={14} aria-hidden="true" /> {micToggle.label}
             <HoverRing />
           </button>
         ) : null}
@@ -138,7 +138,7 @@ export function VoiceControls() {
             onClick={voice.retry}
             className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25"
           >
-            <RefreshCw size={13} aria-hidden="true" /> Retry voice
+            <RefreshCw size={14} aria-hidden="true" /> Retry voice
             <HoverRing />
           </button>
         ) : null}
@@ -148,7 +148,7 @@ export function VoiceControls() {
             onClick={voice.leave}
             className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/10"
           >
-            <LogOut size={13} aria-hidden="true" /> Leave voice
+            <LogOut size={14} aria-hidden="true" /> Leave voice
             <HoverRing />
           </button>
         ) : null}
@@ -160,7 +160,7 @@ export function VoiceControls() {
           onClick={voice.enableAudio}
           className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/25"
         >
-          <Volume2 size={13} aria-hidden="true" /> Enable audio
+          <Volume2 size={14} aria-hidden="true" /> Enable audio
           <HoverRing />
         </button>
       ) : null}
@@ -228,9 +228,9 @@ export function VoiceParticipantBadge({
         role="img"
         aria-label="In voice, muted"
         title="In voice, muted"
-        className="text-slate-500"
+        className="text-slate-400"
       >
-        <MicOff size={13} />
+        <MicOff size={14} aria-hidden="true" />
       </span>
     );
   }
@@ -241,7 +241,7 @@ export function VoiceParticipantBadge({
       title={speaking ? "Speaking" : "In voice"}
       className={speaking ? "text-emerald-300 motion-safe:animate-pulse" : "text-emerald-400/80"}
     >
-      <Mic size={13} />
+      <Mic size={14} aria-hidden="true" />
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { Check, Copy, Crown, Link2, Radio, RefreshCw, UserMinus, Users, X } from "lucide-react";
+import { Check, Copy, Crown, Link, Radio, RefreshCw, UserMinus, Users, X } from "lucide-react";
 import { avatarProxyUrl, signInUrl, useAuth } from "@next-editor/infra";
 import { useCollaboration, type CollaborationParticipant } from "../contexts/CollaborationContext";
 import { useRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
@@ -127,7 +127,7 @@ function ParticipantRow({
         <span className="block truncate text-[10px] text-slate-300">{surfaceLabel}</span>
       </span>
       <VoiceParticipantBadge userId={participant.actorId} sessionId={participant.sessionId} />
-      {participant.isHost ? <Crown size={13} className="text-amber-300" aria-label="Host" /> : null}
+      {participant.isHost ? <Crown size={14} className="text-amber-300" aria-label="Host" /> : null}
       <span className="text-[10px] capitalize text-slate-300">{participant.role}</span>
       {!isSelf ? (
         // A toggle keeps one name and lets aria-pressed carry the state; the
@@ -228,7 +228,7 @@ function RoomOwnerSection({
             onClick={() => void onCreateShareLink("editor")}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50 p-2"
           >
-            <Link2 size={13} /> Editor link
+            <Link size={14} aria-hidden="true" /> Editor link
           </button>
           <button
             type="button"
@@ -236,7 +236,7 @@ function RoomOwnerSection({
             onClick={() => void onCreateShareLink("viewer")}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500/15 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50 p-2"
           >
-            <Link2 size={13} /> Viewer link
+            <Link size={14} aria-hidden="true" /> Viewer link
           </button>
         </div>
         {shareUrl ? (
@@ -245,7 +245,11 @@ function RoomOwnerSection({
             onClick={() => void onCopyShareUrl()}
             className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/3"
           >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
+            {copied ? (
+              <Check size={14} className="text-slate-400" aria-hidden="true" />
+            ) : (
+              <Copy size={14} className="text-slate-400" aria-hidden="true" />
+            )}
             {/* The copy icon is hidden from assistive tech, so the action is
                 spelled out ahead of the visible link. The space sits outside
                 the hidden span because a name drops an element's own trailing
@@ -303,9 +307,9 @@ function RoomOwnerSection({
                     aria-label={`Remove ${collaboratorDisplayName(member)}`}
                     disabled={isBusy}
                     onClick={() => void run(() => collaboration.removeMember(member.userId))}
-                    className="rounded-md p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
+                    className="rounded-md p-1 text-slate-400 hover:bg-rose-500/10 hover:text-rose-300"
                   >
-                    <UserMinus size={13} />
+                    <UserMinus size={14} aria-hidden="true" />
                     <HoverRing />
                   </button>
                 </>
@@ -500,14 +504,22 @@ export default function CollaborationPanel() {
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         onClick={() => setIsOpen((current) => !current)}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
+        className={`group inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
           isInRoom
             ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
             : "text-slate-300 hover:bg-white/5 hover:text-white"
         }`}
         title={isInRoom ? status : "Start live collaboration"}
       >
-        {isInRoom ? <Radio size={15} /> : <Users size={15} />}
+        {isInRoom ? (
+          <Radio size={16} aria-hidden="true" />
+        ) : (
+          <Users
+            size={16}
+            className="text-slate-400 transition-colors group-hover:text-white"
+            aria-hidden="true"
+          />
+        )}
         <span>{isInRoom ? status : "Live"}</span>
         {presence.participants.length > 0 ? (
           <span className="rounded-full bg-white/10 px-1.5 text-[10px] text-slate-200">
@@ -551,7 +563,7 @@ export default function CollaborationPanel() {
               }}
               className="rounded-md p-1 text-slate-400 hover:bg-white/5 hover:text-white"
             >
-              <X size={16} />
+              <X size={16} aria-hidden="true" />
               <HoverRing />
             </button>
           </div>
@@ -611,7 +623,7 @@ export default function CollaborationPanel() {
                       onClick={() => void run(() => collaboration.retry())}
                       className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-sky-300 hover:text-sky-200"
                     >
-                      <RefreshCw size={13} /> Retry connection
+                      <RefreshCw size={14} aria-hidden="true" /> Retry connection
                     </button>
                   ) : null}
                 </div>
@@ -701,7 +713,7 @@ export default function CollaborationPanel() {
                         onClick={collaboration.retryAssets}
                         className="inline-flex items-center gap-1 font-semibold text-sky-200 hover:text-sky-100"
                       >
-                        <RefreshCw size={12} /> Retry shared assets
+                        <RefreshCw size={14} aria-hidden="true" /> Retry shared assets
                       </button>
                     ) : null}
                   </div>
