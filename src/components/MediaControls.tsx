@@ -1,5 +1,6 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
+  CirclePlay,
   Scissors,
   FileMusic,
   Mic,
@@ -9,7 +10,11 @@ import {
   MonitorOff,
   X,
   Keyboard,
-  Loader2,
+  Letters,
+  LoaderCircle,
+  RotateCcw,
+  Settings,
+  SkipForward,
 } from "lucide-react";
 import { useSelector } from "@xstate/store-react";
 import {
@@ -23,7 +28,6 @@ import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import ChaptersMenu from "./ChaptersMenu";
 import type { RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
-import ReplayIcon from "./icon/Replay";
 import RecordButton from "./mediaControls/RecordButton";
 import RecordingTransportControls from "./mediaControls/RecordingTransportControls";
 import RecordingOptionToggle from "./mediaControls/RecordingOptionToggle";
@@ -31,10 +35,10 @@ import CaptionsMenuButton from "./mediaControls/CaptionsMenuButton";
 import CaptionSettings from "./mediaControls/CaptionSettings";
 import { useCaptionFileImport } from "./mediaControls/useCaptionFileImport";
 import CaptionStatus from "./mediaControls/CaptionStatus";
+import MenuRowIcon from "./mediaControls/MenuRowIcon";
 import PlaybackSpeedVolume from "./mediaControls/PlaybackSpeedVolume";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
-import SettingIcon from "./icon/Setting";
 import ProgressBar, { LIVE_PROGRESS_VARIABLE } from "./ProgressBar";
 import HoverRing from "./hoverRing/HoverRing";
 import Switch from "./Switch";
@@ -398,6 +402,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   // A box with room round the icon, for the hover ring to trace.
   const controlButtonClass = large ? "size-[72px] rounded-xl" : "size-7 rounded-md";
   const transportIconSize = large ? 72 : 24;
+  // A line glyph between filled Play and Pause: a little smaller and heavier, to weigh the same.
+  const replayIconSize = large ? 60 : 20;
   const controlIconSize = large ? 52 : 16;
   const recordIconSize = large ? 44 : 14;
   const recordPlusSize = large ? 30 : 10;
@@ -468,7 +474,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                     : "hover:bg-slate-800 hover:text-white"
                 }`}
               >
-                <Mic size={13} aria-hidden="true" />
+                <Mic size={14} aria-hidden="true" />
                 <span className="hidden sm:inline">Mic</span>
                 {/* Inside each option, which touch in the track; not on the chosen one, whose
                     light fill would hide it. */}
@@ -486,7 +492,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                     : "hover:bg-slate-800 hover:text-white"
                 }`}
               >
-                <FileMusic size={13} aria-hidden="true" />
+                <FileMusic size={14} aria-hidden="true" />
                 <span className="hidden sm:inline">File</span>
                 {recordingAudioSource === "external" ? null : <HoverRing gap={0} />}
               </button>
@@ -513,7 +519,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                   // Room for the ring, reaching into the pill's padding so its height stays.
                   className="-my-1 -mr-1 shrink-0 rounded-full p-1 text-slate-500 transition-colors hover:text-white"
                 >
-                  <X size={12} aria-hidden="true" />
+                  <X size={14} aria-hidden="true" />
                   <HoverRing />
                 </button>
               </div>
@@ -568,7 +574,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               {isPlaying ? (
                 <PauseIcon size={transportIconSize} />
               ) : hasEnded ? (
-                <ReplayIcon size={transportIconSize} />
+                <RotateCcw
+                  size={replayIconSize}
+                  strokeWidth={2.25}
+                  className="text-white"
+                  aria-hidden="true"
+                />
               ) : (
                 <PlayIcon size={transportIconSize} />
               )}
@@ -650,7 +661,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 title={describeCaptionGeneration(captionGeneration.state)}
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1 text-[11px] text-slate-400 pointer-events-auto"
               >
-                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />
                 {captionGeneration.state.status === "running" && captionGeneration.state.progress
                   ? `${Math.round(captionGeneration.state.progress.fraction * 100)}%`
                   : ""}
@@ -666,74 +677,75 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 aria-label="Settings"
                 aria-expanded={showSettings}
                 title="Settings"
-                className={`flex items-center justify-center transition-colors cursor-pointer ${controlButtonClass}`}
+                className={`flex items-center justify-center text-slate-300 transition-colors cursor-pointer hover:text-white ${controlButtonClass}`}
               >
-                <SettingIcon size={controlIconSize} />
+                <Settings size={controlIconSize} aria-hidden="true" />
                 <HoverRing />
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#151821] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
-                  <div className="text-slate-100">
-                    {(!effectiveRecordMode || playlistMode) && (
-                      <div className="mb-3 border-b border-slate-700 pb-3">
-                        {playlistMode && (
-                          <Switch
-                            checked={continueToNext}
-                            onChange={(checked) =>
-                              playbackSettingsStore.trigger.setContinueToNext({
-                                continueToNext: checked,
-                              })
-                            }
-                            label="Continue to Next"
-                          />
-                        )}
-                        {!effectiveRecordMode && (
-                          <Switch
-                            checked={autoplay}
-                            onChange={(checked) =>
-                              playbackSettingsStore.trigger.setAutoplay({ autoplay: checked })
-                            }
-                            label="Autoplay"
-                          />
-                        )}
-                      </div>
-                    )}
-                    <PlaybackSpeedVolume />
-                    <CaptionSettings
-                      recording={currentRecording}
-                      effectiveRecordMode={effectiveRecordMode}
-                      captionGeneration={captionGeneration}
-                      activeCaptionTrack={activeCaptionTrack}
-                      importError={captionImportError}
-                      onImport={openCaptionPicker}
-                    />
-                    <div className="mt-3 border-t border-slate-700 pt-3">
-                      <Switch
-                        checked={characterShortcuts}
-                        onChange={(enabled) =>
-                          playbackSettingsStore.trigger.setCharacterShortcuts({ enabled })
-                        }
-                        label="Single-key shortcuts"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // This button unmounts with the menu; without a hand-off focus
-                          // would fall to <body>. The help returns focus to Settings on close.
-                          settingsButtonRef.current?.focus();
-                          setShowSettings(false);
-                          playerShortcuts.openHelp();
-                        }}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
-                      >
-                        <Keyboard size={14} aria-hidden="true" />
-                        Keyboard shortcuts
-                        <kbd className="ml-auto rounded border border-slate-600 px-1 font-mono text-[11px] text-slate-400">
-                          ?
-                        </kbd>
-                      </button>
+                <div className="absolute bottom-full right-0 z-46 mb-2 w-72 rounded-lg border border-slate-700 bg-[#151821] p-1.5 text-slate-100 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+                  {(!effectiveRecordMode || playlistMode) && (
+                    <div className="mb-1.5 border-b border-slate-700 pb-1.5">
+                      {playlistMode && (
+                        <Switch
+                          checked={continueToNext}
+                          onChange={(checked) =>
+                            playbackSettingsStore.trigger.setContinueToNext({
+                              continueToNext: checked,
+                            })
+                          }
+                          label="Continue to Next"
+                          icon={SkipForward}
+                        />
+                      )}
+                      {!effectiveRecordMode && (
+                        <Switch
+                          checked={autoplay}
+                          onChange={(checked) =>
+                            playbackSettingsStore.trigger.setAutoplay({ autoplay: checked })
+                          }
+                          label="Autoplay"
+                          icon={CirclePlay}
+                        />
+                      )}
                     </div>
+                  )}
+                  <PlaybackSpeedVolume />
+                  <CaptionSettings
+                    recording={currentRecording}
+                    effectiveRecordMode={effectiveRecordMode}
+                    captionGeneration={captionGeneration}
+                    activeCaptionTrack={activeCaptionTrack}
+                    importError={captionImportError}
+                    onImport={openCaptionPicker}
+                  />
+                  <div className="mt-1.5 border-t border-slate-700 pt-1.5">
+                    <Switch
+                      checked={characterShortcuts}
+                      onChange={(enabled) =>
+                        playbackSettingsStore.trigger.setCharacterShortcuts({ enabled })
+                      }
+                      label="Single-key shortcuts"
+                      icon={Letters}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // This button unmounts with the menu; without a hand-off focus
+                        // would fall to <body>. The help returns focus to Settings on close.
+                        settingsButtonRef.current?.focus();
+                        setShowSettings(false);
+                        playerShortcuts.openHelp();
+                      }}
+                      className="group/row flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700"
+                    >
+                      <MenuRowIcon icon={Keyboard} />
+                      Keyboard shortcuts
+                      <kbd className="ml-auto rounded border border-slate-600 px-1 font-mono text-[11px] text-slate-400">
+                        ?
+                      </kbd>
+                    </button>
                   </div>
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { History, X } from "lucide-react";
+import { RotateCcwClock, Trash } from "lucide-react";
 import { useDismissOnOutsideInteraction } from "../hooks/useDismissOnOutsideInteraction";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
@@ -149,7 +149,7 @@ export default function LearnerVersionsMenu({
           title="Your edits"
           className={`relative flex items-center justify-center text-slate-300 transition-colors hover:text-white ${buttonClassName}`}
         >
-          <History size={iconSize} aria-hidden="true" />
+          <RotateCcwClock size={iconSize} aria-hidden="true" />
           {/* Before the count, which sits over the ring's corner. */}
           <HoverRing />
           <span
@@ -233,7 +233,7 @@ export default function LearnerVersionsMenu({
                     title="Delete"
                     className="mr-2 flex shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-600 hover:text-white size-6"
                   >
-                    <X size={14} aria-hidden="true" />
+                    <Trash size={14} aria-hidden="true" />
                   </button>
                 </>
               )}

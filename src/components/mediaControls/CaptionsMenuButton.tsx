@@ -86,12 +86,12 @@ const CaptionsMenuButton = ({
               captionTrigger.setEnabled({ enabled: false });
               closeMenu();
             }}
-            className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
+            className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
               !captionsEnabled ? "font-semibold text-white" : "font-normal text-slate-300"
             }`}
           >
-            <span className="w-4">
-              {!captionsEnabled ? <Check size={14} aria-hidden="true" /> : null}
+            <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+              {!captionsEnabled ? <Check size={16} /> : null}
             </span>
             Off
           </button>
@@ -108,12 +108,15 @@ const CaptionsMenuButton = ({
                   if (!captionsEnabled) captionTrigger.toggleEnabled();
                   closeMenu();
                 }}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
+                className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
                   isSelected ? "font-semibold text-white" : "font-normal text-slate-300"
                 }`}
               >
-                <span className="w-4">
-                  {isSelected ? <Check size={14} aria-hidden="true" /> : null}
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center"
+                  aria-hidden="true"
+                >
+                  {isSelected ? <Check size={16} /> : null}
                 </span>
                 {captionTrackLabel(track)}
               </button>

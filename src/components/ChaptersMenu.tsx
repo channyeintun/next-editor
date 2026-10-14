@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { BookmarkPlus, Check, Link, ListVideo, Trash2 } from "lucide-react";
+import { BookmarkPlus, Check, Link, ListVideo, Trash } from "lucide-react";
 import type { Recording, RecordingChapter } from "../core/src";
 import { useLiveTimeValue, useNextEditorActions } from "../hooks/useNextEditorContext";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
@@ -15,6 +15,7 @@ import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import { copyTextToClipboard } from "../utils/clipboard";
 import { isImeComposingKey } from "../utils/keyboardPlatform";
 import HoverRing from "./hoverRing/HoverRing";
+import MenuRowIcon from "./mediaControls/MenuRowIcon";
 
 /** How long a copied-link check mark stays. */
 const COPIED_MS = 1_500;
@@ -174,9 +175,9 @@ export default function ChaptersMenu({
                     className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-white"
                   >
                     {copiedTime === chapter.time ? (
-                      <Check size={13} aria-hidden="true" />
+                      <Check size={14} aria-hidden="true" />
                     ) : (
-                      <Link size={13} aria-hidden="true" />
+                      <Link size={14} aria-hidden="true" />
                     )}
                   </button>
                   {editable ? (
@@ -195,7 +196,7 @@ export default function ChaptersMenu({
                       aria-label={`Delete ${chapter.title}`}
                       className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-red-400"
                     >
-                      <Trash2 size={13} aria-hidden="true" />
+                      <Trash size={14} aria-hidden="true" />
                     </button>
                   ) : null}
                 </li>
@@ -218,22 +219,18 @@ export default function ChaptersMenu({
                   }
                   update([...chapters, { time, title: defaultChapterTitle(chapters.length) }]);
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
+                className="group/row flex items-center gap-2.5 px-3 py-1.5 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700"
               >
-                <BookmarkPlus size={13} aria-hidden="true" />
+                <MenuRowIcon icon={BookmarkPlus} />
                 Add a chapter at {formatPlaybackTime(currentSecond)}
               </button>
             ) : null}
             <button
               type="button"
               onClick={() => void copyLink(currentSecond)}
-              className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
+              className="group/row flex items-center gap-2.5 px-3 py-1.5 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700"
             >
-              {copiedTime === currentSecond ? (
-                <Check size={13} aria-hidden="true" />
-              ) : (
-                <Link size={13} aria-hidden="true" />
-              )}
+              <MenuRowIcon icon={copiedTime === currentSecond ? Check : Link} />
               Copy a link to {formatPlaybackTime(currentSecond)}
             </button>
           </div>

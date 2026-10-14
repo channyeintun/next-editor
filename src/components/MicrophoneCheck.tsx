@@ -180,7 +180,7 @@ export default function MicrophoneCheck() {
             : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
         }`}
       >
-        <AudioLines size={13} aria-hidden="true" />
+        <AudioLines size={14} aria-hidden="true" />
         <HoverRing />
       </button>
       {open ? <MicrophoneCheckPanel onClose={close} /> : null}
@@ -210,7 +210,7 @@ export function RecordingMicrophoneLevel() {
       }
     >
       <Mic
-        size={12}
+        size={14}
         className={noSpeechYet ? "text-amber-400" : "text-slate-400"}
         aria-hidden="true"
       />

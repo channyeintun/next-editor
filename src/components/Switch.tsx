@@ -1,16 +1,22 @@
+import type { LucideIcon } from "lucide-react";
+import MenuRowIcon from "./mediaControls/MenuRowIcon";
+
 interface SwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   disabled?: boolean;
+  /** Shown before the label, in the menu's icon column. */
+  icon?: LucideIcon;
 }
 
-const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, disabled = false }) => {
+const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, disabled = false, icon }) => {
   return (
     <label
-      className={`flex items-center justify-between gap-3 py-1 ${disabled ? "opacity-50" : "cursor-pointer"}`}
+      className={`group/row flex items-center gap-2.5 px-2.5 py-1.5 ${disabled ? "opacity-50" : "cursor-pointer"}`}
     >
-      <span className="text-sm font-medium text-slate-300">{label}</span>
+      {icon ? <MenuRowIcon icon={icon} /> : null}
+      <span className="flex-1 text-sm font-medium text-slate-200">{label}</span>
       <button
         type="button"
         role="switch"

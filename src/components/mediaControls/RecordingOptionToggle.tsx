@@ -38,7 +38,7 @@ const RecordingOptionToggle = ({
           : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
       }`}
     >
-      {on ? <OnIcon size={13} aria-hidden="true" /> : <OffIcon size={13} aria-hidden="true" />}
+      {on ? <OnIcon size={14} aria-hidden="true" /> : <OffIcon size={14} aria-hidden="true" />}
       <span className="hidden sm:inline">{label}</span>
       <HoverRing />
     </button>
