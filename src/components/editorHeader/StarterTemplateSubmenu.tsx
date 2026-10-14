@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, LayoutTemplate } from "lucide-react";
 import type { WorkspaceLessonType } from "../../types/workspace";
+import { SETTINGS_MENU_ICON_SLOT_CLASS, SETTINGS_MENU_ROW_CLASS } from "./SettingsMenuItem";
 
 export interface LessonTypeOption {
   value: WorkspaceLessonType;
@@ -48,18 +49,18 @@ export default function StarterTemplateSubmenu({
         // before it already did, so toggling would shut the flyout under the
         // pointer. Enter or Space (detail 0) toggles, so the keyboard can close it.
         onClick={(event) => setIsOpen((current) => (event.detail === 0 ? !current : true))}
-        className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+        className={`${SETTINGS_MENU_ROW_CLASS} ${
           isOpen ? "bg-slate-700 text-white" : "text-slate-200 hover:bg-slate-700 hover:text-white"
         }`}
       >
-        <span className="flex items-center gap-2">
-          <LayoutTemplate size={14} aria-hidden="true" />
-          Starter Template
+        <span className={SETTINGS_MENU_ICON_SLOT_CLASS} aria-hidden="true">
+          <LayoutTemplate size={16} />
         </span>
+        Starter Template
         <ChevronRight
-          size={14}
+          size={16}
           aria-hidden="true"
-          className={isOpen ? "text-slate-300" : "text-slate-500"}
+          className={`ml-auto shrink-0 ${isOpen ? "text-slate-300" : "text-slate-500"}`}
         />
       </button>
 
@@ -70,7 +71,7 @@ export default function StarterTemplateSubmenu({
         <div
           role="menu"
           aria-label="Starter templates"
-          className="absolute right-full top-0 z-2147483647 w-52 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+          className="absolute right-full top-0 z-2147483647 w-64 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
         >
           {options.map((option) => {
             const isActive = option.value === activeLessonType;
@@ -82,7 +83,7 @@ export default function StarterTemplateSubmenu({
                 role="menuitemradio"
                 aria-checked={isActive}
                 onClick={() => onSelect(option.value)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                className={`${SETTINGS_MENU_ROW_CLASS} justify-between ${
                   isActive
                     ? "bg-slate-700 text-white"
                     : "text-slate-200 hover:bg-slate-700 hover:text-white"

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  FilePlus2,
+  FilePlusCorner,
   FileSearch,
   FolderPlus,
   PanelLeftClose,
@@ -71,8 +71,8 @@ export default function EditorShellSkeleton({
           )}
         </div>
         <div className="flex items-center gap-2" aria-hidden="true">
-          <div className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-400">
-            <Users size={15} />
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-300">
+            <Users size={16} className="text-slate-400" />
             <span>Live</span>
           </div>
           <div className={HEADER_ICON_CLASS}>
@@ -102,22 +102,22 @@ export default function EditorShellSkeleton({
             <div className="border-b border-slate-800 px-3 py-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
                     Files
                   </p>
                   <span className="-my-1 inline-flex size-7 items-center justify-center text-slate-400">
-                    <FileSearch size={14} />
+                    <FileSearch size={16} />
                   </span>
                 </div>
                 <div className="flex items-center gap-0.5 text-slate-400">
                   <span className="-my-1 inline-flex size-7 items-center justify-center">
-                    <FilePlus2 size={14} />
+                    <FilePlusCorner size={16} />
                   </span>
                   <span className="-my-1 inline-flex size-7 items-center justify-center">
-                    <FolderPlus size={14} />
+                    <FolderPlus size={16} />
                   </span>
                   <span className="-my-1 inline-flex size-7 items-center justify-center">
-                    <Upload size={14} />
+                    <Upload size={16} />
                   </span>
                 </div>
               </div>

@@ -5,8 +5,8 @@ import {
   FileArchive,
   FileDown,
   FileUp,
-  FilePlus2,
   Settings,
+  SquarePen,
   Variable,
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
@@ -314,7 +314,7 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
             <div className="fixed inset-0 z-2147483646" onClick={() => setIsMenuOpen(false)} />
             <div
               role="menu"
-              className="absolute right-0 top-full z-2147483647 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+              className="absolute right-0 top-full z-2147483647 mt-2 w-60 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
               {/* The submenu hides itself from isAuthoring: see isVisible. */}
               <StarterTemplateSubmenu
@@ -330,7 +330,7 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
                   <div className="my-1 h-px bg-slate-700" />
 
                   <SettingsMenuItem
-                    icon={FilePlus2}
+                    icon={SquarePen}
                     label="New Editor"
                     onClick={() => {
                       void handleCreateNewEditor();
@@ -353,12 +353,6 @@ export default function WorkspaceSettingsButton({ isAuthoring }: { isAuthoring: 
                       void handleExportRecording();
                     }}
                     disabled={!currentRecording}
-                    // Greyed out, not just disabled, while there is nothing to export.
-                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                      currentRecording
-                        ? "text-slate-200 hover:bg-slate-700 hover:text-white"
-                        : "cursor-not-allowed text-slate-500"
-                    }`}
                   />
                   <div className="my-1 h-px bg-slate-700" />
 
