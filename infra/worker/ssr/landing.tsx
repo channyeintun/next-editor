@@ -1,6 +1,7 @@
 import { renderToString } from "react-dom/server.edge";
 import { StaticRouter } from "react-router";
 import LandingPage from "../../../src/components/LandingPage";
+import IconDefaults from "../../../src/components/icon/IconDefaults";
 
 // The public landing page as the Worker serves it at `/`: index.html with the
 // page's markup in #root, so crawlers and answer engines receive its semantic
@@ -30,7 +31,9 @@ const LANDING_FONT_PRELOADS = [
 export function renderLandingMarkup(): string {
   return renderToString(
     <StaticRouter location="/">
-      <LandingPage />
+      <IconDefaults>
+        <LandingPage />
+      </IconDefaults>
     </StaticRouter>,
   );
 }

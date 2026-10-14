@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import IconDefaults from "./components/icon/IconDefaults";
 import { hydrateServerQueryState } from "./queryClient";
 import { loadDmpCodec } from "./core/dmp/dmpCodec";
 import { analytics, bufferEarlyErrors, loadAnalyticsWhenIdle } from "./utils/analytics";
@@ -31,7 +32,9 @@ hydrateServerQueryState();
 const root = document.getElementById("root")!;
 const app = (
   <StrictMode>
-    <App />
+    <IconDefaults>
+      <App />
+    </IconDefaults>
   </StrictMode>
 );
 

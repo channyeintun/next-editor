@@ -7,6 +7,7 @@ import { renderToString } from "react-dom/server.edge";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vite-plus/test";
 import { landingPrerenderPlugin } from "../../../build/landingPrerenderPlugin";
+import IconDefaults from "../../../src/components/icon/IconDefaults";
 import LandingPage from "../../../src/components/LandingPage";
 import {
   buildLandingDocument,
@@ -67,7 +68,10 @@ describe("landing page SSR", () => {
     const router = createMemoryRouter([{ path: "/", element: createElement(LandingPage) }], {
       initialEntries: ["/"],
     });
-    const browserMarkup = renderToString(createElement(RouterProvider, { router }));
+    // Wrapped as src/main.tsx wraps the app, so its icons draw at the same weight.
+    const browserMarkup = renderToString(
+      createElement(IconDefaults, null, createElement(RouterProvider, { router })),
+    );
 
     expect(browserMarkup).toBe(renderLandingMarkup());
   });
