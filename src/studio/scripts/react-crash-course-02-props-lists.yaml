@@ -1,0 +1,1894 @@
+# React crash course (Burmese), lesson 2 of 12: props, children, lists and
+# conditions. The narration is the Burmese voice script (voice-script.md next
+# to this file), applied span by span with tools/apply-voice.py; every visible
+# string (title, chapters, whiteboard labels, app UI) is Burmese. DESIGN.md is
+# the span-by-span brief.
+#
+# Start state differs from lesson 1's end state on purpose (insert-only edits
+# could not remove code): lesson 1's Menu.jsx with its three identical
+# <DishCard /> lines is dropped, and the shop name and hours that lesson 1
+# wrote directly in App now live in a new Header.jsx (lesson 1's closing
+# announces this move). App renders <Header /> and an empty menu section;
+# Card.jsx, DishCard.jsx and menu.js are pinned EMPTY so they can be typed
+# while nothing imports them. Every edit to an imported module (App.jsx, then
+# DishCard.jsx once App imports it) is a block insert of complete lines,
+# import before usage, so no half-typed JSX ever reaches Vite. A list without
+# keys or a component that mutates outside data would log console.error and
+# fail the render, so the missing key and the impure Cup component live on the
+# whiteboard only.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-02-props-lists
+  title: "React crash course 2: Props၊ list နဲ့ condition"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React Crash Course 2
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+              <section className="menu" data-testid="menu">
+              </section>
+            </main>
+          );
+        }
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title" style={{ color: "#c2410c" }}>
+                ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်
+              </h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/Card.jsx: ""
+      src/DishCard.jsx: ""
+      src/menu.js: ""
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 2: the menu list, the spicy badge inside a card, sold out. */
+        .menu {
+          display: grid;
+          gap: 12px;
+        }
+
+        .card .badge {
+          justify-self: start;
+        }
+
+        .sold-out {
+          color: var(--warn);
+          font-weight: 600;
+        }
+
+  whiteboardAssets:
+    # ---- Board 1: props flow from parent to child (scene props-board)
+    - {
+        id: pb-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "Props: parent ကနေ child ဆီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: pb-same-1,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 140,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: pb-same-text-1,
+        kind: text,
+        x: 318,
+        y: 252,
+        width: 104,
+        height: 36,
+        text: "ဟင်းလျာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-same-2,
+        kind: rectangle,
+        x: 470,
+        y: 235,
+        width: 140,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: pb-same-text-2,
+        kind: text,
+        x: 488,
+        y: 252,
+        width: 104,
+        height: 36,
+        text: "ဟင်းလျာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-same-3,
+        kind: rectangle,
+        x: 640,
+        y: 235,
+        width: 140,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: pb-same-text-3,
+        kind: text,
+        x: 658,
+        y: 252,
+        width: 104,
+        height: 36,
+        text: "ဟင်းလျာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-same-note,
+        kind: text,
+        x: 830,
+        y: 252,
+        width: 220,
+        height: 36,
+        text: "သုံးခုလုံး တူနေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: pb-app,
+        kind: rectangle,
+        x: 300,
+        y: 375,
+        width: 230,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: pb-app-text,
+        kind: text,
+        x: 320,
+        y: 402,
+        width: 190,
+        height: 36,
+        text: "App (parent)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-props-label,
+        kind: text,
+        x: 580,
+        y: 335,
+        width: 90,
+        height: 36,
+        text: "props",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: pb-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 548,
+        y: 395,
+        width: 145,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: pb-child,
+        kind: rectangle,
+        x: 710,
+        y: 375,
+        width: 300,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: pb-child-text,
+        kind: text,
+        x: 730,
+        y: 402,
+        width: 260,
+        height: 36,
+        text: "DishCard (child)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-values,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 520,
+        height: 36,
+        text: "name: ရှမ်းခေါက်ဆွဲ   price: 3000",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: pb-analogy,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 620,
+        height: 36,
+        text: "props က function ရဲ့ argument လိုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pb-readonly,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 330,
+        height: 36,
+        text: "child က ဖတ်ရုံပဲ၊ မပြင်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: pb-readonly-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 630,
+        width: 330,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+
+    # ---- Board 2: children is the hole a parent fills (scene card-children)
+    - {
+        id: cb-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "children: parent ဖြည့်ပေးတဲ့ အကွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: cb-frame,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 380,
+        height: 290,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cb-frame-label,
+        kind: text,
+        x: 710,
+        y: 252,
+        width: 90,
+        height: 36,
+        text: "Card",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: cb-hole,
+        kind: rectangle,
+        x: 730,
+        y: 310,
+        width: 300,
+        height: 180,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: cb-hole-label,
+        kind: text,
+        x: 812,
+        y: 382,
+        width: 140,
+        height: 36,
+        text: "children",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: cb-content-1,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 230,
+        height: 36,
+        text: "<h3>နာမည်</h3>",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: cb-content-2,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 230,
+        height: 36,
+        text: "<p>ဈေးနှုန်း</p>",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: cb-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 345,
+        width: 90,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: cb-note,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 520,
+        height: 36,
+        text: "Card က ဘောင်ကိုပဲ ဆွဲပေးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # ---- Board 3: array -> map -> elements, and a keyed Fragment (scene keys-board)
+    - {
+        id: mb-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "array → map → element စာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: mb-array,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 250,
+        height: 215,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: mb-array-1,
+        kind: text,
+        x: 318,
+        y: 252,
+        width: 190,
+        height: 36,
+        text: "မုန့်ဟင်းခါး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-array-2,
+        kind: text,
+        x: 318,
+        y: 302,
+        width: 190,
+        height: 36,
+        text: "ရှမ်းခေါက်ဆွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-array-3,
+        kind: text,
+        x: 318,
+        y: 352,
+        width: 190,
+        height: 36,
+        text: "နန်းကြီးသုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-array-more,
+        kind: text,
+        x: 318,
+        y: 400,
+        width: 60,
+        height: 36,
+        text: "…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-map-label,
+        kind: text,
+        x: 600,
+        y: 280,
+        width: 70,
+        height: 36,
+        text: "map",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: mb-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 578,
+        y: 320,
+        width: 100,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: mb-card-1,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 360,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: mb-card-text-1,
+        kind: text,
+        x: 718,
+        y: 247,
+        width: 320,
+        height: 36,
+        text: "DishCard  key: mohinga",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-card-2,
+        kind: rectangle,
+        x: 700,
+        y: 312,
+        width: 360,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: mb-card-text-2,
+        kind: text,
+        x: 718,
+        y: 324,
+        width: 320,
+        height: 36,
+        text: "DishCard  key: shan…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-card-3,
+        kind: rectangle,
+        x: 700,
+        y: 389,
+        width: 360,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: mb-card-text-3,
+        kind: text,
+        x: 718,
+        y: 401,
+        width: 320,
+        height: 36,
+        text: "DishCard  key: nan…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mb-frag-1,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 420,
+        height: 36,
+        text: "<Fragment key={dish.id}>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: mb-frag-2,
+        kind: text,
+        x: 330,
+        y: 545,
+        width: 360,
+        height: 36,
+        text: "<h3>…</h3>  <p>…</p>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: mb-frag-3,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 200,
+        height: 36,
+        text: "</Fragment>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: mb-frag-note,
+        kind: text,
+        x: 770,
+        y: 545,
+        width: 300,
+        height: 36,
+        text: "<> မှာ key ထည့်လို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # ---- Board 4: why the key is the id (scene keys-board, second half)
+    - {
+        id: kb-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "key: ဘယ်ပန်းကန်လဲ မှတ်ပေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: kb-row1-label,
+        kind: text,
+        x: 270,
+        y: 257,
+        width: 80,
+        height: 36,
+        text: "အရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: kb-a1, kind: ellipse, x: 400, y: 235, width: 220, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: kb-a1-text,
+        kind: text,
+        x: 455,
+        y: 257,
+        width: 110,
+        height: 36,
+        text: "mohinga",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: kb-b1, kind: ellipse, x: 640, y: 235, width: 220, height: 80, strokeColor: "#2f9e44" }
+    - {
+        id: kb-b1-text,
+        kind: text,
+        x: 668,
+        y: 257,
+        width: 170,
+        height: 36,
+        text: "shan-noodles",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: kb-row2-label,
+        kind: text,
+        x: 270,
+        y: 392,
+        width: 80,
+        height: 36,
+        text: "နောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: kb-new, kind: ellipse, x: 400, y: 370, width: 220, height: 80, strokeColor: "#f08c00" }
+    - {
+        id: kb-new-text,
+        kind: text,
+        x: 428,
+        y: 392,
+        width: 170,
+        height: 36,
+        text: "laphet-thoke",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: kb-new-label,
+        kind: text,
+        x: 465,
+        y: 458,
+        width: 90,
+        height: 36,
+        text: "အသစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: kb-a2, kind: ellipse, x: 640, y: 370, width: 220, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: kb-a2-text,
+        kind: text,
+        x: 695,
+        y: 392,
+        width: 110,
+        height: 36,
+        text: "mohinga",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: kb-b2, kind: ellipse, x: 880, y: 370, width: 220, height: 80, strokeColor: "#2f9e44" }
+    - {
+        id: kb-b2-text,
+        kind: text,
+        x: 908,
+        y: 392,
+        width: 170,
+        height: 36,
+        text: "shan-noodles",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: kb-good,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 250,
+        height: 36,
+        text: "key = dish.id",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: kb-good-check,
+        kind: freedraw,
+        stroke: check,
+        x: 565,
+        y: 528,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: kb-bad-index,
+        kind: text,
+        x: 700,
+        y: 535,
+        width: 210,
+        height: 36,
+        text: "key = index",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: kb-bad-index-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 695,
+        y: 535,
+        width: 200,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: kb-bad-missing,
+        kind: text,
+        x: 700,
+        y: 595,
+        width: 280,
+        height: 36,
+        text: "key မပါ → error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # ---- Board 5: pure components are like a recipe (scene purity-board)
+    - {
+        id: pu-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Pure component = ချက်နည်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: pu-recipe,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 360,
+        height: 175,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: pu-recipe-1,
+        kind: text,
+        x: 320,
+        y: 252,
+        width: 320,
+        height: 36,
+        text: "ပါဝင်ပစ္စည်း တူရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pu-recipe-2,
+        kind: text,
+        x: 320,
+        y: 300,
+        width: 320,
+        height: 36,
+        text: "ဟင်း တူတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pu-recipe-3,
+        kind: text,
+        x: 320,
+        y: 352,
+        width: 320,
+        height: 36,
+        text: "props တူ → JSX တူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: pu-impure,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 380,
+        height: 175,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: pu-impure-1,
+        kind: text,
+        x: 720,
+        y: 252,
+        width: 300,
+        height: 36,
+        text: "let guest = 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pu-impure-2,
+        kind: text,
+        x: 720,
+        y: 300,
+        width: 340,
+        height: 36,
+        text: "Cup: guest = guest + 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pu-impure-3,
+        kind: text,
+        x: 720,
+        y: 352,
+        width: 320,
+        height: 36,
+        text: "render ထဲမှာ ပြင်တယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: pu-strict,
+        kind: text,
+        x: 720,
+        y: 450,
+        width: 360,
+        height: 36,
+        text: "StrictMode: နှစ်ခါ render",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: pu-strict-cups,
+        kind: text,
+        x: 720,
+        y: 500,
+        width: 140,
+        height: 36,
+        text: "Cup × 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pu-strict-result,
+        kind: text,
+        x: 720,
+        y: 550,
+        width: 340,
+        height: 36,
+        text: "guest #2  #4  #6",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: pu-fix,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 340,
+        height: 36,
+        text: "guest ကို props နဲ့ ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: pu-fix-check,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 500,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 20202
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # 1 ---------------------------------------------------------------- start state
+  - id: start-state
+    chapter: "Props ဘာကြောင့် လိုလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဟင်းလျာ card သုံးခုလုံး တူနေခဲ့ပါတယ်။
+      ဒီတစ်ခါတော့ card တစ်ခုစီက ကိုယ့် data ကို props ကနေ ရမှာ ဖြစ်ပြီး၊
+      menu တစ်ခုလုံးက array တစ်ခုကနေ လာမှာပါ။ [[mark:start-dev-server]]
+      အရင်ဆုံး dev server ကို စ run ရအောင်။ browser ထဲမှာ package တွေ
+      install လုပ်ပြီးမှ စမှာမို့ ခဏ ကြာပါမယ်။ စောင့်နေတုန်း code ကို အရင်
+      ဖတ်ရအောင်။ [[mark:select-header]] ပြီးခဲ့တဲ့ lesson မှာ App ထဲ
+      တိုက်ရိုက် ရေးခဲ့တဲ့ ဆိုင်နာမည်နဲ့ ဖွင့်ချိန်ကို၊ Header ဆိုတဲ့
+      component တစ်ခုထဲ ရွှေ့ထားပြီး၊ App က သူ့ကို ပြထားပါတယ်။
+      [[mark:select-menu-slot]] ပြီးခဲ့တဲ့ lesson က Menu နဲ့ card
+      သုံးခုကိုတော့ ဖြုတ်ထားလို့၊ သူ့အောက်မှာ menu အကွက်လွတ် တစ်ခုပဲ
+      ကျန်ပါတယ်။ ဒီ lesson မှာ ဟင်းလျာ card တွေကို data ကနေ ဒီနေရာ
+      ပြန်ထည့်မှာပါ။
+    sources:
+      - title: "React — Passing Props to a Component"
+        url: "https://react.dev/learn/passing-props-to-a-component"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-dev-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { afterAction: start-dev-server }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-header
+        type: editor.select
+        at: { mark: select-header }
+        target:
+          file: src/App.jsx
+          text: "<Header />"
+          occurrence: 1
+      - id: select-menu-slot
+        type: editor.select
+        at: { mark: select-menu-slot }
+        target:
+          file: src/App.jsx
+          text: "<section className=\"menu\" data-testid=\"menu\">\n      </section>"
+          occurrence: 1
+
+  # 2 ---------------------------------------------------------------- props board
+  - id: props-board
+    narration: >
+      [[mark:open-props-board]] သဘောတရားကို whiteboard မှာ ကြည့်ရအောင်။
+      [[mark:draw-before]] ပြီးခဲ့တဲ့ lesson မှာ card သုံးခုလုံး တူနေတာက၊
+      card component က ဘယ်ဟင်းလျာ ပြရမလဲ မသိနိုင်ခဲ့လို့ပါ။
+      [[mark:draw-parent-child]] ဒါကို props နဲ့ ဖြေရှင်းပါတယ်။ props
+      ဆိုတာ parent App က child DishCard ကို အပြင်ကနေ ပေးလိုက်တဲ့
+      တန်ဖိုးတွေပါ။ data က parent ကနေ child ဆီ တစ်လမ်းသွားပဲ သွားပါတယ်။
+      [[mark:draw-props-values]] ဥပမာအားဖြင့်၊ App က card တစ်ခုကို နာမည်က
+      ရှမ်းခေါက်ဆွဲ၊ ဈေးက 3000 ကျပ် လို့ ပြောပြီး၊ နောက် card ကိုတော့
+      တခြား ဟင်းလျာ တစ်မျိုး ပြောလို့ ရပါတယ်။
+      [[mark:draw-function-analogy]] ဒါက function ကို argument ပေးပြီး
+      ခေါ်သလိုပါပဲ။ React က component ကို ခေါ်တဲ့အခါ props အားလုံး ပါတဲ့
+      object တစ်ခုတည်း ပေးလိုက်ပါတယ်။ ဒီလို React က component ကို ခေါ်ပြီး
+      screen ပေါ် ပြရမယ့် အရာကို တွက်ထုတ်တာကို render လုပ်တယ် လို့
+      ခေါ်ပါတယ်။ [[mark:draw-read-only]] စည်းကမ်း တစ်ခု ရှိပါတယ်။ child က
+      props ကို ဖတ်ရုံပဲ ဖတ်ရပါတယ်။ props က ဒီ render အတွက် ရိုက်ထားတဲ့
+      ဓာတ်ပုံလိုမို့၊ child က ပြန်မပြင်ပါဘူး။
+    sources:
+      - title: "React — Passing Props to a Component"
+        url: "https://react.dev/learn/passing-props-to-a-component"
+      - title: "React — Your First Component"
+        url: "https://react.dev/learn/your-first-component"
+    actions:
+      - id: open-props-board
+        type: whiteboard.apply
+        at: { mark: open-props-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [pb-title]
+      - id: draw-before
+        type: whiteboard.apply
+        at: { mark: draw-before }
+        upsertIds:
+          [
+            pb-same-1,
+            pb-same-text-1,
+            pb-same-2,
+            pb-same-text-2,
+            pb-same-3,
+            pb-same-text-3,
+            pb-same-note,
+          ]
+        drawMs: 2400
+      - id: draw-parent-child
+        type: whiteboard.apply
+        at: { mark: draw-parent-child }
+        upsertIds: [pb-app, pb-app-text, pb-props-label, pb-arrow, pb-child, pb-child-text]
+        drawMs: 2600
+      - id: draw-props-values
+        type: whiteboard.apply
+        at: { mark: draw-props-values }
+        upsertIds: [pb-values]
+        drawMs: 1200
+      - id: draw-function-analogy
+        type: whiteboard.apply
+        at: { mark: draw-function-analogy }
+        upsertIds: [pb-analogy]
+        drawMs: 1200
+      - id: draw-read-only
+        type: whiteboard.apply
+        at: { mark: draw-read-only }
+        upsertIds: [pb-readonly, pb-readonly-line]
+        drawMs: 1400
+
+  # 3 ---------------------------------------------------------------- Card + children
+  - id: card-children
+    chapter: "Card နဲ့ DishCard ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-props-board]] ကဲ၊ ရေးကြည့်ရအောင်။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်သွားလို့ ညာဘက်မှာ
+      preview ပွင့်လာပါပြီ။ ဆိုင်နာမည်နဲ့ ဖွင့်ချိန် မြင်ရပြီး၊ menu ကတော့
+      အလွတ်ပဲ ရှိပါသေးတယ်။ [[mark:open-card]] Card ဆိုတဲ့ component
+      သေးသေးလေးကနေ စပါမယ်။ သူ့ ဖိုင်က အလွတ်ပဲ ရှိပြီး ဘယ်ဖိုင်ကမှ import
+      မလုပ်ထားသေးလို့၊ page မပျက်ဘဲ ရိုက်လို့ ရပါတယ်။ [[mark:type-card]]
+      Card က ဘောင်ရော၊ ထောင့်ဝိုင်းရော၊ အရိပ်ပါ ပါတဲ့ အဖြူရောင် အကွက်ကို
+      ဆွဲပြီး၊ သူ့ဆီ ရောက်လာတဲ့ အရာ အားလုံးကို အဲဒီထဲ ထည့်ပေးပါတယ်။ page
+      ပေါ်က card တိုင်း ဒီ Card ကိုပဲ သုံးမှာမို့ အကုန် တူနေပြီး၊ style
+      ပြောင်းချင်ရင် ဒီ တစ်နေရာမှာပဲ ပြောင်းရုံပါ။
+      [[mark:select-children-param]] children ကို ကြည့်ပါ။ သူက အထူး prop
+      ပါ။ parent က Card ရဲ့ အဖွင့်နဲ့ အပိတ် tag ကြားမှာ ထည့်လိုက်တာ အကုန်
+      ဒီကို children အနေနဲ့ ရောက်လာပါတယ်။ [[mark:select-children-use]]
+      Card ကတော့ အဲဒါ ဘာလဲ သိစရာ မလိုဘဲ၊ အကွက်ထဲ ထည့်ပေးလိုက်ရုံပါပဲ။
+      [[mark:open-children-board]] Card ကို အလယ်မှာ အပေါက် ပါတဲ့ ဘောင်
+      တစ်ခုလို စဉ်းစားကြည့်ပါ။ [[mark:draw-children-fill]] အပေါက်ထဲ ဘာ
+      ထည့်မလဲ parent က ဆုံးဖြတ်ပါတယ်။ ခေါင်းစဉ် ဖြစ်ဖြစ်၊ ဈေးနှုန်း
+      ဖြစ်ဖြစ် ရလို့၊ Card တစ်ခုနဲ့ ဟင်းလျာရော order ပါ ဘောင်ခတ်လို့
+      ရပါတယ်။
+    sources:
+      - title: "React — Passing JSX as children"
+        url: "https://react.dev/learn/passing-props-to-a-component#passing-jsx-as-children"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: close-props-board
+        type: whiteboard.apply
+        at: { mark: close-props-board }
+        open: false
+      - id: open-preview
+        type: preview.open
+        at: { mark: preview-opens }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-title
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: title }
+        textContains: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-shop-title }
+      - id: open-card
+        type: workspace.openFile
+        at: { mark: open-card }
+        path: src/Card.jsx
+      # Card.jsx is not imported yet, so keystrokes never reach the page.
+      - id: type-card
+        type: editor.type
+        at: { mark: type-card }
+        cadence: fast-explainer
+        target:
+          file: src/Card.jsx
+          after: ""
+          occurrence: 1
+        text: "export default function Card({ children }) {\n  return <div className=\"card\">{children}</div>;\n}\n"
+      - id: select-children-param
+        type: editor.select
+        at: { mark: select-children-param }
+        target:
+          file: src/Card.jsx
+          text: "{ children }"
+          occurrence: 1
+      - id: select-children-use
+        type: editor.select
+        at: { mark: select-children-use }
+        target:
+          file: src/Card.jsx
+          text: "{children}"
+          occurrence: 1
+      - id: open-children-board
+        type: whiteboard.apply
+        at: { mark: open-children-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [cb-title, cb-frame, cb-frame-label, cb-hole, cb-hole-label]
+        drawMs: 1800
+      - id: draw-children-fill
+        type: whiteboard.apply
+        at: { mark: draw-children-fill }
+        upsertIds: [cb-content-1, cb-content-2, cb-arrow, cb-note]
+        drawMs: 2200
+
+  # 4 ---------------------------------------------------------------- DishCard
+  - id: dish-card
+    narration: >
+      [[mark:close-children-board]] editor ထဲ ပြန်ရအောင်။
+      [[mark:open-dish-card]] နောက်တစ်ခုက DishCard ဖိုင်ပါ။ သူလည်း အလွတ်ပဲ
+      ရှိပြီး၊ App က import မလုပ်ထားသေးပါဘူး။ [[mark:type-dish-import]]
+      သူက Card ကို သုံးမှာမို့ အရင် import လုပ်ပါတယ်။
+      [[mark:type-dish-signature]] ပြီးတော့ သူ လိုအပ်တဲ့ props တွေကို
+      props object ထဲကနေ တန်းခွဲထုတ်ယူပါတယ်။ နာမည်၊ ဈေးနှုန်း၊ စပ်လား၊
+      ကုန်သွားပြီလား ဆိုတဲ့ လေးခုပါ။ object ထဲက တန်ဖိုးတွေကို ဒီလို
+      နာမည်နဲ့ တန်းခွဲထုတ်ယူတာကို destructuring လို့ ခေါ်ပါတယ်။
+      [[mark:select-defaults]] စပ်လား နဲ့ ကုန်သွားပြီလား နှစ်ခုမှာ false
+      ဆိုတဲ့ default ပါပြီး၊ parent က အဲဒီ prop မပေးလိုက်တဲ့အခါမှပဲ
+      သုံးပါတယ်။ [[mark:mention-removals]] အရင် React version တွေမှာ
+      defaultProps နဲ့ propTypes ဆိုတဲ့ နည်းတွေနဲ့ default ပေးတာ၊ prop ရဲ့
+      type စစ်တာ လုပ်ခဲ့ကြပါတယ်။ React 19 ကစပြီး function component ပေါ်က
+      defaultProps ကို ဂရုမစိုက်တော့သလို၊ propTypes ကိုလည်း မစစ်တော့လို့၊
+      parameter ထဲမှာပဲ default ထည့်ရေးရပါတယ်။ [[mark:type-dish-body]]
+      ပြီးတော့ return အပိုင်းပါ။ ခေါင်းစဉ်နဲ့ ဈေးနှုန်းကို Card နဲ့
+      ထုပ်လိုက်လို့၊ အဲဒီ နှစ်ခုက Card ရဲ့ children ဖြစ်ပါတယ်။
+      [[mark:select-price]] ဈေးနှုန်းကို ကြည့်ပါ။ ဂဏန်းကို ဒီအတိုင်း
+      မပြဘဲ၊ ထောင်ဂဏန်း ခြားတဲ့ comma ပါအောင် ပြောင်းပေးတဲ့ function ကို
+      ခေါ်ထားလို့၊ ခဏနေ preview မှာ ပေါ်လာရင် လူတွေ ဈေး ရေးနေကျ
+      ပုံစံအတိုင်း ဖတ်လို့ ရပါမယ်။
+    sources:
+      - title: "React — Passing Props to a Component"
+        url: "https://react.dev/learn/passing-props-to-a-component"
+      - title: "React 19 Upgrade Guide — Removed: propTypes and defaultProps"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-proptypes-and-defaultprops"
+      - title: "MDN — Number.prototype.toLocaleString()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toLocaleString"
+    actions:
+      - id: close-children-board
+        type: whiteboard.apply
+        at: { mark: close-children-board }
+        open: false
+      - id: open-dish-card
+        type: workspace.openFile
+        at: { mark: open-dish-card }
+        path: src/DishCard.jsx
+      # DishCard.jsx is not imported yet: any cadence is safe. The import line
+      # lands whole; the signature (the props idea) is typed key by key.
+      - id: type-dish-import
+        type: editor.type
+        at: { mark: type-dish-import }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: ""
+          occurrence: 1
+        text: "import Card from \"./Card.jsx\";\n\n"
+      - id: type-dish-signature
+        type: editor.type
+        at: { mark: type-dish-signature }
+        cadence: fast-explainer
+        target:
+          file: src/DishCard.jsx
+          after: "import Card from \"./Card.jsx\";\n\n"
+          occurrence: 1
+        text: "export default function DishCard({ name, price, spicy = false, soldOut = false }) {\n"
+      - id: select-defaults
+        type: editor.select
+        at: { mark: select-defaults }
+        target:
+          file: src/DishCard.jsx
+          text: "spicy = false, soldOut = false"
+          occurrence: 1
+      - id: type-dish-body
+        type: editor.type
+        at: { mark: type-dish-body }
+        cadence: line-by-line
+        target:
+          file: src/DishCard.jsx
+          after: "soldOut = false }) {\n"
+          occurrence: 1
+        text: "  return (\n    <Card>\n      <h3>{name}</h3>\n      <p>{price.toLocaleString(\"en-US\")} ကျပ်</p>\n    </Card>\n  );\n}\n"
+      - id: select-price
+        type: editor.select
+        at: { mark: select-price }
+        target:
+          file: src/DishCard.jsx
+          text: '{price.toLocaleString("en-US")}'
+          occurrence: 1
+
+  # 5 ---------------------------------------------------------------- menu data
+  - id: menu-data
+    chapter: "Array ကနေ list ပြကြည့်ရအောင်"
+    narration: >
+      [[mark:open-menu]] နောက်တစ်ဆင့်က data ပါ။ menu ဖိုင်လည်း အလွတ်ပဲ၊
+      ဘယ်ဖိုင်ကမှ import မလုပ်ထားသေးပါဘူး။ [[mark:type-menu]] menu က
+      ဟင်းလျာ ငါးမျိုးကို အစဉ်လိုက် ထည့်ထားတဲ့ array တစ်ခုပါ။ တစ်မျိုးစီက
+      object တစ်ခု ဖြစ်ပြီး၊ id၊ နာမည်၊ ဈေးနဲ့အတူ စပ်လား ကုန်သွားပြီလား
+      ဆိုတဲ့ true false နှစ်ခု ပါပါတယ်။ [[mark:select-first-id]] ပထမ id
+      ကို ကြည့်ပါ။ id တိုင်း တိုပြီး မပြောင်းသလို၊ နှစ်ခု မထပ်ပါဘူး။ ဒါက
+      ခဏနေရင် အရေးကြီးလာပါမယ်။ [[mark:select-sold-out]] ပြီးတော့
+      အုန်းနို့ခေါက်ဆွဲက ဒီနေ့ ကုန်နေပြီး၊ နှစ်မျိုးက စပ်တယ် ဆိုတာကိုလည်း
+      သတိထား ကြည့်ပါ။
+    sources:
+      - title: "React — Rendering Lists"
+        url: "https://react.dev/learn/rendering-lists"
+      - title: "MDN — Array"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array"
+    actions:
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.js
+      # Five Burmese names typed key by key would be slow and teach nothing;
+      # the file is not imported yet, so it is revealed one line at a time.
+      - id: type-menu
+        type: editor.type
+        at: { mark: type-menu }
+        cadence: line-by-line
+        target:
+          file: src/menu.js
+          after: ""
+          occurrence: 1
+        text: "export const menu = [\n  { id: \"mohinga\", name: \"မုန့်ဟင်းခါး\", price: 2500, spicy: false, soldOut: false },\n  { id: \"shan-noodles\", name: \"ရှမ်းခေါက်ဆွဲ\", price: 3000, spicy: false, soldOut: false },\n  { id: \"nan-gyi-thoke\", name: \"နန်းကြီးသုပ်\", price: 2800, spicy: true, soldOut: false },\n  { id: \"ohn-no-khao-swe\", name: \"အုန်းနို့ခေါက်ဆွဲ\", price: 3500, spicy: false, soldOut: true },\n  { id: \"laphet-thoke\", name: \"လက်ဖက်သုပ်\", price: 2000, spicy: true, soldOut: false },\n];\n"
+      - id: select-first-id
+        type: editor.select
+        at: { mark: select-first-id }
+        target:
+          file: src/menu.js
+          text: 'id: "mohinga"'
+          occurrence: 1
+      - id: select-sold-out
+        type: editor.select
+        at: { mark: select-sold-out }
+        target:
+          file: src/menu.js
+          text: "soldOut: true"
+          occurrence: 1
+
+  # 6 ---------------------------------------------------------------- map + keys board
+  - id: keys-board
+    narration: >
+      [[mark:open-map-board]] ဒါဆို array ကို list ဘယ်လို ပြောင်းလဲ
+      ကြည့်ရအောင်။ [[mark:draw-map]] array ရဲ့ map က item တစ်ခုစီကို
+      function နဲ့ ပြောင်းပြီး၊ array အသစ် ပြန်ပေးပါတယ်။ ဒီမှာ ဟင်းလျာ
+      တိုင်းကို DishCard element အဖြစ် ပြောင်းလိုက်တော့၊ React က list
+      အနေနဲ့ render လုပ်ပါတယ်။ [[mark:draw-keys]] element တိုင်းမှာ key
+      လိုပါတယ်။ key ဆိုတာ ဘယ် item က ဘယ်ဟာလဲ React မှတ်မိဖို့ မတူညီတဲ့
+      အမှတ်အသားပါ။ [[mark:draw-fragment]] item တစ်ခုက element နှစ်ခု
+      ဘေးချင်းကပ် ပြရမယ်ဆိုရင်၊ Fragment နဲ့ အုပ်စုဖွဲ့ပြီး key ကို
+      သူ့ပေါ်မှာ ထည့်ပါတယ်။ ဒါပေမဲ့ ပြီးခဲ့တဲ့ lesson က tag အလွတ် တစ်စုံ
+      ရေးနည်း အတိုက key လက်မခံလို့၊ ဒီနေရာမှာတော့ Fragment ကို နာမည်
+      အပြည့်နဲ့ ရေးရပါတယ်။ [[mark:open-key-board]] ဒါဆို key က ဘာလို့ id
+      ဖြစ်သင့်တာလဲ။ [[mark:draw-key-before]] list မှာ မုန့်ဟင်းခါးနဲ့
+      ရှမ်းခေါက်ဆွဲ ရှိတယ် ဆိုပါစို့။ [[mark:draw-key-after]] အခု ဟင်းလျာ
+      အသစ်ကို အရှေ့ဆုံးမှာ ထည့်လိုက်ပါတယ်။ key က id ဖြစ်နေတော့၊
+      မုန့်ဟင်းခါးနဲ့ ရှမ်းခေါက်ဆွဲက နေရာပဲ ရွှေ့သွားတာလို့ React က
+      သိပြီး၊ သူတို့ကို ထားပြီး အသစ်ကိုပဲ ထည့်ပါတယ်။ အရောင် တူတဲ့ ပန်းကန်က
+      key တူတဲ့ item ပါ။ [[mark:draw-key-good]] ဒါကြောင့် key က data ထဲကနေ
+      လာသင့်ပါတယ်။ [[mark:draw-key-bad]] array ထဲက နေရာ၊ ဆိုလိုတာက index
+      ကို key အဖြစ် သုံးရင်တော့၊ အရှေ့မှာ တစ်ခု ထပ်ထည့်တာနဲ့ key တွေ အကုန်
+      ရွေ့သွားပြီး၊ React က item တွေကို မှားတွဲမိနိုင်ပါတယ်။ key လုံးဝ
+      မပါရင်တော့ console မှာ error ထွက်ပါတယ်။
+    sources:
+      - title: "React — Rendering Lists"
+        url: "https://react.dev/learn/rendering-lists"
+      - title: "React — Keeping list items in order with key"
+        url: "https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key"
+      - title: "React — Fragment"
+        url: "https://react.dev/reference/react/Fragment"
+      - title: "MDN — Array.prototype.map()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"
+    actions:
+      - id: open-map-board
+        type: whiteboard.apply
+        at: { mark: open-map-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [mb-title]
+      - id: draw-map
+        type: whiteboard.apply
+        at: { mark: draw-map }
+        upsertIds:
+          [
+            mb-array,
+            mb-array-1,
+            mb-array-2,
+            mb-array-3,
+            mb-array-more,
+            mb-map-label,
+            mb-arrow,
+            mb-card-1,
+            mb-card-2,
+            mb-card-3,
+          ]
+        drawMs: 3000
+      - id: draw-keys
+        type: whiteboard.apply
+        at: { mark: draw-keys }
+        upsertIds: [mb-card-text-1, mb-card-text-2, mb-card-text-3]
+        drawMs: 1800
+      - id: draw-fragment
+        type: whiteboard.apply
+        at: { mark: draw-fragment }
+        upsertIds: [mb-frag-1, mb-frag-2, mb-frag-3, mb-frag-note]
+        drawMs: 2400
+      - id: open-key-board
+        type: whiteboard.apply
+        at: { mark: open-key-board }
+        clear: true
+        upsertIds: [kb-title]
+      - id: draw-key-before
+        type: whiteboard.apply
+        at: { mark: draw-key-before }
+        upsertIds: [kb-row1-label, kb-a1, kb-a1-text, kb-b1, kb-b1-text]
+        drawMs: 1800
+      - id: draw-key-after
+        type: whiteboard.apply
+        at: { mark: draw-key-after }
+        upsertIds:
+          [kb-row2-label, kb-new, kb-new-text, kb-new-label, kb-a2, kb-a2-text, kb-b2, kb-b2-text]
+        drawMs: 2800
+      - id: draw-key-good
+        type: whiteboard.apply
+        at: { mark: draw-key-good }
+        upsertIds: [kb-good, kb-good-check]
+        drawMs: 1200
+      - id: draw-key-bad
+        type: whiteboard.apply
+        at: { mark: draw-key-bad }
+        upsertIds: [kb-bad-index, kb-bad-index-strike, kb-bad-missing]
+        drawMs: 2000
+
+  # 7 ---------------------------------------------------------------- render the list
+  - id: render-list
+    narration: >
+      [[mark:close-key-board]] ကဲ၊ menu ကို page ပေါ် တင်ကြည့်ရအောင်။
+      [[mark:open-app]] App ဖိုင်ထဲ ပြန်ရောက်ပါပြီ။ [[mark:type-imports]]
+      အပေါ်ဆုံးမှာ DishCard နဲ့ menu array ကို import လုပ်ပါတယ်။
+      [[mark:type-map-line]] menu အကွက်ထဲမှာ တစ်ကြောင်းတည်းနဲ့
+      ဟင်းလျာတိုင်းကို DishCard ဖြစ်အောင် map လုပ်ပါတယ်။
+      [[mark:five-cards]] ကြည့်ပါ၊ preview မှာ ဟင်းလျာ card တွေ
+      ပေါ်လာပါပြီ၊ တစ်ခုစီမှာ ကိုယ်ပိုင် နာမည်နဲ့ ဈေးပါ။
+      [[mark:select-key]] ဒီ key က ဟင်းလျာရဲ့ id ပါ။ key ကို React က
+      သူ့အတွက်ပဲ သိမ်းထားပြီး၊ DishCard ဆီ prop အနေနဲ့ ထပ်မပေးပါဘူး။
+      [[mark:select-spread]] dish ရှေ့က အစက် သုံးစက်က spread ပါ။ object
+      ထဲက အရာအားလုံးကို အသစ်ထဲ ကူးထည့်တဲ့ ရေးနည်းမို့၊ field တိုင်း prop
+      ဖြစ်သွားပြီး၊ တစ်ခုချင်း ချရေးစရာ မလိုတော့ပါဘူး။
+    sources:
+      - title: "React — Rendering Lists"
+        url: "https://react.dev/learn/rendering-lists"
+      - title: "React — Forwarding props with the JSX spread syntax"
+        url: "https://react.dev/learn/passing-props-to-a-component#forwarding-props-with-the-jsx-spread-syntax"
+      - title: "React — Importing and Exporting Components"
+        url: "https://react.dev/learn/importing-and-exporting-components"
+    actions:
+      - id: close-key-board
+        type: whiteboard.apply
+        at: { mark: close-key-board }
+        open: false
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      # App.jsx is live: complete lines in one block, imports before usage.
+      - id: type-imports
+        type: editor.type
+        at: { mark: type-imports }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "import { Header } from \"./Header.jsx\";\n"
+          occurrence: 1
+        text: "import DishCard from \"./DishCard.jsx\";\nimport { menu } from \"./menu.js\";\n"
+      - id: type-map-line
+        type: editor.type
+        at: { mark: type-map-line }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "<section className=\"menu\" data-testid=\"menu\">\n"
+          occurrence: 1
+        text: "        {menu.map((dish) => <DishCard key={dish.id} {...dish} />)}\n"
+      - id: expect-first-card
+        type: expect.preview
+        at: { mark: five-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "မုန့်ဟင်းခါး2,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-last-card
+        type: expect.preview
+        at: { afterAction: expect-first-card }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "လက်ဖက်သုပ်2,000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-key
+        type: editor.select
+        at: { mark: select-key }
+        target:
+          file: src/App.jsx
+          text: "key={dish.id}"
+          occurrence: 1
+      - id: select-spread
+        type: editor.select
+        at: { mark: select-spread }
+        target:
+          file: src/App.jsx
+          text: "{...dish}"
+          occurrence: 1
+
+  # 8 ---------------------------------------------------------------- && conditions
+  - id: conditions
+    chapter: "Condition နဲ့ ပြမလား မပြဘူးလား ဆုံးဖြတ်ရအောင်"
+    narration: >
+      [[mark:open-dish-card-again]] အခု တချို့ အပိုင်းကို လိုအပ်မှပဲ
+      ပြအောင် လုပ်ရအောင်။ App က DishCard ကို import ထားပြီမို့၊ ပြင်တိုင်း
+      preview က page ကို ပြန်ဖွင့်ပါမယ်။ [[mark:type-spicy-line]]
+      ခေါင်းစဉ် အောက်မှာ တစ်ကြောင်း ထည့်ပါမယ်။ spicy က true ဆိုရင် စပ်
+      badge လေး ပေါ်ပြီး၊ false ဆိုရင် React က ဘာမှ မပြပါဘူး။ ပြမလား
+      မပြဘူးလား ဆုံးဖြတ်တာကို conditional rendering လို့ ခေါ်ပါတယ်။
+      [[mark:spicy-shown]] preview မှာ စပ်တဲ့ ဟင်းလျာ နှစ်မျိုးမှာပဲ badge
+      ပေါ်နေတာကို ကြည့်ပါ။ [[mark:type-sold-out-line]] ဈေးနှုန်း
+      အောက်မှာလည်း နောက်တစ်ကြောင်း ထည့်ပါမယ်။ သူလည်း ပုံစံ အတူတူပါပဲ။
+      soldOut က true ဖြစ်မှ ကုန်သွားပါပြီ လို့ ပြပေးပါတယ်။
+      [[mark:sold-out-shown]] အုန်းနို့ခေါက်ဆွဲမှာ ကုန်သွားပါပြီ လို့
+      ပေါ်ပြီး၊ ကျန်တဲ့ card တွေမှာ မပေါ်ပါဘူး။ [[mark:select-and]]
+      ampersand နှစ်လုံး နည်းကို ဒီမှာ သုံးလို့ ရတာက၊ spicy က အမြဲ true
+      ဒါမှမဟုတ် false ပဲ ဖြစ်လို့ပါ။ ဘယ်ဘက်က ကိန်းဂဏန်း ဖြစ်ပြီး အဲဒါက 0
+      ဆိုရင်တော့၊ React က ဘာမှ မပြတာ မဟုတ်ဘဲ 0 ကို screen ပေါ်
+      ပြလိုက်မှာမို့၊ ကိန်းဂဏန်းက 0 ထက် ကြီးလား ဆိုတာ အရင် စစ်ပြီးမှ
+      သုံးပါ။
+    sources:
+      - title: "React — Conditional Rendering"
+        url: "https://react.dev/learn/conditional-rendering"
+      - title: "MDN — Logical AND (&&)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Logical_AND"
+    actions:
+      - id: open-dish-card-again
+        type: workspace.openFile
+        at: { mark: open-dish-card-again }
+        path: src/DishCard.jsx
+      # DishCard.jsx is imported now: each condition lands as one complete line.
+      - id: type-spicy-line
+        type: editor.type
+        at: { mark: type-spicy-line }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "      <h3>{name}</h3>\n"
+          occurrence: 1
+        text: "      {spicy && <span className=\"badge warn\">စပ်</span>}\n"
+      - id: expect-spicy-badge
+        type: expect.preview
+        at: { mark: spicy-shown }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "နန်းကြီးသုပ်စပ်2,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-no-badge-on-mohinga
+        type: expect.preview
+        at: { afterAction: expect-spicy-badge }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "မုန့်ဟင်းခါး2,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-sold-out-line
+        type: editor.type
+        at: { mark: type-sold-out-line }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "ကျပ်</p>\n"
+          occurrence: 1
+        text: "      {soldOut && <p className=\"sold-out\">ကုန်သွားပါပြီ</p>}\n"
+      - id: expect-sold-out
+        type: expect.preview
+        at: { mark: sold-out-shown }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "အုန်းနို့ခေါက်ဆွဲ3,500 ကျပ်ကုန်သွားပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-not-sold-out
+        type: expect.preview
+        at: { afterAction: expect-sold-out }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "ရှမ်းခေါက်ဆွဲ3,000 ကျပ်နန်းကြီးသုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-and
+        type: editor.select
+        at: { mark: select-and }
+        target:
+          file: src/DishCard.jsx
+          text: "spicy &&"
+          occurrence: 1
+
+  # 9 ---------------------------------------------------------------- ternary summary
+  - id: summary-line
+    narration: >
+      [[mark:open-app-again]] App ထဲမှာ အနှစ်ချုပ် တစ်ကြောင်း ထည့်ရအောင်။
+      [[mark:type-available]] function ရဲ့ အပေါ်ဆုံးမှာ filter နဲ့
+      မကုန်သေးတဲ့ ဟင်းလျာတွေကိုပဲ ချန်ထားပြီး၊ length နဲ့ ရေတွက်ပါတယ်။ ဒါက
+      render တိုင်း ပြန် run တာမို့၊ ကိန်းဂဏန်းက data နဲ့ အမြဲ
+      ကိုက်နေပါတယ်။ [[mark:type-summary]] Header အောက်မှာ စာပိုဒ် တစ်ခု
+      ထည့်ပြီး၊ သူ့ထဲမှာ ternary သုံးပါတယ်။ ternary ဆိုတာ အခြေအနေ မှန်ရင်
+      တစ်ခု၊ မမှန်ရင် နောက်တစ်ခု ပြန်ပေးတဲ့ JavaScript ရေးနည်း အတိုပါ။
+      ဒီမှာ ရနိုင်တဲ့ ဟင်းလျာ ရှိရင် ဘယ်နှမျိုးလဲ ပြောပြီး၊ မရှိရင်တော့
+      ဒီနေ့ ကုန်သွားပါပြီ လို့ ပြောပါတယ်။ [[mark:summary-shown]] preview
+      မှာ 4 မျိုး ရနိုင်ပါတယ် လို့ ပြနေပါပြီ။ ငါးမျိုးထဲက တစ်မျိုး
+      ကုန်နေလို့ပါ။ [[mark:select-ternary]] ဒီ ternary ကို ကြည့်ပါ။
+      နှစ်ခုထဲက တစ်ခု ပြချင်ရင် ternary၊ ပြမလား မပြဘူးလား ဆိုရင်တော့
+      ampersand နှစ်လုံး သုံးပါ။
+    sources:
+      - title: "React — Conditional Rendering"
+        url: "https://react.dev/learn/conditional-rendering"
+      - title: "MDN — Conditional (ternary) operator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Conditional_operator"
+      - title: "MDN — Array.prototype.filter()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter"
+    actions:
+      - id: open-app-again
+        type: workspace.openFile
+        at: { mark: open-app-again }
+        path: src/App.jsx
+      # The constant is defined before the paragraph that reads it.
+      - id: type-available
+        type: editor.type
+        at: { mark: type-available }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "export default function App() {\n"
+          occurrence: 1
+        text: "  const available = menu.filter((dish) => !dish.soldOut).length;\n\n"
+      - id: type-summary
+        type: editor.type
+        at: { mark: type-summary }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "      <Header />\n"
+          occurrence: 1
+        text: "      <p data-testid=\"menu-summary\">\n        {available > 0\n          ? `${available} မျိုး ရနိုင်ပါတယ်`\n          : \"ဒီနေ့ ကုန်သွားပါပြီ\"}\n      </p>\n"
+      - id: expect-summary
+        type: expect.preview
+        at: { mark: summary-shown }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-summary }
+        textContains: "4 မျိုး ရနိုင်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-ternary
+        type: editor.select
+        at: { mark: select-ternary }
+        target:
+          file: src/App.jsx
+          text: "{available > 0\n          ? `${available} မျိုး ရနိုင်ပါတယ်`\n          : \"ဒီနေ့ ကုန်သွားပါပြီ\"}"
+          occurrence: 1
+
+  # 10 --------------------------------------------------------------- purity board
+  - id: purity-board
+    chapter: "Pure component ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:open-purity-board]] ဒီနေ့ ရေးခဲ့တဲ့ component တိုင်းက pure
+      လည်း ဖြစ်ပါတယ်။ [[mark:draw-recipe]] pure component ဆိုတာ
+      ဟင်းချက်နည်း တစ်ခုလိုပါပဲ။ ပါဝင်ပစ္စည်း တူရင် ဟင်းလည်း တူပါတယ်။
+      အဲဒီလိုပဲ props တူရင် JSX လည်း တူရမှာ ဖြစ်ပြီး၊ render လုပ်နေတုန်း
+      အရင်က ရှိပြီးသား ဘာကိုမှ မပြောင်းရပါဘူး။ [[mark:draw-impure]]
+      ဥပမာအားဖြင့်၊ ဧည့်သည် နံပါတ် ပါတဲ့ လက်ဖက်ရည်ခွက် တစ်ခွက်ကို ပြတဲ့
+      Cup ဆိုတဲ့ component တစ်ခု ရှိတယ် ဆိုပါစို့။ သူက render တိုင်း
+      သူ့အပြင်က guest variable ကို 1 ထပ်ပေါင်းပြီးမှ ပြနေလို့၊ အဲဒီ
+      စည်းကမ်းကို ချိုးဖောက်ပါတယ်။ [[mark:draw-strict]] development မှာ
+      StrictMode က ဒီလို ပြဿနာ ဖမ်းဖို့ component ကို နှစ်ကြိမ် ခေါ်ပါတယ်။
+      ဒါကြောင့် Cup သုံးခု ပြလိုက်ရင် guest နံပါတ်က 1၊ 2၊ 3 အစား 2၊ 4၊ 6
+      ဖြစ်နေပါတယ်။ [[mark:draw-fix]] ပြင်နည်းကတော့ guest နံပါတ်ကို prop
+      အနေနဲ့ ထည့်ပေးလိုက်တာပါ။ counter တိုးတာမျိုးကတော့ ခလုတ် နှိပ်တဲ့အခါ
+      React က ခေါ်ပေးတဲ့ function၊ ဆိုလိုတာက event handler ထဲမှာ
+      လုပ်သင့်ပြီး၊ အဲဒါကို နောက် lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "React — Keeping Components Pure"
+        url: "https://react.dev/learn/keeping-components-pure"
+      - title: "React — Components and Hooks must be pure"
+        url: "https://react.dev/reference/rules/components-and-hooks-must-be-pure"
+      - title: "React — StrictMode"
+        url: "https://react.dev/reference/react/StrictMode"
+    actions:
+      - id: open-purity-board
+        type: whiteboard.apply
+        at: { mark: open-purity-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [pu-title]
+      - id: draw-recipe
+        type: whiteboard.apply
+        at: { mark: draw-recipe }
+        upsertIds: [pu-recipe, pu-recipe-1, pu-recipe-2, pu-recipe-3]
+        drawMs: 2400
+      - id: draw-impure
+        type: whiteboard.apply
+        at: { mark: draw-impure }
+        upsertIds: [pu-impure, pu-impure-1, pu-impure-2, pu-impure-3]
+        drawMs: 2400
+      - id: draw-strict
+        type: whiteboard.apply
+        at: { mark: draw-strict }
+        upsertIds: [pu-strict, pu-strict-cups, pu-strict-result]
+        drawMs: 2000
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [pu-fix, pu-fix-check]
+        drawMs: 1400
+
+  # 11 --------------------------------------------------------------- wrap-up
+  - id: wrap-up
+    narration: >
+      [[mark:close-purity-board]] ကဲ၊ ရလဒ်ကို ကြည့်ရအောင်။
+      [[mark:scroll-preview]] array တစ်ခုတည်းကနေ ဟင်းလျာ ငါးမျိုး
+      ထွက်လာပြီး၊ Card ဘောင်က တစ်မျိုးတည်းပါ။ စပ်တဲ့ဟာမှာပဲ badge ပါပြီး၊
+      တစ်မျိုးက ကုန်သွားပါပြီ လို့ ပြနေပါတယ်။ [[mark:select-map-final]]
+      ဒါဆို ပြန်ချုပ်ရရင်၊ props က data ကို parent ကနေ child ဆီ ပေးပြီး၊
+      children ကတော့ component ရဲ့ ဘောင်ထဲ ဖြည့်ပေးပါတယ်။ list ပြဖို့ map
+      နဲ့ မပြောင်းတဲ့ key ကို တွဲသုံးပြီး၊ ampersand နှစ်လုံးနဲ့ ternary က
+      ဘာ ပြမလဲ ဆုံးဖြတ်ပါတယ်။ [[mark:closing]] အခု card တွေကို နှိပ်လို့
+      ဘာမှ မဖြစ်သေးပါဘူး။ နောက် lesson မှာ state နဲ့ component ကို
+      မှတ်ဉာဏ် ပေးပြီး၊ ခလုတ် နှိပ်တာကို တုံ့ပြန်ပါမယ်။
+    sources:
+      - title: "React — Describing the UI"
+        url: "https://react.dev/learn/describing-the-ui"
+      - title: "React — State: A Component's Memory"
+        url: "https://react.dev/learn/state-a-components-memory"
+    actions:
+      - id: close-purity-board
+        type: whiteboard.apply
+        at: { mark: close-purity-board }
+        open: false
+      - id: scroll-preview
+        type: preview.scroll
+        at: { mark: scroll-preview }
+        timeoutMs: 5000
+        top: 600
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-final-summary
+        type: expect.preview
+        at: { afterAction: scroll-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-summary }
+        textContains: "4 မျိုး ရနိုင်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-final-menu
+        type: expect.preview
+        at: { afterAction: expect-final-summary }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "လက်ဖက်သုပ်စပ်2,000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-map-final
+        type: editor.select
+        at: { mark: select-map-final }
+        target:
+          file: src/App.jsx
+          text: "{menu.map((dish) => <DishCard key={dish.id} {...dish} />)}"
+          occurrence: 1
+      - id: expect-app-file
+        type: expect.file
+        at: { mark: closing }
+        path: src/App.jsx
+        contains: "import DishCard from \"./DishCard.jsx\";\nimport { menu } from \"./menu.js\";\n\nexport default function App() {\n  const available = menu.filter((dish) => !dish.soldOut).length;\n"
+      - id: expect-app-map
+        type: expect.file
+        at: { afterAction: expect-app-file }
+        path: src/App.jsx
+        contains: "      <section className=\"menu\" data-testid=\"menu\">\n        {menu.map((dish) => <DishCard key={dish.id} {...dish} />)}\n      </section>\n"
+      - id: expect-dish-card-file
+        type: expect.file
+        at: { afterAction: expect-app-map }
+        path: src/DishCard.jsx
+        contains: "export default function DishCard({ name, price, spicy = false, soldOut = false }) {\n  return (\n    <Card>\n      <h3>{name}</h3>\n      {spicy && <span className=\"badge warn\">စပ်</span>}\n      <p>{price.toLocaleString(\"en-US\")} ကျပ်</p>\n      {soldOut && <p className=\"sold-out\">ကုန်သွားပါပြီ</p>}\n    </Card>\n  );\n}\n"
+      - id: expect-card-file
+        type: expect.file
+        at: { afterAction: expect-dish-card-file }
+        path: src/Card.jsx
+        contains: "export default function Card({ children }) {\n  return <div className=\"card\">{children}</div>;\n}\n"
+      - id: expect-menu-file
+        type: expect.file
+        at: { afterAction: expect-card-file }
+        path: src/menu.js
+        contains: "  { id: \"ohn-no-khao-swe\", name: \"အုန်းနို့ခေါက်ဆွဲ\", price: 3500, spicy: false, soldOut: true },\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
