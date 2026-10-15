@@ -1419,7 +1419,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [plan-title]
       - id: start-dev-server
@@ -1796,7 +1795,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-derived-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [derived-title]
       - id: draw-duplicate
@@ -1930,7 +1928,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-bubble-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [bubble-title]
       - id: draw-bubble-boxes
@@ -2109,7 +2106,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-position-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [pos-title]
       - id: draw-position-tree
@@ -2222,7 +2218,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-states-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [st-title]
       - id: draw-states
