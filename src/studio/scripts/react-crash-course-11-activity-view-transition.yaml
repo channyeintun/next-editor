@@ -1,0 +1,2115 @@
+# React crash course, lesson 11 — Activity and View Transitions (Burmese, my-MM).
+#
+# Story: three tabs (menu / order / reviews) live inside <Activity>. The order
+# tab's typed note survives a tab switch (state and DOM kept, the hidden tab is
+# only `display: none`); its waiting timer, an Effect interval, does not run
+# while the tab is hidden (it starts from 0 on the first reveal and resumes
+# from its saved number after a round trip; the Effect marks the timer line
+# data-timer="on" and its cleanup "off", so the pause is asserted, not only
+# narrated); the reviews tab reads
+# use(promise) and is pre-rendered while hidden, so it opens with no fallback.
+# Then a dish panel opens inside startTransition with <ViewTransition>
+# (React 19.3), steps next/previous with addTransitionType, and picks
+# slide classes from enter/exit maps keyed by transition type. Because studio
+# playback replays the DOM (rrweb), not the browser's animation, a pinned
+# helper (src/vtCount.js) writes every onEnter into a line outside React
+# (#vt-count in index.html), so each transition is visible and asserted.
+#
+# Insert-only plan: App.jsx is live from the start, so it only takes `block`
+# inserts (the import before the usage). MenuTab, OrderTab, ReviewsTab and
+# vtCount.js are pinned (code tour only); DishPanel.jsx is pinned EMPTY and
+# typed while nothing imports it, then wired with two blocks; after that,
+# every DishPanel edit is a `block`. Every JS edit reloads the preview, so all
+# clicks of a demo come after its last edit, and the panel is reopened after
+# the addTransitionType edits.
+#
+# The dev server starts during the first board and is first needed when the
+# preview opens, about 80 s of narration later.
+#
+# Narration is Burmese (voice-script.md next to this file is the source; the
+# English meaning-reference is tools/narration-en.txt, the brief is DESIGN.md);
+# every visible string (title, chapters, board labels, UI) is Burmese too.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-11-activity-view-transition
+  title: "React crash course 11: Activity နဲ့ ViewTransition"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 11
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <p id="vt-count" class="vt-count" data-testid="vt-count">View Transition – 0 ကြိမ်</p>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 11: Activity and View Transitions */
+        .vt-count {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 6px 16px;
+          background: #f3f0ff;
+          color: #6741d9;
+          font-size: 0.85rem;
+        }
+
+        .tabs {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .card > button {
+          justify-self: start;
+        }
+
+        .dish {
+          display: grid;
+          padding: 8px 14px;
+          border-radius: 10px;
+          background: var(--accent-soft);
+        }
+
+        ::view-transition-new(.slide-left) {
+          animation: 300ms ease-out both from-right;
+        }
+
+        ::view-transition-old(.slide-out-left) {
+          animation: 300ms ease-in both to-left;
+        }
+
+        ::view-transition-new(.slide-right) {
+          animation: 300ms ease-out both from-left;
+        }
+
+        ::view-transition-old(.slide-out-right) {
+          animation: 300ms ease-in both to-right;
+        }
+
+        @keyframes from-right {
+          from {
+            transform: translateX(60px);
+            opacity: 0;
+          }
+        }
+
+        @keyframes from-left {
+          from {
+            transform: translateX(-60px);
+            opacity: 0;
+          }
+        }
+
+        @keyframes to-left {
+          to {
+            transform: translateX(-60px);
+            opacity: 0;
+          }
+        }
+
+        @keyframes to-right {
+          to {
+            transform: translateX(60px);
+            opacity: 0;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          ::view-transition-group(*),
+          ::view-transition-old(*),
+          ::view-transition-new(*) {
+            animation: none;
+          }
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { useState } from "react";
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          const [tab, setTab] = useState("menu");
+
+          return (
+            <main className="page">
+              <Header />
+              <nav className="tabs">
+                <button
+                  className={tab === "menu" ? "" : "secondary"}
+                  data-testid="tab-menu"
+                  onClick={() => setTab("menu")}
+                >
+                  မီနူး
+                </button>
+                <button
+                  className={tab === "order" ? "" : "secondary"}
+                  data-testid="tab-order"
+                  onClick={() => setTab("order")}
+                >
+                  မှာမယ်
+                </button>
+                <button
+                  className={tab === "reviews" ? "" : "secondary"}
+                  data-testid="tab-reviews"
+                  onClick={() => setTab("reviews")}
+                >
+                  သုံးသပ်ချက်
+                </button>
+              </nav>
+            </main>
+          );
+        }
+      src/MenuTab.jsx: |
+        import { menu } from "./menu.js";
+
+        export default function MenuTab() {
+          return (
+            <section className="card" data-testid="menu-tab">
+              <h2>ဒီနေ့ မီနူး</h2>
+              <ul className="list">
+                {menu.map((dish) => (
+                  <li key={dish.id}>
+                    <span>{dish.name}</span>
+                    <span className="muted">{dish.price.toLocaleString("en-US") + " ကျပ်"}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        }
+      src/OrderTab.jsx: |
+        import { useEffect, useRef, useState } from "react";
+
+        export default function OrderTab() {
+          const [note, setNote] = useState("");
+          const [seconds, setSeconds] = useState(0);
+          const timerRef = useRef(null);
+
+          useEffect(() => {
+            const label = timerRef.current;
+            label.dataset.timer = "on";
+            const id = setInterval(() => {
+              setSeconds((s) => s + 1);
+            }, 1000);
+            return () => {
+              clearInterval(id);
+              label.dataset.timer = "off";
+            };
+          }, []);
+
+          return (
+            <section className="card" data-testid="order-tab">
+              <h2>မှာမယ်</h2>
+              <p ref={timerRef} data-testid="order-timer">စောင့်ချိန် – {seconds} စက္ကန့်</p>
+              <textarea
+                data-testid="order-note"
+                placeholder="မီးဖိုချောင်အတွက် မှတ်ချက်"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </section>
+          );
+        }
+      src/ReviewsTab.jsx: |
+        import { use } from "react";
+
+        let reviewsPromise = null;
+
+        function fetchReviews() {
+          if (reviewsPromise === null) {
+            reviewsPromise = new Promise((resolve) => {
+              setTimeout(() => {
+                resolve([
+                  { id: "r1", text: "မုန့်ဟင်းခါး အရသာ ကောင်းပါတယ်" },
+                  { id: "r2", text: "လက်ဖက်သုပ် မွှေးပြီး စပ်ပါတယ်" },
+                  { id: "r3", text: "ဆိုင်က သန့်ရှင်းပါတယ်" },
+                ]);
+              }, 1500);
+            });
+          }
+          return reviewsPromise;
+        }
+
+        export default function ReviewsTab() {
+          const reviews = use(fetchReviews());
+
+          return (
+            <section className="card" data-testid="reviews-tab">
+              <h2>သုံးသပ်ချက်များ</h2>
+              <ul className="list">
+                {reviews.map((review) => (
+                  <li key={review.id}>{review.text}</li>
+                ))}
+              </ul>
+            </section>
+          );
+        }
+      src/vtCount.js: |
+        let enters = 0;
+
+        export function countEnter(types) {
+          enters += 1;
+          const type = types.length > 0 ? types.join(", ") : "type မရှိ";
+          document.getElementById("vt-count").textContent =
+            "View Transition – " + enters + " ကြိမ် · " + type;
+        }
+      src/DishPanel.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — conditional rendering vs Activity.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Activity ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-cond-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 380,
+        height: 270,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-cond-code,
+        kind: text,
+        x: 290,
+        y: 252,
+        width: 330,
+        height: 40,
+        text: "{show && <OrderTab />}",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cond-l1,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 330,
+        height: 40,
+        text: "ပြောင်းရင် ဖျက်ပစ်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cond-l2,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 330,
+        height: 40,
+        text: "state ပျောက်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cond-l3,
+        kind: text,
+        x: 290,
+        y: 440,
+        width: 330,
+        height: 40,
+        text: "ရေးထားတာ ပျောက်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-act-box,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 380,
+        height: 270,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-act-code,
+        kind: text,
+        x: 720,
+        y: 252,
+        width: 330,
+        height: 40,
+        text: '<Activity mode="hidden">',
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-act-l1,
+        kind: text,
+        x: 720,
+        y: 320,
+        width: 330,
+        height: 40,
+        text: "CSS နဲ့ ဖျောက်ထားတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-act-l2,
+        kind: text,
+        x: 720,
+        y: 380,
+        width: 330,
+        height: 40,
+        text: "state နဲ့ DOM ကျန်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-act-l3,
+        kind: text,
+        x: 720,
+        y: 440,
+        width: 330,
+        height: 40,
+        text: "Effect တွေ ရပ်ထားတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-act-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 720,
+        y: 446,
+        width: 270,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-versions,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 810,
+        height: 40,
+        text: "React 19.2 – Activity  ·  React 19.3 – ViewTransition",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 2 — what happens to the Effect while the tab is hidden.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Hidden ဖြစ်တုန်း Effect",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-r1-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 190,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-r1-mode,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 130,
+        height: 40,
+        text: "visible",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-r1-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 475,
+        y: 248,
+        width: 60,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-r1-text,
+        kind: text,
+        x: 560,
+        y: 245,
+        width: 500,
+        height: 40,
+        text: "Effect run – timer တိုးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-r2-box,
+        kind: rectangle,
+        x: 270,
+        y: 330,
+        width: 190,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-r2-mode,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 130,
+        height: 40,
+        text: "hidden",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-r2-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 475,
+        y: 343,
+        width: 60,
+        height: 34,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-r2-text,
+        kind: text,
+        x: 560,
+        y: 340,
+        width: 500,
+        height: 40,
+        text: "cleanup – timer ရပ်၊ state ကျန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-r3-box,
+        kind: rectangle,
+        x: 270,
+        y: 425,
+        width: 190,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-r3-mode,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 130,
+        height: 40,
+        text: "visible",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-r3-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 475,
+        y: 438,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-r3-text,
+        kind: text,
+        x: 560,
+        y: 435,
+        width: 500,
+        height: 40,
+        text: "Effect ပြန် run – ဆက်တိုးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-initial,
+        kind: text,
+        x: 270,
+        y: 545,
+        width: 790,
+        height: 40,
+        text: "အစကတည်းက hidden → Effect မ run သေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 3 — what a view transition is.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "ViewTransition",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-old-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 250,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-old-text,
+        kind: text,
+        x: 305,
+        y: 265,
+        width: 190,
+        height: 40,
+        text: "အဟောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 262,
+        width: 110,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-new-box,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 250,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-new-text,
+        kind: text,
+        x: 725,
+        y: 265,
+        width: 190,
+        height: 40,
+        text: "အသစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-caption,
+        kind: text,
+        x: 280,
+        y: 360,
+        width: 760,
+        height: 40,
+        text: "ပုံ နှစ်ပုံကြားကို browser က animate လုပ်ပေးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-only,
+        kind: text,
+        x: 280,
+        y: 440,
+        width: 600,
+        height: 40,
+        text: "Transition ထဲက update တွေပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-only-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 446,
+        width: 380,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-only-list,
+        kind: text,
+        x: 280,
+        y: 495,
+        width: 760,
+        height: 40,
+        text: "startTransition · Suspense · useDeferredValue",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-triggers,
+        kind: text,
+        x: 280,
+        y: 575,
+        width: 700,
+        height: 40,
+        text: "enter · exit · update · share",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 4 — what addTransitionType changed.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "addTransitionType",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-next-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 200,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-next-text,
+        kind: text,
+        x: 305,
+        y: 245,
+        width: 130,
+        height: 40,
+        text: "next",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-next-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 485,
+        y: 248,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-next-label,
+        kind: text,
+        x: 570,
+        y: 245,
+        width: 490,
+        height: 40,
+        text: "ညာဘက်ကနေ ဝင်လာတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-prev-box,
+        kind: rectangle,
+        x: 270,
+        y: 320,
+        width: 200,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b4-prev-text,
+        kind: text,
+        x: 290,
+        y: 330,
+        width: 160,
+        height: 40,
+        text: "previous",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-prev-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 485,
+        y: 333,
+        width: 60,
+        height: 34,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b4-prev-label,
+        kind: text,
+        x: 570,
+        y: 330,
+        width: 490,
+        height: 40,
+        text: "ဘယ်ဘက်ကနေ ဝင်လာတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-key,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 790,
+        height: 40,
+        text: "key = dish.id → exit + enter",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-none,
+        kind: text,
+        x: 270,
+        y: 495,
+        width: 790,
+        height: 40,
+        text: "default: none → ဖွင့်တာ ပိတ်တာပါ animation မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-auto,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 790,
+        height: 40,
+        text: "default: auto → cross-fade ကျန်တယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-auto-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1010,
+        y: 556,
+        width: 50,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board 5 — two more uses, the recap and the hand-over.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "နောက်ထပ် နှစ်ခုနဲ့ အနှစ်ချုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-share,
+        kind: text,
+        x: 270,
+        y: 235,
+        width: 790,
+        height: 40,
+        text: "name → share – နေရာ တစ်ခုကနေ တစ်ခုကို ကူးပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-suspense,
+        kind: text,
+        x: 270,
+        y: 295,
+        width: 790,
+        height: 40,
+        text: "Suspense ကို ဝိုင်း → fallback ကနေ content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-divider,
+        kind: rectangle,
+        x: 270,
+        y: 362,
+        width: 790,
+        height: 2,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b5-recap-activity,
+        kind: text,
+        x: 270,
+        y: 395,
+        width: 790,
+        height: 40,
+        text: "Activity – ဖျောက်ထား၊ state ထိန်း၊ Effect ရပ်၊ ကြို render",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-recap-vt,
+        kind: text,
+        x: 270,
+        y: 455,
+        width: 790,
+        height: 40,
+        text: "ViewTransition – Transition ကို animate",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b5-recap-type,
+        kind: text,
+        x: 270,
+        y: 515,
+        width: 790,
+        height: 40,
+        text: "addTransitionType – ဘာကြောင့် ပြောင်းတာလဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-next,
+        kind: text,
+        x: 270,
+        y: 590,
+        width: 790,
+        height: 40,
+        text: "နောက် lesson – Server Components (12–13)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-next-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 270,
+        y: 596,
+        width: 520,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 11211
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: activity-idea
+    chapter: "Activity ဆိုတာ ဘာလဲ"
+    narration: >
+      ဒီ lesson မှာ component အသစ် နှစ်ခုကို လေ့လာပါမယ်။ Activity ဆိုတာ UI
+      အပိုင်းကို ဖျက်မပစ်ဘဲ ဖျောက်ထားပြီး၊ state ကို မှတ်ထားပေးတဲ့ component ပါ။
+      ViewTransition ကတော့ UI ပြောင်းတဲ့အခါ animation လေး ထည့်ပေးတဲ့ component
+      ပါ။ [[mark:start-server]] ရှင်းပြနေတုန်း dev server ကို နောက်ကွယ်မှာ စ run
+      ထားလိုက်ရအောင်။ [[mark:draw-conditional]] tab တွေထဲက တစ်ခုကိုပဲ ပြချင်ရင်၊
+      condition နဲ့ ရေးလေ့ ရှိပါတယ်။ ဒါပေမဲ့ tab ပြောင်းတာနဲ့ React က အဲဒီ
+      component ကို ဖျက်ပစ်လို့၊ ရေးလက်စ မှတ်ချက်လို state တွေ ပျောက်သွားပါတယ်။
+      [[mark:draw-activity]] Activity ကို hidden mode နဲ့ သုံးရင်တော့၊ React က
+      content ကို CSS နဲ့ ဖျောက်ထားရုံပါပဲ။ state ရော DOM ပါ ကျန်နေပါတယ်။
+      [[mark:draw-effects]] ဒါပေမဲ့ ဖျောက်ထားတုန်း React က Effect တွေရဲ့ cleanup
+      ကို run လိုက်လို့၊ timer လို အရာတွေ ရပ်နေပါတယ်။ [[mark:draw-versions]]
+      နှစ်ခုလုံးကို React team က 2025 ဧပြီလမှာ စပြီး မိတ်ဆက်ခဲ့ပါတယ်။ Activity က
+      React 19.2 မှာ၊ ViewTransition က React 19.3 မှာ stable ဖြစ်လာခဲ့ပါတယ်။
+    sources:
+      - title: "React — <Activity>"
+        url: "https://react.dev/reference/react/Activity"
+      - title: "React Labs: View Transitions, Activity, and more (April 2025)"
+        url: "https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more"
+      - title: "React 19.2"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-conditional
+        type: whiteboard.apply
+        at: { mark: draw-conditional }
+        upsertIds: [b1-cond-box, b1-cond-code, b1-cond-l1, b1-cond-l2, b1-cond-l3]
+        drawMs: 2600
+      - id: draw-activity
+        type: whiteboard.apply
+        at: { mark: draw-activity }
+        upsertIds: [b1-act-box, b1-act-code, b1-act-l1, b1-act-l2]
+        drawMs: 2200
+      - id: draw-effects
+        type: whiteboard.apply
+        at: { mark: draw-effects }
+        upsertIds: [b1-act-l3, b1-act-underline]
+        drawMs: 1400
+      - id: draw-versions
+        type: whiteboard.apply
+        at: { mark: draw-versions }
+        upsertIds: [b1-versions]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 2
+  - id: tabs-code
+    narration: >
+      [[mark:close-board-1]] editor ထဲ ပြန်သွားရအောင်။ App မှာ tab ခလုတ်
+      သုံးခုပဲ ရှိပြီး၊ tab content တွေကို မပြရသေးပါဘူး။
+      [[mark:select-tab-state]] ရွေးထားတဲ့ tab ကို ဒီ state ထဲမှာ မှတ်ထားပြီး၊
+      ခလုတ်တွေက အဲဒါကို ပြောင်းပေးပါတယ်။ [[mark:open-order-tab]] မှာမယ် ခလုတ်နဲ့
+      ဖွင့်မယ့် order tab ကတော့ ရေးပြီးသားပါ။ [[mark:select-note-state]] သူက
+      ဧည့်သည်ရဲ့ မှတ်ချက်ကို state ထဲမှာ သိမ်းထားပါတယ်။
+      [[mark:select-timer-effect]] ပြီးတော့ Effect က စက္ကန့်တိုင်း
+      စောင့်ချိန်ကို တိုးပေးမယ့် timer ကို စပြီး၊ cleanup က အဲဒီ timer ကို
+      ရပ်ပေးပါတယ်။ timer run နေလား ဆိုတာကိုလည်း စစ်ကြည့်နိုင်အောင် element
+      ပေါ်မှာ မှတ်ထားပါတယ်။ [[mark:open-app-activity]] App ဆီ ပြန်ရအောင်။
+      [[mark:wire-activity-import]] Activity ကို ယူပါတယ်။
+      [[mark:wire-tab-imports]] ပြီးတော့ tab နှစ်ခုကိုပါ။
+      [[mark:wire-activity-jsx]] tab တစ်ခုစီကို သူ့ကိုယ်ပိုင် Activity ထဲ
+      ထည့်ပါတယ်။ [[mark:select-mode]] ဒီ mode ကို ကြည့်ပါ။ order tab ကို
+      ရွေးထားရင် visible၊ မရွေးထားရင် hidden ဖြစ်ပါတယ်။ tab နှစ်ခုလုံး page
+      ထဲမှာ အမြဲ ရှိနေပါတယ်။
+    sources:
+      - title: "React — <Activity>: Restoring the state of hidden components"
+        url: "https://react.dev/reference/react/Activity#restoring-the-state-of-hidden-components"
+      - title: "React — useEffect"
+        url: "https://react.dev/reference/react/useEffect"
+      - title: "MDN — setInterval()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval"
+      - title: "MDN — HTMLElement.dataset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/dataset"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: open-app-tour
+        type: workspace.openFile
+        at: { mark: close-board-1, offsetMs: 400 }
+        path: src/App.jsx
+      - id: select-tab-state
+        type: editor.select
+        at: { mark: select-tab-state }
+        target:
+          { file: src/App.jsx, text: 'const [tab, setTab] = useState("menu");', occurrence: 1 }
+      - id: open-order-tab
+        type: workspace.openFile
+        at: { mark: open-order-tab }
+        path: src/OrderTab.jsx
+      - id: select-note-state
+        type: editor.select
+        at: { mark: select-note-state }
+        target:
+          { file: src/OrderTab.jsx, text: 'const [note, setNote] = useState("");', occurrence: 1 }
+      - id: select-timer-effect
+        type: editor.select
+        at: { mark: select-timer-effect }
+        target:
+          {
+            file: src/OrderTab.jsx,
+            text: "  useEffect(() => {\n    const label = timerRef.current;\n    label.dataset.timer = \"on\";\n    const id = setInterval(() => {\n      setSeconds((s) => s + 1);\n    }, 1000);\n    return () => {\n      clearInterval(id);\n      label.dataset.timer = \"off\";\n    };\n  }, []);\n",
+            occurrence: 1,
+          }
+      - id: open-app-activity
+        type: workspace.openFile
+        at: { mark: open-app-activity }
+        path: src/App.jsx
+      - id: wire-activity-import
+        type: editor.type
+        at: { mark: wire-activity-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { ", occurrence: 1 }
+        text: "Activity, "
+      - id: wire-tab-imports
+        type: editor.type
+        at: { mark: wire-tab-imports }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: "import MenuTab from \"./MenuTab.jsx\";\nimport OrderTab from \"./OrderTab.jsx\";\n"
+      - id: wire-activity-jsx
+        type: editor.type
+        at: { mark: wire-activity-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      </nav>\n", occurrence: 1 }
+        text: "      <Activity mode={tab === \"menu\" ? \"visible\" : \"hidden\"}>\n        <MenuTab />\n      </Activity>\n      <Activity mode={tab === \"order\" ? \"visible\" : \"hidden\"}>\n        <OrderTab />\n      </Activity>\n"
+      - id: select-mode
+        type: editor.select
+        at: { mark: select-mode }
+        target:
+          {
+            file: src/App.jsx,
+            text: 'mode={tab === "order" ? "visible" : "hidden"}',
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 3
+  - id: activity-state
+    narration: >
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်နေပြီမို့ preview
+      ဖွင့်လိုက်ရအောင်။ [[mark:click-order]] မှာမယ် tab ကို ဖွင့်ရအောင်။
+      [[mark:after-order]] timer က 0 ကနေ စပါတယ်။ ဘာကြောင့် 0 ကနေ စလဲ ဆိုတာ ခဏနေ
+      ကြည့်ပါမယ်။ [[mark:type-note]] မီးဖိုချောင်အတွက် မှတ်ချက် ရေးကြည့်ရအောင်။
+      timer ရဲ့ နံပါတ်ကိုလည်း မှတ်ထားပါ။ [[mark:click-menu]] ကဲ၊ မီနူး tab ကို
+      ပြန်သွားရအောင်။ [[mark:after-menu]] မှာမယ် tab က screen ပေါ်က
+      ပျောက်သွားပေမယ့်၊ page ထဲမှာတော့ ရှိနေတုန်းပါ။ [[mark:click-order-again]]
+      မှာမယ် tab ကို ပြန်ဖွင့်ရအောင်။ [[mark:after-return]] React က state ကို
+      မဖျက်ခဲ့လို့၊ မှတ်ချက်က ရှိနေတုန်းပါ။
+    sources:
+      - title: "React — <Activity>: Restoring the state of hidden components"
+        url: "https://react.dev/reference/react/Activity#restoring-the-state-of-hidden-components"
+      - title: "React — <Activity>: Restoring the DOM of hidden components"
+        url: "https://react.dev/reference/react/Activity#restoring-the-dom-of-hidden-components"
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+    actions:
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-menu-tab
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-tab }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-menu-tab }
+      - id: click-order
+        type: preview.click
+        at: { mark: click-order }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-timer-zero
+        type: expect.preview
+        at: { afterAction: click-order }
+        timeoutMs: 5000
+        target: { by: testId, value: order-timer }
+        textContains: "– 0 စက္ကန့်"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-order-shown
+        type: expect.preview
+        at: { mark: after-order }
+        timeoutMs: 5000
+        target: { by: testId, value: order-tab }
+        attribute: { name: style, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-note
+        type: preview.input
+        at: { mark: type-note }
+        timeoutMs: 5000
+        target: { by: testId, value: order-note }
+        value: "ငရုတ်သီး နည်းနည်းပဲ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note
+        type: expect.preview
+        at: { afterAction: type-note }
+        timeoutMs: 5000
+        target: { by: testId, value: order-note }
+        value: "ငရုတ်သီး နည်းနည်းပဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-menu
+        type: preview.click
+        at: { mark: click-menu }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-menu }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-order-hidden
+        type: expect.preview
+        at: { mark: after-menu }
+        timeoutMs: 5000
+        target: { by: testId, value: order-tab }
+        attribute: { name: style, value: "display: none !important;" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-timer-stopped
+        type: expect.preview
+        at: { afterAction: expect-order-hidden }
+        timeoutMs: 5000
+        target: { by: testId, value: order-timer }
+        attribute: { name: data-timer, value: "off" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-order-again
+        type: preview.click
+        at: { mark: click-order-again }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-note-kept
+        type: expect.preview
+        at: { mark: after-return }
+        timeoutMs: 5000
+        target: { by: testId, value: order-note }
+        value: "ငရုတ်သီး နည်းနည်းပဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-order-back
+        type: expect.preview
+        at: { afterAction: expect-note-kept }
+        timeoutMs: 5000
+        target: { by: testId, value: order-tab }
+        attribute: { name: style, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 4
+  - id: activity-effects
+    narration: >
+      [[mark:watch-timer]] timer ကလည်း ခုနက နံပါတ်ကနေ ဆက်ရေနေပါတယ်။
+      ဖျောက်ထားတုန်းက မရေတွက်ခဲ့ပါဘူး။ [[mark:board-effects]] ဘာကြောင့်လဲ။
+      [[mark:draw-row-visible]] tab ပေါ်နေတုန်း Effect ထဲက timer က စက္ကန့်တွေကို
+      တိုးပါတယ်။ [[mark:draw-row-hidden]] hidden ဖြစ်သွားတော့ React က cleanup
+      ကို run လိုက်လို့ timer ရပ်သွားပါတယ်။ ဒါပေမဲ့ state ကတော့ ကျန်နေပါတယ်။
+      [[mark:draw-row-back]] ပြန်ပေါ်လာတော့ Effect ပြန် run ပြီး ဆက်ရေပါတယ်။
+      [[mark:draw-initial]] အစကတည်းက hidden ဖြစ်နေတဲ့ tab ဆိုရင်တော့၊ ပြလိုက်မှ
+      Effect က ပထမဆုံး run ပါတယ်။ ဒါကြောင့် timer က 0 ကနေ စခဲ့တာပါ။
+    sources:
+      - title: "React — <Activity>: My hidden components have Effects that aren’t running"
+        url: "https://react.dev/reference/react/Activity#my-hidden-components-have-effects-that-arent-running"
+      - title: "React — Synchronizing with Effects: How to handle the Effect firing twice"
+        url: "https://react.dev/learn/synchronizing-with-effects#how-to-handle-the-effect-firing-twice-in-development"
+    actions:
+      - id: expect-timer-running
+        type: expect.preview
+        at: { mark: watch-timer }
+        timeoutMs: 5000
+        target: { by: testId, value: order-timer }
+        attribute: { name: data-timer, value: "on" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: board-effects
+        type: whiteboard.apply
+        at: { mark: board-effects }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-row-visible
+        type: whiteboard.apply
+        at: { mark: draw-row-visible }
+        upsertIds: [b2-r1-box, b2-r1-mode, b2-r1-arrow, b2-r1-text]
+        drawMs: 1800
+      - id: draw-row-hidden
+        type: whiteboard.apply
+        at: { mark: draw-row-hidden }
+        upsertIds: [b2-r2-box, b2-r2-mode, b2-r2-arrow, b2-r2-text]
+        drawMs: 1800
+      - id: draw-row-back
+        type: whiteboard.apply
+        at: { mark: draw-row-back }
+        upsertIds: [b2-r3-box, b2-r3-mode, b2-r3-arrow, b2-r3-text]
+        drawMs: 1800
+      - id: draw-initial
+        type: whiteboard.apply
+        at: { mark: draw-initial }
+        upsertIds: [b2-initial]
+        drawMs: 1000
+
+  # ------------------------------------------------------------------ 5
+  - id: reviews-prerender
+    chapter: "Hidden tab ကို ကြို render လုပ်ထားရအောင်"
+    narration: >
+      [[mark:close-board-2]] hidden Activity နဲ့ဆိုရင် content ကို မပြခင်ကတည်းက
+      ကြိုပြင်ထားလို့လည်း ရပါတယ်။ [[mark:open-reviews]] ဒါက သုံးသပ်ချက် tab ပါ။
+      [[mark:select-fetch]] promise ကို သိမ်းထားမယ့် ဒီ variable ကို ကြည့်ပါ။
+      ပထမ render မှာ တစ်စက္ကန့်ခွဲ ကြာမှ data ရမယ့် promise ကို ဒီထဲ
+      သိမ်းထားလို့၊ render တိုင်း promise အတူတူကိုပဲ ဖတ်ပါတယ်။
+      [[mark:select-use]] component က အဲဒါကို use နဲ့ ဖတ်ပြီး၊ promise
+      မပြီးမချင်း စောင့်နေပါတယ်။ [[mark:open-app-reviews]] App ထဲ ထည့်ရအောင်။
+      [[mark:wire-suspense-import]] Suspense လည်း ယူပါတယ်။
+      [[mark:wire-reviews-import]] ပြီးတော့ ReviewsTab ကိုပါ။
+      [[mark:wire-reviews-jsx]] သူ့ကိုယ်ပိုင် Activity ထဲ ထည့်ပြီး၊ fallback
+      ပါတဲ့ Suspense နဲ့ ဝိုင်းထားပါတယ်။ [[mark:explain-prerender]] page
+      ပြန်ပွင့်လာပြီး၊ သုံးသပ်ချက် tab က hidden ဖြစ်နေပါတယ်။ ဒါပေမဲ့ React က
+      hidden content ကိုလည်း နောက်ကွယ်မှာ render လုပ်ထားလို့၊ data တောင်းတာ
+      စပြီးသွားပါပြီ။ [[mark:click-reviews]] သုံးသပ်ချက် tab ကို ဖွင့်ရအောင်။
+      [[mark:after-reviews]] သုံးသပ်ချက်တွေ ချက်ချင်း ပေါ်လာပါတယ်။
+      ဖျောက်ထားတုန်း data က အသင့် ဖြစ်နေပြီးသားမို့ပါ။ [[mark:urgent-note]] data
+      မရောက်ခင် tab ပြောင်းမိရင်တော့ fallback ပေါ်လာပါမယ်။ startTransition နဲ့
+      ပြောင်းရင်တော့ data ရောက်တဲ့အထိ tab အဟောင်းကို ဆက်ပြထားပါမယ်။
+    sources:
+      - title: "React — <Activity>: Pre-rendering content that’s likely to become visible"
+        url: "https://react.dev/reference/react/Activity#pre-rendering-content-thats-likely-to-become-visible"
+      - title: "React — use"
+        url: "https://react.dev/reference/react/use"
+      - title: "React — <Suspense>"
+        url: "https://react.dev/reference/react/Suspense"
+      - title: "React — startTransition"
+        url: "https://react.dev/reference/react/startTransition"
+    actions:
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { mark: close-board-2 }
+        open: false
+      - id: open-reviews
+        type: workspace.openFile
+        at: { mark: open-reviews }
+        path: src/ReviewsTab.jsx
+      - id: select-fetch
+        type: editor.select
+        at: { mark: select-fetch }
+        target: { file: src/ReviewsTab.jsx, text: "let reviewsPromise = null;", occurrence: 1 }
+      - id: select-use
+        type: editor.select
+        at: { mark: select-use }
+        target: { file: src/ReviewsTab.jsx, text: "use(fetchReviews())", occurrence: 1 }
+      - id: open-app-reviews
+        type: workspace.openFile
+        at: { mark: open-app-reviews }
+        path: src/App.jsx
+      - id: wire-suspense-import
+        type: editor.type
+        at: { mark: wire-suspense-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { Activity, ", occurrence: 1 }
+        text: "Suspense, "
+      - id: wire-reviews-import
+        type: editor.type
+        at: { mark: wire-reviews-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import OrderTab from \"./OrderTab.jsx\";\n", occurrence: 1 }
+        text: "import ReviewsTab from \"./ReviewsTab.jsx\";\n"
+      - id: wire-reviews-jsx
+        type: editor.type
+        at: { mark: wire-reviews-jsx }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "        <OrderTab />\n      </Activity>\n", occurrence: 1 }
+        text: "      <Suspense fallback={<p className=\"muted\">ခဏစောင့်ပါ…</p>}>\n        <Activity mode={tab === \"reviews\" ? \"visible\" : \"hidden\"}>\n          <ReviewsTab />\n        </Activity>\n      </Suspense>\n"
+      - id: expect-reviews-prerendered
+        type: expect.preview
+        at: { mark: click-reviews, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews-tab }
+        attribute: { name: style, value: "display: none !important;" }
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: click-reviews
+        type: preview.click
+        at: { mark: click-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-reviews }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-reviews-shown
+        type: expect.preview
+        at: { afterAction: click-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews-tab }
+        textContains: "မုန့်ဟင်းခါး အရသာ ကောင်းပါတယ်"
+        attribute: { name: style, value: "" }
+        retry: { maxAttempts: 2, delayMs: 200 }
+
+  # ------------------------------------------------------------------ 6
+  - id: vt-idea
+    chapter: "ViewTransition ဆိုတာ ဘာလဲ"
+    narration: >
+      အခု ဒုတိယ component ဖြစ်တဲ့ ViewTransition ပါ။ [[mark:draw-snapshots]]
+      page ရဲ့ အပိုင်း တစ်ခု ပြောင်းတဲ့အခါ၊ browser က အဟောင်းနဲ့ အသစ်ကို ပုံ
+      နှစ်ပုံလို ရိုက်ပြီး၊ ကြားထဲမှာ animation ထည့်ပေးနိုင်ပါတယ်။
+      ViewTransition ကို သုံးရင် React က အဲဒါကို စပေးပါတယ်။
+      [[mark:draw-transition-only]] React က startTransition လို Transition ထဲက
+      update တွေကိုပဲ animate လုပ်ပါတယ်။ urgent update ကတော့ animation မပါဘဲ
+      ချက်ချင်း ပြောင်းပါတယ်။ [[mark:draw-triggers]] animation ဖြစ်တဲ့ အခြေအနေ
+      လေးမျိုး ရှိပါတယ်။ ပေါ်လာတဲ့ enter၊ ပျောက်သွားတဲ့ exit၊ အထဲက content
+      ဒါမှမဟုတ် နေရာ၊ အရွယ်အစား ပြောင်းတဲ့ update နဲ့၊ name တူတဲ့ element တစ်ခုက
+      တစ်နေရာမှာ ပျောက်ပြီး နောက်တစ်နေရာမှာ ပေါ်လာတဲ့ share ပါ။
+      [[mark:honest-note]] ဒီ lesson က page ထဲက ပြောင်းလဲမှုတွေကိုပဲ
+      ပြန်ပြတာမို့ animation ကို မမြင်ရပါဘူး၊ ကိုယ့် browser မှာ run ကြည့်မှ
+      မြင်ရပါမယ်။ ဒီမှာတော့ enter animation ဖြစ်တိုင်း အပေါ်ဆုံး စာကြောင်းက
+      ရေတွက်ပြပါမယ်။
+    sources:
+      - title: "React — <ViewTransition>"
+        url: "https://react.dev/reference/react/ViewTransition"
+      - title: "React — <ViewTransition>: Animation triggers"
+        url: "https://react.dev/reference/react/ViewTransition#animation-triggers"
+      - title: "MDN — View Transition API"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+    actions:
+      - id: board-vt
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: draw-snapshots
+        type: whiteboard.apply
+        at: { mark: draw-snapshots }
+        upsertIds: [b3-old-box, b3-old-text, b3-arrow, b3-new-box, b3-new-text, b3-caption]
+        drawMs: 3000
+      - id: draw-transition-only
+        type: whiteboard.apply
+        at: { mark: draw-transition-only }
+        upsertIds: [b3-only, b3-only-underline, b3-only-list]
+        drawMs: 2000
+      - id: draw-triggers
+        type: whiteboard.apply
+        at: { mark: draw-triggers }
+        upsertIds: [b3-triggers]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 7
+  - id: dishpanel-code
+    chapter: "ViewTransition ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-board-3]] ဟင်းလျာကို တစ်ခါ တစ်ခုပဲ ပြမယ့် panel လေး
+      ရေးကြည့်ရအောင်။ [[mark:open-vtcount]] ဒီ helper ကတော့ ရေးပြီးသားပါ။
+      [[mark:select-vtcount]] စာသား ရေးထည့်တဲ့ ဒီ စာကြောင်းကို ကြည့်ပါ။ enter
+      animation အကြိမ်ရေနဲ့၊ နောက်မှ ကြည့်မယ့် transition type ကို၊ React
+      အပြင်ဘက်က အပေါ်ဆုံး စာကြောင်းထဲ ရေးပေးတာပါ။ [[mark:open-dishpanel]]
+      DishPanel ဖိုင်က အခု အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import မလုပ်ထားသေးပါဘူး။
+      [[mark:type-dp-top]] panel က state နှစ်ခု မှတ်ထားပါတယ်။ panel ပွင့်နေလား
+      ဆိုတာနဲ့၊ ပြမယ့် ဟင်းလျာရဲ့ မီနူးထဲက နေရာ နံပါတ်ပါ။ ဟင်းလျာကိုတော့ အဲဒီ
+      နံပါတ်နဲ့ ယူပါတယ်။ [[mark:type-dp-toggle]] နောက်တစ်ခုက panel ကို
+      ဖွင့်လိုက် ပိတ်လိုက် လုပ်ပေးမယ့် toggle function ပါ။
+      [[mark:select-start-transition]] state ကို startTransition ထဲမှာ
+      ပြောင်းတာကို ကြည့်ပါ၊ ဒါ မပါရင် animation မဖြစ်ပါဘူး။ pending ကို ပြစရာ
+      မလိုလို့ useTransition မသုံးထားပါဘူး။ [[mark:type-dp-jsx]] JSX ထဲမှာ panel
+      ကို ဖွင့်ပိတ်လုပ်မယ့် ခလုတ် ပါပြီး၊ သူ့အောက်မှာ panel ပွင့်နေတုန်းပဲ
+      ပေါ်မယ့် အပိုင်း လာပါမယ်။ [[mark:type-dp-vt]] အဲဒါကို ViewTransition နဲ့
+      ဝိုင်းပါတယ်။ HTML element တစ်ခုခုက အပြင်ကနေ ဝိုင်းထားရင် enter animation
+      မဖြစ်လို့၊ condition ထဲမှာ ပထမဆုံး ထားရပါတယ်။ [[mark:type-dp-vt-rest]]
+      သူ့မှာ ဟင်းလျာရဲ့ id ကို key အဖြစ် ပေးပြီး၊ onEnter handler လည်း
+      ပေးထားပါတယ်။ အထဲမှာ ဟင်းလျာရဲ့ နာမည်နဲ့ ဈေးနှုန်းကို ကျပ်နဲ့ ပြပါတယ်။
+      ပြီးတော့ tag အကုန် ပြန်ပိတ်လိုက်ပါတယ်။ [[mark:select-key]] ဒီ key ကြောင့်
+      ဟင်းလျာ ပြောင်းတိုင်း React က card အဟောင်းကို ဖယ်ပြီး အသစ် ထည့်လို့၊
+      အဟောင်းက exit၊ အသစ်က enter ဖြစ်ပါတယ်။ key မပါရင်တော့ card တစ်ခုတည်းရဲ့
+      content ပဲ ပြောင်းတဲ့ update ဖြစ်ပါမယ်။ [[mark:select-onenter]] onEnter က
+      enter animation စတဲ့အခါ run ပြီး၊ transition type တွေကို counter ဆီ
+      ပို့ပါတယ်။ ကျန်တဲ့ အခြေအနေတွေအတွက် onExit၊ onUpdate နဲ့ onShare ရှိပါတယ်။
+    sources:
+      - title: "React — <ViewTransition>"
+        url: "https://react.dev/reference/react/ViewTransition"
+      - title: "React — <ViewTransition>: Events"
+        url: "https://react.dev/reference/react/ViewTransition#view-transition-event"
+      - title: "React — startTransition"
+        url: "https://react.dev/reference/react/startTransition"
+    actions:
+      - id: close-board-3
+        type: whiteboard.apply
+        at: { mark: close-board-3 }
+        open: false
+      - id: open-vtcount
+        type: workspace.openFile
+        at: { mark: open-vtcount }
+        path: src/vtCount.js
+      - id: select-vtcount
+        type: editor.select
+        at: { mark: select-vtcount }
+        target:
+          {
+            file: src/vtCount.js,
+            text: 'document.getElementById("vt-count").textContent',
+            occurrence: 1,
+          }
+      - id: open-dishpanel
+        type: workspace.openFile
+        at: { mark: open-dishpanel }
+        path: src/DishPanel.jsx
+      - id: type-dp-top
+        type: editor.type
+        at: { mark: type-dp-top }
+        cadence: line-by-line
+        target: { file: src/DishPanel.jsx, after: "", occurrence: 1 }
+        text: "import { ViewTransition, startTransition, useState } from \"react\";\nimport { menu } from \"./menu.js\";\nimport { countEnter } from \"./vtCount.js\";\n\nexport default function DishPanel() {\n  const [open, setOpen] = useState(false);\n  const [index, setIndex] = useState(0);\n  const dish = menu[index];\n"
+      - id: type-dp-toggle
+        type: editor.type
+        at: { mark: type-dp-toggle }
+        cadence: line-by-line
+        target: { file: src/DishPanel.jsx, after: "  const dish = menu[index];\n", occurrence: 1 }
+        text: "\n  function toggle() {\n    startTransition(() => {\n      setOpen(!open);\n    });\n  }\n"
+      - id: select-start-transition
+        type: editor.select
+        at: { mark: select-start-transition }
+        target:
+          {
+            file: src/DishPanel.jsx,
+            text: "    startTransition(() => {\n      setOpen(!open);\n    });\n",
+            occurrence: 1,
+          }
+      - id: type-dp-jsx
+        type: editor.type
+        at: { mark: type-dp-jsx }
+        cadence: line-by-line
+        target:
+          { file: src/DishPanel.jsx, after: "      setOpen(!open);\n    });\n  }\n", occurrence: 1 }
+        text: "\n  return (\n    <section className=\"card\">\n      <button data-testid=\"toggle-dish\" onClick={toggle}>\n        {open ? \"ပိတ်မယ်\" : \"ဟင်းလျာ ကြည့်မယ်\"}\n      </button>\n      {open && (\n"
+      - id: type-dp-vt
+        type: editor.type
+        at: { mark: type-dp-vt }
+        cadence: fast-explainer
+        target: { file: src/DishPanel.jsx, after: "      {open && (\n", occurrence: 1 }
+        text: "        <ViewTransition\n"
+      - id: type-dp-vt-rest
+        type: editor.type
+        at: { mark: type-dp-vt-rest }
+        cadence: line-by-line
+        target: { file: src/DishPanel.jsx, after: "        <ViewTransition\n", occurrence: 1 }
+        text: "          key={dish.id}\n          onEnter={(instance, types) => countEnter(types)}\n        >\n          <article className=\"dish\" data-testid=\"dish-detail\">\n            <h3>{dish.name}</h3>\n            <p>{dish.price.toLocaleString(\"en-US\") + \" ကျပ်\"}</p>\n          </article>\n        </ViewTransition>\n      )}\n    </section>\n  );\n}\n"
+      - id: select-key
+        type: editor.select
+        at: { mark: select-key }
+        target: { file: src/DishPanel.jsx, text: "key={dish.id}", occurrence: 1 }
+      - id: select-onenter
+        type: editor.select
+        at: { mark: select-onenter }
+        target:
+          {
+            file: src/DishPanel.jsx,
+            text: "onEnter={(instance, types) => countEnter(types)}",
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 8
+  - id: dishpanel-run
+    narration: >
+      [[mark:open-app-dp]] ကဲ၊ panel ကို page ပေါ် တင်ကြည့်ရအောင်။
+      [[mark:wire-dp-import]] အရင် import လုပ်ပါတယ်။ [[mark:wire-dp-use]]
+      ပြီးတော့ ခေါင်းစဉ် အောက်မှာ ထည့်ပါတယ်။ [[mark:click-open-dish]] panel ကို
+      ဖွင့်ရအောင်။ [[mark:after-open-dish]] ပထမ ဟင်းလျာ မုန့်ဟင်းခါး ပေါ်လာပြီး၊
+      အပေါ်ဆုံး စာကြောင်းက enter animation 1 ကြိမ်လို့ ပြပါတယ်။ type ကတော့
+      မရှိသေးပါဘူး၊ အဲဒါကို နောက်တစ်ပိုင်းမှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "React — <ViewTransition>: Animating an element on enter/exit"
+        url: "https://react.dev/reference/react/ViewTransition#animating-an-element-on-enter"
+      - title: "MDN — View Transition API"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API"
+    actions:
+      - id: open-app-dp
+        type: workspace.openFile
+        at: { mark: open-app-dp }
+        path: src/App.jsx
+      - id: wire-dp-import
+        type: editor.type
+        at: { mark: wire-dp-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import ReviewsTab from \"./ReviewsTab.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import DishPanel from \"./DishPanel.jsx\";\n"
+      - id: wire-dp-use
+        type: editor.type
+        at: { mark: wire-dp-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <DishPanel />\n"
+      - id: expect-toggle-ready
+        type: expect.preview
+        at: { mark: click-open-dish, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-dish }
+        textContains: "ဟင်းလျာ ကြည့်မယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-open-dish
+        type: preview.click
+        at: { mark: click-open-dish }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-dish }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-vt-open
+        type: expect.preview
+        at: { mark: after-open-dish }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-count }
+        textContains: "1 ကြိမ် · type မရှိ"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-dish-open
+        type: expect.preview
+        at: { afterAction: expect-vt-open }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-detail }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  # ------------------------------------------------------------------ 9
+  - id: transition-types
+    chapter: "Transition type နဲ့ animation ရွေးရအောင်"
+    narration: >
+      [[mark:open-dp-types]] ဟင်းလျာတွေကို အရင်တစ်ခု၊ နောက်တစ်ခု ခလုတ်တွေနဲ့
+      တစ်ခုချင်း လှန်ကြည့်ရအောင်။ [[mark:wire-att-import]] addTransitionType ကို
+      ယူပါတယ်။ [[mark:wire-go]] go function က startTransition ထဲမှာ ဟင်းလျာ
+      နံပါတ်ကို တစ်ဆင့် တိုး ဒါမှမဟုတ် လျှော့ပြီး၊ အစွန်း ရောက်ရင်
+      တစ်ဖက်စွန်းကို ပြန်ပတ်ပါတယ်။ [[mark:select-att]] addTransitionType ကို
+      next ဒါမှမဟုတ် previous နဲ့၊ startTransition ထဲမှာပဲ ခေါ်ရတာကို ကြည့်ပါ။
+      Transition ကို type တပ်ပေးလိုက်တော့၊ ဘာကြောင့် ပြောင်းတာလဲ ဆိုတာကို
+      ViewTransition က သိသွားပါတယ်။ [[mark:wire-step-buttons]] အရင်တစ်ခု ခလုတ်က
+      go ကို previous နဲ့၊ နောက်တစ်ခု ခလုတ်က next နဲ့ ခေါ်ပါတယ်။
+      [[mark:open-styles]] CSS ဖိုင်ထဲမှာ animation တွေ ရေးပြီးသားပါ။
+      [[mark:select-css]] ဒီ CSS rule က ပုံ အသစ်ကို ညာဘက်ကနေ လျှောဝင်လာအောင်
+      လုပ်ပေးပါတယ်။ [[mark:open-dp-maps]] panel ဆီ ပြန်ရအောင်။
+      [[mark:wire-maps]] enter နဲ့ exit အတွက် object နှစ်ခုက transition type
+      အလိုက် CSS class ကို ရွေးပေးပါတယ်။ next ဆိုရင် အသစ်က ညာဘက်ကနေ ဝင်လာပြီး၊
+      previous ဆိုရင် ဘယ်ဘက်ကနေ ဝင်လာပါတယ်။ [[mark:select-default]] default
+      ကတော့ panel ဖွင့်တာလို type မပါတဲ့ Transition တွေအတွက်ပါ။ auto ဆိုတာ
+      အဟောင်းက မှိန်ပြီး ပျောက်သွားရင်း အသစ်က ပေါ်လာတဲ့ browser ရဲ့ ပုံမှန်
+      cross-fade ပါ။
+    sources:
+      - title: "React — addTransitionType"
+        url: "https://react.dev/reference/react/addTransitionType"
+      - title: "React — <ViewTransition>: View Transition Class"
+        url: "https://react.dev/reference/react/ViewTransition#view-transition-class"
+      - title: "React — <ViewTransition>: Styling View Transitions"
+        url: "https://react.dev/reference/react/ViewTransition#styling-view-transitions"
+      - title: "MDN — ::view-transition-new()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::view-transition-new"
+    actions:
+      - id: open-dp-types
+        type: workspace.openFile
+        at: { mark: open-dp-types }
+        path: src/DishPanel.jsx
+      - id: wire-att-import
+        type: editor.type
+        at: { mark: wire-att-import }
+        cadence: block
+        target:
+          {
+            file: src/DishPanel.jsx,
+            after: "import { ViewTransition, startTransition",
+            occurrence: 1,
+          }
+        text: ", addTransitionType"
+      - id: wire-go
+        type: editor.type
+        at: { mark: wire-go }
+        cadence: block
+        target:
+          { file: src/DishPanel.jsx, after: "      setOpen(!open);\n    });\n  }\n", occurrence: 1 }
+        text: "\n  function go(dir) {\n    const step = dir === \"next\" ? 1 : -1;\n    startTransition(() => {\n      addTransitionType(dir);\n      setIndex((index + step + menu.length) % menu.length);\n    });\n  }\n"
+      - id: select-att
+        type: editor.select
+        at: { mark: select-att }
+        target: { file: src/DishPanel.jsx, text: "addTransitionType(dir);", occurrence: 1 }
+      - id: wire-step-buttons
+        type: editor.type
+        at: { mark: wire-step-buttons }
+        cadence: block
+        target:
+          { file: src/DishPanel.jsx, after: "        </ViewTransition>\n      )}\n", occurrence: 1 }
+        text: "      {open && (\n        <div className=\"row\">\n          <button className=\"secondary\" data-testid=\"dish-prev\" onClick={() => go(\"previous\")}>\n            အရင်တစ်ခု\n          </button>\n          <button className=\"secondary\" data-testid=\"dish-next\" onClick={() => go(\"next\")}>\n            နောက်တစ်ခု\n          </button>\n        </div>\n      )}\n"
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: src/styles.css
+      - id: select-css
+        type: editor.select
+        at: { mark: select-css }
+        target:
+          {
+            file: src/styles.css,
+            text: "::view-transition-new(.slide-left) {\n  animation: 300ms ease-out both from-right;\n}\n",
+            occurrence: 1,
+          }
+      - id: open-dp-maps
+        type: workspace.openFile
+        at: { mark: open-dp-maps }
+        path: src/DishPanel.jsx
+      - id: wire-maps
+        type: editor.type
+        at: { mark: wire-maps }
+        cadence: block
+        target: { file: src/DishPanel.jsx, after: "          key={dish.id}\n", occurrence: 1 }
+        text: "          enter={{ next: \"slide-left\", previous: \"slide-right\", default: \"auto\" }}\n          exit={{ next: \"slide-out-left\", previous: \"slide-out-right\", default: \"auto\" }}\n"
+      - id: select-default
+        type: editor.select
+        at: { mark: select-default }
+        target: { file: src/DishPanel.jsx, text: 'default: "auto"', occurrence: 1 }
+
+  # ------------------------------------------------------------------ 10
+  - id: types-run
+    narration: >
+      [[mark:click-open-2]] ပြင်လိုက်လို့ page ပြန်ပွင့်သွားတာမို့၊ panel ကို
+      ထပ်ဖွင့်ရအောင်။ [[mark:after-open-2]] အရေအတွက်က 1 ကနေ ပြန်စပြီး၊ type
+      မရှိပါဘူး။ [[mark:click-next-1]] နောက်တစ်ခုကို နှိပ်ရအောင်။
+      [[mark:after-next-1]] ရှမ်းခေါက်ဆွဲ ပေါ်လာပြီး၊ type က next ပါ။
+      [[mark:click-next-2]] ထပ်နှိပ်ရအောင်။ [[mark:after-next-2]] enter
+      animation 3 ကြိမ် ဖြစ်သွားပါပြီ၊ ဒီတစ်ခါလည်း type က next ပါ။
+      [[mark:click-prev]] အရင်တစ်ခုကို နှိပ်ရအောင်။ [[mark:after-prev]]
+      ရှမ်းခေါက်ဆွဲ ပြန်ပေါ်လာပြီး၊ type က previous ပါ။ [[mark:board-types]]
+      ဒါဆို type က ဘာ ပြောင်းလိုက်တာလဲ။ [[mark:draw-types]] next ရော previous
+      ရော ပြောင်းတာက ဟင်းလျာ နံပါတ် state တစ်ခုတည်းပါ။ ရှေ့သွားလား နောက်ပြန်လား
+      ဆိုတာကို type ကပဲ ခွဲပေးလို့၊ တစ်ခုစီမှာ ကိုယ်ပိုင် animation
+      ရှိနိုင်ပါတယ်။ [[mark:draw-key]] key ကြောင့် exit ရော enter ရော ဖြစ်ပါတယ်။
+      [[mark:draw-default]] default ကို none ထားမိရင်တော့ panel ဖွင့်တာလို type
+      မပါတဲ့ Transition တွေမှာ animation မဖြစ်တော့ပါဘူး။ ဒါကြောင့် ဒီမှာ default
+      ကို auto ထားခဲ့တာပါ။
+    sources:
+      - title: "React — addTransitionType"
+        url: "https://react.dev/reference/react/addTransitionType"
+      - title: "React — <ViewTransition>: Customizing animations with types"
+        url: "https://react.dev/reference/react/ViewTransition#customizing-animations-with-types"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+    actions:
+      - id: expect-toggle-ready-2
+        type: expect.preview
+        at: { mark: click-open-2, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-dish }
+        textContains: "ဟင်းလျာ ကြည့်မယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-open-2
+        type: preview.click
+        at: { mark: click-open-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-dish }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-vt-open-2
+        type: expect.preview
+        at: { mark: after-open-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-count }
+        textContains: "1 ကြိမ် · type မရှိ"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: click-next-1
+        type: preview.click
+        at: { mark: click-next-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-vt-next-1
+        type: expect.preview
+        at: { mark: after-next-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-count }
+        textContains: "2 ကြိမ် · next"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-dish-next-1
+        type: expect.preview
+        at: { afterAction: expect-vt-next-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-detail }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: click-next-2
+        type: preview.click
+        at: { mark: click-next-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-vt-next-2
+        type: expect.preview
+        at: { mark: after-next-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-count }
+        textContains: "3 ကြိမ် · next"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-dish-next-2
+        type: expect.preview
+        at: { afterAction: expect-vt-next-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-detail }
+        textContains: "နန်းကြီးသုပ်"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: click-prev
+        type: preview.click
+        at: { mark: click-prev }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-prev }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-vt-prev
+        type: expect.preview
+        at: { mark: after-prev }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-count }
+        textContains: "4 ကြိမ် · previous"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-dish-prev
+        type: expect.preview
+        at: { afterAction: expect-vt-prev }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-detail }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: board-types
+        type: whiteboard.apply
+        at: { mark: board-types }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-types
+        type: whiteboard.apply
+        at: { mark: draw-types }
+        upsertIds:
+          [
+            b4-next-box,
+            b4-next-text,
+            b4-next-arrow,
+            b4-next-label,
+            b4-prev-box,
+            b4-prev-text,
+            b4-prev-arrow,
+            b4-prev-label,
+          ]
+        drawMs: 3000
+      - id: draw-key
+        type: whiteboard.apply
+        at: { mark: draw-key }
+        upsertIds: [b4-key]
+        drawMs: 1000
+      - id: draw-default
+        type: whiteboard.apply
+        at: { mark: draw-default }
+        upsertIds: [b4-none, b4-auto, b4-auto-check]
+        drawMs: 2000
+
+  # ------------------------------------------------------------------ 11
+  - id: wrap-up
+    chapter: "အနှစ်ချုပ်"
+    narration: >
+      [[mark:board-more]] ViewTransition သုံးနည်း နှစ်ခု ကျန်ပါသေးတယ်။
+      [[mark:draw-share]] ViewTransition နှစ်ခုကို name တူ ပေးထားရင်၊ ပုံသေးလေးက
+      ပုံကြီး ဖြစ်လာသလို share animation ဖြစ်ပါတယ်။ [[mark:draw-suspense]]
+      Suspense boundary တစ်ခုကို ဝိုင်းထားရင်လည်း၊ fallback ကနေ content အစစ်ကို
+      ပြောင်းသွားတာကို animate လုပ်ပေးပါတယ်။ [[mark:draw-recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ Activity က UI ကို ဖျောက်ထားတုန်း state ကို မှတ်ထားပြီး
+      Effect တွေကို ရပ်ထားပါတယ်။ content ကိုလည်း ကြို render လုပ်ပြီး data ကို
+      ယူထားပေးပါတယ်။ ViewTransition က Transition ထဲက ပြောင်းလဲမှုတွေကို animate
+      လုပ်ပြီး၊ addTransitionType က ဘာကြောင့် ပြောင်းရတာလဲ ဆိုတာ ပြောပေးပါတယ်။
+      [[mark:next-lesson]] နောက် lesson နှစ်ခုမှာတော့ server ပေါ်မှာ run တဲ့
+      Server Component အစစ်တွေကို ရေးပြီး run ကြည့်ပါမယ်။
+    sources:
+      - title: "React — <ViewTransition>: Animating a shared element"
+        url: "https://react.dev/reference/react/ViewTransition#animating-a-shared-element"
+      - title: "React — <ViewTransition>: Animating from Suspense content"
+        url: "https://react.dev/reference/react/ViewTransition#animating-from-suspense-content"
+      - title: "React — <Activity>"
+        url: "https://react.dev/reference/react/Activity"
+      - title: "React — Server Components"
+        url: "https://react.dev/reference/rsc/server-components"
+    actions:
+      - id: board-more
+        type: whiteboard.apply
+        at: { mark: board-more }
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-share
+        type: whiteboard.apply
+        at: { mark: draw-share }
+        upsertIds: [b5-share]
+        drawMs: 1200
+      - id: draw-suspense
+        type: whiteboard.apply
+        at: { mark: draw-suspense }
+        upsertIds: [b5-suspense]
+        drawMs: 1200
+      - id: draw-recap
+        type: whiteboard.apply
+        at: { mark: draw-recap }
+        upsertIds: [b5-divider, b5-recap-activity, b5-recap-vt, b5-recap-type]
+        drawMs: 2400
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b5-next, b5-next-underline]
+        drawMs: 1200
+      - id: expect-app-activity-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/App.jsx
+        contains: "      <Activity mode={tab === \"menu\" ? \"visible\" : \"hidden\"}>\n        <MenuTab />\n      </Activity>\n      <Activity mode={tab === \"order\" ? \"visible\" : \"hidden\"}>\n        <OrderTab />\n      </Activity>\n"
+      - id: expect-app-suspense-file
+        type: expect.file
+        at: { afterAction: expect-app-activity-file }
+        path: src/App.jsx
+        contains: "      <Suspense fallback={<p className=\"muted\">ခဏစောင့်ပါ…</p>}>\n        <Activity mode={tab === \"reviews\" ? \"visible\" : \"hidden\"}>\n          <ReviewsTab />\n        </Activity>\n      </Suspense>\n"
+      - id: expect-app-imports-file
+        type: expect.file
+        at: { afterAction: expect-app-suspense-file }
+        path: src/App.jsx
+        contains: "import { Activity, Suspense, useState } from \"react\";\n"
+      - id: expect-dp-go-file
+        type: expect.file
+        at: { afterAction: expect-app-imports-file }
+        path: src/DishPanel.jsx
+        contains: "    startTransition(() => {\n      addTransitionType(dir);\n      setIndex((index + step + menu.length) % menu.length);\n    });\n"
+      - id: expect-dp-vt-file
+        type: expect.file
+        at: { afterAction: expect-dp-go-file }
+        path: src/DishPanel.jsx
+        contains: "        <ViewTransition\n          key={dish.id}\n          enter={{ next: \"slide-left\", previous: \"slide-right\", default: \"auto\" }}\n          exit={{ next: \"slide-out-left\", previous: \"slide-out-right\", default: \"auto\" }}\n          onEnter={(instance, types) => countEnter(types)}\n        >\n"
+      - id: expect-dp-import-file
+        type: expect.file
+        at: { afterAction: expect-dp-vt-file }
+        path: src/DishPanel.jsx
+        contains: "import { ViewTransition, startTransition, addTransitionType, useState } from \"react\";\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
