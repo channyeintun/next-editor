@@ -1184,7 +1184,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1453,7 +1452,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-effects }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b2-title]
       - id: draw-row-visible
@@ -1603,7 +1601,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title]
       - id: draw-snapshots
@@ -2001,7 +1998,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-types }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b4-title]
       - id: draw-types
