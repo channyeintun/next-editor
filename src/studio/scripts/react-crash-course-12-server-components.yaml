@@ -1,0 +1,1961 @@
+# React crash course, lesson 12 — Server Components and Server Functions
+# (Burmese, my-MM).
+#
+# Story: until now every component ran in the browser. This lesson runs a
+# real React Server Components app inside the WebContainer (Vite's official
+# RSC plugin, @vitejs/plugin-rsc; no framework and no router). App is an async
+# Server Component that reads the menu with node:fs through a server-only
+# db.js; an AddButton marked 'use client' adds state and clicks to each dish
+# row; a 'use server' placeOrder Server Function is called by a 'use client'
+# OrderForm through useActionState, and the server re-renders App so the
+# server-side order count updates; finally an async Specials Server Component
+# streams in behind <Suspense>. Boards explain where code runs, the three
+# plugin environments, the 'use client' boundary (serializable props), Server
+# Functions, and a recap with cacheSignal / prerender / partial prerendering.
+#
+# Insert-only plan: AddButton.jsx, actions.js, OrderForm.jsx and Specials.jsx
+# are pinned EMPTY and typed while nothing imports them. App.jsx is a live
+# Server Component, so it only takes `block` inserts of complete lines: the
+# import first, then the usage. New JSX is appended AFTER the stateful
+# AddButton rows, so their client state survives every server refresh.
+# Streaming comes last: once the 5 s Specials is on the page, every later
+# server refresh would wait for it (none follows).
+#
+# The dev server starts in the first scene (install + boot take ~40 s in the
+# WebContainer) and is waited on only when the preview opens, about two and a
+# half minutes later.
+#
+# Narration is Burmese (my-MM), written span by span from the English draft
+# in tools/narration-en.txt; voice-script.md next to this file is the source
+# (tools/sync_check.py applies it). DESIGN.md is the writer's brief.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-12-server-components
+  title: "React crash course 12: Server Component နဲ့ Server Function"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 12
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-rsc",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1",
+            "rsc-html-stream": "0.0.8"
+          },
+          "devDependencies": {
+            "@vitejs/plugin-rsc": "0.5.37",
+            "vite": "7.3.7"
+          }
+        }
+      vite.config.js: |
+        import "./webcontainer-fix.js";
+        import rsc from "@vitejs/plugin-rsc";
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every browser entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react-dom",
+              "react-dom/client",
+              "rsc-html-stream/client",
+            ],
+          },
+          plugins: [
+            // React's bundler integration for Server Components. It builds three
+            // environments: rsc (Server Components + Server Functions), ssr (HTML)
+            // and client (hydration in the browser).
+            rsc({
+              entries: {
+                rsc: "./src/framework/entry.rsc.jsx",
+                ssr: "./src/framework/entry.ssr.jsx",
+                client: "./src/framework/entry.browser.jsx",
+              },
+            }),
+          ],
+        });
+      webcontainer-fix.js: |
+        // Two gaps between WebContainer's in-browser Node.js and real Node.js that
+        // React Server Components run into. Real Node.js passes both checks and is
+        // left alone. Imported once by vite.config.js, which runs in the server process.
+
+        // 1. The server clock (performance.timeOrigin + performance.now()) runs
+        // behind the browser's Date.now(). React stamps that time into the RSC stream,
+        // so the browser computes component times before the page existed and React's
+        // dev performance track throws "cannot have a negative time stamp".
+        const drift = Date.now() - (performance.timeOrigin + performance.now());
+        if (Math.abs(drift) > 20) {
+          Object.defineProperty(performance, "timeOrigin", { value: performance.timeOrigin + drift });
+        }
+
+        // 2. TextDecoder ignores { stream: true }: a Burmese letter (3 bytes in UTF-8)
+        // split between two chunks of the RSC stream turns into "�" and corrupts the
+        // page. Keep an unfinished letter's bytes and decode them with the next chunk.
+        const NativeTextDecoder = globalThis.TextDecoder;
+
+        function decodesSplitLetters() {
+          const decoder = new NativeTextDecoder();
+          const text =
+            decoder.decode(new Uint8Array([0xe1, 0x80]), { stream: true }) +
+            decoder.decode(new Uint8Array([0x81]));
+          return text === "ခ";
+        }
+
+        if (process.env.FORCE_TEXT_DECODER_FIX || !decodesSplitLetters()) {
+          globalThis.TextDecoder = class TextDecoder extends NativeTextDecoder {
+            #pending = new Uint8Array(0);
+
+            decode(input, options) {
+              let bytes = !input
+                ? new Uint8Array(0)
+                : ArrayBuffer.isView(input)
+                  ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+                  : new Uint8Array(input);
+              if (this.#pending.length > 0) {
+                const joined = new Uint8Array(this.#pending.length + bytes.length);
+                joined.set(this.#pending);
+                joined.set(bytes, this.#pending.length);
+                bytes = joined;
+              }
+              let end = bytes.length;
+              if (options?.stream) {
+                // Step back over continuation bytes (10xxxxxx) to the letter's first byte.
+                let start = end - 1;
+                while (start >= 0 && end - start < 4 && (bytes[start] & 0xc0) === 0x80) start--;
+                if (start >= 0) {
+                  const first = bytes[start];
+                  const length = first >= 0xf0 ? 4 : first >= 0xe0 ? 3 : first >= 0xc0 ? 2 : 1;
+                  if (start + length > end) end = start;
+                }
+              }
+              this.#pending = bytes.slice(end);
+              return super.decode(bytes.slice(0, end));
+            }
+          };
+        }
+      src/framework/entry.rsc.jsx: |
+        // Runs on the server, in the "rsc" environment (react-server condition).
+        // GET  /            -> HTML (rendered by the ssr environment)
+        // GET  /?rsc        -> the RSC payload (used by the browser to refresh)
+        // POST /?rsc + x-rsc-action header -> call a Server Function, then re-render
+        import {
+          renderToReadableStream,
+          createTemporaryReferenceSet,
+          decodeReply,
+          loadServerAction,
+          decodeAction,
+          decodeFormState,
+        } from "@vitejs/plugin-rsc/rsc/server";
+        import App from "../App.jsx";
+
+        async function handler(request) {
+          const url = new URL(request.url);
+          const wantsRsc = url.searchParams.has("rsc");
+          let returnValue;
+          let formState;
+          let temporaryReferences;
+
+          if (request.method === "POST") {
+            const actionId = request.headers.get("x-rsc-action");
+            if (actionId) {
+              // Called from the hydrated page (React's server callback).
+              const contentType = request.headers.get("content-type") ?? "";
+              const body = contentType.startsWith("multipart/form-data")
+                ? await request.formData()
+                : await request.text();
+              temporaryReferences = createTemporaryReferenceSet();
+              const args = await decodeReply(body, { temporaryReferences });
+              const action = await loadServerAction(actionId);
+              try {
+                returnValue = { ok: true, data: await action(...args) };
+              } catch (error) {
+                returnValue = { ok: false, data: error };
+              }
+            } else {
+              // A plain <form> post before JavaScript loaded.
+              const formData = await request.formData();
+              const action = await decodeAction(formData);
+              formState = await decodeFormState(await action(), formData);
+            }
+          }
+
+          // A closed tab or a reloaded preview cancels the stream: not an error.
+          const onError = (error) => {
+            if (!request.signal.aborted) console.error(error);
+          };
+          const rscStream = renderToReadableStream(
+            { root: <App />, returnValue, formState },
+            { temporaryReferences, onError },
+          );
+
+          if (wantsRsc) {
+            return new Response(rscStream, {
+              headers: { "content-type": "text/x-component;charset=utf-8" },
+            });
+          }
+
+          const ssr = await import.meta.viteRsc.loadModule("ssr", "index");
+          const htmlStream = await ssr.renderHtml(rscStream, { formState, onError });
+          return new Response(htmlStream, {
+            headers: { "content-type": "text/html;charset=utf-8" },
+          });
+        }
+
+        export default { fetch: handler };
+
+        if (import.meta.hot) {
+          import.meta.hot.accept();
+        }
+      src/framework/entry.ssr.jsx: |
+        // Runs on the server, in the "ssr" environment: turns the RSC payload into
+        // HTML and embeds the payload in the page so the browser can hydrate.
+        import { createFromReadableStream, getClientEntryUrl } from "@vitejs/plugin-rsc/ssr";
+        import { use } from "react";
+        import { renderToReadableStream } from "react-dom/server.edge";
+        import { injectRSCPayload } from "rsc-html-stream/server";
+
+        export async function renderHtml(rscStream, { formState, onError }) {
+          const [forHtml, forBrowser] = rscStream.tee();
+          let payload;
+          function SsrRoot() {
+            payload ??= createFromReadableStream(forHtml);
+            return use(payload).root;
+          }
+          const htmlStream = await renderToReadableStream(<SsrRoot />, {
+            bootstrapScriptContent: `import(${JSON.stringify(getClientEntryUrl())})`,
+            formState,
+            onError,
+          });
+          return htmlStream.pipeThrough(injectRSCPayload(forBrowser));
+        }
+      src/framework/entry.browser.jsx: |
+        // Runs in the browser: hydrates the server HTML, calls Server Functions,
+        // and re-renders whenever the server sends a new RSC payload.
+        import {
+          createFromReadableStream,
+          createFromFetch,
+          setServerCallback,
+          createTemporaryReferenceSet,
+          encodeReply,
+        } from "@vitejs/plugin-rsc/browser";
+        import { StrictMode, startTransition, useEffect, useState } from "react";
+        import { hydrateRoot } from "react-dom/client";
+        import { rscStream } from "rsc-html-stream/client";
+
+        // Replaced once the page has hydrated; a server edit that lands before
+        // that has nothing to update (the HTML is already the newest render).
+        let setPayload = () => {};
+
+        function rscUrl() {
+          const url = new URL(window.location.href);
+          url.searchParams.set("rsc", "");
+          return url;
+        }
+
+        function Root({ initial }) {
+          const [payload, set] = useState(initial);
+          useEffect(() => {
+            setPayload = (next) => startTransition(() => set(next));
+          }, []);
+          return payload.root;
+        }
+
+        setServerCallback(async (id, args) => {
+          const temporaryReferences = createTemporaryReferenceSet();
+          const payload = await createFromFetch(
+            fetch(rscUrl(), {
+              method: "POST",
+              headers: { "x-rsc-action": id },
+              body: await encodeReply(args, { temporaryReferences }),
+            }),
+            { temporaryReferences },
+          );
+          setPayload(payload);
+          if (!payload.returnValue.ok) throw payload.returnValue.data;
+          return payload.returnValue.data;
+        });
+
+        createFromReadableStream(rscStream).then((initial) => {
+          hydrateRoot(
+            document,
+            <StrictMode>
+              <Root initial={initial} />
+            </StrictMode>,
+            { formState: initial.formState },
+          );
+        });
+
+        // An edit to a server file: fetch a fresh RSC payload instead of reloading.
+        if (import.meta.hot) {
+          import.meta.hot.on("rsc:update", async () => {
+            setPayload(await createFromFetch(fetch(rscUrl())));
+          });
+        }
+      src/db.js: |
+        // Server-only data: this module never reaches the browser.
+        import "server-only";
+        import { readFile } from "node:fs/promises";
+
+        export async function getMenu() {
+          const text = await readFile(new URL("./menu.json", import.meta.url), "utf8");
+          return JSON.parse(text);
+        }
+
+        // Orders live in the server's memory (kept across edits for the lesson).
+        globalThis.orders ??= [];
+
+        export function getOrders() {
+          return globalThis.orders;
+        }
+
+        export function addOrder(name) {
+          globalThis.orders.push(name);
+        }
+      src/menu.json: |
+        [
+          { "id": "mohinga", "name": "မုန့်ဟင်းခါး", "price": 2500 },
+          { "id": "shan-noodles", "name": "ရှမ်းခေါက်ဆွဲ", "price": 3000 },
+          { "id": "nan-gyi-thoke", "name": "နန်းကြီးသုပ်", "price": 2800 },
+          { "id": "ohn-no-khao-swe", "name": "အုန်းနို့ခေါက်ဆွဲ", "price": 3500 },
+          { "id": "laphet-thoke", "name": "လက်ဖက်သုပ်", "price": 2000 }
+        ]
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 12: buttons inside a card keep their own width. */
+        .card > button {
+          justify-self: start;
+        }
+      src/App.jsx: |
+        import { getMenu, getOrders } from "./db.js";
+        import "./styles.css";
+
+        export default async function App() {
+          const menu = await getMenu();
+          const orders = getOrders();
+          return (
+            <html lang="my">
+              <head>
+                <meta charSet="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</title>
+              </head>
+              <body>
+                <main className="page">
+                  <header className="header">
+                    <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+                  </header>
+                  <p className="muted" data-testid="order-count">
+                    မှာထားတာ {orders.length} ခု
+                  </p>
+                  <ul className="list" data-testid="menu">
+                    {menu.map((dish) => (
+                      <li key={dish.id}>
+                        <span>{dish.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </main>
+              </body>
+            </html>
+          );
+        }
+      src/AddButton.jsx: ""
+      src/actions.js: ""
+      src/OrderForm.jsx: ""
+      src/Specials.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — where code runs.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Code က ဘယ်မှာ run လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-browser-box,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 360,
+        height: 210,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-browser-name,
+        kind: text,
+        x: 745,
+        y: 255,
+        width: 160,
+        height: 40,
+        text: "browser",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b1-browser-l1,
+        kind: text,
+        x: 745,
+        y: 320,
+        width: 280,
+        height: 40,
+        text: "lesson 1 – 11",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-browser-l2,
+        kind: text,
+        x: 745,
+        y: 380,
+        width: 300,
+        height: 40,
+        text: "component အားလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-server-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 340,
+        height: 210,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-server-name,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 140,
+        height: 40,
+        text: "server",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b1-server-l1,
+        kind: text,
+        x: 305,
+        y: 320,
+        width: 280,
+        height: 40,
+        text: "Server Component",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-server-l2,
+        kind: text,
+        x: 305,
+        y: 380,
+        width: 280,
+        height: 40,
+        text: "ဖိုင်၊ database ဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 630,
+        y: 325,
+        width: 80,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-sends,
+        kind: text,
+        x: 280,
+        y: 490,
+        width: 640,
+        height: 40,
+        text: "server → browser – HTML + RSC payload",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-never,
+        kind: text,
+        x: 280,
+        y: 565,
+        width: 780,
+        height: 40,
+        text: "Server Component ရဲ့ code က browser ကို မရောက်ပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-never-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 573,
+        width: 560,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+
+    # Board 2 — the plugin's three environments.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Environment 3 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-rsc-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 170,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-rsc-name,
+        kind: text,
+        x: 335,
+        y: 247,
+        width: 70,
+        height: 40,
+        text: "rsc",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-rsc-desc,
+        kind: text,
+        x: 500,
+        y: 247,
+        width: 560,
+        height: 40,
+        text: "Server Component၊ Server Function",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 345,
+        y: 304,
+        width: 40,
+        height: 46,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-ssr-box,
+        kind: rectangle,
+        x: 280,
+        y: 355,
+        width: 170,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-ssr-name,
+        kind: text,
+        x: 335,
+        y: 367,
+        width: 70,
+        height: 40,
+        text: "ssr",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-ssr-desc,
+        kind: text,
+        x: 500,
+        y: 367,
+        width: 400,
+        height: 40,
+        text: "HTML ထုတ်ပေးတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 345,
+        y: 424,
+        width: 40,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-client-box,
+        kind: rectangle,
+        x: 280,
+        y: 475,
+        width: 170,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-client-name,
+        kind: text,
+        x: 320,
+        y: 487,
+        width: 100,
+        height: 40,
+        text: "client",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-client-desc,
+        kind: text,
+        x: 500,
+        y: 487,
+        width: 560,
+        height: 40,
+        text: "browser ထဲ ခလုတ်တွေ အလုပ်လုပ်အောင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-framework,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 800,
+        height: 40,
+        text: "src/framework – Next.js လို framework က ရေးပေးတဲ့ အပိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 3 — the 'use client' boundary and serializable props.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "'use client' boundary",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-app-box,
+        kind: rectangle,
+        x: 280,
+        y: 265,
+        width: 260,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-app-text,
+        kind: text,
+        x: 305,
+        y: 285,
+        width: 210,
+        height: 40,
+        text: "App · server",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-btn-box,
+        kind: rectangle,
+        x: 700,
+        y: 265,
+        width: 380,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-btn-text,
+        kind: text,
+        x: 725,
+        y: 285,
+        width: 330,
+        height: 40,
+        text: "AddButton · browser",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 555,
+        y: 285,
+        width: 130,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-props,
+        kind: text,
+        x: 575,
+        y: 228,
+        width: 90,
+        height: 40,
+        text: "props",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-ok,
+        kind: text,
+        x: 280,
+        y: 395,
+        width: 800,
+        height: 40,
+        text: "✓ string၊ ကိန်းဂဏန်း၊ array၊ plain object၊ promise",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-no,
+        kind: text,
+        x: 280,
+        y: 460,
+        width: 760,
+        height: 40,
+        text: "✗ function (Server Function ကလွဲရင်)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-ssr,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 800,
+        height: 40,
+        text: "Client Component လည်း server မှာ HTML အရင် ထုတ်တယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 4 — Server Functions.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Server Function",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-mark,
+        kind: text,
+        x: 280,
+        y: 225,
+        width: 800,
+        height: 40,
+        text: "'use server' – browser က ခေါ်ခွင့်ရှိတဲ့ async function",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-browser-label,
+        kind: text,
+        x: 290,
+        y: 295,
+        width: 140,
+        height: 40,
+        text: "browser",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-browser-box,
+        kind: rectangle,
+        x: 280,
+        y: 340,
+        width: 290,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-browser-text,
+        kind: text,
+        x: 305,
+        y: 360,
+        width: 240,
+        height: 40,
+        text: "form submit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-arrow-go,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 360,
+        width: 160,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b4-req,
+        kind: text,
+        x: 600,
+        y: 310,
+        width: 120,
+        height: 40,
+        text: "request",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-server-label,
+        kind: text,
+        x: 770,
+        y: 295,
+        width: 140,
+        height: 40,
+        text: "server",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-server-box,
+        kind: rectangle,
+        x: 760,
+        y: 340,
+        width: 320,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-server-text,
+        kind: text,
+        x: 785,
+        y: 360,
+        width: 270,
+        height: 40,
+        text: "placeOrder run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-back,
+        kind: text,
+        x: 560,
+        y: 435,
+        width: 520,
+        height: 40,
+        text: "← return value + page ပြန် render",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-form,
+        kind: text,
+        x: 280,
+        y: 510,
+        width: 800,
+        height: 40,
+        text: "JavaScript မရောက်ခင်လည်း form အလုပ်လုပ်တယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-validate,
+        kind: text,
+        x: 280,
+        y: 575,
+        width: 760,
+        height: 40,
+        text: "argument တွေကို server မှာ အမြဲ စစ်ပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board 5 — recap.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ဘာက ဘယ်မှာ run လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-server,
+        kind: text,
+        x: 280,
+        y: 240,
+        width: 800,
+        height: 40,
+        text: "directive မပါ → default Server Component · server",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-client,
+        kind: text,
+        x: 280,
+        y: 305,
+        width: 800,
+        height: 40,
+        text: "'use client' → Client Component · HTML + browser",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-sf,
+        kind: text,
+        x: 280,
+        y: 370,
+        width: 800,
+        height: 40,
+        text: "'use server' → Server Function · request နဲ့ ခေါ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b5-more-title,
+        kind: text,
+        x: 280,
+        y: 455,
+        width: 600,
+        height: 40,
+        text: "framework တွေ သုံးတဲ့ server API",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-more-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 463,
+        width: 440,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-more,
+        kind: text,
+        x: 280,
+        y: 510,
+        width: 560,
+        height: 40,
+        text: "cacheSignal · prerender",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-ppr,
+        kind: text,
+        x: 280,
+        y: 560,
+        width: 560,
+        height: 40,
+        text: "partial prerendering",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-next,
+        kind: text,
+        x: 700,
+        y: 610,
+        width: 380,
+        height: 40,
+        text: "နောက် lesson – React 19.3",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 12412
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: where-code-runs
+    chapter: "Server Component ဆိုတာ ဘာလဲ"
+    narration: >
+      ဒီ lesson မှာ component တချို့ကို server ပေါ် ရွှေ့ပြီး၊ တကယ့် React Server
+      Components app ထဲမှာ ကြည့်ပါမယ်။ [[mark:start-server]] package တွေ install
+      လုပ်ရတာ ကြာတဲ့အတွက်၊ dev server ကို အခုကတည်းက စ run ထားလိုက်ရအောင်။
+      [[mark:draw-browser]] အခုထိတော့ ကိုယ့် component အားလုံးကို browser ကပဲ run
+      ခဲ့ပါတယ်။ [[mark:draw-server]] Server Component ကတော့ server ပေါ်မှာ render
+      လုပ်တဲ့ component ပါ။ ဒါကြောင့် ဖိုင်တို့ database တို့ကို တိုက်ရိုက်
+      ဖတ်လို့ ရပါတယ်။ [[mark:draw-arrow]] ပြီးရင် server က ထုတ်ပြီးသား HTML ကို
+      ပို့လို့ page က ချက်ချင်း ပေါ်ပါတယ်။ RSC payload ဆိုတဲ့ ရလဒ် ဖော်ပြချက်လည်း
+      ပါလာပြီး၊ browser ထဲက React က အဲဒါနဲ့ page ကို update လုပ်ပါတယ်။ RSC က React
+      Server Components ပါ။ [[mark:draw-never]] အရေးကြီးတာကတော့၊ Server Component
+      ရဲ့ code နဲ့ သူ သုံးတဲ့ library တွေက browser ဆီ ဘယ်တော့မှ မရောက်ဘဲ၊ ရလဒ်ပဲ
+      ရောက်တာပါ။
+    sources:
+      - title: "React — Server Components"
+        url: "https://react.dev/reference/rsc/server-components"
+      - title: "React 19 — Server Components"
+        url: "https://react.dev/blog/2024/12/05/react-19#server-components"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-browser
+        type: whiteboard.apply
+        at: { mark: draw-browser }
+        upsertIds: [b1-browser-box, b1-browser-name, b1-browser-l1, b1-browser-l2]
+        drawMs: 2200
+      - id: draw-server
+        type: whiteboard.apply
+        at: { mark: draw-server }
+        upsertIds: [b1-server-box, b1-server-name, b1-server-l1, b1-server-l2]
+        drawMs: 2200
+      - id: draw-arrow
+        type: whiteboard.apply
+        at: { mark: draw-arrow }
+        upsertIds: [b1-arrow, b1-sends]
+        drawMs: 1600
+      - id: draw-never
+        type: whiteboard.apply
+        at: { mark: draw-never }
+        upsertIds: [b1-never, b1-never-underline]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 2
+  - id: plugin-environments
+    narration: >
+      [[mark:draw-envs]] ဒါကို React တစ်ခုတည်းနဲ့ မရပါဘူး၊ code ကို server နဲ့
+      browser ခွဲဖို့ ဖိုင်တွေ စုပေးတဲ့ bundler လိုပါတယ်။ Vite ရဲ့ တရားဝင် Server
+      Component plugin က app ကို environment သုံးခု၊ ဆိုလိုတာက code run မယ့် နေရာ
+      သုံးခုနဲ့ build လုပ်ပါတယ်။ [[mark:draw-env-rsc]] rsc environment က Server
+      Component နဲ့ Server Function တွေကို run ပါတယ်။ [[mark:draw-env-ssr]] ssr က
+      server-side rendering ပါ၊ အဲဒီ ရလဒ်ကို HTML အဖြစ် ပြောင်းပေးပါတယ်။
+      [[mark:draw-env-client]] client environment ကတော့ browser ထဲမှာ ခလုတ်တွေ
+      အလုပ်လုပ်အောင် လုပ်ပေးပါတယ်။ [[mark:draw-framework]] ဒီ သုံးခုကို framework
+      folder ထဲက ဖိုင်တွေက ချိတ်ပေးပါတယ်။ Next.js လို framework တွေက ဒါကို
+      ကိုယ့်အစား ရေးပေးပြီး၊ ဒီမှာတော့ router မပါဘဲ မြင်သာအောင် ထားထားပါတယ်။
+      [[mark:close-board-2]] ဒါက Vite ရဲ့ config ဖိုင်ပါ။ [[mark:select-entries]]
+      ဒီ သုံးကြောင်းက environment တစ်ခုစီရဲ့ entry ဖိုင်တွေပါ။ [[mark:select-fix]]
+      ပထမ စာကြောင်းက fix သေးသေးလေး တစ်ခုပါ။ ဒီ editor က server ကို browser tab ထဲက
+      Node.js နဲ့ run ပေးလို့ လိုတာ ဖြစ်ပြီး၊ သာမန် ကွန်ပျူတာမှာတော့ ဘာမှ
+      မလုပ်ပါဘူး။
+    sources:
+      - title: "React — Server Components"
+        url: "https://react.dev/reference/rsc/server-components"
+      - title: "Vite — Environment API"
+        url: "https://vite.dev/guide/api-environment"
+      - title: "Vite — @vitejs/plugin-rsc"
+        url: "https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-rsc"
+    actions:
+      - id: draw-envs
+        type: whiteboard.apply
+        at: { mark: draw-envs }
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-env-rsc
+        type: whiteboard.apply
+        at: { mark: draw-env-rsc }
+        upsertIds: [b2-rsc-box, b2-rsc-name, b2-rsc-desc]
+        drawMs: 1600
+      - id: draw-env-ssr
+        type: whiteboard.apply
+        at: { mark: draw-env-ssr }
+        upsertIds: [b2-arrow-1, b2-ssr-box, b2-ssr-name, b2-ssr-desc]
+        drawMs: 1600
+      - id: draw-env-client
+        type: whiteboard.apply
+        at: { mark: draw-env-client }
+        upsertIds: [b2-arrow-2, b2-client-box, b2-client-name, b2-client-desc]
+        drawMs: 1600
+      - id: draw-framework
+        type: whiteboard.apply
+        at: { mark: draw-framework }
+        upsertIds: [b2-framework]
+        drawMs: 1200
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { mark: close-board-2 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-2 }
+      - id: open-vite-config
+        type: workspace.openFile
+        at: { mark: close-board-2, offsetMs: 700 }
+        path: vite.config.js
+      - id: select-entries
+        type: editor.select
+        at: { mark: select-entries }
+        target:
+          file: vite.config.js
+          text: "rsc: \"./src/framework/entry.rsc.jsx\",\n        ssr: \"./src/framework/entry.ssr.jsx\",\n        client: \"./src/framework/entry.browser.jsx\","
+          occurrence: 1
+      - id: select-fix
+        type: editor.select
+        at: { mark: select-fix }
+        target: { file: vite.config.js, text: 'import "./webcontainer-fix.js";', occurrence: 1 }
+
+  # ------------------------------------------------------------------ 3
+  - id: server-component-tour
+    chapter: "Server ပေါ်မှာ data ဖတ်ရအောင်"
+    narration: >
+      [[mark:open-app]] App ကို ဖွင့်ရအောင်။ [[mark:select-html]] html tag ကနေ
+      စပြီး page တစ်ခုလုံးကို render လုပ်တဲ့အတွက်၊ သီးသန့် HTML ဖိုင် မလိုပါဘူး။
+      [[mark:select-async]] function ကိုယ်တိုင်ကို ကြည့်ပါ။ သူက async ပါ၊ browser
+      ထဲက component ကတော့ ဒီလို ဖြစ်လို့ မရပါဘူး။ [[mark:select-await]] ဒါကြောင့်
+      menu ကို ဒီမှာပဲ await နဲ့ စောင့်လို့ ရပြီး၊ useEffect တို့ fetch တို့
+      မလိုပါဘူး။ [[mark:open-db]] ဒါဆို menu က ဘယ်က လာတာလဲ။
+      [[mark:select-readfile]] ဒီ စာကြောင်းက JSON ဖိုင်ကို Node.js ရဲ့ file system
+      နဲ့ ဖတ်ပါတယ်၊ browser က ဒီလို မဖတ်နိုင်ပါဘူး။ [[mark:select-server-only]]
+      ပထမဆုံး import က ဒီ ဖိုင်ကို server-only လို့ အမှတ်အသား လုပ်ထားတာပါ။ browser
+      ဘက်က ဖိုင်က ဒါကို import လုပ်မိရင် bundler က error နဲ့ ရပ်ပေးလို့၊ database
+      code က browser ဆီ မရောက်နိုင်ပါဘူး။ [[mark:preview-opens]] dev server က
+      အသင့် ဖြစ်နေပြီမို့ preview ကို ဖွင့်လိုက်ရအောင်။ [[mark:after-preview]]
+      menu က server ကနေ လာတဲ့ ပထမဆုံး HTML ထဲမှာ ပါပြီးသားပါ။ ဆိုင် နာမည် အောက်က
+      မှာထားတဲ့ အရေအတွက်ကတော့ server ရဲ့ memory ထဲက လာတာပါ၊ အခုတော့ 0 ပါ။
+    sources:
+      - title: "React — Server Components: async components"
+        url: "https://react.dev/reference/rsc/server-components"
+      - title: "Node.js — fs.promises.readFile"
+        url: "https://nodejs.org/api/fs.html#fspromisesreadfilepath-options"
+      - title: "React — 'use client' (the module boundary)"
+        url: "https://react.dev/reference/rsc/use-client"
+      - title: "Vite — @vitejs/plugin-rsc: server-only and client-only import"
+        url: "https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-rsc#server-only-and-client-only-import"
+    actions:
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      - id: select-html
+        type: editor.select
+        at: { mark: select-html }
+        target: { file: src/App.jsx, text: '<html lang="my">', occurrence: 1 }
+      - id: select-async
+        type: editor.select
+        at: { mark: select-async }
+        target: { file: src/App.jsx, text: "export default async function App()", occurrence: 1 }
+      - id: select-await
+        type: editor.select
+        at: { mark: select-await }
+        target: { file: src/App.jsx, text: "const menu = await getMenu();", occurrence: 1 }
+      - id: open-db
+        type: workspace.openFile
+        at: { mark: open-db }
+        path: src/db.js
+      - id: select-readfile
+        type: editor.select
+        at: { mark: select-readfile }
+        target:
+          {
+            file: src/db.js,
+            text: 'await readFile(new URL("./menu.json", import.meta.url), "utf8")',
+            occurrence: 1,
+          }
+      - id: select-server-only
+        type: editor.select
+        at: { mark: select-server-only }
+        target: { file: src/db.js, text: 'import "server-only";', occurrence: 1 }
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-menu
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-menu }
+      - id: expect-no-orders
+        type: expect.preview
+        at: { mark: after-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: order-count }
+        textContains: "မှာထားတာ 0 ခု"
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  # ------------------------------------------------------------------ 4
+  - id: client-component
+    chapter: "'use client' နဲ့ Client Component"
+    narration: >
+      [[mark:open-addbutton]] နောက်တစ်ဆင့်မှာ ဘယ်နှစ်ပွဲ လိုချင်လဲ ရွေးလို့ ရအောင်
+      လုပ်ပါမယ်။ ဒါက state နဲ့ click လိုပေမယ့်၊ Server Component က server မှာပဲ
+      run လို့ ဒါတွေကို သုံးလို့ မရပါဘူး။ AddButton ဖိုင်က အခု အလွတ်ပါ။
+      [[mark:type-use-client]] ပထမ စာကြောင်းက use client directive ပါ၊ directive
+      ဆိုတာ ဖိုင်ထိပ်က bundler အတွက် ညွှန်ကြားချက်ပါ။ ဒီ ဖိုင်နဲ့ သူ့ import တွေ
+      browser မှာလည်း run မယ်လို့ ပြောတာပါ၊ ဒီလို ဖိုင်ထဲက component ကို Client
+      Component လို့ ခေါ်ပါတယ်။ [[mark:type-addbutton]] ကျန်တာက lesson 3 က like
+      ခလုတ်လိုပါပဲ။ အရေအတွက်ကို state ထဲ ထားပြီး၊ နှိပ်လိုက်တိုင်း တစ်ပွဲ
+      တိုးပြီး၊ အဲဒီ ဟင်းလျာရဲ့ စုစုပေါင်း ဈေးကို ပြပေးပါတယ်။
+      [[mark:open-app-wire]] App ဆီ ပြန်ရအောင်။ [[mark:wire-add-import]] Server
+      Component က Client Component ကို import လုပ်နိုင်ပါတယ်။
+      [[mark:wire-add-use]] ဒါကြောင့် ဟင်းလျာ row တိုင်းမှာ AddButton တစ်ခုစီ
+      ထည့်ပြီး၊ id နဲ့ ဈေးကို props အနေနဲ့ ပေးလိုက်ပါတယ်။ [[mark:click-add]]
+      မုန့်ဟင်းခါး နှစ်ပွဲ ထည့်ကြည့်ရအောင်။ [[mark:after-add]] server ဆီ request
+      မပို့ဘဲ၊ အရေအတွက်နဲ့ စုစုပေါင်းက ချက်ချင်း ပြောင်းသွားပါတယ်။ browser ထဲမှာ
+      run နေတာက ဒီ AddButton ခလုတ်တွေပဲ ဖြစ်ပါတယ်။
+    sources:
+      - title: "React — 'use client'"
+        url: "https://react.dev/reference/rsc/use-client"
+      - title: "React — State: A Component's Memory"
+        url: "https://react.dev/learn/state-a-components-memory"
+    actions:
+      - id: open-addbutton
+        type: workspace.openFile
+        at: { mark: open-addbutton }
+        path: src/AddButton.jsx
+      - id: type-use-client
+        type: editor.type
+        at: { mark: type-use-client }
+        cadence: fast-explainer
+        target: { file: src/AddButton.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\n"
+      - id: type-addbutton
+        type: editor.type
+        at: { mark: type-addbutton }
+        cadence: line-by-line
+        target: { file: src/AddButton.jsx, after: "\"use client\";\n", occurrence: 1 }
+        text: "import { useState } from \"react\";\n\nexport function AddButton({ id, price }) {\n  const [count, setCount] = useState(0);\n  return (\n    <button data-testid={\"add-\" + id} onClick={() => setCount(count + 1)}>\n      + {count} ({(count * price).toLocaleString(\"en-US\")} ကျပ်)\n    </button>\n  );\n}\n"
+      - id: open-app-wire
+        type: workspace.openFile
+        at: { mark: open-app-wire, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-add-import
+        type: editor.type
+        at: { mark: wire-add-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { getMenu, getOrders } from \"./db.js\";\n",
+            occurrence: 1,
+          }
+        text: "import { AddButton } from \"./AddButton.jsx\";\n"
+      - id: wire-add-use
+        type: editor.type
+        at: { mark: wire-add-use }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "                <span>{dish.name}</span>\n", occurrence: 1 }
+        text: "                <AddButton id={dish.id} price={dish.price} />\n"
+      - id: expect-add-zero
+        type: expect.preview
+        at: { afterAction: wire-add-use }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        textContains: "+ 0"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: click-add-1
+        type: preview.click
+        at: { mark: click-add }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: click-add-2
+        type: preview.click
+        at: { mark: click-add, offsetMs: 1000 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-add-two
+        type: expect.preview
+        at: { mark: after-add }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        textContains: "+ 2 (5,000 ကျပ်)"
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  # ------------------------------------------------------------------ 5
+  - id: client-boundary
+    narration: >
+      [[mark:draw-boundary]] ခုနက ဖြစ်သွားတာကို ပုံနဲ့ ကြည့်ရအောင်။ App က server
+      ပေါ်မှာ run ပြီး၊ AddButton ကစပြီး code က browser ဘက် ကူးသွားပါတယ်။ အဲဒီ
+      နေရာကို use client boundary လို့ ခေါ်ပါတယ်။ [[mark:draw-props]] boundary ကို
+      ဖြတ်တဲ့ prop တိုင်း serializable ဖြစ်ရပါမယ်၊ ဆိုလိုတာက network နဲ့ ပို့လို့
+      ရတဲ့ data ပါ။ string၊ ကိန်းဂဏန်း၊ array၊ plain object၊ promise တောင် ရပါတယ်။
+      [[mark:draw-no-functions]] သာမန် function ကတော့ ကူးလို့ မရပါဘူး၊ သူ့ code က
+      server ပေါ်မှာ ကျန်နေလို့ပါ။ ခြွင်းချက်ကတော့ နောက်မှ ရေးမယ့် Server Function
+      လို function တွေပါ။ [[mark:draw-ssr-too]] ပြီးတော့ Client Component ကိုလည်း
+      server မှာ HTML အဖြစ် အရင် render လုပ်ပါတယ်။ ပြီးမှ browser ထဲက React က
+      ဆက်ယူလို့ click တွေ အလုပ်လုပ်လာတာပါ။
+    sources:
+      - title: "React — 'use client': serializable types"
+        url: "https://react.dev/reference/rsc/use-client#serializable-types"
+      - title: "React — Directives"
+        url: "https://react.dev/reference/rsc/directives"
+    actions:
+      - id: draw-boundary
+        type: whiteboard.apply
+        at: { mark: draw-boundary }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title, b3-app-box, b3-app-text, b3-btn-box, b3-btn-text]
+        drawMs: 2000
+      - id: draw-props
+        type: whiteboard.apply
+        at: { mark: draw-props }
+        upsertIds: [b3-arrow, b3-props, b3-ok]
+        drawMs: 2000
+      - id: draw-no-functions
+        type: whiteboard.apply
+        at: { mark: draw-no-functions }
+        upsertIds: [b3-no]
+        drawMs: 1200
+      - id: draw-ssr-too
+        type: whiteboard.apply
+        at: { mark: draw-ssr-too }
+        upsertIds: [b3-ssr]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 6
+  - id: server-functions
+    chapter: "Server Function နဲ့ 'use server'"
+    narration: >
+      [[mark:draw-sf-title]] အခု ပြောင်းပြန် ဘက်ကို ကြည့်ရအောင်။ order
+      သိမ်းပေးပါလို့ browser က server ကို ဘယ်လို ပြောမလဲ။ [[mark:draw-sf-mark]]
+      Server Function နဲ့ ပြောလို့ ရပါတယ်။ use server directive က browser က
+      ခေါ်ခွင့် ရှိတဲ့ async function တွေကို အမှတ်အသား လုပ်ပါတယ်။
+      [[mark:draw-sf-flow]] browser က အဲဒီ function ကို ခေါ်ရင်၊ React က server ဆီ
+      request ပို့ပြီး function ကို server ပေါ်မှာ run ပါတယ်။ ဒီ app မှာတော့
+      return value ရော၊ ပြန် render လုပ်ထားတဲ့ page ရော ပြန်ရောက်လာပါတယ်။
+      [[mark:draw-sf-form]] form ရဲ့ action ထဲ ထည့်ရင်တော့၊ browser က form ကို
+      သာမန်အတိုင်း submit လုပ်နိုင်လို့ JavaScript မရောက်ခင်မှာတောင်
+      အလုပ်လုပ်ပါတယ်။ [[mark:draw-sf-validate]] အဲဒီ request ကို ဘယ်သူမဆို
+      ပို့လို့ ရတဲ့အတွက်၊ argument တွေကို server မှာ အမြဲ စစ်ပါ။
+    sources:
+      - title: "React — Server Functions"
+        url: "https://react.dev/reference/rsc/server-functions"
+      - title: "React — 'use server'"
+        url: "https://react.dev/reference/rsc/use-server"
+    actions:
+      - id: draw-sf-title
+        type: whiteboard.apply
+        at: { mark: draw-sf-title }
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-sf-mark
+        type: whiteboard.apply
+        at: { mark: draw-sf-mark }
+        upsertIds: [b4-mark]
+        drawMs: 1400
+      - id: draw-sf-flow
+        type: whiteboard.apply
+        at: { mark: draw-sf-flow }
+        upsertIds:
+          [
+            b4-browser-label,
+            b4-browser-box,
+            b4-browser-text,
+            b4-arrow-go,
+            b4-req,
+            b4-server-label,
+            b4-server-box,
+            b4-server-text,
+            b4-back,
+          ]
+        drawMs: 3600
+      - id: draw-sf-form
+        type: whiteboard.apply
+        at: { mark: draw-sf-form }
+        upsertIds: [b4-form]
+        drawMs: 1400
+      - id: draw-sf-validate
+        type: whiteboard.apply
+        at: { mark: draw-sf-validate }
+        upsertIds: [b4-validate]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 7
+  - id: server-function-code
+    narration: >
+      [[mark:close-board-sf]] ကဲ၊ editor ထဲမှာ Server Function တစ်ခု ကိုယ်တိုင်
+      ရေးကြည့်ရအောင်။ [[mark:open-actions]] ဒါက actions ဖိုင်ပါ။
+      [[mark:type-use-server]] သူက use server နဲ့ စလို့၊ သူ export လုပ်တဲ့
+      function တိုင်း Server Function ဖြစ်သွားပါတယ်။ [[mark:type-place-order]]
+      placeOrder က lesson 10 က useActionState ရဲ့ action အတိုင်းပဲ၊ အရင် state နဲ့
+      form data ကို ရပါတယ်။ ရွေးလိုက်တဲ့ ဟင်းလျာကို server ပေါ်မှာ သိမ်းပြီး၊
+      message တစ်ခု ပြန်ပေးပါတယ်။ [[mark:select-check]] ဒီ စစ်တဲ့ စာကြောင်းက ခုနက
+      board ပေါ်က အကြံပြုချက်ပါ။ form data က browser ကနေ လာလို့၊ ဟင်းလျာက server
+      ရဲ့ menu ထဲမှာ တကယ် ရှိမရှိ အရင် စစ်ပါတယ်။ [[mark:open-orderform]]
+      နောက်တစ်ခုက form ပါ။ hook တစ်ခု လိုတဲ့အတွက် Client Component ဖြစ်ရပါမယ်။
+      [[mark:type-orderform-head]] placeOrder ကို server ဖိုင်ကနေ တိုက်ရိုက်
+      import လုပ်ပါတယ်။ browser ဘက်မှာတော့ server ကို ခေါ်ပေးမယ့် reference လေး
+      တစ်ခုပဲ ရပါတယ်။ [[mark:type-orderform-state]] useActionState က Server
+      Function ကို ထုပ်ပေးပါတယ်၊ lesson 10 က client action လိုပါပဲ။
+      [[mark:type-orderform-jsx]] form က prop ထဲက ဟင်းလျာ စာရင်းကို ရွေးစရာ list
+      အဖြစ် ပြပြီး၊ lesson 10 လိုပဲ label နဲ့ ထုပ်ထားပါတယ်။ မှာမယ့် ခလုတ်ကို
+      request pending ဖြစ်နေတုန်း ပိတ်ထားပြီး၊ အောက်မှာ server က ပြန်ပို့တဲ့
+      message ကို ပြပါတယ်။
+    sources:
+      - title: "React — 'use server'"
+        url: "https://react.dev/reference/rsc/use-server"
+      - title: "React — useActionState"
+        url: "https://react.dev/reference/react/useActionState"
+      - title: "MDN — FormData.get()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/FormData/get"
+    actions:
+      - id: close-board-sf
+        type: whiteboard.apply
+        at: { mark: close-board-sf }
+        open: false
+      - id: open-actions
+        type: workspace.openFile
+        at: { mark: open-actions }
+        path: src/actions.js
+      - id: type-use-server
+        type: editor.type
+        at: { mark: type-use-server }
+        cadence: fast-explainer
+        target: { file: src/actions.js, after: "", occurrence: 1 }
+        text: "\"use server\";\n"
+      - id: type-place-order
+        type: editor.type
+        at: { mark: type-place-order }
+        cadence: line-by-line
+        target: { file: src/actions.js, after: "\"use server\";\n", occurrence: 1 }
+        text: "import { addOrder, getMenu } from \"./db.js\";\n\nexport async function placeOrder(previousState, formData) {\n  const dish = formData.get(\"dish\");\n  const menu = await getMenu();\n  if (!menu.some((item) => item.name === dish)) return \"ဟင်းလျာ ရွေးပါ\";\n  addOrder(dish);\n  return dish + \" မှာပြီးပါပြီ\";\n}\n"
+      - id: select-check
+        type: editor.select
+        at: { mark: select-check }
+        target:
+          {
+            file: src/actions.js,
+            text: 'if (!menu.some((item) => item.name === dish)) return "ဟင်းလျာ ရွေးပါ";',
+            occurrence: 1,
+          }
+      - id: open-orderform
+        type: workspace.openFile
+        at: { mark: open-orderform }
+        path: src/OrderForm.jsx
+      - id: type-orderform-head
+        type: editor.type
+        at: { mark: type-orderform-head }
+        cadence: line-by-line
+        target: { file: src/OrderForm.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\nimport { useActionState } from \"react\";\nimport { placeOrder } from \"./actions.js\";\n"
+      - id: type-orderform-state
+        type: editor.type
+        at: { mark: type-orderform-state }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderForm.jsx,
+            after: "import { placeOrder } from \"./actions.js\";\n",
+            occurrence: 1,
+          }
+        text: "\nexport function OrderForm({ dishes }) {\n  const [message, formAction, isPending] = useActionState(placeOrder, \"\");\n"
+      - id: type-orderform-jsx
+        type: editor.type
+        at: { mark: type-orderform-jsx }
+        cadence: line-by-line
+        target:
+          { file: src/OrderForm.jsx, after: "useActionState(placeOrder, \"\");\n", occurrence: 1 }
+        text: "  return (\n    <form action={formAction} className=\"card\">\n      <label>\n        ဟင်းလျာ\n        <select name=\"dish\" data-testid=\"order-dish\">\n          {dishes.map((dish) => (\n            <option key={dish}>{dish}</option>\n          ))}\n        </select>\n      </label>\n      <button data-testid=\"submit-order\" disabled={isPending}>မှာမယ်</button>\n      <p data-testid=\"order-message\">{message}</p>\n    </form>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 8
+  - id: order-round-trip
+    narration: >
+      [[mark:open-app-form]] App ဆီ ထပ် ပြန်ရအောင်။ [[mark:wire-form-import]] form
+      ကို အရင် import လုပ်ပါတယ်။ [[mark:wire-form-use]] ပြီးတော့ menu အောက်မှာ
+      render လုပ်ပါတယ်။ သူ့ prop က ဟင်းလျာ နာမည်တွေရဲ့ string array ဖြစ်လို့
+      boundary ကို ဖြတ်လို့ ရပါတယ်။ [[mark:pick-dish]] ရှမ်းခေါက်ဆွဲကို
+      ရွေးရအောင်။ [[mark:submit-order]] ပြီးရင် မှာလိုက်ရအောင်။
+      [[mark:after-order]] message က Server Function ဆီကနေ ပြန်ရောက်လာပါပြီ။
+      [[mark:check-count]] client state မသုံးဘဲ မှာထားတဲ့ အရေအတွက်ကလည်း 1
+      ဖြစ်သွားပါပြီ။ server က App ကို ပြန် render လုပ်ပြီး ရလဒ်ကို
+      ပို့ပေးလိုက်လို့ပါ။ [[mark:check-kept]] ကိုယ့် မုန့်ဟင်းခါး နှစ်ပွဲကလည်း
+      ရှိနေပါသေးတယ်၊ React က browser ထဲက state ကို ဆက်မှတ်ထားလို့ပါ။ ဒီ နှစ်ပွဲကို
+      server က မသိလို့၊ မှာထားတဲ့ အရေအတွက်ထဲ မပါပါဘူး။
+    sources:
+      - title: "React — Server Functions with forms"
+        url: "https://react.dev/reference/rsc/server-functions"
+      - title: "React — <form>"
+        url: "https://react.dev/reference/react-dom/components/form"
+      - title: "MDN — <select>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/select"
+    actions:
+      - id: open-app-form
+        type: workspace.openFile
+        at: { mark: open-app-form, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-form-import
+        type: editor.type
+        at: { mark: wire-form-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { AddButton } from \"./AddButton.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { OrderForm } from \"./OrderForm.jsx\";\n"
+      - id: wire-form-use
+        type: editor.type
+        at: { mark: wire-form-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "          </ul>\n", occurrence: 1 }
+        text: "          <OrderForm dishes={menu.map((dish) => dish.name)} />\n"
+      - id: expect-form
+        type: expect.preview
+        at: { afterAction: wire-form-use }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: pick-dish
+        type: preview.input
+        at: { mark: pick-dish }
+        timeoutMs: 5000
+        target: { by: testId, value: order-dish }
+        value: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-picked
+        type: expect.preview
+        at: { afterAction: pick-dish }
+        timeoutMs: 5000
+        target: { by: testId, value: order-dish }
+        value: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: submit-order
+        type: preview.click
+        at: { mark: submit-order }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-message
+        type: expect.preview
+        at: { mark: after-order }
+        timeoutMs: 5000
+        target: { by: testId, value: order-message }
+        textContains: "ရှမ်းခေါက်ဆွဲ မှာပြီးပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: expect-one-order
+        type: expect.preview
+        at: { mark: check-count }
+        timeoutMs: 5000
+        target: { by: testId, value: order-count }
+        textContains: "မှာထားတာ 1 ခု"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: expect-kept
+        type: expect.preview
+        at: { mark: check-kept }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        textContains: "+ 2 (5,000 ကျပ်)"
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  # ------------------------------------------------------------------ 9
+  - id: streaming
+    chapter: "Suspense နဲ့ streaming"
+    narration: >
+      [[mark:open-specials]] နောက်ဆုံးက နှေးနှေး ရောက်လာမယ့် ဒီနေ့ အထူး ဟင်းလျာပါ။
+      [[mark:type-specials]] async Server Component ဖြစ်လို့ directive မလိုပါဘူး။
+      နှေးတဲ့ database လိုပဲ ငါးစက္ကန့် လောက် စောင့်ပြီးမှ ပြန်ပေးပါတယ်။
+      [[mark:open-app-specials]] App ပြန်ရအောင်။ [[mark:wire-specials-import]]
+      Suspense နဲ့ Specials ကို import လုပ်ပါတယ်။ ပြီးရင် ညာဘက်က preview ကို
+      သတိထား ကြည့်ထားပါ။ [[mark:wire-specials-use]] ပြီးတော့ Specials ကို Suspense
+      boundary ထဲ ထည့်ပါတယ်။ [[mark:after-specials]] ကြည့်ပါ၊ ခဏစောင့်ပါ ဆိုတဲ့
+      fallback အရင် ပေါ်ပြီး၊ ပြီးမှ အထူး ဟင်းလျာ ရောက်လာပါတယ်။ lesson 9 က
+      Suspense ပါပဲ၊ စောင့်နေတာက server ပေါ်က component ဖြစ်သွားတာပဲ ကွာပါတယ်။
+      တကယ့် page မှာလည်း server က boundary အထိ HTML ကို အရင် ပို့ပြီး ကျန်တာကို
+      နောက်မှ ဆက်ပို့လို့၊ page တစ်ခုလုံး မစောင့်ရပါဘူး။ ဒါကို streaming လို့
+      ခေါ်ပါတယ်။
+    sources:
+      - title: "React — <Suspense>"
+        url: "https://react.dev/reference/react/Suspense"
+      - title: "React — Server Components: async components"
+        url: "https://react.dev/reference/rsc/server-components"
+    actions:
+      - id: open-specials
+        type: workspace.openFile
+        at: { mark: open-specials }
+        path: src/Specials.jsx
+      - id: type-specials
+        type: editor.type
+        at: { mark: type-specials }
+        cadence: line-by-line
+        target: { file: src/Specials.jsx, after: "", occurrence: 1 }
+        text: "export async function Specials() {\n  await new Promise((resolve) => setTimeout(resolve, 5000));\n  return <p data-testid=\"specials\">ဒီနေ့ အထူး – လက်ဖက်သုပ်</p>;\n}\n"
+      - id: open-app-specials
+        type: workspace.openFile
+        at: { mark: open-app-specials, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-specials-import
+        type: editor.type
+        at: { mark: wire-specials-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { OrderForm } from \"./OrderForm.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { Suspense } from \"react\";\nimport { Specials } from \"./Specials.jsx\";\n"
+      - id: wire-specials-use
+        type: editor.type
+        at: { mark: wire-specials-use }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "          <OrderForm dishes={menu.map((dish) => dish.name)} />\n",
+            occurrence: 1,
+          }
+        text: "          <Suspense fallback={<p className=\"muted\" data-testid=\"specials-wait\">ခဏစောင့်ပါ...</p>}>\n            <Specials />\n          </Suspense>\n"
+      # The fallback is on screen for ~5 s after the refresh lands; prove it
+      # showed first, then that the special replaced it. expect-specials'
+      # retries span 6 s and its timeoutMs (the performer's deadline for the
+      # whole retry loop) covers all three attempts: at 55 ms/char the mark
+      # lands ~3.3 s after the insert, before the special exists.
+      - id: expect-specials-wait
+        type: expect.preview
+        at: { afterAction: wire-specials-use }
+        timeoutMs: 5000
+        target: { by: testId, value: specials-wait }
+        textContains: "ခဏစောင့်ပါ"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: expect-specials
+        type: expect.preview
+        at: { mark: after-specials }
+        timeoutMs: 8000
+        target: { by: testId, value: specials }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 3000 }
+
+  # ------------------------------------------------------------------ 10
+  - id: recap
+    chapter: "ပြန်ချုပ်ရအောင်"
+    narration: >
+      [[mark:draw-recap-title]] ဒါဆို ပြန်ချုပ်ကြည့်ရအောင်။
+      [[mark:draw-recap-server]] directive မပါတဲ့ component တွေက default အားဖြင့်
+      Server Component ပါ၊ code ကို browser ဆီ မပို့ပါဘူး။ use client ဖိုင်က
+      import လုပ်ရင်တော့ Client Component ဖြစ်သွားပါတယ်။
+      [[mark:draw-recap-client]] use client ဖိုင်ထဲက Client Component တွေကိုတော့
+      server မှာ HTML အရင် ထုတ်ပြီး၊ browser ထဲမှာ ဆက် run ပါတယ်။
+      [[mark:draw-recap-sf]] use server ကတော့ browser က request နဲ့ ခေါ်တဲ့ Server
+      Function တွေကို အမှတ်အသား လုပ်ပါတယ်။ [[mark:draw-recap-more]] framework တွေက
+      ဒီမှာ run မပြတဲ့ server API တွေကိုလည်း သုံးပါတယ်။ cacheSignal က render
+      ပြီးရင် မလိုတော့တဲ့ အလုပ်ကို ရပ်ခိုင်းပြီး၊ prerender က page ကို static HTML
+      အဖြစ် ကြိုထုတ်ပါတယ်။ [[mark:draw-recap-ppr]] React 19.2 က partial
+      prerendering ကတော့ မပြောင်းတဲ့ အပိုင်းကို ကြိုထုတ်ထားပြီး၊ ပြောင်းတဲ့
+      အပိုင်းကို request တိုင်းမှာ နောက်မှ ဖြည့်ပါတယ်။ [[mark:draw-recap-next]]
+      နောက်ဆုံး lesson မှာတော့ React 19.3 ရဲ့ feature အသစ်တွေကို ဒီ app ပေါ်မှာ
+      ကြည့်ပြီး၊ course တစ်ခုလုံးကို ပြန်လှည့်ကြည့်ပါမယ်။
+    sources:
+      - title: "React — Directives"
+        url: "https://react.dev/reference/rsc/directives"
+      - title: "React — cacheSignal"
+        url: "https://react.dev/reference/react/cacheSignal"
+      - title: "React — prerender"
+        url: "https://react.dev/reference/react-dom/static/prerender"
+      - title: "React 19.2"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+    actions:
+      - id: draw-recap-title
+        type: whiteboard.apply
+        at: { mark: draw-recap-title }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b5-title]
+      - id: expect-file-app
+        type: expect.file
+        at: { afterAction: draw-recap-title }
+        path: src/App.jsx
+        contains: "<AddButton id={dish.id} price={dish.price} />"
+      - id: expect-file-app-form
+        type: expect.file
+        at: { afterAction: expect-file-app }
+        path: src/App.jsx
+        contains: "<OrderForm dishes={menu.map((dish) => dish.name)} />"
+      - id: expect-file-app-suspense
+        type: expect.file
+        at: { afterAction: expect-file-app-form }
+        path: src/App.jsx
+        contains: "            <Specials />\n          </Suspense>"
+      - id: expect-file-addbutton
+        type: expect.file
+        at: { afterAction: expect-file-app-suspense }
+        path: src/AddButton.jsx
+        contains: "\"use client\";\nimport { useState } from \"react\";"
+      - id: expect-file-actions
+        type: expect.file
+        at: { afterAction: expect-file-addbutton }
+        path: src/actions.js
+        contains: "\"use server\";\nimport { addOrder, getMenu } from \"./db.js\";"
+      - id: expect-file-orderform
+        type: expect.file
+        at: { afterAction: expect-file-actions }
+        path: src/OrderForm.jsx
+        contains: 'useActionState(placeOrder, "")'
+      - id: expect-file-specials
+        type: expect.file
+        at: { afterAction: expect-file-orderform }
+        path: src/Specials.jsx
+        contains: "export async function Specials()"
+      - id: draw-recap-server
+        type: whiteboard.apply
+        at: { mark: draw-recap-server }
+        upsertIds: [b5-server]
+        drawMs: 1400
+      - id: draw-recap-client
+        type: whiteboard.apply
+        at: { mark: draw-recap-client }
+        upsertIds: [b5-client]
+        drawMs: 1400
+      - id: draw-recap-sf
+        type: whiteboard.apply
+        at: { mark: draw-recap-sf }
+        upsertIds: [b5-sf]
+        drawMs: 1400
+      - id: draw-recap-more
+        type: whiteboard.apply
+        at: { mark: draw-recap-more }
+        upsertIds: [b5-more-title, b5-more-underline, b5-more]
+        drawMs: 1800
+      - id: draw-recap-ppr
+        type: whiteboard.apply
+        at: { mark: draw-recap-ppr }
+        upsertIds: [b5-ppr]
+        drawMs: 1000
+      - id: draw-recap-next
+        type: whiteboard.apply
+        at: { mark: draw-recap-next }
+        upsertIds: [b5-next]
+        drawMs: 1000
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
