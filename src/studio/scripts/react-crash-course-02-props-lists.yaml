@@ -1826,7 +1826,7 @@ scenes:
       နဲ့ မပြောင်းတဲ့ key ကို တွဲသုံးပြီး၊ ampersand နှစ်လုံးနဲ့ ternary က
       ဘာ ပြမလဲ ဆုံးဖြတ်ပါတယ်။ [[mark:closing]] အခု card တွေကို နှိပ်လို့
       ဘာမှ မဖြစ်သေးပါဘူး။ နောက် lesson မှာ state နဲ့ component ကို
-      မှတ်ဉာဏ် ပေးပြီး၊ ခလုတ် နှိပ်တာကို တုံ့ပြန်ပါမယ်။
+      memory ပေးပြီး၊ ခလုတ် နှိပ်တာကို တုံ့ပြန်ပါမယ်။
     sources:
       - title: "React — Describing the UI"
         url: "https://react.dev/learn/describing-the-ui"
