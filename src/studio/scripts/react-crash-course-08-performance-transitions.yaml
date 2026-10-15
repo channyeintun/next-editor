@@ -9,12 +9,15 @@
 # useMemo + useCallback do, while a real search still re-renders the list.
 # React Compiler 1.0 is whiteboard-only (it needs Babel; this Vite 5 workspace
 # compiles JSX with esbuild). A HistoryPanel switches to a deliberately slow
-# tab inside useTransition (pending label first; SlowRow busy-waits 10 ms, so
-# the 250-row render under StrictMode lasts ~5 s and the 100-row deferred
-# render ~2 s, longer than the short act sentence, and the narration predicts
-# each transient state before the action), then searches it through
-# useDeferredValue (a "still searching" label while the memoized SlowList
-# catches up). The close draws React 19.3's independent Transitions.
+# tab inside useTransition (pending label first while the today text stays;
+# SlowRow busy-waits 10 ms, so the 250-row render under StrictMode lasts ~5 s
+# and the 100-row deferred render ~2 s; the after-pending span is long enough
+# that "all 250 arrived" is spoken after the list lands even at 55 ms/char),
+# then searches it through useDeferredValue (a search box and a "still
+# searching" label on the history tab only, while the memoized SlowList
+# catches up; the brief stale label is predicted before the input and
+# described in the past after it). The close draws React 19.3's independent
+# Transitions as points on one timeline (fast update clicked at 0.3 s).
 #
 # Why the Profiler sits INSIDE DishList (deviation from the curriculum): a
 # harness experiment (tools/exp1.ts) showed that a <Profiler> placed in App
@@ -34,8 +37,8 @@
 # preview opens, about two minutes later.
 #
 # Narration is Burmese (my-MM); voice-script.md next to this file is the
-# source (tools/sync_check.py applies it and checks it against the English
-# draft in tools/narration-en.txt). Every visible string (title, chapters,
+# source (tools/sync_check2.py applies it and checks normalized equality,
+# mark order and placement; tools/sync_check.py was the English-draft check). Every visible string (title, chapters,
 # board labels, UI) is Burmese too.
 schemaVersion: 1
 
@@ -988,7 +991,7 @@ lesson:
         y: 500,
         width: 790,
         height: 40,
-        text: "isPending → ဖွင့်နေပါတယ်…",
+        text: "isPending → မှတ်တမ်း ဖွင့်နေပါတယ်…",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -1012,7 +1015,7 @@ lesson:
         y: 160,
         width: 700,
         height: 46,
-        text: "React 19.3 – Transition တွေ သီးခြား",
+        text: "React 19.3 – Transition တွေ သီးခြားစီ",
         strokeColor: "#1e1e1e",
         fontSize: 36,
       }
@@ -1039,7 +1042,7 @@ lesson:
     - {
         id: b6-192-bar-text,
         kind: text,
-        x: 440,
+        x: 570,
         y: 240,
         width: 400,
         height: 40,
@@ -1048,13 +1051,33 @@ lesson:
         fontSize: 28,
       }
     - {
+        id: b6-192-tick,
+        kind: rectangle,
+        x: 538,
+        y: 222,
+        width: 4,
+        height: 76,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b6-192-tick-text,
+        kind: text,
+        x: 480,
+        y: 302,
+        width: 200,
+        height: 40,
+        text: "0.3 s နှိပ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
         id: b6-192-fast,
         kind: text,
-        x: 700,
-        y: 300,
-        width: 380,
+        x: 760,
+        y: 302,
+        width: 320,
         height: 40,
-        text: "မြန်တဲ့ update → 1.5 s",
+        text: "→ 1.5 s မှ ပေါ်",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -1081,7 +1104,7 @@ lesson:
     - {
         id: b6-193-bar-text,
         kind: text,
-        x: 440,
+        x: 570,
         y: 385,
         width: 400,
         height: 40,
@@ -1090,13 +1113,33 @@ lesson:
         fontSize: 28,
       }
     - {
+        id: b6-193-tick,
+        kind: rectangle,
+        x: 538,
+        y: 367,
+        width: 4,
+        height: 76,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b6-193-tick-text,
+        kind: text,
+        x: 480,
+        y: 447,
+        width: 200,
+        height: 40,
+        text: "0.3 s နှိပ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
         id: b6-193-fast,
         kind: text,
-        x: 420,
-        y: 445,
-        width: 380,
+        x: 760,
+        y: 447,
+        width: 320,
         height: 40,
-        text: "မြန်တဲ့ update → 0.3 s",
+        text: "→ ချက်ချင်း (0.3 s)",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -1202,15 +1245,13 @@ scenes:
   - id: rerender-idea
     chapter: "Component တွေ ဘယ်အချိန် ပြန် render လုပ်လဲ"
     narration: >
-      ပြီးခဲ့တဲ့ lesson မှာ Effect နဲ့ React အပြင်ဘက်ကို ချိတ်ခဲ့ပါတယ်။ ဒီ lesson
-      ကတော့ performance အကြောင်းပါ။ React က ဘယ်အချိန် ပြန် render လုပ်လဲ၊ ဘယ်လို
+      ဒီ lesson မှာ React က ဘယ်အချိန် ပြန် render လုပ်လဲ၊ performance ကို ဘယ်လို
       တိုင်းပြီး ပြင်မလဲ ကြည့်ပါမယ်။ [[mark:start-server]] ရှင်းပြနေတုန်း dev
       server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ [[mark:draw-tree]] component
       ရဲ့ state ပြောင်းရင် React က သူ့ကို ပြန် render လုပ်ပါတယ်။
       [[mark:draw-cascade]] ပြီးတော့ သူ့အောက်က component အားလုံးကိုပါ ပြန် render
-      လုပ်ပါတယ်၊ သူတို့ ပြနေတာ ဘာမှ မပြောင်းရင်တောင်ပါပဲ။ [[mark:draw-cheap]]
-      များသောအားဖြင့် ဒါက ကိစ္စ မရှိပါဘူး။ render ဆိုတာ function ခေါ်တာပဲ
-      ဖြစ်ပြီး၊ ရလဒ် ကွာသွားတဲ့ နေရာကိုပဲ React က DOM ထဲမှာ ပြင်ပါတယ်။
+      လုပ်ပါတယ်၊ ဘာမှ မပြောင်းရင်တောင်ပါပဲ။ [[mark:draw-cheap]] များသောအားဖြင့်
+      ဒါက ကိစ္စ မရှိပါဘူး၊ ကွာသွားတဲ့ နေရာကိုပဲ React က DOM ထဲမှာ ပြင်လို့ပါ။
       [[mark:draw-measure]] ဒါကြောင့် မှန်းမနေပါနဲ့။ အရင် တိုင်းကြည့်ပြီး၊ တကယ်
       နှေးတာကိုပဲ ပြင်ပါ။
     sources:
@@ -1269,13 +1310,12 @@ scenes:
   # ------------------------------------------------------------------ 2
   - id: tour-app
     narration: >
-      [[mark:close-board-1]] ဒီနေ့ စမယ့် code ကို ကြည့်ရအောင်။ App မှာ state
-      သုံးခု ရှိပါတယ်။ မီးဖိုချောင်အတွက် မှတ်ချက်၊ ရှာမယ့် စာလုံးနဲ့ ရွေးထားတဲ့
-      ဟင်းလျာပါ။ [[mark:select-visible]] menu ကို စစ်ထုတ်တဲ့ ဒီ စာကြောင်းက render
-      တိုင်း ပြန် run လို့၊ array အသစ် တစ်ခု ထွက်လာပါတယ်။ [[mark:select-handle]]
-      ရွေးလိုက်တဲ့ ဟင်းလျာကို သိမ်းပေးတဲ့ ဒီ function ကလည်း render တိုင်း အသစ်
-      ပြန်ဆောက်ပါတယ်။ [[mark:select-slot]] ရှာတဲ့ အကွက် အောက်မှာ ဟင်းလျာ
-      စာရင်းအတွက် နေရာ ရှိပါတယ်။ အဲဒါကို ရေးကြည့်ရအောင်။
+      [[mark:close-board-1]] ဒီနေ့ စမယ့် code ကို ကြည့်ရအောင်။ App မှာ မှတ်ချက်၊
+      ရှာမယ့် စာလုံးနဲ့ ရွေးထားတဲ့ ဟင်းလျာ ဆိုပြီး state သုံးခု ရှိပါတယ်။
+      [[mark:select-visible]] menu ကို စစ်ထုတ်တဲ့ ဒီ စာကြောင်းက render တိုင်း
+      array အသစ် တစ်ခု ထုတ်ပေးပါတယ်။ [[mark:select-handle]] ဟင်းလျာ ရွေးတဲ့ ဒီ
+      function ကလည်း render တိုင်း အသစ် ဖြစ်ပါတယ်။ [[mark:select-slot]] ရှာတဲ့
+      အကွက်ကို ကြည့်ပါ။ သူ့အောက်မှာ ဟင်းလျာ စာရင်း မရှိသေးလို့ ရေးကြည့်ရအောင်။
     sources:
       - title: "React — Rendering Lists"
         url: "https://react.dev/learn/rendering-lists"
@@ -1310,25 +1350,27 @@ scenes:
       - id: select-slot
         type: editor.select
         at: { mark: select-slot }
-        target: { file: src/App.jsx, text: 'data-testid="search-input"', occurrence: 1 }
+        target:
+          {
+            file: src/App.jsx,
+            text: "<input\n          value={query}\n          onChange={(e) => setQuery(e.target.value)}\n          placeholder=\"ဟင်းလျာ ရှာရန်\"\n          data-testid=\"search-input\"\n        />",
+            occurrence: 1,
+          }
 
   # ------------------------------------------------------------------ 3
   - id: profiler-code
     chapter: "Profiler နဲ့ တိုင်းကြည့်ရအောင်"
     narration: >
-      [[mark:open-dishlist]] DishList ဖိုင်က အခု အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import
+      [[mark:open-dishlist]] DishList ဖိုင်က အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import
       မလုပ်ထားသေးပါဘူး။ [[mark:type-dl-import]] Profiler ကို import လုပ်ပါတယ်။ သူက
       သူ့ထဲက အပိုင်း ဘယ်နှစ်ကြိမ် render ဖြစ်လဲ တိုင်းပေးတဲ့ component ပါ။
-      [[mark:type-dl-onrender]] သူ့ callback onRender ကတော့ အဲဒီ အပိုင်းကို React
-      က commit လုပ်တိုင်း run ပါတယ်။ commit လုပ်တယ် ဆိုတာ ရလဒ် အသစ်ကို screen ပေါ်
-      တင်လိုက်တာပါ။ React က Profiler ရဲ့ id၊ mount လား update လား ဆိုတဲ့ phase နဲ့
-      ကြာချိန် ကိန်းဂဏန်း တချို့ ပေးပါတယ်။ [[mark:select-dl-dom]] render
-      အရေအတွက်ကို ဘယ်မှာ ရေးလဲ ကြည့်ပါ။ state ထဲ မထည့်ပါဘူး။ state ပြောင်းရင်
-      render ထပ်ဖြစ်၊ onRender ထပ်ခေါ်၊ ဒီလိုပဲ အဆုံးမရှိ ဖြစ်သွားမှာ ဖြစ်လို့ပါ။
-      ဒါကြောင့် index.html က React အပြင်ဘက်မှာ ထားတဲ့ badge ထဲ ရေးလိုက်ပါတယ်။
-      [[mark:type-dl-component]] component ကတော့ သာမန် list တစ်ခုပါ။ ဟင်းလျာ
-      တစ်ခုစီမှာ key၊ နာမည်နဲ့ ရွေးမယ့် ခလုတ် ပါပါတယ်။ [[mark:select-dl-profiler]]
-      ဒီ Profiler tag ကို ကြည့်ပါ။ list တစ်ခုလုံး သူ့ထဲ ရှိလို့၊ DishList render
+      [[mark:type-dl-onrender]] onRender ကတော့ React က ရလဒ်ကို screen ပေါ်
+      တင်တိုင်း၊ ဆိုလိုတာက commit လုပ်တိုင်း run ပြီး၊ mount လား update လား
+      ပြောပေးပါတယ်။ [[mark:select-dl-dom]] render အရေအတွက်ကို ဘယ်မှာ ရေးလဲ
+      ကြည့်ပါ။ state ထဲ ထည့်ရင် render ထပ်ဖြစ်ပြီး အဆုံးမရှိ ဖြစ်မှာမို့၊ React
+      အပြင်က badge ထဲ ရေးပါတယ်။ [[mark:type-dl-component]] component ကတော့ ဟင်းလျာ
+      တစ်ခုစီမှာ ရွေးမယ့် ခလုတ် ပါတဲ့ သာမန် list ပါ။ [[mark:select-dl-profiler]]
+      ဒီ Profiler tag ကို ကြည့်ပါ။ list တစ်ခုလုံး သူ့ထဲ ရှိလို့ DishList render
       တိုင်း ရေတွက်ပေးပါတယ်။
     sources:
       - title: "React — <Profiler>"
@@ -1391,11 +1433,11 @@ scenes:
       [[mark:open-app-wire]] App ထဲ ထည့်ရအောင်။ [[mark:wire-dl-import]] အရင်ဆုံး
       DishList ကို import လုပ်ပါတယ်။ [[mark:wire-dl-use]] ပြီးတော့ list ကို ရှာတဲ့
       အကွက် အောက်မှာ ထည့်ပါတယ်။ [[mark:preview-opens]] dev server ရသွားပြီမို့
-      preview ကို ဖွင့်လိုက်ရအောင်။ အောက်ထောင့်က badge မှာ render 1 ကြိမ်လို့
-      ပြနေပါတယ်။ အဲဒါက mount ပါ။ [[mark:type-note-1]] မီးဖိုချောင်အတွက် မှတ်ချက်
-      ရိုက်ကြည့်ရအောင်။ [[mark:after-note-1]] badge က 2 ဖြစ်သွားပါပြီ။ မှတ်ချက်က
-      list နဲ့ ဘာမှ မဆိုင်ပေမယ့်၊ parent ဖြစ်တဲ့ App က ပြန် render ဖြစ်လို့
-      DishList ကပါ ပြန် render ဖြစ်သွားတာပါ။
+      preview ကို ဖွင့်ရအောင်။ အောက်ထောင့်က badge က mount အတွက် render 1 ကြိမ်လို့
+      ပြနေပါတယ်။ [[mark:type-note-1]] မီးဖိုချောင်အတွက် မှတ်ချက် ရိုက်ကြည့်ရအောင်။
+      [[mark:after-note-1]] badge က 2 ဖြစ်သွားပါပြီ။ မှတ်ချက်က list နဲ့
+      မဆိုင်ပေမယ့်၊ parent ဖြစ်တဲ့ App ပြန် render ဖြစ်လို့ DishList ပါ ပြန်
+      render ဖြစ်တာပါ။
     sources:
       - title: "React — <Profiler>: Measuring rendering performance programmatically"
         url: "https://react.dev/reference/react/Profiler#measuring-rendering-performance-programmatically"
@@ -1463,14 +1505,13 @@ scenes:
   - id: memo-try
     chapter: "memo၊ useMemo နဲ့ useCallback"
     narration: >
-      [[mark:wire-memo-import]] memo ကို စမ်းကြည့်ရအောင်။ အရင်ဆုံး memo ကို React
-      ကနေ import လုပ်ပါတယ်။ [[mark:wire-memo-line]] memo က component တစ်ခုကို
-      ထုပ်ပေးပြီး၊ ထွက်လာတဲ့ component အသစ်က props မပြောင်းရင် ပြန် render မလုပ်ဘဲ
-      ကျော်သွားပါတယ်။ [[mark:wire-memo-use]] ခေါ်တဲ့ နေရာမှာ MemoDishList ကို
-      သုံးပါတယ်။ [[mark:after-memo-reload]] ပြင်လိုက်လို့ page ပြန်ပွင့်သွားတော့
-      badge က 1 ပြန်ဖြစ်နေပါတယ်။ [[mark:type-note-2]] မှတ်ချက်ကို
-      ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-2]] 2 ဖြစ်သွားပြန်ပါပြီ။ memo က
-      ဘာလို့ မရတာလဲ။
+      [[mark:wire-memo-import]] memo ကို စမ်းကြည့်ရအောင်၊ အရင်ဆုံး React ကနေ
+      import လုပ်ပါတယ်။ [[mark:wire-memo-line]] memo က component ကို ထုပ်ပေးပြီး၊
+      props မပြောင်းရင် render ကို ကျော်တဲ့ component အသစ် ပြန်ပေးပါတယ်။
+      [[mark:wire-memo-use]] ခေါ်တဲ့ နေရာမှာ MemoDishList ကို သုံးပါတယ်။
+      [[mark:after-memo-reload]] page ပြန်ပွင့်သွားလို့ badge က 1 ပြန်ဖြစ်နေပါတယ်။
+      [[mark:type-note-2]] မှတ်ချက်ကို ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-2]]
+      2 ဖြစ်သွားပြန်ပါပြီ။ memo က ဘာလို့ မရတာလဲ။
     sources:
       - title: "React — memo"
         url: "https://react.dev/reference/react/memo"
@@ -1530,17 +1571,14 @@ scenes:
   # ------------------------------------------------------------------ 6
   - id: object-is-board
     narration: >
-      memo က prop အသစ် တစ်ခုစီကို အဟောင်းနဲ့ Object.is သုံးပြီး နှိုင်းယှဉ်ပါတယ်။
-      [[mark:draw-same-string]] string ဒါမှမဟုတ် ကိန်းဂဏန်းလို ရိုးရိုး
-      တန်ဖိုးတွေကိုတော့ Object.is က တန်ဖိုးချင်း နှိုင်းယှဉ်လို့၊ စာသား တူရင်
-      တူတယ်လို့ ပြောပါတယ်။ [[mark:draw-new-array]] array နဲ့ function ကိုတော့ အထဲက
-      တန်ဖိုးတွေကို မကြည့်ဘဲ၊ အရင် render က object နဲ့ တစ်ခုတည်း ဟုတ်မဟုတ်ကိုပဲ
-      ကြည့်ပါတယ်။ ဒါပေမဲ့ filter က render တိုင်း array အသစ် ပြန်ပေးလို့၊
-      ဟင်းလျာတွေ တူနေပေမယ့် Object.is က မတူဘူးလို့ ပြောပါတယ်။
-      [[mark:draw-new-function]] handleSelect လည်း အတူတူပါပဲ။ render တိုင်း
-      function အသစ် တစ်ခု ဆောက်နေလို့ပါ။ [[mark:draw-fix]] ဒါကြောင့် render
-      ကြားမှာ မပြောင်းဘဲ တူနေမယ့် တန်ဖိုးတွေ လိုပါတယ်။ အဲဒါကို useMemo နဲ့
-      useCallback က ပေးပါတယ်။
+      memo က prop တစ်ခုစီကို Object.is နဲ့ စစ်ပါတယ်၊ Object.is ဆိုတာ တန်ဖိုး
+      နှစ်ခု တူမတူ စစ်ပေးတဲ့ JavaScript function ပါ။ [[mark:draw-same-string]]
+      string ဒါမှမဟုတ် ကိန်းဂဏန်းဆိုရင် တန်ဖိုးချင်း နှိုင်းယှဉ်လို့၊ စာသား တူရင်
+      တူတယ်လို့ ပြောပါတယ်။ [[mark:draw-new-array]] array ကိုတော့ အထဲကို မကြည့်ဘဲ
+      အရင် array နဲ့ တစ်ခုတည်း ဟုတ်မဟုတ်ကိုပဲ ကြည့်လို့၊ filter ရဲ့ array အသစ်ကို
+      မတူဘူးလို့ ပြောပါတယ်။ [[mark:draw-new-function]] handleSelect လည်း render
+      တိုင်း အသစ် ဖြစ်လို့ မတူပါဘူး။ [[mark:draw-fix]] ဒါကြောင့် render ကြားမှာ
+      တူနေမယ့် တန်ဖိုးတွေ လိုပြီး၊ အဲဒါကို useMemo နဲ့ useCallback က ပေးပါတယ်။
     sources:
       - title: "React — memo: Minimizing props changes"
         url: "https://react.dev/reference/react/memo#minimizing-props-changes"
@@ -1579,22 +1617,23 @@ scenes:
   - id: stable-props
     narration: >
       [[mark:close-board-objectis]] App ထဲ ပြန်ရအောင်။ [[mark:wire-hooks-import]]
-      useCallback နဲ့ useMemo import လုပ်ပါတယ်။ [[mark:wire-usememo]] useMemo က
-      စစ်ထုတ်ထားတဲ့ array ကို မှတ်ထားပေးပြီး၊ ရှာတဲ့ စာလုံး ပြောင်းမှသာ
-      ပြန်စစ်ထုတ်ပါတယ်။ [[mark:wire-usecallback]] useCallback ကတော့ function
-      ကိုယ်တိုင်ကို မှတ်ထားပါတယ်။ state setter က ဘယ်တော့မှ မပြောင်းလို့ dependency
-      စာရင်းက အလွတ်ပါ။ [[mark:wire-callsite-dishes]] အခု list က မှတ်ထားတဲ့ array
-      ကို ရပါပြီ။ [[mark:wire-callsite-select]] မှတ်ထားတဲ့ function ကိုလည်း
-      ရပါပြီ။ အပေါ်က filter စာကြောင်း အဟောင်းနဲ့ handleSelect အဟောင်းကို အခု
-      ဘယ်နေရာကမှ မသုံးတော့ပါဘူး။ ကိုယ့် code မှာဆိုရင်တော့ အသစ် မထည့်ဘဲ၊
-      အဟောင်းကိုပဲ နေရာမှာတင် ပြင်လိုက်ရုံပါပဲ။ [[mark:type-note-3]] မှတ်ချက်ကို
-      ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-3]] badge က 1 မှာပဲပါ။ App ပြန်
-      render ဖြစ်ပေမယ့် DishList ကိုတော့ ကျော်သွားပါတယ်။ [[mark:click-pick]]
-      ဟင်းလျာ ရွေးရအောင်။ [[mark:after-pick]] ရွေးထားတာ ပြောင်းသွားပေမယ့် badge က
-      1 ပဲ ပြနေပါသေးတယ်။ ရွေးထားတဲ့ ဟင်းလျာက App ရဲ့ state ဖြစ်ပြီး list ရဲ့ props
-      ထဲ မပါလို့၊ list အတွက်တော့ ဘာမှ မပြောင်းပါဘူး။ [[mark:type-search]] အခု
-      ရှမ်းခေါက်ဆွဲကို ရှာကြည့်ရအောင်။ [[mark:after-search]] ဒီတစ်ခါတော့ 2
-      ဖြစ်သွားပါပြီ။ list က တကယ် ပြောင်းသွားလို့ပါ။
+      useCallback နဲ့ useMemo ကို import လုပ်ပါတယ်။ [[mark:wire-usememo]] useMemo
+      က စစ်ထုတ်ထားတဲ့ array ကို မှတ်ထားပေးပြီး၊ ရှာတဲ့ စာလုံး ပြောင်းမှသာ
+      ပြန်စစ်ထုတ်ပါတယ်။ [[mark:wire-usecallback]] useCallback ကတော့ function ကို
+      မှတ်ထားပါတယ်၊ useState ရဲ့ state ပြောင်းတဲ့ function က မပြောင်းလို့
+      dependency စာရင်းက အလွတ်ပါ။ [[mark:wire-callsite-dishes]] အခု list က
+      မှတ်ထားတဲ့ array ကို ရပါပြီ။ [[mark:wire-callsite-select]] မှတ်ထားတဲ့
+      function ကိုလည်း ရပါပြီ။ [[mark:select-old-visible]] ဒီ filter စာကြောင်း
+      အဟောင်းကို အခု ဘယ်နေရာကမှ မသုံးတော့ပါဘူး။ [[mark:select-old-handle]]
+      handleSelect အဟောင်းလည်း အတူတူပါ၊ ကိုယ့် code မှာတော့ အဟောင်းကိုပဲ နေရာမှာ
+      ပြင်ပါ။ [[mark:type-note-3]] page ပြန်ပွင့်လို့ badge က 1 ကနေ ပြန်စပါတယ်။
+      မှတ်ချက်ကို ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-3]] ဒီတစ်ခါတော့ badge က 1
+      ကနေ မတက်တော့ပါဘူး၊ DishList ကို ကျော်သွားလို့ပါ။ [[mark:click-pick]] ဟင်းလျာ
+      ရွေးရအောင်။ [[mark:after-pick]] ရွေးထားတာ ပြောင်းသွားပေမယ့် badge က 1 မှာပဲ
+      ရှိနေပါတယ်၊ ရွေးထားတဲ့ ဟင်းလျာက list ရဲ့ props ထဲ မပါလို့ပါ။
+      [[mark:type-search]] အခု ရှမ်းခေါက်ဆွဲကို ရှာကြည့်ရအောင်။
+      [[mark:after-search]] badge က 2 ဖြစ်သွားပါပြီ၊ list က တကယ်
+      ပြောင်းသွားလို့ပါ။
     sources:
       - title: "React — useMemo"
         url: "https://react.dev/reference/react/useMemo"
@@ -1647,6 +1686,24 @@ scenes:
         cadence: block
         target: { file: src/App.jsx, after: "onSelect={handleSelect", occurrence: 1 }
         text: "Stable"
+      - id: select-old-visible
+        type: editor.select
+        at: { mark: select-old-visible }
+        target:
+          {
+            file: src/App.jsx,
+            text: "const visible = menu.filter((dish) => dish.name.includes(query));",
+            occurrence: 1,
+          }
+      - id: select-old-handle
+        type: editor.select
+        at: { mark: select-old-handle }
+        target:
+          {
+            file: src/App.jsx,
+            text: "  function handleSelect(id) {\n    setSelectedId(id);\n  }\n",
+            occurrence: 1,
+          }
       - id: expect-mount-3
         type: expect.preview
         at: { mark: type-note-3, offsetMs: -600 }
@@ -1721,32 +1778,24 @@ scenes:
   - id: compiler-board
     chapter: "React Compiler"
     narration: >
-      React Compiler 1.0 က ဒါကို ကိုယ့်အစား လုပ်ပေးနိုင်ပါတယ်။ 2025
-      အောက်တိုဘာကတည်းက stable ပါ။ [[mark:draw-compiler-build]] သူက app ကို build
-      လုပ်ချိန်မှာ run ပါတယ်။ အခုတော့ Babel ဆိုတဲ့ JavaScript code ကို ဖတ်ပြီး
-      ပြောင်းရေးပေးတဲ့ tool အတွက် plugin တစ်ခုပါ။ [[mark:draw-compiler-before]]
-      ကိုယ်ရေးတဲ့ သာမန် code ကို ယူပါတယ်၊ ဥပမာ filter စာကြောင်းပါ။
-      [[mark:draw-compiler-after]] ပြီးတော့ ဒီလို code ထုတ်ပေးပါတယ်။ component
-      တစ်ခုစီအတွက် cache သေးသေးလေး တစ်ခု ထားပေးလို့၊ ရှာတဲ့ စာလုံး ပြောင်းမှသာ
-      filter ပြန် run ပါတယ်။ JSX နဲ့ function တွေကိုပါ cache လုပ်ပေးတဲ့အတွက်၊
-      props မပြောင်းတဲ့ child တွေက memo မပါဘဲ render ကို ကျော်သွားပါတယ်။
-      [[mark:draw-compiler-guidance]] ဒါကြောင့် code အသစ်မှာ ဒီ hook တွေ သိပ်
-      မလိုတော့ပါဘူး။ တကယ် လိုတဲ့ နေရာမှာပဲ သုံးပါ၊ ဥပမာ Effect ရဲ့ dependency ထဲ
-      ထည့်ရမယ့် တန်ဖိုး တစ်ခုကို render တိုင်း မပြောင်းစေချင်တဲ့အခါမျိုးပါ။
+      React Compiler 1.0 ကတော့ ဒီ အလုပ်ကို ကိုယ့်အစား လုပ်ပေးနိုင်ပါတယ်။
+      [[mark:draw-compiler-build]] သူက build လုပ်ချိန်မှာ run တဲ့ Babel plugin ပါ၊
+      Babel က JavaScript code ကို ပြောင်းရေးပေးတဲ့ tool ပါ။
+      [[mark:draw-compiler-before]] ကိုယ်ရေးတဲ့ filter စာကြောင်းလို code ကို
+      ယူပါတယ်။ [[mark:draw-compiler-after]] ပြီးတော့ cache သေးသေးလေး ထည့်ပေးလို့
+      ရှာတဲ့ စာလုံး ပြောင်းမှသာ filter ပြန် run ပြီး၊ child component တွေကလည်း
+      memo မပါဘဲ render ကို ကျော်သွားပါတယ်။ [[mark:draw-compiler-guidance]]
+      ဒါကြောင့် code အသစ်မှာ ဒီ hook တွေကို တကယ် လိုမှပဲ သုံးပါ။
       [[mark:board-compiler-rules]] ဒါပေမဲ့ compiler က ကိုယ့် code ဟာ Rules of
-      React ကို လိုက်နာထားမယ်လို့ ယူဆပါတယ်။ ဥပမာ render လုပ်နေတုန်း props
-      ဒါမှမဟုတ် state ကို တိုက်ရိုက် မပြင်ရတာ၊ hook ကို component ရဲ့ အပေါ်ဆုံး
-      အဆင့်ကပဲ ခေါ်ရတာမျိုးပါ။ [[mark:draw-rules]] စည်းကမ်း ချိုးတဲ့ component
-      ကိုတော့ ကျော်သွားပေမယ့်၊ cache မပါဘဲ ပုံမှန်အတိုင်း အလုပ်လုပ်ပါတယ်။
-      [[mark:draw-directives]] component ရဲ့ အပေါ်ဆုံးမှာ use no memo လို့
-      ရေးထားရင် compiler က အဲဒီ component ကို တမင် ကျော်သွားပြီး၊ use memo လို့
-      ရေးရင်တော့ compile လုပ်ဖို့ ရွေးပေးတာပါ။ [[mark:draw-lint]] Rules of React
-      ကို ချိုးထားတာကို React ရဲ့ hooks lint plugin က code ရေးနေတုန်းမှာပဲ
-      သတိပေးပါတယ်။ Vite မှာဆိုရင်တော့ Vite ရဲ့ React plugin အသစ်မှာ compiler အတွက်
-      preset တစ်ခု ပါလာလို့၊ အဲဒါကို Babel plugin တစ်ခုထဲ ထည့်ပေးရုံပါ။
-      [[mark:draw-not-here]] ကိုယ့် project မှာတော့ Vite က JSX ကို esbuild နဲ့ပဲ
-      ပြောင်းပြီး Babel မပါလို့၊ compiler က run မှာ မဟုတ်ပါဘူး။ ဒါကြောင့် hook
-      တွေကို လက်နဲ့ ရေးခဲ့တာပါ။
+      React ကို လိုက်နာမယ်လို့ ယူဆပါတယ်၊ ဥပမာ render ထဲမှာ props ကို
+      မပြင်ရတာမျိုးပါ။ [[mark:draw-rules]] မလိုက်နာတဲ့ component ကိုတော့
+      ကျော်သွားပေမယ့်၊ ပုံမှန်အတိုင်း အလုပ်လုပ်ပါတယ်။ [[mark:draw-directives]] use
+      no memo လို့ ရေးထားရင် compiler က အဲဒီ component ကို ကျော်ပါတယ်၊ ပြဿနာ
+      တက်တာကို ခဏ ဖယ်ထားဖို့ပါ။ use memo ကတော့ ရွေးထားတာကိုပဲ compile လုပ်တဲ့
+      project အတွက်ပါ။ [[mark:draw-lint]] စည်းကမ်း ချိုးတာကို hooks lint plugin က
+      code ရေးနေတုန်းမှာပဲ သတိပေးပါတယ်။ [[mark:draw-not-here]] ကိုယ့် project က
+      Babel မပါဘဲ esbuild ပဲ သုံးလို့ compiler မ run ပါဘူး၊ ဒါကြောင့် hook တွေကို
+      လက်နဲ့ ရေးခဲ့တာပါ။
     sources:
       - title: "React — React Compiler v1.0 (blog)"
         url: "https://react.dev/blog/2025/10/07/react-compiler-1"
@@ -1819,16 +1868,15 @@ scenes:
     chapter: "Transition နဲ့ deferred value"
     narration: >
       နောက် ပြဿနာ တစ်ခုက render တချို့ တကယ်ကို နှေးတာပါ။ [[mark:draw-urgent]]
-      စာရိုက်တာနဲ့ နှိပ်တာက urgent ပါ၊ ဆိုလိုတာက screen က ချက်ချင်း
-      တုံ့ပြန်ရပါမယ်။ [[mark:draw-transition]] data အများကြီး ပြရတဲ့ tab ကို
-      ပြောင်းတာကတော့ ခဏ စောင့်လို့ ရပါတယ်။ Transition ဆိုတာ အလောတကြီး မဟုတ်တဲ့
-      state update ပါ၊ React က အဲဒါကို နောက်ကွယ်မှာ render လုပ်ပါတယ်။
-      [[mark:draw-interrupt]] အဲဒီကြားထဲ စာရိုက်လိုက်ရင် React က အဲဒီ render ကို
-      ရပ်လိုက်ပြီး၊ ရိုက်တဲ့ စာကို အရင် ပြပါတယ်။ ပြီးမှ Transition ကို အစကနေ ပြန်
-      render လုပ်ပါတယ်။ [[mark:draw-pending]] စောင့်နေတုန်း isPending က true
-      ဖြစ်လို့၊ loading စာသား ပြလို့ ရပါတယ်။ [[mark:draw-tracks]] ဒါကို timeline
-      ပေါ်မှာ ကြည့်ချင်ရင်၊ React 19.2 က Chrome DevTools ထဲ Performance Tracks
-      ထည့်ပေးပါတယ်။
+      စာရိုက်တာ၊ နှိပ်တာက urgent ပါ၊ screen က ချက်ချင်း တုံ့ပြန်ရပါမယ်။
+      [[mark:draw-transition]] data များတဲ့ tab ပြောင်းတာကတော့ စောင့်လို့ ရပါတယ်။
+      Transition ဆိုတာ အလောတကြီး မဟုတ်တဲ့ state update ပါ၊ React က နောက်ကွယ်မှာ
+      render လုပ်ပါတယ်။ [[mark:draw-interrupt]] အဲဒီကြားထဲ စာရိုက်ရင် React က
+      render ကို ရပ်ပြီး စာကို အရင် ပြပါတယ်၊ ပြီးမှ Transition ကို အစကနေ
+      ပြန်စပါတယ်။ [[mark:draw-pending]] Transition ကို useTransition ဆိုတဲ့ hook
+      နဲ့ စပြီး၊ စောင့်နေတုန်း သူပေးတဲ့ isPending က true ဖြစ်လို့ loading စာသား
+      ပြလို့ ရပါတယ်။ [[mark:draw-tracks]] timeline ပေါ်မှာ ကြည့်ချင်ရင် React 19.2
+      က Chrome DevTools ထဲ Performance Tracks ထည့်ပေးပါတယ်။
     sources:
       - title: "React — useTransition"
         url: "https://react.dev/reference/react/useTransition"
@@ -1875,24 +1923,22 @@ scenes:
       ဆောက်ကြည့်ရအောင်။ [[mark:open-slowlist]] SlowList က ရေးပြီးသားပါ။
       [[mark:select-slow-loop]] ဒီ loop က row တိုင်း 10 millisecond တမင်
       စောင့်စေလို့၊ row 250 ခု render တာ နှေးပါတယ်။ [[mark:select-slowlist-memo]]
-      ပြီးတော့ memo နဲ့ ထုပ်ထားပါတယ်။ ဒါ နောက်မှ လိုပါလိမ့်မယ်။
+      memo နဲ့ ထုပ်ထားတာကိုလည်း ကြည့်ထားပါ၊ နောက်မှ လိုပါမယ်။
       [[mark:open-history]] HistoryPanel ကတော့ အလွတ်ပါ။ [[mark:type-hp-top]]
       SlowList ကို import လုပ်ပြီး၊ လက်ရှိ tab ကို state ထဲမှာ ထားပါတယ်။ အစမှာ
-      ဒီနေ့ tab ကနေ စပါတယ်။ [[mark:type-hp-transition]] useTransition ကတော့ state
-      update ကို အလောတကြီး မဟုတ်ဘူးလို့ React ကို ပြောပေးပြီး၊ နှစ်ခု
-      ပြန်ပေးပါတယ်။ Transition run နေဆဲလား ပြောတဲ့ isPending နဲ့၊ Transition
-      စပေးတဲ့ startTransition ပါ။ [[mark:type-hp-select]] tab ပြောင်းတာကို
+      ဒီနေ့ tab ကနေ စပါတယ်။ [[mark:type-hp-transition]] useTransition က Transition
+      run နေဆဲလား ပြောတဲ့ isPending နဲ့၊ Transition စပေးတဲ့ startTransition
+      ဆိုပြီး နှစ်ခု ပြန်ပေးပါတယ်။ [[mark:type-hp-select]] tab ပြောင်းတာကို
       startTransition ထဲမှာ လုပ်လို့၊ ဒီ update က urgent မဟုတ်တော့ပါဘူး။
-      [[mark:type-hp-jsx]] JSX မှာတော့ tab ခလုတ် နှစ်ခု၊ pending ဖြစ်နေတုန်း
-      ပြမယ့် loading စာသား၊ ပြီးတော့ ဒီနေ့ စာသား ဒါမှမဟုတ် နှေးတဲ့ list ပါပါတယ်။
-      [[mark:open-app-history]] App မှာ import လုပ်ပါတယ်။ [[mark:wire-hp-use]]
-      ပြီးတော့ ခေါင်းစဉ် အောက်မှာ ထည့်ပါတယ်။ မှတ်တမ်း tab ကို နှိပ်လိုက်ရင်၊ list
-      မရောက်ခင်မှာ loading စာသား အရင် ပေါ်လာပြီး၊ ဒီနေ့ tab ကလည်း ကျန်နေပါမယ်။
-      [[mark:click-history]] ကဲ၊ နှိပ်ကြည့်ရအောင်။ [[mark:after-pending]] loading
-      စာသား ပေါ်နေပြီး၊ ဒီနေ့ tab လည်း ရှိနေပါသေးတယ်။ [[mark:after-history]] အခု
-      order 250 ပွဲလုံး ရောက်လာပါပြီ။
+      [[mark:type-hp-jsx]] JSX မှာ tab ခလုတ် နှစ်ခု၊ loading စာသား၊ ပြီးတော့ ဒီနေ့
+      စာသား ဒါမှမဟုတ် နှေးတဲ့ list ပါပါတယ်။ [[mark:open-app-history]] App မှာ
+      import လုပ်ပါတယ်။ [[mark:wire-hp-use]] ပြီးတော့ ခေါင်းစဉ် အောက်မှာ
+      ထည့်ပါတယ်။ [[mark:click-history]] ကဲ၊ မှတ်တမ်း tab ကို နှိပ်ရအောင်။
+      [[mark:after-pending]] ကြည့်ပါ၊ loading စာသား ပေါ်လာပေမယ့် ဒီနေ့ tab ရဲ့
+      စာသားက မပျောက်ပါဘူး။ React က နောက်ကွယ်မှာ render လုပ်နေတုန်း page က ဆက်
+      တုံ့ပြန်နေပါတယ်။ [[mark:after-history]] အခု order 250 ပွဲလုံး ရောက်လာပါပြီ။
     sources:
-      - title: "React — useTransition: Updating the parent component in a Transition"
+      - title: "React — useTransition: Marking a state update as a non-blocking Transition"
         url: "https://react.dev/reference/react/useTransition#marking-a-state-update-as-a-non-blocking-transition"
       - title: "React — useTransition: Displaying a pending visual state"
         url: "https://react.dev/reference/react/useTransition#displaying-a-pending-visual-state-during-the-transition"
@@ -1962,7 +2008,7 @@ scenes:
             after: "      setTab(nextTab);\n    });\n  }\n",
             occurrence: 1,
           }
-        text: "\n  return (\n    <section className=\"card\" data-testid=\"history-panel\">\n      <div className=\"row\">\n        <button data-testid=\"tab-today\" onClick={() => selectTab(\"today\")}>\n          ဒီနေ့\n        </button>\n        <button data-testid=\"tab-history\" onClick={() => selectTab(\"history\")}>\n          မှတ်တမ်း\n        </button>\n      </div>\n      {isPending && <p className=\"muted\" data-testid=\"history-pending\">ဖွင့်နေပါတယ်…</p>}\n      {tab === \"today\" ? <p data-testid=\"today-text\">ဒီနေ့ ဆိုင်ဖွင့်ထားပါတယ်</p> : <SlowList />}\n    </section>\n  );\n}\n"
+        text: "\n  return (\n    <section className=\"card\" data-testid=\"history-panel\">\n      <div className=\"row\">\n        <button data-testid=\"tab-today\" onClick={() => selectTab(\"today\")}>\n          ဒီနေ့\n        </button>\n        <button data-testid=\"tab-history\" onClick={() => selectTab(\"history\")}>\n          မှတ်တမ်း\n        </button>\n      </div>\n      {isPending && <p className=\"muted\" data-testid=\"history-pending\">မှတ်တမ်း ဖွင့်နေပါတယ်…</p>}\n      {tab === \"today\" ? <p data-testid=\"today-text\">ဒီနေ့ ဆိုင်ဖွင့်ထားပါတယ်</p> : <SlowList />}\n    </section>\n  );\n}\n"
       - id: open-app-history
         type: workspace.openFile
         at: { mark: open-app-history }
@@ -2004,6 +2050,13 @@ scenes:
         target: { by: testId, value: history-pending }
         textContains: "ဖွင့်နေပါတယ်"
         retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-today-pending
+        type: expect.preview
+        at: { afterAction: expect-pending }
+        timeoutMs: 3000
+        target: { by: testId, value: today-text }
+        textContains: "ဆိုင်ဖွင့်ထားပါတယ်"
+        retry: { maxAttempts: 2, delayMs: 100 }
       - id: expect-history
         type: expect.preview
         at: { mark: after-history }
@@ -2015,34 +2068,28 @@ scenes:
   # ------------------------------------------------------------------ 11
   - id: deferred-search
     narration: >
-      [[mark:open-history-2]] အခု မှတ်တမ်းထဲ ရှာလို့ ရတဲ့ အကွက် ထည့်ကြည့်ရအောင်။
-      ဒီတစ်ခါတော့ startTransition ကို မသုံးပါဘူး။ input ထဲ ရိုက်တဲ့ စာက ချက်ချင်း
-      ပေါ်ရမှာ ဖြစ်လို့၊ input ရဲ့ state ကို Transition ထဲ ထည့်လို့ မရပါဘူး။
-      ဒါကြောင့် state ကို ချက်ချင်း ပြောင်းပြီး၊ နှေးတဲ့ list ကို ပေးမယ့်
-      တန်ဖိုးကိုပဲ နောက်ကျစေပါတယ်။ [[mark:wire-deferred-import]] useDeferredValue
-      ကို ယူပါတယ်။ [[mark:wire-deferred-state]] query က input ထဲ ရိုက်ထားတဲ့ စာကို
-      မှတ်ထားတဲ့ state ပါ။ deferredQuery ကတော့ useDeferredValue က ပေးတဲ့၊
-      နောက်ကျပြီးမှ လိုက်ပြောင်းတဲ့ copy ပါ။ [[mark:wire-deferred-input]] input က
-      query ကို ပြလို့ ရိုက်လိုက်တာ ချက်ချင်း ပေါ်ပြီး၊ နှစ်ခု မတူနေတုန်း
-      ရှာနေဆဲပါ ဆိုတဲ့ စာသား ပြပါတယ်။ [[mark:wire-deferred-filter]] SlowList ကတော့
-      deferred တန်ဖိုးကို ရပါတယ်။ urgent render မှာ အဲဒီ တန်ဖိုး မပြောင်းသေးလို့
-      memo က နှေးတဲ့ list ကို ကျော်သွားပါတယ်။ အဲဒီနောက်မှ React က တန်ဖိုး အသစ်နဲ့
-      list ကို နောက်ကွယ်မှာ render လုပ်ပါတယ်။ React 19 ကစပြီး ပထမဆုံး render မှာ
-      ပြထားမယ့် တန်ဖိုး တစ်ခုကိုလည်း ပေးလို့ ရလို့၊ page စဖွင့်ချိန်မှာတောင်
-      နှေးတဲ့ list ကို မစောင့်ဘဲ ကျန်တဲ့ အပိုင်းတွေကို အရင် ပြလို့ ရပါတယ်။
-      [[mark:click-history-2]] page ပြန်ပွင့်သွားလို့ မှတ်တမ်း tab ကို
-      ထပ်ဖွင့်ရအောင်။ list ရောက်လာရင် ခေါက်ဆွဲကို ရှာကြည့်ပါမယ်။ ရိုက်လိုက်တာနဲ့
-      input ထဲက စာက ချက်ချင်း ပေါ်ပြီး၊ list က လိုက်မမီသေးတုန်း ရှာနေဆဲပါ ဆိုတဲ့
-      စာသား ခဏ ပေါ်ပါမယ်။ [[mark:type-history-search]] ကဲ၊ ရိုက်ကြည့်ရအောင်။
-      [[mark:after-stale]] input ထဲက စာက ချက်ချင်း ပြောင်းသွားပြီး၊ list ကတော့
-      ခဏနေမှ လိုက်မီလာပါတယ်။ [[mark:after-filtered]] အခု ခေါက်ဆွဲ order 100 ပွဲပဲ
-      ပြနေပါပြီ။
+      [[mark:open-history-2]] အခု မှတ်တမ်းထဲ ရှာတဲ့ အကွက် ထည့်ရအောင်။ စာက
+      ချက်ချင်း ပေါ်ရမှာမို့ Transition မသုံးဘဲ၊ list ကို ပေးမယ့် တန်ဖိုးကိုပဲ
+      နောက်ကျစေပါမယ်။ [[mark:wire-deferred-import]] useDeferredValue ကို import
+      လုပ်ပါတယ်။ [[mark:wire-deferred-state]] query က ရိုက်ထားတဲ့ စာကို မှတ်တဲ့
+      state ပါ။ deferredQuery ကတော့ useDeferredValue က ပေးတဲ့၊ နောက်ကျပြီးမှ
+      လိုက်ပြောင်းတဲ့ copy ပါ။ [[mark:wire-deferred-input]] မှတ်တမ်း tab မှာ input
+      က query ကို ပြပြီး၊ နှစ်ခု မတူနေတုန်း ရှာနေဆဲပါ ဆိုတဲ့ စာသား ပြပါတယ်။
+      [[mark:wire-deferred-filter]] SlowList ကတော့ deferred တန်ဖိုးကို ရလို့၊
+      urgent render မှာ memo က ကျော်ပြီး နောက်ကွယ်မှာမှ render လုပ်ပါတယ်။ React 19
+      ကစပြီး useDeferredValue ကို ပထမဆုံး render အတွက် တန်ဖိုး တစ်ခုပါ ပေးလို့
+      ရပါတယ်။ [[mark:click-history-2]] page ပြန်ပွင့်လို့ မှတ်တမ်း tab ကို
+      ထပ်ဖွင့်ရအောင်။ list ရောက်ရင် ခေါက်ဆွဲကို ရှာပါမယ်၊ ရှာနေဆဲပါ ဆိုတဲ့ စာသားက
+      ခဏပဲ ပေါ်မှာမို့ သတိထား ကြည့်ပါ။ [[mark:type-history-search]] ကဲ၊
+      ရိုက်ကြည့်ရအောင်။ [[mark:after-stale]] ရှာနေဆဲပါ ပေါ်နေတဲ့ ခဏမှာ list က
+      အဟောင်းအတိုင်း ကျန်နေခဲ့ပြီး၊ React က အသစ်ကို နောက်ကွယ်မှာ render
+      လုပ်နေတာပါ။ [[mark:after-filtered]] အခု ခေါက်ဆွဲ order 100 ပွဲပဲ ပြနေပါပြီ။
     sources:
       - title: "React — useDeferredValue"
         url: "https://react.dev/reference/react/useDeferredValue"
       - title: "React — useTransition: Updating an input in a Transition doesn't work"
         url: "https://react.dev/reference/react/useTransition#updating-an-input-in-a-transition-doesnt-work"
-      - title: "React — useDeferredValue: Showing stale content while fresh content is loading"
+      - title: "React — useDeferredValue: Deferring re-rendering for a part of the UI"
         url: "https://react.dev/reference/react/useDeferredValue#deferring-re-rendering-for-a-part-of-the-ui"
       - title: "React 19 — useDeferredValue initial value"
         url: "https://react.dev/blog/2024/12/05/react-19#use-deferred-value-initial-value"
@@ -2075,10 +2122,10 @@ scenes:
         target:
           {
             file: src/HistoryPanel.jsx,
-            after: "data-testid=\"history-pending\">ဖွင့်နေပါတယ်…</p>}\n",
+            after: "data-testid=\"history-pending\">မှတ်တမ်း ဖွင့်နေပါတယ်…</p>}\n",
             occurrence: 1,
           }
-        text: "      <input\n        value={query}\n        onChange={(e) => setQuery(e.target.value)}\n        placeholder=\"မှတ်တမ်းထဲ ရှာရန်\"\n        data-testid=\"history-search\"\n      />\n      {query !== deferredQuery && <p className=\"muted\" data-testid=\"history-stale\">ရှာနေဆဲပါ…</p>}\n"
+        text: "      {tab === \"history\" && (\n        <>\n          <input\n            value={query}\n            onChange={(e) => setQuery(e.target.value)}\n            placeholder=\"မှတ်တမ်းထဲ ရှာရန်\"\n            data-testid=\"history-search\"\n          />\n          {query !== deferredQuery && <p className=\"muted\" data-testid=\"history-stale\">ရှာနေဆဲပါ…</p>}\n        </>\n      )}\n"
       - id: wire-deferred-filter
         type: editor.type
         at: { mark: wire-deferred-filter }
@@ -2138,22 +2185,22 @@ scenes:
   - id: independent-recap
     chapter: "React 19.3 နဲ့ အနှစ်ချုပ်"
     narration: >
-      React 19.3 က နောက်တစ်ခု ပြောင်းလိုက်ပါတယ်။ [[mark:draw-192]] အရင်က မဆိုင်တဲ့
-      Transition နှစ်ခုကို React က တစ်ခါတလေ တစ်ခုတည်း ပေါင်းပြီး render
-      လုပ်တတ်ပါတယ်။ React 19.2 နဲ့ တိုင်းကြည့်တဲ့ စမ်းသပ်မှု တစ်ခုမှာ၊ မြန်တဲ့
-      update က နှေးတာကို စောင့်နေရပြီး၊ နှစ်ခုလုံး 1.5 စက္ကန့်လောက် ကြာမှ
-      ပေါ်လာပါတယ်။ [[mark:draw-193]] React 19.3 ကတော့ သီးခြား Transition တွေကို
-      တစ်ခုချင်းစီ render လုပ်လို့၊ မြန်တဲ့ update က 0.3 စက္ကန့်လောက်နဲ့
-      ပေါ်လာပါတယ်။ [[mark:draw-action-note]] ခြွင်းချက် တစ်ခုက၊ async Action
-      pending ဖြစ်နေတုန်း စတဲ့ Transition ကတော့ အဲဒီ Action နဲ့ အတူ batch
-      လုပ်နေဆဲပါ။ Action တွေကို lesson 10 မှာ ကြည့်ပါမယ်။
+      React 19.3 မှာ Transition နဲ့ ပတ်သက်တဲ့ ပြောင်းလဲမှု ရှိပါတယ်။
+      [[mark:draw-192]] အရင်က မဆိုင်တဲ့ Transition တွေကို တစ်ခါတလေ ပေါင်းပြီး
+      render လုပ်ပါတယ်။ နှေးတဲ့ Transition စပြီး 0.3 စက္ကန့်မှာ မြန်တဲ့ update ကို
+      နှိပ်ကြည့်တော့၊ React 19.2 က 1.5 စက္ကန့် ရောက်မှ နှစ်ခုလုံး ပြပါတယ်။
+      [[mark:draw-193]] React 19.3 ကတော့ Transition တစ်ခုချင်းစီကို သီးခြား render
+      လုပ်လို့၊ မြန်တဲ့ update က နှိပ်လိုက်တာနဲ့ ချက်ချင်း ပေါ်ပါတယ်။
+      [[mark:draw-action-note]] ခြွင်းချက်ကတော့ async Action pending ဖြစ်နေတုန်း
+      စတဲ့ Transition ပါ၊ အဲဒါက Action နဲ့ အတူ batch ဖြစ်နေဆဲပါ။
       [[mark:draw-recap-measure]] ဒါဆို ပြန်ချုပ်ရရင်၊ Profiler နဲ့ အရင် တိုင်းပါ။
-      [[mark:draw-recap-memo]] memo က props မပြောင်းတဲ့ child ကို ကျော်ပေးပြီး၊
-      useMemo နဲ့ useCallback က props တွေ မပြောင်းအောင် ထိန်းပေးပါတယ်။
-      [[mark:draw-recap-compiler]] React Compiler က ကိုယ့်အစား လုပ်ပေးပါတယ်။
-      [[mark:draw-recap-transition]] Transition နဲ့ deferred value ကတော့ စာရိုက်တာ
-      မနှေးစေပါဘူး။ [[mark:next-lesson]] နောက် lesson မှာတော့ data မရောက်ခင်
-      loading ပြပေးတဲ့ Suspense ကို ကြည့်သွားပါမယ်။
+      [[mark:draw-recap-memo]] memo၊ useMemo နဲ့ useCallback က props မပြောင်းတဲ့
+      child ကို render မလုပ်ဘဲ ကျော်စေပါတယ်။ [[mark:draw-recap-compiler]] React
+      Compiler က အဲဒါကို ကိုယ့်အစား လုပ်ပေးနိုင်ပါတယ်။
+      [[mark:draw-recap-transition]] Transition နဲ့ deferred value က နှေးတဲ့
+      render ရှိနေတုန်းမှာတောင် page ကို ချက်ချင်း တုံ့ပြန်စေပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ data မရောက်ခင် loading ပြပေးတဲ့
+      Suspense ကို ကြည့်ပါမယ်။
     sources:
       - title: "React 19.3 (blog)"
         url: "https://react.dev/blog/2026/09/09/react-19-3"
@@ -2172,12 +2219,14 @@ scenes:
       - id: draw-192
         type: whiteboard.apply
         at: { mark: draw-192 }
-        upsertIds: [b6-192-label, b6-192-bar, b6-192-bar-text, b6-192-fast]
+        upsertIds:
+          [b6-192-label, b6-192-bar, b6-192-bar-text, b6-192-tick, b6-192-tick-text, b6-192-fast]
         drawMs: 2200
       - id: draw-193
         type: whiteboard.apply
         at: { mark: draw-193 }
-        upsertIds: [b6-193-label, b6-193-bar, b6-193-bar-text, b6-193-fast]
+        upsertIds:
+          [b6-193-label, b6-193-bar, b6-193-bar-text, b6-193-tick, b6-193-tick-text, b6-193-fast]
         drawMs: 2200
       - id: draw-action-note
         type: whiteboard.apply
