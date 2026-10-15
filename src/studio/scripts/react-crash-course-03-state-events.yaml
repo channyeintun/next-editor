@@ -1098,7 +1098,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: []
       - id: wb-why-title
@@ -1316,7 +1315,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b-title]
       - id: wb-draw-trigger
@@ -1407,7 +1405,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-snapshot-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [c-title]
       - id: wb-snapshot-frame
@@ -1493,7 +1490,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-queue-board }
         open: true
-        maximized: true
         upsertIds: [c-batch]
         drawMs: 1200
       - id: wb-queue-box
@@ -1531,7 +1527,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [d-title]
       - id: wb-array-rule
@@ -1949,7 +1944,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [e-title]
       - id: wb-hook-slots
