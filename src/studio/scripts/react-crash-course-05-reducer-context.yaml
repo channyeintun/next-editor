@@ -1,0 +1,1700 @@
+# React crash course, lesson 5 — useReducer and Context (Burmese, my-MM).
+#
+# Story: the order logic from lesson 3 (three handlers in App) moves into one
+# pure reducer; then the order and dispatch are shared through two contexts,
+# so an add button three levels down, a badge and an order summary all read
+# one order without prop drilling. OrderSummary reads context with use()
+# after an early return (React 19); the provider is rendered as <Context
+# value> (React 19).
+#
+# Insert-only plan: every new module (orderReducer.js, OrderContext.jsx,
+# AddButton.jsx, OrderBadge.jsx, OrderSummary.jsx) is pinned EMPTY and typed
+# while nothing imports it; DishCard.jsx and MenuList.jsx are pinned but not
+# imported until the last scene, so DishCard can take keystrokes too. App.jsx
+# (live) only gets three `block` inserts: the imports, one state line, then
+# one JSX block that renders everything already wrapped in <OrderProvider>.
+# Each App edit reloads the preview, so every click comes after the last edit.
+#
+# The dev server starts during the first board (install + boot take time) and
+# is waited on only when the preview opens, several minutes later.
+#
+# Narration is the edited Burmese voice script (voice-script.md next to this
+# file, brief in DESIGN.md); every visible string (title, chapters, board
+# labels, UI) is Burmese too.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-05-reducer-context
+  title: "React crash course 5: Reducer နဲ့ context"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 5
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 5: the dish cards put the order button on the right. */
+        .menu {
+          display: grid;
+          gap: 10px;
+        }
+
+        .dish {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .toolbar {
+          justify-content: space-between;
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+            </main>
+          );
+        }
+      src/MenuList.jsx: |
+        import DishCard from "./DishCard.jsx";
+
+        export default function MenuList({ dishes }) {
+          return (
+            <section className="menu">
+              {dishes.map((dish) => (
+                <DishCard key={dish.id} dish={dish} />
+              ))}
+            </section>
+          );
+        }
+      src/DishCard.jsx: |
+        export default function DishCard({ dish }) {
+          return (
+            <article className="card dish" data-testid={`dish-card-${dish.id}`}>
+              <div>
+                <h3>{dish.name}</h3>
+                <p className="muted">{dish.price.toLocaleString("en-US")} ကျပ်</p>
+              </div>
+            </article>
+          );
+        }
+      src/orderReducer.js: ""
+      src/OrderContext.jsx: ""
+      src/AddButton.jsx: ""
+      src/OrderBadge.jsx: ""
+      src/OrderSummary.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — lesson 3's scattered handlers, then action -> reducer -> new order.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 280,
+        y: 150,
+        width: 520,
+        height: 46,
+        text: "Reducer ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-app-box,
+        kind: rectangle,
+        x: 280,
+        y: 230,
+        width: 330,
+        height: 220,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-app-name,
+        kind: text,
+        x: 305,
+        y: 242,
+        width: 120,
+        height: 35,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-1,
+        kind: text,
+        x: 305,
+        y: 292,
+        width: 260,
+        height: 35,
+        text: "handleAdd",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-2,
+        kind: text,
+        x: 305,
+        y: 337,
+        width: 260,
+        height: 35,
+        text: "handleRemove",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-3,
+        kind: text,
+        x: 305,
+        y: 382,
+        width: 290,
+        height: 35,
+        text: "handleChangeCount",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-scattered,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 340,
+        height: 80,
+        text: "state ပြောင်းတဲ့ code\nနေရာအနှံ့ ပြန့်နေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b1-dispatch-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 240,
+        width: 95,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-dispatch-label,
+        kind: text,
+        x: 615,
+        y: 310,
+        width: 120,
+        height: 35,
+        text: "dispatch",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-box,
+        kind: rectangle,
+        x: 740,
+        y: 195,
+        width: 340,
+        height: 105,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-action-title,
+        kind: text,
+        x: 760,
+        y: 203,
+        width: 300,
+        height: 35,
+        text: "action = မှာစာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-code,
+        kind: text,
+        x: 760,
+        y: 248,
+        width: 300,
+        height: 35,
+        text: '{ type: "added" }',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 890,
+        y: 305,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b1-reducer-box,
+        kind: rectangle,
+        x: 740,
+        y: 360,
+        width: 340,
+        height: 105,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b1-reducer-title,
+        kind: text,
+        x: 760,
+        y: 368,
+        width: 300,
+        height: 35,
+        text: "reducer = ငွေကိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-reducer-code,
+        kind: text,
+        x: 760,
+        y: 413,
+        width: 300,
+        height: 35,
+        text: "(order, action)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 890,
+        y: 470,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b1-state-box,
+        kind: rectangle,
+        x: 740,
+        y: 525,
+        width: 340,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-state-text,
+        kind: text,
+        x: 760,
+        y: 545,
+        width: 300,
+        height: 35,
+        text: "order အသစ် → render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board 2 — prop drilling down the menu tree, then the context "pipe".
+    - {
+        id: b2-title,
+        kind: text,
+        x: 280,
+        y: 150,
+        width: 560,
+        height: 46,
+        text: "Prop drilling နဲ့ context",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-app,
+        kind: rectangle,
+        x: 420,
+        y: 210,
+        width: 240,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-app-t,
+        kind: text,
+        x: 445,
+        y: 222,
+        width: 190,
+        height: 35,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-menulist,
+        kind: rectangle,
+        x: 420,
+        y: 310,
+        width: 240,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-menulist-t,
+        kind: text,
+        x: 445,
+        y: 322,
+        width: 190,
+        height: 35,
+        text: "MenuList",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-dishcard,
+        kind: rectangle,
+        x: 420,
+        y: 410,
+        width: 240,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-dishcard-t,
+        kind: text,
+        x: 445,
+        y: 422,
+        width: 190,
+        height: 35,
+        text: "DishCard",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-addbutton,
+        kind: rectangle,
+        x: 420,
+        y: 510,
+        width: 240,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-addbutton-t,
+        kind: text,
+        x: 445,
+        y: 522,
+        width: 190,
+        height: 35,
+        text: "AddButton",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-drill-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 272,
+        width: 40,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-drill-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 372,
+        width: 40,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-drill-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 472,
+        width: 40,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-drill-label,
+        kind: text,
+        x: 720,
+        y: 300,
+        width: 360,
+        height: 80,
+        text: "props ကို အဆင့်ဆင့်\nလက်ဆင့်ကမ်းရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-pipe-top,
+        kind: rectangle,
+        x: 300,
+        y: 232,
+        width: 120,
+        height: 14,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: b2-pipe,
+        kind: rectangle,
+        x: 300,
+        y: 232,
+        width: 18,
+        height: 300,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: b2-pipe-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 322,
+        y: 515,
+        width: 92,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-pipe-label,
+        kind: text,
+        x: 720,
+        y: 450,
+        width: 360,
+        height: 80,
+        text: "context: အလယ်ကို\nကျော်ပြီး တန်းရောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board 3 — four rules of context.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 280,
+        y: 150,
+        width: 600,
+        height: 46,
+        text: "Context ရဲ့ စည်းကမ်း လေးချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-outer,
+        kind: rectangle,
+        x: 280,
+        y: 215,
+        width: 300,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-outer-t,
+        kind: text,
+        x: 295,
+        y: 222,
+        width: 200,
+        height: 35,
+        text: "value A",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-inner,
+        kind: rectangle,
+        x: 320,
+        y: 265,
+        width: 230,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-inner-t,
+        kind: text,
+        x: 335,
+        y: 277,
+        width: 150,
+        height: 35,
+        text: "value B",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-inner-check,
+        kind: freedraw,
+        stroke: check,
+        x: 500,
+        y: 275,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-rule-1,
+        kind: text,
+        x: 640,
+        y: 255,
+        width: 440,
+        height: 40,
+        text: "① အနီးဆုံး provider က နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-2,
+        kind: text,
+        x: 280,
+        y: 370,
+        width: 800,
+        height: 40,
+        text: "② provider မရှိမှ default value ကို သုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-3,
+        kind: text,
+        x: 280,
+        y: 440,
+        width: 800,
+        height: 40,
+        text: "③ value ပြောင်းရင် ဖတ်တဲ့ component တိုင်း ပြန် render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-3-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 478,
+        width: 520,
+        height: 14,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-rule-4,
+        kind: text,
+        x: 280,
+        y: 520,
+        width: 800,
+        height: 40,
+        text: "④ contextTypes → React 19 မှာ ဖယ်လိုက်ပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-4-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 318,
+        y: 522,
+        width: 190,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5205
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: why-reducer
+    chapter: "Reducer ဘာကြောင့် လိုလဲ"
+    narration: >
+      ဒီ lesson မှာ order ပြောင်းတဲ့ logic တွေကို reducer ဆိုတဲ့ function တစ်ခုထဲ စုပြီး၊
+      context နဲ့ ဘယ် component ကမဆို ယူသုံးနိုင်အောင် လုပ်သွားပါမယ်။ [[mark:draw-before]]
+      lesson 3 မှာ App က order ကို state နဲ့ မှတ်ထားပြီး၊ ဟင်းပွဲ ထည့်တာ၊ ဖယ်တာ၊ အရေအတွက်
+      ပြောင်းတာ ဆိုပြီး handler သုံးခုက ပြောင်းပေးခဲ့ပါတယ်။ [[mark:mark-scattered]]
+      handler တစ်ခုစီက array အသစ်ကို သူ့ဘာသာသူ ဆောက်ရပါတယ်။ app ကြီးလာရင် ဒီ code တွေ
+      component အနှံ့ ပြန့်သွားပြီး၊ order ဘယ်လို ပြောင်းနိုင်လဲ ဆိုတာ ခြုံပြီး
+      မမြင်ရတော့ပါဘူး။ [[mark:start-server]] ဒီကြားထဲမှာ dev server ကို နောက်ကွယ်ကနေ စ run
+      ထားရအောင်။ [[mark:draw-action]] reducer နည်းမှာတော့ component က ဘာ ဖြစ်သွားလဲ
+      ဆိုတာကိုပဲ action ဆိုတဲ့ object လေးနဲ့ ဖော်ပြပါတယ်။ ဟင်းပွဲ ထည့်ပြီ ဆိုတဲ့
+      မှာစာလိုပါပဲ၊ ဘယ်လို ပြင်ရမလဲ မပါပါဘူး။ [[mark:draw-dispatch]] အဲဒီ မှာစာကို reducer
+      ဆီ ပို့ပေးတာက dispatch ဆိုတဲ့ function ပါ။ [[mark:draw-reducer]] reducer ကတော့
+      ငွေကိုင်နဲ့ တူပါတယ်။ လက်ရှိ order နဲ့ မှာစာကို ယူပြီး၊ အဟောင်းကို မပြင်ဘဲ order အသစ်
+      ပြန်ပေးပါတယ်။ [[mark:draw-state]] အဲဒါကို React က state အသစ်အဖြစ် သိမ်းပြီး ပြန်
+      render လုပ်ပါတယ်။
+    sources:
+      - { title: "useReducer — React", url: "https://react.dev/reference/react/useReducer" }
+      - {
+          title: "Extracting State Logic into a Reducer — React",
+          url: "https://react.dev/learn/extracting-state-logic-into-a-reducer",
+        }
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: []
+      - id: draw-b1-title
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [b1-title]
+        drawMs: 900
+      - id: draw-before
+        type: whiteboard.apply
+        at: { mark: draw-before }
+        upsertIds: [b1-app-box, b1-app-name, b1-handler-1, b1-handler-2, b1-handler-3]
+        drawMs: 2000
+      - id: mark-scattered
+        type: whiteboard.apply
+        at: { mark: mark-scattered }
+        upsertIds: [b1-scattered]
+        drawMs: 1200
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-action
+        type: whiteboard.apply
+        at: { mark: draw-action }
+        upsertIds: [b1-action-box, b1-action-title, b1-action-code]
+        drawMs: 1500
+      - id: draw-dispatch
+        type: whiteboard.apply
+        at: { mark: draw-dispatch }
+        upsertIds: [b1-dispatch-arrow, b1-dispatch-label]
+        drawMs: 900
+      - id: draw-reducer
+        type: whiteboard.apply
+        at: { mark: draw-reducer }
+        upsertIds: [b1-arrow-1, b1-reducer-box, b1-reducer-title, b1-reducer-code]
+        drawMs: 1500
+      - id: draw-state
+        type: whiteboard.apply
+        at: { mark: draw-state }
+        upsertIds: [b1-arrow-2, b1-state-box, b1-state-text]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 2
+  - id: write-reducer
+    chapter: "Reducer ကို ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-board-1]] ကဲ၊ ရေးရအောင်။ [[mark:open-reducer]] ဒီ ဖိုင်အသစ်က အလွတ်ပါ။
+      ဘယ် ဖိုင်ကမှ import မလုပ်ရသေးလို့၊ run နေတဲ့ app ကို မထိပါဘူး။
+      [[mark:type-signature]] reducer ဆိုတာ component အပြင်ဘက်က သာမန် function တစ်ခုပါ။
+      လက်ရှိ order နဲ့ action ကို လက်ခံပါတယ်။ ပြီးတော့ action ရဲ့ type ကို switch နဲ့
+      စစ်ပြီး၊ ဘာ ဖြစ်သွားလဲ ခွဲပါတယ်။ [[mark:type-added]] ပထမ case က added ပါ။ ဟင်းပွဲက
+      order ထဲ ရှိပြီးသားဆိုရင် သူ့ အရေအတွက်ကိုပဲ တစ်ခု တိုးပေးပြီး၊ မရှိသေးရင်တော့
+      နောက်ဆုံးမှာ ထည့်ပေးပါတယ်။ [[mark:select-spread]] ဒီ array အသစ် ဆောက်တဲ့ နေရာကို
+      ကြည့်ပါ။ lesson 3 ကလိုပဲ အဟောင်းကို မပြင်ဘဲ အသစ် ဆောက်တာပါ။ [[mark:type-removed]]
+      removed ကတော့ id တူတဲ့ တစ်ခုကလွဲပြီး ကျန်တာ အကုန် ချန်ထားပါတယ်။ အရေအတွက်
+      ပြောင်းတာကလည်း ဒီလိုပဲ case တစ်ခု ထပ်ထည့်ရုံပါ။ [[mark:type-default]] မသိတဲ့ type
+      ဆိုရင် error ပစ်ထားလို့၊ နာမည် မှားရိုက်မိရင် ချက်ချင်း သိရပါတယ်။
+      [[mark:select-signature]] ဒီ function ကို ကြည့်ပါ။ အပြင်က ဘာကိုမှ မထိသလို၊ argument
+      ကိုလည်း မပြင်ပါဘူး။ ဒါကြောင့် order တူ action တူရင် အဖြေ အမြဲ တူပါတယ်။ ဒါကို pure
+      လို့ ခေါ်ပြီး၊ reducer တိုင်း pure ဖြစ်ရပါမယ်။ development မှာ StrictMode က reducer
+      ကိုလည်း နှစ်ကြိမ် ခေါ်ကြည့်လို့၊ pure မဟုတ်ရင် ပြဿနာက စောစော ပေါ်လာပါတယ်။
+    sources:
+      - {
+          title: "Extracting State Logic into a Reducer — React",
+          url: "https://react.dev/learn/extracting-state-logic-into-a-reducer",
+        }
+      - { title: "useReducer — React", url: "https://react.dev/reference/react/useReducer" }
+      - {
+          title: "Updating Arrays in State — React",
+          url: "https://react.dev/learn/updating-arrays-in-state",
+        }
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: open-reducer
+        type: workspace.openFile
+        at: { mark: open-reducer }
+        path: src/orderReducer.js
+      - id: type-signature
+        type: editor.type
+        at: { mark: type-signature }
+        cadence: fast-explainer
+        target: { file: src/orderReducer.js, after: "", occurrence: 1 }
+        text: "export function orderReducer(order, action) {\n  switch (action.type) {\n"
+      - id: type-added
+        type: editor.type
+        at: { mark: type-added }
+        cadence: line-by-line
+        target: { file: src/orderReducer.js, after: "  switch (action.type) {\n", occurrence: 1 }
+        text: |2
+              case "added": {
+                const old = order.find((item) => item.id === action.dish.id);
+                if (old) {
+                  return order.map((item) =>
+                    item.id === old.id ? { ...item, count: item.count + 1 } : item,
+                  );
+                }
+                return [...order, { ...action.dish, count: 1 }];
+              }
+      - id: select-spread
+        type: editor.select
+        at: { mark: select-spread }
+        target:
+          {
+            file: src/orderReducer.js,
+            text: "[...order, { ...action.dish, count: 1 }]",
+            occurrence: 1,
+          }
+      - id: type-removed
+        type: editor.type
+        at: { mark: type-removed }
+        cadence: line-by-line
+        target:
+          {
+            file: src/orderReducer.js,
+            after: "      return [...order, { ...action.dish, count: 1 }];\n    }\n",
+            occurrence: 1,
+          }
+        text: |2
+              case "removed": {
+                return order.filter((item) => item.id !== action.id);
+              }
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
+        cadence: line-by-line
+        target:
+          {
+            file: src/orderReducer.js,
+            after: "      return order.filter((item) => item.id !== action.id);\n    }\n",
+            occurrence: 1,
+          }
+        text: |2
+              default: {
+                throw Error("Unknown action: " + action.type);
+              }
+            }
+          }
+      - id: select-signature
+        type: editor.select
+        at: { mark: select-signature }
+        target: { file: src/orderReducer.js, text: "orderReducer(order, action)", occurrence: 1 }
+      - id: expect-reducer-file
+        type: expect.file
+        at: { afterAction: select-signature }
+        path: src/orderReducer.js
+        contains: "    case \"added\": {\n      const old = order.find((item) => item.id === action.dish.id);\n"
+
+  # ------------------------------------------------------------------ 3
+  - id: prop-drilling
+    chapter: "Props ကို အဆင့်ဆင့် မပို့ချင်ရင်"
+    narration: >
+      [[mark:open-board-2]] နောက်မေးခွန်းက ဘယ် component တွေက order ကို ဖတ်ပြီး dispatch
+      ခေါ်မလဲ ဆိုတာပါ။ [[mark:draw-ladder]] menu က သစ်ပင်လိုပါ။ App က MenuList ကို၊
+      MenuList က ဟင်းပွဲ တစ်ပွဲစီအတွက် DishCard ကို render လုပ်ပြီး၊ card ထဲမှာ မှာမယ့်
+      ခလုတ် ထည့်မှာပါ။ [[mark:draw-drilling]] props နဲ့ပဲ ပို့ရင် dispatch ကို အဆင့်ဆင့်
+      လက်ဆင့်ကမ်းရပါတယ်။ ကိုယ်တိုင် မသုံးတဲ့ MenuList နဲ့ DishCard ကပါ ကြားခံ
+      ပို့ပေးရပါတယ်။ ဒါကို prop drilling လို့ ခေါ်ပါတယ်။ [[mark:draw-pipe]] context ကတော့
+      အပေါ်က component က တန်ဖိုး တစ်ခု ထည့်ထားရင်၊ အောက်က component တွေ ဘယ်လောက် နက်နက်
+      ရှိရှိ တိုက်ရိုက် ဖတ်လို့ ရတဲ့ နည်းပါ။ အဲဒီလို တန်ဖိုး ထည့်ပေးတဲ့ အပေါ်က component
+      ကို provider လို့ ခေါ်ပါတယ်။ [[mark:draw-pipe-label]] အလယ်က component တွေ သိစရာတောင်
+      မလိုပါဘူး။ ကိုယ့် app မှာ context နှစ်ခု လုပ်ပါမယ်။ order အတွက် တစ်ခု၊ dispatch
+      အတွက် တစ်ခုပါ။ dispatch က ဘယ်တော့မှ မပြောင်းလို့၊ action ပဲ ပို့တဲ့ ခလုတ်လို
+      component တွေက order ကို လိုက်ကြည့်စရာ မလိုအောင်ပါ။
+    sources:
+      - {
+          title: "Passing Data Deeply with Context — React",
+          url: "https://react.dev/learn/passing-data-deeply-with-context",
+        }
+      - {
+          title: "Scaling Up with Reducer and Context — React",
+          url: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+        }
+    actions:
+      - id: open-board-2
+        type: whiteboard.apply
+        at: { mark: open-board-2 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b2-title]
+        drawMs: 900
+      - id: draw-ladder
+        type: whiteboard.apply
+        at: { mark: draw-ladder }
+        upsertIds:
+          [
+            b2-app,
+            b2-app-t,
+            b2-menulist,
+            b2-menulist-t,
+            b2-dishcard,
+            b2-dishcard-t,
+            b2-addbutton,
+            b2-addbutton-t,
+          ]
+        drawMs: 2400
+      - id: draw-drilling
+        type: whiteboard.apply
+        at: { mark: draw-drilling }
+        upsertIds: [b2-drill-1, b2-drill-2, b2-drill-3, b2-drill-label]
+        drawMs: 2000
+      - id: draw-pipe
+        type: whiteboard.apply
+        at: { mark: draw-pipe }
+        upsertIds: [b2-pipe-top, b2-pipe, b2-pipe-arrow]
+        drawMs: 1500
+      - id: draw-pipe-label
+        type: whiteboard.apply
+        at: { mark: draw-pipe-label }
+        upsertIds: [b2-pipe-label]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 4
+  - id: write-provider
+    narration: >
+      [[mark:close-board-2]] context တွေကို သီးသန့် ဖိုင်နဲ့ ရေးရအောင်။
+      [[mark:open-context]] ဒါလည်း ခုနကလိုပဲ ဖိုင်အလွတ်ပါ။ [[mark:type-context-imports]]
+      React ဆီက createContext နဲ့ useReducer၊ ခုနက reducer ကိုပါ import လုပ်ပါတယ်။
+      [[mark:type-create-context]] အခု context နှစ်ခုကို createContext နဲ့ component
+      အပြင်ဘက်မှာ တစ်ခါတည်း လုပ်ထားပါတယ်။ argument က default တန်ဖိုးပါ။ order အတွက် စာရင်း
+      အလွတ်၊ dispatch အတွက်တော့ null ပါ။ ဒီ default ကို ရတာက အပေါ်မှာ provider လုံးဝ
+      မရှိမှပါ။ [[mark:type-provider]] OrderProvider ကတော့ order ကို ပိုင်တဲ့ component
+      ပါ။ useReducer နဲ့ order ကို မှတ်ထားပြီး၊ သူ့ children ကို provider နှစ်ခုနဲ့
+      ထုပ်ပေးပါတယ်။ [[mark:select-use-reducer]] ဒီ useReducer က reducer ကို React state
+      နဲ့ ချိတ်ပေးပြီး၊ လက်ရှိ order နဲ့ dispatch၊ နှစ်ခုကို ပြန်ပေးပါတယ်။
+      [[mark:select-provider]] ဒီ provider က အောက်က component တွေကို တန်ဖိုး ပေးတာပါ။
+      React 19 မှာ context ကိုယ်တိုင်ကို render လုပ်ပြီး value ပေးရုံပါ။ context နောက်မှာ
+      Provider ဆက်ရေးတဲ့ ပုံစံအဟောင်းလည်း ရပါသေးတယ်။ [[mark:select-children]] အလယ်မှာ
+      children ကို render လုပ်ထားလို့၊ OrderProvider နဲ့ ထုပ်ထားတဲ့ component တိုင်း
+      တန်ဖိုး နှစ်ခုလုံး ဖတ်လို့ ရပါတယ်။ ဒါကို ကိုယ်တိုင် ရေးတဲ့ custom hook နဲ့
+      ဖတ်တာကတော့ lesson 7 မှာပါ။
+    sources:
+      - { title: "createContext — React", url: "https://react.dev/reference/react/createContext" }
+      - {
+          title: "React v19 — <Context> as a provider",
+          url: "https://react.dev/blog/2024/12/05/react-19#context-as-a-provider",
+        }
+      - {
+          title: "Scaling Up with Reducer and Context — React",
+          url: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+        }
+      - { title: "useReducer — React", url: "https://react.dev/reference/react/useReducer" }
+    actions:
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { mark: close-board-2 }
+        open: false
+      - id: open-context
+        type: workspace.openFile
+        at: { mark: open-context }
+        path: src/OrderContext.jsx
+      - id: type-context-imports
+        type: editor.type
+        at: { mark: type-context-imports }
+        cadence: line-by-line
+        target: { file: src/OrderContext.jsx, after: "", occurrence: 1 }
+        text: |+
+          import { createContext, useReducer } from "react";
+          import { orderReducer } from "./orderReducer.js";
+
+      - id: type-create-context
+        type: editor.type
+        at: { mark: type-create-context }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/OrderContext.jsx,
+            after: "import { orderReducer } from \"./orderReducer.js\";\n\n",
+            occurrence: 1,
+          }
+        text: |
+          export const OrderContext = createContext([]);
+          export const OrderDispatchContext = createContext(null);
+      - id: type-provider
+        type: editor.type
+        at: { mark: type-provider }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderContext.jsx,
+            after: "export const OrderDispatchContext = createContext(null);\n",
+            occurrence: 1,
+          }
+        text: "\nexport function OrderProvider({ children }) {\n  const [order, dispatch] = useReducer(orderReducer, []);\n  return (\n    <OrderContext value={order}>\n      <OrderDispatchContext value={dispatch}>\n        {children}\n      </OrderDispatchContext>\n    </OrderContext>\n  );\n}\n"
+      - id: select-use-reducer
+        type: editor.select
+        at: { mark: select-use-reducer }
+        target: { file: src/OrderContext.jsx, text: "useReducer(orderReducer, [])", occurrence: 1 }
+      - id: select-provider
+        type: editor.select
+        at: { mark: select-provider }
+        target: { file: src/OrderContext.jsx, text: "<OrderContext value={order}>", occurrence: 1 }
+      - id: select-children
+        type: editor.select
+        at: { mark: select-children }
+        target: { file: src/OrderContext.jsx, text: "{children}", occurrence: 1 }
+      - id: expect-context-file
+        type: expect.file
+        at: { afterAction: select-children }
+        path: src/OrderContext.jsx
+        contains: "    <OrderContext value={order}>\n      <OrderDispatchContext value={dispatch}>\n"
+
+  # ------------------------------------------------------------------ 5
+  - id: read-context
+    chapter: "Context ကို ဖတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-addbutton]] နောက်တစ်ဆင့်က မှာမယ့် ခလုတ်ပါ။ [[mark:type-addbutton]] ဒီ
+      ခလုတ်က ဟင်းပွဲကိုတော့ သာမန် prop အနေနဲ့ ရပါတယ်၊ card ရဲ့ ကိုယ်ပိုင် data ဖြစ်လို့ပါ။
+      ဟင်းပွဲ ကုန်နေရင် ခလုတ်ကို disabled လုပ်ထားပြီး၊ နှိပ်လိုက်ရင်တော့ reducer ဆီ action
+      တစ်ခု ပို့ပါတယ်။ [[mark:select-usecontext]] dispatch ကတော့ ဒီ useContext ကနေ ရတာပါ။
+      သူက အပေါ်က အနီးဆုံး provider ကို ရှာပြီး တန်ဖိုး ပြန်ပေးလို့၊ props တစ်ခုမှ
+      မလိုပါဘူး။ [[mark:select-dispatch-call]] နှိပ်ရင် ဟင်းပွဲ ပါတဲ့ added action ကို
+      dispatch လုပ်ပါတယ်။ order ထဲ ဘယ်လို ထည့်မလဲ ဆိုတာက reducer ရဲ့ အလုပ်ပါ။
+      [[mark:open-badge]] နောက်တစ်ခုက order ထဲက ဟင်းပွဲ အရေအတွက် ပြမယ့် badge ပါ။
+      [[mark:type-badge]] ဒီမှာလည်း order ကို useContext နဲ့ အတူတူ ဖတ်ပြီး၊ item တိုင်းရဲ့
+      အရေအတွက်ကို ပေါင်းပါတယ်။ မုန့်ဟင်းခါး နှစ်ပွဲနဲ့ ရှမ်းခေါက်ဆွဲ တစ်ပွဲ ဆိုရင် 3 လို့
+      ပြပါမယ်။ [[mark:select-badge-context]] ဒီ useContext ကတော့ order context ကို
+      ဖတ်တာပါ။ [[mark:open-dishcard]] ကဲ၊ ခလုတ်ကို card တစ်ခုစီထဲ ထည့်ရအောင်။
+      [[mark:type-dishcard-import]] အရင်ဆုံး အပေါ်ဆုံးမှာ import လုပ်ပါတယ်။ ဒါမှ card က
+      ခလုတ်အသစ်ကို သုံးလို့ ရပါမယ်။ [[mark:type-dishcard-usage]] ပြီးတော့ card ထဲမှာ
+      ခလုတ်ကို ထည့်ပြီး၊ ဟင်းပွဲကို prop အနေနဲ့ ပေးလိုက်ပါတယ်။
+      [[mark:select-dishcard-props]] ဒီ parameter ကို ကြည့်ပါ။ card က ဟင်းပွဲပဲ ရပါတယ်။
+      order မပါ၊ dispatch မပါ၊ MenuList ကိုလည်း ပြင်စရာ မလိုပါဘူး။
+    sources:
+      - { title: "useContext — React", url: "https://react.dev/reference/react/useContext" }
+      - {
+          title: "Scaling Up with Reducer and Context — React",
+          url: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+        }
+    actions:
+      - id: open-addbutton
+        type: workspace.openFile
+        at: { mark: open-addbutton }
+        path: src/AddButton.jsx
+      - id: type-addbutton
+        type: editor.type
+        at: { mark: type-addbutton }
+        cadence: line-by-line
+        target: { file: src/AddButton.jsx, after: "", occurrence: 1 }
+        text: |
+          import { useContext } from "react";
+          import { OrderDispatchContext } from "./OrderContext.jsx";
+
+          export default function AddButton({ dish }) {
+            const dispatch = useContext(OrderDispatchContext);
+            return (
+              <button
+                data-testid={`add-${dish.id}`}
+                disabled={dish.soldOut}
+                onClick={() => dispatch({ type: "added", dish })}
+              >
+                မှာမယ်
+              </button>
+            );
+          }
+      - id: select-usecontext
+        type: editor.select
+        at: { mark: select-usecontext }
+        target: { file: src/AddButton.jsx, text: "useContext(OrderDispatchContext)", occurrence: 1 }
+      - id: select-dispatch-call
+        type: editor.select
+        at: { mark: select-dispatch-call }
+        target:
+          { file: src/AddButton.jsx, text: 'dispatch({ type: "added", dish })', occurrence: 1 }
+      - id: open-badge
+        type: workspace.openFile
+        at: { mark: open-badge }
+        path: src/OrderBadge.jsx
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: line-by-line
+        target: { file: src/OrderBadge.jsx, after: "", occurrence: 1 }
+        text: |
+          import { useContext } from "react";
+          import { OrderContext } from "./OrderContext.jsx";
+
+          export default function OrderBadge() {
+            const order = useContext(OrderContext);
+            const count = order.reduce((sum, item) => sum + item.count, 0);
+            return (
+              <span className="badge" data-testid="order-badge">
+                {count} ပွဲ
+              </span>
+            );
+          }
+      - id: select-badge-context
+        type: editor.select
+        at: { mark: select-badge-context }
+        target: { file: src/OrderBadge.jsx, text: "useContext(OrderContext)", occurrence: 1 }
+      - id: open-dishcard
+        type: workspace.openFile
+        at: { mark: open-dishcard }
+        path: src/DishCard.jsx
+      - id: type-dishcard-import
+        type: editor.type
+        at: { mark: type-dishcard-import }
+        cadence: fast-explainer
+        target: { file: src/DishCard.jsx, after: "", occurrence: 1 }
+        text: |+
+          import AddButton from "./AddButton.jsx";
+
+      - id: type-dishcard-usage
+        type: editor.type
+        at: { mark: type-dishcard-usage }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/DishCard.jsx,
+            after: "        <p className=\"muted\">{dish.price.toLocaleString(\"en-US\")} ကျပ်</p>\n      </div>\n",
+            occurrence: 1,
+          }
+        text: "      <AddButton dish={dish} />\n"
+      - id: select-dishcard-props
+        type: editor.select
+        at: { mark: select-dishcard-props }
+        target: { file: src/DishCard.jsx, text: "DishCard({ dish })", occurrence: 1 }
+      - id: expect-dishcard-file
+        type: expect.file
+        at: { afterAction: select-dishcard-props }
+        path: src/DishCard.jsx
+        contains: "      </div>\n      <AddButton dish={dish} />\n    </article>"
+
+  # ------------------------------------------------------------------ 6
+  - id: summary-with-use
+    chapter: "Early return နောက်မှာ use နဲ့ ဖတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-summary]] နောက်ထပ် view တစ်ခုက ဖွင့်ထားမှ ပေါ်မယ့် မှာထားတဲ့ စာရင်းပါ။
+      [[mark:type-summary-top]] use နဲ့ context နှစ်ခုကို import လုပ်ပြီး၊ open prop
+      ယူပါတယ်။ [[mark:type-early-return]] open မဟုတ်ရင် ဘာမှ မပြဘဲ ချက်ချင်း
+      ထွက်သွားပါတယ်။ အဲဒီ early return ရဲ့ နောက်မှ order ကို context ကနေ ဖတ်ပါတယ်။ ဒီ
+      နှစ်ကြောင်းက အရေးကြီးပါတယ်။ [[mark:select-use]] ဒီမှာ ဖတ်တာက useContext မဟုတ်ဘဲ use
+      ပါ။ useContext က hook ဖြစ်လို့၊ early return မရောက်ခင် အပေါ်ဆုံး အဆင့်မှာပဲ
+      ခေါ်ရပါတယ်။ [[mark:use-explained]] use ကတော့ hook တွေရဲ့ ဒီ စည်းကမ်း မပါတဲ့ React
+      ရဲ့ API ပါ။ early return နောက်မှာရော if ထဲမှာပါ ခေါ်လို့ ရပါတယ်။ ဒါပေမဲ့ render
+      နေချိန်မှာပဲ ခေါ်ရပြီး၊ event handler ထဲမှာတော့ မရပါဘူး။ [[mark:type-summary-calc]]
+      dispatch ကိုလည်း အတူတူပဲ ဖတ်ပြီး၊ စုစုပေါင်း ကျသင့်ငွေ တွက်ပါတယ်။
+      [[mark:type-summary-markup]] JSX ကတော့ ဟင်းပွဲ တစ်ပွဲစီကို ဖယ်မယ့် ခလုတ်နဲ့
+      တွဲပြပြီး၊ အောက်ဆုံးမှာ စုစုပေါင်း ပြပါတယ်။ [[mark:select-remove]] ဖယ်မယ့် ခလုတ်က
+      ဟင်းပွဲ id ပါတဲ့ removed action ကို အဲဒီ reducer ဆီပဲ dispatch လုပ်ပါတယ်။
+      [[mark:select-key]] row တိုင်းမှာ key အနေနဲ့ ဟင်းပွဲ id ထည့်ထားတာ lesson 2 ကလိုပါပဲ။
+    sources:
+      - { title: "use — React", url: "https://react.dev/reference/react/use" }
+      - { title: "Rules of Hooks — React", url: "https://react.dev/reference/rules/rules-of-hooks" }
+      - { title: "useContext — React", url: "https://react.dev/reference/react/useContext" }
+    actions:
+      - id: open-summary
+        type: workspace.openFile
+        at: { mark: open-summary }
+        path: src/OrderSummary.jsx
+      - id: type-summary-top
+        type: editor.type
+        at: { mark: type-summary-top }
+        cadence: line-by-line
+        target: { file: src/OrderSummary.jsx, after: "", occurrence: 1 }
+        text: |
+          import { use } from "react";
+          import { OrderContext, OrderDispatchContext } from "./OrderContext.jsx";
+
+          export default function OrderSummary({ open }) {
+      - id: type-early-return
+        type: editor.type
+        at: { mark: type-early-return }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/OrderSummary.jsx,
+            after: "export default function OrderSummary({ open }) {\n",
+            occurrence: 1,
+          }
+        text: |2
+            if (!open) return null;
+            const order = use(OrderContext);
+      - id: select-use
+        type: editor.select
+        at: { mark: select-use }
+        target: { file: src/OrderSummary.jsx, text: "use(OrderContext)", occurrence: 1 }
+      - id: type-summary-calc
+        type: editor.type
+        at: { mark: type-summary-calc }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderSummary.jsx,
+            after: "  const order = use(OrderContext);\n",
+            occurrence: 1,
+          }
+        text: |2
+            const dispatch = use(OrderDispatchContext);
+            const total = order.reduce((sum, item) => sum + item.price * item.count, 0);
+      # The markup is summarized, not explained line by line, so it lands whole
+      # (this file is still not imported by anything).
+      - id: type-summary-markup
+        type: editor.type
+        at: { mark: type-summary-markup }
+        cadence: block
+        target:
+          {
+            file: src/OrderSummary.jsx,
+            after: "  const total = order.reduce((sum, item) => sum + item.price * item.count, 0);\n",
+            occurrence: 1,
+          }
+        text: |2
+            return (
+              <section className="card" data-testid="order-summary">
+                <h2>မှာထားတာတွေ</h2>
+                <ul className="list">
+                  {order.map((item) => (
+                    <li key={item.id} data-testid={`order-row-${item.id}`}>
+                      {item.name} × {item.count}
+                      <button
+                        className="secondary"
+                        data-testid={`remove-${item.id}`}
+                        onClick={() => dispatch({ type: "removed", id: item.id })}
+                      >
+                        ဖယ်မယ်
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p data-testid="order-total">
+                  စုစုပေါင်း {total.toLocaleString("en-US")} ကျပ်
+                </p>
+              </section>
+            );
+          }
+      - id: select-remove
+        type: editor.select
+        at: { mark: select-remove }
+        target:
+          {
+            file: src/OrderSummary.jsx,
+            text: 'dispatch({ type: "removed", id: item.id })',
+            occurrence: 1,
+          }
+      - id: select-key
+        type: editor.select
+        at: { mark: select-key }
+        target: { file: src/OrderSummary.jsx, text: "key={item.id}", occurrence: 1 }
+      - id: expect-summary-file
+        type: expect.file
+        at: { afterAction: select-key }
+        path: src/OrderSummary.jsx
+        contains: "  if (!open) return null;\n  const order = use(OrderContext);\n  const dispatch = use(OrderDispatchContext);\n"
+
+  # ------------------------------------------------------------------ 7
+  - id: wire-app
+    chapter: "App ထဲမှာ ချိတ်ပြီး စမ်းကြည့်ရအောင်"
+    narration: >
+      [[mark:open-app]] ကဲ၊ အကုန်လုံးကို App ထဲ ချိတ်ရအောင်။ App က အခုထိ Header ပဲ render
+      လုပ်နေပါသေးတယ်။ [[mark:open-preview]] dev server က အစကတည်းက run နေပြီးသားမို့၊
+      preview ကို ဖွင့်လိုက်ရအောင်။ [[mark:add-imports]] အရင်ဆုံး import တွေပါ။ ခုနက
+      ရေးခဲ့တဲ့ ဖိုင်တွေ၊ menu data နဲ့ ပြီးခဲ့တဲ့ lesson က MenuList ကို ယူထားတာပါ။
+      [[mark:add-state]] ပြီးတော့ စာရင်းကို ဖွင့်ထားလား ဆိုတဲ့ သာမန် state တစ်ခုပါ။ App
+      ကပဲ သုံးမှာ ဖြစ်လို့၊ ရိုးရိုး useState နဲ့ လုံလောက်ပါတယ်။ [[mark:fill-slot]] အခု
+      အဓိက အပိုင်းကို တစ်ခါတည်း ထည့်ပါမယ်။ OrderProvider က badge၊ ဖွင့်ပိတ် ခလုတ်၊
+      စာရင်းနဲ့ menu ကို ထုပ်ထားပါတယ်။ [[mark:menu-back]] preview ပြန်ပွင့်လာတော့ card
+      တိုင်းမှာ မှာမယ့် ခလုတ် ပါလာပါပြီ။ badge ကတော့ 0 ပြနေပါတယ်။ [[mark:click-add-1]]
+      မုန့်ဟင်းခါး တစ်ပွဲ မှာကြည့်ရအောင်။ ခလုတ်က သုံးဆင့် အောက်မှာ ရှိပေမယ့်၊ props
+      မဖြတ်ဘဲ action က reducer ဆီ တန်းရောက်သွားပါတယ်။ [[mark:after-add-1]] badge က 1
+      ဖြစ်သွားပါပြီ။ [[mark:click-add-2]] မုန့်ဟင်းခါး ထပ်မှာ၊ [[mark:click-add-3]]
+      ရှမ်းခေါက်ဆွဲ တစ်ပွဲပါ။ [[mark:after-add-3]] badge က 3 ပါ။ item တိုင်းရဲ့
+      အရေအတွက်ကို ပေါင်းပြထားလို့ပါ။ [[mark:click-toggle]] စာရင်းကို ဖွင့်ကြည့်ရအောင်။
+      [[mark:after-toggle]] မုန့်ဟင်းခါးက row နှစ်ကြောင်း မဟုတ်ဘဲ၊ နှစ်ပွဲ ဆိုတဲ့ row
+      တစ်ကြောင်းတည်းပါ။ reducer က အရေအတွက်ကိုပဲ တိုးလိုက်လို့ပါ။ ရှမ်းခေါက်ဆွဲ တစ်ပွဲနဲ့
+      စုစုပေါင်း 8000 ကျပ်ပါ။ [[mark:click-remove]] မုန့်ဟင်းခါးကို ဖယ်ကြည့်ရအောင်။
+      [[mark:after-remove]] row ပျောက်သွားပြီး၊ စုစုပေါင်း 3000 ကျပ်၊ badge ကလည်း 1
+      ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Scaling Up with Reducer and Context — React",
+          url: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+        }
+      - { title: "useState — React", url: "https://react.dev/reference/react/useState" }
+    actions:
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: open-preview }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: title }
+        textContains: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: add-imports
+        type: editor.type
+        at: { mark: add-imports }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: |
+          import { useState } from "react";
+          import { menu } from "./menu.js";
+          import MenuList from "./MenuList.jsx";
+          import { OrderProvider } from "./OrderContext.jsx";
+          import OrderBadge from "./OrderBadge.jsx";
+          import OrderSummary from "./OrderSummary.jsx";
+      - id: add-state
+        type: editor.type
+        at: { mark: add-state }
+        cadence: block
+        target: { file: src/App.jsx, after: "export default function App() {\n", occurrence: 1 }
+        text: |2
+            const [open, setOpen] = useState(false);
+      - id: fill-slot
+        type: editor.type
+        at: { mark: fill-slot }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: |2
+                <OrderProvider>
+                  <div className="row toolbar">
+                    <OrderBadge />
+                    <button
+                      className="secondary"
+                      data-testid="toggle-summary"
+                      onClick={() => setOpen(!open)}
+                    >
+                      {open ? "ပိတ်မယ်" : "မှာထားတာ ကြည့်မယ်"}
+                    </button>
+                  </div>
+                  <OrderSummary open={open} />
+                  <MenuList dishes={menu} />
+                </OrderProvider>
+      - id: expect-menu-back
+        type: expect.preview
+        at: { mark: menu-back }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-card-mohinga }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-badge-zero
+        type: expect.preview
+        at: { afterAction: expect-menu-back }
+        timeoutMs: 5000
+        target: { by: testId, value: order-badge }
+        textContains: "0 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-add-1
+        type: preview.click
+        at: { mark: click-add-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-badge-one
+        type: expect.preview
+        at: { mark: after-add-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-badge }
+        textContains: "1 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-add-2
+        type: preview.click
+        at: { mark: click-add-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-badge-two
+        type: expect.preview
+        at: { afterAction: click-add-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-badge }
+        textContains: "2 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-add-3
+        type: preview.click
+        at: { mark: click-add-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-shan-noodles }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-badge-three
+        type: expect.preview
+        at: { mark: after-add-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-badge }
+        textContains: "3 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-toggle
+        type: preview.click
+        at: { mark: click-toggle }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-summary }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-summary-row
+        type: expect.preview
+        at: { mark: after-toggle }
+        timeoutMs: 5000
+        target: { by: testId, value: order-row-mohinga }
+        textContains: "မုန့်ဟင်းခါး × 2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-total-before
+        type: expect.preview
+        at: { afterAction: expect-summary-row }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "8,000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-remove
+        type: preview.click
+        at: { mark: click-remove }
+        timeoutMs: 5000
+        target: { by: testId, value: remove-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-total-after
+        type: expect.preview
+        at: { mark: after-remove }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "3,000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-badge-after
+        type: expect.preview
+        at: { afterAction: expect-total-after }
+        timeoutMs: 5000
+        target: { by: testId, value: order-badge }
+        textContains: "1 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-app-file
+        type: expect.file
+        at: { afterAction: expect-badge-after }
+        path: src/App.jsx
+        contains: "      <Header />\n      <OrderProvider>\n"
+
+  # ------------------------------------------------------------------ 8
+  - id: context-rules
+    chapter: "Context ရဲ့ စည်းကမ်းတွေ"
+    narration: >
+      [[mark:open-board-3]] မဆုံးခင် context ရဲ့ စည်းကမ်း လေးချက် ကြည့်ရအောင်။
+      [[mark:draw-nested]] ပထမက၊ component က သူ့အပေါ်က အနီးဆုံး provider ကို ဖတ်လို့၊
+      အတွင်းက provider က အပြင်ကဟာကို လွှမ်းမိုးပါတယ်။ [[mark:draw-default]] ဒုတိယက၊
+      createContext ရဲ့ default တန်ဖိုးကို အပေါ်မှာ provider လုံးဝ မရှိမှပဲ သုံးပါတယ်။
+      [[mark:draw-rerender]] တတိယက၊ provider ရဲ့ value ပြောင်းရင် အဲဒီ context ကို ဖတ်တဲ့
+      component တိုင်း ပြန် render လုပ်ပါတယ်။ ဒါကြောင့် badge နဲ့ စာရင်း အတူတူ
+      ပြောင်းသွားတာပါ။ [[mark:draw-removed]] နောက်ဆုံးက၊ အရင် React version တွေက
+      contextTypes ဆိုတဲ့ context နည်းဟောင်းကို React 19 မှာ ဖယ်လိုက်ပြီး၊ အခုတော့
+      createContext တစ်ခုတည်းပါပဲ။ [[mark:summary]] ဒါဆို ပြန်ချုပ်ရရင်၊ reducer က state
+      ပြောင်းတဲ့ စည်းကမ်းတွေကို pure function တစ်ခုထဲ စုပြီး၊ component က action ပဲ
+      ပို့ပါတယ်။ context ကတော့ အဲဒီ state နဲ့ dispatch ကို prop drilling မလုပ်ဘဲ အောက်က
+      component တွေဆီ ပို့ပေးပါတယ်။ ဒီနှစ်ခုနဲ့ screen တစ်ခုလုံးကို React နဲ့ပဲ
+      စီမံနိုင်ပါပြီ။ [[mark:next-lesson]] နောက် lesson မှာတော့ ref ကို ကြည့်သွားပါမယ်။
+      ပြန် render မလုပ်ဘဲ တန်ဖိုး မှတ်သလို၊ DOM element ကိုပါ ကိုင်လို့ ရပါတယ်။
+    sources:
+      - { title: "useContext — React", url: "https://react.dev/reference/react/useContext" }
+      - { title: "createContext — React", url: "https://react.dev/reference/react/createContext" }
+      - {
+          title: "React 19 Upgrade Guide — Removed: legacy context",
+          url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-removing-legacy-context",
+        }
+      - {
+          title: "Scaling Up with Reducer and Context — React",
+          url: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+        }
+    actions:
+      - id: open-board-3
+        type: whiteboard.apply
+        at: { mark: open-board-3 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title]
+        drawMs: 900
+      - id: draw-nested
+        type: whiteboard.apply
+        at: { mark: draw-nested }
+        upsertIds: [b3-outer, b3-outer-t, b3-inner, b3-inner-t, b3-inner-check, b3-rule-1]
+        drawMs: 2400
+      - id: draw-default
+        type: whiteboard.apply
+        at: { mark: draw-default }
+        upsertIds: [b3-rule-2]
+        drawMs: 1200
+      - id: draw-rerender
+        type: whiteboard.apply
+        at: { mark: draw-rerender }
+        upsertIds: [b3-rule-3, b3-rule-3-mark]
+        drawMs: 1400
+      - id: draw-removed
+        type: whiteboard.apply
+        at: { mark: draw-removed }
+        upsertIds: [b3-rule-4, b3-rule-4-strike]
+        drawMs: 1400
+      # The board closes on the recap, and the provider is highlighted while the
+      # voice sums up reducer + context; the ref teaser that follows then plays
+      # over code a paused learner can read, with nothing selected for it.
+      - id: close-board-3
+        type: whiteboard.apply
+        at: { mark: summary }
+        open: false
+      - id: open-context-final
+        type: workspace.openFile
+        at: { mark: summary, offsetMs: 700 }
+        path: src/OrderContext.jsx
+      - id: select-provider-final
+        type: editor.select
+        at: { afterAction: open-context-final }
+        target: { file: src/OrderContext.jsx, text: "<OrderContext value={order}>", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
