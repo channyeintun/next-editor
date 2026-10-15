@@ -1,0 +1,2012 @@
+# React crash course, lesson 10 — Actions and form hooks (Burmese, my-MM).
+#
+# Story: lesson 4 called preventDefault and kept a "saved" flag by hand, and
+# promised that Actions would take over the submitting part; a real server
+# form would also need a "sending" state, an error state and a reset. React 19
+# Actions hand that work to React. A fake server (api.js: placeOrder waits
+# 4 s — long enough that the sentence each click opens still describes the
+# pending UI at 70–95 ms/char — and ALWAYS resolves, returning { error } or
+# { orderId }) is called first from the smallest
+# Action (ReorderButton: startTransition(async …) from useTransition), then
+# from an order form: useActionState + <form action>, a SubmitButton that
+# reads useFormStatus, a second button with formAction (save a draft),
+# useOptimistic for an instant "sending" row, and a <title> rendered by
+# OrderList that React hoists into <head> (a pinned bar outside #root mirrors
+# document.title because the preview iframe has no browser tab). The close
+# lists React DOM 19's other resource features (mentions).
+#
+# Insert-only plan: api.js, ReorderButton.jsx, SubmitButton.jsx and
+# OrderForm.jsx are pinned EMPTY and typed while nothing imports them
+# (line-by-line, plus a few short fast-explainer lines). App.jsx, and later
+# OrderForm.jsx and OrderList.jsx, are live: they only take `block` inserts of
+# complete lines, or atomic suffix inserts into an identifier (", useState",
+# ", useOptimistic", "Optimistic"). Every JS edit reloads the preview (state
+# and the fake server's order counter start over), so every interaction comes
+# after the last edit, and two Actions never overlap (while an async Action
+# is pending, React holds other Actions' updates).
+#
+# The dev server starts during the first board and is first needed when the
+# preview opens, about two and a half minutes later.
+#
+# Narration: Burmese (voice-script.md is the same text with ⟪marks⟫, plus the
+# editor's notes). DESIGN.md is the brief; every visible string is Burmese.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-10-actions-forms
+  title: "React crash course 10: Action နဲ့ form hook တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 10
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <!-- The preview has no browser tab, so this bar mirrors document.title. -->
+            <p class="tab-bar" data-testid="tab-title"></p>
+            <div id="root"></div>
+            <script>
+              const tabBar = document.querySelector(".tab-bar");
+              const showTitle = () => {
+                tabBar.textContent = "tab ခေါင်းစဉ် · " + document.title;
+              };
+              new MutationObserver(showTitle).observe(document.head, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+              });
+              showTitle();
+            </script>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 10: actions and forms */
+        .tab-bar {
+          padding: 6px 16px;
+          background: var(--line);
+          color: var(--text);
+          font-size: 0.85rem;
+        }
+
+        .order-form {
+          display: grid;
+          gap: 8px;
+        }
+
+        .order-form label {
+          display: grid;
+          gap: 2px;
+        }
+
+        .orders {
+          display: grid;
+          gap: 6px;
+        }
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+            </main>
+          );
+        }
+      src/OrderList.jsx: |
+        export default function OrderList({ orders }) {
+          return (
+            <section className="orders">
+              <h3>အော်ဒါ စာရင်း</h3>
+              <ul className="list" data-testid="order-list">
+                {orders.map((order) => (
+                  <li key={order.id}>
+                    <span>
+                      {order.name} · စားပွဲ {order.table}
+                    </span>
+                    {order.sending ? (
+                      <span className="badge warn">ပို့နေဆဲ…</span>
+                    ) : (
+                      <span className="badge ok">#{order.id}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        }
+      src/api.js: ""
+      src/ReorderButton.jsx: ""
+      src/OrderForm.jsx: ""
+      src/SubmitButton.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — by hand (lesson 4) vs an Action.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Action ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-manual-box,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 360,
+        height: 280,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-manual-head,
+        kind: text,
+        x: 295,
+        y: 245,
+        width: 300,
+        height: 40,
+        text: "ကိုယ်တိုင် ရေးရင်",
+        strokeColor: "#e03131",
+        fontSize: 30,
+      }
+    - {
+        id: b1-manual-l1,
+        kind: text,
+        x: 295,
+        y: 305,
+        width: 290,
+        height: 40,
+        text: "ပို့နေဆဲလား state",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-manual-l2,
+        kind: text,
+        x: 295,
+        y: 355,
+        width: 290,
+        height: 40,
+        text: "error state",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-manual-l3,
+        kind: text,
+        x: 295,
+        y: 405,
+        width: 290,
+        height: 40,
+        text: "preventDefault",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-manual-l4,
+        kind: text,
+        x: 295,
+        y: 455,
+        width: 290,
+        height: 40,
+        text: "form ပြန်ရှင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 645,
+        y: 350,
+        width: 55,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-action-box,
+        kind: rectangle,
+        x: 720,
+        y: 230,
+        width: 380,
+        height: 280,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-action-head,
+        kind: text,
+        x: 745,
+        y: 245,
+        width: 300,
+        height: 40,
+        text: "React 19 Action",
+        strokeColor: "#2f9e44",
+        fontSize: 30,
+      }
+    - {
+        id: b1-action-l1,
+        kind: text,
+        x: 745,
+        y: 305,
+        width: 300,
+        height: 40,
+        text: "(async) function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-l2,
+        kind: text,
+        x: 745,
+        y: 355,
+        width: 300,
+        height: 40,
+        text: "Transition ထဲမှာ run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-l3,
+        kind: text,
+        x: 745,
+        y: 405,
+        width: 300,
+        height: 40,
+        text: "pending · error · reset",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-l4,
+        kind: text,
+        x: 745,
+        y: 455,
+        width: 300,
+        height: 40,
+        text: "React က လုပ်ပေးတယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-action-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 745,
+        y: 412,
+        width: 300,
+        height: 36,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-hooks,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 830,
+        height: 40,
+        text: "useActionState · useFormStatus · useOptimistic",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 2 — the useActionState loop.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Form ကနေ state အထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-form-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 160,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-form-text,
+        kind: text,
+        x: 290,
+        y: 265,
+        width: 120,
+        height: 40,
+        text: "submit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 436,
+        y: 265,
+        width: 44,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-fd-box,
+        kind: rectangle,
+        x: 486,
+        y: 250,
+        width: 190,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-fd-text,
+        kind: text,
+        x: 506,
+        y: 265,
+        width: 150,
+        height: 40,
+        text: "FormData",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fd-note,
+        kind: text,
+        x: 486,
+        y: 335,
+        width: 200,
+        height: 40,
+        text: "input ရဲ့ name",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 682,
+        y: 265,
+        width: 44,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-action-box,
+        kind: rectangle,
+        x: 732,
+        y: 250,
+        width: 170,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-action-text,
+        kind: text,
+        x: 757,
+        y: 265,
+        width: 120,
+        height: 40,
+        text: "action",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-action-note,
+        kind: text,
+        x: 700,
+        y: 400,
+        width: 380,
+        height: 40,
+        text: "prevState၊ formData",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-action-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 797,
+        y: 328,
+        width: 40,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-arrow-3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 908,
+        y: 265,
+        width: 44,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-state-box,
+        kind: rectangle,
+        x: 958,
+        y: 250,
+        width: 140,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b2-state-text,
+        kind: text,
+        x: 983,
+        y: 265,
+        width: 100,
+        height: 40,
+        text: "state",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-screen,
+        kind: text,
+        x: 270,
+        y: 470,
+        width: 600,
+        height: 40,
+        text: "state အသစ် → screen ပြန်ပြ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-hook,
+        kind: text,
+        x: 270,
+        y: 550,
+        width: 830,
+        height: 40,
+        text: "useActionState → state · formAction · isPending",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board 3 — the optimistic timeline.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "useOptimistic",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-click-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 150,
+        height: 66,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-click-text,
+        kind: text,
+        x: 290,
+        y: 253,
+        width: 110,
+        height: 40,
+        text: "submit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 428,
+        y: 255,
+        width: 46,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-temp-box,
+        kind: rectangle,
+        x: 482,
+        y: 240,
+        width: 250,
+        height: 66,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-temp-text,
+        kind: text,
+        x: 502,
+        y: 253,
+        width: 200,
+        height: 40,
+        text: "ပို့နေဆဲ row",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-temp-note,
+        kind: text,
+        x: 482,
+        y: 322,
+        width: 240,
+        height: 40,
+        text: "ချက်ချင်း ပြတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 740,
+        y: 255,
+        width: 46,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-real-box,
+        kind: rectangle,
+        x: 794,
+        y: 240,
+        width: 220,
+        height: 66,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-real-text,
+        kind: text,
+        x: 814,
+        y: 253,
+        width: 170,
+        height: 40,
+        text: "#12 row",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-real-note,
+        kind: text,
+        x: 794,
+        y: 322,
+        width: 220,
+        height: 40,
+        text: "action ပြီးမှ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-fail-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 587,
+        y: 372,
+        width: 40,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-fail,
+        kind: text,
+        x: 482,
+        y: 442,
+        width: 600,
+        height: 40,
+        text: "မအောင်မြင်ရင် row ပျောက်သွားတယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule,
+        kind: text,
+        x: 270,
+        y: 540,
+        width: 830,
+        height: 40,
+        text: "addOptimistic ကို Action / Transition ထဲမှာပဲ ခေါ်ရတယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 4 — React DOM 19's other resource features, recap and next lesson.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "React DOM 19 ရဲ့ တခြား feature တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-meta,
+        kind: text,
+        x: 270,
+        y: 225,
+        width: 800,
+        height: 40,
+        text: "title · meta · link → head ထဲ ရွှေ့ပေးတယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-style,
+        kind: text,
+        x: 270,
+        y: 275,
+        width: 800,
+        height: 40,
+        text: "stylesheet + precedence → အစီအစဉ်တကျ၊ တစ်ခါပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-script,
+        kind: text,
+        x: 270,
+        y: 325,
+        width: 800,
+        height: 40,
+        text: "async script → တစ်ခါပဲ run",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-preload,
+        kind: text,
+        x: 270,
+        y: 375,
+        width: 800,
+        height: 40,
+        text: "preload → ကြိုပြီး load · preinit → load + run",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-custom,
+        kind: text,
+        x: 270,
+        y: 425,
+        width: 800,
+        height: 40,
+        text: "custom element → အပြည့်အဝ သုံးလို့ ရပြီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-jsurl,
+        kind: text,
+        x: 270,
+        y: 475,
+        width: 800,
+        height: 40,
+        text: "javascript: URL → ပိတ်ထားတယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-recap-box,
+        kind: rectangle,
+        x: 260,
+        y: 535,
+        width: 840,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-recap,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 800,
+        height: 40,
+        text: "Action · useActionState · useFormStatus · useOptimistic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-next,
+        kind: text,
+        x: 280,
+        y: 595,
+        width: 800,
+        height: 40,
+        text: "နောက် lesson – Activity နဲ့ ViewTransition",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 10210
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: actions-idea
+    chapter: "Action ဆိုတာ ဘာလဲ"
+    narration: >
+      lesson 4 မှာ form submit လုပ်တော့ preventDefault ကို ကိုယ်တိုင် ခေါ်ခဲ့ပြီး၊
+      submitting အပိုင်းကိုတော့ ဒီ lesson မှာ Action တွေက လုပ်ပေးမယ်လို့
+      ပြောခဲ့ပါတယ်။ ဒါဆို Action တွေကို ကြည့်ရအောင်။ [[mark:start-server]]
+      ရှင်းပြနေတုန်း dev server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။
+      [[mark:draw-manual]] server ကို တကယ် ပို့မယ်ဆိုရင်တော့၊ ပို့နေဆဲလား state၊
+      error state၊ preventDefault နဲ့ form ပြန်ရှင်းတဲ့ code တွေကို ကိုယ်တိုင်
+      ရေးရပါတယ်။ [[mark:draw-action]] Action ဆိုတာ React က Transition ထဲမှာ run
+      ပေးတဲ့ function ပါ၊ အများအားဖြင့် async function ပါ။ React ကိုယ်တိုင်
+      ခေါ်ပေးတာ ဖြစ်လို့၊ စောင့်နေဆဲလား၊ error တက်လား၊ ပြီးပြီလား ဆိုတာ React က အမြဲ
+      သိပါတယ်။ [[mark:draw-action-gives]] ဒါကြောင့် အဖြေ မရသေးတဲ့ pending ကာလနဲ့
+      form ပြန်ရှင်းတာကို React က ကိုင်ပေးပြီး၊ မမျှော်လင့်ထားတဲ့ error ကိုလည်း
+      error boundary ဆီ ပို့ပေးပါတယ်။ [[mark:draw-hooks]] အဲဒီ အခြေအနေတွေကို
+      ယူသုံးဖို့ hook အသစ် သုံးခုက useActionState၊ useFormStatus နဲ့ useOptimistic
+      ပါ။
+    sources:
+      - title: "React 19 — Actions"
+        url: "https://react.dev/blog/2024/12/05/react-19#actions"
+      - title: "React — useTransition"
+        url: "https://react.dev/reference/react/useTransition"
+      - title: "React — <form>"
+        url: "https://react.dev/reference/react-dom/components/form"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-manual
+        type: whiteboard.apply
+        at: { mark: draw-manual }
+        upsertIds:
+          [b1-manual-box, b1-manual-head, b1-manual-l1, b1-manual-l2, b1-manual-l3, b1-manual-l4]
+        drawMs: 3000
+      - id: draw-action
+        type: whiteboard.apply
+        at: { mark: draw-action }
+        upsertIds: [b1-arrow, b1-action-box, b1-action-head, b1-action-l1, b1-action-l2]
+        drawMs: 2600
+      - id: draw-action-gives
+        type: whiteboard.apply
+        at: { mark: draw-action-gives }
+        upsertIds: [b1-action-l3, b1-action-underline, b1-action-l4]
+        drawMs: 1800
+      - id: draw-hooks
+        type: whiteboard.apply
+        at: { mark: draw-hooks }
+        upsertIds: [b1-hooks]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 2
+  - id: api-code
+    chapter: "အသေးဆုံး Action ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-board-1]] အရင်ဆုံး အဖြေ ပြန်ရတာ ကြာတဲ့ server တစ်ခု လိုပါတယ်။
+      [[mark:open-api]] ဒီ api ဖိုင် အလွတ်ကို server အတု အဖြစ် သုံးပါမယ်။
+      [[mark:type-wait]] ဒီ helper က ပေးလိုက်တဲ့ အချိန် ကြာတဲ့အထိ စောင့်ပေးပြီး၊
+      အော်ဒါ နံပါတ်တွေကတော့ 12 ကနေ စပါတယ်။ [[mark:type-place-order]] placeOrder
+      ကတော့ network နှေးနေသလို 4 စက္ကန့် စောင့်ပါတယ်။ ပြီးတော့ နာမည် မပါရင် error
+      ကို ပြန်ပေးပြီး၊ နာမည် ပါရင်တော့ နောက် အော်ဒါ နံပါတ်ကို ပြန်ပေးပါတယ်။
+      [[mark:select-error-return]] error ပြန်ပေးတဲ့ ဒီ စာကြောင်းကို ကြည့်ပါ။ throw
+      မလုပ်ဘဲ ပြန်ပေးထားတာပါ။ [[mark:why-no-throw]] throw လုပ်လိုက်ရင် lesson 9
+      ကလိုပဲ error boundary ဆီ ရောက်သွားပြီး၊ ဆက်တိုက် submit လို့ တန်းစီ
+      စောင့်နေတဲ့ Action တွေလည်း မ run တော့ပါဘူး။ နာမည် မထည့်တာက ဖြစ်တတ်တဲ့ ကိစ္စ
+      ဖြစ်လို့ data အနေနဲ့ ပြန်ပေးတာပါ။
+    sources:
+      - title: "React — useActionState: Caveats"
+        url: "https://react.dev/reference/react/useActionState#caveats"
+      - title: "React — useTransition: Displaying an error to users with an error boundary"
+        url: "https://react.dev/reference/react/useTransition#displaying-an-error-to-users-with-error-boundary"
+      - title: "MDN — setTimeout()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: open-api
+        type: workspace.openFile
+        at: { mark: open-api }
+        path: src/api.js
+      - id: type-wait
+        type: editor.type
+        at: { mark: type-wait }
+        cadence: line-by-line
+        target: { file: src/api.js, after: "", occurrence: 1 }
+        text: "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\n\nlet nextId = 12;\n"
+      - id: type-place-order
+        type: editor.type
+        at: { mark: type-place-order }
+        cadence: line-by-line
+        target: { file: src/api.js, after: "let nextId = 12;\n", occurrence: 1 }
+        text: "\nexport async function placeOrder(order) {\n  await wait(4000);\n  if (!order.name) {\n    return { error: \"နာမည် ထည့်ပါ\" };\n  }\n  return { orderId: nextId++ };\n}\n"
+      - id: select-error-return
+        type: editor.select
+        at: { mark: select-error-return }
+        target: { file: src/api.js, text: 'return { error: "နာမည် ထည့်ပါ" };', occurrence: 1 }
+
+  # ------------------------------------------------------------------ 3
+  - id: reorder-code
+    narration: >
+      [[mark:open-reorder]] အခု အသေးဆုံး Action တစ်ခု ရေးကြည့်ရအောင်။ အမြဲ လာပြီး
+      တစ်မျိုးတည်းကိုပဲ ပြန်မှာတတ်တဲ့ ဧည့်သည် ကိုအောင်အတွက် ခလုတ် တစ်ခုပါ။
+      [[mark:type-reorder-top]] placeOrder ကို import လုပ်ပြီး၊ နောက်ဆုံး ရတဲ့
+      အော်ဒါ နံပါတ်ကို state ထဲ မှတ်ထားပါတယ်။ [[mark:type-use-transition]]
+      useTransition က lesson 8 ကလိုပဲ၊ လုပ်နေဆဲလား ပြတဲ့ pending flag တစ်ခုနဲ့၊
+      Transition စပေးမယ့် function တစ်ခုကို ပြန်ပေးပါတယ်။ [[mark:type-handle-click]]
+      click handler က startTransition ကို async function တစ်ခု ပေးလိုက်ပါတယ်။ ဒါက
+      Action ပါ။ function မပြီးမချင်း pending က true ဖြစ်နေပါမယ်။
+      [[mark:select-inner-transition]] အထဲက ဒုတိယ startTransition ကို ကြည့်ပါ။ await
+      နောက်က code ကို JavaScript က နောက်မှ သီးခြား run လို့၊ React က Transition ထဲက
+      update မှန်း မသိတော့ပါဘူး။ ဒါကြောင့် ထပ်ထုပ်ပေးရတာပါ။
+      [[mark:type-reorder-jsx]] pending ဖြစ်နေတုန်း ခလုတ်ကို ပိတ်ပြီး၊ ပို့နေပါတယ်
+      ဆိုတဲ့ စာ ပြပါတယ်။
+    sources:
+      - title: "React — useTransition"
+        url: "https://react.dev/reference/react/useTransition"
+      - title: "React — startTransition"
+        url: "https://react.dev/reference/react/startTransition"
+      - title: "React 19 — Actions"
+        url: "https://react.dev/blog/2024/12/05/react-19#actions"
+    actions:
+      - id: open-reorder
+        type: workspace.openFile
+        at: { mark: open-reorder }
+        path: src/ReorderButton.jsx
+      - id: type-reorder-top
+        type: editor.type
+        at: { mark: type-reorder-top }
+        cadence: line-by-line
+        target: { file: src/ReorderButton.jsx, after: "", occurrence: 1 }
+        text: "import { useState, useTransition } from \"react\";\nimport { placeOrder } from \"./api.js\";\n\nexport default function ReorderButton() {\n  const [lastId, setLastId] = useState(null);\n"
+      - id: type-use-transition
+        type: editor.type
+        at: { mark: type-use-transition }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/ReorderButton.jsx,
+            after: "  const [lastId, setLastId] = useState(null);\n",
+            occurrence: 1,
+          }
+        text: "  const [isPending, startTransition] = useTransition();\n"
+      - id: type-handle-click
+        type: editor.type
+        at: { mark: type-handle-click }
+        cadence: line-by-line
+        target:
+          {
+            file: src/ReorderButton.jsx,
+            after: "  const [isPending, startTransition] = useTransition();\n",
+            occurrence: 1,
+          }
+        text: "\n  function handleClick() {\n    startTransition(async () => {\n      const result = await placeOrder({ name: \"ကိုအောင်\", table: \"2\" });\n      startTransition(() => {\n        setLastId(result.orderId);\n      });\n    });\n  }\n"
+      - id: select-inner-transition
+        type: editor.select
+        at: { mark: select-inner-transition }
+        target:
+          {
+            file: src/ReorderButton.jsx,
+            text: "      startTransition(() => {\n        setLastId(result.orderId);\n      });",
+            occurrence: 1,
+          }
+      - id: type-reorder-jsx
+        type: editor.type
+        at: { mark: type-reorder-jsx }
+        cadence: block
+        target: { file: src/ReorderButton.jsx, after: "      });\n    });\n  }\n", occurrence: 1 }
+        text: "\n  return (\n    <div className=\"row\">\n      <button data-testid=\"reorder\" onClick={handleClick} disabled={isPending}>\n        {isPending ? \"ပို့နေပါတယ်…\" : \"ကိုအောင် ထပ်မှာမယ်\"}\n      </button>\n      <span data-testid=\"reorder-result\">\n        {lastId && \"အော်ဒါ #\" + lastId + \" ရပါပြီ\"}\n      </span>\n    </div>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 4
+  - id: reorder-run
+    narration: >
+      ကဲ၊ page ပေါ် တင်ကြည့်ရအောင်။ [[mark:open-app-reorder]] App က အခုထိ header ပဲ
+      ပြနေပါသေးတယ်။ [[mark:wire-reorder-import]] ReorderButton ရဲ့ import ကို အရင်
+      ထည့်ပါမယ်။ ဒါမှ သုံးတဲ့အခါ နာမည် ရှိနေမှာပါ။ [[mark:wire-reorder-use]]
+      ပြီးတော့ ခလုတ်ကို header အောက်မှာ ထည့်ပါတယ်။ [[mark:preview-opens]] dev server
+      အသင့် ဖြစ်နေပြီမို့ preview ကို ဖွင့်လိုက်ရအောင်။ ပြီးရင် ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:click-reorder]] ခလုတ် ပိတ်သွားပြီး၊ ပို့နေပါတယ်
+      ဆိုတဲ့ စာ ပေါ်လာပါတယ်။ [[mark:reorder-done]] 4 စက္ကန့် ကြာတော့ အော်ဒါ နံပါတ်
+      12 ရောက်လာပါပြီ။ async function ပြီးသွားတာနဲ့ React က pending ကို သူ့ဘာသာ
+      false ပြန်လုပ်ပေးတာပါ။
+    sources:
+      - title: "React — useTransition: Displaying a pending visual state"
+        url: "https://react.dev/reference/react/useTransition#displaying-a-pending-visual-state"
+      - title: "React — Importing and Exporting Components"
+        url: "https://react.dev/learn/importing-and-exporting-components"
+    actions:
+      - id: open-app-reorder
+        type: workspace.openFile
+        at: { mark: open-app-reorder }
+        path: src/App.jsx
+      - id: wire-reorder-import
+        type: editor.type
+        at: { mark: wire-reorder-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: "import ReorderButton from \"./ReorderButton.jsx\";\n"
+      - id: wire-reorder-use
+        type: editor.type
+        at: { mark: wire-reorder-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <ReorderButton />\n"
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-reorder-ready
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: reorder }
+        textContains: "ကိုအောင် ထပ်မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tab-static
+        type: expect.preview
+        at: { afterAction: expect-reorder-ready }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-title }
+        textContains: "React သင်ခန်းစာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-tab-static }
+      - id: click-reorder
+        type: preview.click
+        at: { mark: click-reorder }
+        timeoutMs: 5000
+        target: { by: testId, value: reorder }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-reorder-pending
+        type: expect.preview
+        at: { afterAction: click-reorder }
+        timeoutMs: 3000
+        target: { by: testId, value: reorder }
+        textContains: "ပို့နေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-reorder-done
+        type: expect.preview
+        at: { mark: reorder-done }
+        timeoutMs: 5000
+        target: { by: testId, value: reorder-result }
+        textContains: "အော်ဒါ #12 ရပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 2500 }
+
+  # ------------------------------------------------------------------ 5
+  - id: form-loop
+    chapter: "Form action နဲ့ useActionState"
+    narration: >
+      [[mark:board-form]] အော်ဒါ အများစုကတော့ form ကနေ လာပါတယ်။ React 19 မှာ form
+      ရဲ့ action prop ထဲကို function တစ်ခု တိုက်ရိုက် ထည့်လို့ ရပါပြီ။
+      [[mark:draw-form-data]] submit လုပ်ရင် React က input တွေရဲ့ တန်ဖိုးကို name
+      အလိုက် FormData ဆိုတဲ့ object ထဲ စုပြီး၊ အဲဒီ function ကို FormData တစ်ခုတည်း
+      ပေးပြီး ခေါ်ပါတယ်။ [[mark:draw-action-call]] useActionState နဲ့ ချိတ်ထားတဲ့
+      Action ဆိုရင်တော့၊ React က လက်ရှိ state နဲ့ အဲဒီ FormData၊ နှစ်ခု ပေးပြီး
+      ခေါ်ပါတယ်။ [[mark:draw-new-state]] Action ပြန်ပေးတဲ့ တန်ဖိုးက state အသစ်
+      ဖြစ်သွားပြီး၊ screen ပေါ်မှာ ပြန်ပြပါတယ်။ [[mark:draw-use-action-state]]
+      useActionState က ဒီ အဆင့်တွေကို ချိတ်ပေးပြီး၊ နောက်ဆုံး state၊ form ရဲ့ action
+      ထဲ ထည့်မယ့် function နဲ့ pending flag၊ သုံးခု ပြန်ပေးပါတယ်။
+    sources:
+      - title: "React — useActionState"
+        url: "https://react.dev/reference/react/useActionState"
+      - title: "React — <form>: Handle form submission with a Server Function / action"
+        url: "https://react.dev/reference/react-dom/components/form"
+      - title: "MDN — FormData"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/FormData"
+    actions:
+      - id: board-form
+        type: whiteboard.apply
+        at: { mark: board-form }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b2-title, b2-form-box, b2-form-text]
+      - id: draw-form-data
+        type: whiteboard.apply
+        at: { mark: draw-form-data }
+        upsertIds: [b2-arrow-1, b2-fd-box, b2-fd-text, b2-fd-note]
+        drawMs: 2000
+      - id: draw-action-call
+        type: whiteboard.apply
+        at: { mark: draw-action-call }
+        upsertIds: [b2-arrow-2, b2-action-box, b2-action-text, b2-action-arrow, b2-action-note]
+        drawMs: 2400
+      - id: draw-new-state
+        type: whiteboard.apply
+        at: { mark: draw-new-state }
+        upsertIds: [b2-arrow-3, b2-state-box, b2-state-text, b2-screen]
+        drawMs: 2200
+      - id: draw-use-action-state
+        type: whiteboard.apply
+        at: { mark: draw-use-action-state }
+        upsertIds: [b2-hook]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 6
+  - id: order-form-code
+    narration: >
+      [[mark:close-board-2]] ကဲ၊ form ကို ရေးကြည့်ရအောင်။ [[mark:open-order-form]]
+      OrderForm က အလွတ်ပါ၊ ဘယ် ဖိုင်ကမှ import မလုပ်ရသေးပါဘူး။
+      [[mark:type-form-top]] placeOrder၊ OrderList နဲ့ ခဏနေရင် ရေးမယ့် submit
+      ခလုတ်ကို import လုပ်ပါတယ်။ state ကတော့ အော်ဒါ စာရင်း အလွတ်နဲ့ message အလွတ်ကနေ
+      စပါတယ်။ [[mark:select-action-arg]] useActionState ခေါ်တဲ့ နေရာကို ကြည့်ပါ။
+      ကိုယ့် Action နဲ့ စစချင်း state ကို ပေးရပါတယ်။ [[mark:type-form-action]]
+      Action က FormData ကနေ နာမည်နဲ့ စားပွဲကို ဖတ်ပြီး placeOrder ကို ခေါ်ပါတယ်။
+      error ပြန်လာရင် အော်ဒါ စာရင်းကို ဒီအတိုင်း ထားပြီး message ကိုပဲ ပြောင်းပါတယ်။
+      အောင်မြင်ရင်တော့ အော်ဒါကို သူ့ နံပါတ်နဲ့ စာရင်းထဲ ထည့်ပါတယ်။
+      [[mark:select-form-data]] Action က လက်ခံတဲ့ တန်ဖိုး နှစ်ခုကို ကြည့်ပါ။ လက်ရှိ
+      state က ပထမ၊ FormData က ဒုတိယ ပါ။ ဒီ အစီအစဉ်ကို မှားတတ်ကြပါတယ်။
+      [[mark:type-form-jsx]] form ရဲ့ action မှာ useActionState က ပေးတဲ့ function
+      ကို ထည့်ပါတယ်။ input တွေမှာ FormData အတွက် name ပါပြီး၊ value အစား default
+      တန်ဖိုးပဲ ပေးထားလို့ uncontrolled ပါ။ ရိုက်ထားတဲ့ စာကို browser ကပဲ
+      မှတ်ထားတာပါ။
+    sources:
+      - title: "React — useActionState: Parameters"
+        url: "https://react.dev/reference/react/useActionState#parameters"
+      - title: "React — <form>"
+        url: "https://react.dev/reference/react-dom/components/form"
+      - title: "React — <input>: Providing an initial value for an input"
+        url: "https://react.dev/reference/react-dom/components/input#providing-an-initial-value-for-an-input"
+      - title: "MDN — FormData.get()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/FormData/get"
+    actions:
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { mark: close-board-2 }
+        open: false
+      - id: open-order-form
+        type: workspace.openFile
+        at: { mark: open-order-form }
+        path: src/OrderForm.jsx
+      - id: type-form-top
+        type: editor.type
+        at: { mark: type-form-top }
+        cadence: line-by-line
+        target: { file: src/OrderForm.jsx, after: "", occurrence: 1 }
+        text: "import { useActionState } from \"react\";\nimport { placeOrder } from \"./api.js\";\nimport OrderList from \"./OrderList.jsx\";\nimport SubmitButton from \"./SubmitButton.jsx\";\n\nexport default function OrderForm() {\n  const [state, formAction] = useActionState(placeOrderAction, {\n    orders: [],\n    message: \"\",\n  });\n  const orders = state.orders;\n"
+      - id: select-action-arg
+        type: editor.select
+        at: { mark: select-action-arg }
+        target:
+          { file: src/OrderForm.jsx, text: "useActionState(placeOrderAction, {", occurrence: 1 }
+      - id: type-form-action
+        type: editor.type
+        at: { mark: type-form-action }
+        cadence: line-by-line
+        target:
+          { file: src/OrderForm.jsx, after: "  const orders = state.orders;\n", occurrence: 1 }
+        text: "\n  async function placeOrderAction(prevState, formData) {\n    const order = { name: formData.get(\"name\"), table: formData.get(\"table\") };\n    const result = await placeOrder(order);\n    if (result.error) {\n      return { ...prevState, message: result.error };\n    }\n    return {\n      orders: [...prevState.orders, { ...order, id: result.orderId }],\n      message: \"အော်ဒါ #\" + result.orderId + \" ရပါပြီ\",\n    };\n  }\n"
+      - id: select-form-data
+        type: editor.select
+        at: { mark: select-form-data }
+        target:
+          { file: src/OrderForm.jsx, text: "placeOrderAction(prevState, formData)", occurrence: 1 }
+      - id: type-form-jsx
+        type: editor.type
+        at: { mark: type-form-jsx }
+        cadence: block
+        target:
+          {
+            file: src/OrderForm.jsx,
+            after: "      message: \"အော်ဒါ #\" + result.orderId + \" ရပါပြီ\",\n    };\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  return (\n    <section className=\"card\">\n      <h2>အော်ဒါ တင်ရန်</h2>\n      <form action={formAction} className=\"order-form\">\n        <label>\n          နာမည်\n          <input name=\"name\" defaultValue=\"\" data-testid=\"name-input\" />\n        </label>\n        <label>\n          စားပွဲ\n          <input name=\"table\" defaultValue=\"1\" data-testid=\"table-input\" />\n        </label>\n        <div className=\"row\">\n          <SubmitButton />\n        </div>\n      </form>\n      <p data-testid=\"order-message\">{state.message}</p>\n      <OrderList orders={orders} />\n    </section>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 7
+  - id: submit-button
+    narration: >
+      [[mark:open-submit]] submit ခလုတ် ရေးရအောင်။ [[mark:type-submit-top]]
+      useFormStatus ကို react ကနေ မဟုတ်ဘဲ react-dom ကနေ import လုပ်ရပါတယ်။
+      [[mark:type-form-status]] သူက ဒီ component ပါနေတဲ့ form ကို ကြည့်ပြီး၊ အဲဒီ
+      form က အခု submit လုပ်နေဆဲလား ဆိုတာကို pending နဲ့ ပြောပြပါတယ်။
+      [[mark:type-submit-jsx]] pending ဖြစ်နေတုန်း ခလုတ်ကို ပိတ်ထားပြီး၊ စာသားကလည်း
+      ပို့နေပါတယ် လို့ ပြောင်းသွားပါတယ်။ [[mark:form-status-rule]] useFormStatus ကို
+      form ရဲ့ အထဲမှာ render လုပ်တဲ့ component ကနေပဲ ခေါ်ရပါတယ်။ form ကို render
+      လုပ်တဲ့ component ထဲမှာ ခေါ်ရင် pending က အမြဲ false ပါ။ ဒါကြောင့် ခလုတ်ကို
+      component သီးသန့် ခွဲပြီး၊ OrderForm မှာလည်း useActionState ရဲ့ pending ကို
+      မယူတော့ပါဘူး။
+    sources:
+      - title: "React — useFormStatus"
+        url: "https://react.dev/reference/react-dom/hooks/useFormStatus"
+      - title: "React — useFormStatus: Caveats"
+        url: "https://react.dev/reference/react-dom/hooks/useFormStatus#caveats"
+    actions:
+      - id: open-submit
+        type: workspace.openFile
+        at: { mark: open-submit }
+        path: src/SubmitButton.jsx
+      - id: type-submit-top
+        type: editor.type
+        at: { mark: type-submit-top }
+        cadence: line-by-line
+        target: { file: src/SubmitButton.jsx, after: "", occurrence: 1 }
+        text: "import { useFormStatus } from \"react-dom\";\n\nexport default function SubmitButton() {\n"
+      - id: type-form-status
+        type: editor.type
+        at: { mark: type-form-status }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/SubmitButton.jsx,
+            after: "export default function SubmitButton() {\n",
+            occurrence: 1,
+          }
+        text: "  const { pending } = useFormStatus();\n"
+      - id: type-submit-jsx
+        type: editor.type
+        at: { mark: type-submit-jsx }
+        cadence: line-by-line
+        target:
+          {
+            file: src/SubmitButton.jsx,
+            after: "  const { pending } = useFormStatus();\n",
+            occurrence: 1,
+          }
+        text: "  return (\n    <button data-testid=\"submit-order\" disabled={pending}>\n      {pending ? \"ပို့နေပါတယ်…\" : \"မှာမယ်\"}\n    </button>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 8
+  - id: order-form-run
+    narration: >
+      [[mark:open-app-form]] App ထဲ form ကို ထည့်ကြည့်ရအောင်။
+      [[mark:wire-form-import]] import ကို အရင် ထည့်ပါတယ်။ [[mark:wire-form-use]]
+      ပြီးတော့ form ကို header အောက်မှာ ထည့်ပါတယ်။ ဖိုင် ပြင်တိုင်း page
+      ပြန်ပွင့်ပြီး၊ server အတုကလည်း browser ထဲမှာပဲ ရှိလို့၊ အော်ဒါ နံပါတ်က 12 ကနေ
+      ပြန်စပါတယ်။ နာမည် မထည့်ဘဲ submit လုပ်ကြည့်ရအောင်။ [[mark:click-submit-empty]]
+      ခလုတ် ပိတ်သွားပြီး၊ ပို့နေပါတယ် လို့ ပြနေပါတယ်။ [[mark:empty-error]] ပြီးတော့
+      နာမည် ထည့်ပါ ဆိုတဲ့ error ပေါ်လာပါတယ်။ Action က ပြန်ပေးတဲ့ state ကနေ
+      ရောက်လာတာပါ။ [[mark:fill-name]] အခု နာမည် ထည့်ပြီး၊ [[mark:fill-table]] စားပွဲ
+      နံပါတ်ကို 3 လို့ ပြောင်းကြည့်ရအောင်။ [[mark:click-submit-order]] submit
+      လုပ်ပြီး server ကို 4 စက္ကန့် စောင့်ပေးရအောင်။ [[mark:order-placed]] အော်ဒါ 12
+      က စာရင်းထဲ ရောက်လာပါပြီ။ [[mark:form-reset]] input တွေလည်း မူလ တန်ဖိုး
+      ပြန်ဖြစ်သွားပါပြီ။ Action က throw မလုပ်ရင်၊ submit တိုင်း ပြီးတဲ့အခါ React က
+      uncontrolled input တွေကို ပြန်ရှင်းပေးပါတယ်။ ခုနက error submit မှာလည်း
+      ဒီအတိုင်းပါပဲ။ [[mark:no-prevent-default]] page ပြန်မပွင့်အောင် React က
+      သူ့ဘာသာ ကိုင်ပေးလို့၊ lesson 4 လို preventDefault ခေါ်စရာ မလိုတော့ပါဘူး။
+      ကိုယ်တိုင် ပြန်ရှင်းချင်ရင်တော့ react-dom မှာ requestFormReset ရှိပါတယ်။
+    sources:
+      - title: "React — <form>"
+        url: "https://react.dev/reference/react-dom/components/form"
+      - title: "React 19 — Form Actions (automatic reset, requestFormReset)"
+        url: "https://react.dev/blog/2024/12/05/react-19#form-actions"
+      - title: "React — useFormStatus"
+        url: "https://react.dev/reference/react-dom/hooks/useFormStatus"
+      - title: "React — useActionState"
+        url: "https://react.dev/reference/react/useActionState"
+    actions:
+      - id: open-app-form
+        type: workspace.openFile
+        at: { mark: open-app-form }
+        path: src/App.jsx
+      - id: wire-form-import
+        type: editor.type
+        at: { mark: wire-form-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import ReorderButton from \"./ReorderButton.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import OrderForm from \"./OrderForm.jsx\";\n"
+      - id: wire-form-use
+        type: editor.type
+        at: { mark: wire-form-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <OrderForm />\n"
+      - id: expect-form-ready
+        type: expect.preview
+        at: { mark: click-submit-empty, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-submit-empty
+        type: preview.click
+        at: { mark: click-submit-empty }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-submit-pending
+        type: expect.preview
+        at: { afterAction: click-submit-empty }
+        timeoutMs: 3000
+        target: { by: testId, value: submit-order }
+        textContains: "ပို့နေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-empty-error
+        type: expect.preview
+        at: { mark: empty-error }
+        timeoutMs: 5000
+        target: { by: testId, value: order-message }
+        textContains: "နာမည် ထည့်ပါ"
+        retry: { maxAttempts: 3, delayMs: 2500 }
+      - id: fill-name
+        type: preview.input
+        at: { mark: fill-name }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: "မမြ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: fill-table
+        type: preview.input
+        at: { mark: fill-table }
+        timeoutMs: 5000
+        target: { by: testId, value: table-input }
+        value: "3"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-filled
+        type: expect.preview
+        at: { afterAction: fill-table }
+        timeoutMs: 5000
+        target: { by: testId, value: table-input }
+        value: "3"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: click-submit-order
+        type: preview.click
+        at: { mark: click-submit-order }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-order-placed
+        type: expect.preview
+        at: { mark: order-placed }
+        timeoutMs: 5000
+        target: { by: testId, value: order-message }
+        textContains: "အော်ဒါ #12 ရပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 2500 }
+      - id: expect-order-row
+        type: expect.preview
+        at: { afterAction: expect-order-placed }
+        timeoutMs: 5000
+        target: { by: testId, value: order-list }
+        textContains: "မမြ · စားပွဲ 3"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-name-reset
+        type: expect.preview
+        at: { mark: form-reset }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-table-reset
+        type: expect.preview
+        at: { afterAction: expect-name-reset }
+        timeoutMs: 5000
+        target: { by: testId, value: table-input }
+        value: "1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 9
+  - id: draft-button
+    narration: >
+      [[mark:open-form-draft]] form မှာ မူကြမ်း သိမ်းတာလို တခြား အလုပ် လုပ်မယ့်
+      ဒုတိယ ခလုတ်လည်း ထည့်လို့ ရပါတယ်။ [[mark:type-use-state-import]] useState ကို
+      import ထဲ ထည့်ပါတယ်။ [[mark:type-save-draft]] saveDraft ကို useActionState နဲ့
+      မချိတ်ထားလို့၊ state မပါဘဲ FormData တစ်ခုတည်းကိုပဲ ရပါတယ်။ အဲဒီထဲက နာမည်ကို
+      မူကြမ်း state ထဲ မှတ်ထားပါတယ်။ [[mark:type-draft-button]] ဒုတိယ ခလုတ်မှာ
+      formAction ဆိုတဲ့ prop နဲ့ saveDraft ကို ပေးထားပါတယ်။ ခုနက useActionState
+      ပေးတဲ့ function နဲ့ နာမည် တူပေမယ့်၊ ဒါက ခလုတ်ရဲ့ prop ပါ။ ဒီ ခလုတ်နဲ့ submit
+      လုပ်ရင် form ရဲ့ action အစား saveDraft ကို ခေါ်ပါတယ်။ [[mark:fill-draft-name]]
+      နာမည် ရိုက်ကြည့်ရအောင်။ [[mark:click-draft]] ပြီးရင် မူကြမ်း သိမ်းပါမယ်။
+      [[mark:draft-saved]] မူကြမ်း ပေါ်လာပြီး၊ form လည်း ပြန်ရှင်းသွားပါတယ်။
+      saveDraft က async မဟုတ်ပေမဲ့ formAction ကနေ ခေါ်တာမို့ Action ပဲ ဖြစ်လို့ပါ။
+      မလိုချင်ရင်တော့ input ကို controlled လုပ်ထားနိုင်ပါတယ်။
+      [[mark:one-action-at-a-time]] lesson 8 က ခြွင်းချက်ကလည်း Action နဲ့
+      ဆိုင်ပါတယ်။ async Action pending ဖြစ်နေတုန်း တခြား Action တွေရဲ့ update က အဲဒီ
+      Action ပြီးမှ ပေါ်ပါတယ်။ ဥပမာ အော်ဒါ ပို့နေတုန်း မူကြမ်း သိမ်းရင်၊ မူကြမ်းက
+      အော်ဒါ ပြီးမှ ပေါ်ပါမယ်။
+    sources:
+      - title: "React — <button>: formAction"
+        url: "https://react.dev/reference/react-dom/components/button"
+      - title: "React — <form>: Handling multiple submission types"
+        url: "https://react.dev/reference/react-dom/components/form#handling-multiple-submission-types"
+      - title: "React 19.3 — Independent Transitions"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "MDN — HTMLButtonElement.formAction"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLButtonElement/formAction"
+    actions:
+      - id: open-form-draft
+        type: workspace.openFile
+        at: { mark: open-form-draft }
+        path: src/OrderForm.jsx
+      - id: type-use-state-import
+        type: editor.type
+        at: { mark: type-use-state-import }
+        cadence: block
+        target: { file: src/OrderForm.jsx, after: "import { useActionState", occurrence: 1 }
+        text: ", useState"
+      - id: type-save-draft
+        type: editor.type
+        at: { mark: type-save-draft }
+        cadence: block
+        target:
+          {
+            file: src/OrderForm.jsx,
+            after: "export default function OrderForm() {\n",
+            occurrence: 1,
+          }
+        text: "  const [draft, setDraft] = useState(\"\");\n\n  function saveDraft(formData) {\n    setDraft(formData.get(\"name\"));\n  }\n\n"
+      - id: type-draft-button
+        type: editor.type
+        at: { mark: type-draft-button }
+        cadence: block
+        target: { file: src/OrderForm.jsx, after: "          <SubmitButton />\n", occurrence: 1 }
+        text: "          <button className=\"secondary\" formAction={saveDraft} data-testid=\"save-draft\">\n            မူကြမ်း သိမ်းမယ်\n          </button>\n          <span className=\"muted\" data-testid=\"draft\">\n            {draft && \"မူကြမ်း – \" + draft}\n          </span>\n"
+      - id: expect-draft-ready
+        type: expect.preview
+        at: { mark: fill-draft-name, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: save-draft }
+        textContains: "မူကြမ်း သိမ်းမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: fill-draft-name
+        type: preview.input
+        at: { mark: fill-draft-name }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: "ကိုကို"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-draft
+        type: preview.click
+        at: { mark: click-draft }
+        timeoutMs: 5000
+        target: { by: testId, value: save-draft }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-draft-saved
+        type: expect.preview
+        at: { mark: draft-saved }
+        timeoutMs: 5000
+        target: { by: testId, value: draft }
+        textContains: "မူကြမ်း – ကိုကို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-draft-reset
+        type: expect.preview
+        at: { afterAction: expect-draft-saved }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 10
+  - id: optimistic
+    chapter: "useOptimistic နဲ့ ကြိုပြရအောင်"
+    narration: >
+      [[mark:board-optimistic]] 4 စက္ကန့် စောင့်ရတာ ကြာပါတယ်။ ပြီးတော့ အော်ဒါ
+      အများစုက အောင်မြင်ကြပါတယ်။ [[mark:draw-optimistic-row]] ဒါကြောင့်
+      useOptimistic က Action pending ဖြစ်နေတုန်း အောင်မြင်မယ်လို့ ယူဆပြီး၊ ရလဒ်ကို
+      ယာယီ ကြိုပြပေးပါတယ်။ row အသစ်က ချက်ချင်း ပေါ်လာတာပါ။ [[mark:draw-real-row]]
+      Action ပြီးတော့ React က ယာယီ တန်ဖိုးကို ဖယ်ပြီး၊ နံပါတ် ပါတဲ့ တကယ့် state ကို
+      ပြပါတယ်။ [[mark:draw-revert]] အော်ဒါ မအောင်မြင်လို့ တကယ့် state
+      မပြောင်းရင်တော့၊ ယာယီ row ပျောက်သွားပါတယ်။ ယာယီ တန်ဖိုး ထည့်တဲ့ function
+      ကိုတော့ Action ဒါမှမဟုတ် Transition ထဲမှာပဲ ခေါ်ရပါတယ်။ [[mark:close-board-3]]
+      ကဲ၊ ထည့်ကြည့်ရအောင်။ [[mark:type-optimistic-import]] အရင်ဆုံး useOptimistic
+      ကို import ထဲ ထည့်ပါတယ်။ [[mark:type-optimistic-hook]] useOptimistic က တကယ့်
+      စာရင်းနဲ့၊ ယာယီ အော်ဒါကို အဆုံးမှာ ထပ်ထည့်ပေးမယ့် function ကို လက်ခံပြီး၊
+      ပြရမယ့် စာရင်းနဲ့ ယာယီ အော်ဒါ ထည့်မယ့် function ကို ပြန်ပေးပါတယ်။
+      [[mark:type-add-optimistic]] Action က server ကို မစောင့်ခင် အော်ဒါကို
+      ကြိုထည့်ပါတယ်။ [[mark:type-optimistic-suffix]] ပြီးတော့ OrderList ကို
+      optimistic စာရင်း ပေးပါတယ်။ [[mark:open-order-list]] OrderList ကတော့ အသင့်
+      ပြင်ထားပြီးသားပါ။ [[mark:select-sending-badge]] ဒီ condition ကို ကြည့်ပါ၊
+      ပို့နေဆဲ အော်ဒါဆိုရင် လိမ္မော်ရောင် badge ပြပါတယ်။
+      [[mark:fill-optimistic-name]] ထပ်မှာပြီး submit လုပ်ကြည့်ရအောင်။ စာရင်းကို
+      ကြည့်ထားပါ။ [[mark:click-optimistic-submit]] row က ပို့နေဆဲ badge နဲ့
+      ချက်ချင်း ပေါ်လာပါပြီ။ [[mark:confirmed-row]] အခုတော့ row က သူ့ နံပါတ်နဲ့
+      အတည်ဖြစ်သွားပါပြီ။
+    sources:
+      - title: "React — useOptimistic"
+        url: "https://react.dev/reference/react/useOptimistic"
+      - title: "React 19 — New hook: useOptimistic"
+        url: "https://react.dev/blog/2024/12/05/react-19#new-hook-optimistic-updates"
+      - title: "React — useOptimistic: Optimistically updating forms"
+        url: "https://react.dev/reference/react/useOptimistic#optimistically-updating-with-forms"
+    actions:
+      - id: board-optimistic
+        type: whiteboard.apply
+        at: { mark: board-optimistic }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title, b3-click-box, b3-click-text]
+      - id: draw-optimistic-row
+        type: whiteboard.apply
+        at: { mark: draw-optimistic-row }
+        upsertIds: [b3-arrow-1, b3-temp-box, b3-temp-text, b3-temp-note]
+        drawMs: 2000
+      - id: draw-real-row
+        type: whiteboard.apply
+        at: { mark: draw-real-row }
+        upsertIds: [b3-arrow-2, b3-real-box, b3-real-text, b3-real-note]
+        drawMs: 2000
+      - id: draw-revert
+        type: whiteboard.apply
+        at: { mark: draw-revert }
+        upsertIds: [b3-fail-arrow, b3-fail, b3-rule]
+        drawMs: 2200
+      - id: close-board-3
+        type: whiteboard.apply
+        at: { mark: close-board-3 }
+        open: false
+      - id: type-optimistic-import
+        type: editor.type
+        at: { mark: type-optimistic-import }
+        cadence: block
+        target:
+          { file: src/OrderForm.jsx, after: "import { useActionState, useState", occurrence: 1 }
+        text: ", useOptimistic"
+      - id: type-optimistic-hook
+        type: editor.type
+        at: { mark: type-optimistic-hook }
+        cadence: block
+        target:
+          { file: src/OrderForm.jsx, after: "  const orders = state.orders;\n", occurrence: 1 }
+        text: "  const [ordersOptimistic, addOptimistic] = useOptimistic(\n    orders,\n    (list, order) => [...list, { ...order, id: \"new\", sending: true }],\n  );\n"
+      - id: type-add-optimistic
+        type: editor.type
+        at: { mark: type-add-optimistic }
+        cadence: block
+        target:
+          {
+            file: src/OrderForm.jsx,
+            after: "    const order = { name: formData.get(\"name\"), table: formData.get(\"table\") };\n",
+            occurrence: 1,
+          }
+        text: "    addOptimistic(order);\n"
+      - id: type-optimistic-suffix
+        type: editor.type
+        at: { mark: type-optimistic-suffix }
+        cadence: block
+        target: { file: src/OrderForm.jsx, after: "<OrderList orders={orders", occurrence: 1 }
+        text: "Optimistic"
+      - id: open-order-list
+        type: workspace.openFile
+        at: { mark: open-order-list }
+        path: src/OrderList.jsx
+      - id: select-sending-badge
+        type: editor.select
+        at: { mark: select-sending-badge }
+        target:
+          {
+            file: src/OrderList.jsx,
+            text: "{order.sending ? (\n              <span className=\"badge warn\">ပို့နေဆဲ…</span>",
+            occurrence: 1,
+          }
+      - id: expect-optimistic-ready
+        type: expect.preview
+        at: { mark: fill-optimistic-name, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: fill-optimistic-name
+        type: preview.input
+        at: { mark: fill-optimistic-name }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: "ဒေါ်လှ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-optimistic-submit
+        type: preview.click
+        at: { mark: click-optimistic-submit }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-optimistic-row
+        type: expect.preview
+        at: { afterAction: click-optimistic-submit }
+        timeoutMs: 3000
+        target: { by: testId, value: order-list }
+        textContains: "ပို့နေဆဲ"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-confirmed-row
+        type: expect.preview
+        at: { mark: confirmed-row }
+        timeoutMs: 5000
+        target: { by: testId, value: order-list }
+        textContains: "#12"
+        retry: { maxAttempts: 3, delayMs: 2500 }
+      - id: expect-confirmed-name
+        type: expect.preview
+        at: { afterAction: expect-confirmed-row }
+        timeoutMs: 5000
+        target: { by: testId, value: order-list }
+        textContains: "ဒေါ်လှ · စားပွဲ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 11
+  - id: title-metadata
+    chapter: "Component ထဲက title"
+    narration: >
+      နောက်ဆုံး တစ်ခုက page ရဲ့ title ပါ။ React 19 မတိုင်ခင်က title ကို ပြောင်းဖို့
+      effect ထဲမှာ ကိုယ်တိုင် ပြင်ရပါတယ်။ အခုတော့ title tag ကို component ထဲမှာ
+      render လုပ်ရုံပါပဲ။ preview မှာ tab မရှိလို့၊ အပေါ်ဆုံးက မီးခိုးရောင် bar မှာ
+      title ကို ပြထားပါတယ်။ [[mark:type-title]] OrderList ထဲမှာ အော်ဒါ အရေအတွက်
+      ပါတဲ့ title ကို render လုပ်ပါတယ်။ စာသားနဲ့ တန်ဖိုးကို ခွဲရေးရင် children
+      အများကြီး ဖြစ်ပြီး React က warning ပေးလို့၊ စာသားထဲ တန်ဖိုး ထည့်ရေးလို့ ရတဲ့
+      template string တစ်ခုတည်းနဲ့ ရေးထားတာပါ။ [[mark:title-hoist]] React က ဒီ title
+      ကို component ထဲကနေ head ထဲ ရွှေ့ပေးလို့၊ bar မှာ အော်ဒါ 0 ခု လို့ ပြနေပါပြီ။
+      [[mark:fill-title-name]] နောက် တစ်ကြိမ် ထပ်မှာပြီး submit လုပ်ကြည့်ရအောင်။
+      [[mark:click-title-submit]] bar မှာ အော်ဒါ 1 ခု လို့ ချက်ချင်း
+      ပြောင်းသွားပါတယ်၊ optimistic စာရင်းကို ရေတွက်နေလို့ပါ။
+      [[mark:title-confirmed]] ပြီးတော့ အော်ဒါ အတည်ဖြစ်သွားပြီး၊ title ကလည်း state
+      နဲ့ အမြဲ ကိုက်နေပါတယ်။
+    sources:
+      - title: "React — <title>"
+        url: "https://react.dev/reference/react-dom/components/title"
+      - title: "React 19 — Support for Document Metadata"
+        url: "https://react.dev/blog/2024/12/05/react-19#support-for-metadata-tags"
+      - title: "MDN — Template literals"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals"
+      - title: "MDN — Document.title"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/title"
+    actions:
+      - id: type-title
+        type: editor.type
+        at: { mark: type-title }
+        cadence: block
+        target:
+          { file: src/OrderList.jsx, after: "    <section className=\"orders\">\n", occurrence: 1 }
+        text: "      <title>{`ရွှေရန်ကုန် · အော်ဒါ ${orders.length} ခု`}</title>\n"
+      - id: expect-title-zero
+        type: expect.preview
+        at: { mark: title-hoist }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-title }
+        textContains: "ရွှေရန်ကုန် · အော်ဒါ 0 ခု"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: fill-title-name
+        type: preview.input
+        at: { mark: fill-title-name }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: "ဦးဘ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-title-submit
+        type: preview.click
+        at: { mark: click-title-submit }
+        timeoutMs: 5000
+        target: { by: testId, value: submit-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-title-one
+        type: expect.preview
+        at: { afterAction: click-title-submit }
+        timeoutMs: 3000
+        target: { by: testId, value: tab-title }
+        textContains: "အော်ဒါ 1 ခု"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      # Same moment, still optimistic: the count of 1 comes from the
+      # temporary row, not from a confirmed order.
+      - id: expect-title-optimistic-row
+        type: expect.preview
+        at: { afterAction: expect-title-one }
+        timeoutMs: 3000
+        target: { by: testId, value: order-list }
+        textContains: "ပို့နေဆဲ"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-title-confirmed
+        type: expect.preview
+        at: { mark: title-confirmed }
+        timeoutMs: 5000
+        target: { by: testId, value: order-list }
+        textContains: "#12"
+        retry: { maxAttempts: 3, delayMs: 2500 }
+      - id: expect-title-confirmed-name
+        type: expect.preview
+        at: { afterAction: expect-title-confirmed }
+        timeoutMs: 5000
+        target: { by: testId, value: order-list }
+        textContains: "ဦးဘ · စားပွဲ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-title-still-one
+        type: expect.preview
+        at: { afterAction: expect-title-confirmed-name }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-title }
+        textContains: "အော်ဒါ 1 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 12
+  - id: dom-extras-recap
+    chapter: "React DOM 19 ရဲ့ တခြား feature တွေ"
+    narration: >
+      [[mark:board-dom]] React DOM 19 မှာ ဒီလို feature တွေ ထပ်ရှိပါသေးတယ်။
+      [[mark:draw-meta]] meta နဲ့ link tag တွေကိုလည်း head ထဲ ရွှေ့ပေးပါတယ်။
+      [[mark:draw-style]] stylesheet ကို precedence နဲ့ ပေးထားရင်၊ React က အဲဒီ
+      အဆင့်အလိုက် head ထဲမှာ စီပြီး၊ component ဘယ်နှစ်ခုက render လုပ်လုပ် တစ်ခါပဲ
+      load လုပ်ပါတယ်။ [[mark:draw-script]] async script ကိုလည်း ဒီအတိုင်း တစ်ခါပဲ
+      run ပါတယ်။ [[mark:draw-preload]] preload က လိုလာမယ့် ဖိုင်ကို ကြို load
+      လုပ်ခိုင်းတာ ဖြစ်ပြီး၊ preinit ကတော့ load ပြီးတာနဲ့ run ဒါမှမဟုတ် apply ပါ
+      လုပ်ပေးပါတယ်။ [[mark:draw-custom]] ကိုယ်တိုင် သတ်မှတ်ထားတဲ့ HTML tag ဖြစ်တဲ့
+      custom element တွေကိုလည်း props မှန်မှန် ပေးလို့ ရပါပြီ။ [[mark:draw-js-url]]
+      javascript နဲ့ စတဲ့ link လိပ်စာက နှိပ်တာနဲ့ code run နိုင်လို့၊ React က
+      ပိတ်ထားပါတယ်။ [[mark:draw-recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ useActionState က Action
+      ရဲ့ ရလဒ်ကို မှတ်ပေးပြီး၊ useFormStatus က pending ကို ပြပေးပါတယ်။ useOptimistic
+      ကတော့ ရလဒ်ကို ကြိုပြပါတယ်။ lesson 12 မှာတော့ form ရဲ့ Action ကို တကယ့် server
+      ပေါ်မှာ run ကြည့်ပါမယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ ရိုက်ထားတာ
+      မပျောက်အောင် UI ကို Activity နဲ့ ဖျောက်ထားတာနဲ့၊ ViewTransition နဲ့ animation
+      ထည့်တာကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "React 19 — Support for stylesheets"
+        url: "https://react.dev/blog/2024/12/05/react-19#support-for-stylesheets"
+      - title: "React — <link>"
+        url: "https://react.dev/reference/react-dom/components/link"
+      - title: "React — <meta>"
+        url: "https://react.dev/reference/react-dom/components/meta"
+      - title: "React — <script>"
+        url: "https://react.dev/reference/react-dom/components/script"
+      - title: "React — preload"
+        url: "https://react.dev/reference/react-dom/preload"
+      - title: "React — preinit"
+        url: "https://react.dev/reference/react-dom/preinit"
+      - title: "React — Custom HTML elements"
+        url: "https://react.dev/reference/react-dom/components#custom-html-elements"
+      - title: "React 19 Upgrade Guide — Other breaking changes (javascript: URLs)"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#other-breaking-changes"
+      - title: "React — Activity"
+        url: "https://react.dev/reference/react/Activity"
+    actions:
+      - id: board-dom
+        type: whiteboard.apply
+        at: { mark: board-dom }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-meta
+        type: whiteboard.apply
+        at: { mark: draw-meta }
+        upsertIds: [b4-meta]
+        drawMs: 1000
+      - id: draw-style
+        type: whiteboard.apply
+        at: { mark: draw-style }
+        upsertIds: [b4-style]
+        drawMs: 1000
+      - id: draw-script
+        type: whiteboard.apply
+        at: { mark: draw-script }
+        upsertIds: [b4-script]
+        drawMs: 900
+      - id: draw-preload
+        type: whiteboard.apply
+        at: { mark: draw-preload }
+        upsertIds: [b4-preload]
+        drawMs: 900
+      - id: draw-custom
+        type: whiteboard.apply
+        at: { mark: draw-custom }
+        upsertIds: [b4-custom]
+        drawMs: 900
+      - id: draw-js-url
+        type: whiteboard.apply
+        at: { mark: draw-js-url }
+        upsertIds: [b4-jsurl]
+        drawMs: 900
+      - id: draw-recap
+        type: whiteboard.apply
+        at: { mark: draw-recap }
+        upsertIds: [b4-recap-box, b4-recap]
+        drawMs: 1600
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b4-next]
+        drawMs: 900
+      - id: expect-api-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/api.js
+        contains: "  if (!order.name) {\n    return { error: \"နာမည် ထည့်ပါ\" };\n  }\n  return { orderId: nextId++ };\n"
+      - id: expect-reorder-file
+        type: expect.file
+        at: { afterAction: expect-api-file }
+        path: src/ReorderButton.jsx
+        contains: "    startTransition(async () => {\n      const result = await placeOrder({ name: \"ကိုအောင်\", table: \"2\" });\n      startTransition(() => {\n        setLastId(result.orderId);\n      });\n    });\n"
+      - id: expect-submit-file
+        type: expect.file
+        at: { afterAction: expect-reorder-file }
+        path: src/SubmitButton.jsx
+        contains: "  const { pending } = useFormStatus();\n"
+      - id: expect-form-hooks-file
+        type: expect.file
+        at: { afterAction: expect-submit-file }
+        path: src/OrderForm.jsx
+        contains: "import { useActionState, useState, useOptimistic } from \"react\";\n"
+      - id: expect-form-optimistic-file
+        type: expect.file
+        at: { afterAction: expect-form-hooks-file }
+        path: src/OrderForm.jsx
+        contains: "    const order = { name: formData.get(\"name\"), table: formData.get(\"table\") };\n    addOptimistic(order);\n    const result = await placeOrder(order);\n"
+      - id: expect-form-jsx-file
+        type: expect.file
+        at: { afterAction: expect-form-optimistic-file }
+        path: src/OrderForm.jsx
+        contains: '<button className="secondary" formAction={saveDraft} data-testid="save-draft">'
+      - id: expect-form-list-file
+        type: expect.file
+        at: { afterAction: expect-form-jsx-file }
+        path: src/OrderForm.jsx
+        contains: "      <OrderList orders={ordersOptimistic} />\n"
+      - id: expect-title-file
+        type: expect.file
+        at: { afterAction: expect-form-list-file }
+        path: src/OrderList.jsx
+        contains: "      <title>{`ရွှေရန်ကုန် · အော်ဒါ ${orders.length} ခု`}</title>\n"
+      - id: expect-app-file
+        type: expect.file
+        at: { afterAction: expect-title-file }
+        path: src/App.jsx
+        contains: "      <Header />\n      <OrderForm />\n      <ReorderButton />\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
