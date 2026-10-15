@@ -3,8 +3,9 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
 
-import { replayTypedFile, whiteboardAssetProblems } from "./crashCourseTestUtils";
+import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
+import { whiteboardAssetProblems } from "./whiteboardLegibility";
 import { AsmPlaygroundClient } from "../runtime/asmPlayground/client";
 import {
   asmRegisterConsoleLines,

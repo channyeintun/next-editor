@@ -3,12 +3,9 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { resolveAnchorOffset } from "../async";
-import { defaultRuntimeModeOf, type StudioSlide } from "../plan";
-import { compileLessonScript } from "../script/compile";
-import { splitIntoDialogs } from "../script/dialogs";
-import { LEXICON_V1 } from "../script/lexicon";
-import { extractScriptNarration } from "../script/markers";
-import { RECORDING_BUFFER_MS, scheduleDialogs } from "../script/schedule";
+import { defaultRuntimeModeOf } from "../plan";
+import { compileWithEstimatedNarration, estimateByTokens } from "../script/estimatedCompile";
+import { RECORDING_BUFFER_MS } from "../script/schedule";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES, mergeStudioSources } from "./index";
 
 describe("studio lesson registry", () => {
@@ -106,37 +103,7 @@ describe("studio lesson registry", () => {
 
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
       const script = source.load();
-      const extracted = extractScriptNarration(script);
-      const dialogs = splitIntoDialogs(extracted);
-      const schedule = scheduleDialogs({
-        script,
-        extracted,
-        dialogs,
-        durationsMs: dialogs.map((dialog) => 400 + dialog.tokens.length * 320),
-        lexicon: LEXICON_V1,
-      });
-      const resolvedSlides: StudioSlide[] = script.lesson.slides.map((slide) =>
-        slide.contentType === "google"
-          ? {
-              id: slide.id,
-              contentType: "google-svg",
-              content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
-              name: slide.name,
-              sourceUrl: slide.deckUrl,
-            }
-          : slide,
-      );
-      const { plan } = compileLessonScript({
-        script,
-        extracted,
-        alignment: schedule.alignment,
-        narration: {
-          audioPath: "studio-tts://registry-test",
-          mimeType: "audio/wav",
-          durationMs: schedule.totalDurationMs,
-        },
-        resolvedSlides,
-      });
+      const { schedule, plan } = compileWithEstimatedNarration(script, estimateByTokens);
 
       const lastDialog = schedule.timeline.at(-1)!;
       expect(schedule.timeline[0].startMs, `${slug} opening handle`).toBe(RECORDING_BUFFER_MS);

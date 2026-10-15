@@ -3,12 +3,9 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
 
-import {
-  whiteboardAssetProblems,
-  whiteboardLabelProblems,
-  replayTypedFile,
-} from "./crashCourseTestUtils";
+import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
+import { whiteboardAssetProblems, whiteboardLabelProblems } from "./whiteboardLegibility";
 
 /**
  * The Haskell crash course has no compiler in this repo to check itself
