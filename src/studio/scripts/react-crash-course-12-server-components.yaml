@@ -1213,7 +1213,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1520,7 +1519,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: draw-boundary }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title, b3-app-box, b3-app-text, b3-btn-box, b3-btn-text]
         drawMs: 2000
@@ -1888,7 +1886,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: draw-recap-title }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b5-title]
       - id: expect-file-app
