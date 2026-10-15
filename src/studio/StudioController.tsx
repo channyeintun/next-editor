@@ -23,6 +23,7 @@ import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
 import HoverRing from "../components/hoverRing/HoverRing";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useRecordingSettings } from "../hooks/useRecordingSettings";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
@@ -57,7 +58,11 @@ import {
 } from "./tts/profiles";
 import { critiqueScript, type CritiqueNote } from "./script/critic";
 import { extractScriptNarration } from "./script/markers";
-import { runStudioRender, type StudioRunResult } from "./runStudioRender";
+import {
+  runStudioRender,
+  WAITING_FOR_VISIBLE_TAB_PHASE,
+  type StudioRunResult,
+} from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
 import {
   isStudioNarrationProvider,
@@ -239,6 +244,13 @@ export default function StudioController() {
 
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
+  const waitingForVisibleTab = running && phase === WAITING_FOR_VISIBLE_TAB_PHASE;
+  // This view owns the studio's title (StudioRoute passes null) because the
+  // tab strip is the only surface Chan can see while the render holds for a
+  // background tab; the in-page hint is gone the moment the tab is in front.
+  useDocumentTitle(
+    waitingForVisibleTab ? "Waiting for you · Studio | Next Editor" : "Studio | Next Editor",
+  );
   const [receipts, setReceipts] = useState<ActionReceipt[]>([]);
   const [latest, setLatest] = useState<StudioRunEntry | null>(runHistory.at(-1) ?? null);
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
@@ -767,6 +779,15 @@ export default function StudioController() {
           </button>
         </div>
       </div>
+
+      {/* Outside the collapsible body: the render is held until this tab is in
+          front, so the instruction must show however the console is left. */}
+      {waitingForVisibleTab ? (
+        <p className="mt-2 max-w-80 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+          Bring this tab to the front to start the performance. Chrome pauses the preview and the
+          recorder in a background tab.
+        </p>
+      ) : null}
 
       <div hidden={collapsed}>
         <div className="mt-2 flex items-center gap-2">

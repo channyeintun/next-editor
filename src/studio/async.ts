@@ -47,6 +47,43 @@ export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * Resolve once `doc` is visible: at once when it already is, otherwise on the
+ * first `visibilitychange` to "visible". Event-driven rather than polled,
+ * because a hidden tab throttles timers (to once a minute after five minutes)
+ * and the wait can last as long as the person takes to come back.
+ */
+export function waitForVisibleDocument(
+  signal: AbortSignal,
+  doc: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener"> = document,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(cancelledError());
+      return;
+    }
+    if (doc.visibilityState !== "hidden") {
+      resolve();
+      return;
+    }
+    const cleanup = () => {
+      doc.removeEventListener("visibilitychange", onChange);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onChange = () => {
+      if (doc.visibilityState === "hidden") return;
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(cancelledError());
+    };
+    doc.addEventListener("visibilitychange", onChange);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export interface WaitUntilOptions {
   timeoutMs: number;
   signal: AbortSignal;

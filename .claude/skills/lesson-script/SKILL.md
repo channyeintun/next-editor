@@ -87,6 +87,10 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      and watch the performance live (slides, typing, run) with periodic
      screenshots. Confirm the checks heading (e.g. "Checks (13/13 ok)") and
      scan the receipts for drift.
+   - The studio tab must be in front: after narration synthesis the render
+     holds at status `waiting-for-visible-tab` (tab title "Waiting for you")
+     until it is. Bring it forward (e.g. osascript-activate Chrome and select
+     the tab) and the performance starts.
    - Never launch `bun run dev` in the background, detached, or concurrently
      with another tool. If no server is already available, ask the user to run
      it in a separate foreground terminal; otherwise stop after step 4 and

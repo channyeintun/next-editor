@@ -68,6 +68,10 @@ browser at render time. Two ways it reaches the studio:
 lesson from the dropdown (or **Import…** a YAML file — validated and
 critiqued in the page), press **Start render**, watch, and **Create draft…**
 (sign-in required for drafts; publishing stays a separate human action).
+Narration synthesis can take many minutes on a first render; when it is done,
+the render waits for the studio tab to be in front (status
+`waiting-for-visible-tab`) before it starts recording, because Chrome pauses
+the preview and the recorder in a background tab.
 
 Users can also provide a narrator reference: the voice row offers **Record**
 (microphone) or an audio-file picker. The prepared sample is stored in the

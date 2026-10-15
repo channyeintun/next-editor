@@ -92,7 +92,10 @@ vi.mock("./inPageDirector", () => ({
     });
   },
 }));
-vi.mock("./runStudioRender", () => ({ runStudioRender: studio.runRender }));
+vi.mock("./runStudioRender", () => ({
+  runStudioRender: studio.runRender,
+  WAITING_FOR_VISIBLE_TAB_PHASE: "waiting-for-visible-tab",
+}));
 vi.mock("./tts/pocketSynth", () => ({ synthesizePocketWav: studio.synthesizePocket }));
 vi.mock("./tts/modalVoxCpm2Synth", () => ({
   synthesizeModalVoxCpm2Wav: () => Promise.reject(new Error("unused")),
@@ -223,6 +226,33 @@ describe("StudioController status messages", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The live preview command bridge is not mounted",
     );
+  });
+
+  it("asks for the tab in front while the render holds for it, also while collapsed", async () => {
+    let finishWait: () => void = () => {};
+    studio.runRender.mockImplementation((_plan, _mode, deps) => {
+      deps.onPhase?.("waiting-for-visible-tab");
+      return new Promise((_resolve, reject) => {
+        finishWait = () => {
+          deps.onPhase?.("start-recording");
+          reject(new Error("stopped by the test"));
+        };
+      });
+    });
+    renderController();
+    fireEvent.click(startButton());
+    await waitFor(() =>
+      expect(renderStatus()).toHaveTextContent("Render status: waiting-for-visible-tab"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Studio render console" }));
+    expect(screen.getByText(/Bring this tab to the front/)).toBeVisible();
+    // The tab strip is the cue Chan can see from another tab.
+    expect(document.title).toBe("Waiting for you · Studio | Next Editor");
+
+    finishWait();
+    await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: failed"));
+    expect(screen.queryByText(/Bring this tab to the front/)).toBeNull();
+    expect(document.title).toBe("Studio | Next Editor");
   });
 
   it("keeps the collapse toggle's name constant while aria-expanded reports the state", () => {

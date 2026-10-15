@@ -120,6 +120,12 @@ export function requestStudioPreviewCommand(
   });
 }
 
+/**
+ * How long a command waits for an animation frame before answering anyway.
+ * Well above a visible tab's frame interval, so it only fires in a hidden tab.
+ */
+export const STUDIO_PREVIEW_FRAME_FALLBACK_MS = 100;
+
 /** Raw script injected by WebContainer.setPreviewScript into every HTML response. */
 export function createStudioPreviewCommandBridgeScript(setupMarker: string): string {
   return `
@@ -227,6 +233,27 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
         } catch {}
       }
 
+      // Let the page react to a command (re-render, layout) before reading the
+      // result. In a visible tab the frame comes first (~16 ms), so results are
+      // what they always were; the timeout only keeps a tab hidden mid-render
+      // from hanging the command, since Chrome runs no frames there.
+      function nextFrameOrTimeout() {
+        return new Promise(function(resolve) {
+          var settled = false;
+          var frame;
+          var timer;
+          function settle() {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            if (frame !== undefined) window.cancelAnimationFrame(frame);
+            resolve();
+          }
+          timer = window.setTimeout(settle, ${STUDIO_PREVIEW_FRAME_FALLBACK_MS});
+          frame = window.requestAnimationFrame(settle);
+        });
+      }
+
       async function execute(command) {
         if (!command || typeof command.type !== 'string') {
           throw new Error('Invalid preview command');
@@ -263,8 +290,13 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
           throw new Error('Unsupported preview command "' + command.type + '"');
         }
 
-        await Promise.resolve();
-        await new Promise(function(resolve) { window.requestAnimationFrame(function() { resolve(); }); });
+        // A ping only proves the listener exists, so it answers at once: a
+        // hidden tab runs no animation frames, and waiting for one here left
+        // the preview.open handshake unanswered until it timed out.
+        if (command.type !== 'ping') {
+          await Promise.resolve();
+          await nextFrameOrTimeout();
+        }
         return result(command, target);
       }
 

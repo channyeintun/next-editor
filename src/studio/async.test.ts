@@ -8,6 +8,7 @@ import {
   resolveAnchorOffset,
   throwIfAborted,
   tween,
+  waitForVisibleDocument,
   waitUntil,
 } from "./async";
 
@@ -165,5 +166,62 @@ describe("tween", () => {
     await expect(run).rejects.toThrow(StudioActionError);
     await expect(run).rejects.toThrow(RENDER_CANCELLED_MESSAGE);
     expect(stepCount).toBe(2);
+  });
+});
+
+describe("waitForVisibleDocument", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function hideDocument() {
+    let state: DocumentVisibilityState = "hidden";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => state);
+    return (next: DocumentVisibilityState) => {
+      state = next;
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+  }
+
+  it("resolves at once for a visible document", async () => {
+    await expect(waitForVisibleDocument(new AbortController().signal)).resolves.toBeUndefined();
+  });
+
+  it("waits while hidden and resolves on the change to visible", async () => {
+    const setVisibility = hideDocument();
+    let settled = false;
+    const wait = waitForVisibleDocument(new AbortController().signal).then(() => {
+      settled = true;
+    });
+
+    // A change that leaves the page hidden does not end the wait.
+    setVisibility("hidden");
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    setVisibility("visible");
+    await wait;
+    expect(settled).toBe(true);
+  });
+
+  it("rejects with the cancellation error when aborted while hidden", async () => {
+    hideDocument();
+    const remove = vi.spyOn(document, "removeEventListener");
+    const controller = new AbortController();
+    const wait = waitForVisibleDocument(controller.signal);
+    controller.abort();
+
+    await expect(wait).rejects.toThrow(RENDER_CANCELLED_MESSAGE);
+    // The listener goes with the wait, so a later tab switch touches nothing.
+    expect(remove).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+  });
+
+  it("rejects an already-aborted signal without waiting", async () => {
+    hideDocument();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(waitForVisibleDocument(controller.signal)).rejects.toThrow(
+      RENDER_CANCELLED_MESSAGE,
+    );
   });
 });

@@ -18,7 +18,9 @@ import StudioController from "./StudioController";
  * project, and a studio tab's Ctrl-S would otherwise overwrite it.
  */
 export default function StudioRoute() {
-  useDocumentTitle("Studio | Next Editor");
+  // StudioController owns the title: it retitles the tab while a render holds
+  // for the tab to come to the front.
+  useDocumentTitle(null);
 
   return (
     <Editor

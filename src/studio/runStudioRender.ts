@@ -18,7 +18,7 @@ import { collectWorkspaceFolders } from "../types/workspacePaths";
 import { createWorkspaceFile } from "../starters/shared";
 import { workspacePathFromMonacoModelUri } from "../monaco";
 import { extractRenderSemantics, type RenderSemantics } from "./compare";
-import { StudioActionError, waitUntil } from "./async";
+import { StudioActionError, waitForVisibleDocument, waitUntil } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
 import { runtimeDockStartsCollapsed } from "./plan";
@@ -105,6 +105,13 @@ function workspaceProjectFromPlan(plan: StudioPlan): WorkspaceProject {
     files,
   };
 }
+
+/**
+ * The phase a render reports while it holds the performance for a hidden tab.
+ * Exported so the studio UI can map it to an instruction; the rule itself
+ * (when to wait, and for what) lives in runStudioRender.
+ */
+export const WAITING_FOR_VISIBLE_TAB_PHASE = "waiting-for-visible-tab";
 
 const PREPARE_TIMEOUT_MS = 15_000;
 const RECORDING_START_TIMEOUT_MS = 8_000;
@@ -255,6 +262,30 @@ export async function runStudioRender(
   const audioBlob = options.narration.blob;
   audioHash = options.narration.audioSha256;
 
+  // ---- Hold for a visible tab ------------------------------------------------
+  // A first render synthesizes narration for minutes, so by now the studio tab
+  // is often in the background. Chrome runs no animation frames — so no style,
+  // layout or paint — in a hidden page, and from here on the render depends on
+  // them: the slide warm-up below exists to pay first-paint cost before the
+  // clock starts, the preview's rrweb recorder flushes on the next frame, and
+  // the editor and whiteboard paint on frames. A silent hidden tab also gets
+  // its chained timers throttled to one wake-up a minute. Nothing is recorded
+  // or timed while holding, so the timing gate is unaffected; only the
+  // report's wall duration grows. Event-driven, so the wait itself is not
+  // throttled.
+  const holdForVisibleTab = async (): Promise<string | null> => {
+    if (document.visibilityState !== "hidden") return null;
+    phase(WAITING_FOR_VISIBLE_TAB_PHASE);
+    try {
+      await waitForVisibleDocument(signal);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+  const heldBeforePrepare = await holdForVisibleTab();
+  if (heldBeforePrepare !== null) return failedResult(heldBeforePrepare);
+
   // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");
   if (plan.actions.some((action) => action.type === "whiteboard.apply")) {
@@ -330,6 +361,11 @@ export async function runStudioRender(
   } catch (error) {
     return failedResult(error instanceof Error ? error.message : String(error));
   }
+
+  // The tab may have been hidden again during preparation; the check is free
+  // when it is still in front.
+  const heldBeforeRecording = await holdForVisibleTab();
+  if (heldBeforeRecording !== null) return failedResult(heldBeforeRecording);
 
   // ---- Start recording with the external narration -------------------------
   phase("start-recording");
