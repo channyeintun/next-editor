@@ -1,0 +1,2282 @@
+# React crash course, lesson 13 — React 19.3 and the course recap
+# (Burmese, my-MM). The last lesson of the course.
+#
+# Story: the same React Server Components app as lesson 12 (Vite 7.3.7 +
+# @vitejs/plugin-rsc 0.5.37, React 19.3.1; no framework, no router), minus
+# the slow Specials so every server refresh stays fast. A whiteboard map of
+# what React 19.3 added (two items already taught in lessons 8 and 11), then
+# hydration: server HTML -> hydrateRoot, read in the pinned
+# src/framework/entry.browser.jsx, with React 19's mismatch diff and 19.3's
+# StrictMode-during-hydration change. Three 19.3 features are then written
+# into the running app: a context created in a 'use client' file and
+# RENDERED by the App Server Component as <ShopContext value> (opening
+# hours); a TimeZone Client Component that opts out of server rendering with
+# use(browser()) inside <Suspense>; and an OrderDetails card whose three
+# fields sit in a <Fragment ref>, focused as a group through the
+# FragmentInstance. A board on Trusted Types and the smaller 19.3 changes,
+# and a recap of the whole course (lessons 1-13) close it.
+#
+# Insert-only plan: ShopContext.jsx, ShopHours.jsx, TimeZone.jsx and
+# OrderDetails.jsx are pinned EMPTY and typed while nothing imports them
+# (the 'use client' line keystroke by keystroke, the rest line by line).
+# App.jsx is a live Server Component: it only takes `block` inserts of
+# complete lines, the import first, then the usage. Every App edit is an
+# in-place RSC refresh (no reload). The three new parts are inserted ABOVE
+# the menu (after the header, and after the order count) so the whole demo
+# stays inside the docked preview without scrolling; nothing is clicked
+# before them, so the siblings they shift have no client state to lose.
+#
+# The dev server starts in the first scene (install + boot take ~40 s in the
+# WebContainer); the preview opens only after the hydration scene, more than
+# two minutes later.
+#
+# Narration is Burmese (my-MM). Its source is voice-script.md next to this
+# file: tools/sync_check.py copies it into tools/template.yaml and rebuilds
+# this YAML with tools/build.py, so edit voice-script.md, not the narration
+# here. Every visible string (title, chapters, board labels, UI) is Burmese.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-13-react-19-3-recap
+  title: "React crash course 13: React 19.3 နဲ့ အနှစ်ချုပ်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 13
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-rsc",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1",
+            "rsc-html-stream": "0.0.8"
+          },
+          "devDependencies": {
+            "@vitejs/plugin-rsc": "0.5.37",
+            "vite": "7.3.7"
+          }
+        }
+      vite.config.js: |
+        import "./webcontainer-fix.js";
+        import rsc from "@vitejs/plugin-rsc";
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every browser entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react-dom",
+              "react-dom/client",
+              "rsc-html-stream/client",
+            ],
+          },
+          plugins: [
+            // React's bundler integration for Server Components. It builds three
+            // environments: rsc (Server Components + Server Functions), ssr (HTML)
+            // and client (hydration in the browser).
+            rsc({
+              entries: {
+                rsc: "./src/framework/entry.rsc.jsx",
+                ssr: "./src/framework/entry.ssr.jsx",
+                client: "./src/framework/entry.browser.jsx",
+              },
+            }),
+          ],
+        });
+      webcontainer-fix.js: |
+        // Two gaps between WebContainer's in-browser Node.js and real Node.js that
+        // React Server Components run into. Real Node.js passes both checks and is
+        // left alone. Imported once by vite.config.js, which runs in the server process.
+
+        // 1. The server clock (performance.timeOrigin + performance.now()) runs
+        // behind the browser's Date.now(). React stamps that time into the RSC stream,
+        // so the browser computes component times before the page existed and React's
+        // dev performance track throws "cannot have a negative time stamp".
+        const drift = Date.now() - (performance.timeOrigin + performance.now());
+        if (Math.abs(drift) > 20) {
+          Object.defineProperty(performance, "timeOrigin", { value: performance.timeOrigin + drift });
+        }
+
+        // 2. TextDecoder ignores { stream: true }: a Burmese letter (3 bytes in UTF-8)
+        // split between two chunks of the RSC stream turns into "�" and corrupts the
+        // page. Keep an unfinished letter's bytes and decode them with the next chunk.
+        const NativeTextDecoder = globalThis.TextDecoder;
+
+        function decodesSplitLetters() {
+          const decoder = new NativeTextDecoder();
+          const text =
+            decoder.decode(new Uint8Array([0xe1, 0x80]), { stream: true }) +
+            decoder.decode(new Uint8Array([0x81]));
+          return text === "ခ";
+        }
+
+        if (process.env.FORCE_TEXT_DECODER_FIX || !decodesSplitLetters()) {
+          globalThis.TextDecoder = class TextDecoder extends NativeTextDecoder {
+            #pending = new Uint8Array(0);
+
+            decode(input, options) {
+              let bytes = !input
+                ? new Uint8Array(0)
+                : ArrayBuffer.isView(input)
+                  ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+                  : new Uint8Array(input);
+              if (this.#pending.length > 0) {
+                const joined = new Uint8Array(this.#pending.length + bytes.length);
+                joined.set(this.#pending);
+                joined.set(bytes, this.#pending.length);
+                bytes = joined;
+              }
+              let end = bytes.length;
+              if (options?.stream) {
+                // Step back over continuation bytes (10xxxxxx) to the letter's first byte.
+                let start = end - 1;
+                while (start >= 0 && end - start < 4 && (bytes[start] & 0xc0) === 0x80) start--;
+                if (start >= 0) {
+                  const first = bytes[start];
+                  const length = first >= 0xf0 ? 4 : first >= 0xe0 ? 3 : first >= 0xc0 ? 2 : 1;
+                  if (start + length > end) end = start;
+                }
+              }
+              this.#pending = bytes.slice(end);
+              return super.decode(bytes.slice(0, end));
+            }
+          };
+        }
+      src/framework/entry.rsc.jsx: |
+        // Runs on the server, in the "rsc" environment (react-server condition).
+        // GET  /            -> HTML (rendered by the ssr environment)
+        // GET  /?rsc        -> the RSC payload (used by the browser to refresh)
+        // POST /?rsc + x-rsc-action header -> call a Server Function, then re-render
+        import {
+          renderToReadableStream,
+          createTemporaryReferenceSet,
+          decodeReply,
+          loadServerAction,
+          decodeAction,
+          decodeFormState,
+        } from "@vitejs/plugin-rsc/rsc/server";
+        import App from "../App.jsx";
+
+        async function handler(request) {
+          const url = new URL(request.url);
+          const wantsRsc = url.searchParams.has("rsc");
+          let returnValue;
+          let formState;
+          let temporaryReferences;
+
+          if (request.method === "POST") {
+            const actionId = request.headers.get("x-rsc-action");
+            if (actionId) {
+              // Called from the hydrated page (React's server callback).
+              const contentType = request.headers.get("content-type") ?? "";
+              const body = contentType.startsWith("multipart/form-data")
+                ? await request.formData()
+                : await request.text();
+              temporaryReferences = createTemporaryReferenceSet();
+              const args = await decodeReply(body, { temporaryReferences });
+              const action = await loadServerAction(actionId);
+              try {
+                returnValue = { ok: true, data: await action(...args) };
+              } catch (error) {
+                returnValue = { ok: false, data: error };
+              }
+            } else {
+              // A plain <form> post before JavaScript loaded.
+              const formData = await request.formData();
+              const action = await decodeAction(formData);
+              formState = await decodeFormState(await action(), formData);
+            }
+          }
+
+          // A closed tab or a reloaded preview cancels the stream: not an error.
+          const onError = (error) => {
+            if (!request.signal.aborted) console.error(error);
+          };
+          const rscStream = renderToReadableStream(
+            { root: <App />, returnValue, formState },
+            { temporaryReferences, onError },
+          );
+
+          if (wantsRsc) {
+            return new Response(rscStream, {
+              headers: { "content-type": "text/x-component;charset=utf-8" },
+            });
+          }
+
+          const ssr = await import.meta.viteRsc.loadModule("ssr", "index");
+          const htmlStream = await ssr.renderHtml(rscStream, { formState, onError });
+          return new Response(htmlStream, {
+            headers: { "content-type": "text/html;charset=utf-8" },
+          });
+        }
+
+        export default { fetch: handler };
+
+        if (import.meta.hot) {
+          import.meta.hot.accept();
+        }
+      src/framework/entry.ssr.jsx: |
+        // Runs on the server, in the "ssr" environment: turns the RSC payload into
+        // HTML and embeds the payload in the page so the browser can hydrate.
+        import { createFromReadableStream, getClientEntryUrl } from "@vitejs/plugin-rsc/ssr";
+        import { use } from "react";
+        import { renderToReadableStream } from "react-dom/server.edge";
+        import { injectRSCPayload } from "rsc-html-stream/server";
+
+        export async function renderHtml(rscStream, { formState, onError }) {
+          const [forHtml, forBrowser] = rscStream.tee();
+          let payload;
+          function SsrRoot() {
+            payload ??= createFromReadableStream(forHtml);
+            return use(payload).root;
+          }
+          const htmlStream = await renderToReadableStream(<SsrRoot />, {
+            bootstrapScriptContent: `import(${JSON.stringify(getClientEntryUrl())})`,
+            formState,
+            onError,
+          });
+          return htmlStream.pipeThrough(injectRSCPayload(forBrowser));
+        }
+      src/framework/entry.browser.jsx: |
+        // Runs in the browser: hydrates the server HTML, calls Server Functions,
+        // and re-renders whenever the server sends a new RSC payload.
+        import {
+          createFromReadableStream,
+          createFromFetch,
+          setServerCallback,
+          createTemporaryReferenceSet,
+          encodeReply,
+        } from "@vitejs/plugin-rsc/browser";
+        import { StrictMode, startTransition, useEffect, useState } from "react";
+        import { hydrateRoot } from "react-dom/client";
+        import { rscStream } from "rsc-html-stream/client";
+
+        // Replaced once the page has hydrated; a server edit that lands before
+        // that has nothing to update (the HTML is already the newest render).
+        let setPayload = () => {};
+
+        function rscUrl() {
+          const url = new URL(window.location.href);
+          url.searchParams.set("rsc", "");
+          return url;
+        }
+
+        function Root({ initial }) {
+          const [payload, set] = useState(initial);
+          useEffect(() => {
+            setPayload = (next) => startTransition(() => set(next));
+          }, []);
+          return payload.root;
+        }
+
+        setServerCallback(async (id, args) => {
+          const temporaryReferences = createTemporaryReferenceSet();
+          const payload = await createFromFetch(
+            fetch(rscUrl(), {
+              method: "POST",
+              headers: { "x-rsc-action": id },
+              body: await encodeReply(args, { temporaryReferences }),
+            }),
+            { temporaryReferences },
+          );
+          setPayload(payload);
+          if (!payload.returnValue.ok) throw payload.returnValue.data;
+          return payload.returnValue.data;
+        });
+
+        createFromReadableStream(rscStream).then((initial) => {
+          hydrateRoot(
+            document,
+            <StrictMode>
+              <Root initial={initial} />
+            </StrictMode>,
+            { formState: initial.formState },
+          );
+        });
+
+        // An edit to a server file: fetch a fresh RSC payload instead of reloading.
+        if (import.meta.hot) {
+          import.meta.hot.on("rsc:update", async () => {
+            setPayload(await createFromFetch(fetch(rscUrl())));
+          });
+        }
+      src/db.js: |
+        // Server-only data: this module never reaches the browser.
+        import "server-only";
+        import { readFile } from "node:fs/promises";
+
+        export async function getMenu() {
+          const text = await readFile(new URL("./menu.json", import.meta.url), "utf8");
+          return JSON.parse(text);
+        }
+
+        // Orders live in the server's memory (kept across edits for the lesson).
+        globalThis.orders ??= [];
+
+        export function getOrders() {
+          return globalThis.orders;
+        }
+
+        export function addOrder(name) {
+          globalThis.orders.push(name);
+        }
+      src/menu.json: |
+        [
+          { "id": "mohinga", "name": "မုန့်ဟင်းခါး", "price": 2500 },
+          { "id": "shan-noodles", "name": "ရှမ်းခေါက်ဆွဲ", "price": 3000 },
+          { "id": "nan-gyi-thoke", "name": "နန်းကြီးသုပ်", "price": 2800 },
+          { "id": "ohn-no-khao-swe", "name": "အုန်းနို့ခေါက်ဆွဲ", "price": 3500 },
+          { "id": "laphet-thoke", "name": "လက်ဖက်သုပ်", "price": 2000 }
+        ]
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 12: buttons inside a card keep their own width. */
+        .card > button {
+          justify-self: start;
+        }
+      src/App.jsx: |
+        import { getMenu, getOrders } from "./db.js";
+        import { AddButton } from "./AddButton.jsx";
+        import { OrderForm } from "./OrderForm.jsx";
+        import "./styles.css";
+
+        export default async function App() {
+          const menu = await getMenu();
+          const orders = getOrders();
+          return (
+            <html lang="my">
+              <head>
+                <meta charSet="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</title>
+              </head>
+              <body>
+                <main className="page">
+                  <header className="header">
+                    <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+                  </header>
+                  <p className="muted" data-testid="order-count">
+                    မှာထားတာ {orders.length} ခု
+                  </p>
+                  <ul className="list" data-testid="menu">
+                    {menu.map((dish) => (
+                      <li key={dish.id}>
+                        <span>{dish.name}</span>
+                        <AddButton id={dish.id} price={dish.price} />
+                      </li>
+                    ))}
+                  </ul>
+                  <OrderForm dishes={menu.map((dish) => dish.name)} />
+                </main>
+              </body>
+            </html>
+          );
+        }
+      src/AddButton.jsx: |
+        "use client";
+        import { useState } from "react";
+
+        export function AddButton({ id, price }) {
+          const [count, setCount] = useState(0);
+          return (
+            <button data-testid={"add-" + id} onClick={() => setCount(count + 1)}>
+              + {count} ({(count * price).toLocaleString("en-US")} ကျပ်)
+            </button>
+          );
+        }
+      src/actions.js: |
+        "use server";
+        import { addOrder, getMenu } from "./db.js";
+
+        export async function placeOrder(previousState, formData) {
+          const dish = formData.get("dish");
+          const menu = await getMenu();
+          if (!menu.some((item) => item.name === dish)) return "ဟင်းလျာ ရွေးပါ";
+          addOrder(dish);
+          return dish + " မှာပြီးပါပြီ";
+        }
+      src/OrderForm.jsx: |
+        "use client";
+        import { useActionState } from "react";
+        import { placeOrder } from "./actions.js";
+
+        export function OrderForm({ dishes }) {
+          const [message, formAction, isPending] = useActionState(placeOrder, "");
+          return (
+            <form action={formAction} className="card">
+              <label>
+                ဟင်းလျာ
+                <select name="dish" data-testid="order-dish">
+                  {dishes.map((dish) => (
+                    <option key={dish}>{dish}</option>
+                  ))}
+                </select>
+              </label>
+              <button data-testid="submit-order" disabled={isPending}>မှာမယ်</button>
+              <p data-testid="order-message">{message}</p>
+            </form>
+          );
+        }
+      src/ShopContext.jsx: ""
+      src/ShopHours.jsx: ""
+      src/TimeZone.jsx: ""
+      src/OrderDetails.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — what React 19.3 added.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "React 19.3 မှာ ဘာအသစ်တွေ ပါလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-done-check-1,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 228,
+        width: 34,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-done-1,
+        kind: text,
+        x: 330,
+        y: 225,
+        width: 500,
+        height: 40,
+        text: "ViewTransition + addTransitionType",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-done-1-tag,
+        kind: text,
+        x: 920,
+        y: 225,
+        width: 150,
+        height: 40,
+        text: "lesson 11",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-done-check-2,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 283,
+        width: 34,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-done-2,
+        kind: text,
+        x: 330,
+        y: 280,
+        width: 500,
+        height: 40,
+        text: "Transition တွေ သီးခြား render",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-done-2-tag,
+        kind: text,
+        x: 920,
+        y: 280,
+        width: 150,
+        height: 40,
+        text: "lesson 8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-new-label,
+        kind: text,
+        x: 290,
+        y: 340,
+        width: 400,
+        height: 40,
+        text: "ဒီ lesson မှာ ရေးမယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-new-box,
+        kind: rectangle,
+        x: 280,
+        y: 385,
+        width: 800,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-new-1,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 560,
+        height: 40,
+        text: "Server Component ထဲက <Context>",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-new-2,
+        kind: text,
+        x: 305,
+        y: 452,
+        width: 400,
+        height: 40,
+        text: "use(browser())",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-new-3,
+        kind: text,
+        x: 305,
+        y: 504,
+        width: 400,
+        height: 40,
+        text: "<Fragment ref>",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-tt,
+        kind: text,
+        x: 280,
+        y: 590,
+        width: 560,
+        height: 40,
+        text: "Trusted Types · security",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 2 — server HTML, then hydration; the React 19 mismatch diff.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Server HTML နဲ့ hydration",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-html-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 370,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-html-text,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 340,
+        height: 40,
+        text: "server က HTML ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 445,
+        y: 310,
+        width: 40,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-show-box,
+        kind: rectangle,
+        x: 280,
+        y: 355,
+        width: 370,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-show-text,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 340,
+        height: 40,
+        text: "browser က ချက်ချင်း ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-show-note,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 360,
+        height: 40,
+        text: "ခလုတ်တွေ မနှိပ်ရသေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 445,
+        y: 478,
+        width: 40,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b2-hydrate-box,
+        kind: rectangle,
+        x: 280,
+        y: 522,
+        width: 370,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b2-hydrate-text,
+        kind: text,
+        x: 300,
+        y: 537,
+        width: 340,
+        height: 40,
+        text: "hydrateRoot က ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-mismatch,
+        kind: text,
+        x: 710,
+        y: 240,
+        width: 330,
+        height: 40,
+        text: "server ≠ browser ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-mismatch-eg,
+        kind: text,
+        x: 710,
+        y: 295,
+        width: 330,
+        height: 40,
+        text: "ဥပမာ - time zone",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-diff-box,
+        kind: rectangle,
+        x: 710,
+        y: 360,
+        width: 340,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-diff-plus,
+        kind: text,
+        x: 735,
+        y: 375,
+        width: 280,
+        height: 40,
+        text: "+ browser ရဲ့ စာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-diff-minus,
+        kind: text,
+        x: 735,
+        y: 425,
+        width: 280,
+        height: 40,
+        text: "- server ရဲ့ စာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-diff-label,
+        kind: text,
+        x: 710,
+        y: 500,
+        width: 340,
+        height: 40,
+        text: "React 19 · diff နဲ့ error",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 3 — <Context> rendered by a Server Component (render, not create).
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Server Component ထဲက Context",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-before-label,
+        kind: text,
+        x: 280,
+        y: 228,
+        width: 400,
+        height: 40,
+        text: "React 19.3 မတိုင်ခင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-before,
+        kind: text,
+        x: 280,
+        y: 280,
+        width: 640,
+        height: 40,
+        text: "App → wrapper component → ShopHours",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-before-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 280,
+        y: 278,
+        width: 560,
+        height: 44,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-now-label,
+        kind: text,
+        x: 280,
+        y: 350,
+        width: 300,
+        height: 40,
+        text: "React 19.3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-now,
+        kind: text,
+        x: 280,
+        y: 402,
+        width: 640,
+        height: 40,
+        text: "App → <ShopContext value> → ShopHours",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-box,
+        kind: rectangle,
+        x: 280,
+        y: 470,
+        width: 800,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b3-rule-create,
+        kind: text,
+        x: 305,
+        y: 485,
+        width: 720,
+        height: 40,
+        text: "createContext → 'use client' ဖိုင်ထဲမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-render,
+        kind: text,
+        x: 305,
+        y: 535,
+        width: 720,
+        height: 40,
+        text: "render → ဘယ်မှာမဆို၊ server မှာလည်း ရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board 4 — use(browser()): server HTML gets the fallback, the browser renders.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "use(browser())",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-problem,
+        kind: text,
+        x: 280,
+        y: 225,
+        width: 800,
+        height: 40,
+        text: "server က time zone မသိ → server ≠ browser",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-server-box,
+        kind: rectangle,
+        x: 280,
+        y: 290,
+        width: 360,
+        height: 170,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-server-name,
+        kind: text,
+        x: 305,
+        y: 305,
+        width: 200,
+        height: 40,
+        text: "server",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-server-l1,
+        kind: text,
+        x: 305,
+        y: 355,
+        width: 300,
+        height: 40,
+        text: "component ကို ကျော်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-server-l2,
+        kind: text,
+        x: 305,
+        y: 405,
+        width: 300,
+        height: 40,
+        text: "HTML ထဲ fallback",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 355,
+        width: 60,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b4-client-box,
+        kind: rectangle,
+        x: 730,
+        y: 290,
+        width: 350,
+        height: 170,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-client-name,
+        kind: text,
+        x: 755,
+        y: 305,
+        width: 200,
+        height: 40,
+        text: "browser",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-client-l1,
+        kind: text,
+        x: 755,
+        y: 355,
+        width: 300,
+        height: 40,
+        text: "hydration ပြီးမှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-client-l2,
+        kind: text,
+        x: 755,
+        y: 405,
+        width: 300,
+        height: 40,
+        text: "time zone အစစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-nowait,
+        kind: text,
+        x: 280,
+        y: 505,
+        width: 800,
+        height: 40,
+        text: "browser ထဲမှာတော့ မစောင့်ဘဲ ချက်ချင်း render",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-nowait-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 513,
+        width: 600,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+
+    # Board 5 — a wrapper <div> vs <Fragment ref>.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "<Fragment ref>",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-div-label,
+        kind: text,
+        x: 280,
+        y: 222,
+        width: 320,
+        height: 40,
+        text: "wrapper <div>",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b5-div-card,
+        kind: rectangle,
+        x: 280,
+        y: 270,
+        width: 340,
+        height: 190,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b5-div-inner,
+        kind: rectangle,
+        x: 300,
+        y: 290,
+        width: 300,
+        height: 150,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b5-div-text,
+        kind: text,
+        x: 325,
+        y: 345,
+        width: 250,
+        height: 40,
+        text: "grid item တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-div-note,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 340,
+        height: 40,
+        text: "field ကြား gap ပျောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b5-frag-label,
+        kind: text,
+        x: 720,
+        y: 222,
+        width: 340,
+        height: 40,
+        text: "<Fragment ref>",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-frag-card,
+        kind: rectangle,
+        x: 720,
+        y: 270,
+        width: 360,
+        height: 190,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-frag-f1,
+        kind: rectangle,
+        x: 745,
+        y: 288,
+        width: 310,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-frag-f2,
+        kind: rectangle,
+        x: 745,
+        y: 344,
+        width: 310,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-frag-f3,
+        kind: rectangle,
+        x: 745,
+        y: 400,
+        width: 310,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-frag-note,
+        kind: text,
+        x: 720,
+        y: 475,
+        width: 360,
+        height: 40,
+        text: "DOM ထဲ အပို မရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-methods-1,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 800,
+        height: 40,
+        text: "focus() · focusLast() · addEventListener()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-methods-2,
+        kind: text,
+        x: 280,
+        y: 595,
+        width: 800,
+        height: 40,
+        text: "observeUsing() · scrollIntoView()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 6 — Trusted Types and the smaller 19.3 changes.
+    - {
+        id: b6-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Trusted Types နဲ့ တခြားဟာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b6-rule,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 800,
+        height: 40,
+        text: "စစ်ပြီးသား HTML နဲ့ script URL ပဲ လက်ခံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b6-before,
+        kind: text,
+        x: 280,
+        y: 290,
+        width: 800,
+        height: 40,
+        text: "19.3 မတိုင်ခင် · React က string ပြောင်း → ငြင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b6-now,
+        kind: text,
+        x: 280,
+        y: 350,
+        width: 800,
+        height: 40,
+        text: "19.3 · attribute ထဲ မပြောင်းဘဲ ပို့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-now-check,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 352,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b6-other-label,
+        kind: text,
+        x: 280,
+        y: 435,
+        width: 420,
+        height: 40,
+        text: "တခြား ပြောင်းလဲမှုတွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b6-other-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 443,
+        width: 320,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-other-1,
+        kind: text,
+        x: 280,
+        y: 495,
+        width: 800,
+        height: 40,
+        text: "conditional use() · dev warning",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-other-2,
+        kind: text,
+        x: 280,
+        y: 548,
+        width: 800,
+        height: 40,
+        text: "onFullscreenChange · onFullscreenError",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board 7 — the whole course, lessons 1-13, and the next step.
+    - {
+        id: b7-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Course တစ်ခုလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b7-trunk,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 280,
+        y: 230,
+        width: 36,
+        height: 300,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b7-row-1,
+        kind: text,
+        x: 340,
+        y: 228,
+        width: 740,
+        height: 40,
+        text: "1 Component · 2 Props · 3 State · 4 Form",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b7-row-2,
+        kind: text,
+        x: 340,
+        y: 285,
+        width: 740,
+        height: 40,
+        text: "5 Reducer · Context · 6 Ref · 7 Effect",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b7-row-3,
+        kind: text,
+        x: 340,
+        y: 342,
+        width: 740,
+        height: 40,
+        text: "8 Performance · 9 Suspense · 10 Action",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b7-row-4,
+        kind: text,
+        x: 340,
+        y: 399,
+        width: 740,
+        height: 40,
+        text: "11 Activity · ViewTransition",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b7-row-5,
+        kind: text,
+        x: 340,
+        y: 456,
+        width: 740,
+        height: 40,
+        text: "12 Server Component · 13 React 19.3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b7-next,
+        kind: text,
+        x: 340,
+        y: 555,
+        width: 560,
+        height: 40,
+        text: "နောက်တစ်ဆင့် → react.dev",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b7-next-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 315,
+        y: 538,
+        width: 480,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 13527
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: react-19-3-map
+    chapter: "React 19.3 မှာ ဘာအသစ်တွေ ပါလဲ"
+    narration: >
+      ဒီ lesson က course ရဲ့ နောက်ဆုံး lesson ပါ။ lesson 12 က ဆိုင် app ပေါ်မှာ
+      React 19.3 ရဲ့ feature အသစ်တွေကို ထည့်ကြည့်ပြီး၊ course တစ်ခုလုံးကို
+      ပြန်ချုပ်ပါမယ်။ [[mark:start-server]] package တွေ install လုပ်ရတာ
+      ကြာတဲ့အတွက်၊ dev server ကို အရင်ဆုံး စ run ထားလိုက်ရအောင်။
+      [[mark:draw-done-1]] React 19.3 ထဲက တချို့ကိုတော့ သုံးခဲ့ပြီးသားပါ။ lesson
+      11 မှာ သုံးခဲ့တဲ့ ViewTransition နဲ့ addTransitionType ပါ။
+      [[mark:draw-done-2]] lesson 8 မှာလည်း React က Transition တွေကို သီးခြားစီ
+      render လုပ်တာ တွေ့ခဲ့ပါတယ်။ [[mark:draw-new]] ဒီနေ့တော့ ကျန်တာတွေထဲက
+      သုံးခုကို app ထဲ ထည့်ရေးပါမယ်။ Server Component က render လုပ်တဲ့ context၊
+      browser ဆိုတဲ့ function အသစ်နဲ့ Fragment ပေါ်မှာ တပ်တဲ့ ref ပါ။
+      [[mark:draw-tt]] Trusted Types ကတော့ security နဲ့ ဆိုင်ပြီး၊ lesson
+      အဆုံးနားမှာ ပြန်ပြောပါမယ်။
+    sources:
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "React — <ViewTransition>"
+        url: "https://react.dev/reference/react/ViewTransition"
+      - title: "React — useTransition"
+        url: "https://react.dev/reference/react/useTransition"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-done-1
+        type: whiteboard.apply
+        at: { mark: draw-done-1 }
+        upsertIds: [b1-done-check-1, b1-done-1, b1-done-1-tag]
+        drawMs: 1600
+      - id: draw-done-2
+        type: whiteboard.apply
+        at: { mark: draw-done-2 }
+        upsertIds: [b1-done-check-2, b1-done-2, b1-done-2-tag]
+        drawMs: 1600
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [b1-new-label, b1-new-box, b1-new-1, b1-new-2, b1-new-3]
+        drawMs: 2600
+      - id: draw-tt
+        type: whiteboard.apply
+        at: { mark: draw-tt }
+        upsertIds: [b1-tt]
+        drawMs: 1000
+
+  # ------------------------------------------------------------------ 2
+  - id: ssr-hydration
+    chapter: "Server HTML နဲ့ hydration"
+    narration: >
+      [[mark:draw-hydration]] အရင်ဆုံး lesson 12 မှာ နာမည် မပြောခဲ့ရသေးတဲ့
+      hydration ကို ကြည့်ရအောင်။ [[mark:draw-step-html]] page တစ်ခု ပွင့်လာတဲ့အခါ
+      server က ပြီးပြီးသား HTML ကို ပို့ပေးလို့၊ JavaScript မ run ရသေးခင်မှာပဲ
+      browser က ဆိုင်ကို ပြနိုင်ပါတယ်။ [[mark:draw-step-show]] ဒါပေမဲ့ ခလုတ်တွေကို
+      နှိပ်လို့ မရသေးပါဘူး။ [[mark:draw-step-hydrate]] JavaScript ရောက်လာတဲ့အခါ
+      React က page ကို ပြန်မဆောက်ဘဲ၊ ရှိပြီးသား HTML ပေါ်မှာ လာချိတ်ပါတယ်။ အဲဒီ
+      အဆင့်ကို hydration လို့ ခေါ်ပါတယ်။ [[mark:draw-mismatch]] ဒါကြောင့် browser
+      ရဲ့ ပထမ render က server ရဲ့ HTML နဲ့ ကိုက်ညီရပါမယ်။ ဒါပေမဲ့ လက်ရှိ အချိန်၊
+      ကြည့်နေသူရဲ့ time zone လိုမျိုး တန်ဖိုးတွေက နှစ်ဘက် မတူ ဖြစ်နိုင်ပါတယ်။
+      [[mark:draw-diff]] မကိုက်ရင် React 19 က server စာနဲ့ browser စာ ဘယ်မှာ ကွာလဲ
+      ပြတဲ့ error ကို ပြပြီး၊ အဲဒီ အပိုင်းကို browser မှာ ပြန် render လုပ်ပါတယ်။
+      [[mark:close-board-2]] hydration ကို app ထဲမှာ ရှာကြည့်ရအောင်။
+      [[mark:select-hydrate-import]] ဒါက browser ထဲမှာ run တဲ့ framework ဖိုင်ပါ။
+      ဒီ import က hydrateRoot ကို ယူထားပါတယ်။ [[mark:select-hydrate]] lesson 1 မှာ
+      createRoot က page ကို အလွတ်ကနေ ဆောက်ခဲ့ပါတယ်။ hydrateRoot ကတော့ server
+      ပို့ထားတဲ့ document တစ်ခုလုံးကို ဆက်ကိုင်ပါတယ်။ [[mark:select-strict]]
+      သူ့ကို StrictMode နဲ့ ထုပ်ထားပါတယ်။ React 19.3 ကစပြီး development မှာ
+      StrictMode က hydration လုပ်တုန်းမှာလည်း Effect တွေကို နှစ်ခါ run ပါတယ်။
+    sources:
+      - title: "React — hydrateRoot"
+        url: "https://react.dev/reference/react-dom/client/hydrateRoot"
+      - title: "React 19 — Diffs for hydration errors"
+        url: "https://react.dev/blog/2024/12/05/react-19#diffs-for-hydration-errors"
+      - title: "React — <StrictMode>"
+        url: "https://react.dev/reference/react/StrictMode"
+      - title: "React 19.3 changelog"
+        url: "https://github.com/react/react/blob/main/CHANGELOG.md"
+    actions:
+      - id: draw-hydration
+        type: whiteboard.apply
+        at: { mark: draw-hydration }
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-step-html
+        type: whiteboard.apply
+        at: { mark: draw-step-html }
+        upsertIds: [b2-html-box, b2-html-text, b2-arrow-1, b2-show-box, b2-show-text]
+        drawMs: 2400
+      - id: draw-step-show
+        type: whiteboard.apply
+        at: { mark: draw-step-show }
+        upsertIds: [b2-show-note]
+        drawMs: 1000
+      - id: draw-step-hydrate
+        type: whiteboard.apply
+        at: { mark: draw-step-hydrate }
+        upsertIds: [b2-arrow-2, b2-hydrate-box, b2-hydrate-text]
+        drawMs: 1800
+      - id: draw-mismatch
+        type: whiteboard.apply
+        at: { mark: draw-mismatch }
+        upsertIds: [b2-mismatch, b2-mismatch-eg]
+        drawMs: 1600
+      - id: draw-diff
+        type: whiteboard.apply
+        at: { mark: draw-diff }
+        upsertIds: [b2-diff-box, b2-diff-plus, b2-diff-minus, b2-diff-label]
+        drawMs: 2400
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { mark: close-board-2 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-2 }
+      - id: open-entry-browser
+        type: workspace.openFile
+        at: { mark: close-board-2, offsetMs: 700 }
+        path: src/framework/entry.browser.jsx
+      - id: select-hydrate-import
+        type: editor.select
+        at: { mark: select-hydrate-import }
+        target:
+          {
+            file: src/framework/entry.browser.jsx,
+            text: 'import { hydrateRoot } from "react-dom/client";',
+            occurrence: 1,
+          }
+      - id: select-hydrate
+        type: editor.select
+        at: { mark: select-hydrate }
+        target:
+          {
+            file: src/framework/entry.browser.jsx,
+            text: "hydrateRoot(\n    document,",
+            occurrence: 1,
+          }
+      - id: select-strict
+        type: editor.select
+        at: { mark: select-strict }
+        target: { file: src/framework/entry.browser.jsx, text: "<StrictMode>", occurrence: 1 }
+
+  # ------------------------------------------------------------------ 3
+  - id: context-code
+    chapter: "Server Component ထဲမှာ context"
+    narration: >
+      [[mark:preview-opens]] dev server က အသင့် ဖြစ်နေပြီမို့ preview ကို
+      ဖွင့်ရအောင်။ [[mark:after-preview]] ဒါက lesson 12 က ကိုယ့် ဆိုင်ပါပဲ။ menu
+      ရော၊ order မှာတဲ့ form ရော ရှိနေပါတယ်။ [[mark:open-context]] ပထမ feature
+      အနေနဲ့ ဆိုင် ဖွင့်ချိန်ကို context ကနေ ပြပါမယ်။ context ဖိုင်က အခု အလွတ်ပါ။
+      [[mark:type-context-directive]] ဖိုင်ကို use client နဲ့ အရင် စပါတယ်။
+      [[mark:type-context]] ပြီးတော့ context ကို ဖန်တီးပါတယ်။ Server Component က
+      context ကို ဖန်တီးလို့ မရပါဘူး၊ server ဘက် React မှာ createContext
+      မပါလို့ပါ။ [[mark:open-hours]] နောက်ဖိုင်က အဲဒါကို ဖတ်မယ့် Client Component
+      လေးပါ။ [[mark:type-hours]] သူက lesson 5 လိုပဲ use နဲ့ context ကို ဖတ်ပါတယ်။
+      context ကို ဖတ်တာက Client Component ထဲမှာပဲ ရလို့၊ ဒီ ဖိုင်ကလည်း use client
+      နဲ့ စပါတယ်။ [[mark:open-app-context]] Server Component ဖြစ်တဲ့ App ဆီ
+      ပြန်သွားရအောင်။ [[mark:wire-context-import]] နှစ်ဖိုင်လုံးကို ယူပါတယ်။
+      [[mark:wire-context-use]] ဒီ အပိုင်းကတော့ အသစ်ပါ။
+      [[mark:select-context-provider]] App က context ကို provider အနေနဲ့
+      တိုက်ရိုက် render လုပ်ပြီး၊ ဖွင့်ချိန်ကို သူ့ တန်ဖိုး အဖြစ် ပေးထားပါတယ်။
+      [[mark:after-context]] ဆိုင်နာမည် အောက်မှာ ဖွင့်ချိန် ပေါ်လာပါပြီ။
+      တန်ဖိုးကို server က ပေးပြီး၊ Client Component က context ကနေ ဖတ်တာပါ။
+    sources:
+      - title: "React 19.3 — Context in Server Components"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "React — createContext"
+        url: "https://react.dev/reference/react/createContext"
+      - title: "React — use"
+        url: "https://react.dev/reference/react/use"
+    actions:
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-title
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: title }
+        textContains: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-title }
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: after-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: open-context
+        type: workspace.openFile
+        at: { mark: open-context }
+        path: src/ShopContext.jsx
+      - id: type-context-directive
+        type: editor.type
+        at: { mark: type-context-directive }
+        cadence: fast-explainer
+        target: { file: src/ShopContext.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\n"
+      - id: type-context
+        type: editor.type
+        at: { mark: type-context }
+        cadence: line-by-line
+        target: { file: src/ShopContext.jsx, after: "\"use client\";\n", occurrence: 1 }
+        text: "import { createContext } from \"react\";\n\nexport const ShopContext = createContext(\"\");\n"
+      - id: open-hours
+        type: workspace.openFile
+        at: { mark: open-hours }
+        path: src/ShopHours.jsx
+      - id: type-hours
+        type: editor.type
+        at: { mark: type-hours }
+        cadence: line-by-line
+        target: { file: src/ShopHours.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\nimport { use } from \"react\";\nimport { ShopContext } from \"./ShopContext.jsx\";\n\nexport function ShopHours() {\n  const hours = use(ShopContext);\n  return <p className=\"muted\" data-testid=\"shop-hours\">ဖွင့်ချိန် · {hours}</p>;\n}\n"
+      - id: open-app-context
+        type: workspace.openFile
+        at: { mark: open-app-context, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-context-import
+        type: editor.type
+        at: { mark: wire-context-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { OrderForm } from \"./OrderForm.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { ShopContext } from \"./ShopContext.jsx\";\nimport { ShopHours } from \"./ShopHours.jsx\";\n"
+      - id: wire-context-use
+        type: editor.type
+        at: { mark: wire-context-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "          </header>\n", occurrence: 1 }
+        text: "          <ShopContext value=\"မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ\">\n            <ShopHours />\n          </ShopContext>\n"
+      - id: select-context-provider
+        type: editor.select
+        at: { mark: select-context-provider }
+        target:
+          {
+            file: src/App.jsx,
+            text: '<ShopContext value="မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ">',
+            occurrence: 1,
+          }
+      - id: expect-hours
+        type: expect.preview
+        at: { mark: after-context }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-hours }
+        textContains: "မနက် ၆ နာရီ"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+
+  # ------------------------------------------------------------------ 4
+  - id: context-board
+    narration: >
+      [[mark:draw-ctx-before]] React 19.3 မတိုင်ခင်က ဒီလို မရခဲ့ပါဘူး။ တန်ဖိုး
+      တစ်ခု အောက်ကို ပို့ရုံလေးအတွက်တောင်၊ use client wrapper component တစ်ခု
+      ထပ်ရေးခဲ့ရပါတယ်။ [[mark:draw-ctx-now]] အခုတော့ wrapper မလိုဘဲ၊ Server
+      Component က context ကို ကိုယ်တိုင် render လုပ်ပါတယ်။ [[mark:draw-ctx-rule]]
+      ဆိုတော့ မှတ်ရမှာက၊ context ကို use client ဖိုင်ထဲမှာ ဖန်တီးပြီး၊ render
+      ကိုတော့ server မှာလည်း လုပ်နိုင်ပါတယ်။
+    sources:
+      - title: "React 19.3 — Context in Server Components"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "React — 'use client'"
+        url: "https://react.dev/reference/rsc/use-client"
+    actions:
+      - id: draw-ctx-before
+        type: whiteboard.apply
+        at: { mark: draw-ctx-before }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title, b3-before-label, b3-before]
+        drawMs: 2000
+      - id: draw-ctx-now
+        type: whiteboard.apply
+        at: { mark: draw-ctx-now }
+        upsertIds: [b3-before-strike, b3-now-label, b3-now]
+        drawMs: 2000
+      - id: draw-ctx-rule
+        type: whiteboard.apply
+        at: { mark: draw-ctx-rule }
+        upsertIds: [b3-rule-box, b3-rule-create, b3-rule-render]
+        drawMs: 2200
+
+  # ------------------------------------------------------------------ 5
+  - id: browser-board
+    chapter: "browser() နဲ့ browser ထဲမှာပဲ render လုပ်ရအောင်"
+    narration: >
+      [[mark:draw-browser-title]] time zone ဥပမာကို ပြန်ကြည့်ရအောင်။ server က
+      ကြည့်နေသူရဲ့ time zone ကို မသိပါဘူး။ [[mark:draw-browser-problem]] ဒီအတိုင်း
+      render လုပ်ရင် server နဲ့ browser က time zone မတူလို့ hydration မှာ
+      မကိုက်တော့ပါဘူး။ [[mark:draw-browser-server]] ဒါအတွက် React 19.3 ရဲ့
+      react-dom မှာ browser ဆိုတဲ့ function ပါလာပါတယ်။ component က အဲဒါကို use နဲ့
+      ခေါ်ရင်၊ server က component ကို render မလုပ်ဘဲ၊ အနီးဆုံး Suspense ရဲ့
+      fallback ကို HTML ထဲ ထည့်ပါတယ်။ [[mark:draw-browser-client]] hydration
+      ပြီးမှ browser က component အစစ်ကို render လုပ်တဲ့အတွက်၊ မကိုက်ညီစရာ ဘာမှ
+      မရှိတော့ပါဘူး။ [[mark:draw-browser-nowait]] browser ထဲမှာကျတော့ use က
+      ဘာကိုမှ မစောင့်ပါဘူး။ component က ချက်ချင်း render လုပ်ပါတယ်။
+    sources:
+      - title: "React — browser"
+        url: "https://react.dev/reference/react-dom/browser"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+    actions:
+      - id: draw-browser-title
+        type: whiteboard.apply
+        at: { mark: draw-browser-title }
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-browser-problem
+        type: whiteboard.apply
+        at: { mark: draw-browser-problem }
+        upsertIds: [b4-problem]
+        drawMs: 1400
+      - id: draw-browser-server
+        type: whiteboard.apply
+        at: { mark: draw-browser-server }
+        upsertIds: [b4-server-box, b4-server-name, b4-server-l1, b4-server-l2]
+        drawMs: 2200
+      - id: draw-browser-client
+        type: whiteboard.apply
+        at: { mark: draw-browser-client }
+        upsertIds: [b4-arrow, b4-client-box, b4-client-name, b4-client-l1, b4-client-l2]
+        drawMs: 2200
+      - id: draw-browser-nowait
+        type: whiteboard.apply
+        at: { mark: draw-browser-nowait }
+        upsertIds: [b4-nowait, b4-nowait-underline]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 6
+  - id: browser-code
+    narration: >
+      [[mark:close-board-browser]] ကဲ၊ editor ထဲ ပြန်သွားပြီး ရေးကြည့်ရအောင်။
+      [[mark:open-timezone]] time zone ဖိုင်ကလည်း အလွတ်ပါပဲ။ [[mark:type-tz-head]]
+      browser ထဲမှာပဲ render လုပ်မှာမို့ ဒါက Client Component ပါ။ react-dom ကနေ
+      browser function ကို import လုပ်ပါတယ်။ [[mark:type-tz-body]] component က
+      သုံးကြောင်းပဲ ပါပါတယ်။ server render ကို ရှောင်တဲ့ စာကြောင်း၊ time zone
+      ဖတ်တဲ့ စာကြောင်းနဲ့ ပြတဲ့ စာကြောင်းပါ။ [[mark:select-tz-browser]] ဒီ ပထမ
+      စာကြောင်းက server မှာ render မလုပ်ပါနဲ့လို့ React ကို ပြောတာပါ။ ထဲက စာသားက
+      browser မှာပဲ render လုပ်ရတဲ့ အကြောင်းပြချက် ဖြစ်ပြီး၊ server ဘက် React က
+      အဲဒါကို onBrowserBailout ဆိုတဲ့ callback ဆီ ပို့ပေးပါတယ်။
+      [[mark:select-tz-zone]] ပြီးတော့ ဒီ Intl API က browser ရဲ့ time zone ကို
+      ပေးပါတယ်။ [[mark:open-app-tz]] App ပြန်ရအောင်။ [[mark:wire-tz-import]]
+      Suspense နဲ့ TimeZone ကို ယူပါတယ်။ [[mark:wire-tz-use]] ပြီးတော့ TimeZone
+      ကို Suspense ထဲမှာ render လုပ်ပြီး၊ စောင့်ခိုင်းတဲ့ စာ တိုတိုကို fallback
+      အဖြစ် ပေးပါတယ်။ server ရဲ့ HTML ထဲ ရောက်မှာက အဲဒီ စာပါ။ Suspense မပါရင်တော့
+      server render က error နဲ့ ရပ်သွားပါတယ်။ [[mark:after-tz]] preview မှာ ဒီ
+      browser ရဲ့ time zone ပေါ်လာပါပြီ။ page ပွင့်ပြီးမှ ထည့်လိုက်တာမို့ browser
+      က တိုက်ရိုက် render လုပ်တာပါ။ page ကို အသစ် ဖွင့်ရင်တော့ server ရဲ့ HTML က
+      စောင့်ခိုင်းတဲ့ စာကို အရင် ပြမှာပါ။
+    sources:
+      - title: "React — browser"
+        url: "https://react.dev/reference/react-dom/browser"
+      - title: "React — <Suspense>"
+        url: "https://react.dev/reference/react/Suspense"
+      - title: "MDN — Intl.DateTimeFormat.prototype.resolvedOptions()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions"
+    actions:
+      - id: close-board-browser
+        type: whiteboard.apply
+        at: { mark: close-board-browser }
+        open: false
+      - id: open-timezone
+        type: workspace.openFile
+        at: { mark: open-timezone }
+        path: src/TimeZone.jsx
+      - id: type-tz-head
+        type: editor.type
+        at: { mark: type-tz-head }
+        cadence: line-by-line
+        target: { file: src/TimeZone.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\nimport { use } from \"react\";\nimport { browser } from \"react-dom\";\n"
+      - id: type-tz-body
+        type: editor.type
+        at: { mark: type-tz-body }
+        cadence: line-by-line
+        target:
+          {
+            file: src/TimeZone.jsx,
+            after: "import { browser } from \"react-dom\";\n",
+            occurrence: 1,
+          }
+        text: "\nexport function TimeZone() {\n  use(browser(\"shows the visitor's time zone\"));\n  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;\n  return <p className=\"muted\" data-testid=\"time-zone\">browser ရဲ့ time zone · {zone}</p>;\n}\n"
+      - id: select-tz-browser
+        type: editor.select
+        at: { mark: select-tz-browser }
+        target:
+          {
+            file: src/TimeZone.jsx,
+            text: 'use(browser("shows the visitor''s time zone"));',
+            occurrence: 1,
+          }
+      - id: select-tz-zone
+        type: editor.select
+        at: { mark: select-tz-zone }
+        target:
+          {
+            file: src/TimeZone.jsx,
+            text: "Intl.DateTimeFormat().resolvedOptions().timeZone",
+            occurrence: 1,
+          }
+      - id: open-app-tz
+        type: workspace.openFile
+        at: { mark: open-app-tz, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-tz-import
+        type: editor.type
+        at: { mark: wire-tz-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { ShopHours } from \"./ShopHours.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { Suspense } from \"react\";\nimport { TimeZone } from \"./TimeZone.jsx\";\n"
+      - id: wire-tz-use
+        type: editor.type
+        at: { mark: wire-tz-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "          </ShopContext>\n", occurrence: 1 }
+        text: "          <Suspense fallback={<p className=\"muted\" data-testid=\"time-zone-wait\">ခဏစောင့်ပါ...</p>}>\n            <TimeZone />\n          </Suspense>\n"
+      - id: expect-tz
+        type: expect.preview
+        at: { mark: after-tz }
+        timeoutMs: 5000
+        target: { by: testId, value: time-zone }
+        textContains: "browser ရဲ့ time zone ·"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+
+  # ------------------------------------------------------------------ 7
+  - id: fragment-board
+    chapter: "Fragment ref နဲ့ DOM အုပ်စု"
+    narration: >
+      [[mark:draw-frag-title]] နောက်ဆုံး feature အသစ်ကတော့ DOM နဲ့ ဆိုင်ပါတယ်။
+      [[mark:draw-frag-div]] field အုပ်စု တစ်ခုလုံးအတွက် ref တစ်ခုတည်း လိုတယ်
+      ဆိုပါစို့။ အရင်က div နဲ့ ထုပ်ခဲ့ရပါတယ်။ ဒါပေမဲ့ ဒီ card က သူ့ထဲက element
+      တွေကြားမှာ gap လို့ ခေါ်တဲ့ နေရာလွတ် ထည့်ပေးပါတယ်။ div နဲ့ ထုပ်လိုက်ရင်
+      field သုံးခုက element တစ်ခုတည်း ဖြစ်သွားလို့ gap ပျောက်သွားပါတယ်။
+      [[mark:draw-frag-ref]] React 19.3 မှာတော့ ref ကို Fragment ပေါ်မှာ တပ်လို့
+      ရပါပြီ။ သူ့ ref က FragmentInstance တစ်ခုကို ပေးပြီး၊ အဲဒါက Fragment ထဲက
+      child အားလုံးကို အုပ်စု တစ်ခုလို ကိုင်ပေးပါတယ်။ [[mark:draw-frag-methods]]
+      သူက ပထမ ဒါမှမဟုတ် နောက်ဆုံး field ကို focus လုပ်တာ၊ child တိုင်းမှာ event
+      listener ထည့်တာ၊ observeUsing နဲ့ screen ပေါ် မြင်ရလား၊ အရွယ်အစား ပြောင်းလား
+      စောင့်ကြည့်တာတွေ လုပ်နိုင်ပါတယ်။
+    sources:
+      - title: "React — <Fragment> (ref)"
+        url: "https://react.dev/reference/react/Fragment"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "MDN — CSS grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout"
+    actions:
+      - id: draw-frag-title
+        type: whiteboard.apply
+        at: { mark: draw-frag-title }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-frag-div
+        type: whiteboard.apply
+        at: { mark: draw-frag-div }
+        upsertIds: [b5-div-label, b5-div-card, b5-div-inner, b5-div-text, b5-div-note]
+        drawMs: 2600
+      - id: draw-frag-ref
+        type: whiteboard.apply
+        at: { mark: draw-frag-ref }
+        upsertIds: [b5-frag-label, b5-frag-card, b5-frag-f1, b5-frag-f2, b5-frag-f3, b5-frag-note]
+        drawMs: 2600
+      - id: draw-frag-methods
+        type: whiteboard.apply
+        at: { mark: draw-frag-methods }
+        upsertIds: [b5-methods-1, b5-methods-2]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 8
+  - id: fragment-code
+    narration: >
+      [[mark:close-board-frag]] order အသေးစိတ် card တစ်ခု ရေးရအောင်။
+      [[mark:open-details]] ဖိုင်က အလွတ်ပါ။ [[mark:type-details-head]] ref နဲ့
+      focus က browser ထဲမှာပဲ ရှိလို့ ဒါက Client Component ပါ။ lesson 2 က key
+      လိုပဲ tag အလွတ် ရေးနည်းက ref ကို လက်မခံလို့၊ Fragment ကို import လုပ်ပါတယ်။
+      [[mark:type-details-state]] ref တစ်ခုက FragmentInstance ကို ကိုင်ထားမှာ
+      ဖြစ်ပြီး၊ state တစ်ခုက ဘယ် field မှာ focus ရှိလဲ မှတ်ထားပါတယ်။
+      [[mark:type-details-fn]] ခလုတ်ကို နှိပ်ရင် အုပ်စုက သူ့ ပထမဆုံး field ကို
+      focus လုပ်ပါတယ်။ ပြီးတော့ focus ရောက်နေတဲ့ element ရဲ့ နာမည်ကို preview မှာ
+      ပြဖို့ မှတ်ထားပါတယ်။ [[mark:type-details-jsx]] နာမည်၊ စားပွဲ နံပါတ်နဲ့
+      မှတ်ချက် field သုံးခုကို label နဲ့ ထုပ်ပြီး၊ ref ပါတဲ့ Fragment ထဲမှာ
+      ထားပါတယ်။ ခလုတ်နဲ့ အောက်က စာကြောင်းကတော့ Fragment အပြင်မှာ ထားတဲ့အတွက်
+      အုပ်စုထဲ မပါပါဘူး။ ပြီးတော့ Fragment က element အပို မထည့်တဲ့အတွက်၊ field
+      တွေကြားက gap တွေလည်း မပျောက်ပါဘူး။ [[mark:select-group-focus]] ဒီ focus ကို
+      အုပ်စု တစ်ခုလုံးပေါ်မှာ ခေါ်တာပါ။ [[mark:open-app-details]] နောက်ဆုံး တစ်ခါ
+      App ပြန်ရအောင်။ [[mark:wire-details-import]] card ကို ယူပါတယ်။
+      [[mark:wire-details-use]] မှာထားတဲ့ အရေအတွက် အောက်မှာ render လုပ်ပါတယ်။
+      [[mark:click-fill]] ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:after-fill]] အောက်က
+      စာကြောင်းက နာမည် အကွက်မှာ focus ရောက်နေတယ်လို့ ပြနေပါပြီ။ wrapper div လည်း
+      မလို၊ input မှာ ref လည်း မတပ်ဘဲ Fragment က ရှာတွေ့သွားတာပါ။
+    sources:
+      - title: "React — <Fragment>: managing focus"
+        url: "https://react.dev/reference/react/Fragment"
+      - title: "React — useRef"
+        url: "https://react.dev/reference/react/useRef"
+      - title: "MDN — Document.activeElement"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/activeElement"
+    actions:
+      - id: close-board-frag
+        type: whiteboard.apply
+        at: { mark: close-board-frag }
+        open: false
+      - id: open-details
+        type: workspace.openFile
+        at: { mark: open-details }
+        path: src/OrderDetails.jsx
+      - id: type-details-head
+        type: editor.type
+        at: { mark: type-details-head }
+        cadence: line-by-line
+        target: { file: src/OrderDetails.jsx, after: "", occurrence: 1 }
+        text: "\"use client\";\nimport { Fragment, useRef, useState } from \"react\";\n"
+      - id: type-details-state
+        type: editor.type
+        at: { mark: type-details-state }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderDetails.jsx,
+            after: "import { Fragment, useRef, useState } from \"react\";\n",
+            occurrence: 1,
+          }
+        text: "\nexport function OrderDetails() {\n  const groupRef = useRef(null);\n  const [focused, setFocused] = useState(\"\");\n"
+      - id: type-details-fn
+        type: editor.type
+        at: { mark: type-details-fn }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderDetails.jsx,
+            after: "  const [focused, setFocused] = useState(\"\");\n",
+            occurrence: 1,
+          }
+        text: "\n  function startFilling() {\n    groupRef.current.focus();\n    setFocused(document.activeElement.name);\n  }\n"
+      - id: type-details-jsx
+        type: editor.type
+        at: { mark: type-details-jsx }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderDetails.jsx,
+            after: "    setFocused(document.activeElement.name);\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  return (\n    <section className=\"card\">\n      <Fragment ref={groupRef}>\n        <label>နာမည် <input name=\"name\" /></label>\n        <label>စားပွဲ နံပါတ် <input name=\"table\" /></label>\n        <label>မှတ်ချက် <textarea name=\"note\" /></label>\n      </Fragment>\n      <button data-testid=\"fill-details\" onClick={startFilling}>\n        အချက်အလက် ဖြည့်မယ်\n      </button>\n      <p className=\"muted\" data-testid=\"focus-label\">\n        {focused && \"အခု ဖြည့်နေတာ · \" + focused}\n      </p>\n    </section>\n  );\n}\n"
+      - id: select-group-focus
+        type: editor.select
+        at: { mark: select-group-focus }
+        target: { file: src/OrderDetails.jsx, text: "groupRef.current.focus();", occurrence: 1 }
+      - id: open-app-details
+        type: workspace.openFile
+        at: { mark: open-app-details, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-details-import
+        type: editor.type
+        at: { mark: wire-details-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { TimeZone } from \"./TimeZone.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { OrderDetails } from \"./OrderDetails.jsx\";\n"
+      - id: wire-details-use
+        type: editor.type
+        at: { mark: wire-details-use }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "            မှာထားတာ {orders.length} ခု\n          </p>\n",
+            occurrence: 1,
+          }
+        text: "          <OrderDetails />\n"
+      - id: expect-details
+        type: expect.preview
+        at: { afterAction: wire-details-use }
+        timeoutMs: 5000
+        target: { by: testId, value: fill-details }
+        textContains: "ဖြည့်မယ်"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: click-fill
+        type: preview.click
+        at: { mark: click-fill }
+        timeoutMs: 5000
+        target: { by: testId, value: fill-details }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-focus
+        type: expect.preview
+        at: { mark: after-fill }
+        timeoutMs: 5000
+        target: { by: testId, value: focus-label }
+        textContains: "အခု ဖြည့်နေတာ · name"
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  # ------------------------------------------------------------------ 9
+  - id: trusted-types
+    chapter: "Trusted Types နဲ့ တခြား ပြောင်းလဲမှုတွေ"
+    narration: >
+      [[mark:draw-tt-title]] အစက စာရင်းထဲက နောက်ဆုံး တစ်ခုကတော့ Trusted Types ပါ။
+      [[mark:draw-tt-rule]] တချို့ site တွေက browser ရဲ့ security စည်းကမ်း
+      တစ်ခုကို ဖွင့်ထားပြီး၊ စစ်ပြီးသား HTML နဲ့ script URL ကိုပဲ လက်ခံပါတယ်။
+      ဒါကြောင့် ထိုးထည့်တဲ့ script တွေကို တားနိုင်ပါတယ်။ [[mark:draw-tt-before]]
+      React 19.3 မတိုင်ခင်က attribute ထဲက ခွင့်ပြုပြီးသား တန်ဖိုးတွေကို React က
+      string အဖြစ် ပြောင်းလိုက်လို့၊ browser က လက်မခံခဲ့ပါဘူး။
+      [[mark:draw-tt-now]] အခုတော့ React က မပြောင်းဘဲ ဒီအတိုင်း ပို့ပေးပါတယ်။
+      [[mark:draw-tt-other]] တခြား ပြောင်းလဲမှု သေးသေး နှစ်ခုလည်း ရှိပါတယ်။
+      condition ထဲမှာ use ကို မှားသုံးထားရင် development မှာ သတိပေးတဲ့ warning
+      အသစ်နဲ့၊ fullscreen အတွက် event အသစ်တွေပါ။
+    sources:
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "MDN — Trusted Types API"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API"
+      - title: "React 19.3 changelog"
+        url: "https://github.com/react/react/blob/main/CHANGELOG.md"
+    actions:
+      - id: draw-tt-title
+        type: whiteboard.apply
+        at: { mark: draw-tt-title }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b6-title]
+      - id: draw-tt-rule
+        type: whiteboard.apply
+        at: { mark: draw-tt-rule }
+        upsertIds: [b6-rule]
+        drawMs: 1400
+      - id: draw-tt-before
+        type: whiteboard.apply
+        at: { mark: draw-tt-before }
+        upsertIds: [b6-before]
+        drawMs: 1400
+      - id: draw-tt-now
+        type: whiteboard.apply
+        at: { mark: draw-tt-now }
+        upsertIds: [b6-now, b6-now-check]
+        drawMs: 1400
+      - id: draw-tt-other
+        type: whiteboard.apply
+        at: { mark: draw-tt-other }
+        upsertIds: [b6-other-label, b6-other-underline, b6-other-1, b6-other-2]
+        drawMs: 2400
+
+  # ------------------------------------------------------------------ 10
+  - id: course-recap
+    chapter: "Course တစ်ခုလုံးကို ပြန်ချုပ်ရအောင်"
+    narration: >
+      [[mark:draw-recap-title]] ဒါဆို course တစ်ခုလုံးကို ပြန်ချုပ်ရအောင်။
+      [[mark:draw-recap-1]] component နဲ့ JSX ကနေ စခဲ့ပြီး၊ props၊ state နဲ့ form
+      တွေကို လေ့လာခဲ့ပါတယ်။ [[mark:draw-recap-2]] ပြီးတော့ reducer၊ context၊ ref
+      နဲ့ Effect တွေကို လေ့လာခဲ့ပါတယ်။ [[mark:draw-recap-3]] နောက်တော့ app ကို
+      မြန်အောင် လုပ်ခဲ့ပြီး၊ Suspense နဲ့ data ကို စောင့်ခဲ့ပါတယ်။ form တွေကိုတော့
+      Action နဲ့ ပို့ခဲ့ပါတယ်။ [[mark:draw-recap-4]] Activity က ဖျောက်ထားတဲ့ UI
+      ရဲ့ state ကို မှတ်ထားပေးပြီး၊ ViewTransition က animation ထည့်ခဲ့ပါတယ်။
+      [[mark:draw-recap-5]] နောက်ဆုံးမှာ component တချို့ကို server ပေါ်
+      ရွှေ့ခဲ့ပြီး၊ ဒီနေ့ React 19.3 ကို ထပ်ထည့်ခဲ့ပါတယ်။ [[mark:draw-recap-next]]
+      နောက်တစ်ဆင့်ကတော့ React ရဲ့ တရားဝင် site ဖြစ်တဲ့ react.dev ပါ။ အဆုံးထိ
+      လိုက်ကြည့်ပေးလို့ ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - title: "React — Learn"
+        url: "https://react.dev/learn"
+      - title: "React — API reference"
+        url: "https://react.dev/reference/react"
+      - title: "React 19.3"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+    actions:
+      - id: draw-recap-title
+        type: whiteboard.apply
+        at: { mark: draw-recap-title }
+        clear: true
+        upsertIds: [b7-title]
+      - id: expect-file-app-context
+        type: expect.file
+        at: { afterAction: draw-recap-title }
+        path: src/App.jsx
+        contains: "          <ShopContext value=\"မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ\">\n            <ShopHours />\n          </ShopContext>"
+      - id: expect-file-app-tz
+        type: expect.file
+        at: { afterAction: expect-file-app-context }
+        path: src/App.jsx
+        contains: "            <TimeZone />\n          </Suspense>"
+      - id: expect-file-app-details
+        type: expect.file
+        at: { afterAction: expect-file-app-tz }
+        path: src/App.jsx
+        contains: "          </p>\n          <OrderDetails />\n          <ul className=\"list\" data-testid=\"menu\">"
+      - id: expect-file-context
+        type: expect.file
+        at: { afterAction: expect-file-app-details }
+        path: src/ShopContext.jsx
+        contains: "\"use client\";\nimport { createContext } from \"react\";\n\nexport const ShopContext = createContext(\"\");"
+      - id: expect-file-hours
+        type: expect.file
+        at: { afterAction: expect-file-context }
+        path: src/ShopHours.jsx
+        contains: "const hours = use(ShopContext);"
+      - id: expect-file-tz
+        type: expect.file
+        at: { afterAction: expect-file-hours }
+        path: src/TimeZone.jsx
+        contains: 'use(browser("shows the visitor''s time zone"));'
+      - id: expect-file-details
+        type: expect.file
+        at: { afterAction: expect-file-tz }
+        path: src/OrderDetails.jsx
+        contains: "      <Fragment ref={groupRef}>"
+      - id: draw-recap-1
+        type: whiteboard.apply
+        at: { mark: draw-recap-1 }
+        upsertIds: [b7-trunk, b7-row-1]
+        drawMs: 1800
+      - id: draw-recap-2
+        type: whiteboard.apply
+        at: { mark: draw-recap-2 }
+        upsertIds: [b7-row-2]
+        drawMs: 1200
+      - id: draw-recap-3
+        type: whiteboard.apply
+        at: { mark: draw-recap-3 }
+        upsertIds: [b7-row-3]
+        drawMs: 1200
+      - id: draw-recap-4
+        type: whiteboard.apply
+        at: { mark: draw-recap-4 }
+        upsertIds: [b7-row-4]
+        drawMs: 1000
+      - id: draw-recap-5
+        type: whiteboard.apply
+        at: { mark: draw-recap-5 }
+        upsertIds: [b7-row-5]
+        drawMs: 1200
+      - id: draw-recap-next
+        type: whiteboard.apply
+        at: { mark: draw-recap-next }
+        upsertIds: [b7-next, b7-next-circle]
+        drawMs: 1600
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
