@@ -131,6 +131,10 @@ picker simply renders without the video.
                                                # (or pass one path)
    → fix schema/marker errors; weigh critic notes (advisory);
      writes <slug>.critique.json next to the YAML
+   Check    bun scripts/studio-compile-check.ts src/studio/scripts/<slug>.yaml
+   → timeline at real narration rates, dialog limits, whiteboard ink/sizes
+   Replay   bun scripts/studio-verify-lesson.ts src/studio/scripts/<slug>.yaml
+   → WebContainer (Vite) lessons only: every action against real Vite + Chrome
 3. Render   bun run dev   (separate terminal, keep running)
             open /studio?plan=<slug> in a real Chrome, press Start render,
             watch the performance, confirm "Checks (N/N ok)" + receipts
@@ -142,11 +146,40 @@ picker simply renders without the video.
 4. A human watches the full replay (/studio?plan=<slug>) and decides on a draft.
 ```
 
-Step 2 is convenience — the same validation runs in the page — but it catches
-errors without a browser. Renders need Chrome and network for the one-time
-TTS bundle download and, for JS/TS, the pinned dependency install. If your
-environment cannot run a browser, stop after step 2 and report that the two
-Chrome renders and human replay review are pending.
+Step 2 is convenience — the Director's validation runs in the page too — but
+it catches errors before a render. Renders need Chrome and network for the
+one-time TTS bundle download and, for JS/TS, the pinned dependency install. If
+your environment cannot run a browser, stop after step 2 and report that the
+two Chrome renders and human replay review are pending.
+
+`studio-compile-check` compiles each script it is given at narration rates
+estimated by characters: 55, 70 and 95 ms per character by default
+(`--rates=`), around the ~14 characters a second VoxCPM2 speaks Burmese. The
+registry test (`npx vp test run src/studio/plans/index.test.ts`) estimates by
+whitespace tokens, which badly underestimates Burmese, so a timeline that only
+breaks with real audio fails here first, before any synthesis is paid for. It
+exits 1 on an error: a compile failure at any rate, a Burmese dialog over the
+2,000 characters VoxCPM2 speaks per request, pale whiteboard ink, or a label
+under 28px. Warnings are advisory — fix each one or keep it on purpose: a long
+dialog, a Burmese dialog that stops mid-clause instead of at `။` or `၊`,
+code-like characters in narration, a box outside the visible area, or a board
+whose shapes share one colour.
+
+`studio-verify-lesson` is for WebContainer (Vite) lessons. It replays every
+action in plan order through the Performer's own dispatch, against the pinned
+workspace running its own Vite and the studio's real preview bridge in
+headless Chrome. `editor.type` lands chunk by chunk at the studio's cadence,
+so half-typed JSX in a live module shows up the way a learner would see it —
+as a Vite overlay or a console error — and `preview.*`, `expect.preview` and
+`expect.file` run as they do in a render. Any console error, uncaught error,
+overlay or failed action fails the lesson (exit 1). Pass several YAMLs to check
+a whole course; `--only-scene=<id>` fast-forwards to one scene, `--bail` stops
+at the first failure, `--headed` shows the browser, and
+`--screenshot-dir=<dir>` saves the final preview and every failed expectation.
+It needs system Chrome and node, plus network the first time it meets a
+dependency set (installed once into `node_modules/.cache/studio-verify-lesson/`).
+Pointer, slides, whiteboard and console runs are not checked. A pass is a
+preflight, not a render: step 3 is still the gate.
 
 ## Schema reference
 
@@ -608,7 +641,7 @@ main thread at each show/close — actions scheduled right next to a
 
 ```yaml
 whiteboardAssets:
-  - { id: box, kind: rectangle, x: 320, y: 200, width: 420, height: 150, strokeColor: "#7dd3fc" }
+  - { id: box, kind: rectangle, x: 320, y: 200, width: 420, height: 150, strokeColor: "#1971c2" }
   - {
       id: label,
       kind: text,
@@ -630,7 +663,10 @@ The board renders in Excalidraw's dark theme, which inverts colours:
 `strokeColor` defaults to `#1e1e1e` (paints white) and `fontSize` to `28`, the
 smallest label that stays readable in the recorded lesson. Never author a pale
 or near-white colour such as `#e2e8f0` — it paints near-black and all but
-vanishes on the dark canvas.
+vanishes on the dark canvas. For colour, use Excalidraw's mid-tone palette —
+`#1971c2` blue, `#f08c00` orange, `#2f9e44` green, `#e03131` red, `#6741d9`
+violet — which inverts to legible pastels, and give each colour a job: a board
+whose shapes all share one colour reads flat.
 
 A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
 Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,

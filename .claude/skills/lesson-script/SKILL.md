@@ -63,8 +63,18 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      `<slug>.critique.json` next to the YAML.
    - The CLI does not compile or schedule: overlap and narration-end errors
      otherwise surface only in /studio after synthesis. Catch them offline
-     with `npx vp test run src/studio/plans/index.test.ts`, which compiles
-     every checked-in script against estimated dialog lengths.
+     with `bun scripts/studio-compile-check.ts src/studio/scripts/<slug>.yaml`,
+     which compiles at three character-based narration rates and also checks
+     dialog limits, Burmese sentence ends, code read aloud, and whiteboard
+     ink and label sizes. Fix every `✗` error. (The registry test,
+     `npx vp test run src/studio/plans/index.test.ts`, estimates by
+     whitespace tokens and misses overlaps that only Burmese audio causes.)
+   - For a WebContainer (Vite) lesson, also run
+     `bun scripts/studio-verify-lesson.ts src/studio/scripts/<slug>.yaml`.
+     It replays every action against a real Vite server and headless Chrome,
+     and fails on half-typed JSX that breaks the preview, console errors, and
+     failed preview or file expectations. It is a preflight, not the render
+     check in step 5.
    - Scripts auto-register by filename — do not edit
      `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
      alternatively import it via /studio's **Import…** on the website.

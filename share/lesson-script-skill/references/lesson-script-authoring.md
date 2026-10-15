@@ -590,7 +590,7 @@ main thread at each show/close — actions scheduled right next to a
 
 ```yaml
 whiteboardAssets:
-  - { id: box, kind: rectangle, x: 320, y: 200, width: 420, height: 150, strokeColor: "#7dd3fc" }
+  - { id: box, kind: rectangle, x: 320, y: 200, width: 420, height: 150, strokeColor: "#1971c2" }
   - {
       id: label,
       kind: text,
@@ -612,7 +612,10 @@ The board renders in Excalidraw's dark theme, which inverts colours:
 `strokeColor` defaults to `#1e1e1e` (paints white) and `fontSize` to `28`, the
 smallest label that stays readable in the recorded lesson. Never author a pale
 or near-white colour such as `#e2e8f0` — it paints near-black and all but
-vanishes on the dark canvas.
+vanishes on the dark canvas. For colour, use Excalidraw's mid-tone palette —
+`#1971c2` blue, `#f08c00` orange, `#2f9e44` green, `#e03131` red, `#6741d9`
+violet — which inverts to legible pastels, and give each colour a job: a board
+whose shapes all share one colour reads flat.
 
 A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
 Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,
