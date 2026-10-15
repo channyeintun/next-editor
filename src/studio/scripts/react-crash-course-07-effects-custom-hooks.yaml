@@ -850,7 +850,7 @@ lesson:
         y: 560,
         width: 820,
         height: 40,
-        text: "null၊ Promise ပြန်ရင် → development warning",
+        text: "null ပြန်ရင်၊ async setup → development warning",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -1223,7 +1223,7 @@ lesson:
         y: 480,
         width: 830,
         height: 40,
-        text: "store – snapshot တစ်ခုတည်းကို အားလုံး ဖတ်",
+        text: "React အပြင်က store – snapshot တစ်ခုတည်းကို ဖတ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -1274,15 +1274,17 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ stopwatch ပျောက်သွားရင်တောင် timer က ဆက် run
       နေနိုင်တယ်လို့ ပြောခဲ့ပါတယ်။ ဒီ lesson မှာ အဲဒီလို ပြဿနာကို ဖြေရှင်းပေးတဲ့
-      Effect နဲ့ custom hook ကို လေ့လာပါမယ်။ [[mark:start-server]] ရှင်းပြနေတုန်း
-      dev server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ preview လိုတဲ့အချိန်မှာ
-      အသင့် ဖြစ်နေအောင်ပါ။ [[mark:draw-render]] React မှာ code ရေးဖို့ နေရာ
-      သုံးနေရာ ရှိပါတယ်။ render က props နဲ့ state ကနေ screen ပေါ် ပြမယ့်အရာကိုပဲ
-      တွက်ပါတယ်။ [[mark:draw-handler]] event handler ကတော့ user က ခလုတ် နှိပ်တာလို
-      တစ်ခုခု လုပ်မှ run တာပါ။ [[mark:draw-effect]] Effect ကတော့ component ကို
-      screen ပေါ် ပြပြီးမှ run ပါတယ်။ network connection၊ timer လို React အပြင်က
-      system တွေနဲ့ ချိတ်ထားဖို့ သုံးပါတယ်။ [[mark:draw-cause]] ဆိုတော့ handler က
-      click ကြောင့် run ပြီး၊ Effect ကတော့ render ကြောင့် run တာပါ။
+      Effect ကို လေ့လာပြီး၊ နောက်ဆုံးမှာ custom hook တစ်ခုကိုလည်း ရေးကြည့်ပါမယ်။
+      [[mark:start-server]] ရှင်းပြနေတုန်း dev server ကို နောက်ကွယ်မှာ စ run
+      ထားလိုက်ရအောင်။ preview လိုတဲ့အချိန်မှာ အသင့် ဖြစ်နေအောင်ပါ။
+      [[mark:draw-render]] React မှာ code ရေးဖို့ နေရာ သုံးနေရာ ရှိပါတယ်။ render က
+      props နဲ့ state ကနေ screen ပေါ် ပြမယ့်အရာကိုပဲ တွက်ပါတယ်။
+      [[mark:draw-handler]] event handler ကတော့ user က ခလုတ် နှိပ်တာလို တစ်ခုခု
+      လုပ်မှ run တာပါ။ [[mark:draw-effect]] Effect ကတော့ component ကို screen ပေါ်
+      ပြပြီးမှ run ပါတယ်။ network connection၊ timer လို React အပြင်က system တွေနဲ့
+      ချိတ်ထားဖို့ သုံးပါတယ်။ code ထဲမှာတော့ Effect ကို useEffect ဆိုတဲ့ hook နဲ့
+      ရေးပါတယ်။ [[mark:draw-cause]] ဆိုတော့ handler က click ကြောင့် run ပြီး၊
+      Effect ကတော့ render ကြောင့် run တာပါ။
     sources:
       - title: "React — Synchronizing with Effects"
         url: "https://react.dev/learn/synchronizing-with-effects"
@@ -1338,11 +1340,11 @@ scenes:
       [[mark:board-timing]] ဒါဆို Effect က အတိအကျ ဘယ်အချိန် run လဲ။
       [[mark:draw-step-render]] React က component ကို render လုပ်ပြီး၊ အဲဒီအတိုင်း
       DOM ကို ပြင်ပါတယ်။ [[mark:draw-step-layout]] ပြီးရင် browser က screen ကို
-      မဆွဲခင် useLayoutEffect က run ပါတယ်။ tooltip ရဲ့ အရွယ်အစားလို တစ်ခုခုကို
-      user မမြင်ခင် တိုင်းဖို့ နေရာပါ။ [[mark:draw-step-effect]] အဲဒီနောက် browser
-      က screen ကို ဆွဲပြီး၊ အများအားဖြင့် အဲဒါ ပြီးမှ useEffect က run ပါတယ်။
-      useLayoutEffect ပြီးတဲ့အထိ browser က screen မဆွဲဘဲ စောင့်ရလို့၊
-      ပုံမှန်အားဖြင့် useEffect ကိုပဲ သုံးပါ။
+      မဆွဲခင်၊ useEffect နဲ့ တူတဲ့ useLayoutEffect က run ပါတယ်။ tooltip ရဲ့
+      အရွယ်အစားလို တစ်ခုခုကို user မမြင်ခင် တိုင်းဖို့ နေရာပါ။
+      [[mark:draw-step-effect]] အဲဒီနောက် browser က screen ကို ဆွဲပြီး၊
+      အများအားဖြင့် အဲဒါ ပြီးမှ useEffect က run ပါတယ်။ useLayoutEffect ပြီးတဲ့အထိ
+      browser က screen မဆွဲဘဲ စောင့်ရလို့၊ ပုံမှန်အားဖြင့် useEffect ကိုပဲ သုံးပါ။
     sources:
       - title: "React — useLayoutEffect"
         url: "https://react.dev/reference/react/useLayoutEffect"
@@ -1379,15 +1381,15 @@ scenes:
       [[mark:close-board-timing]] ကဲ၊ app ကို အရင် ကြည့်ရအောင်။
       [[mark:select-state]] App ထဲက state နှစ်ခုကို ကြည့်ပါ၊ လက်ရှိ စားပွဲနဲ့ အသံ
       ဖွင့်ထားလား ဆိုတာပါ။ ခလုတ်တွေက သူတို့ကို ပြောင်းပေးပါတယ်။
-      [[mark:open-kitchen]] kitchen.js ကတော့ မီးဖိုချောင်နဲ့ ချိတ်တဲ့ connection
+      [[mark:open-kitchen]] kitchen ဖိုင်ကတော့ မီးဖိုချောင်နဲ့ ချိတ်တဲ့ connection
       အတုပါ။ React အပြင်က မှတ်တမ်း စာရင်းထဲ တိုက်ရိုက် ရေးလို့၊ အပြင်က system
       တစ်ခုလို ဖြစ်နေပါတယ်။ [[mark:select-connect]] connect က မှတ်တမ်းထဲ
       တစ်ကြောင်း ရေးပြီး၊ ခဏနေရင် အသင့် ဖြစ်ပြီလို့ ပြောပါတယ်။
       [[mark:select-disconnect]] disconnect ကတော့ အသင့် ဖြစ်ပြီလို့ မပြောရသေးရင်
-      ရပ်လိုက်ပြီး၊ ဖြုတ်ကြောင်း တစ်ကြောင်း ရေးပါတယ်။ [[mark:select-on]] on ကတော့
-      အသင့် ဖြစ်တဲ့အခါ ခေါ်ရမယ့် function ကို လက်ခံပါတယ်။ [[mark:preview-opens]]
-      preview ကို ဖွင့်လိုက်ရအောင်။ ခလုတ်တွေ အောက်မှာ မီးဖိုချောင် မှတ်တမ်းက အခု
-      အလွတ်ပါ။
+      အဲဒါကို ရပ်ပစ်ပါတယ်။ ပြီးတော့ ဖြုတ်လိုက်ပြီလို့ မှတ်တမ်းထဲ အမြဲ ရေးပါတယ်။
+      [[mark:select-on]] on ကတော့ အသင့် ဖြစ်တဲ့အခါ ခေါ်ရမယ့် function ကို
+      လက်ခံပါတယ်။ [[mark:preview-opens]] preview ကို ဖွင့်လိုက်ရအောင်။ ခလုတ်တွေ
+      အောက်မှာ မီးဖိုချောင် မှတ်တမ်းက အခု အလွတ်ပါ။
     sources:
       - title: "React — Synchronizing with Effects: subscribing to events"
         url: "https://react.dev/learn/synchronizing-with-effects#subscribing-to-events"
@@ -1540,7 +1542,9 @@ scenes:
       StrictMode ကြောင့်ပါ။ ကိုယ် ရေးနေတုန်း development မှာပဲ၊ React က setup နဲ့
       cleanup ကို တစ်ကြိမ် ပို run ပြီး၊ cleanup က setup ကို တကယ် ပြန်ဖြုတ်လား
       စစ်ပါတယ်။ production မှာတော့ တစ်ကြိမ်ပဲ ချိတ်ပါတယ်။ [[mark:strict-fix]]
-      ဒုတိယ run ကို တားဖို့ မကြိုးစားဘဲ၊ cleanup ကို မှန်အောင် ရေးပါ။
+      ဒုတိယ run ကို တားဖို့ မကြိုးစားဘဲ၊ cleanup ကို မှန်အောင် ရေးပါ။ ပြီးခဲ့တဲ့
+      lesson က stopwatch ဆိုရင်လည်း timer ကို Effect ထဲမှာ စပြီး cleanup ထဲမှာ
+      ရပ်ပေးလိုက်ရင်၊ stopwatch ပျောက်တာနဲ့ timer ပါ ရပ်သွားမှာပါ။
       [[mark:click-table-2]] စားပွဲ 2 ကို ပြောင်းကြည့်ရအောင်။
       [[mark:after-table-2]] စားပွဲ 1 ကို ဖြုတ်ပြီးမှ စားပွဲ 2 ကို ချိတ်ပါတယ်။
       အသစ် မချိတ်ခင် အဟောင်းကို React က cleanup လုပ်ပေးလို့ပါ။
@@ -1606,11 +1610,12 @@ scenes:
       ဖတ်တဲ့ props၊ state နဲ့ အဲဒါတွေကနေ တွက်ထားတဲ့ တန်ဖိုး အားလုံး ပါရပါမယ်။
       ကိုယ့် Effect ကတော့ စားပွဲ နံပါတ်ပဲ ဖတ်ပါတယ်။ [[mark:draw-rule-lint]] lint
       rule ဆိုတာ code ကို run မကြည့်ခင် ဖတ်ပြီး၊ မှားနိုင်တာကို သတိပေးတဲ့
-      စစ်ဆေးချက်ပါ။ React ရဲ့ lint rule က ဒီ စာရင်းကို စစ်ပြီး၊ သတိပေးရင် code ကို
-      ပြင်ပါ။ တန်ဖိုး တစ်ခု ချန်ခဲ့ရင် Effect က တန်ဖိုး အဟောင်းနဲ့ ကျန်နေလို့ပါ။
+      စစ်ဆေးချက်ပါ။ React ရဲ့ lint rule က ဒီ စာရင်းကို စစ်ပေးပါတယ်။ သူ သတိပေးရင်
+      warning ကို ပိတ်မထားဘဲ code ကို ပြင်ပါ။ ဘာလို့လဲဆိုတော့ တန်ဖိုး တစ်ခု
+      ချန်ခဲ့ရင်၊ Effect က အဲဒီ တန်ဖိုး အဟောင်းနဲ့ပဲ ကျန်နေမှာ ဖြစ်လို့ပါ။
       [[mark:draw-rule-return]] setup က cleanup function ကိုပဲ ပြန်ပေးရပါမယ်၊
       ဒါမှမဟုတ် ဘာမှ မပြန်ပါနဲ့။ null ပြန်မိရင်ဖြစ်ဖြစ်၊ setup ကို async function
-      အဖြစ် ရေးလို့ promise ပြန်သွားရင်ဖြစ်ဖြစ်၊ development မှာ warning ပေးပါတယ်။
+      အဖြစ် ရေးမိရင်ဖြစ်ဖြစ်၊ React က development မှာ warning ပေးပါတယ်။
     sources:
       - title: "React — Lifecycle of Reactive Effects"
         url: "https://react.dev/learn/lifecycle-of-reactive-effects"
@@ -1666,13 +1671,15 @@ scenes:
       [[mark:board-no-effect]] Effect မရေးခင် တကယ် လိုလား ဆိုတာ အရင် စစ်ကြည့်ပါ။
       [[mark:draw-no-derive]] props နဲ့ state ကနေ တွက်ယူလို့ ရတဲ့ တန်ဖိုးကို
       render လုပ်နေတုန်းမှာပဲ တွက်ပါ၊ lesson 4 မှာ menu ကို စစ်ထုတ်ခဲ့သလိုပါ။
-      [[mark:draw-no-reset]] prop ပြောင်းလို့ state ပြန်စချင်ရင် key ကို သုံးပါ။
-      [[mark:draw-no-handler]] user လုပ်လို့ ဖြစ်တဲ့ အလုပ်ကို event handler
-      ထဲမှာပဲ ရေးပါ။ [[mark:draw-no-chain]] Effect က state ကို ပြောင်း၊
-      အဲဒါကြောင့် နောက် Effect run ပြီး state ထပ်ပြောင်း ဆိုတဲ့ ကွင်းဆက်မျိုးကို
-      ရှောင်ပါ။ ပြန် render တွေ အဆင့်ဆင့် ဖြစ်လို့ နှေးပြီး၊ နားလည်ရလည်း ခက်ပါတယ်။
-      [[mark:draw-yes-sync]] မီးဖိုချောင် connection ကတော့ အပြင်က system အစစ်
-      ဖြစ်လို့၊ Effect နဲ့ လုပ်သင့်တဲ့ အလုပ်ပါ။
+      [[mark:draw-no-reset]] prop ပြောင်းလို့ state ပြန်စချင်ရင်၊ lesson 4 မှာ
+      စားပွဲ မှတ်ချက်ကို လုပ်ခဲ့သလို key ကို သုံးပါ။ key ပြောင်းရင် React က
+      component ကို အသစ်လို ပြန်စပေးလို့ပါ။ [[mark:draw-no-handler]] user လုပ်လို့
+      ဖြစ်တဲ့ အလုပ်ကို event handler ထဲမှာပဲ ရေးပါ။ [[mark:draw-no-chain]] Effect
+      က state ကို ပြောင်း၊ အဲဒါကြောင့် နောက် Effect run ပြီး state ထပ်ပြောင်း
+      ဆိုတဲ့ ကွင်းဆက်မျိုးကို ရှောင်ပါ။ ပြန် render တွေ အဆင့်ဆင့် ဖြစ်လို့
+      နှေးပြီး၊ နားလည်ရလည်း ခက်ပါတယ်။ [[mark:draw-yes-sync]] မီးဖိုချောင်
+      connection ကတော့ အပြင်က system အစစ် ဖြစ်လို့၊ Effect နဲ့ လုပ်သင့်တဲ့
+      အလုပ်ပါ။
     sources:
       - title: "React — You Might Not Need an Effect"
         url: "https://react.dev/learn/you-might-not-need-an-effect"
@@ -1808,14 +1815,15 @@ scenes:
   - id: reactive-board
     narration: >
       [[mark:board-reactive]] ဒီ Effect ထဲမှာ logic နှစ်မျိုး ရောနေပါတယ်။
-      [[mark:draw-reactive]] ချိတ်တဲ့ logic က reactive ပါ၊ စားပွဲ နံပါတ်
-      ပြောင်းရင် ပြန်ချိတ်ရပါမယ်။ [[mark:draw-non-reactive]] props နဲ့ state ကို
-      reactive တန်ဖိုးလို့ ခေါ်လို့၊ sound လည်း reactive တန်ဖိုးပါပဲ။ ဒါပေမဲ့
-      အသိပေးချက် logic က sound ပြောင်းတိုင်း ပြန်ချိတ်စရာ မလိုဘဲ၊ အသင့်
-      ဖြစ်ချိန်မှာ နောက်ဆုံး sound ကိုပဲ ဖတ်ချင်တာပါ။ [[mark:draw-effect-event]]
-      ဒါအတွက် React 19.2 မှာ useEffectEvent ပါလာပါတယ်။ component ရဲ့ အပေါ်ဆုံး
-      အဆင့်မှာ သူ့ကို function တစ်ခု ပေးရင်၊ Effect Event လို့ ခေါ်တဲ့ function
-      တစ်ခု ပြန်ရပါတယ်။ အဲဒါကို Effect ထဲကပဲ ခေါ်ရပါတယ်။
+      [[mark:draw-reactive]] props နဲ့ state လို ပြန် render လုပ်တဲ့အခါ
+      ပြောင်းနိုင်တဲ့ တန်ဖိုးတွေကို reactive တန်ဖိုးလို့ ခေါ်ပါတယ်။ ချိတ်တဲ့ logic
+      က reactive ပါ၊ စားပွဲ နံပါတ် ပြောင်းရင် ပြန်ချိတ်ရပါမယ်။
+      [[mark:draw-non-reactive]] sound လည်း reactive တန်ဖိုး ဖြစ်ပေမယ့်၊
+      အသိပေးချက် logic ကတော့ non-reactive ပါ။ sound ပြောင်းတိုင်း ပြန်ချိတ်စရာ
+      မလိုဘဲ၊ အသင့် ဖြစ်ချိန်မှာ နောက်ဆုံး sound ကိုပဲ ဖတ်ချင်တာပါ။
+      [[mark:draw-effect-event]] ဒါအတွက် React 19.2 မှာ useEffectEvent ပါလာပါတယ်။
+      component ရဲ့ အပေါ်ဆုံး အဆင့်မှာ သူ့ကို function တစ်ခု ပေးရင်၊ Effect Event
+      လို့ ခေါ်တဲ့ function တစ်ခု ပြန်ရပါတယ်။ အဲဒါကို Effect ထဲကပဲ ခေါ်ရပါတယ်။
       [[mark:draw-effect-event-deps]] Effect Event က နောက်ဆုံး props နဲ့ state ကို
       အမြဲ မြင်ပြီး၊ dependency စာရင်းထဲ မထည့်ရပါဘူး။
     sources:
@@ -1861,16 +1869,19 @@ scenes:
       [[mark:open-app-fix]] App ကနေ sound ကိုပါ ပေးလိုက်ပါတယ်။
       [[mark:open-os-fix]] OrderStatus မှာ useEffectEvent နဲ့ အသိပေးချက် function
       ကို import လုပ်ပြီး၊ sound prop ကို လက်ခံပါတယ်။ [[mark:fix-event]]
-      အသိပေးချက်ကို useEffectEvent ထဲ ထည့်လိုက်လို့၊ Effect Event က စားပွဲနဲ့
-      sound ကို ဖတ်ပါတယ်။ [[mark:fix-on]] Effect ထဲမှာ မီးဖိုချောင် အသင့် ဖြစ်ရင်
-      သူ့ကို ခေါ်ပါတယ်။ [[mark:select-fix-deps]] dependency စာရင်းမှာ စားပွဲ
-      နံပါတ်ပဲ ရှိနေတုန်းပါ။ page ပြန်ပွင့်လို့ အသံလည်း ပြန်ဖွင့်ထားပါတယ်။
-      [[mark:click-sound-2]] အသံကို ထပ်ပိတ်ကြည့်ရအောင်။ [[mark:after-sound-2]]
-      Naive ပဲ ပြန်ချိတ်ပြီး၊ OrderStatus ကတော့ ချိတ်ထားတဲ့အတိုင်းပါ။
-      [[mark:click-table-3]] စားပွဲ 2 ကို ပြောင်းကြည့်ရအောင်။
-      [[mark:after-table-3]] စားပွဲ တကယ် ပြောင်းလို့ နှစ်ခုလုံး ပြန်ချိတ်ပါတယ်။
-      OrderStatus ရဲ့ အသိပေးချက်မှာ ခေါင်းလောင်း မပါတော့ပါဘူး။ အသံ ပိတ်တုန်းက
-      ပြန်မချိတ်ခဲ့ပေမယ့်၊ Effect Event က နောက်ဆုံး sound ကို ဖတ်လို့ပါ။
+      အသိပေးချက်ကို useEffectEvent ထဲ ထည့်လိုက်ပါတယ်။ ဒီ Effect Event က နောက်ဆုံး
+      sound ကို ဖတ်ပေမယ့်၊ Effect ရဲ့ dependency ထဲ ထည့်စရာ မလိုပါဘူး။ စားပွဲ
+      နံပါတ်ကိုတော့ argument အနေနဲ့ လက်ခံပါတယ်။ [[mark:fix-on]] Effect ထဲမှာ
+      မီးဖိုချောင် အသင့် ဖြစ်ရင်၊ ချိတ်ခဲ့တဲ့ စားပွဲ နံပါတ်ကို ပေးပြီး သူ့ကို
+      ခေါ်ပါတယ်။ ဒါမှ အသိပေးချက်က ဒီ connection ဖွင့်ခဲ့တဲ့ စားပွဲကို ပြမှာပါ။
+      [[mark:select-fix-deps]] dependency စာရင်းမှာ စားပွဲ နံပါတ်ပဲ ရှိနေတုန်းပါ။
+      page ပြန်ပွင့်လို့ အသံလည်း ပြန်ဖွင့်ထားပါတယ်။ [[mark:click-sound-2]] အသံကို
+      ထပ်ပိတ်ကြည့်ရအောင်။ [[mark:after-sound-2]] Naive ပဲ ပြန်ချိတ်ပြီး၊
+      OrderStatus ကတော့ ချိတ်ထားတဲ့အတိုင်းပါ။ [[mark:click-table-3]] စားပွဲ 2 ကို
+      ပြောင်းကြည့်ရအောင်။ [[mark:after-table-3]] စားပွဲ တကယ် ပြောင်းလို့
+      နှစ်ခုလုံး ပြန်ချိတ်ပါတယ်။ OrderStatus ရဲ့ အသိပေးချက်မှာ ခေါင်းလောင်း
+      မပါတော့ပါဘူး။ အသံ ပိတ်တုန်းက ပြန်မချိတ်ခဲ့ပေမယ့်၊ Effect Event က နောက်ဆုံး
+      sound ကို ဖတ်လို့ပါ။
     sources:
       - title: "React — useEffectEvent: Usage"
         url: "https://react.dev/reference/react/useEffectEvent#usage"
@@ -1928,7 +1939,7 @@ scenes:
             after: "export default function OrderStatus({ tableId, sound }) {\n",
             occurrence: 1,
           }
-        text: "  const onConnected = useEffectEvent(() => {\n    showNotice(\"OrderStatus · စားပွဲ \" + tableId + \" အသင့်\", sound);\n  });\n\n"
+        text: "  const onConnected = useEffectEvent((connectedTable) => {\n    showNotice(\"OrderStatus · စားပွဲ \" + connectedTable + \" အသင့်\", sound);\n  });\n\n"
       - id: fix-on
         type: editor.type
         at: { mark: fix-on }
@@ -1939,7 +1950,7 @@ scenes:
             after: "    const connection = createConnection(tableId, \"OrderStatus\");\n",
             occurrence: 1,
           }
-        text: "    connection.on(\"connected\", () => onConnected());\n"
+        text: "    connection.on(\"connected\", () => onConnected(tableId));\n"
       - id: select-fix-deps
         type: editor.select
         at: { mark: select-fix-deps }
@@ -1991,15 +2002,18 @@ scenes:
       ပြန်ဖြုတ်ပေးမယ့် function တစ်ခု ပြန်ပေးပါတယ်။ [[mark:type-store-snapshot]]
       getSnapshot က store ရဲ့ လက်ရှိ တန်ဖိုးကို ပြန်ပေးပြီး၊ အဲဒါကို snapshot လို့
       ခေါ်ပါတယ်။ [[mark:type-store-add]] addOrder က count ကို 1 တိုးပြီး၊ listener
-      တိုင်းကို အကြောင်းကြားပါတယ်။ [[mark:open-hook]] custom hook ရေးရအောင်။
-      [[mark:type-hook-imports]] သူ့အတွက် useSyncExternalStore နဲ့ store ရဲ့
-      function နှစ်ခု လိုပါတယ်။ [[mark:type-hook-body]] custom hook ဆိုတာ use နဲ့
-      စပြီး နောက်မှာ စာလုံးအကြီး လိုက်တဲ့ နာမည် ရှိပြီး၊ တခြား hook တွေကို ခေါ်တဲ့
-      function ပါ။ ကိုယ့် hook က store ကို useSyncExternalStore ဆီ ပေးလိုက်လို့၊
-      count ပြောင်းတိုင်း component ပြန် render လုပ်ပါတယ်။ [[mark:open-panel]]
-      KitchenPanel ဖိုင်ကလည်း အခု အလွတ်ပါ၊ ဒီ hook ကို တခြား hook လိုပဲ
-      ခေါ်သုံးမှာပါ။ [[mark:type-panel]] hook ဆီက count ကို ယူပြီး၊ အော်ဒါ တစ်ခု
-      ထည့်ပေးမယ့် ခလုတ်နဲ့အတူ card လေး တစ်ခုထဲမှာ ပြပါတယ်။
+      တိုင်းကို အကြောင်းကြားပါတယ်။ [[mark:open-hook]] component နှစ်ခုလုံးက store
+      ကို ဘယ်လို subscribe လုပ်မလဲ ဆိုတာ ကိုယ်တိုင် မသိရအောင်၊ အဲဒီ logic ကို
+      custom hook တစ်ခုထဲ ထုတ်ထားရအောင်။ [[mark:type-hook-imports]] သူ့အတွက်
+      useSyncExternalStore နဲ့ store ရဲ့ function နှစ်ခု လိုပါတယ်။
+      [[mark:type-hook-body]] custom hook ဆိုတာ use နဲ့ စပြီး နောက်မှာ စာလုံးအကြီး
+      လိုက်တဲ့ နာမည် ရှိပြီး၊ တခြား hook တွေကို ခေါ်တဲ့ function ပါ။ ကိုယ့် hook က
+      store ကို useSyncExternalStore ဆီ ပေးလိုက်လို့၊ count ပြောင်းတိုင်း React က
+      ဒီ hook ကို သုံးတဲ့ component ကို ပြန် render လုပ်ပေးပါတယ်။ lesson 5 က
+      context ကိုလည်း၊ useOrder လို custom hook နဲ့ ဖတ်လို့ ရပါတယ်။
+      [[mark:open-panel]] KitchenPanel ဖိုင်ကလည်း အခု အလွတ်ပါ၊ ဒီ hook ကို တခြား
+      hook လိုပဲ ခေါ်သုံးမှာပါ။ [[mark:type-panel]] hook ဆီက count ကို ယူပြီး၊
+      အော်ဒါ တစ်ခု ထည့်ပေးမယ့် ခလုတ်နဲ့အတူ card လေး တစ်ခုထဲမှာ ပြပါတယ်။
     sources:
       - title: "React — Reusing Logic with Custom Hooks"
         url: "https://react.dev/learn/reusing-logic-with-custom-hooks"
@@ -2096,14 +2110,15 @@ scenes:
       တူနေတာလဲ။ custom hook က logic ကိုပဲ မျှပြီး state ကို မမျှပါဘူး။ hook ထဲမှာ
       useState သုံးရင် component တစ်ခုစီ ကိုယ်ပိုင် count ရှိသွားမှာပါ။
       [[mark:draw-store]] ဒီမှာတော့ count က store တစ်ခုတည်းမှာ ရှိလို့၊ component
-      တိုင်းက snapshot တစ်ခုတည်းကို ဖတ်ပါတယ်။ [[mark:draw-recap]] ဒါဆို
+      တိုင်းက snapshot တစ်ခုတည်းကို ဖတ်ပါတယ်။ useSyncExternalStore က React အပြင်က
+      store အတွက်ပါ။ React state ကို မျှချင်ရင်တော့ lesson 4၊ 5 လို state ကို
+      အပေါ် ရွှေ့တာ၊ ဒါမှမဟုတ် context ကို အရင် သုံးပါ။ [[mark:draw-recap]] ဒါဆို
       ပြန်ချုပ်ရရင်၊ Effect က အပြင်က system နဲ့ ချိတ်ပြီး cleanup က
       ပြန်ဖြုတ်ပါတယ်။ Effect ဖတ်တဲ့ reactive တန်ဖိုးတိုင်း dependency ထဲ ပါရပြီး၊
       ပြန်မချိတ်စေချင်တဲ့ logic ကို useEffectEvent ထဲ ထုတ်ပါတယ်။ custom hook က
-      logic ကို မျှပြီး၊ data တစ်ခုတည်းကို မျှဖို့ store နဲ့ useSyncExternalStore
-      ကို သုံးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ မလိုအပ်တဲ့ ပြန်
-      render တွေကို ဘယ်လို တိုင်းပြီး ပြင်မလဲ ဆိုတာနဲ့ transition ကို
-      ကြည့်သွားပါမယ်။
+      logic ကို မျှပြီး၊ React အပြင်က store ကို ဖတ်ဖို့ useSyncExternalStore ကို
+      သုံးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ မလိုအပ်တဲ့ ပြန် render
+      တွေကို ဘယ်လို တိုင်းပြီး ပြင်မလဲ ဆိုတာနဲ့ transition ကို ကြည့်သွားပါမယ်။
     sources:
       - title: "React — Custom Hooks let you share stateful logic, not state itself"
         url: "https://react.dev/learn/reusing-logic-with-custom-hooks#custom-hooks-let-you-share-stateful-logic-not-state-itself"
@@ -2232,7 +2247,7 @@ scenes:
         type: expect.file
         at: { afterAction: draw-next }
         path: src/OrderStatus.jsx
-        contains: "  const onConnected = useEffectEvent(() => {\n    showNotice(\"OrderStatus · စားပွဲ \" + tableId + \" အသင့်\", sound);\n  });\n\n  useEffect(() => {\n    const connection = createConnection(tableId, \"OrderStatus\");\n    connection.on(\"connected\", () => onConnected());\n    connection.connect();\n    return () => connection.disconnect();\n  }, [tableId]);\n"
+        contains: "  const onConnected = useEffectEvent((connectedTable) => {\n    showNotice(\"OrderStatus · စားပွဲ \" + connectedTable + \" အသင့်\", sound);\n  });\n\n  useEffect(() => {\n    const connection = createConnection(tableId, \"OrderStatus\");\n    connection.on(\"connected\", () => onConnected(tableId));\n    connection.connect();\n    return () => connection.disconnect();\n  }, [tableId]);\n"
       - id: expect-order-status-imports
         type: expect.file
         at: { afterAction: expect-order-status-file }
