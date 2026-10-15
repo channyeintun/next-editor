@@ -353,7 +353,7 @@ lesson:
       y: 165
       width: 600
       height: 50
-      text: "State ဆိုတာ component ရဲ့ မှတ်ဉာဏ်"
+      text: "State ဆိုတာ component ရဲ့ memory"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: a-let-box
@@ -1084,7 +1084,7 @@ scenes:
       [[mark:let-resets]] React က card ကို ပြတိုင်း component ကို ပြန်ခေါ်လို့၊ အဲဒီ variable က ခေါ်တိုင်း
       0 ကနေ ပြန်စပါတယ်။ [[mark:let-silent]] ပြီးတော့ click လုပ်လို့ အဲဒါ ပြောင်းသွားရင်လည်း React က
       မသိလို့၊ screen ပေါ်မှာ အဟောင်းအတိုင်းပဲ ကျန်နေပါတယ်။ [[mark:draw-state]] ဒါကြောင့် React က
-      component ကို state ဆိုတဲ့ မှတ်ဉာဏ် ပေးထားပါတယ်။ [[mark:state-remembers]] useState ဆိုတဲ့ hook က
+      component ကို state ဆိုတဲ့ memory ပေးထားပါတယ်။ [[mark:state-remembers]] useState ဆိုတဲ့ hook က
       အဲဒီ တန်ဖိုးကို render ကြားမှာ မှတ်ထားပေးပါတယ်။ hook ဆိုတာ use နဲ့ စတဲ့ React ရဲ့ အထူး function
       တွေပါ။ [[mark:state-rerenders]] useState က တန်ဖိုး ပြောင်းဖို့ function တစ်ခုလည်း ပေးပါတယ်။ အဲဒါ
       ခေါ်ရင် React က component ကို ပြန်ခေါ်ပြီး အသစ်ကို ပြပါတယ်၊ ဒါကို ပြန် render လုပ်တယ်လို့ ခေါ်ပါတယ်။
@@ -1935,7 +1935,7 @@ scenes:
       event handler ထဲမှာ ခေါ်ရင်တော့ render အပြင်မှာ ခေါ်တာ ဖြစ်လို့ တန်း error တက်ပါတယ်။
       [[mark:draw-hook-rule]] ဒါကြောင့် hook ကို component ဒါမှမဟုတ် ကိုယ်တိုင် ရေးတဲ့ custom hook ရဲ့
       အပေါ်ဆုံးမှာပဲ၊ ဘယ် return မှ မရောက်ခင် ခေါ်ပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ state ဆိုတာ
-      component ရဲ့ မှတ်ဉာဏ် ဖြစ်ပြီး၊ ပြောင်းလိုက်တိုင်း React က ပြန် render လုပ်ပေးပါတယ်။ render
+      component ရဲ့ memory ဖြစ်ပြီး၊ ပြောင်းလိုက်တိုင်း React က ပြန် render လုပ်ပေးပါတယ်။ render
       တစ်ခုစီက သူ့ snapshot ကိုပဲ မြင်ပါတယ်။ state ထဲက array ကိုလည်း မပြင်ဘဲ အသစ်နဲ့ လဲပါတယ်။ နောက် lesson
       မှာတော့ input ထဲ ရိုက်တာကို state နဲ့ ချိတ်တာနဲ့၊ component နှစ်ခု တူတူ သုံးရမယ့် state ကို ဘယ်မှာ
       ထားရမလဲ ဆိုတာ ကြည့်သွားပါမယ်။
