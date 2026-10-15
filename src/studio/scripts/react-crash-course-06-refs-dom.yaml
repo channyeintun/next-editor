@@ -1,0 +1,1984 @@
+# React crash course, lesson 6 — Refs and the DOM (Burmese, my-MM).
+#
+# Story: a ref is a box React keeps between renders whose change never
+# re-renders. A waiting-time stopwatch keeps its interval id in a ref; a
+# SearchInput takes ref as an ordinary prop (React 19, no forwardRef) and a
+# button focuses it; a NoteBox exposes only focus() and clear() through
+# useImperativeHandle; today's specials list tracks its <li> nodes in a Map
+# through ref callbacks that return a cleanup (React 19), jumps to a dish, and
+# adds a special inside flushSync so the new row exists before it is scrolled
+# to; an order modal is rendered into document.body with createPortal. The
+# close names what React 19 removed (string refs, findDOMNode) and what is
+# legacy (forwardRef, element.ref).
+#
+# Insert-only plan: every new component (Stopwatch, SearchInput, NoteBox,
+# SpecialsList, OrderModal) is pinned EMPTY and typed while nothing imports
+# it (keystrokes only on short, shallow lines; the rest line by line). App.jsx
+# is live, so it only takes `block` inserts of complete lines: the import
+# first, then hooks, then the JSX. New sections go directly under <Header />,
+# so the newest demo is always at the top of the 432 px preview. Every App
+# edit reloads the preview, so every click comes after the last edit.
+#
+# The dev server starts during the first board (install + boot take time) and
+# is waited on only when the preview opens, about two minutes later.
+#
+# Narration is Burmese (my-MM). voice-script.md next to this file is the
+# editable source of the narration (tools/sync_check.py re-wraps it into this
+# YAML and checks marks and span lengths against the English draft in
+# tools/narration-en.txt); every visible string (title, chapters, board
+# labels, UI) is Burmese too.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-06-refs-dom
+  title: "React crash course 6: Ref နဲ့ DOM"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 6
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 6: refs and the DOM */
+        .page > button,
+        .card > button {
+          justify-self: start;
+        }
+
+        .elapsed {
+          font-size: 1.6rem;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .specials {
+          max-height: 168px;
+          overflow-y: auto;
+        }
+
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          padding: 16px;
+          background: rgb(0 0 0 / 0.45);
+        }
+
+        .modal {
+          width: min(360px, 100%);
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+            </main>
+          );
+        }
+      src/Stopwatch.jsx: ""
+      src/SearchInput.jsx: ""
+      src/NoteBox.jsx: ""
+      src/SpecialsList.jsx: ""
+      src/OrderModal.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — state vs ref.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 420,
+        height: 46,
+        text: "Ref ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-state-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 360,
+        height: 200,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-state-name,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 150,
+        height: 40,
+        text: "state",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b1-state-l1,
+        kind: text,
+        x: 305,
+        y: 315,
+        width: 300,
+        height: 40,
+        text: "ပြောင်းရင် ပြန် render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-state-l2,
+        kind: text,
+        x: 305,
+        y: 375,
+        width: 300,
+        height: 40,
+        text: "screen ပေါ်မှာ ပြတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-ref-box,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 390,
+        height: 200,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-ref-name,
+        kind: text,
+        x: 725,
+        y: 255,
+        width: 200,
+        height: 40,
+        text: "ref.current",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b1-ref-l1,
+        kind: text,
+        x: 725,
+        y: 315,
+        width: 330,
+        height: 40,
+        text: "ပြောင်းလည်း render မဖြစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-ref-l2,
+        kind: text,
+        x: 725,
+        y: 375,
+        width: 330,
+        height: 40,
+        text: "render အပြင်မှာပဲ သုံးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-ref-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 725,
+        y: 322,
+        width: 330,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-uses,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 700,
+        height: 40,
+        text: "ဥပမာ – timer id၊ DOM element",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-rule-state,
+        kind: text,
+        x: 280,
+        y: 550,
+        width: 380,
+        height: 40,
+        text: "screen က ပြရင် → state",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-rule-ref,
+        kind: text,
+        x: 720,
+        y: 550,
+        width: 360,
+        height: 40,
+        text: "code ပဲ လိုရင် → ref",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board 4 — flushSync timeline.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "flushSync",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-normal-label,
+        kind: text,
+        x: 280,
+        y: 225,
+        width: 500,
+        height: 40,
+        text: "ပုံမှန် setState",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n1-box,
+        kind: rectangle,
+        x: 280,
+        y: 275,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-n1-text,
+        kind: text,
+        x: 296,
+        y: 285,
+        width: 140,
+        height: 40,
+        text: "setItems",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 458,
+        y: 288,
+        width: 55,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-n2-box,
+        kind: rectangle,
+        x: 520,
+        y: 275,
+        width: 280,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-n2-text,
+        kind: text,
+        x: 538,
+        y: 285,
+        width: 230,
+        height: 40,
+        text: "handler ဆက် run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 808,
+        y: 288,
+        width: 55,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-n3-box,
+        kind: rectangle,
+        x: 870,
+        y: 275,
+        width: 230,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-n3-text,
+        kind: text,
+        x: 888,
+        y: 285,
+        width: 195,
+        height: 40,
+        text: "နောက်မှ render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-flush-label,
+        kind: text,
+        x: 280,
+        y: 375,
+        width: 500,
+        height: 40,
+        text: "flushSync နဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-f1-box,
+        kind: rectangle,
+        x: 280,
+        y: 425,
+        width: 170,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-f1-text,
+        kind: text,
+        x: 296,
+        y: 435,
+        width: 140,
+        height: 40,
+        text: "setItems",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-f-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 458,
+        y: 438,
+        width: 55,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-f2-box,
+        kind: rectangle,
+        x: 520,
+        y: 425,
+        width: 280,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-f2-text,
+        kind: text,
+        x: 538,
+        y: 435,
+        width: 230,
+        height: 40,
+        text: "DOM ပြင်ပြီးပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-f-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 808,
+        y: 438,
+        width: 55,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-f3-box,
+        kind: rectangle,
+        x: 870,
+        y: 425,
+        width: 230,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b4-f3-text,
+        kind: text,
+        x: 888,
+        y: 435,
+        width: 195,
+        height: 40,
+        text: "scroll လုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-warning,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 800,
+        height: 40,
+        text: "ခဏခဏ မသုံးပါနဲ့ – batching ကို ကျော်ပါတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 5 — React tree vs DOM tree for the portal.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "React tree နဲ့ DOM tree",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-react-head,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 220,
+        height: 40,
+        text: "React tree",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-r-app-box,
+        kind: rectangle,
+        x: 320,
+        y: 290,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-r-app-text,
+        kind: text,
+        x: 362,
+        y: 300,
+        width: 90,
+        height: 40,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-r-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 385,
+        y: 355,
+        width: 40,
+        height: 55,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-r-modal-box,
+        kind: rectangle,
+        x: 300,
+        y: 415,
+        width: 220,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-r-modal-text,
+        kind: text,
+        x: 318,
+        y: 425,
+        width: 185,
+        height: 40,
+        text: "OrderModal",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-dom-head,
+        kind: text,
+        x: 680,
+        y: 230,
+        width: 220,
+        height: 40,
+        text: "DOM tree",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-d-body-box,
+        kind: rectangle,
+        x: 700,
+        y: 290,
+        width: 300,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-d-body-text,
+        kind: text,
+        x: 820,
+        y: 300,
+        width: 90,
+        height: 40,
+        text: "body",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-d-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 730,
+        y: 355,
+        width: 40,
+        height: 55,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-d-root-box,
+        kind: rectangle,
+        x: 660,
+        y: 415,
+        width: 180,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-d-root-text,
+        kind: text,
+        x: 690,
+        y: 425,
+        width: 120,
+        height: 40,
+        text: "#root",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-d-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 960,
+        y: 355,
+        width: 40,
+        height: 55,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-d-modal-box,
+        kind: rectangle,
+        x: 890,
+        y: 415,
+        width: 190,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-d-modal-text,
+        kind: text,
+        x: 920,
+        y: 425,
+        width: 130,
+        height: 40,
+        text: "modal",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-bubble,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 800,
+        height: 40,
+        text: "event က React tree အတိုင်း bubble ဖြစ်ပါတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b5-bubble-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 548,
+        width: 330,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+
+    # Board 6 — what changed in React 19 (two removed, two legacy), and the recap.
+    - {
+        id: b6-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "React 19 မှာ ပြောင်းသွားတာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b6-string,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 200,
+        height: 40,
+        text: "string ref",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b6-string-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 295,
+        y: 250,
+        width: 190,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b6-string-fix,
+        kind: text,
+        x: 580,
+        y: 250,
+        width: 480,
+        height: 40,
+        text: "→ useRef / ref callback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-find,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 220,
+        height: 40,
+        text: "findDOMNode",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b6-find-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 295,
+        y: 310,
+        width: 215,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b6-find-fix,
+        kind: text,
+        x: 580,
+        y: 310,
+        width: 480,
+        height: 40,
+        text: "→ element မှာ ref တပ်ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-forward,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 220,
+        height: 40,
+        text: "forwardRef",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b6-forward-fix,
+        kind: text,
+        x: 580,
+        y: 370,
+        width: 480,
+        height: 40,
+        text: "→ ref ကို prop အဖြစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-element-ref,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 220,
+        height: 40,
+        text: "element.ref",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b6-element-ref-fix,
+        kind: text,
+        x: 580,
+        y: 430,
+        width: 480,
+        height: 40,
+        text: "→ element.props.ref",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-recap-ref,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 760,
+        height: 40,
+        text: "ref – render မဖြစ်စေဘဲ မှတ်ထားတဲ့ အကွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b6-recap-dom,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 40,
+        text: "flushSync · createPortal – react-dom ရဲ့ tool တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b6-next,
+        kind: text,
+        x: 300,
+        y: 610,
+        width: 600,
+        height: 40,
+        text: "နောက် lesson – Effect",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6206
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: ref-idea
+    chapter: "Ref ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ state ကို context နဲ့ မျှဝေခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      ref အကြောင်းပါ။ ref ဆိုတာ တန်ဖိုး ဒါမှမဟုတ် DOM element တစ်ခုကို render
+      ကြားမှာ ကိုင်ထားပေးတဲ့ အကွက်လေးပါ။ [[mark:start-server]] ရှင်းပြနေတုန်း dev
+      server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ preview လိုတဲ့အချိန်မှာ အသင့်
+      ဖြစ်နေအောင်ပါ။ [[mark:draw-state-box]] အရင်ဆုံး state ကို ပြန်ပြောရရင်၊
+      state ပြောင်းလိုက်ရင် React က component ကို ပြန်ခေါ်ပြီး screen ကို
+      ပြင်ပေးပါတယ်။ [[mark:draw-ref-box]] ref ကတော့ current ဆိုတဲ့ field တစ်ခုပဲ
+      ပါတဲ့ အကွက်လေးပါ။ useRef က render တိုင်း အဲဒီ အကွက်ကိုပဲ ပြန်ပေးပြီး၊
+      current ပြောင်းလည်း ပြန် render မလုပ်ပါဘူး။ [[mark:draw-ref-uses]] ဒါကြောင့်
+      screen ပေါ် မပြဘဲ handler လို နေရာကပဲ သုံးမယ့် တန်ဖိုးအတွက် ref က
+      သင့်တော်ပါတယ်။ ဥပမာ timer ရပ်ဖို့ လိုတဲ့ id တို့၊ focus ပေးချင်တဲ့ DOM
+      element တို့ပါ။ [[mark:draw-rule]] screen ပေါ်မှာ ပြရမယ့် တန်ဖိုးဆိုရင်
+      state ကို သုံးပြီး၊ code ကပဲ လိုတာဆိုရင်တော့ ref နဲ့ လုံလောက်ပါတယ်။
+    sources:
+      - title: "React — useRef"
+        url: "https://react.dev/reference/react/useRef"
+      - title: "React — Referencing Values with Refs"
+        url: "https://react.dev/learn/referencing-values-with-refs"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-state-box
+        type: whiteboard.apply
+        at: { mark: draw-state-box }
+        upsertIds: [b1-state-box, b1-state-name, b1-state-l1, b1-state-l2]
+        drawMs: 2200
+      - id: draw-ref-box
+        type: whiteboard.apply
+        at: { mark: draw-ref-box }
+        upsertIds: [b1-ref-box, b1-ref-name, b1-ref-l1, b1-ref-l2, b1-ref-underline]
+        drawMs: 2600
+      - id: draw-ref-uses
+        type: whiteboard.apply
+        at: { mark: draw-ref-uses }
+        upsertIds: [b1-uses]
+        drawMs: 1000
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [b1-rule-state, b1-rule-ref]
+        drawMs: 1600
+
+  # ------------------------------------------------------------------ 2
+  - id: stopwatch-code
+    narration: >
+      [[mark:close-board-1]] ဧည့်သည် စောင့်ချိန် တိုင်းမယ့် stopwatch လေး တစ်ခု
+      ရေးကြည့်ရအောင်။ [[mark:open-stopwatch]] Stopwatch ဖိုင်က အခု အလွတ်ပါ၊ ဘယ်
+      ဖိုင်ကမှ import မလုပ်ရသေးပါဘူး။ [[mark:type-sw-state]] စတဲ့ အချိန်နဲ့ လက်ရှိ
+      အချိန်ကို state ထဲ ထားပါတယ်။ ဒီ နှစ်ခု ကြားက စက္ကန့်ကို screen က ပြရမှာ
+      ဖြစ်လို့ပါ။ [[mark:type-sw-ref]] timer ကို စလိုက်ရင် browser က id တစ်ခု
+      ပြန်ပေးပြီး၊ ရပ်ချင်ရင် အဲဒီ id နဲ့ ရပ်ရပါတယ်။ အဲဒီ id ကိုတော့ ref ထဲ
+      ထားပါတယ်။ screen ပေါ် မပြဘဲ ရပ်မယ့် ခလုတ်ကပဲ သုံးမှာ ဖြစ်လို့ပါ။
+      [[mark:type-sw-handlers]] စမယ် ဆိုရင် အချိန်ကို သိမ်းပြီး၊ timer အဟောင်း
+      ရှိရင် ရပ်ပါတယ်။ တစ်စက္ကန့် ဆယ်ခါ အချိန် ပြောင်းမယ့် timer အသစ် စပါတယ်။
+      ရပ်မယ် ဆိုရင်တော့ timer ကို ရပ်ပစ်ပါတယ်။ [[mark:select-sw-assign]] timer
+      အသစ်ရဲ့ id ကို current ထဲ ရေးတဲ့ နေရာကို ကြည့်ပါ။ ဒီလို ရေးလို့ ပြန် render
+      မဖြစ်ပါဘူး။ [[mark:type-sw-render]] နောက်ဆုံး component က စက္ကန့်ကို
+      ပြပါတယ်။ မစရသေးရင်တော့ စာတိုလေး တစ်ကြောင်းပဲ ပြပါတယ်။ ပြီးတော့ ခလုတ် နှစ်ခု
+      ပါပါတယ်။ ref ကို handler တွေထဲမှာပဲ သုံးပြီး JSX ထဲမှာ မသုံးတာကို သတိထားပါ။
+      render လုပ်နေတုန်း ref ကို မဖတ်ဖို့၊ မရေးဖို့ React က သတိပေးထားလို့ပါ။
+    sources:
+      - title: "React — Referencing Values with Refs: Example: building a stopwatch"
+        url: "https://react.dev/learn/referencing-values-with-refs#example-building-a-stopwatch"
+      - title: "React — useRef: Caveats"
+        url: "https://react.dev/reference/react/useRef#caveats"
+      - title: "MDN — setInterval()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: open-stopwatch
+        type: workspace.openFile
+        at: { mark: open-stopwatch }
+        path: src/Stopwatch.jsx
+      - id: type-sw-state
+        type: editor.type
+        at: { mark: type-sw-state }
+        cadence: line-by-line
+        target: { file: src/Stopwatch.jsx, after: "", occurrence: 1 }
+        text: "import { useRef, useState } from \"react\";\n\nexport default function Stopwatch() {\n  const [startTime, setStartTime] = useState(null);\n  const [now, setNow] = useState(null);\n"
+      - id: type-sw-ref
+        type: editor.type
+        at: { mark: type-sw-ref }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/Stopwatch.jsx,
+            after: "  const [now, setNow] = useState(null);\n",
+            occurrence: 1,
+          }
+        text: "  const intervalRef = useRef(null);\n"
+      - id: type-sw-handlers
+        type: editor.type
+        at: { mark: type-sw-handlers }
+        cadence: line-by-line
+        target:
+          { file: src/Stopwatch.jsx, after: "  const intervalRef = useRef(null);\n", occurrence: 1 }
+        text: "\n  function handleStart() {\n    setStartTime(Date.now());\n    setNow(Date.now());\n    clearInterval(intervalRef.current);\n    intervalRef.current = setInterval(() => {\n      setNow(Date.now());\n    }, 100);\n  }\n\n  function handleStop() {\n    clearInterval(intervalRef.current);\n  }\n"
+      - id: select-sw-assign
+        type: editor.select
+        at: { mark: select-sw-assign }
+        target:
+          { file: src/Stopwatch.jsx, text: "intervalRef.current = setInterval", occurrence: 1 }
+      - id: type-sw-render
+        type: editor.type
+        at: { mark: type-sw-render }
+        cadence: line-by-line
+        target:
+          {
+            file: src/Stopwatch.jsx,
+            after: "    clearInterval(intervalRef.current);\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  const seconds = (now - startTime) / 1000;\n\n  return (\n    <section className=\"card\" data-testid=\"stopwatch\">\n      <h2>စောင့်ချိန်</h2>\n      <p className=\"elapsed\" data-testid=\"elapsed\">\n        {startTime === null ? \"မစရသေးပါ\" : seconds.toFixed(1) + \" စက္ကန့်\"}\n      </p>\n      <div className=\"row\">\n        <button data-testid=\"start-timer\" onClick={handleStart}>\n          စမယ်\n        </button>\n        <button className=\"secondary\" data-testid=\"stop-timer\" onClick={handleStop}>\n          ရပ်မယ်\n        </button>\n      </div>\n    </section>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 3
+  - id: stopwatch-run
+    narration: >
+      ကဲ၊ page ထဲ ထည့်ကြည့်ရအောင်။ [[mark:open-app-sw]] App က အခုထိ ခေါင်းစဉ်ပဲ
+      ပြနေပါသေးတယ်။ [[mark:wire-sw-import]] အရင်ဆုံး Stopwatch ကို import
+      လုပ်ပါတယ်။ မသုံးခင် import က အရင် ရှိရလို့ပါ။ [[mark:wire-sw-use]] ပြီးတော့
+      ခေါင်းစဉ် အောက်မှာ ထည့်ပါတယ်။ [[mark:preview-opens]] dev server က အသင့်
+      ဖြစ်နေပြီမို့ preview ကို ဖွင့်လိုက်ရအောင်။ stopwatch က မစရသေးဘူးလို့
+      ပြနေပါတယ်။ [[mark:click-start]] စမယ်ကို နှိပ်ရအောင်။ [[mark:watch-count]]
+      စက္ကန့်တွေ တက်လာပါပြီ။ timer ခေါ်တိုင်း state ပြောင်းနေလို့ပါ။
+      [[mark:click-stop]] ကဲ၊ ရပ်လိုက်ရအောင်။ [[mark:after-stop]] ကိန်းဂဏန်းက
+      ရပ်သွားပါပြီ။ ရပ်မယ့် handler က ref ထဲက timer id နဲ့ timer ကို
+      ရပ်ပစ်လိုက်တာပါ။ သာမန် variable ထဲ ထားမိရင်တော့ render တိုင်း အစကနေ
+      ပြန်စလို့ အဲဒီ id ပျောက်သွားမှာပါ။
+    sources:
+      - title: "React — Referencing Values with Refs"
+        url: "https://react.dev/learn/referencing-values-with-refs"
+      - title: "React — useRef"
+        url: "https://react.dev/reference/react/useRef"
+      - title: "MDN — clearInterval()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/clearInterval"
+    actions:
+      - id: open-app-sw
+        type: workspace.openFile
+        at: { mark: open-app-sw }
+        path: src/App.jsx
+      - id: wire-sw-import
+        type: editor.type
+        at: { mark: wire-sw-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: "import Stopwatch from \"./Stopwatch.jsx\";\n"
+      - id: wire-sw-use
+        type: editor.type
+        at: { mark: wire-sw-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <Stopwatch />\n"
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-not-started
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: elapsed }
+        textContains: "မစရသေးပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-not-started }
+      - id: click-start
+        type: preview.click
+        at: { mark: click-start }
+        timeoutMs: 5000
+        target: { by: testId, value: start-timer }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-counting
+        type: expect.preview
+        at: { mark: watch-count }
+        timeoutMs: 5000
+        target: { by: testId, value: elapsed }
+        textContains: "စက္ကန့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-stop
+        type: preview.click
+        at: { mark: click-stop }
+        timeoutMs: 5000
+        target: { by: testId, value: stop-timer }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      # Presence check only: the verifier can assert text/value/attribute/route,
+      # not that the number stopped moving. The freeze was checked by hand in
+      # headless Chrome (DESIGN.md, "Assertions that are presence checks only").
+      - id: expect-stopped
+        type: expect.preview
+        at: { mark: after-stop }
+        timeoutMs: 5000
+        target: { by: testId, value: elapsed }
+        textContains: "စက္ကန့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 4
+  - id: search-ref
+    chapter: "DOM element ကို ref နဲ့ ကိုင်ရအောင်"
+    narration: >
+      [[mark:open-search-input]] ref ထဲ DOM element လည်း ထည့်လို့ ရပါတယ်။ ခလုတ်
+      နှိပ်ရင် focus ရောက်မယ့် ရှာတဲ့ အကွက် လုပ်ကြည့်ရအောင်။
+      [[mark:type-search-input]] SearchInput က props ထဲက ref ကို ခွဲထုတ်ပြီး၊
+      ကျန်တဲ့ props တွေနဲ့အတူ input ဆီ ပေးလိုက်ပါတယ်။ React 19 မှာ ဒီလောက်နဲ့
+      ရပါပြီ။ function component အတွက် ref က သာမန် prop ဖြစ်သွားလို့ပါ။ အရင်က
+      forwardRef နဲ့ ထုပ်ရပေမယ့် အခု မလိုတော့ပါဘူး။ [[mark:open-app-search]] ကဲ၊
+      App ကို ပြင်ရအောင်။ [[mark:wire-react-import]] React ကနေ useRef၊ useState
+      ယူပါတယ်။ [[mark:wire-search-import]] ပြီးတော့ SearchInput ကိုလည်း import
+      လုပ်ပါတယ်။ [[mark:wire-search-logic]] App ထဲမှာ null ကနေ စတဲ့ ref တစ်ခုနဲ့၊
+      status စာသားအတွက် state တစ်ခု လုပ်ပါတယ်။ [[mark:select-focus]] handler ထဲမှာ
+      ref ထဲက element ကို focus ပေးတဲ့ နေရာကို ကြည့်ပါ။ [[mark:select-active]]
+      ပြီးတော့ focus တကယ် ရောက်လား စစ်ပြီးမှ စာသား ပြတဲ့ နေရာကို ကြည့်ပါ။
+      [[mark:wire-search-jsx]] JSX ထဲမှာ ref ကို SearchInput ဆီ သာမန် prop လိုပဲ
+      ပေးလိုက်ပါတယ်။ [[mark:click-search]] ရှာမယ်ကို နှိပ်ရအောင်။
+      [[mark:after-search]] ရှာလို့ ရပါပြီ လို့ ပေါ်လာတော့၊ focus က input ထဲ တကယ်
+      ရောက်သွားတာ သေချာပါတယ်။ input ကို screen ပေါ် တင်တဲ့အချိန်မှာ React က ref ထဲ
+      element ထည့်ပေးလို့ပါ။
+    sources:
+      - title: "React — Manipulating the DOM with Refs"
+        url: "https://react.dev/learn/manipulating-the-dom-with-refs"
+      - title: "React 19 — ref as a prop"
+        url: "https://react.dev/blog/2024/12/05/react-19#ref-as-a-prop"
+      - title: "React — forwardRef"
+        url: "https://react.dev/reference/react/forwardRef"
+      - title: "MDN — HTMLElement.focus()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus"
+      - title: "MDN — Document.activeElement"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/activeElement"
+    actions:
+      - id: open-search-input
+        type: workspace.openFile
+        at: { mark: open-search-input }
+        path: src/SearchInput.jsx
+      - id: type-search-input
+        type: editor.type
+        at: { mark: type-search-input }
+        cadence: fast-explainer
+        target: { file: src/SearchInput.jsx, after: "", occurrence: 1 }
+        text: "export default function SearchInput({ ref, ...props }) {\n  return <input ref={ref} {...props} />;\n}\n"
+      - id: open-app-search
+        type: workspace.openFile
+        at: { mark: open-app-search, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-react-import
+        type: editor.type
+        at: { mark: wire-react-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "", occurrence: 1 }
+        text: "import { useRef, useState } from \"react\";\n"
+      - id: wire-search-import
+        type: editor.type
+        at: { mark: wire-search-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import Stopwatch from \"./Stopwatch.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import SearchInput from \"./SearchInput.jsx\";\n"
+      - id: wire-search-logic
+        type: editor.type
+        at: { mark: wire-search-logic }
+        cadence: block
+        target: { file: src/App.jsx, after: "export default function App() {\n", occurrence: 1 }
+        text: "  const searchRef = useRef(null);\n  const [searchStatus, setSearchStatus] = useState(\"\");\n\n  function handleSearchClick() {\n    searchRef.current.focus();\n    if (document.activeElement === searchRef.current) {\n      setSearchStatus(\"ရှာလို့ ရပါပြီ\");\n    }\n  }\n\n"
+      - id: select-focus
+        type: editor.select
+        at: { mark: select-focus }
+        target: { file: src/App.jsx, text: "searchRef.current.focus();", occurrence: 1 }
+      - id: select-active
+        type: editor.select
+        at: { mark: select-active }
+        target:
+          { file: src/App.jsx, text: "document.activeElement === searchRef.current", occurrence: 1 }
+      - id: wire-search-jsx
+        type: editor.type
+        at: { mark: wire-search-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <section className=\"card\">\n        <SearchInput\n          ref={searchRef}\n          placeholder=\"ဟင်းလျာ ရှာရန်\"\n          data-testid=\"search-input\"\n        />\n        <button data-testid=\"search-button\" onClick={handleSearchClick}>\n          ရှာမယ်\n        </button>\n        <p data-testid=\"search-status\">{searchStatus}</p>\n      </section>\n"
+      - id: expect-search-box
+        type: expect.preview
+        at: { mark: click-search, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: search-button }
+        textContains: "ရှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-search
+        type: preview.click
+        at: { mark: click-search }
+        timeoutMs: 5000
+        target: { by: testId, value: search-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-search-ready
+        type: expect.preview
+        at: { mark: after-search }
+        timeoutMs: 5000
+        target: { by: testId, value: search-status }
+        textContains: "ရှာလို့ ရပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 6
+  - id: notebox-handle
+    narration: >
+      [[mark:open-notebox]] parent က element တစ်ခုလုံး ရသွားရင် input ကို
+      ကြိုက်သလို ပြင်လို့ ရတော့၊ တစ်ခါတစ်လေ မသင့်တော်ပါဘူး။ မီးဖိုချောင် မှတ်ချက်
+      အကွက်ဆိုရင် focus ပေးဖို့နဲ့ ရှင်းဖို့ပဲ ခွင့်ပြုချင်ပါတယ်။
+      [[mark:type-notebox-top]] NoteBox က တကယ့် input အတွက် သူ့ ref တစ်ခု
+      ထားပါတယ်။ parent ရဲ့ ref ကတော့ ခုနကလိုပဲ prop အနေနဲ့ ရောက်လာပါတယ်။
+      [[mark:type-handle-focus]] ဒါပေမဲ့ useImperativeHandle က parent ရဲ့ ref
+      ထဲကို input အစား ကိုယ်တိုင် သတ်မှတ်တဲ့ object တစ်ခု ထည့်ပေးပါတယ်။ ပထမ method
+      focus က အတွင်းက input ကို focus ပေးပါတယ်။ [[mark:type-handle-clear]] ဒုတိယ
+      method clear ကတော့ input ထဲက စာသားကို ရှင်းပစ်ပါတယ်။ parent က မြင်ရမှာ ဒီ
+      နှစ်ခုပဲပါ။ [[mark:type-notebox-return]] input ကိုတော့ အတွင်းက ref နဲ့
+      ချိတ်ထားပါတယ်။ input က NoteBox ထဲမှာပဲ ကျန်ပြီး၊ parent ဆီ ရောက်တာက အပေါ်က
+      object ပဲပါ။ [[mark:open-app-note]] NoteBox ကို import လုပ်ပါတယ်။
+      [[mark:wire-note-ref]] ref တစ်ခု ထပ်လုပ်ပါတယ်။ [[mark:wire-note-jsx]]
+      ပြီးတော့ အကွက်နဲ့ method နှစ်ခုကို ခေါ်မယ့် ခလုတ် နှစ်ခု ထည့်ပါတယ်။
+      [[mark:type-note-text]] မှတ်ချက် ရေးရအောင်။ [[mark:click-clear]]
+      ဖျက်လိုက်ရအောင်။ [[mark:after-clear]] အကွက် လွတ်သွားပါပြီ။ App က clear
+      လုပ်ပါလို့ ပြောရုံပါ။ ဘယ်လို ရှင်းမလဲ ဆိုတာက NoteBox ရဲ့ အလုပ်ပါ။
+    sources:
+      - title: "React — useImperativeHandle"
+        url: "https://react.dev/reference/react/useImperativeHandle"
+      - title: "React — Exposing a subset of the API with an imperative handle"
+        url: "https://react.dev/learn/manipulating-the-dom-with-refs#exposing-a-subset-of-the-api-with-an-imperative-handle"
+    actions:
+      - id: open-notebox
+        type: workspace.openFile
+        at: { mark: open-notebox }
+        path: src/NoteBox.jsx
+      - id: type-notebox-top
+        type: editor.type
+        at: { mark: type-notebox-top }
+        cadence: line-by-line
+        target: { file: src/NoteBox.jsx, after: "", occurrence: 1 }
+        text: "import { useImperativeHandle, useRef } from \"react\";\n\nexport default function NoteBox({ ref }) {\n  const inputRef = useRef(null);\n"
+      - id: type-handle-focus
+        type: editor.type
+        at: { mark: type-handle-focus }
+        cadence: line-by-line
+        target:
+          { file: src/NoteBox.jsx, after: "  const inputRef = useRef(null);\n", occurrence: 1 }
+        text: "\n  useImperativeHandle(ref, () => ({\n    focus() {\n      inputRef.current.focus();\n    },\n"
+      - id: type-handle-clear
+        type: editor.type
+        at: { mark: type-handle-clear }
+        cadence: line-by-line
+        target:
+          {
+            file: src/NoteBox.jsx,
+            after: "      inputRef.current.focus();\n    },\n",
+            occurrence: 1,
+          }
+        text: "    clear() {\n      inputRef.current.value = \"\";\n    },\n  }));\n"
+      - id: type-notebox-return
+        type: editor.type
+        at: { mark: type-notebox-return }
+        cadence: line-by-line
+        target: { file: src/NoteBox.jsx, after: "    },\n  }));\n", occurrence: 1 }
+        text: "\n  return (\n    <input ref={inputRef} placeholder=\"မှတ်ချက် ရေးရန်\" data-testid=\"note-input\" />\n  );\n}\n"
+      - id: open-app-note
+        type: workspace.openFile
+        at: { mark: open-app-note, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-note-import
+        type: editor.type
+        at: { afterAction: open-app-note }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import SearchInput from \"./SearchInput.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import NoteBox from \"./NoteBox.jsx\";\n"
+      - id: wire-note-ref
+        type: editor.type
+        at: { mark: wire-note-ref }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "  const [searchStatus, setSearchStatus] = useState(\"\");\n",
+            occurrence: 1,
+          }
+        text: "  const noteRef = useRef(null);\n"
+      - id: wire-note-jsx
+        type: editor.type
+        at: { mark: wire-note-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <section className=\"card\">\n        <NoteBox ref={noteRef} />\n        <div className=\"row\">\n          <button data-testid=\"note-focus\" onClick={() => noteRef.current.focus()}>\n            ရေးမယ်\n          </button>\n          <button data-testid=\"note-clear\" onClick={() => noteRef.current.clear()}>\n            ဖျက်မယ်\n          </button>\n        </div>\n      </section>\n"
+      - id: type-note-text
+        type: preview.input
+        at: { mark: type-note-text }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note-text
+        type: expect.preview
+        at: { afterAction: type-note-text }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-clear
+        type: preview.click
+        at: { mark: click-clear }
+        timeoutMs: 5000
+        target: { by: testId, value: note-clear }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-note-cleared
+        type: expect.preview
+        at: { mark: after-clear }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 7
+  - id: specials-refs
+    chapter: "Ref callback နဲ့ flushSync"
+    narration: >
+      [[mark:open-specials]] နောက်တစ်ခုက scroll လုပ်လို့ ရတဲ့ list ပါ။ ခလုတ်
+      နှိပ်ရင် ဟင်းလျာ တစ်ခုဆီ ခုန်ဖို့၊ ဟင်းလျာ တစ်ခုစီရဲ့ element ကို ref နဲ့
+      ကိုင်ထားရပါမယ်။ ဒါပေမဲ့ item တိုင်း useRef ခေါ်လို့ မရပါဘူး။ hook ကို loop
+      ထဲ ခေါ်လို့ မရလို့ပါ။ [[mark:type-specials-top]] အဲဒီအစား ref တစ်ခုထဲမှာ Map
+      တစ်ခု ထားပါတယ်။ ဟင်းလျာ id ကနေ သူ့ element ကို ချိတ်ပေးဖို့ပါ။ useRef ကို
+      ပေးတဲ့ argument က render တိုင်း ပြန် run ရလို့၊ Map လို ပေါ့ပါးတာမှသာ ဒီလို
+      တိုက်ရိုက် ထည့်ပါ။ [[mark:type-specials-scroll]] ခုန်ချင်ရင် Map ထဲက element
+      ကို ရှာပြီး၊ မြင်ကွင်းထဲ ရောက်အောင် scroll လုပ်ဖို့ browser ကို ပြောပါတယ်။
+      [[mark:type-specials-list]] JSX ထဲမှာတော့ ခုန်မယ့် ခလုတ်၊ အသစ် ထည့်မယ့်
+      ခလုတ်နဲ့ ဒီနေ့ အထူး ဟင်းလျာ စာရင်း ပါပါတယ်။ [[mark:type-ref-callback]] item
+      တိုင်းမှာ key နဲ့ ref callback ပါပါတယ်။ ref object အစား function
+      ပေးလိုက်တာပါ။ item ပေါ်လာရင် React က သူ့ကို element နဲ့ ခေါ်ပေးပြီး၊ ကိုယ်က
+      Map ထဲ သိမ်းပါတယ်။ [[mark:select-cleanup]] ဒီ return စာကြောင်းကို ကြည့်ပါ။
+      React 19 မှာ callback က cleanup ပြန်ပေးနိုင်ပါပြီ။ item ပျောက်ရင် ဒါမှမဟုတ်
+      ပြန် render လို့ callback အသစ် ရောက်ရင် React က run ပေးလို့၊ Map ထဲက entry
+      ဖျက်တာပါ။ [[mark:strict-note]] development မှာတော့ StrictMode က list ပထမဆုံး
+      ပေါ်တဲ့အခါ callback ခေါ်၊ cleanup run၊ callback ထပ်ခေါ် ဆိုပြီး တစ်ကြိမ်
+      ပိုလုပ်ပါတယ်။ cleanup က callback လုပ်ထားတာကို တကယ် ပြန်ဖြုတ်လား စစ်တာပါ။
+    sources:
+      - title: "React — How to manage a list of refs using a ref callback"
+        url: "https://react.dev/learn/manipulating-the-dom-with-refs#how-to-manage-a-list-of-refs-using-a-ref-callback"
+      - title: "React — Common components: ref callback function"
+        url: "https://react.dev/reference/react-dom/components/common#ref-callback"
+      - title: "React 19 — Cleanup functions for refs"
+        url: "https://react.dev/blog/2024/12/05/react-19#cleanup-functions-for-refs"
+      - title: "React 19 Upgrade Guide — StrictMode changes"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#strict-mode-improvements"
+      - title: "MDN — Element.scrollIntoView()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView"
+    actions:
+      - id: open-specials
+        type: workspace.openFile
+        at: { mark: open-specials }
+        path: src/SpecialsList.jsx
+      - id: type-specials-top
+        type: editor.type
+        at: { mark: type-specials-top }
+        cadence: line-by-line
+        target: { file: src/SpecialsList.jsx, after: "", occurrence: 1 }
+        text: "import { useRef, useState } from \"react\";\nimport { menu } from \"./menu.js\";\n\nlet nextId = 1;\n\nexport default function SpecialsList() {\n  const [items, setItems] = useState(menu);\n  const itemsRef = useRef(new Map());\n"
+      - id: type-specials-scroll
+        type: editor.type
+        at: { mark: type-specials-scroll }
+        cadence: line-by-line
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            after: "  const itemsRef = useRef(new Map());\n",
+            occurrence: 1,
+          }
+        text: "\n  function scrollToItem(id) {\n    const node = itemsRef.current.get(id);\n    node.scrollIntoView({ behavior: \"smooth\", block: \"nearest\" });\n  }\n"
+      - id: type-specials-list
+        type: editor.type
+        at: { mark: type-specials-list }
+        cadence: block
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            after: "    node.scrollIntoView({ behavior: \"smooth\", block: \"nearest\" });\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  return (\n    <section className=\"card\">\n      <div className=\"row\">\n        <button data-testid=\"jump-laphet\" onClick={() => scrollToItem(\"laphet-thoke\")}>\n          လက်ဖက်သုပ်ဆီ သွားမယ်\n        </button>\n        <button className=\"secondary\" data-testid=\"add-special\" onClick={handleAdd}>\n          အသစ်ထည့်မယ်\n        </button>\n      </div>\n      <ul className=\"list specials\" data-testid=\"specials-list\">\n        {items.map((item) => (\n"
+      - id: type-ref-callback
+        type: editor.type
+        at: { mark: type-ref-callback }
+        cadence: line-by-line
+        target:
+          { file: src/SpecialsList.jsx, after: "        {items.map((item) => (\n", occurrence: 1 }
+        text: "          <li\n            key={item.id}\n            data-testid={\"special-\" + item.id}\n            ref={(node) => {\n              itemsRef.current.set(item.id, node);\n              return () => itemsRef.current.delete(item.id);\n            }}\n          >\n            {item.name}\n          </li>\n        ))}\n      </ul>\n    </section>\n  );\n}\n"
+      - id: select-cleanup
+        type: editor.select
+        at: { mark: select-cleanup }
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            text: "return () => itemsRef.current.delete(item.id);",
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 8
+  - id: specials-flush
+    narration: >
+      အသစ်ထည့်မယ့် ခလုတ်ကတော့ ဟင်းလျာ အသစ် ထည့်ပြီး သူ့ဆီ တန်း scroll လုပ်ရမှာပါ။
+      [[mark:type-flush-import]] ဒါအတွက် flushSync ကို import လုပ်ပါတယ်။ DOM နဲ့
+      ဆိုင်တဲ့ အလုပ် ဖြစ်လို့ react-dom ဆီက လာတာပါ။ [[mark:type-handle-add]]
+      handler က counter ထဲက နောက် နံပါတ်နဲ့ ဟင်းလျာ အသစ် တည်ဆောက်ပြီး counter ကို
+      တိုးပါတယ်။ ပြီးတော့ state ထဲက list ထဲ ထည့်ပြီး၊ အဲဒီ id နဲ့ သူ့ဆီ scroll
+      လုပ်ပါတယ်။ [[mark:select-flushsync]] ဒီ flushSync ကို ကြည့်ပါ။ မပါရင် state
+      ပြောင်းရုံနဲ့ DOM က ချက်ချင်း မပြောင်းသေးလို့၊ နောက် စာကြောင်းမှာ item အသစ်
+      မရှိသေးတာ ဖြစ်မှာပါ။ [[mark:flush-explain]] flushSync ကတော့ နောက် စာကြောင်း
+      မရောက်ခင် DOM ကို အရင် ပြင်ခိုင်းတာပါ။ [[mark:open-app-specials]]
+      SpecialsList ကို import လုပ်ပါတယ်။ [[mark:wire-specials-use]] ပြီးတော့
+      ခေါင်းစဉ် အောက်မှာ ထည့်ပါတယ်။ [[mark:click-jump]] လက်ဖက်သုပ်ဆီ
+      သွားကြည့်ရအောင်။ [[mark:after-jump]] list က သူ့ဆီ scroll ဆင်းသွားပါပြီ။
+      [[mark:click-add]] အသစ် ထည့်ကြည့်ရအောင်။ [[mark:after-add]] row အသစ် တစ်ခု
+      အောက်ဆုံးမှာ ပေါ်လာပြီး၊ list ကလည်း သူ့ဆီ တန်း scroll ဆင်းသွားပါတယ်။
+    sources:
+      - title: "React — flushSync"
+        url: "https://react.dev/reference/react-dom/flushSync"
+      - title: "React — Flushing state updates synchronously with flushSync"
+        url: "https://react.dev/learn/manipulating-the-dom-with-refs#flushing-state-updates-synchronously-with-flush-sync"
+      - title: "React — Queueing a Series of State Updates"
+        url: "https://react.dev/learn/queueing-a-series-of-state-updates"
+    actions:
+      - id: type-flush-import
+        type: editor.type
+        at: { mark: type-flush-import }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            after: "import { useRef, useState } from \"react\";\n",
+            occurrence: 1,
+          }
+        text: "import { flushSync } from \"react-dom\";\n"
+      - id: type-handle-add
+        type: editor.type
+        at: { mark: type-handle-add }
+        cadence: line-by-line
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            after: "    node.scrollIntoView({ behavior: \"smooth\", block: \"nearest\" });\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  function handleAdd() {\n    const next = {\n      id: \"new-\" + nextId,\n      name: \"အထူး ဟင်းလျာ \" + nextId,\n    };\n    nextId++;\n    flushSync(() => {\n      setItems([...items, next]);\n    });\n    scrollToItem(next.id);\n  }\n"
+      - id: select-flushsync
+        type: editor.select
+        at: { mark: select-flushsync }
+        target:
+          {
+            file: src/SpecialsList.jsx,
+            text: "    flushSync(() => {\n      setItems([...items, next]);\n    });\n",
+            occurrence: 1,
+          }
+      - id: open-app-specials
+        type: workspace.openFile
+        at: { mark: open-app-specials }
+        path: src/App.jsx
+      - id: wire-specials-import
+        type: editor.type
+        at: { afterAction: open-app-specials }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import NoteBox from \"./NoteBox.jsx\";\n", occurrence: 1 }
+        text: "import SpecialsList from \"./SpecialsList.jsx\";\n"
+      - id: wire-specials-use
+        type: editor.type
+        at: { mark: wire-specials-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <SpecialsList />\n"
+      - id: expect-specials-list
+        type: expect.preview
+        at: { mark: click-jump, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: special-mohinga }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-jump
+        type: preview.click
+        at: { mark: click-jump }
+        timeoutMs: 5000
+        target: { by: testId, value: jump-laphet }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      # Presence check only: the <li> existed before the click; the scroll
+      # itself was checked by hand in headless Chrome (DESIGN.md).
+      - id: expect-jumped
+        type: expect.preview
+        at: { mark: after-jump }
+        timeoutMs: 5000
+        target: { by: testId, value: special-laphet-thoke }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-add
+        type: preview.click
+        at: { mark: click-add }
+        timeoutMs: 5000
+        target: { by: testId, value: add-special }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-added
+        type: expect.preview
+        at: { mark: after-add }
+        timeoutMs: 5000
+        target: { by: testId, value: special-new-1 }
+        textContains: "အထူး ဟင်းလျာ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 9
+  - id: flush-board
+    narration: >
+      [[mark:board-flush]] ပုံမှန်ဆိုရင် state ပြောင်းတာက update ကို တန်းစီ
+      ထားရုံပါ။ handler ပြီးမှ React က update အားလုံးကို render တစ်ကြိမ်တည်းနဲ့
+      လုပ်ပြီး၊ ဒါကို batching လို့ ခေါ်ပါတယ်။ [[mark:draw-flush-sync]] flushSync
+      ကတော့ ချက်ချင်း render လုပ်လို့၊ နောက် စာကြောင်းက element အသစ်ကို
+      တန်းမြင်ရပါတယ်။ [[mark:draw-flush-warning]] ဒါပေမဲ့ ခဏခဏ မသုံးပါနဲ့။
+      batching ကို ကျော်ရင် app ပိုနှေးသွားနိုင်လို့ပါ။
+    sources:
+      - title: "React — flushSync: Caveats"
+        url: "https://react.dev/reference/react-dom/flushSync#caveats"
+      - title: "React — Queueing a Series of State Updates"
+        url: "https://react.dev/learn/queueing-a-series-of-state-updates"
+    actions:
+      - id: board-flush
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-flush-normal
+        type: whiteboard.apply
+        at: { mark: board-flush }
+        upsertIds:
+          [
+            b4-normal-label,
+            b4-n1-box,
+            b4-n1-text,
+            b4-n-arrow-1,
+            b4-n2-box,
+            b4-n2-text,
+            b4-n-arrow-2,
+            b4-n3-box,
+            b4-n3-text,
+          ]
+        drawMs: 3000
+      - id: draw-flush-sync
+        type: whiteboard.apply
+        at: { mark: draw-flush-sync }
+        upsertIds:
+          [
+            b4-flush-label,
+            b4-f1-box,
+            b4-f1-text,
+            b4-f-arrow-1,
+            b4-f2-box,
+            b4-f2-text,
+            b4-f-arrow-2,
+            b4-f3-box,
+            b4-f3-text,
+          ]
+        drawMs: 3000
+      - id: draw-flush-warning
+        type: whiteboard.apply
+        at: { mark: draw-flush-warning }
+        upsertIds: [b4-warning]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 10
+  - id: portal-modal
+    chapter: "Portal နဲ့ modal"
+    narration: >
+      [[mark:close-board-flush]] နောက်ဆုံးက page တစ်ခုလုံး ဖုံးပြီး ပေါ်လာမယ့်
+      order modal ပါ။ ကိုယ့် component က layout ထဲ နက်နက်မှာ ရှိတော့၊ parent ရဲ့
+      style က သူ့ကို ဖြတ်နိုင်ပါတယ်။ [[mark:type-portal-import]] ဒါကို react-dom
+      ကပဲ လာတဲ့ createPortal က ဖြေရှင်းပေးပါတယ်။ သူက JSX ကို DOM ထဲက တခြား နေရာမှာ
+      သွားပြပေးတာပါ။ [[mark:type-modal-body]] component က createPortal ကို
+      argument နှစ်ခုနဲ့ ခေါ်ပြီး return လုပ်ပါတယ်။ ပထမ argument က ပြမယ့် JSX ပါ။
+      နောက်ခံ အမှောင်ပေါ်မှာ order card လေး တင်ထားတာပါ။ ဒုတိယ argument ကတော့
+      အဲဒါကို ထည့်မယ့် DOM element ပါ။ [[mark:select-body]] ဒီမှာ အဲဒီ element က
+      page ရဲ့ body ပါ။ React က render လုပ်နေတဲ့ root ရဲ့ အပြင်ဘက်ပါ။
+      [[mark:open-app-modal]] OrderModal ကို import လုပ်ပါတယ်။
+      [[mark:wire-modal-state]] ဖွင့်ထားလား ဆိုတဲ့ state တစ်ခု ထည့်ပါတယ်။
+      [[mark:wire-modal-jsx]] ပြီးတော့ ဖွင့်မယ့် ခလုတ် တစ်ခု ထည့်ပြီး၊ အဲဒီ state
+      က true ဖြစ်နေတုန်းမှာပဲ modal ကို ပြပါတယ်။ [[mark:click-open-modal]]
+      ဖွင့်ကြည့်ရအောင်။ [[mark:after-modal]] order card က page တစ်ခုလုံးကို
+      ဖုံးသွားပါပြီ။
+    sources:
+      - title: "React — createPortal"
+        url: "https://react.dev/reference/react-dom/createPortal"
+      - title: "React — Rendering a modal dialog with a portal"
+        url: "https://react.dev/reference/react-dom/createPortal#rendering-a-modal-dialog-with-a-portal"
+    actions:
+      - id: close-board-flush
+        type: whiteboard.apply
+        at: { mark: close-board-flush }
+        open: false
+      - id: open-order-modal
+        type: workspace.openFile
+        at: { mark: close-board-flush, offsetMs: 700 }
+        path: src/OrderModal.jsx
+      - id: type-portal-import
+        type: editor.type
+        at: { mark: type-portal-import }
+        cadence: fast-explainer
+        target: { file: src/OrderModal.jsx, after: "", occurrence: 1 }
+        text: "import { createPortal } from \"react-dom\";\n"
+      - id: type-modal-body
+        type: editor.type
+        at: { mark: type-modal-body }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderModal.jsx,
+            after: "import { createPortal } from \"react-dom\";\n",
+            occurrence: 1,
+          }
+        text: "\nexport default function OrderModal({ onClose }) {\n  return createPortal(\n    <div className=\"modal-backdrop\">\n      <div className=\"card modal\" data-testid=\"order-modal\">\n        <h2>မှာထားတာ</h2>\n        <p>မုန့်ဟင်းခါး 1 ပွဲ · 2,500 ကျပ်</p>\n        <button data-testid=\"close-modal\" onClick={onClose}>\n          ပိတ်မယ်\n        </button>\n      </div>\n    </div>,\n    document.body,\n  );\n}\n"
+      - id: select-body
+        type: editor.select
+        at: { mark: select-body }
+        target: { file: src/OrderModal.jsx, text: "document.body", occurrence: 1 }
+      - id: open-app-modal
+        type: workspace.openFile
+        at: { mark: open-app-modal }
+        path: src/App.jsx
+      - id: wire-modal-import
+        type: editor.type
+        at: { afterAction: open-app-modal }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import SpecialsList from \"./SpecialsList.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import OrderModal from \"./OrderModal.jsx\";\n"
+      - id: wire-modal-state
+        type: editor.type
+        at: { mark: wire-modal-state }
+        cadence: block
+        target: { file: src/App.jsx, after: "  const noteRef = useRef(null);\n", occurrence: 1 }
+        text: "  const [showModal, setShowModal] = useState(false);\n"
+      - id: wire-modal-jsx
+        type: editor.type
+        at: { mark: wire-modal-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <button data-testid=\"open-modal\" onClick={() => setShowModal(true)}>\n        မှာထားတာ ကြည့်မယ်\n      </button>\n      {showModal && <OrderModal onClose={() => setShowModal(false)} />}\n"
+      - id: expect-modal-button
+        type: expect.preview
+        at: { mark: click-open-modal, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: open-modal }
+        textContains: "မှာထားတာ ကြည့်မယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-open-modal
+        type: preview.click
+        at: { mark: click-open-modal }
+        timeoutMs: 5000
+        target: { by: testId, value: open-modal }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-modal-open
+        type: expect.preview
+        at: { mark: after-modal }
+        timeoutMs: 5000
+        target: { by: testId, value: order-modal }
+        textContains: "2,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 11
+  - id: portal-board
+    narration: >
+      [[mark:board-trees]] ဒါဆို modal က တကယ် ဘယ်မှာ ရှိနေတာလဲ။
+      [[mark:draw-react-tree]] React tree ထဲမှာတော့ App ရဲ့ child အတိုင်းပဲ
+      ရှိနေလို့၊ အပေါ်က props နဲ့ context ကို ပုံမှန်အတိုင်း ရပါတယ်။
+      [[mark:draw-dom-tree]] DOM tree ထဲမှာကျတော့ body ရဲ့ တိုက်ရိုက် အောက်မှာ၊
+      root element ရဲ့ ဘေးနားမှာ ရှိနေပါတယ်။ [[mark:draw-bubbling]] event တွေကတော့
+      React tree အတိုင်းပဲ သွားပါတယ်။ modal ထဲက click က parent ရဲ့ DOM element ထဲ
+      မရှိပေမယ့်၊ သူ့ React parent တွေဆီ bubble ဖြစ်ပြီး တက်သွားပါတယ်။
+    sources:
+      - title: "React — createPortal"
+        url: "https://react.dev/reference/react-dom/createPortal"
+      - title: "React — Responding to Events: event propagation"
+        url: "https://react.dev/learn/responding-to-events#event-propagation"
+    actions:
+      - id: board-trees
+        type: whiteboard.apply
+        at: { mark: board-trees }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-react-tree
+        type: whiteboard.apply
+        at: { mark: draw-react-tree }
+        upsertIds:
+          [b5-react-head, b5-r-app-box, b5-r-app-text, b5-r-arrow, b5-r-modal-box, b5-r-modal-text]
+        drawMs: 2200
+      - id: draw-dom-tree
+        type: whiteboard.apply
+        at: { mark: draw-dom-tree }
+        upsertIds:
+          [
+            b5-dom-head,
+            b5-d-body-box,
+            b5-d-body-text,
+            b5-d-arrow-1,
+            b5-d-root-box,
+            b5-d-root-text,
+            b5-d-arrow-2,
+            b5-d-modal-box,
+            b5-d-modal-text,
+          ]
+        drawMs: 3000
+      - id: draw-bubbling
+        type: whiteboard.apply
+        at: { mark: draw-bubbling }
+        upsertIds: [b5-bubble, b5-bubble-underline]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 12
+  - id: removed-recap
+    chapter: "React 19 မှာ ပြောင်းသွားတာတွေ"
+    narration: >
+      [[mark:board-removed]] နောက်ဆုံး၊ React 19 က DOM ကိုင်ဖို့ နည်းဟောင်း နှစ်ခု
+      ဖယ်လိုက်ပါပြီ။ [[mark:draw-string-refs]] class component ခေတ်က string ref
+      မရှိတော့ပါဘူး။ အဲဒီအစား useRef ဒါမှမဟုတ် ref callback ကို သုံးပါ။
+      [[mark:draw-find-dom-node]] findDOMNode လည်း မရှိတော့ပါဘူး။ လိုတဲ့ element
+      ပေါ် ref တပ်လိုက်ပါ။ [[mark:draw-legacy-rows]] forwardRef ကတော့ အလုပ်
+      လုပ်နေတုန်းပါပဲ။ ဒါပေမဲ့ ref prop က သူ့နေရာ ယူလိုက်ပါပြီ။ JSX element ကနေ
+      ref ဖတ်တာလည်း deprecated ဖြစ်သွားပါပြီ။ ref က props ထဲ ရောက်နေလို့ပါ။
+      [[mark:draw-recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ref က ပြန် render မလုပ်ဘဲ တန်ဖိုး
+      မှတ်ပေးပြီး၊ DOM element လည်း ကိုင်လို့ ရပါတယ်။ flushSync နဲ့ createPortal
+      ကတော့ လိုမှသာ သုံးရတဲ့ tool တွေပါ။ [[mark:next-lesson]] နောက် lesson မှာတော့
+      Effect ကို ကြည့်သွားပါမယ်။ ကိုယ့် stopwatch က screen ပေါ်က
+      ပျောက်သွားရင်တောင် timer က ဆက် run နေမှာမို့၊ cleanup ပါတဲ့ Effect က
+      အဲဒီအတွက် မှန်ကန်တဲ့ အဖြေပါ။
+    sources:
+      - title: "React 19 Upgrade Guide — Removed: string refs"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-string-refs"
+      - title: "React 19 Upgrade Guide — Removed: ReactDOM.findDOMNode"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-reactdom-finddomnode"
+      - title: "React — forwardRef"
+        url: "https://react.dev/reference/react/forwardRef"
+      - title: "React 19 Upgrade Guide — Deprecated: element.ref"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#deprecated-element-ref"
+      - title: "React — Synchronizing with Effects"
+        url: "https://react.dev/learn/synchronizing-with-effects"
+    actions:
+      - id: board-removed
+        type: whiteboard.apply
+        at: { mark: board-removed }
+        clear: true
+        upsertIds: [b6-title]
+      - id: draw-string-refs
+        type: whiteboard.apply
+        at: { mark: draw-string-refs }
+        upsertIds: [b6-string, b6-string-strike, b6-string-fix]
+        drawMs: 1600
+      - id: draw-find-dom-node
+        type: whiteboard.apply
+        at: { mark: draw-find-dom-node }
+        upsertIds: [b6-find, b6-find-strike, b6-find-fix]
+        drawMs: 1600
+      - id: draw-legacy-rows
+        type: whiteboard.apply
+        at: { mark: draw-legacy-rows }
+        upsertIds: [b6-forward, b6-forward-fix, b6-element-ref, b6-element-ref-fix]
+        drawMs: 2000
+      - id: draw-recap
+        type: whiteboard.apply
+        at: { mark: draw-recap }
+        upsertIds: [b6-recap-ref, b6-recap-dom]
+        drawMs: 1600
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b6-next]
+        drawMs: 800
+      - id: expect-stopwatch-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/Stopwatch.jsx
+        contains: "    intervalRef.current = setInterval(() => {\n      setNow(Date.now());\n    }, 100);\n"
+      - id: expect-search-input-file
+        type: expect.file
+        at: { afterAction: expect-stopwatch-file }
+        path: src/SearchInput.jsx
+        contains: "export default function SearchInput({ ref, ...props }) {\n  return <input ref={ref} {...props} />;\n}\n"
+      - id: expect-notebox-file
+        type: expect.file
+        at: { afterAction: expect-search-input-file }
+        path: src/NoteBox.jsx
+        contains: "  useImperativeHandle(ref, () => ({\n    focus() {\n      inputRef.current.focus();\n    },\n    clear() {\n      inputRef.current.value = \"\";\n    },\n  }));\n"
+      - id: expect-specials-file
+        type: expect.file
+        at: { afterAction: expect-notebox-file }
+        path: src/SpecialsList.jsx
+        contains: "              itemsRef.current.set(item.id, node);\n              return () => itemsRef.current.delete(item.id);\n"
+      - id: expect-flushsync-file
+        type: expect.file
+        at: { afterAction: expect-specials-file }
+        path: src/SpecialsList.jsx
+        contains: "    flushSync(() => {\n      setItems([...items, next]);\n    });\n    scrollToItem(next.id);\n"
+      - id: expect-modal-file
+        type: expect.file
+        at: { afterAction: expect-flushsync-file }
+        path: src/OrderModal.jsx
+        contains: "    </div>,\n    document.body,\n  );\n"
+      - id: expect-app-file
+        type: expect.file
+        at: { afterAction: expect-modal-file }
+        path: src/App.jsx
+        contains: "      {showModal && <OrderModal onClose={() => setShowModal(false)} />}\n      <SpecialsList />\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
