@@ -1038,7 +1038,7 @@ scenes:
     chapter: "Props ကို အဆင့်ဆင့် မပို့ချင်ရင်"
     narration: >
       [[mark:open-board-2]] နောက်မေးခွန်းက ဘယ် component တွေက order ကို ဖတ်ပြီး dispatch
-      ခေါ်မလဲ ဆိုတာပါ။ [[mark:draw-ladder]] menu က သစ်ပင်လိုပါ။ App က MenuList ကို၊
+      ခေါ်မလဲ ဆိုတာပါ။ [[mark:draw-ladder]] menu က tree တစ်ခုလိုပါ။ App က MenuList ကို၊
       MenuList က ဟင်းပွဲ တစ်ပွဲစီအတွက် DishCard ကို render လုပ်ပြီး၊ card ထဲမှာ မှာမယ့်
       ခလုတ် ထည့်မှာပါ။ [[mark:draw-drilling]] props နဲ့ပဲ ပို့ရင် dispatch ကို အဆင့်ဆင့်
       လက်ဆင့်ကမ်းရပါတယ်။ ကိုယ်တိုင် မသုံးတဲ့ MenuList နဲ့ DishCard ကပါ ကြားခံ
