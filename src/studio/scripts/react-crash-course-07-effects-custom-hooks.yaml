@@ -1,0 +1,2263 @@
+# React crash course, lesson 7 — Effects and custom hooks (Burmese, my-MM).
+#
+# Story: React has three places for code (render, event handlers, Effects);
+# an Effect runs after the screen updates (useLayoutEffect before the paint,
+# useEffect usually after it) and keeps a component in sync with something
+# outside React. Our outside system is a pretend kitchen connection
+# (src/kitchen.js) that writes into a kitchen log list pinned in index.html,
+# OUTSIDE #root, with plain DOM calls. OrderStatus connects the chosen table
+# in useEffect with a cleanup and [tableId]; the log shows StrictMode's
+# development-only connect → disconnect → connect, then a table switch
+# disconnects table 1 before connecting table 2. Boards cover the dependency
+# rules (and the non-function return warning) and "You might not need an
+# Effect". The pinned OrderStatusNaive reads `sound` for its notice, so its
+# deps are [tableId, sound] and toggling sound reconnects it; OrderStatus
+# moves the notice into useEffectEvent (React 19.2) and keeps [tableId], so it
+# does not reconnect, yet its notice reads the latest sound. Last, a
+# module-level store (queueStore.js) + a custom hook on useSyncExternalStore
+# (useKitchenQueue.js) give the header and a KitchenPanel one shared count.
+#
+# Insert-only plan: kitchen.js, OrderStatusNaive.jsx and the starting App are
+# pinned; OrderStatus.jsx, queueStore.js, useKitchenQueue.js and
+# KitchenPanel.jsx are pinned EMPTY and typed while nothing imports them.
+# Live modules (App.jsx, Header.jsx, and OrderStatus.jsx once it is wired)
+# only take `block` inserts of complete lines or of a few characters that
+# keep the file valid (", useEffectEvent", ", sound", " sound={sound}"), the
+# import always before its usage. Every JS edit fully reloads the preview
+# (state AND the kitchen log reset), so every click comes after the last edit
+# and every expect.preview is anchored after it.
+#
+# The dev server starts during the first board and is first needed when the
+# preview opens at the end of the code tour, about 1.5 minutes later.
+#
+# Narration is Burmese (my-MM); voice-script.md in this folder is its source
+# (DESIGN.md is the brief, tools/narration-en.txt the English draft). Every
+# visible string (title, chapters, board labels, UI) is Burmese.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-07-effects-custom-hooks
+  title: "React crash course 7: Effect နဲ့ custom hook"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 7
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <section class="kitchen">
+              <h2>မီးဖိုချောင် မှတ်တမ်း</h2>
+              <ol id="kitchen-log" class="kitchen-log" data-testid="kitchen-log"></ol>
+            </section>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 7: effects and custom hooks */
+        .page > .badge,
+        .card > button {
+          justify-self: start;
+        }
+
+        .kitchen {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 0 16px 24px;
+          display: grid;
+          gap: 6px;
+        }
+
+        .kitchen-log {
+          max-height: 196px;
+          overflow-y: auto;
+          margin: 0;
+          padding: 8px 12px 8px 36px;
+          border: 1px dashed var(--muted);
+          border-radius: var(--radius);
+          background: var(--surface);
+          font-size: 0.85rem;
+          line-height: 1.6;
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { useState } from "react";
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          const [tableId, setTableId] = useState(1);
+          const [sound, setSound] = useState(true);
+
+          return (
+            <main className="page">
+              <Header />
+              <div className="row">
+                {[1, 2, 3].map((n) => (
+                  <button
+                    key={n}
+                    data-testid={`table-${n}`}
+                    className={n === tableId ? "" : "secondary"}
+                    onClick={() => setTableId(n)}
+                  >
+                    စားပွဲ {n}
+                  </button>
+                ))}
+                <button
+                  className="secondary"
+                  data-testid="sound-toggle"
+                  onClick={() => setSound(!sound)}
+                >
+                  {sound ? "🔔 အသံ ဖွင့်ထား" : "🔕 အသံ ပိတ်ထား"}
+                </button>
+              </div>
+            </main>
+          );
+        }
+      src/kitchen.js: |
+        // A pretend connection to the kitchen: a system outside React.
+        // It writes straight into the kitchen log list in index.html.
+        const kitchenLog = document.getElementById("kitchen-log");
+
+        function log(text) {
+          const line = document.createElement("li");
+          line.textContent = text;
+          kitchenLog.append(line);
+          kitchenLog.scrollTop = kitchenLog.scrollHeight;
+        }
+
+        export function createConnection(tableId, who) {
+          let timer = null;
+          let onConnected = null;
+          return {
+            connect() {
+              log(who + " · စားပွဲ " + tableId + " ချိတ်ပြီ");
+              timer = setTimeout(() => onConnected?.(), 300);
+            },
+            disconnect() {
+              clearTimeout(timer);
+              log(who + " · စားပွဲ " + tableId + " ဖြုတ်ပြီ");
+            },
+            on(event, callback) {
+              if (event === "connected") onConnected = callback;
+            },
+          };
+        }
+
+        export function showNotice(text, sound) {
+          log((sound ? "🔔 " : "🔕 ") + text);
+        }
+      src/OrderStatusNaive.jsx: |
+        import { useEffect } from "react";
+        import { createConnection, showNotice } from "./kitchen.js";
+
+        export default function OrderStatusNaive({ tableId, sound }) {
+          useEffect(() => {
+            const connection = createConnection(tableId, "Naive");
+            connection.on("connected", () => {
+              showNotice("Naive · စားပွဲ " + tableId + " အသင့်", sound);
+            });
+            connection.connect();
+            return () => connection.disconnect();
+          }, [tableId, sound]);
+
+          return null;
+        }
+      src/OrderStatus.jsx: ""
+      src/queueStore.js: ""
+      src/useKitchenQueue.js: ""
+      src/KitchenPanel.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — three places for code.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Code ကို ဘယ်မှာ ရေးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-render-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 240,
+        height: 210,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-render-name,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 150,
+        height: 42,
+        text: "render",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b1-render-l1,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 190,
+        height: 40,
+        text: "တွက်ရုံပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-render-l2,
+        kind: text,
+        x: 290,
+        y: 375,
+        width: 190,
+        height: 40,
+        text: "UI ကို ပြန်ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-box,
+        kind: rectangle,
+        x: 565,
+        y: 235,
+        width: 240,
+        height: 210,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-handler-name,
+        kind: text,
+        x: 585,
+        y: 252,
+        width: 200,
+        height: 40,
+        text: "event handler",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-l1,
+        kind: text,
+        x: 585,
+        y: 315,
+        width: 190,
+        height: 40,
+        text: "user လုပ်မှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-handler-l2,
+        kind: text,
+        x: 585,
+        y: 375,
+        width: 190,
+        height: 40,
+        text: "နှိပ်တာ၊ ရိုက်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-effect-box,
+        kind: rectangle,
+        x: 860,
+        y: 235,
+        width: 240,
+        height: 210,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-effect-name,
+        kind: text,
+        x: 880,
+        y: 250,
+        width: 150,
+        height: 42,
+        text: "Effect",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b1-effect-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 880,
+        y: 262,
+        width: 110,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-effect-l1,
+        kind: text,
+        x: 880,
+        y: 315,
+        width: 190,
+        height: 40,
+        text: "အပြင်နဲ့ ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-effect-l2,
+        kind: text,
+        x: 880,
+        y: 375,
+        width: 190,
+        height: 40,
+        text: "ပြပြီးမှ run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-examples,
+        kind: text,
+        x: 270,
+        y: 490,
+        width: 830,
+        height: 40,
+        text: "ဥပမာ – network၊ timer၊ React မထိတဲ့ DOM",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cause,
+        kind: text,
+        x: 270,
+        y: 565,
+        width: 830,
+        height: 40,
+        text: "handler ← click ကြောင့် · Effect ← render ကြောင့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 2 — when an Effect runs.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Effect ဘယ်အချိန် run လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-s1-box,
+        kind: rectangle,
+        x: 280,
+        y: 228,
+        width: 330,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-s1-text,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 290,
+        height: 40,
+        text: "1 · render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s2-box,
+        kind: rectangle,
+        x: 280,
+        y: 298,
+        width: 330,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-s2-text,
+        kind: text,
+        x: 300,
+        y: 306,
+        width: 290,
+        height: 40,
+        text: "2 · DOM ကို ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s3-box,
+        kind: rectangle,
+        x: 280,
+        y: 368,
+        width: 330,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-s3-text,
+        kind: text,
+        x: 300,
+        y: 376,
+        width: 290,
+        height: 40,
+        text: "3 · useLayoutEffect",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s3-note,
+        kind: text,
+        x: 670,
+        y: 376,
+        width: 420,
+        height: 40,
+        text: "screen မဆွဲခင် · တိုင်းတာဖို့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s4-box,
+        kind: rectangle,
+        x: 280,
+        y: 438,
+        width: 330,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-s4-text,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 290,
+        height: 40,
+        text: "4 · browser က screen ဆွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s5-box,
+        kind: rectangle,
+        x: 280,
+        y: 508,
+        width: 330,
+        height: 56,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-s5-text,
+        kind: text,
+        x: 300,
+        y: 516,
+        width: 290,
+        height: 40,
+        text: "5 · useEffect",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s5-note,
+        kind: text,
+        x: 670,
+        y: 516,
+        width: 420,
+        height: 40,
+        text: "အများအားဖြင့် ဒါကို သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-s5-check,
+        kind: freedraw,
+        stroke: check,
+        x: 620,
+        y: 512,
+        width: 40,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board 3 — dependency rules.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Dependency စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-c1-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 210,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-c1-text,
+        kind: text,
+        x: 298,
+        y: 245,
+        width: 180,
+        height: 40,
+        text: "စားပွဲ 1 ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 498,
+        y: 248,
+        width: 54,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-c2-box,
+        kind: rectangle,
+        x: 560,
+        y: 235,
+        width: 210,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-c2-text,
+        kind: text,
+        x: 578,
+        y: 245,
+        width: 180,
+        height: 40,
+        text: "စားပွဲ 1 ဖြုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 778,
+        y: 248,
+        width: 54,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-c3-box,
+        kind: rectangle,
+        x: 840,
+        y: 235,
+        width: 210,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-c3-text,
+        kind: text,
+        x: 858,
+        y: 245,
+        width: 180,
+        height: 40,
+        text: "စားပွဲ 2 ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-deps,
+        kind: text,
+        x: 280,
+        y: 345,
+        width: 820,
+        height: 40,
+        text: "Effect ထဲ ဖတ်တဲ့ props၊ state → dependency ထဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-lint,
+        kind: text,
+        x: 280,
+        y: 415,
+        width: 820,
+        height: 40,
+        text: "lint က သတိပေးရင် code ကို ပြင် – dependency ကို မချန်နဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-return,
+        kind: text,
+        x: 280,
+        y: 495,
+        width: 820,
+        height: 40,
+        text: "return – cleanup function ပဲ (ဒါမှမဟုတ် ဘာမှ မပြန်)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rule-warn,
+        kind: text,
+        x: 280,
+        y: 560,
+        width: 820,
+        height: 40,
+        text: "null၊ Promise ပြန်ရင် → development warning",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board 4 — you might not need an Effect.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Effect မလိုတဲ့ နေရာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-derive,
+        kind: text,
+        x: 280,
+        y: 240,
+        width: 820,
+        height: 40,
+        text: "တွက်ယူလို့ ရတာ → render ထဲမှာ တွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-reset,
+        kind: text,
+        x: 280,
+        y: 305,
+        width: 820,
+        height: 40,
+        text: "prop ပြောင်းရင် state ပြန်စ → key",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-handler,
+        kind: text,
+        x: 280,
+        y: 370,
+        width: 820,
+        height: 40,
+        text: "user လုပ်လို့ ဖြစ်တာ → event handler",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-chain,
+        kind: text,
+        x: 280,
+        y: 435,
+        width: 820,
+        height: 40,
+        text: "Effect → state → Effect ကွင်းဆက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-chain-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 275,
+        y: 435,
+        width: 470,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b4-sync,
+        kind: text,
+        x: 280,
+        y: 530,
+        width: 700,
+        height: 40,
+        text: "အပြင် system နဲ့ ချိတ်တာ → Effect",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-sync-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1010,
+        y: 522,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board 5 — reactive vs non-reactive.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 760,
+        height: 46,
+        text: "Reactive logic နဲ့ non-reactive logic",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-left-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 370,
+        height: 210,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-left-name,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 200,
+        height: 42,
+        text: "ချိတ်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b5-left-l1,
+        kind: text,
+        x: 305,
+        y: 315,
+        width: 320,
+        height: 40,
+        text: "tableId ပြောင်းရင် ပြန်ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-left-l2,
+        kind: text,
+        x: 305,
+        y: 375,
+        width: 320,
+        height: 40,
+        text: "→ dependency",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-right-box,
+        kind: rectangle,
+        x: 720,
+        y: 235,
+        width: 380,
+        height: 210,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-right-name,
+        kind: text,
+        x: 745,
+        y: 250,
+        width: 300,
+        height: 42,
+        text: "အသိပေးချက်",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: b5-right-l1,
+        kind: text,
+        x: 745,
+        y: 315,
+        width: 320,
+        height: 40,
+        text: "နောက်ဆုံး တန်ဖိုးပဲ လို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-right-l2,
+        kind: text,
+        x: 745,
+        y: 375,
+        width: 320,
+        height: 40,
+        text: "→ useEffectEvent",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-right-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 745,
+        y: 382,
+        width: 290,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-rule-call,
+        kind: text,
+        x: 280,
+        y: 495,
+        width: 820,
+        height: 40,
+        text: "React 19.2 · ပြန်ရတဲ့ function ကို Effect ထဲကပဲ ခေါ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-rule-deps,
+        kind: text,
+        x: 280,
+        y: 560,
+        width: 820,
+        height: 40,
+        text: "dependency ထဲ မထည့်ပါနဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 6 — custom hook + external store, and the recap.
+    - {
+        id: b6-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Custom hook နဲ့ store",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b6-header-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 210,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b6-header-text,
+        kind: text,
+        x: 290,
+        y: 243,
+        width: 170,
+        height: 40,
+        text: "Header",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-panel-box,
+        kind: rectangle,
+        x: 270,
+        y: 320,
+        width: 210,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b6-panel-text,
+        kind: text,
+        x: 290,
+        y: 328,
+        width: 170,
+        height: 40,
+        text: "KitchenPanel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-arrow-header,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 488,
+        y: 250,
+        width: 56,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b6-arrow-panel,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 488,
+        y: 330,
+        width: 56,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b6-hook-box,
+        kind: rectangle,
+        x: 555,
+        y: 275,
+        width: 260,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-hook-text,
+        kind: text,
+        x: 572,
+        y: 285,
+        width: 230,
+        height: 40,
+        text: "useKitchenQueue",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-arrow-store,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 822,
+        y: 288,
+        width: 50,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-store-box,
+        kind: rectangle,
+        x: 880,
+        y: 275,
+        width: 220,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b6-store-text,
+        kind: text,
+        x: 900,
+        y: 285,
+        width: 180,
+        height: 40,
+        text: "queueStore",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-store-note,
+        kind: text,
+        x: 880,
+        y: 345,
+        width: 220,
+        height: 40,
+        text: "count တစ်ခုတည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-rule-hook,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 830,
+        height: 40,
+        text: "custom hook – logic ကို မျှတယ်၊ state ကို မမျှဘူး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b6-rule-store,
+        kind: text,
+        x: 270,
+        y: 480,
+        width: 830,
+        height: 40,
+        text: "store – snapshot တစ်ခုတည်းကို အားလုံး ဖတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-recap,
+        kind: text,
+        x: 270,
+        y: 555,
+        width: 830,
+        height: 40,
+        text: "Effect = အပြင်နဲ့ ချိတ် · cleanup · dependency",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b6-next,
+        kind: text,
+        x: 270,
+        y: 612,
+        width: 700,
+        height: 40,
+        text: "နောက် lesson – performance နဲ့ transition",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 7207
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: effect-places
+    chapter: "Effect ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ stopwatch ပျောက်သွားရင်တောင် timer က ဆက် run
+      နေနိုင်တယ်လို့ ပြောခဲ့ပါတယ်။ ဒီ lesson မှာ အဲဒီလို ပြဿနာကို ဖြေရှင်းပေးတဲ့
+      Effect နဲ့ custom hook ကို လေ့လာပါမယ်။ [[mark:start-server]] ရှင်းပြနေတုန်း
+      dev server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ preview လိုတဲ့အချိန်မှာ
+      အသင့် ဖြစ်နေအောင်ပါ။ [[mark:draw-render]] React မှာ code ရေးဖို့ နေရာ
+      သုံးနေရာ ရှိပါတယ်။ render က props နဲ့ state ကနေ screen ပေါ် ပြမယ့်အရာကိုပဲ
+      တွက်ပါတယ်။ [[mark:draw-handler]] event handler ကတော့ user က ခလုတ် နှိပ်တာလို
+      တစ်ခုခု လုပ်မှ run တာပါ။ [[mark:draw-effect]] Effect ကတော့ component ကို
+      screen ပေါ် ပြပြီးမှ run ပါတယ်။ network connection၊ timer လို React အပြင်က
+      system တွေနဲ့ ချိတ်ထားဖို့ သုံးပါတယ်။ [[mark:draw-cause]] ဆိုတော့ handler က
+      click ကြောင့် run ပြီး၊ Effect ကတော့ render ကြောင့် run တာပါ။
+    sources:
+      - title: "React — Synchronizing with Effects"
+        url: "https://react.dev/learn/synchronizing-with-effects"
+      - title: "React — useEffect"
+        url: "https://react.dev/reference/react/useEffect"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-render
+        type: whiteboard.apply
+        at: { mark: draw-render }
+        upsertIds: [b1-render-box, b1-render-name, b1-render-l1, b1-render-l2]
+        drawMs: 2000
+      - id: draw-handler
+        type: whiteboard.apply
+        at: { mark: draw-handler }
+        upsertIds: [b1-handler-box, b1-handler-name, b1-handler-l1, b1-handler-l2]
+        drawMs: 2000
+      - id: draw-effect
+        type: whiteboard.apply
+        at: { mark: draw-effect }
+        upsertIds:
+          [
+            b1-effect-box,
+            b1-effect-name,
+            b1-effect-underline,
+            b1-effect-l1,
+            b1-effect-l2,
+            b1-examples,
+          ]
+        drawMs: 2800
+      - id: draw-cause
+        type: whiteboard.apply
+        at: { mark: draw-cause }
+        upsertIds: [b1-cause]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 2
+  - id: effect-timing
+    narration: >
+      [[mark:board-timing]] ဒါဆို Effect က အတိအကျ ဘယ်အချိန် run လဲ။
+      [[mark:draw-step-render]] React က component ကို render လုပ်ပြီး၊ အဲဒီအတိုင်း
+      DOM ကို ပြင်ပါတယ်။ [[mark:draw-step-layout]] ပြီးရင် browser က screen ကို
+      မဆွဲခင် useLayoutEffect က run ပါတယ်။ tooltip ရဲ့ အရွယ်အစားလို တစ်ခုခုကို
+      user မမြင်ခင် တိုင်းဖို့ နေရာပါ။ [[mark:draw-step-effect]] အဲဒီနောက် browser
+      က screen ကို ဆွဲပြီး၊ အများအားဖြင့် အဲဒါ ပြီးမှ useEffect က run ပါတယ်။
+      useLayoutEffect ပြီးတဲ့အထိ browser က screen မဆွဲဘဲ စောင့်ရလို့၊
+      ပုံမှန်အားဖြင့် useEffect ကိုပဲ သုံးပါ။
+    sources:
+      - title: "React — useLayoutEffect"
+        url: "https://react.dev/reference/react/useLayoutEffect"
+      - title: "React — useEffect: Caveats"
+        url: "https://react.dev/reference/react/useEffect#caveats"
+      - title: "React — Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+    actions:
+      - id: board-timing
+        type: whiteboard.apply
+        at: { mark: board-timing }
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-step-render
+        type: whiteboard.apply
+        at: { mark: draw-step-render }
+        upsertIds: [b2-s1-box, b2-s1-text, b2-s2-box, b2-s2-text]
+        drawMs: 1600
+      - id: draw-step-layout
+        type: whiteboard.apply
+        at: { mark: draw-step-layout }
+        upsertIds: [b2-s3-box, b2-s3-text, b2-s3-note]
+        drawMs: 1800
+      - id: draw-step-effect
+        type: whiteboard.apply
+        at: { mark: draw-step-effect }
+        upsertIds: [b2-s4-box, b2-s4-text, b2-s5-box, b2-s5-text, b2-s5-check, b2-s5-note]
+        drawMs: 2400
+
+  # ------------------------------------------------------------------ 3
+  - id: kitchen-tour
+    chapter: "useEffect နဲ့ cleanup"
+    narration: >
+      [[mark:close-board-timing]] ကဲ၊ app ကို အရင် ကြည့်ရအောင်။
+      [[mark:select-state]] App ထဲက state နှစ်ခုကို ကြည့်ပါ၊ လက်ရှိ စားပွဲနဲ့ အသံ
+      ဖွင့်ထားလား ဆိုတာပါ။ ခလုတ်တွေက သူတို့ကို ပြောင်းပေးပါတယ်။
+      [[mark:open-kitchen]] kitchen.js ကတော့ မီးဖိုချောင်နဲ့ ချိတ်တဲ့ connection
+      အတုပါ။ React အပြင်က မှတ်တမ်း စာရင်းထဲ တိုက်ရိုက် ရေးလို့၊ အပြင်က system
+      တစ်ခုလို ဖြစ်နေပါတယ်။ [[mark:select-connect]] connect က မှတ်တမ်းထဲ
+      တစ်ကြောင်း ရေးပြီး၊ ခဏနေရင် အသင့် ဖြစ်ပြီလို့ ပြောပါတယ်။
+      [[mark:select-disconnect]] disconnect ကတော့ အသင့် ဖြစ်ပြီလို့ မပြောရသေးရင်
+      ရပ်လိုက်ပြီး၊ ဖြုတ်ကြောင်း တစ်ကြောင်း ရေးပါတယ်။ [[mark:select-on]] on ကတော့
+      အသင့် ဖြစ်တဲ့အခါ ခေါ်ရမယ့် function ကို လက်ခံပါတယ်။ [[mark:preview-opens]]
+      preview ကို ဖွင့်လိုက်ရအောင်။ ခလုတ်တွေ အောက်မှာ မီးဖိုချောင် မှတ်တမ်းက အခု
+      အလွတ်ပါ။
+    sources:
+      - title: "React — Synchronizing with Effects: subscribing to events"
+        url: "https://react.dev/learn/synchronizing-with-effects#subscribing-to-events"
+      - title: "MDN — Document: createElement() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/createElement"
+      - title: "MDN — setTimeout()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout"
+    actions:
+      - id: close-board-timing
+        type: whiteboard.apply
+        at: { mark: close-board-timing }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-timing }
+      - id: select-state
+        type: editor.select
+        at: { mark: select-state }
+        target:
+          {
+            file: src/App.jsx,
+            text: "  const [tableId, setTableId] = useState(1);\n  const [sound, setSound] = useState(true);\n",
+            occurrence: 1,
+          }
+      - id: open-kitchen
+        type: workspace.openFile
+        at: { mark: open-kitchen }
+        path: src/kitchen.js
+      - id: select-connect
+        type: editor.select
+        at: { mark: select-connect }
+        target:
+          {
+            file: src/kitchen.js,
+            text: "    connect() {\n      log(who + \" · စားပွဲ \" + tableId + \" ချိတ်ပြီ\");\n      timer = setTimeout(() => onConnected?.(), 300);\n",
+            occurrence: 1,
+          }
+      - id: select-disconnect
+        type: editor.select
+        at: { mark: select-disconnect }
+        target:
+          {
+            file: src/kitchen.js,
+            text: "    disconnect() {\n      clearTimeout(timer);\n      log(who + \" · စားပွဲ \" + tableId + \" ဖြုတ်ပြီ\");\n",
+            occurrence: 1,
+          }
+      - id: select-on
+        type: editor.select
+        at: { mark: select-on }
+        target:
+          {
+            file: src/kitchen.js,
+            text: "    on(event, callback) {\n      if (event === \"connected\") onConnected = callback;\n",
+            occurrence: 1,
+          }
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-app
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: sound-toggle }
+        textContains: "အသံ ဖွင့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-start-app }
+
+  # ------------------------------------------------------------------ 4
+  - id: order-status-code
+    narration: >
+      [[mark:open-order-status]] OrderStatus ဖိုင်က အခု အလွတ်ပါ၊ ဘယ် ဖိုင်ကမှ
+      import မလုပ်ရသေးပါဘူး။ စားပွဲ တစ်ခုကို မီးဖိုချောင်နဲ့ ချိတ်ပေးမှာပါ။
+      [[mark:type-os-top]] useEffect နဲ့ connection ကို import လုပ်ပြီး၊ စားပွဲ
+      နံပါတ်ကို prop အနေနဲ့ လက်ခံပါတယ်။ [[mark:type-os-setup]] useEffect ထဲက ပထမ
+      အပိုင်းက setup ပါ။ ဒီ စားပွဲအတွက် connection တစ်ခု လုပ်ပြီး ချိတ်လိုက်တာပါ။
+      [[mark:type-os-cleanup]] setup က ပြန်ပေးတဲ့ cleanup ဆိုတာ ချိတ်ထားတာကို
+      ပြန်ဖြုတ်တဲ့ function ပါ။ Effect ထပ် မ run ခင်နဲ့ component ပျောက်သွားတဲ့အခါ
+      React က သူ့ကို ခေါ်ပါတယ်။ [[mark:type-os-deps]] dependency စာရင်းက ဘယ်
+      တန်ဖိုး ပြောင်းမှ ပြန် run ရမလဲ ဆိုတာပါ။ ဒီမှာတော့ စားပွဲ နံပါတ်ပဲပါ။
+      [[mark:type-os-render]] component ကိုယ်တိုင်ကတော့ ဘယ် စားပွဲနဲ့ ချိတ်ထားလဲ
+      ဆိုတာကိုပဲ ပြပါတယ်။
+    sources:
+      - title: "React — useEffect: Connecting to an external system"
+        url: "https://react.dev/reference/react/useEffect#connecting-to-an-external-system"
+      - title: "React — Synchronizing with Effects: add cleanup if needed"
+        url: "https://react.dev/learn/synchronizing-with-effects#step-3-add-cleanup-if-needed"
+    actions:
+      - id: open-order-status
+        type: workspace.openFile
+        at: { mark: open-order-status }
+        path: src/OrderStatus.jsx
+      - id: type-os-top
+        type: editor.type
+        at: { mark: type-os-top }
+        cadence: line-by-line
+        target: { file: src/OrderStatus.jsx, after: "", occurrence: 1 }
+        text: "import { useEffect } from \"react\";\nimport { createConnection } from \"./kitchen.js\";\n\nexport default function OrderStatus({ tableId }) {\n"
+      - id: type-os-setup
+        type: editor.type
+        at: { mark: type-os-setup }
+        cadence: line-by-line
+        target:
+          {
+            file: src/OrderStatus.jsx,
+            after: "export default function OrderStatus({ tableId }) {\n",
+            occurrence: 1,
+          }
+        text: "  useEffect(() => {\n    const connection = createConnection(tableId, \"OrderStatus\");\n    connection.connect();\n"
+      - id: type-os-cleanup
+        type: editor.type
+        at: { mark: type-os-cleanup }
+        cadence: fast-explainer
+        target: { file: src/OrderStatus.jsx, after: "    connection.connect();\n", occurrence: 1 }
+        text: "    return () => connection.disconnect();\n"
+      - id: type-os-deps
+        type: editor.type
+        at: { mark: type-os-deps }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/OrderStatus.jsx,
+            after: "    return () => connection.disconnect();\n",
+            occurrence: 1,
+          }
+        text: "  }, [tableId]);\n"
+      - id: type-os-render
+        type: editor.type
+        at: { mark: type-os-render }
+        cadence: line-by-line
+        target: { file: src/OrderStatus.jsx, after: "  }, [tableId]);\n", occurrence: 1 }
+        text: "\n  return <p data-testid=\"order-status\">စားပွဲ {tableId} နဲ့ ချိတ်ထားပါတယ်</p>;\n}\n"
+
+  # ------------------------------------------------------------------ 5
+  - id: order-status-run
+    narration: >
+      [[mark:open-app-os]] ကဲ၊ page ထဲ ထည့်ကြည့်ရအောင်။ [[mark:wire-os-import]]
+      import လုပ်ပြီး၊ ခလုတ်တွေ အောက်မှာ လက်ရှိ စားပွဲ နံပါတ်နဲ့ ထည့်လိုက်ပါတယ်။
+      [[mark:after-wire-os]] မီးဖိုချောင် မှတ်တမ်းကို ကြည့်ပါ။ စားပွဲ 1 ချိတ်၊
+      ပြန်ဖြုတ်၊ ပြီးမှ ထပ်ချိတ် ဆိုပြီး ပေါ်နေပါတယ်။ [[mark:strict-explain]] ဒါက
+      StrictMode ကြောင့်ပါ။ ကိုယ် ရေးနေတုန်း development မှာပဲ၊ React က setup နဲ့
+      cleanup ကို တစ်ကြိမ် ပို run ပြီး၊ cleanup က setup ကို တကယ် ပြန်ဖြုတ်လား
+      စစ်ပါတယ်။ production မှာတော့ တစ်ကြိမ်ပဲ ချိတ်ပါတယ်။ [[mark:strict-fix]]
+      ဒုတိယ run ကို တားဖို့ မကြိုးစားဘဲ၊ cleanup ကို မှန်အောင် ရေးပါ။
+      [[mark:click-table-2]] စားပွဲ 2 ကို ပြောင်းကြည့်ရအောင်။
+      [[mark:after-table-2]] စားပွဲ 1 ကို ဖြုတ်ပြီးမှ စားပွဲ 2 ကို ချိတ်ပါတယ်။
+      အသစ် မချိတ်ခင် အဟောင်းကို React က cleanup လုပ်ပေးလို့ပါ။
+    sources:
+      - title: "React — How to handle the Effect firing twice in development"
+        url: "https://react.dev/learn/synchronizing-with-effects#how-to-handle-the-effect-firing-twice-in-development"
+      - title: "React — StrictMode"
+        url: "https://react.dev/reference/react/StrictMode"
+      - title: "React — Lifecycle of Reactive Effects"
+        url: "https://react.dev/learn/lifecycle-of-reactive-effects"
+    actions:
+      - id: open-app-os
+        type: workspace.openFile
+        at: { mark: open-app-os }
+        path: src/App.jsx
+      - id: wire-os-import
+        type: editor.type
+        at: { mark: wire-os-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: "import OrderStatus from \"./OrderStatus.jsx\";\n"
+      - id: wire-os-use
+        type: editor.type
+        at: { afterAction: wire-os-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "      </div>\n", occurrence: 1 }
+        text: "      <OrderStatus tableId={tableId} />\n"
+      - id: expect-strict-log
+        type: expect.preview
+        at: { mark: after-wire-os }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "OrderStatus · စားပွဲ 1 ချိတ်ပြီOrderStatus · စားပွဲ 1 ဖြုတ်ပြီOrderStatus · စားပွဲ 1 ချိတ်ပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-table-2
+        type: preview.click
+        at: { mark: click-table-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: table-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-switch-log
+        type: expect.preview
+        at: { mark: after-table-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "OrderStatus · စားပွဲ 1 ဖြုတ်ပြီOrderStatus · စားပွဲ 2 ချိတ်ပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-status-2
+        type: expect.preview
+        at: { afterAction: expect-switch-log }
+        timeoutMs: 5000
+        target: { by: testId, value: order-status }
+        textContains: "စားပွဲ 2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 6
+  - id: deps-board
+    narration: >
+      [[mark:board-deps]] Effect တစ်ခုက ချိတ်တာနဲ့ ဖြုတ်တာ၊ ဒီ နှစ်ခုပဲ လုပ်ပါတယ်။
+      [[mark:draw-lifecycle]] စားပွဲ ပြောင်းသွားရင် စားပွဲ 1 နဲ့ ဖြုတ်ပြီး၊ စားပွဲ
+      2 နဲ့ ပြန်ချိတ်ပါတယ်။ [[mark:draw-rule-deps]] dependency စာရင်းထဲမှာ Effect
+      ဖတ်တဲ့ props၊ state နဲ့ အဲဒါတွေကနေ တွက်ထားတဲ့ တန်ဖိုး အားလုံး ပါရပါမယ်။
+      ကိုယ့် Effect ကတော့ စားပွဲ နံပါတ်ပဲ ဖတ်ပါတယ်။ [[mark:draw-rule-lint]] lint
+      rule ဆိုတာ code ကို run မကြည့်ခင် ဖတ်ပြီး၊ မှားနိုင်တာကို သတိပေးတဲ့
+      စစ်ဆေးချက်ပါ။ React ရဲ့ lint rule က ဒီ စာရင်းကို စစ်ပြီး၊ သတိပေးရင် code ကို
+      ပြင်ပါ။ တန်ဖိုး တစ်ခု ချန်ခဲ့ရင် Effect က တန်ဖိုး အဟောင်းနဲ့ ကျန်နေလို့ပါ။
+      [[mark:draw-rule-return]] setup က cleanup function ကိုပဲ ပြန်ပေးရပါမယ်၊
+      ဒါမှမဟုတ် ဘာမှ မပြန်ပါနဲ့။ null ပြန်မိရင်ဖြစ်ဖြစ်၊ setup ကို async function
+      အဖြစ် ရေးလို့ promise ပြန်သွားရင်ဖြစ်ဖြစ်၊ development မှာ warning ပေးပါတယ်။
+    sources:
+      - title: "React — Lifecycle of Reactive Effects"
+        url: "https://react.dev/learn/lifecycle-of-reactive-effects"
+      - title: "React — Removing Effect Dependencies"
+        url: "https://react.dev/learn/removing-effect-dependencies"
+      - title: "React — exhaustive-deps lint rule"
+        url: "https://react.dev/reference/eslint-plugin-react-hooks/lints/exhaustive-deps"
+      - title: "React — useEffect: Parameters"
+        url: "https://react.dev/reference/react/useEffect#parameters"
+    actions:
+      - id: board-deps
+        type: whiteboard.apply
+        at: { mark: board-deps }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: draw-lifecycle
+        type: whiteboard.apply
+        at: { mark: draw-lifecycle }
+        upsertIds:
+          [
+            b3-c1-box,
+            b3-c1-text,
+            b3-arrow-1,
+            b3-c2-box,
+            b3-c2-text,
+            b3-arrow-2,
+            b3-c3-box,
+            b3-c3-text,
+          ]
+        drawMs: 2800
+      - id: draw-rule-deps
+        type: whiteboard.apply
+        at: { mark: draw-rule-deps }
+        upsertIds: [b3-rule-deps]
+        drawMs: 1200
+      - id: draw-rule-lint
+        type: whiteboard.apply
+        at: { mark: draw-rule-lint }
+        upsertIds: [b3-rule-lint]
+        drawMs: 1200
+      - id: draw-rule-return
+        type: whiteboard.apply
+        at: { mark: draw-rule-return }
+        upsertIds: [b3-rule-return, b3-rule-warn]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 7
+  - id: no-effect-board
+    chapter: "Effect မလိုတဲ့ နေရာတွေ"
+    narration: >
+      [[mark:board-no-effect]] Effect မရေးခင် တကယ် လိုလား ဆိုတာ အရင် စစ်ကြည့်ပါ။
+      [[mark:draw-no-derive]] props နဲ့ state ကနေ တွက်ယူလို့ ရတဲ့ တန်ဖိုးကို
+      render လုပ်နေတုန်းမှာပဲ တွက်ပါ၊ lesson 4 မှာ menu ကို စစ်ထုတ်ခဲ့သလိုပါ။
+      [[mark:draw-no-reset]] prop ပြောင်းလို့ state ပြန်စချင်ရင် key ကို သုံးပါ။
+      [[mark:draw-no-handler]] user လုပ်လို့ ဖြစ်တဲ့ အလုပ်ကို event handler
+      ထဲမှာပဲ ရေးပါ။ [[mark:draw-no-chain]] Effect က state ကို ပြောင်း၊
+      အဲဒါကြောင့် နောက် Effect run ပြီး state ထပ်ပြောင်း ဆိုတဲ့ ကွင်းဆက်မျိုးကို
+      ရှောင်ပါ။ ပြန် render တွေ အဆင့်ဆင့် ဖြစ်လို့ နှေးပြီး၊ နားလည်ရလည်း ခက်ပါတယ်။
+      [[mark:draw-yes-sync]] မီးဖိုချောင် connection ကတော့ အပြင်က system အစစ်
+      ဖြစ်လို့၊ Effect နဲ့ လုပ်သင့်တဲ့ အလုပ်ပါ။
+    sources:
+      - title: "React — You Might Not Need an Effect"
+        url: "https://react.dev/learn/you-might-not-need-an-effect"
+      - title: "React — Resetting all state when a prop changes"
+        url: "https://react.dev/learn/you-might-not-need-an-effect#resetting-all-state-when-a-prop-changes"
+    actions:
+      - id: board-no-effect
+        type: whiteboard.apply
+        at: { mark: board-no-effect }
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-no-derive
+        type: whiteboard.apply
+        at: { mark: draw-no-derive }
+        upsertIds: [b4-derive]
+        drawMs: 1200
+      - id: draw-no-reset
+        type: whiteboard.apply
+        at: { mark: draw-no-reset }
+        upsertIds: [b4-reset]
+        drawMs: 1200
+      - id: draw-no-handler
+        type: whiteboard.apply
+        at: { mark: draw-no-handler }
+        upsertIds: [b4-handler]
+        drawMs: 1200
+      - id: draw-no-chain
+        type: whiteboard.apply
+        at: { mark: draw-no-chain }
+        upsertIds: [b4-chain, b4-chain-strike]
+        drawMs: 1600
+      - id: draw-yes-sync
+        type: whiteboard.apply
+        at: { mark: draw-yes-sync }
+        upsertIds: [b4-sync, b4-sync-check]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 8
+  - id: naive-status
+    chapter: "useEffectEvent နဲ့ နောက်ဆုံး တန်ဖိုး"
+    narration: >
+      [[mark:close-board-no-effect]] အခု ပိုခက်တဲ့ ကိစ္စပါ။ မီးဖိုချောင် အသင့်
+      ဖြစ်ရင် အသိပေးချက် ပြပြီး၊ အသံ ဖွင့်ထားရင် ခေါင်းလောင်း ထည့်ချင်ပါတယ်။
+      [[mark:open-naive]] OrderStatusNaive ကတော့ လူအများစု အရင် ရေးမိမယ့်
+      ပုံစံအတိုင်း ရေးထားတာပါ။ [[mark:select-naive-notice]] သူ့ အသိပေးချက်က sound
+      prop ကို ဖတ်ပါတယ်။ [[mark:select-naive-deps]] ဒါကြောင့် ခုနက စည်းကမ်းအရ
+      sound ကလည်း dependency ဖြစ်ရပါမယ်။ [[mark:open-app-naive]] သူ့ကို
+      OrderStatus အောက်မှာ စားပွဲနဲ့ အသံ ပေးပြီး ထည့်လိုက်ရအောင်။
+      [[mark:after-wire-naive]] App ကို ပြင်လို့ page ပြန်ပွင့်ပြီး၊ စားပွဲ 1 နဲ့
+      မှတ်တမ်း အလွတ်ကနေ ပြန်စပါတယ်။ component နှစ်ခုလုံး မှတ်တမ်းထဲ ရေးပြီး၊ Naive
+      ရဲ့ အသိပေးချက်မှာ ခေါင်းလောင်း ပါပါတယ်။ [[mark:click-sound-1]] အသံကို
+      ပိတ်လိုက်ရအောင်။ [[mark:after-sound-1]] အသံ ပြောင်းရုံနဲ့ Naive က ဖြုတ်ပြီး
+      ပြန်ချိတ်သွားပါတယ်။ မီးဖိုချောင်ဘက်မှာ ဘာမှ မပြောင်းလို့၊ ဒါက မလိုအပ်တဲ့
+      အလုပ်ပါ။
+    sources:
+      - title: "React — Separating Events from Effects"
+        url: "https://react.dev/learn/separating-events-from-effects"
+      - title: "React — Removing Effect Dependencies"
+        url: "https://react.dev/learn/removing-effect-dependencies"
+    actions:
+      - id: close-board-no-effect
+        type: whiteboard.apply
+        at: { mark: close-board-no-effect }
+        open: false
+      - id: open-naive
+        type: workspace.openFile
+        at: { mark: open-naive }
+        path: src/OrderStatusNaive.jsx
+      - id: select-naive-notice
+        type: editor.select
+        at: { mark: select-naive-notice }
+        target:
+          {
+            file: src/OrderStatusNaive.jsx,
+            text: "    connection.on(\"connected\", () => {\n      showNotice(\"Naive · စားပွဲ \" + tableId + \" အသင့်\", sound);\n",
+            occurrence: 1,
+          }
+      - id: select-naive-deps
+        type: editor.select
+        at: { mark: select-naive-deps }
+        target: { file: src/OrderStatusNaive.jsx, text: "[tableId, sound]", occurrence: 1 }
+      - id: open-app-naive
+        type: workspace.openFile
+        at: { mark: open-app-naive }
+        path: src/App.jsx
+      - id: wire-naive-import
+        type: editor.type
+        at: { afterAction: open-app-naive }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import OrderStatus from \"./OrderStatus.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import OrderStatusNaive from \"./OrderStatusNaive.jsx\";\n"
+      - id: wire-naive-use
+        type: editor.type
+        at: { afterAction: wire-naive-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "      <OrderStatus tableId={tableId} />\n", occurrence: 1 }
+        text: "      <OrderStatusNaive tableId={tableId} sound={sound} />\n"
+      - id: expect-naive-notice
+        type: expect.preview
+        at: { mark: after-wire-naive }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "🔔 Naive · စားပွဲ 1 အသင့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sound-1
+        type: preview.click
+        at: { mark: click-sound-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: sound-toggle }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-naive-reconnect
+        type: expect.preview
+        at: { mark: after-sound-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "Naive · စားပွဲ 1 ဖြုတ်ပြီNaive · စားပွဲ 1 ချိတ်ပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-sound-off
+        type: expect.preview
+        at: { afterAction: expect-naive-reconnect }
+        timeoutMs: 5000
+        target: { by: testId, value: sound-toggle }
+        textContains: "အသံ ပိတ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 9
+  - id: reactive-board
+    narration: >
+      [[mark:board-reactive]] ဒီ Effect ထဲမှာ logic နှစ်မျိုး ရောနေပါတယ်။
+      [[mark:draw-reactive]] ချိတ်တဲ့ logic က reactive ပါ၊ စားပွဲ နံပါတ်
+      ပြောင်းရင် ပြန်ချိတ်ရပါမယ်။ [[mark:draw-non-reactive]] props နဲ့ state ကို
+      reactive တန်ဖိုးလို့ ခေါ်လို့၊ sound လည်း reactive တန်ဖိုးပါပဲ။ ဒါပေမဲ့
+      အသိပေးချက် logic က sound ပြောင်းတိုင်း ပြန်ချိတ်စရာ မလိုဘဲ၊ အသင့်
+      ဖြစ်ချိန်မှာ နောက်ဆုံး sound ကိုပဲ ဖတ်ချင်တာပါ။ [[mark:draw-effect-event]]
+      ဒါအတွက် React 19.2 မှာ useEffectEvent ပါလာပါတယ်။ component ရဲ့ အပေါ်ဆုံး
+      အဆင့်မှာ သူ့ကို function တစ်ခု ပေးရင်၊ Effect Event လို့ ခေါ်တဲ့ function
+      တစ်ခု ပြန်ရပါတယ်။ အဲဒါကို Effect ထဲကပဲ ခေါ်ရပါတယ်။
+      [[mark:draw-effect-event-deps]] Effect Event က နောက်ဆုံး props နဲ့ state ကို
+      အမြဲ မြင်ပြီး၊ dependency စာရင်းထဲ မထည့်ရပါဘူး။
+    sources:
+      - title: "React — useEffectEvent"
+        url: "https://react.dev/reference/react/useEffectEvent"
+      - title: "React 19.2 — useEffectEvent"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+      - title: "React — Separating Events from Effects"
+        url: "https://react.dev/learn/separating-events-from-effects"
+    actions:
+      - id: board-reactive
+        type: whiteboard.apply
+        at: { mark: board-reactive }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-reactive
+        type: whiteboard.apply
+        at: { mark: draw-reactive }
+        upsertIds: [b5-left-box, b5-left-name, b5-left-l1, b5-left-l2]
+        drawMs: 2000
+      - id: draw-non-reactive
+        type: whiteboard.apply
+        at: { mark: draw-non-reactive }
+        upsertIds: [b5-right-box, b5-right-name, b5-right-l1, b5-right-l2]
+        drawMs: 2000
+      - id: draw-effect-event
+        type: whiteboard.apply
+        at: { mark: draw-effect-event }
+        upsertIds: [b5-right-underline, b5-rule-call]
+        drawMs: 1600
+      - id: draw-effect-event-deps
+        type: whiteboard.apply
+        at: { mark: draw-effect-event-deps }
+        upsertIds: [b5-rule-deps]
+        drawMs: 1000
+
+  # ------------------------------------------------------------------ 10
+  - id: effect-event-code
+    narration: >
+      [[mark:close-board-reactive]] OrderStatus ကို ပြင်ရအောင်။
+      [[mark:open-app-fix]] App ကနေ sound ကိုပါ ပေးလိုက်ပါတယ်။
+      [[mark:open-os-fix]] OrderStatus မှာ useEffectEvent နဲ့ အသိပေးချက် function
+      ကို import လုပ်ပြီး၊ sound prop ကို လက်ခံပါတယ်။ [[mark:fix-event]]
+      အသိပေးချက်ကို useEffectEvent ထဲ ထည့်လိုက်လို့၊ Effect Event က စားပွဲနဲ့
+      sound ကို ဖတ်ပါတယ်။ [[mark:fix-on]] Effect ထဲမှာ မီးဖိုချောင် အသင့် ဖြစ်ရင်
+      သူ့ကို ခေါ်ပါတယ်။ [[mark:select-fix-deps]] dependency စာရင်းမှာ စားပွဲ
+      နံပါတ်ပဲ ရှိနေတုန်းပါ။ page ပြန်ပွင့်လို့ အသံလည်း ပြန်ဖွင့်ထားပါတယ်။
+      [[mark:click-sound-2]] အသံကို ထပ်ပိတ်ကြည့်ရအောင်။ [[mark:after-sound-2]]
+      Naive ပဲ ပြန်ချိတ်ပြီး၊ OrderStatus ကတော့ ချိတ်ထားတဲ့အတိုင်းပါ။
+      [[mark:click-table-3]] စားပွဲ 2 ကို ပြောင်းကြည့်ရအောင်။
+      [[mark:after-table-3]] စားပွဲ တကယ် ပြောင်းလို့ နှစ်ခုလုံး ပြန်ချိတ်ပါတယ်။
+      OrderStatus ရဲ့ အသိပေးချက်မှာ ခေါင်းလောင်း မပါတော့ပါဘူး။ အသံ ပိတ်တုန်းက
+      ပြန်မချိတ်ခဲ့ပေမယ့်၊ Effect Event က နောက်ဆုံး sound ကို ဖတ်လို့ပါ။
+    sources:
+      - title: "React — useEffectEvent: Usage"
+        url: "https://react.dev/reference/react/useEffectEvent#usage"
+      - title: "React — Declaring an Effect Event"
+        url: "https://react.dev/learn/separating-events-from-effects#declaring-an-effect-event"
+    actions:
+      - id: close-board-reactive
+        type: whiteboard.apply
+        at: { mark: close-board-reactive }
+        open: false
+      - id: open-app-fix
+        type: workspace.openFile
+        at: { mark: open-app-fix }
+        path: src/App.jsx
+      - id: fix-app-prop
+        type: editor.type
+        at: { afterAction: open-app-fix }
+        cadence: block
+        target: { file: src/App.jsx, after: "<OrderStatus tableId={tableId}", occurrence: 1 }
+        text: " sound={sound}"
+      - id: open-os-fix
+        type: workspace.openFile
+        at: { mark: open-os-fix }
+        path: src/OrderStatus.jsx
+      - id: fix-import-react
+        type: editor.type
+        at: { afterAction: open-os-fix }
+        cadence: block
+        target: { file: src/OrderStatus.jsx, after: "import { useEffect", occurrence: 1 }
+        text: ", useEffectEvent"
+      - id: fix-import-notice
+        type: editor.type
+        at: { afterAction: fix-import-react }
+        cadence: block
+        target: { file: src/OrderStatus.jsx, after: "import { createConnection", occurrence: 1 }
+        text: ", showNotice"
+      - id: fix-props
+        type: editor.type
+        at: { afterAction: fix-import-notice }
+        cadence: block
+        target:
+          {
+            file: src/OrderStatus.jsx,
+            after: "export default function OrderStatus({ tableId",
+            occurrence: 1,
+          }
+        text: ", sound"
+      - id: fix-event
+        type: editor.type
+        at: { mark: fix-event }
+        cadence: block
+        target:
+          {
+            file: src/OrderStatus.jsx,
+            after: "export default function OrderStatus({ tableId, sound }) {\n",
+            occurrence: 1,
+          }
+        text: "  const onConnected = useEffectEvent(() => {\n    showNotice(\"OrderStatus · စားပွဲ \" + tableId + \" အသင့်\", sound);\n  });\n\n"
+      - id: fix-on
+        type: editor.type
+        at: { mark: fix-on }
+        cadence: block
+        target:
+          {
+            file: src/OrderStatus.jsx,
+            after: "    const connection = createConnection(tableId, \"OrderStatus\");\n",
+            occurrence: 1,
+          }
+        text: "    connection.on(\"connected\", () => onConnected());\n"
+      - id: select-fix-deps
+        type: editor.select
+        at: { mark: select-fix-deps }
+        target: { file: src/OrderStatus.jsx, text: "[tableId]", occurrence: 1 }
+      - id: expect-fixed-ready
+        type: expect.preview
+        at: { mark: click-sound-2, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "🔔 OrderStatus · စားပွဲ 1 အသင့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sound-2
+        type: preview.click
+        at: { mark: click-sound-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: sound-toggle }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-only-naive
+        type: expect.preview
+        at: { mark: after-sound-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "Naive · စားပွဲ 1 ဖြုတ်ပြီNaive · စားပွဲ 1 ချိတ်ပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-table-3
+        type: preview.click
+        at: { mark: click-table-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: table-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-latest-sound
+        type: expect.preview
+        at: { mark: after-table-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: kitchen-log }
+        textContains: "🔕 OrderStatus · စားပွဲ 2 အသင့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 11
+  - id: custom-hook-code
+    chapter: "Custom hook နဲ့ store"
+    narration: >
+      [[mark:open-store]] နောက်ဆုံးကတော့ logic မျှဝေတာပါ။ ခေါင်းစဉ်နဲ့
+      မီးဖိုချောင် panel အသစ်က စောင့်နေတဲ့ အော်ဒါ အရေအတွက်ကို store တစ်ခုကနေ
+      ပြမှာပါ။ store ဆိုတာ React အပြင်က JavaScript ဖိုင် တစ်ခုထဲမှာ data ကို
+      ကိုင်ထားတဲ့ နေရာပါ။ [[mark:type-store-state]] store ထဲမှာ count နဲ့ listener
+      တွေ ရှိပါတယ်။ listener ဆိုတာ count ပြောင်းတိုင်း အကြောင်းကြားခံမယ့် function
+      တွေပါ။ [[mark:type-store-subscribe]] subscribe က listener တစ်ခု ထည့်ပြီး၊
+      ပြန်ဖြုတ်ပေးမယ့် function တစ်ခု ပြန်ပေးပါတယ်။ [[mark:type-store-snapshot]]
+      getSnapshot က store ရဲ့ လက်ရှိ တန်ဖိုးကို ပြန်ပေးပြီး၊ အဲဒါကို snapshot လို့
+      ခေါ်ပါတယ်။ [[mark:type-store-add]] addOrder က count ကို 1 တိုးပြီး၊ listener
+      တိုင်းကို အကြောင်းကြားပါတယ်။ [[mark:open-hook]] custom hook ရေးရအောင်။
+      [[mark:type-hook-imports]] သူ့အတွက် useSyncExternalStore နဲ့ store ရဲ့
+      function နှစ်ခု လိုပါတယ်။ [[mark:type-hook-body]] custom hook ဆိုတာ use နဲ့
+      စပြီး နောက်မှာ စာလုံးအကြီး လိုက်တဲ့ နာမည် ရှိပြီး၊ တခြား hook တွေကို ခေါ်တဲ့
+      function ပါ။ ကိုယ့် hook က store ကို useSyncExternalStore ဆီ ပေးလိုက်လို့၊
+      count ပြောင်းတိုင်း component ပြန် render လုပ်ပါတယ်။ [[mark:open-panel]]
+      KitchenPanel ဖိုင်ကလည်း အခု အလွတ်ပါ၊ ဒီ hook ကို တခြား hook လိုပဲ
+      ခေါ်သုံးမှာပါ။ [[mark:type-panel]] hook ဆီက count ကို ယူပြီး၊ အော်ဒါ တစ်ခု
+      ထည့်ပေးမယ့် ခလုတ်နဲ့အတူ card လေး တစ်ခုထဲမှာ ပြပါတယ်။
+    sources:
+      - title: "React — Reusing Logic with Custom Hooks"
+        url: "https://react.dev/learn/reusing-logic-with-custom-hooks"
+      - title: "React — useSyncExternalStore"
+        url: "https://react.dev/reference/react/useSyncExternalStore"
+      - title: "React — Rules of Hooks"
+        url: "https://react.dev/reference/rules/rules-of-hooks"
+    actions:
+      - id: open-store
+        type: workspace.openFile
+        at: { mark: open-store }
+        path: src/queueStore.js
+      - id: type-store-state
+        type: editor.type
+        at: { mark: type-store-state }
+        cadence: line-by-line
+        target: { file: src/queueStore.js, after: "", occurrence: 1 }
+        text: "let count = 0;\nconst listeners = new Set();\n"
+      - id: type-store-subscribe
+        type: editor.type
+        at: { mark: type-store-subscribe }
+        cadence: line-by-line
+        target: { file: src/queueStore.js, after: "const listeners = new Set();\n", occurrence: 1 }
+        text: "\nexport function subscribe(listener) {\n  listeners.add(listener);\n  return () => listeners.delete(listener);\n}\n"
+      - id: type-store-snapshot
+        type: editor.type
+        at: { mark: type-store-snapshot }
+        cadence: line-by-line
+        target:
+          {
+            file: src/queueStore.js,
+            after: "  return () => listeners.delete(listener);\n}\n",
+            occurrence: 1,
+          }
+        text: "\nexport function getSnapshot() {\n  return count;\n}\n"
+      - id: type-store-add
+        type: editor.type
+        at: { mark: type-store-add }
+        cadence: line-by-line
+        target: { file: src/queueStore.js, after: "  return count;\n}\n", occurrence: 1 }
+        text: "\nexport function addOrder() {\n  count = count + 1;\n  listeners.forEach((listener) => listener());\n}\n"
+      - id: open-hook
+        type: workspace.openFile
+        at: { mark: open-hook }
+        path: src/useKitchenQueue.js
+      - id: type-hook-imports
+        type: editor.type
+        at: { mark: type-hook-imports }
+        cadence: line-by-line
+        target: { file: src/useKitchenQueue.js, after: "", occurrence: 1 }
+        text: "import { useSyncExternalStore } from \"react\";\nimport { subscribe, getSnapshot } from \"./queueStore.js\";\n\nexport function useKitchenQueue() {\n"
+      - id: type-hook-body
+        type: editor.type
+        at: { mark: type-hook-body }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/useKitchenQueue.js,
+            after: "export function useKitchenQueue() {\n",
+            occurrence: 1,
+          }
+        text: "  return useSyncExternalStore(subscribe, getSnapshot);\n}\n"
+      - id: open-panel
+        type: workspace.openFile
+        at: { mark: open-panel }
+        path: src/KitchenPanel.jsx
+      - id: type-panel
+        type: editor.type
+        at: { mark: type-panel }
+        cadence: line-by-line
+        target: { file: src/KitchenPanel.jsx, after: "", occurrence: 1 }
+        text: "import { useKitchenQueue } from \"./useKitchenQueue.js\";\nimport { addOrder } from \"./queueStore.js\";\n\nexport default function KitchenPanel() {\n  const count = useKitchenQueue();\n"
+      - id: type-panel-jsx
+        type: editor.type
+        at: { afterAction: type-panel }
+        cadence: block
+        target:
+          {
+            file: src/KitchenPanel.jsx,
+            after: "  const count = useKitchenQueue();\n",
+            occurrence: 1,
+          }
+        text: "\n  return (\n    <section className=\"card\">\n      <h2>မီးဖိုချောင်</h2>\n      <p data-testid=\"panel-queue\">တန်းစီ {count} ပွဲ</p>\n      <button data-testid=\"add-order\" onClick={addOrder}>\n        အော်ဒါ ထည့်မယ်\n      </button>\n    </section>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 12
+  - id: queue-run
+    narration: >
+      ကဲ၊ ထည့်ကြည့်ရအောင်။ [[mark:open-header]] ခေါင်းစဉ်မှာလည်း count ကို
+      ပြပါမယ်။ [[mark:wire-header]] hook ကို import လုပ်၊ ခေါ်ပြီး၊ count ကို
+      badge လေး တစ်ခုနဲ့ ပြပါတယ်။ [[mark:open-app-panel]] App မှာ panel ကို import
+      လုပ်ပြီး ခလုတ်တွေ အောက်မှာ ထည့်ပါတယ်။ [[mark:click-add-1]] အော်ဒါ
+      ထည့်ရအောင်။ [[mark:click-add-2]] ထပ်ထည့်ရအောင်။ [[mark:after-add]] panel ရော
+      ခေါင်းစဉ်ပါ 2 လို့ ပြနေပါပြီ။ [[mark:draw-hook-logic]] ဘာလို့ နံပါတ်
+      တူနေတာလဲ။ custom hook က logic ကိုပဲ မျှပြီး state ကို မမျှပါဘူး။ hook ထဲမှာ
+      useState သုံးရင် component တစ်ခုစီ ကိုယ်ပိုင် count ရှိသွားမှာပါ။
+      [[mark:draw-store]] ဒီမှာတော့ count က store တစ်ခုတည်းမှာ ရှိလို့၊ component
+      တိုင်းက snapshot တစ်ခုတည်းကို ဖတ်ပါတယ်။ [[mark:draw-recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ Effect က အပြင်က system နဲ့ ချိတ်ပြီး cleanup က
+      ပြန်ဖြုတ်ပါတယ်။ Effect ဖတ်တဲ့ reactive တန်ဖိုးတိုင်း dependency ထဲ ပါရပြီး၊
+      ပြန်မချိတ်စေချင်တဲ့ logic ကို useEffectEvent ထဲ ထုတ်ပါတယ်။ custom hook က
+      logic ကို မျှပြီး၊ data တစ်ခုတည်းကို မျှဖို့ store နဲ့ useSyncExternalStore
+      ကို သုံးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ မလိုအပ်တဲ့ ပြန်
+      render တွေကို ဘယ်လို တိုင်းပြီး ပြင်မလဲ ဆိုတာနဲ့ transition ကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "React — Custom Hooks let you share stateful logic, not state itself"
+        url: "https://react.dev/learn/reusing-logic-with-custom-hooks#custom-hooks-let-you-share-stateful-logic-not-state-itself"
+      - title: "React — useSyncExternalStore: Subscribing to an external store"
+        url: "https://react.dev/reference/react/useSyncExternalStore#subscribing-to-an-external-store"
+      - title: "React Compiler — Introduction"
+        url: "https://react.dev/learn/react-compiler/introduction"
+    actions:
+      - id: open-header
+        type: workspace.openFile
+        at: { mark: open-header }
+        path: src/Header.jsx
+      - id: wire-header-import
+        type: editor.type
+        at: { mark: wire-header }
+        cadence: block
+        target: { file: src/Header.jsx, after: "", occurrence: 1 }
+        text: "import { useKitchenQueue } from \"./useKitchenQueue.js\";\n\n"
+      - id: wire-header-hook
+        type: editor.type
+        at: { afterAction: wire-header-import }
+        cadence: block
+        target: { file: src/Header.jsx, after: "export function Header() {\n", occurrence: 1 }
+        text: "  const count = useKitchenQueue();\n"
+      - id: wire-header-badge
+        type: editor.type
+        at: { afterAction: wire-header-hook }
+        cadence: block
+        target:
+          {
+            file: src/Header.jsx,
+            after: "      <p className=\"muted\">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>\n",
+            occurrence: 1,
+          }
+        text: "      <p className=\"badge\" data-testid=\"header-queue\">တန်းစီ {count}</p>\n"
+      - id: open-app-panel
+        type: workspace.openFile
+        at: { mark: open-app-panel }
+        path: src/App.jsx
+      - id: wire-panel-import
+        type: editor.type
+        at: { afterAction: open-app-panel }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import OrderStatusNaive from \"./OrderStatusNaive.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import KitchenPanel from \"./KitchenPanel.jsx\";\n"
+      - id: wire-panel-use
+        type: editor.type
+        at: { afterAction: wire-panel-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "      </div>\n", occurrence: 1 }
+        text: "      <KitchenPanel />\n"
+      - id: expect-panel-ready
+        type: expect.preview
+        at: { mark: click-add-1, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: panel-queue }
+        textContains: "တန်းစီ 0 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-add-1
+        type: preview.click
+        at: { mark: click-add-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: click-add-2
+        type: preview.click
+        at: { mark: click-add-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: add-order }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-panel-2
+        type: expect.preview
+        at: { mark: after-add }
+        timeoutMs: 5000
+        target: { by: testId, value: panel-queue }
+        textContains: "တန်းစီ 2 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-header-2
+        type: expect.preview
+        at: { afterAction: expect-panel-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: header-queue }
+        textContains: "တန်းစီ 2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: draw-hook-logic
+        type: whiteboard.apply
+        at: { mark: draw-hook-logic }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds:
+          [
+            b6-title,
+            b6-header-box,
+            b6-header-text,
+            b6-panel-box,
+            b6-panel-text,
+            b6-arrow-header,
+            b6-arrow-panel,
+            b6-hook-box,
+            b6-hook-text,
+            b6-rule-hook,
+          ]
+        drawMs: 3000
+      - id: draw-store
+        type: whiteboard.apply
+        at: { mark: draw-store }
+        upsertIds: [b6-arrow-store, b6-store-box, b6-store-text, b6-store-note, b6-rule-store]
+        drawMs: 2400
+      - id: draw-recap
+        type: whiteboard.apply
+        at: { mark: draw-recap }
+        upsertIds: [b6-recap]
+        drawMs: 1200
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b6-next]
+        drawMs: 800
+      - id: expect-order-status-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/OrderStatus.jsx
+        contains: "  const onConnected = useEffectEvent(() => {\n    showNotice(\"OrderStatus · စားပွဲ \" + tableId + \" အသင့်\", sound);\n  });\n\n  useEffect(() => {\n    const connection = createConnection(tableId, \"OrderStatus\");\n    connection.on(\"connected\", () => onConnected());\n    connection.connect();\n    return () => connection.disconnect();\n  }, [tableId]);\n"
+      - id: expect-order-status-imports
+        type: expect.file
+        at: { afterAction: expect-order-status-file }
+        path: src/OrderStatus.jsx
+        contains: "import { useEffect, useEffectEvent } from \"react\";\nimport { createConnection, showNotice } from \"./kitchen.js\";\n\nexport default function OrderStatus({ tableId, sound }) {\n"
+      - id: expect-store-file
+        type: expect.file
+        at: { afterAction: expect-order-status-imports }
+        path: src/queueStore.js
+        contains: "export function addOrder() {\n  count = count + 1;\n  listeners.forEach((listener) => listener());\n}\n"
+      - id: expect-hook-file
+        type: expect.file
+        at: { afterAction: expect-store-file }
+        path: src/useKitchenQueue.js
+        contains: "export function useKitchenQueue() {\n  return useSyncExternalStore(subscribe, getSnapshot);\n}\n"
+      - id: expect-header-file
+        type: expect.file
+        at: { afterAction: expect-hook-file }
+        path: src/Header.jsx
+        contains: "  const count = useKitchenQueue();\n"
+      - id: expect-app-file
+        type: expect.file
+        at: { afterAction: expect-header-file }
+        path: src/App.jsx
+        contains: "      <KitchenPanel />\n      <OrderStatus tableId={tableId} sound={sound} />\n      <OrderStatusNaive tableId={tableId} sound={sound} />\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
