@@ -1426,11 +1426,6 @@ scenes:
         at: { mark: start-server }
         timeoutMs: 45000
         retry: { maxAttempts: 2, delayMs: 500 }
-      - id: wait-for-dev-server
-        type: runtime.waitForReady
-        at: { afterAction: start-dev-server }
-        timeoutMs: 20000
-        retry: { maxAttempts: 2, delayMs: 250 }
       - id: draw-sketch
         type: whiteboard.apply
         at: { mark: draw-sketch }
@@ -1592,9 +1587,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-lift-board }
         open: false
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: show-preview }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-preview
         type: preview.open
-        at: { mark: show-preview }
+        at: { afterAction: wait-for-dev-server }
         timeoutMs: 15000
         mode: docked
         retry: { maxAttempts: 2, delayMs: 250 }
