@@ -18,8 +18,8 @@ import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 // long ping would therefore spend the whole action budget proving nothing,
 // which is why each attempt is short and the loop keeps knocking until the
 // injected bridge answers.
-const PREVIEW_HANDSHAKE_PING_TIMEOUT_MS = 500;
-const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
+export const PREVIEW_HANDSHAKE_PING_TIMEOUT_MS = 500;
+export const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
 
 type StudioWebContainerRuntime = Extract<StudioRuntime, { kind: "webcontainer" }>;
 

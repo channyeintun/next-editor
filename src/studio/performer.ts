@@ -33,7 +33,12 @@ export interface PerformPlanOptions {
   onProgress?: (receipt: ActionReceipt) => void;
 }
 
-async function invokeAction(
+/**
+ * The one mapping from a plan action to the driver command that performs it.
+ * Exported for drivers outside the page (scripts/studio-verify-lesson.ts),
+ * which replay a plan through this same dispatch without its clock.
+ */
+export async function invokeAction(
   action: StudioPlanAction,
   driver: StudioDriver,
 ): Promise<Record<string, unknown>> {
