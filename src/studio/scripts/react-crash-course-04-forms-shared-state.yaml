@@ -1,0 +1,2277 @@
+# React crash course, lesson 4 of 12: forms and shared state (Burmese course,
+# narration drafted in English for the Burmese writer — see DESIGN.md).
+#
+# App: the Yangon food-shop menu from lessons 1–3. A SearchBox (controlled text
+# input + "not spicy" checkbox, label wired with useId) filters the sibling
+# MenuList through state kept in App and a filter computed during render. A
+# TableNote form (label-wrapped inputs) keeps { name, note } in one state object,
+# saves without a page reload (preventDefault), keeps table 1's text on table 2 until key={tableId}
+# is added, after which every table starts fresh.
+#
+# Editing rules (live Vite, no React plugin, every JS edit is a full reload):
+# - SearchBox.jsx and TableNote.jsx are pinned EMPTY and typed while nothing
+#   imports them: boilerplate lands line by line, the lines the lesson is about
+#   (value/onChange, checked/onChange, the object spread) as keystrokes.
+# - Every edit to App.jsx is a `block` insert of complete lines: imports first,
+#   then state, then the JSX that uses them, then the `.filter(matches)` and
+#   ` key={tableId}` atomic inserts at the call sites.
+# - Preview state resets on every App.jsx edit, so each interaction is done
+#   after the edit it depends on, and every claim is an expect.preview.
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-04-forms-shared-state
+  title: "React crash course 4: Form နဲ့ shared state"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 4
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+        import MenuList from "./MenuList.jsx";
+        import { menu } from "./menu.js";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+              <MenuList dishes={menu} />
+            </main>
+          );
+        }
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <header className="header">
+                <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              </header>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/MenuList.jsx: |
+        import DishCard from "./DishCard.jsx";
+
+        export default function MenuList({ dishes }) {
+          return (
+            <section className="menu" data-testid="menu">
+              <p className="muted" data-testid="menu-count">
+                ဟင်းလျာ {dishes.length} မျိုး
+              </p>
+              {dishes.map((dish) => (
+                <DishCard key={dish.id} {...dish} />
+              ))}
+            </section>
+          );
+        }
+      src/DishCard.jsx: |
+        export default function DishCard({ id, name, price, spicy = false, soldOut = false }) {
+          return (
+            <article className="card dish" data-testid={`dish-card-${id}`}>
+              <h3>{name}</h3>
+              <p className="row">
+                {price.toLocaleString("en-US")} ကျပ်
+                {spicy && <span className="badge warn">စပ်</span>}
+                {soldOut && <span className="badge">ကုန်သွားပါပြီ</span>}
+              </p>
+            </article>
+          );
+        }
+      src/SearchBox.jsx: ""
+      src/TableNote.jsx: ""
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 4: menu list, compact dish cards, the checkbox row, form button. */
+        .menu {
+          display: grid;
+          gap: 8px;
+        }
+
+        .dish {
+          gap: 2px;
+          padding: 8px 16px;
+        }
+
+        .dish h3 {
+          font-size: 1rem;
+        }
+
+        .check {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .check input {
+          width: auto;
+        }
+
+        form.card button {
+          justify-self: start;
+        }
+
+  whiteboardAssets:
+    # ---------------------------------------------------------------- board 1: Thinking in React
+    - {
+        id: plan-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "Thinking in React: အဆင့် 5 ဆင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: plan-app,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 300,
+        height: 380,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: plan-app-label,
+        kind: text,
+        x: 296,
+        y: 248,
+        width: 100,
+        height: 40,
+        text: "App",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: plan-header,
+        kind: rectangle,
+        x: 300,
+        y: 300,
+        width: 260,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: plan-header-label,
+        kind: text,
+        x: 316,
+        y: 310,
+        width: 160,
+        height: 40,
+        text: "Header",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-search,
+        kind: rectangle,
+        x: 300,
+        y: 380,
+        width: 260,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: plan-search-label,
+        kind: text,
+        x: 316,
+        y: 390,
+        width: 180,
+        height: 40,
+        text: "SearchBox",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-menu,
+        kind: rectangle,
+        x: 300,
+        y: 460,
+        width: 260,
+        height: 140,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: plan-menu-label,
+        kind: text,
+        x: 316,
+        y: 470,
+        width: 180,
+        height: 40,
+        text: "MenuList",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-menu-dishes,
+        kind: text,
+        x: 316,
+        y: 530,
+        width: 220,
+        height: 40,
+        text: "DishCard × 5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-1,
+        kind: text,
+        x: 640,
+        y: 250,
+        width: 400,
+        height: 40,
+        text: "1. component တွေ ခွဲမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-2,
+        kind: text,
+        x: 640,
+        y: 320,
+        width: 400,
+        height: 40,
+        text: "2. props နဲ့ ပြရုံ version",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-3,
+        kind: text,
+        x: 640,
+        y: 390,
+        width: 400,
+        height: 40,
+        text: "3. အနည်းဆုံး state ရှာမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-4,
+        kind: text,
+        x: 640,
+        y: 460,
+        width: 400,
+        height: 40,
+        text: "4. state ဘယ်မှာ ထားမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-5,
+        kind: text,
+        x: 640,
+        y: 530,
+        width: 400,
+        height: 40,
+        text: "5. အပေါ်ကို ပြန်ပို့မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: plan-step-3-detail,
+        kind: text,
+        x: 680,
+        y: 590,
+        width: 360,
+        height: 40,
+        text: "query၊ mildOnly",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: plan-circle-4,
+        kind: freedraw,
+        stroke: circle,
+        x: 615,
+        y: 440,
+        width: 470,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+
+    # ---------------------------------------------------------------- board 2: where state lives
+    - {
+        id: lift-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "State ကို ဘယ်မှာ ထားမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: wrong-app,
+        kind: rectangle,
+        x: 380,
+        y: 240,
+        width: 160,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: wrong-app-label,
+        kind: text,
+        x: 420,
+        y: 250,
+        width: 80,
+        height: 40,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-search,
+        kind: rectangle,
+        x: 280,
+        y: 350,
+        width: 180,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: wrong-search-label,
+        kind: text,
+        x: 292,
+        y: 358,
+        width: 160,
+        height: 40,
+        text: "SearchBox",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-search-state,
+        kind: text,
+        x: 292,
+        y: 400,
+        width: 160,
+        height: 40,
+        text: "query",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-menu,
+        kind: rectangle,
+        x: 490,
+        y: 350,
+        width: 160,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: wrong-menu-label,
+        kind: text,
+        x: 502,
+        y: 358,
+        width: 140,
+        height: 40,
+        text: "MenuList",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-menu-q,
+        kind: text,
+        x: 502,
+        y: 400,
+        width: 100,
+        height: 40,
+        text: "query ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-note,
+        kind: text,
+        x: 280,
+        y: 480,
+        width: 370,
+        height: 40,
+        text: "MenuList က မမြင်ရဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: wrong-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 280,
+        y: 340,
+        width: 370,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: right-app,
+        kind: rectangle,
+        x: 790,
+        y: 230,
+        width: 230,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: right-app-label,
+        kind: text,
+        x: 806,
+        y: 238,
+        width: 80,
+        height: 40,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: right-app-state,
+        kind: text,
+        x: 806,
+        y: 280,
+        width: 200,
+        height: 40,
+        text: "state: query",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: right-arrow-search,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 800,
+        y: 340,
+        width: 30,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: right-arrow-menu,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 975,
+        y: 340,
+        width: 30,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: right-search,
+        kind: rectangle,
+        x: 710,
+        y: 430,
+        width: 180,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: right-search-label,
+        kind: text,
+        x: 722,
+        y: 440,
+        width: 160,
+        height: 40,
+        text: "SearchBox",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: right-menu,
+        kind: rectangle,
+        x: 920,
+        y: 430,
+        width: 170,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: right-menu-label,
+        kind: text,
+        x: 932,
+        y: 440,
+        width: 150,
+        height: 40,
+        text: "MenuList",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: right-props,
+        kind: text,
+        x: 710,
+        y: 520,
+        width: 380,
+        height: 40,
+        text: "props ↓ တန်ဖိုး ပေးတယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: right-up,
+        kind: text,
+        x: 710,
+        y: 575,
+        width: 380,
+        height: 40,
+        text: "onQueryChange ↑",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: right-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1040,
+        y: 240,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+    # ---------------------------------------------------------------- board 3: derived, not duplicated
+    - {
+        id: derived-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "တွက်လို့ ရရင် state မထားနဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: dup-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 360,
+        height: 170,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: dup-line-1,
+        kind: text,
+        x: 300,
+        y: 252,
+        width: 320,
+        height: 40,
+        text: "state: query",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: dup-line-2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 320,
+        height: 40,
+        text: "state: mildOnly",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: dup-line-3,
+        kind: text,
+        x: 300,
+        y: 348,
+        width: 320,
+        height: 40,
+        text: "state: filteredMenu",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: dup-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 296,
+        y: 346,
+        width: 300,
+        height: 44,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: derived-box,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 400,
+        height: 170,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: derived-line-1,
+        kind: text,
+        x: 710,
+        y: 252,
+        width: 360,
+        height: 40,
+        text: "state: query၊ mildOnly",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: derived-line-2,
+        kind: text,
+        x: 710,
+        y: 300,
+        width: 360,
+        height: 40,
+        text: "render ထဲမှာ တွက်:",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: derived-line-3,
+        kind: text,
+        x: 710,
+        y: 348,
+        width: 360,
+        height: 40,
+        text: "menu.filter(matches)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: derived-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1040,
+        y: 175,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: ids-box,
+        kind: rectangle,
+        x: 280,
+        y: 460,
+        width: 810,
+        height: 140,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: ids-line-1,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 760,
+        height: 40,
+        text: "object ကို copy မမှတ်ဘဲ၊ id ကိုပဲ မှတ်ပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: ids-line-2,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 500,
+        height: 40,
+        text: 'selectedId: "mohinga"',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # ---------------------------------------------------------------- board 4: bubbling vs default action
+    - {
+        id: bubble-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 700,
+        height: 50,
+        text: "Event က အပေါ်ကို တက်သွားတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: bubble-div,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 400,
+        height: 380,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: bubble-div-label,
+        kind: text,
+        x: 296,
+        y: 248,
+        width: 80,
+        height: 40,
+        text: "div",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: bubble-form,
+        kind: rectangle,
+        x: 310,
+        y: 300,
+        width: 340,
+        height: 290,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: bubble-form-label,
+        kind: text,
+        x: 326,
+        y: 308,
+        width: 100,
+        height: 40,
+        text: "form",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: bubble-button,
+        kind: rectangle,
+        x: 350,
+        y: 480,
+        width: 200,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: bubble-button-label,
+        kind: text,
+        x: 370,
+        y: 494,
+        width: 120,
+        height: 40,
+        text: "button",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: bubble-order-1,
+        kind: text,
+        x: 570,
+        y: 494,
+        width: 60,
+        height: 40,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: bubble-order-2,
+        kind: text,
+        x: 585,
+        y: 400,
+        width: 60,
+        height: 40,
+        text: "2 ↑",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: bubble-order-3,
+        kind: text,
+        x: 600,
+        y: 252,
+        width: 60,
+        height: 40,
+        text: "3 ↑",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: stop-box,
+        kind: rectangle,
+        x: 730,
+        y: 300,
+        width: 360,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: stop-line-1,
+        kind: text,
+        x: 746,
+        y: 310,
+        width: 330,
+        height: 40,
+        text: "stopPropagation()",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: stop-line-2,
+        kind: text,
+        x: 746,
+        y: 358,
+        width: 330,
+        height: 40,
+        text: "အပေါ် မတက်တော့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: prevent-box,
+        kind: rectangle,
+        x: 730,
+        y: 460,
+        width: 360,
+        height: 110,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: prevent-line-1,
+        kind: text,
+        x: 746,
+        y: 470,
+        width: 330,
+        height: 40,
+        text: "preventDefault()",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: prevent-line-2,
+        kind: text,
+        x: 746,
+        y: 518,
+        width: 330,
+        height: 40,
+        text: "မူလ အလုပ်ကို ရပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # ---------------------------------------------------------------- board 5: state lives at a position
+    - {
+        id: pos-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 700,
+        height: 50,
+        text: "State က သစ်ပင်ထဲက နေရာမှာ နေတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: pos-app,
+        kind: rectangle,
+        x: 580,
+        y: 235,
+        width: 160,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: pos-app-label,
+        kind: text,
+        x: 620,
+        y: 245,
+        width: 80,
+        height: 40,
+        text: "App",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pos-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 645,
+        y: 298,
+        width: 30,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: pos-slot,
+        kind: rectangle,
+        x: 520,
+        y: 350,
+        width: 280,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: pos-slot-label,
+        kind: text,
+        x: 536,
+        y: 358,
+        width: 200,
+        height: 40,
+        text: "TableNote",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pos-slot-state,
+        kind: text,
+        x: 536,
+        y: 402,
+        width: 220,
+        height: 40,
+        text: "state: info",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: pos-same-box,
+        kind: rectangle,
+        x: 280,
+        y: 490,
+        width: 380,
+        height: 130,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: pos-same-line-1,
+        kind: text,
+        x: 296,
+        y: 502,
+        width: 340,
+        height: 40,
+        text: "စားပွဲ 1 → 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pos-same-line-2,
+        kind: text,
+        x: 296,
+        y: 556,
+        width: 340,
+        height: 40,
+        text: "နေရာတူ = state ကျန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: pos-key-box,
+        kind: rectangle,
+        x: 710,
+        y: 490,
+        width: 380,
+        height: 130,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: pos-key-line-1,
+        kind: text,
+        x: 726,
+        y: 502,
+        width: 340,
+        height: 40,
+        text: "key={tableId}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: pos-key-line-2,
+        kind: text,
+        x: 726,
+        y: 556,
+        width: 340,
+        height: 40,
+        text: "key သစ် = state သစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # ---------------------------------------------------------------- board 6: UI states of a form
+    - {
+        id: st-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Form ရဲ့ UI အခြေအနေတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: st-typing,
+        kind: rectangle,
+        x: 280,
+        y: 270,
+        width: 170,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: st-typing-label,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 130,
+        height: 40,
+        text: "typing",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 458,
+        y: 290,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: st-submitting,
+        kind: rectangle,
+        x: 525,
+        y: 270,
+        width: 210,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: st-submitting-label,
+        kind: text,
+        x: 545,
+        y: 285,
+        width: 170,
+        height: 40,
+        text: "submitting",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 742,
+        y: 290,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: st-success,
+        kind: rectangle,
+        x: 810,
+        y: 225,
+        width: 170,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: st-success-label,
+        kind: text,
+        x: 830,
+        y: 235,
+        width: 130,
+        height: 40,
+        text: "success",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-error,
+        kind: rectangle,
+        x: 810,
+        y: 320,
+        width: 170,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: st-error-label,
+        kind: text,
+        x: 830,
+        y: 330,
+        width: 130,
+        height: 40,
+        text: "error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-rule-1,
+        kind: text,
+        x: 280,
+        y: 420,
+        width: 780,
+        height: 40,
+        text: "အခြေအနေ တစ်ခုစီမှာ ဘာ ပြမလဲ ရေးထားမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-rule-2,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 780,
+        height: 40,
+        text: "state ပြောင်းရင် UI လိုက်ပြောင်းတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: st-next-box,
+        kind: rectangle,
+        x: 270,
+        y: 545,
+        width: 430,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: st-next,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 390,
+        height: 40,
+        text: "Lesson 10: Action တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 40419
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  # Board 1 while pnpm install + vite boot run (preview is needed ~2 min later).
+  - id: plan-the-screen
+    chapter: "Thinking in React နဲ့ state ရဲ့ နေရာ"
+    narration: >
+      ဒီ lesson မှာ menu ရှာတဲ့ search box နဲ့၊ စားပွဲ တစ်ခုစီအတွက် မှတ်ချက်
+      form ထည့်ကြည့်ပါမယ်။ [[mark:start-server]] install လုပ်တာ ကြာတတ်လို့၊
+      dev server ကို အခုကတည်း စ run ထားပြီး၊ ကြားမှာ board ပေါ်မှာ
+      စီစဉ်ကြည့်ရအောင်။ [[mark:draw-sketch]] page ကို အကွက် ခွဲကြည့်ရင်၊ App
+      ထဲမှာ header၊ search box နဲ့ menu list ရှိပါတယ်။ [[mark:draw-steps-1-2]]
+      React က အဆင့် 5 ဆင့်နဲ့ စဉ်းစားဖို့ အကြံပြုထားပါတယ်။ ပထမက UI ကို
+      component တွေအဖြစ် ခွဲတာပါ။ ဒုတိယက state မပါဘဲ props နဲ့ ပြရုံ version
+      အရင် ဆောက်တာပါ။ [[mark:draw-step-3]] တတိယက screen အတွက် လိုတဲ့ အနည်းဆုံး
+      state ကို ရှာတာပါ။ ဒီမှာ ရှာတဲ့ စာသားနဲ့၊ စပ်တာ ဖျောက်မလား၊ ဒီနှစ်ခုပဲ
+      လိုပါတယ်။ စစ်ထုတ်ပြီးသား list ကတော့ အဲဒီ နှစ်ခုကနေ တွက်လို့ ရလို့ state
+      မဟုတ်ပါဘူး။ [[mark:draw-steps-4-5]] စတုတ္ထက အဲဒီ state ကို ဘယ် component
+      က ပိုင်မလဲ ဆုံးဖြတ်တာပါ။ နောက်ဆုံးက child တွေက ပြောင်းလဲမှုကို အပေါ်ကို
+      ပြန်ပို့တာပါ။ [[mark:circle-step-4]] ဒီအထဲမှာ အဆင့် 4 ကို လူအများစု
+      မှားတတ်ကြပါတယ်။
+    sources:
+      - title: "React — Thinking in React"
+        url: "https://react.dev/learn/thinking-in-react"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-plan-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [plan-title]
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { afterAction: start-dev-server }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: draw-sketch
+        type: whiteboard.apply
+        at: { mark: draw-sketch }
+        upsertIds:
+          [
+            plan-app,
+            plan-app-label,
+            plan-header,
+            plan-header-label,
+            plan-search,
+            plan-search-label,
+            plan-menu,
+            plan-menu-label,
+            plan-menu-dishes,
+          ]
+        drawMs: 2400
+      - id: draw-steps-1-2
+        type: whiteboard.apply
+        at: { mark: draw-steps-1-2 }
+        upsertIds: [plan-step-1, plan-step-2]
+        drawMs: 1400
+      - id: draw-step-3
+        type: whiteboard.apply
+        at: { mark: draw-step-3 }
+        upsertIds: [plan-step-3, plan-step-3-detail]
+        drawMs: 1400
+      - id: draw-steps-4-5
+        type: whiteboard.apply
+        at: { mark: draw-steps-4-5 }
+        upsertIds: [plan-step-4, plan-step-5]
+        drawMs: 1400
+      - id: circle-step-4
+        type: whiteboard.apply
+        at: { mark: circle-step-4 }
+        upsertIds: [plan-circle-4]
+        drawMs: 900
+
+  # ------------------------------------------------------------------ 2
+  # Thinking in React step 4: the tempting "state in SearchBox" version is the
+  # whiteboard 'before' (it is never typed), the lifted version is what we write.
+  - id: where-state-lives
+    narration: >
+      [[mark:draw-lift-title]] ရှာတဲ့ စာသားကို SearchBox ထဲမှာပဲ state အနေနဲ့
+      ထားချင်တတ်ပါတယ်၊ စာရိုက်တာက အဲဒီမှာ ဖြစ်လို့ပါ။ [[mark:draw-wrong-tree]]
+      ဒါပေမဲ့ SearchBox နဲ့ MenuList က App အောက်က ဘေးချင်းကပ် component
+      နှစ်ခုပါ။ state က သူ့ကို ပိုင်တဲ့ component ထဲမှာပဲ ရှိလို့၊ MenuList က
+      မမြင်ရပါဘူး။ [[mark:strike-wrong]] ဆိုတော့ ဒီ version နဲ့ ဘာမှ စစ်လို့
+      မရပါဘူး။ [[mark:draw-right-tree]] အဲဒီအစား state ကို နှစ်ခုလုံးရဲ့
+      အနီးဆုံး parent ဖြစ်တဲ့ App ထဲ ရွှေ့ပြီး၊ App ကပဲ လိုတဲ့ တန်ဖိုးကို
+      props နဲ့ အောက်ကို ပေးပါတယ်။ [[mark:draw-flow-up]] App က function
+      တစ်ခုလည်း ပေးပါတယ်။ စာရိုက်တိုင်း SearchBox က အဲဒီ function ကို စာသား
+      အသစ်နဲ့ ခေါ်ပြီး၊ App က state ကို ပြောင်းပါတယ်။ ဆိုတော့ တန်ဖိုးက props
+      နဲ့ အောက် ဆင်းပြီး၊ ပြောင်းလဲမှုက function နဲ့ အပေါ် ပြန်တက်ပါတယ်။
+      [[mark:check-right]] ဒါကို lifting state up လို့ ခေါ်ပါတယ်။
+    sources:
+      - title: "React — Sharing State Between Components"
+        url: "https://react.dev/learn/sharing-state-between-components"
+      - title: "React — Thinking in React: where your state should live"
+        url: "https://react.dev/learn/thinking-in-react#step-4-identify-where-your-state-should-live"
+    actions:
+      - id: draw-lift-title
+        type: whiteboard.apply
+        at: { mark: draw-lift-title }
+        clear: true
+        upsertIds: [lift-title]
+      - id: draw-wrong-tree
+        type: whiteboard.apply
+        at: { mark: draw-wrong-tree }
+        upsertIds:
+          [
+            wrong-app,
+            wrong-app-label,
+            wrong-search,
+            wrong-search-label,
+            wrong-search-state,
+            wrong-menu,
+            wrong-menu-label,
+            wrong-menu-q,
+          ]
+        drawMs: 2600
+      - id: strike-wrong
+        type: whiteboard.apply
+        at: { mark: strike-wrong }
+        upsertIds: [wrong-note, wrong-strike]
+        drawMs: 1200
+      - id: draw-right-tree
+        type: whiteboard.apply
+        at: { mark: draw-right-tree }
+        upsertIds:
+          [
+            right-app,
+            right-app-label,
+            right-app-state,
+            right-arrow-search,
+            right-arrow-menu,
+            right-search,
+            right-search-label,
+            right-menu,
+            right-menu-label,
+            right-props,
+          ]
+        drawMs: 3000
+      - id: draw-flow-up
+        type: whiteboard.apply
+        at: { mark: draw-flow-up }
+        upsertIds: [right-up]
+        drawMs: 1000
+      - id: check-right
+        type: whiteboard.apply
+        at: { mark: check-right }
+        upsertIds: [right-check]
+        drawMs: 600
+
+  # ------------------------------------------------------------------ 3
+  # SearchBox.jsx is pinned empty and nothing imports it: boilerplate lands
+  # line by line, the controlled-input lines as keystrokes.
+  - id: search-box
+    chapter: "Controlled input ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-lift-board]] ကဲ၊ editor ထဲ ပြန်သွားရအောင်။
+      [[mark:show-preview]] dev server ရသွားပါပြီ။ preview ဖွင့်လိုက်တော့
+      ဟင်းလျာ 5 မျိုး ပေါ်နေပါပြီ။ [[mark:open-searchbox]] SearchBox ဖိုင်က
+      အလွတ်ပါ။ ဘယ်ဖိုင်ကမှလည်း import မလုပ်ရသေးပါဘူး။
+      [[mark:type-search-head]] ဒီ component က App ဆီက props လေးခု
+      လက်ခံပါတယ်။ ရှာတဲ့ စာသားနဲ့၊ စပ်တာ ဖျောက်မလား ဆိုတဲ့ တန်ဖိုး နှစ်ခုနဲ့၊ အဲဒါတွေကို
+      ပြောင်းဖို့ function နှစ်ခုပါ။ ပြီးရင် useId ဆီက id ယူပြီး label နဲ့
+      input ကို ချိတ်ထားလို့၊ label နှိပ်ရင် cursor က input ထဲ ရောက်ပါတယ်။
+      [[mark:type-search-value]] ဒီ နှစ်ကြောင်းက controlled input ပါ။
+      တန်ဖိုးကို state ထဲ ထားပြီး၊ စာရိုက်တိုင်း state ကို ပြောင်းပေးတာပါ။
+      value က App ရဲ့ state ကနေ လာပြီး၊ onChange က စာသား အသစ်ကို App ဆီ
+      ပြန်ပို့ပါတယ်။ [[mark:select-value]] ဒီ နှစ်ကြောင်းကြောင့် input ထဲမှာ
+      App ရဲ့ state အတိုင်းပဲ ပြနေလို့၊ input နဲ့ state ဘယ်တော့မှ မကွဲပါဘူး။
+      [[mark:type-search-check]] checkbox ကလည်း ဒီအတိုင်းပါပဲ။ ကွာတာက value
+      အစား checked ကို သုံးပြီး၊ event ထဲကလည်း checked ကိုပဲ ဖတ်တာပါ။ ပြီးရင်
+      component ကို ပိတ်လိုက်ပါမယ်။ [[mark:select-useid]] ဒီ useId ကို
+      ကြည့်ပါ။ ခေါ်တဲ့ component တိုင်း ကိုယ်ပိုင် id ရလို့၊ page ထဲ နှစ်ကြိမ်
+      သုံးထားရင်တောင် id မတူပါဘူး။ [[mark:useid-format]] ဒီ label ကို ကြည့်ပါ။
+      useId ရဲ့ id ကို label နဲ့ input လို element တွေ အချင်းချင်း ချိတ်ဖို့
+      သုံးပါ။ ပုံစံက React 19.1 နဲ့ React 19.2 မှာ ပြောင်းခဲ့လို့ ခွဲဖတ်တာမျိုး
+      မလုပ်ပါနဲ့။ list key ကတော့ item တစ်ခုစီရဲ့ data ထဲက id ဖြစ်ရလို့၊ useId
+      ကို list key အဖြစ်လည်း မသုံးပါနဲ့။ [[mark:uncontrolled-note]] value အစား
+      default
+      တန်ဖိုး ပေးထားတဲ့ input ကတော့ uncontrolled ပါ။ စာသားကို browser ကပဲ
+      မှတ်ထားပြီး၊ form ပို့တဲ့အခါမှ FormData နဲ့ ဖတ်ရပါတယ်။ lesson 10 မှာ
+      အဲဒါ သုံးပါမယ်။
+    sources:
+      - title: "React — <input>: controlling an input with a state variable"
+        url: "https://react.dev/reference/react-dom/components/input#controlling-an-input-with-a-state-variable"
+      - title: "React — controlled and uncontrolled components"
+        url: "https://react.dev/learn/sharing-state-between-components#controlled-and-uncontrolled-components"
+      - title: "React — useId"
+        url: "https://react.dev/reference/react/useId"
+      - title: "React 19.2 (useId format)"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+      - title: "React CHANGELOG (19.1 and 19.2 useId format)"
+        url: "https://github.com/react/react/blob/main/CHANGELOG.md"
+    actions:
+      - id: close-lift-board
+        type: whiteboard.apply
+        at: { mark: close-lift-board }
+        open: false
+      - id: open-preview
+        type: preview.open
+        at: { mark: show-preview }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-five-dishes
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-count }
+        textContains: "ဟင်းလျာ 5 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-five-dishes }
+      - id: open-searchbox
+        type: workspace.openFile
+        at: { mark: open-searchbox }
+        path: src/SearchBox.jsx
+      - id: type-search-head
+        type: editor.type
+        at: { mark: type-search-head }
+        cadence: line-by-line
+        target: { file: src/SearchBox.jsx, after: "", occurrence: 1 }
+        text: "import { useId } from \"react\";\n\nexport default function SearchBox({\n  query,\n  onQueryChange,\n  mildOnly,\n  onMildOnlyChange,\n}) {\n  const id = useId();\n  return (\n    <div className=\"card\">\n      <label htmlFor={id}>ဟင်းလျာ ရှာရန်</label>\n      <input\n        id={id}\n        data-testid=\"search-input\"\n        "
+      - id: type-search-value
+        type: editor.type
+        at: { mark: type-search-value }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/SearchBox.jsx,
+            after: "        data-testid=\"search-input\"\n        ",
+            occurrence: 1,
+          }
+        text: "value={query}\n        onChange={(e) => onQueryChange(e.target.value)}\n"
+      - id: select-value
+        type: editor.select
+        at: { mark: select-value }
+        target:
+          {
+            file: src/SearchBox.jsx,
+            text: "        value={query}\n        onChange={(e) => onQueryChange(e.target.value)}",
+            occurrence: 1,
+          }
+      - id: type-search-check
+        type: editor.type
+        at: { mark: type-search-check }
+        cadence: line-by-line
+        target:
+          { file: src/SearchBox.jsx, after: "onQueryChange(e.target.value)}\n", occurrence: 1 }
+        text: "      />\n      <label className=\"check\">\n        <input\n          type=\"checkbox\"\n          data-testid=\"mild-only\"\n          checked={mildOnly}\n          onChange={(e) => onMildOnlyChange(e.target.checked)}\n        />\n        မစပ်တာပဲ ပြပါ\n      </label>\n    </div>\n  );\n}\n"
+      - id: select-useid
+        type: editor.select
+        at: { mark: select-useid }
+        target: { file: src/SearchBox.jsx, text: "const id = useId();", occurrence: 1 }
+      - id: select-htmlfor
+        type: editor.select
+        at: { mark: useid-format }
+        target: { file: src/SearchBox.jsx, text: "<label htmlFor={id}>", occurrence: 1 }
+      - id: select-value-controlled
+        type: editor.select
+        at: { mark: uncontrolled-note }
+        target: { file: src/SearchBox.jsx, text: "value={query}", occurrence: 1 }
+
+  # ------------------------------------------------------------------ 4
+  # App.jsx is live: four block inserts, import first, filter last.
+  - id: wire-search
+    narration: >
+      [[mark:open-app]] အခု App ဖိုင်ပါ။ menu တစ်ခုလုံးကို ပြနေပါသေးတယ်။
+      [[mark:type-app-imports]] import တွေကို အရင် ထည့်ပါမယ်။ ဒါမှ သုံးတဲ့အခါ
+      နာမည်တွေ ရှိနေမှာပါ။ [[mark:type-app-state]] နောက်က state နှစ်ခုနဲ့၊
+      ဟင်းလျာ တစ်မျိုးကို ပြမလား မပြဘူးလား ဆုံးဖြတ်မယ့် function ပါ။ checkbox
+      ခြစ်ထားရင် စပ်တာ ဖျောက်ပြီး၊ နာမည်ထဲ ရှာတဲ့ စာသား ပါမှ ပြပါတယ်။
+      [[mark:type-app-searchbox]] ပြီးရင် SearchBox ကို header အောက် ထည့်ပြီး၊
+      တန်ဖိုးရော function ရော ပေးလိုက်ပါတယ်။ [[mark:type-app-filter]]
+      နောက်ဆုံး MenuList ကို menu ပေးတဲ့ နေရာမှာပဲ filter နဲ့ စစ်ထုတ်ပါတယ်။
+      [[mark:select-filter]] ဒီ filter ကို ကြည့်ပါ။ စစ်ထုတ်ပြီးသား list ကို
+      state ထဲ မသိမ်းဘဲ၊ render တိုင်း ပြန်တွက်တဲ့အတွက် state နဲ့ အမြဲ
+      ကိုက်နေပါတယ်။ [[mark:input-search]] search box ထဲ ရှမ်း လို့
+      ရိုက်ရအောင်။ ဟင်းလျာ 1 မျိုး၊ ရှမ်းခေါက်ဆွဲပဲ ကျန်ပါတယ်။ SearchBox နဲ့ MenuList
+      နှစ်ခုလုံးက App ရဲ့ state တစ်ခုတည်းကို သုံးလို့ပါ။ [[mark:clear-search]]
+      ပြန်ဖျက်လိုက်တော့ ဟင်းလျာ 5 မျိုးလုံး ပြန်ပေါ်လာပါပြီ။
+      [[mark:click-mild]] အခု မစပ်တာပဲ ပြပါ ဆိုတဲ့ အကွက်ကို အမှန်ခြစ်ရအောင်။
+      စပ်တဲ့ အသုပ် နှစ်မျိုး ပျောက်သွားပြီး၊ ဟင်းလျာ 3 မျိုးပဲ ကျန်ပါတော့တယ်။
+    sources:
+      - title: "React — Sharing State Between Components"
+        url: "https://react.dev/learn/sharing-state-between-components"
+      - title: "React — Thinking in React: add inverse data flow"
+        url: "https://react.dev/learn/thinking-in-react#step-5-add-inverse-data-flow"
+      - title: "React — Choosing the State Structure: avoid redundant state"
+        url: "https://react.dev/learn/choosing-the-state-structure#avoid-redundant-state"
+    actions:
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      - id: type-app-imports
+        type: editor.type
+        at: { mark: type-app-imports }
+        cadence: block
+        target: { file: src/App.jsx, after: "", occurrence: 1 }
+        text: "import { useState } from \"react\";\nimport SearchBox from \"./SearchBox.jsx\";\n"
+      - id: type-app-state
+        type: editor.type
+        at: { mark: type-app-state }
+        cadence: block
+        target: { file: src/App.jsx, after: "export default function App() {\n", occurrence: 1 }
+        text: "  const [query, setQuery] = useState(\"\");\n  const [mildOnly, setMildOnly] = useState(false);\n\n  function matches(dish) {\n    if (mildOnly && dish.spicy) return false;\n    return dish.name.includes(query);\n  }\n\n"
+      - id: type-app-searchbox
+        type: editor.type
+        at: { mark: type-app-searchbox }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <SearchBox\n        query={query}\n        onQueryChange={setQuery}\n        mildOnly={mildOnly}\n        onMildOnlyChange={setMildOnly}\n      />\n"
+      - id: expect-search-box-shown
+        type: expect.preview
+        at: { mark: type-app-filter }
+        timeoutMs: 4000
+        target: { by: testId, value: search-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-app-filter
+        type: editor.type
+        at: { mark: type-app-filter, offsetMs: 300 }
+        cadence: block
+        target: { file: src/App.jsx, after: "dishes={menu", occurrence: 1 }
+        text: ".filter(matches)"
+      - id: select-filter
+        type: editor.select
+        at: { mark: select-filter }
+        target: { file: src/App.jsx, text: "menu.filter(matches)", occurrence: 1 }
+      - id: input-search
+        type: preview.input
+        at: { mark: input-search }
+        timeoutMs: 5000
+        target: { by: testId, value: search-input }
+        value: "ရှမ်း"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-one-dish
+        type: expect.preview
+        at: { afterAction: input-search }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-count }
+        textContains: "ဟင်းလျာ 1 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-shan-card
+        type: expect.preview
+        at: { afterAction: expect-one-dish }
+        timeoutMs: 4000
+        target: { by: testId, value: dish-card-shan-noodles }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: clear-search
+        type: preview.input
+        at: { mark: clear-search }
+        timeoutMs: 5000
+        target: { by: testId, value: search-input }
+        value: ""
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-five-again
+        type: expect.preview
+        at: { afterAction: clear-search }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-count }
+        textContains: "ဟင်းလျာ 5 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-mild-only
+        type: preview.click
+        at: { mark: click-mild }
+        timeoutMs: 5000
+        target: { by: testId, value: mild-only }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-three-dishes
+        type: expect.preview
+        at: { afterAction: click-mild-only }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-count }
+        textContains: "ဟင်းလျာ 3 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 5
+  - id: derived-state
+    chapter: "State ကို ဘယ်လို ပုံစံချမလဲ"
+    narration: >
+      [[mark:open-derived-board]] ဒါဆို စစ်ထုတ်ပြီးသား list ကို state ထဲမှာ
+      ဘာလို့ မထားတာလဲ။ [[mark:draw-duplicate]] ထားရင် data တစ်ခုတည်းက နှစ်နေရာ
+      ရှိနေပြီး၊ ပြောင်းတိုင်း နှစ်နေရာလုံး လိုက်ပြင်ရပါမယ်။ တစ်ခါ မေ့တာနဲ့
+      screen ပေါ်မှာ ဟင်းလျာ မှားပြနေမှာပါ။ [[mark:draw-derived]] ဆိုတော့
+      ရှိပြီးသား props ဒါမှမဟုတ် state ကနေ တွက်လို့ ရရင်၊ state ထဲ မထည့်ဘဲ
+      render ထဲမှာပဲ တွက်ပါ။ အဲဒီအခါ ကိုက်အောင် ထိန်းစရာ ဘာမှ မကျန်တော့ပါဘူး။
+      [[mark:draw-ids]] အလားတူပဲ၊ ရွေးထားတဲ့ ဟင်းလျာကို မှတ်ချင်ရင် object ကို
+      copy မမှတ်ဘဲ၊ id ကိုပဲ မှတ်ပါ။ menu ထဲက ဟင်းလျာ ပြောင်းသွားရင် copy က
+      အဟောင်းအတိုင်း ကျန်နေပေမယ့်၊ id ကတော့ အစစ်ကို အမြဲ ညွှန်ပါတယ်။
+    sources:
+      - title: "React — Choosing the State Structure"
+        url: "https://react.dev/learn/choosing-the-state-structure"
+    actions:
+      - id: open-derived-board
+        type: whiteboard.apply
+        at: { mark: open-derived-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [derived-title]
+      - id: draw-duplicate
+        type: whiteboard.apply
+        at: { mark: draw-duplicate }
+        upsertIds: [dup-box, dup-line-1, dup-line-2, dup-line-3, dup-strike]
+        drawMs: 2200
+      - id: draw-derived
+        type: whiteboard.apply
+        at: { mark: draw-derived }
+        upsertIds: [derived-box, derived-line-1, derived-line-2, derived-line-3, derived-check]
+        drawMs: 2200
+      - id: draw-ids
+        type: whiteboard.apply
+        at: { mark: draw-ids }
+        upsertIds: [ids-box, ids-line-1, ids-line-2]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 6
+  # TableNote.jsx is pinned empty and nothing imports it yet.
+  - id: table-note
+    chapter: "Form နဲ့ object state"
+    narration: >
+      [[mark:close-derived-board]] အခု စားပွဲ တစ်ခုစီရဲ့ မှတ်ချက် form ပါ။
+      [[mark:open-tablenote]] TableNote ဖိုင်ကလည်း အလွတ်ပါပဲ။
+      [[mark:type-note-state]] နာမည်နဲ့ မှတ်ချက်က မှတ်ချက် တစ်ခုတည်းရဲ့
+      အပိုင်းတွေ ဖြစ်ပြီး အတူ သိမ်းရလို့၊ object တစ်ခုတည်းနဲ့ state ထဲ
+      ထားပါတယ်။ ဒုတိယ state ကတော့ သိမ်းပြီးပြီလား ဆိုတာ မှတ်ထားပါတယ်။
+      [[mark:type-note-submit]] form ဆိုတာ input တွေ စုပြီး submit လုပ်လို့
+      ရတဲ့ HTML အပိုင်းပါ။ submit လုပ်ရင် run မယ့် handler ထဲမှာ
+      preventDefault ကို အရင် ခေါ်ပါတယ်။ မဟုတ်ရင် browser က page ကို အစကနေ
+      ပြန်ဖွင့်လို့ state အကုန် ပျောက်မှာပါ။ ပြီးမှ သိမ်းပြီးပြီလို့ မှတ်ပါတယ်။
+      [[mark:type-note-form]] form မှာ အဲဒီ handler ကို ချိတ်ပြီး၊ စားပွဲ
+      နံပါတ် ခေါင်းစဉ်နဲ့ နာမည် input ထည့်ပါတယ်။ label က input ကို သူ့ထဲမှာ
+      ထည့်ထားလို့၊ ဒီတစ်ခါ id ချိတ်စရာ မလိုပါဘူး။ သူ့ value က object ထဲက
+      နာမည် field ကနေ လာပါတယ်။ [[mark:type-note-name]] အခု သူ့ onChange ပါ။
+      array လိုပဲ object အဟောင်းကို မပြင်ဘဲ၊ object အသစ် ဆောက်ပါတယ်။ အစက်
+      သုံးစက် spread က အဟောင်းထဲက field အားလုံးကို ကူးပြီး၊ နာမည်ကိုပဲ
+      အသစ်နဲ့ လဲတာပါ။ [[mark:select-spread]] ဒီ copy မပါရင် နာမည်
+      ရိုက်လိုက်တာနဲ့ မှတ်ချက် ပျောက်သွားမှာပါ။ [[mark:type-note-rest]]
+      မှတ်ချက် input ကလည်း သူ့ field အတွက် ဒီအတိုင်းပါပဲ။ ပြီးရင် သိမ်းမယ့်
+      ခလုတ်ပါ။ form ထဲက ခလုတ်ကို နှိပ်ရင် form က submit ဖြစ်ပြီး ခုနက handler
+      run လို့၊ ခလုတ်မှာ onClick ထည့်စရာ မလိုပါဘူး။ နောက်ဆုံးက သိမ်းပြီးမှ
+      ပေါ်လာမယ့် စာကြောင်းပါ။ spread က အပေါ်ယံ တစ်ထပ်ပဲ ကူးလို့၊ object ထဲမှာ
+      object ထပ်ပါနေရင် ပြောင်းမယ့် အထပ်တိုင်းကို copy ကူးရပါတယ်။
+    sources:
+      - title: "React — Updating Objects in State"
+        url: "https://react.dev/learn/updating-objects-in-state"
+      - title: "React — Responding to Events: preventing default behavior"
+        url: "https://react.dev/learn/responding-to-events#preventing-default-behavior"
+      - title: "MDN — HTMLFormElement: submit event"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/submit_event"
+    actions:
+      - id: close-derived-board
+        type: whiteboard.apply
+        at: { mark: close-derived-board }
+        open: false
+      - id: open-tablenote
+        type: workspace.openFile
+        at: { mark: open-tablenote }
+        path: src/TableNote.jsx
+      - id: type-note-state
+        type: editor.type
+        at: { mark: type-note-state }
+        cadence: line-by-line
+        target: { file: src/TableNote.jsx, after: "", occurrence: 1 }
+        text: "import { useState } from \"react\";\n\nexport default function TableNote({ tableId }) {\n  const [info, setInfo] = useState({ name: \"\", note: \"\" });\n  const [saved, setSaved] = useState(false);\n"
+      - id: type-note-submit
+        type: editor.type
+        at: { mark: type-note-submit }
+        cadence: line-by-line
+        target:
+          {
+            file: src/TableNote.jsx,
+            after: "  const [saved, setSaved] = useState(false);\n",
+            occurrence: 1,
+          }
+        text: "\n  function handleSubmit(e) {\n    e.preventDefault();\n    setSaved(true);\n  }\n"
+      - id: type-note-form
+        type: editor.type
+        at: { mark: type-note-form }
+        cadence: line-by-line
+        target: { file: src/TableNote.jsx, after: "    setSaved(true);\n  }\n", occurrence: 1 }
+        text: "\n  return (\n    <form className=\"card\" data-testid=\"table-note\" onSubmit={handleSubmit}>\n      <h2>စားပွဲ {tableId}</h2>\n      <label>\n        နာမည်\n        <input\n          data-testid=\"note-name\"\n          value={info.name}\n          "
+      - id: type-note-name
+        type: editor.type
+        at: { mark: type-note-name }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/TableNote.jsx,
+            after: "          value={info.name}\n          ",
+            occurrence: 1,
+          }
+        text: "onChange={(e) => setInfo({ ...info, name: e.target.value })}\n"
+      - id: select-spread
+        type: editor.select
+        at: { mark: select-spread }
+        target:
+          { file: src/TableNote.jsx, text: "{ ...info, name: e.target.value }", occurrence: 1 }
+      - id: type-note-rest
+        type: editor.type
+        at: { mark: type-note-rest }
+        cadence: line-by-line
+        target: { file: src/TableNote.jsx, after: "name: e.target.value })}\n", occurrence: 1 }
+        text: "        />\n      </label>\n      <label>\n        မှတ်ချက်\n        <input\n          data-testid=\"note-text\"\n          value={info.note}\n          onChange={(e) => setInfo({ ...info, note: e.target.value })}\n        />\n      </label>\n      <button data-testid=\"save-note\">သိမ်းမယ်</button>\n      {saved && <p data-testid=\"note-saved\">{info.name} ရဲ့ မှတ်ချက် သိမ်းပြီးပါပြီ</p>}\n    </form>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 7
+  # Whiteboard aside only: bubbling and stopPropagation are not typed.
+  - id: event-bubbling
+    narration: >
+      [[mark:open-bubble-board]] preventDefault ကို event ရဲ့ တခြား method နဲ့
+      ရောတတ်လို့၊ နှစ်ခုလုံး board ပေါ် ဆွဲပြပါမယ်။ [[mark:draw-bubble-boxes]]
+      ဒီမှာ ခလုတ်က form ထဲမှာ ရှိပြီး၊ form ကတော့ div ထဲမှာ ရှိပါတယ်။
+      [[mark:draw-bubble-order]] ခလုတ် နှိပ်ရင် သူ့ handler အရင် run ပြီး၊
+      event က အပေါ် တက်လို့ form၊ ပြီးရင် div ရဲ့ handler ပါ run ပါတယ်။ ဒါကို
+      bubbling လို့ ခေါ်ပါတယ်။ [[mark:draw-stop]] stopPropagation က အဲဒီ
+      တက်တာကို ရပ်ပေးတဲ့အတွက်၊ form နဲ့ div က ဒီ click ကို မသိတော့ပါဘူး။
+      [[mark:draw-prevent]] preventDefault ကတော့ အပေါ် တက်တာကို မရပ်ပါဘူး။
+      browser ရဲ့ မူလ အလုပ်ကိုပဲ ရပ်တာပါ၊ ဥပမာ submit လုပ်ရင် page
+      ပြန်ပွင့်တာမျိုးပါ။ ဒီ နှစ်ခုက မဆိုင်ပါဘူး။
+    sources:
+      - title: "React — Responding to Events: event propagation"
+        url: "https://react.dev/learn/responding-to-events#event-propagation"
+      - title: "MDN — Event: stopPropagation() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Event/stopPropagation"
+      - title: "MDN — Event: preventDefault() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Event/preventDefault"
+    actions:
+      - id: open-bubble-board
+        type: whiteboard.apply
+        at: { mark: open-bubble-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [bubble-title]
+      - id: draw-bubble-boxes
+        type: whiteboard.apply
+        at: { mark: draw-bubble-boxes }
+        upsertIds:
+          [
+            bubble-div,
+            bubble-div-label,
+            bubble-form,
+            bubble-form-label,
+            bubble-button,
+            bubble-button-label,
+          ]
+        drawMs: 2200
+      - id: draw-bubble-order
+        type: whiteboard.apply
+        at: { mark: draw-bubble-order }
+        upsertIds: [bubble-order-1, bubble-order-2, bubble-order-3]
+        drawMs: 1500
+      - id: draw-stop
+        type: whiteboard.apply
+        at: { mark: draw-stop }
+        upsertIds: [stop-box, stop-line-1, stop-line-2]
+        drawMs: 1400
+      - id: draw-prevent
+        type: whiteboard.apply
+        at: { mark: draw-prevent }
+        upsertIds: [prevent-box, prevent-line-1, prevent-line-2]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 8
+  # Wire TableNote into App (block inserts), then show the bug live.
+  - id: wire-table
+    narration: >
+      [[mark:close-bubble-board]] App ဖိုင်ထဲ ပြန်သွားပြီး၊ form ကို page ပေါ်
+      တင်ကြည့်ရအောင်။ [[mark:type-table-import]] import ကို အရင် ထည့်ပါတယ်။
+      [[mark:type-table-state]] ပြီးရင် ရွေးထားတဲ့ စားပွဲအတွက် state တစ်ခုပါ၊
+      စားပွဲ 1 ကနေ စပါမယ်။ [[mark:type-table-jsx]] search box အပေါ်မှာ စားပွဲ
+      ခလုတ် သုံးခုနဲ့၊ စားပွဲ နံပါတ်ကို prop အနေနဲ့ ရတဲ့ TableNote ထည့်ပါတယ်။
+      [[mark:input-name]] စားပွဲ 1 မှာ နာမည် ရိုက်ကြည့်ရအောင်၊
+      [[mark:input-note]] မီးဖိုချောင်အတွက် မှတ်ချက်ပါ။ [[mark:click-save]]
+      သိမ်းလိုက်ရအောင်။ သိမ်းပြီးပါပြီ ဆိုတဲ့ စာကြောင်း ပေါ်လာပြီး၊
+      preventDefault ခေါ်ထားလို့ page လည်း ပြန်မပွင့်ပါဘူး။ [[mark:click-table-2]] အခု စားပွဲ 2 ကို
+      ပြောင်းကြည့်ရအောင်။ ခေါင်းစဉ်က စားပွဲ 2 ဖြစ်ပေမယ့်၊ စားပွဲ 1 ရဲ့
+      နာမည်နဲ့ မှတ်ချက်က ကျန်နေပါသေးတယ်။ ဒါက bug ပါ၊ စားပွဲ အသစ်ဆိုရင် form
+      အလွတ်နဲ့ စသင့်ပါတယ်။
+    sources:
+      - title: "React — Responding to Events: preventing default behavior"
+        url: "https://react.dev/learn/responding-to-events#preventing-default-behavior"
+      - title: "React — Preserving and Resetting State"
+        url: "https://react.dev/learn/preserving-and-resetting-state"
+    actions:
+      - id: close-bubble-board
+        type: whiteboard.apply
+        at: { mark: close-bubble-board }
+        open: false
+      - id: open-app-again
+        type: workspace.openFile
+        at: { mark: close-bubble-board, offsetMs: 700 }
+        path: src/App.jsx
+      - id: type-table-import
+        type: editor.type
+        at: { mark: type-table-import }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import SearchBox from \"./SearchBox.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import TableNote from \"./TableNote.jsx\";\n"
+      - id: type-table-state
+        type: editor.type
+        at: { mark: type-table-state }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "  const [mildOnly, setMildOnly] = useState(false);\n",
+            occurrence: 1,
+          }
+        text: "  const [tableId, setTableId] = useState(1);\n"
+      - id: type-table-jsx
+        type: editor.type
+        at: { mark: type-table-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <div className=\"row\">\n        {[1, 2, 3].map((n) => (\n          <button\n            key={n}\n            data-testid={`table-${n}`}\n            className={n === tableId ? \"\" : \"secondary\"}\n            onClick={() => setTableId(n)}\n          >\n            စားပွဲ {n}\n          </button>\n        ))}\n      </div>\n      <TableNote tableId={tableId} />\n"
+      - id: expect-table-1
+        type: expect.preview
+        at: { mark: input-name }
+        timeoutMs: 4000
+        target: { by: testId, value: table-note }
+        textContains: "စားပွဲ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: input-name
+        type: preview.input
+        at: { mark: input-name, offsetMs: 700 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-name }
+        value: "မောင်မောင်"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: input-note
+        type: preview.input
+        at: { mark: input-note }
+        timeoutMs: 5000
+        target: { by: testId, value: note-text }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-save
+        type: preview.click
+        at: { mark: click-save }
+        timeoutMs: 5000
+        target: { by: testId, value: save-note }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-saved
+        type: expect.preview
+        at: { afterAction: click-save }
+        timeoutMs: 4000
+        target: { by: testId, value: note-saved }
+        textContains: "မောင်မောင် ရဲ့ မှတ်ချက် သိမ်းပြီးပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-table-2
+        type: preview.click
+        at: { mark: click-table-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: table-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-heading-table-2
+        type: expect.preview
+        at: { afterAction: click-table-2 }
+        timeoutMs: 4000
+        target: { by: testId, value: table-note }
+        textContains: "စားပွဲ 2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-name-kept
+        type: expect.preview
+        at: { afterAction: expect-heading-table-2 }
+        timeoutMs: 4000
+        target: { by: testId, value: note-name }
+        value: "မောင်မောင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 9
+  # Why the note stayed (position in the tree), then the one-prop fix.
+  - id: position-and-key
+    chapter: "Key က state ကို ဘယ်အချိန် ပြန်စလဲ"
+    narration: >
+      [[mark:open-position-board]] ဘာလို့ ဒီလို ဖြစ်ရတာလဲ။
+      [[mark:draw-position-tree]] React က state ကို component function ထဲမှာ
+      မသိမ်းပါဘူး။ component သစ်ပင်ထဲက အဲဒီ component ရဲ့ နေရာမှာ သိမ်းတာပါ။
+      [[mark:draw-same-slot]] စားပွဲ ပြောင်းတာက TableNote အတူတူကို နေရာ
+      အတူတူမှာပဲ prop အသစ်နဲ့ ပြန် render လုပ်တာမို့၊ state က အဲဒီအတိုင်း
+      ကျန်နေတာပါ။ [[mark:draw-key-slot]] key က အဲဒါကို ပြောင်းပေးပါတယ်။ စားပွဲ
+      နံပါတ်ကို key ပေးလိုက်ရင်၊ key ပြောင်းတိုင်း React အတွက် component အသစ်
+      ဖြစ်သွားလို့၊ state အဟောင်း ပစ်ပြီး အစကနေ ပြန်စပါတယ်။
+      [[mark:close-position-board]] ထည့်ကြည့်ရအောင်။ [[mark:type-key]]
+      TableNote tag မှာ key တစ်ခု ထပ်ထည့်ရုံပါ။ [[mark:select-key]] ဒီ key
+      ကတော့ စားပွဲ နံပါတ်ပါ။ key ကို TableNote က prop အနေနဲ့ မရလို့၊ စားပွဲ
+      နံပါတ်ကို tableId နဲ့ သီးသန့် ပေးထားရတာပါ။ [[mark:input-name-again]] ဖိုင် ပြင်လို့ page
+      ပြန်ပွင့်သွားတဲ့အတွက်၊ စားပွဲ 1 မှာ နာမည် ပြန်ရိုက်ရအောင်။
+      [[mark:click-table-2-again]] ပြီးရင် စားပွဲ 2 ကို ပြောင်းလိုက်ပါမယ်။
+      ဒီတစ်ခါတော့ စားပွဲ 2 က form အလွတ်နဲ့ စပါပြီ။
+      [[mark:click-table-1-again]] စားပွဲ 1 ပြန်သွားတော့လည်း နာမည်
+      ပျောက်သွားပါပြီ။ key ပြန်ပြောင်းလို့ ဒါလည်း component အသစ် ဖြစ်ပြန်တာပါ။
+      စားပွဲတိုင်း မှတ်ချက် သိမ်းထားချင်ရင်၊ state ကို App ထဲ ရွှေ့ပြီး စားပွဲ
+      နံပါတ်နဲ့ သိမ်းရပါမယ်။
+    sources:
+      - title: "React — Preserving and Resetting State"
+        url: "https://react.dev/learn/preserving-and-resetting-state"
+      - title: "React — Resetting state with a key"
+        url: "https://react.dev/learn/preserving-and-resetting-state#option-2-resetting-state-with-a-key"
+    actions:
+      - id: open-position-board
+        type: whiteboard.apply
+        at: { mark: open-position-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [pos-title]
+      - id: draw-position-tree
+        type: whiteboard.apply
+        at: { mark: draw-position-tree }
+        upsertIds: [pos-app, pos-app-label, pos-arrow, pos-slot, pos-slot-label, pos-slot-state]
+        drawMs: 2200
+      - id: draw-same-slot
+        type: whiteboard.apply
+        at: { mark: draw-same-slot }
+        upsertIds: [pos-same-box, pos-same-line-1, pos-same-line-2]
+        drawMs: 1600
+      - id: draw-key-slot
+        type: whiteboard.apply
+        at: { mark: draw-key-slot }
+        upsertIds: [pos-key-box, pos-key-line-1, pos-key-line-2]
+        drawMs: 1600
+      - id: close-position-board
+        type: whiteboard.apply
+        at: { mark: close-position-board }
+        open: false
+      - id: type-key
+        type: editor.type
+        at: { mark: type-key }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <TableNote", occurrence: 1 }
+        text: " key={tableId}"
+      - id: select-key
+        type: editor.select
+        at: { mark: select-key }
+        target: { file: src/App.jsx, text: "key={tableId}", occurrence: 1 }
+      - id: expect-reloaded-table-1
+        type: expect.preview
+        at: { mark: input-name-again }
+        timeoutMs: 4000
+        target: { by: testId, value: table-note }
+        textContains: "စားပွဲ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: input-name-again
+        type: preview.input
+        at: { mark: input-name-again, offsetMs: 700 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-name }
+        value: "မောင်မောင်"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-table-2-again
+        type: preview.click
+        at: { mark: click-table-2-again }
+        timeoutMs: 5000
+        target: { by: testId, value: table-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-fresh-heading
+        type: expect.preview
+        at: { afterAction: click-table-2-again }
+        timeoutMs: 4000
+        target: { by: testId, value: table-note }
+        textContains: "စားပွဲ 2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-fresh-name
+        type: expect.preview
+        at: { afterAction: expect-fresh-heading }
+        timeoutMs: 4000
+        target: { by: testId, value: note-name }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-table-1-again
+        type: preview.click
+        at: { mark: click-table-1-again }
+        timeoutMs: 5000
+        target: { by: testId, value: table-1 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-back-heading
+        type: expect.preview
+        at: { afterAction: click-table-1-again }
+        timeoutMs: 4000
+        target: { by: testId, value: table-note }
+        textContains: "စားပွဲ 1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-back-name-empty
+        type: expect.preview
+        at: { afterAction: expect-back-heading }
+        timeoutMs: 4000
+        target: { by: testId, value: note-name }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 10
+  # Declarative UI states (bridge to lesson 10's Actions), recap, final files.
+  - id: form-states-recap
+    narration: >
+      [[mark:open-states-board]] နောက်ဆုံးတစ်ခုပါ။ [[mark:draw-states]] ဥပမာ
+      order form တစ်ခုဆိုရင် အခြေအနေ လေးခုကြား ကူးပြောင်းပါတယ်။ typing၊ submitting၊
+      ပြီးရင် success ဒါမှမဟုတ် error ပါ။ [[mark:draw-states-rule]] React မှာ
+      အခြေအနေ တစ်ခုစီမှာ ဘာ ပြမလဲ ကြိုရေးထားပြီး၊ state ပြောင်းရုံနဲ့ တစ်ခုကနေ
+      တစ်ခု ကူးပါတယ်။ page ကို တစ်ဆင့်ချင်း ကိုယ်တိုင် လိုက်ပြင်စရာ မလိုပါဘူး။
+      [[mark:draw-states-next]] lesson 10 မှာ submitting အပိုင်းကို Action
+      တွေက ကိုယ့်အစား လုပ်ပေးပါမယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊
+      controlled input က တန်ဖိုးကို state ကနေ ယူပြီး၊ မျှသုံးတဲ့ state က
+      အနီးဆုံး parent မှာ နေပါတယ်။ တွက်လို့ ရတာကို မသိမ်းသလို၊ object ကို
+      မပြင်ဘဲ copy ကူးပါတယ်။ key က state ကို ဘယ်အချိန် ပြန်စမလဲ ဆုံးဖြတ်ပါတယ်။
+      နောက် lesson မှာတော့ lesson 3 က order logic ကို reducer တစ်ခုထဲ စုပြီး၊
+      context နဲ့ ဘယ် component ကမဆို ယူသုံးနိုင်အောင် လုပ်သွားပါမယ်။
+    sources:
+      - title: "React — Reacting to Input with State"
+        url: "https://react.dev/learn/reacting-to-input-with-state"
+      - title: "React — Managing State"
+        url: "https://react.dev/learn/managing-state"
+    actions:
+      - id: open-states-board
+        type: whiteboard.apply
+        at: { mark: open-states-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [st-title]
+      - id: draw-states
+        type: whiteboard.apply
+        at: { mark: draw-states }
+        upsertIds:
+          [
+            st-typing,
+            st-typing-label,
+            st-arrow-1,
+            st-submitting,
+            st-submitting-label,
+            st-arrow-2,
+            st-success,
+            st-success-label,
+            st-error,
+            st-error-label,
+          ]
+        drawMs: 3000
+      - id: draw-states-rule
+        type: whiteboard.apply
+        at: { mark: draw-states-rule }
+        upsertIds: [st-rule-1, st-rule-2]
+        drawMs: 1600
+      - id: draw-states-next
+        type: whiteboard.apply
+        at: { mark: draw-states-next }
+        upsertIds: [st-next-box, st-next]
+        drawMs: 900
+      - id: expect-app-final
+        type: expect.file
+        at: { mark: recap }
+        path: src/App.jsx
+        contains: "      <TableNote key={tableId} tableId={tableId} />\n      <SearchBox\n"
+      - id: expect-app-filter
+        type: expect.file
+        at: { afterAction: expect-app-final }
+        path: src/App.jsx
+        contains: "<MenuList dishes={menu.filter(matches)} />"
+      - id: expect-searchbox-final
+        type: expect.file
+        at: { afterAction: expect-app-filter }
+        path: src/SearchBox.jsx
+        contains: "        value={query}\n        onChange={(e) => onQueryChange(e.target.value)}\n"
+      - id: expect-tablenote-final
+        type: expect.file
+        at: { afterAction: expect-searchbox-final }
+        path: src/TableNote.jsx
+        contains: "onChange={(e) => setInfo({ ...info, note: e.target.value })}"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
