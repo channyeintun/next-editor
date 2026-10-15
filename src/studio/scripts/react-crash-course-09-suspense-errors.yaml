@@ -1034,7 +1034,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1324,7 +1323,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b2-title]
       - id: draw-in-render
@@ -1592,7 +1590,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-routes }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title]
       - id: draw-caught
@@ -1849,7 +1846,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-recap }
         open: true
-        maximized: true
         upsertIds: [b3-title]
       - id: draw-not-caught
         type: whiteboard.apply
