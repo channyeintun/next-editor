@@ -1175,7 +1175,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-props-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [pb-title]
       - id: draw-before
@@ -1294,7 +1293,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-children-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [cb-title, cb-frame, cb-frame-label, cb-hole, cb-hole-label]
         drawMs: 1800
@@ -1475,7 +1473,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-map-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [mb-title]
       - id: draw-map
@@ -1790,7 +1787,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-purity-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [pu-title]
       - id: draw-recipe
