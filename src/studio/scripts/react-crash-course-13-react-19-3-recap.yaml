@@ -1533,7 +1533,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1798,7 +1797,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: draw-ctx-before }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title, b3-before-label, b3-before]
         drawMs: 2000
@@ -1987,7 +1985,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: draw-frag-title }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b5-title]
       - id: draw-frag-div
@@ -2160,7 +2157,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: draw-tt-title }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b6-title]
       - id: draw-tt-rule
