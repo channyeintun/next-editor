@@ -998,7 +998,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: []
       - id: draw-intro-title
@@ -1433,7 +1432,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-jsx-board }
         open: true
-        maximized: true
         clear: true
         upsertIds: [c-title]
         drawMs: 900
