@@ -1,0 +1,2008 @@
+# React crash course 3 (Burmese): state and events.
+#
+# NARRATION IS AN ENGLISH DRAFT. A Burmese writer converts it span by span
+# (the text between two marks) using DESIGN.md next to this file and the
+# course GLOSSARY.md. Every mark already sits where its action begins, at a
+# sentence end; keep each mark between the same two ideas when translating.
+#
+# Start state = lesson 2's end state (App maps menu.js into DishCard, DishCard
+# wraps its content in Card with spicy / sold-out badges) plus an EMPTY
+# src/OrderPanel.jsx that this lesson types while nothing imports it.
+#
+# Editing discipline (insert-only, live Vite without the React plugin, so every
+# .jsx edit fully reloads the preview and resets state):
+# - DishCard.jsx and App.jsx are imported by the running app, so every edit to
+#   them is a `block` insert of complete lines (import line before any use,
+#   handler before the JSX that names it) or an atomic mid-line insert
+#   (", onAdd" into the props, " onAdd={handleAdd}" into the DishCard tag).
+# - OrderPanel.jsx is typed keystroke by keystroke (head) and line by line
+#   (markup) while unimported, then wired in with two blocks: import, usage.
+# - Every click that follows an edit is guarded by an expect.preview first,
+#   because the edit reloaded the page — and the narration says so once (scene
+#   snapshot), since the reload also sends every card's likes back to 0.
+# - The per-card counter is a like counter (❤), so it never competes with the
+#   order count; the two "+3" buttons are labelled က and ခ (A and B).
+#
+# Gates:
+#   bun scripts/studio-director.ts <this file>
+#   bun <course>/harness/compile-check.ts <this file>
+#   bun <course>/harness/verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-03-state-events
+  title: "React crash course 3: State နဲ့ event"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React State and Events
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+        import DishCard from "./DishCard.jsx";
+        import { menu } from "./menu.js";
+
+        export default function App() {
+          const available = menu.filter((dish) => !dish.soldOut).length;
+
+          return (
+            <main className="page">
+              <header className="header">
+                <Header />
+              </header>
+              <p className="muted" data-testid="summary">
+                {available > 0 ? `${available} မျိုး ရနိုင်ပါတယ်` : "ဒီနေ့ ကုန်သွားပါပြီ"}
+              </p>
+              <section className="menu">
+                {menu.map((dish) => <DishCard key={dish.id} {...dish} />)}
+              </section>
+            </main>
+          );
+        }
+      src/Header.jsx: |
+        const shopName = "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်";
+        const openHours = "မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ";
+
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">{shopName}</h1>
+              <p className="muted">{openHours}</p>
+            </>
+          );
+        }
+      src/Card.jsx: |
+        export default function Card({ children }) {
+          return <div className="card">{children}</div>;
+        }
+      src/DishCard.jsx: |
+        import Card from "./Card.jsx";
+
+        export default function DishCard({ id, name, price, spicy = false, soldOut = false }) {
+          return (
+            <Card>
+              <div className="row" data-testid={`dish-card-${id}`}>
+                <h3>{name}</h3>
+                {spicy && <span className="badge warn">စပ်</span>}
+                {soldOut && <span className="badge">ကုန်ပြီ</span>}
+                <span className="price">{price.toLocaleString("en-US")} ကျပ်</span>
+              </div>
+            </Card>
+          );
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/OrderPanel.jsx: ""
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lessons 1–2: header, menu and dish cards */
+        .header {
+          flex-wrap: wrap;
+          row-gap: 0;
+        }
+
+        .menu {
+          display: grid;
+          gap: 14px;
+        }
+
+        .price {
+          margin-left: auto;
+          font-weight: 600;
+        }
+
+        /* Lesson 3: compact buttons in the order rows */
+        .order-row button {
+          padding: 2px 12px;
+        }
+  whiteboardAssets:
+    # ---------------------------------------------------------------- Board A
+    # A plain variable versus state.
+    - id: a-title
+      kind: text
+      x: 300
+      y: 165
+      width: 600
+      height: 50
+      text: "State ဆိုတာ component ရဲ့ မှတ်ဉာဏ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: a-let-box
+      kind: rectangle
+      x: 270
+      y: 250
+      width: 370
+      height: 280
+      strokeColor: "#e03131"
+    - id: a-let-code
+      kind: text
+      x: 300
+      y: 270
+      width: 220
+      height: 40
+      text: "let likes = 0"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: a-let-l1
+      kind: text
+      x: 300
+      y: 335
+      width: 320
+      height: 40
+      text: "ခေါ်တိုင်း 0 ကနေ ပြန်စ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-let-l2
+      kind: text
+      x: 300
+      y: 395
+      width: 200
+      height: 40
+      text: "React က မသိ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-let-l3
+      kind: text
+      x: 300
+      y: 455
+      width: 230
+      height: 40
+      text: "screen မပြောင်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-let-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 270
+      width: 232
+      height: 40
+      strokeColor: "#e03131"
+    - id: a-state-box
+      kind: rectangle
+      x: 700
+      y: 250
+      width: 390
+      height: 280
+      strokeColor: "#2f9e44"
+    - id: a-state-code
+      kind: text
+      x: 730
+      y: 270
+      width: 200
+      height: 40
+      text: "useState(0)"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: a-state-l1
+      kind: text
+      x: 730
+      y: 335
+      width: 300
+      height: 40
+      text: "React က မှတ်ထားပေး"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-state-l2
+      kind: text
+      x: 730
+      y: 395
+      width: 320
+      height: 40
+      text: "set လုပ်ရင် ပြန် render"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-state-l3
+      kind: text
+      x: 730
+      y: 455
+      width: 210
+      height: 40
+      text: "screen ပြောင်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-state-check
+      kind: freedraw
+      stroke: check
+      x: 990
+      y: 450
+      width: 60
+      height: 45
+      strokeColor: "#2f9e44"
+    # ---------------------------------------------------------------- Board B
+    # Trigger -> render -> commit -> paint, as a restaurant.
+    - id: b-title
+      kind: text
+      x: 300
+      y: 165
+      width: 470
+      height: 50
+      text: "Click ပြီးရင် ဘာ ဖြစ်လဲ"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: b-trigger-box
+      kind: rectangle
+      x: 270
+      y: 240
+      width: 230
+      height: 120
+      strokeColor: "#f08c00"
+    - id: b-trigger-name
+      kind: text
+      x: 295
+      y: 255
+      width: 140
+      height: 40
+      text: "Trigger"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b-trigger-verb
+      kind: text
+      x: 295
+      y: 305
+      width: 140
+      height: 40
+      text: "မှာတယ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-trigger-note-1
+      kind: text
+      x: 275
+      y: 385
+      width: 220
+      height: 40
+      text: "state ပြောင်းရင်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-trigger-note-2
+      kind: text
+      x: 275
+      y: 430
+      width: 220
+      height: 40
+      text: "app စတုန်းလည်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-arrow-1
+      kind: freedraw
+      stroke: arrow-right
+      x: 508
+      y: 285
+      width: 45
+      height: 30
+      strokeColor: "#1e1e1e"
+    - id: b-render-box
+      kind: rectangle
+      x: 560
+      y: 240
+      width: 230
+      height: 120
+      strokeColor: "#1971c2"
+    - id: b-render-name
+      kind: text
+      x: 585
+      y: 255
+      width: 140
+      height: 40
+      text: "Render"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b-render-verb
+      kind: text
+      x: 585
+      y: 305
+      width: 150
+      height: 40
+      text: "ချက်တယ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-render-note-1
+      kind: text
+      x: 565
+      y: 385
+      width: 220
+      height: 40
+      text: "component ကို"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-render-note-2
+      kind: text
+      x: 565
+      y: 430
+      width: 220
+      height: 40
+      text: "ပြန်ခေါ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-arrow-2
+      kind: freedraw
+      stroke: arrow-right
+      x: 798
+      y: 285
+      width: 45
+      height: 30
+      strokeColor: "#1e1e1e"
+    - id: b-commit-box
+      kind: rectangle
+      x: 850
+      y: 240
+      width: 230
+      height: 120
+      strokeColor: "#2f9e44"
+    - id: b-commit-name
+      kind: text
+      x: 875
+      y: 255
+      width: 140
+      height: 40
+      text: "Commit"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b-commit-verb
+      kind: text
+      x: 875
+      y: 305
+      width: 160
+      height: 40
+      text: "ဟင်းချတယ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-commit-note-1
+      kind: text
+      x: 855
+      y: 385
+      width: 220
+      height: 40
+      text: "ကွာတာကိုပဲ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-commit-note-2
+      kind: text
+      x: 855
+      y: 430
+      width: 220
+      height: 40
+      text: "DOM မှာ ပြင်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-arrow-3
+      kind: freedraw
+      stroke: arrow-down
+      x: 950
+      y: 478
+      width: 30
+      height: 40
+      strokeColor: "#6741d9"
+    - id: b-paint-box
+      kind: rectangle
+      x: 560
+      y: 530
+      width: 520
+      height: 80
+      strokeColor: "#6741d9"
+    - id: b-paint
+      kind: text
+      x: 585
+      y: 548
+      width: 450
+      height: 40
+      text: "ပြီးမှ browser က paint လုပ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    # ---------------------------------------------------------------- Board C
+    # State as a snapshot (row 1), the updater queue (row 2).
+    - id: c-title
+      kind: text
+      x: 300
+      y: 165
+      width: 480
+      height: 50
+      text: "State က snapshot တစ်ခုပါ"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: c-frame
+      kind: rectangle
+      x: 270
+      y: 235
+      width: 250
+      height: 110
+      strokeColor: "#e03131"
+    - id: c-frame-label
+      kind: text
+      x: 295
+      y: 248
+      width: 180
+      height: 40
+      text: "likes = 0"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: c-frame-sub
+      kind: text
+      x: 295
+      y: 293
+      width: 180
+      height: 40
+      text: "ဒီ render"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-calls
+      kind: text
+      x: 565
+      y: 270
+      width: 330
+      height: 40
+      text: "0 + 1 ၊ 0 + 1 ၊ 0 + 1"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-result1
+      kind: text
+      x: 950
+      y: 270
+      width: 60
+      height: 40
+      text: "1"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: c-result1-circle
+      kind: freedraw
+      stroke: circle
+      x: 925
+      y: 255
+      width: 80
+      height: 70
+      strokeColor: "#e03131"
+    - id: c-queue-box
+      kind: rectangle
+      x: 270
+      y: 385
+      width: 280
+      height: 110
+      strokeColor: "#2f9e44"
+    - id: c-queue-label
+      kind: text
+      x: 290
+      y: 398
+      width: 240
+      height: 40
+      text: "prev => prev + 1"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: c-queue-sub
+      kind: text
+      x: 290
+      y: 443
+      width: 200
+      height: 40
+      text: "× 3 တန်းစီ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-steps
+      kind: text
+      x: 600
+      y: 420
+      width: 260
+      height: 40
+      text: "0 → 1 → 2 → 3"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-check
+      kind: freedraw
+      stroke: check
+      x: 910
+      y: 410
+      width: 60
+      height: 50
+      strokeColor: "#2f9e44"
+    - id: c-batch
+      kind: text
+      x: 280
+      y: 530
+      width: 600
+      height: 40
+      text: "batching: handler ပြီးမှ render တစ်ခါ"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: c-rule
+      kind: text
+      x: 280
+      y: 590
+      width: 660
+      height: 40
+      text: "တစ်ကြိမ်ထက် ပိုပြောင်းရင် updater function"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-rule-underline
+      kind: freedraw
+      stroke: underline
+      x: 280
+      y: 590
+      width: 660
+      height: 48
+      strokeColor: "#1971c2"
+    # ---------------------------------------------------------------- Board D
+    # Arrays in state: change in place (red) versus return a new array (green).
+    - id: d-title
+      kind: text
+      x: 300
+      y: 165
+      width: 480
+      height: 50
+      text: "Array state ကို ပြောင်းနည်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: d-bad-box
+      kind: rectangle
+      x: 270
+      y: 235
+      width: 360
+      height: 300
+      strokeColor: "#e03131"
+    - id: d-bad-head
+      kind: text
+      x: 295
+      y: 250
+      width: 280
+      height: 40
+      text: "မူရင်းကို ပြင်တယ်"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: d-bad-1
+      kind: text
+      x: 300
+      y: 310
+      width: 90
+      height: 40
+      text: "push"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-bad-1-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 310
+      width: 100
+      height: 40
+      strokeColor: "#e03131"
+    - id: d-bad-2
+      kind: text
+      x: 300
+      y: 365
+      width: 110
+      height: 40
+      text: "splice"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-bad-2-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 365
+      width: 120
+      height: 40
+      strokeColor: "#e03131"
+    - id: d-bad-3
+      kind: text
+      x: 300
+      y: 420
+      width: 210
+      height: 40
+      text: "sort / reverse"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-bad-3-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 420
+      width: 220
+      height: 40
+      strokeColor: "#e03131"
+    - id: d-bad-4
+      kind: text
+      x: 300
+      y: 475
+      width: 230
+      height: 40
+      text: "item.count = 2"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-bad-4-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 475
+      width: 240
+      height: 40
+      strokeColor: "#e03131"
+    - id: d-good-box
+      kind: rectangle
+      x: 690
+      y: 235
+      width: 400
+      height: 300
+      strokeColor: "#2f9e44"
+    - id: d-good-head
+      kind: text
+      x: 715
+      y: 250
+      width: 330
+      height: 40
+      text: "array အသစ် ပြန်ပေးတယ်"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: d-good-1
+      kind: text
+      x: 720
+      y: 310
+      width: 260
+      height: 40
+      text: "[...order, dish]"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-good-2
+      kind: text
+      x: 720
+      y: 365
+      width: 100
+      height: 40
+      text: "filter"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-good-3
+      kind: text
+      x: 720
+      y: 420
+      width: 260
+      height: 40
+      text: "copy ပြီးမှ sort"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-good-4
+      kind: text
+      x: 720
+      y: 475
+      width: 80
+      height: 40
+      text: "map"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-note
+      kind: text
+      x: 290
+      y: 575
+      width: 620
+      height: 40
+      text: "မူရင်းကို မပြင်ဘဲ array အသစ်နဲ့ လဲ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: d-note-underline
+      kind: freedraw
+      stroke: underline
+      x: 290
+      y: 575
+      width: 620
+      height: 48
+      strokeColor: "#6741d9"
+    # ---------------------------------------------------------------- Board E
+    # Rules of Hooks: React matches hooks by call order.
+    - id: e-title
+      kind: text
+      x: 300
+      y: 165
+      width: 420
+      height: 50
+      text: "Hook တွေရဲ့ စည်းကမ်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: e-good-head
+      kind: text
+      x: 290
+      y: 235
+      width: 320
+      height: 40
+      text: "render တိုင်း အစဉ်တူ"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: e-slot1
+      kind: rectangle
+      x: 280
+      y: 290
+      width: 360
+      height: 66
+      strokeColor: "#1971c2"
+    - id: e-slot1-text
+      kind: text
+      x: 300
+      y: 303
+      width: 300
+      height: 40
+      text: "1. useState → count"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-slot2
+      kind: rectangle
+      x: 280
+      y: 375
+      width: 360
+      height: 66
+      strokeColor: "#1971c2"
+    - id: e-slot2-text
+      kind: text
+      x: 300
+      y: 388
+      width: 300
+      height: 40
+      text: "2. useState → name"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-bad-head
+      kind: text
+      x: 710
+      y: 235
+      width: 330
+      height: 40
+      text: "if ထဲမှာ ခေါ်ရင်"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: e-bad-box
+      kind: rectangle
+      x: 700
+      y: 290
+      width: 390
+      height: 160
+      strokeColor: "#e03131"
+    - id: e-bad-l1
+      kind: text
+      x: 720
+      y: 305
+      width: 320
+      height: 40
+      text: "1 ကို ကျော်သွားရင်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-bad-l2
+      kind: text
+      x: 720
+      y: 352
+      width: 320
+      height: 40
+      text: "2 က 1 ရဲ့ state ကို ရ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-bad-l3
+      kind: text
+      x: 720
+      y: 399
+      width: 320
+      height: 40
+      text: "app က error နဲ့ ရပ်"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: e-why
+      kind: text
+      x: 290
+      y: 490
+      width: 700
+      height: 40
+      text: "React က hook ကို ခေါ်တဲ့ အစဉ်နဲ့ မှတ်တယ်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-rule
+      kind: text
+      x: 290
+      y: 560
+      width: 620
+      height: 40
+      text: "component ရဲ့ အပေါ်ဆုံးမှာပဲ ခေါ်ပါ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-rule-underline
+      kind: freedraw
+      stroke: underline
+      x: 290
+      y: 560
+      width: 620
+      height: 48
+      strokeColor: "#2f9e44"
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 3031
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: why-state
+    chapter: "State ဘာကြောင့် လိုလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson အဆုံးမှာ card တွေကို နှိပ်လို့ ဘာမှ မဖြစ်သေးပါဘူး။ ဒီ lesson မှာ card တိုင်းမှာ
+      like ခလုတ် ထည့်ပြီး၊ ဟင်းလျာ မှာလို့ ရတဲ့ order panel အထိ ရေးသွားမှာမို့၊ component က တန်ဖိုးကို
+      ဘယ်လို မှတ်ထားလဲ ဆိုတာကနေ စကြည့်ရအောင်။ [[mark:start-server]] အဲဒီကြားမှာ editor က package တွေ
+      install လုပ်ပြီး dev server စ run ထားပါလိမ့်မယ်။ [[mark:draw-let]] အရင်ဆုံး၊ သာမန် variable နဲ့
+      ဘာကြောင့် မရလဲ။ card တစ်ခုစီက like အရေအတွက်ကို component ထဲက let variable မှာ မှတ်ထားတယ် ဆိုပါစို့။
+      [[mark:let-resets]] React က card ကို ပြတိုင်း component ကို ပြန်ခေါ်လို့၊ အဲဒီ variable က ခေါ်တိုင်း
+      0 ကနေ ပြန်စပါတယ်။ [[mark:let-silent]] ပြီးတော့ click လုပ်လို့ အဲဒါ ပြောင်းသွားရင်လည်း React က
+      မသိလို့၊ screen ပေါ်မှာ အဟောင်းအတိုင်းပဲ ကျန်နေပါတယ်။ [[mark:draw-state]] ဒါကြောင့် React က
+      component ကို state ဆိုတဲ့ မှတ်ဉာဏ် ပေးထားပါတယ်။ [[mark:state-remembers]] useState ဆိုတဲ့ hook က
+      အဲဒီ တန်ဖိုးကို render ကြားမှာ မှတ်ထားပေးပါတယ်။ hook ဆိုတာ use နဲ့ စတဲ့ React ရဲ့ အထူး function
+      တွေပါ။ [[mark:state-rerenders]] useState က တန်ဖိုး ပြောင်းဖို့ function တစ်ခုလည်း ပေးပါတယ်။ အဲဒါ
+      ခေါ်ရင် React က component ကို ပြန်ခေါ်ပြီး အသစ်ကို ပြပါတယ်၊ ဒါကို ပြန် render လုပ်တယ်လို့ ခေါ်ပါတယ်။
+    sources:
+      - title: "State: A Component's Memory"
+        url: "https://react.dev/learn/state-a-components-memory"
+      - title: "useState"
+        url: "https://react.dev/reference/react/useState"
+    actions:
+      - id: wb-open-why
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: []
+      - id: wb-why-title
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [a-title]
+        drawMs: 1000
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wb-draw-let
+        type: whiteboard.apply
+        at: { mark: draw-let }
+        upsertIds: [a-let-box, a-let-code]
+        drawMs: 1200
+      - id: wb-let-resets
+        type: whiteboard.apply
+        at: { mark: let-resets }
+        upsertIds: [a-let-l1]
+        drawMs: 800
+      - id: wb-let-silent
+        type: whiteboard.apply
+        at: { mark: let-silent }
+        upsertIds: [a-let-l2, a-let-l3, a-let-strike]
+        drawMs: 1500
+      - id: wb-draw-state
+        type: whiteboard.apply
+        at: { mark: draw-state }
+        upsertIds: [a-state-box, a-state-code]
+        drawMs: 1200
+      - id: wb-state-remembers
+        type: whiteboard.apply
+        at: { mark: state-remembers }
+        upsertIds: [a-state-l1]
+        drawMs: 800
+      - id: wb-state-rerenders
+        type: whiteboard.apply
+        at: { mark: state-rerenders }
+        upsertIds: [a-state-l2, a-state-l3, a-state-check]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 2
+  - id: add-use-state
+    chapter: "Editor ထဲမှာ state ထည့်ကြည့်ရအောင်"
+    narration: >
+      ကဲ၊ ဟင်းလျာ card ဆီ သွားရအောင်။ [[mark:open-dish-card]] ဒါက ပြီးခဲ့တဲ့ lesson က DishCard ပါ။
+      [[mark:select-props]] ဒီ props တွေကို ကြည့်ပါ။ ဟင်းလျာ တစ်ခုကို ဒီကနေ ရပြီး၊ နာမည်၊ badge နဲ့
+      ဈေးနှုန်း ပြပါတယ်။ [[mark:open-preview]] preview ကို ဖွင့်ရအောင်။ card ငါးခု ပေါ်နေပေမယ့်၊ ခလုတ်
+      မပါသေးပါဘူး။ [[mark:type-import]] useState ကို အရင် import လုပ်ပါမယ်။ [[mark:type-state]] ပြီးတော့
+      component ရဲ့ အပေါ်ဆုံးမှာ သူ့ကို 0 နဲ့ ခေါ်ပါတယ်၊ အဲဒီ 0 က စစချင်း တန်ဖိုးပါ။ [[mark:select-state]]
+      ဒီ useState စာကြောင်းကို ကြည့်ပါ။ သူက နှစ်ခု ပြန်ပေးပါတယ်၊ လက်ရှိ တန်ဖိုး likes နဲ့၊ အဲဒါကို
+      ပြောင်းဖို့ ခေါ်ရမယ့် function setLikes ပါ။ [[mark:type-handler]] နောက်တစ်ဆင့်က event handler ပါ။
+      event ဆိုတာ ခလုတ် နှိပ်တာလို အဖြစ်အပျက် ဖြစ်ပြီး၊ event handler ဆိုတာ အဲဒါ ဖြစ်ရင် React က
+      ခေါ်ပေးမယ့် function ပါ။ နာမည်ကို handle နဲ့ စပြီး၊ likes ထက် တစ် ပိုတဲ့ တန်ဖိုးကို setLikes နဲ့
+      တောင်းပါတယ်။ [[mark:type-like-button]] ပြီးတော့ နှလုံးပုံနဲ့ like အရေအတွက် ပြမယ့် ခလုတ်ပါ။ [[mark:select-onclick]] ဒီ onClick ကို ကြည့်ပါ။ handleLike ကို ခေါ်တာ
+      မဟုတ်ဘဲ၊ function ကိုယ်တိုင်ကို ပေးတာပါ။ ဒီမှာ ခေါ်မိရင် click မှ မဟုတ်ဘဲ render တုန်းမှာတင် run
+      သွားပါမယ်။
+    sources:
+      - title: "Responding to Events"
+        url: "https://react.dev/learn/responding-to-events"
+      - title: "State: A Component's Memory"
+        url: "https://react.dev/learn/state-a-components-memory"
+      - title: "useState"
+        url: "https://react.dev/reference/react/useState"
+    actions:
+      - id: wb-close-why
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: wait-dev-server
+        type: runtime.waitForReady
+        at: { scene: start, offsetMs: 300 }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-dish-card
+        type: workspace.openFile
+        at: { mark: open-dish-card }
+        path: src/DishCard.jsx
+      - id: select-props
+        type: editor.select
+        at: { mark: select-props }
+        target:
+          file: src/DishCard.jsx
+          text: "{ id, name, price, spicy = false, soldOut = false }"
+          occurrence: 1
+      - id: open-preview
+        type: preview.open
+        at: { mark: open-preview }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-cards
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-card-mohinga }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-cards }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: ""
+          occurrence: 1
+        text: "import { useState } from \"react\";\n"
+      - id: type-state
+        type: editor.type
+        at: { mark: type-state }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "soldOut = false }) {\n"
+          occurrence: 1
+        text: "  const [likes, setLikes] = useState(0);\n\n"
+      - id: select-state
+        type: editor.select
+        at: { mark: select-state }
+        target:
+          file: src/DishCard.jsx
+          text: "const [likes, setLikes] = useState(0);"
+          occurrence: 1
+      - id: type-handler
+        type: editor.type
+        at: { mark: type-handler }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "  const [likes, setLikes] = useState(0);\n"
+          occurrence: 1
+        text: "\n  function handleLike() {\n    setLikes(likes + 1);\n  }\n"
+      - id: type-like-button
+        type: editor.type
+        at: { mark: type-like-button }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "        <span className=\"price\">{price.toLocaleString(\"en-US\")} ကျပ်</span>\n      </div>\n"
+          occurrence: 1
+        text: "      <div className=\"row\">\n        <button\n          className=\"secondary\"\n          data-testid={`like-${id}`}\n          onClick={handleLike}\n        >\n          ❤ {likes}\n        </button>\n      </div>\n"
+      - id: expect-like-button
+        type: expect.preview
+        at: { afterAction: type-like-button }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        textContains: "❤ 0"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-onclick
+        type: editor.select
+        at: { mark: select-onclick }
+        target:
+          file: src/DishCard.jsx
+          text: "onClick={handleLike}"
+          occurrence: 1
+
+  # ------------------------------------------------------------------ 3
+  - id: click-like
+    narration: >
+      ကဲ၊ စမ်းကြည့်ရအောင်။ [[mark:click-like-1]] ပထမ card ရဲ့ နှလုံးပုံကို နှိပ်လိုက်တော့ 1 ဖြစ်သွားပါပြီ။
+      [[mark:click-like-2]] ထပ်နှိပ်တော့ 2 ဖြစ်သွားပါပြီ။ [[mark:check-other-card]] ဒါပေမဲ့ ဒုတိယ card
+      ကတော့ 0 အတိုင်းပါပဲ။ card တစ်ခုစီက သီးခြား copy ဖြစ်ပြီး၊ ကိုယ်ပိုင် state ကိုယ်စီ ရှိလို့ပါ။
+    sources:
+      - title: "State is isolated and private"
+        url: "https://react.dev/learn/state-a-components-memory#state-is-isolated-and-private"
+    actions:
+      - id: click-like-1
+        type: preview.click
+        at: { mark: click-like-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: click-like-2
+        type: preview.click
+        at: { mark: click-like-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-like-two
+        type: expect.preview
+        at: { afterAction: click-like-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        textContains: "❤ 2"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: expect-other-zero
+        type: expect.preview
+        at: { mark: check-other-card }
+        timeoutMs: 5000
+        target: { by: testId, value: like-shan-noodles }
+        textContains: "❤ 0"
+        retry: { maxAttempts: 3, delayMs: 200 }
+
+  # ------------------------------------------------------------------ 4
+  - id: render-commit
+    chapter: "Click ပြီးရင် ဘာ ဖြစ်လဲ"
+    narration: >
+      ဒါဆို click နဲ့ ကိန်းဂဏန်း အသစ် ကြားမှာ ဘာတွေ ဖြစ်သွားလဲ ကြည့်ရအောင်။ စားသောက်ဆိုင် တစ်ဆိုင်လို
+      စဉ်းစားကြည့်ပါ။ [[mark:draw-trigger]] ပထမက trigger ပါ၊ ဧည့်သည်က ဟင်း မှာလိုက်တာပါ။ React မှာ trigger
+      က နှစ်မျိုးပဲ ရှိပါတယ်၊ app စစချင်း render လုပ်တာနဲ့၊ ခုနက click လို state ပြောင်းတာပါ။
+      [[mark:draw-render]] ဒုတိယက render ပါ၊ မီးဖိုချောင်က ချက်တာပါ။ screen မှာ ဘာ ပြရမလဲ တွက်ဖို့ React က
+      component ကို ပြန်ခေါ်ပါတယ်။ screen ပေါ် ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:draw-commit]] တတိယက commit
+      ပါ၊ ဟင်းပွဲ စားပွဲ ရောက်တာပါ။ React က DOM ထဲက ကွာတဲ့ နေရာလေးကိုပဲ ပြင်ပါတယ်၊ ဒီမှာ ကိန်းဂဏန်း
+      တစ်လုံးတည်းပါ။ [[mark:draw-paint]] ပြီးမှ browser က paint လုပ်ပေးလို့ ကိုယ် မြင်ရတာပါ။
+    sources:
+      - title: "Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+    actions:
+      - id: wb-open-render
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b-title]
+      - id: wb-draw-trigger
+        type: whiteboard.apply
+        at: { mark: draw-trigger }
+        upsertIds:
+          [b-trigger-box, b-trigger-name, b-trigger-verb, b-trigger-note-1, b-trigger-note-2]
+        drawMs: 2000
+      - id: wb-draw-render
+        type: whiteboard.apply
+        at: { mark: draw-render }
+        upsertIds:
+          [b-arrow-1, b-render-box, b-render-name, b-render-verb, b-render-note-1, b-render-note-2]
+        drawMs: 2200
+      - id: wb-draw-commit
+        type: whiteboard.apply
+        at: { mark: draw-commit }
+        upsertIds:
+          [b-arrow-2, b-commit-box, b-commit-name, b-commit-verb, b-commit-note-1, b-commit-note-2]
+        drawMs: 2200
+      - id: wb-draw-paint
+        type: whiteboard.apply
+        at: { mark: draw-paint }
+        upsertIds: [b-arrow-3, b-paint-box, b-paint]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 5
+  - id: snapshot
+    chapter: "State က snapshot တစ်ခုပါ"
+    narration: >
+      အခု လူအများ အံ့ဩတတ်တဲ့ အချက် တစ်ခုပါ။ [[mark:type-like-three]] ဒီ handler အသစ်က setLikes ကို likes
+      ထက် တစ် ပိုတဲ့ တန်ဖိုးနဲ့ သုံးကြိမ် ဆက်တိုက် ခေါ်ပါတယ်။ [[mark:type-like-three-button]] သူ့အတွက်
+      ခလုတ် ထည့်ပါမယ်။ ဒီ project မှာ ဖိုင်ကို ပြင်လိုက်တိုင်း page တစ်ခုလုံး ပြန်ပွင့်ပြီး state က 0 ကနေ
+      ပြန်စလို့၊ ခုနက 2 က ပျောက်သွားပါပြီ။ တစ်ချက် နှိပ်ရင် သုံးခု တိုးမယ်လို့ ထင်ရမှာပါ။
+      [[mark:click-like-three]] နှိပ်ကြည့်ရအောင်။ ကြည့်ပါ၊ 0 ကနေ 1 ပဲ တက်သွားပါတယ်။
+      [[mark:open-snapshot-board]] ဘာကြောင့်လဲဆိုတော့၊ render တစ်ခုစီမှာ state က ဓာတ်ပုံလို ပုံသေ
+      ဖြစ်နေလို့ပါ၊ snapshot လို့ ခေါ်ပါတယ်။ [[mark:draw-snapshot-frame]] ကိုယ် click လုပ်လိုက်တဲ့ render
+      မှာ likes က 0 ဖြစ်လို့၊ handler ကလည်း 0 ကိုပဲ မြင်ပါတယ်။ [[mark:draw-snapshot-calls]] ဒါကြောင့်
+      သုံးကြိမ်လုံးက 0 နဲ့ 1 ပေါင်းတဲ့ 1 ကိုပဲ တောင်းနေတာပါ။ setLikes ခေါ်တာက run နေဆဲ code ထဲက likes ကို
+      ချက်ချင်း မပြောင်းဘဲ၊ render အသစ် တောင်းတာပါ။ အဲဒီ render ကျမှ အသစ်ကို မြင်ရပါတယ်။
+    sources:
+      - title: "State as a Snapshot"
+        url: "https://react.dev/learn/state-as-a-snapshot"
+    actions:
+      - id: wb-close-render
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-like-three
+        type: editor.type
+        at: { mark: type-like-three }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "    setLikes(likes + 1);\n  }\n"
+          occurrence: 1
+        text: "\n  function handleLikeThree() {\n    setLikes(likes + 1);\n    setLikes(likes + 1);\n    setLikes(likes + 1);\n  }\n"
+      - id: type-like-three-button
+        type: editor.type
+        at: { mark: type-like-three-button }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "          ❤ {likes}\n        </button>\n"
+          occurrence: 1
+        text: "        <button\n          className=\"secondary\"\n          data-testid={`like-three-${id}`}\n          onClick={handleLikeThree}\n        >\n          +3 က\n        </button>\n"
+      - id: expect-like-three-button
+        type: expect.preview
+        at: { afterAction: type-like-three-button }
+        timeoutMs: 5000
+        target: { by: testId, value: like-three-mohinga }
+        textContains: "+3 က"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-like-three
+        type: preview.click
+        at: { mark: click-like-three }
+        timeoutMs: 5000
+        target: { by: testId, value: like-three-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-like-one
+        type: expect.preview
+        at: { afterAction: click-like-three }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        textContains: "❤ 1"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: wb-open-snapshot
+        type: whiteboard.apply
+        at: { mark: open-snapshot-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [c-title]
+      - id: wb-snapshot-frame
+        type: whiteboard.apply
+        at: { mark: draw-snapshot-frame }
+        upsertIds: [c-frame, c-frame-label, c-frame-sub]
+        drawMs: 1300
+      - id: wb-snapshot-calls
+        type: whiteboard.apply
+        at: { mark: draw-snapshot-calls }
+        upsertIds: [c-calls, c-result1, c-result1-circle]
+        drawMs: 1600
+
+  # ------------------------------------------------------------------ 6
+  - id: updater
+    narration: >
+      ဒါဆို သုံးခု ဘယ်လို တိုးမလဲ။ [[mark:type-queued]] ဒီတစ်ခါ setLikes ကို function တစ်ခု ပေးပါတယ်၊
+      updater function လို့ ခေါ်ပါတယ်။ သူက အရင် update တွေ ပြီးတဲ့ နောက်ဆုံး တန်ဖိုးကို ရပြီး၊ တစ် ပိုတဲ့
+      တန်ဖိုး ပြန်ပေးပါတယ်။ [[mark:type-queued-button]] ဒုတိယ ခလုတ်ကတော့ ဒီ handler အသစ်ကို သုံးပါမယ်။
+      [[mark:click-queued]] နှိပ်ကြည့်ရအောင်။ အခုတော့ 0 ကနေ 3 ဖြစ်သွားပါပြီ။ [[mark:open-queue-board]]
+      React က click handler တစ်ခုလုံး ပြီးမှ render တစ်ကြိမ်တည်း လုပ်ပါတယ်။ အဲဒါကို batching လို့
+      ခေါ်ပါတယ်။ [[mark:draw-queue-box]] အဲဒီကြားမှာ updater function သုံးခုက queue ထဲ တန်းစီနေပါတယ်။
+      [[mark:draw-queue-steps]] နောက် render မှာ React က သူတို့ကို အစဉ်အတိုင်း run ပေးလို့၊ 3
+      ရောက်သွားတာပါ။ [[mark:draw-queue-rule]] ဒါကြောင့် event တစ်ခုထဲမှာ state တစ်ခုကို အရင် တန်ဖိုးပေါ်
+      မူတည်ပြီး အကြိမ်ကြိမ် ပြောင်းရင်၊ updater function ကို သုံးပါ။ တစ်ကြိမ်တည်း ပြောင်းရင်တော့ တန်ဖိုး
+      အသစ်ကို တန်းပေးလို့ ရပါတယ်။
+    sources:
+      - title: "Queueing a Series of State Updates"
+        url: "https://react.dev/learn/queueing-a-series-of-state-updates"
+      - title: "useState: updating state based on the previous state"
+        url: "https://react.dev/reference/react/useState#updating-state-based-on-the-previous-state"
+    actions:
+      - id: wb-close-snapshot
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-queued
+        type: editor.type
+        at: { mark: type-queued }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "  function handleLikeThree() {\n    setLikes(likes + 1);\n    setLikes(likes + 1);\n    setLikes(likes + 1);\n  }\n"
+          occurrence: 1
+        text: "\n  function handleLikeThreeQueued() {\n    setLikes((prev) => prev + 1);\n    setLikes((prev) => prev + 1);\n    setLikes((prev) => prev + 1);\n  }\n"
+      - id: select-updater
+        type: editor.select
+        at: { mark: type-queued, offsetMs: 1500 }
+        target:
+          file: src/DishCard.jsx
+          text: "(prev) => prev + 1"
+          occurrence: 1
+      - id: type-queued-button
+        type: editor.type
+        at: { mark: type-queued-button }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "          +3 က\n        </button>\n"
+          occurrence: 1
+        text: "        <button\n          className=\"secondary\"\n          data-testid={`like-queue-${id}`}\n          onClick={handleLikeThreeQueued}\n        >\n          +3 ခ\n        </button>\n"
+      - id: expect-queued-button
+        type: expect.preview
+        at: { afterAction: type-queued-button }
+        timeoutMs: 5000
+        target: { by: testId, value: like-queue-mohinga }
+        textContains: "+3 ခ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-queued
+        type: preview.click
+        at: { mark: click-queued }
+        timeoutMs: 5000
+        target: { by: testId, value: like-queue-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-like-three
+        type: expect.preview
+        at: { afterAction: click-queued }
+        timeoutMs: 5000
+        target: { by: testId, value: like-mohinga }
+        textContains: "❤ 3"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: wb-open-queue
+        type: whiteboard.apply
+        at: { mark: open-queue-board }
+        open: true
+        maximized: true
+        upsertIds: [c-batch]
+        drawMs: 1200
+      - id: wb-queue-box
+        type: whiteboard.apply
+        at: { mark: draw-queue-box }
+        upsertIds: [c-queue-box, c-queue-label, c-queue-sub]
+        drawMs: 1500
+      - id: wb-queue-steps
+        type: whiteboard.apply
+        at: { mark: draw-queue-steps }
+        upsertIds: [c-steps, c-check]
+        drawMs: 1500
+      - id: wb-queue-rule
+        type: whiteboard.apply
+        at: { mark: draw-queue-rule }
+        upsertIds: [c-rule, c-rule-underline]
+        drawMs: 1300
+
+  # ------------------------------------------------------------------ 7
+  - id: array-rules
+    chapter: "Array state ကို ပြောင်းကြည့်ရအောင်"
+    narration: >
+      နောက်တစ်ခုက order ပါ။ ဟင်းလျာ စာရင်း ဖြစ်လို့၊ သူ့ state က array တစ်ခု ဖြစ်ပါမယ်။
+      [[mark:draw-array-rule]] စည်းကမ်းက၊ state ထဲက array ကို တိုက်ရိုက် မပြင်ရဘဲ၊ array အသစ်နဲ့ လဲရပါတယ်။
+      [[mark:draw-mutating]] push နဲ့ splice က မူရင်း array ကိုယ်တိုင်ကို ပြင်လိုက်တာပါ။ sort၊ reverse နဲ့
+      item တစ်ခုကို တိုက်ရိုက် ပြောင်းတာလည်း အတူတူပါပဲ။ [[mark:strike-mutating]] အဲဒီလိုဆိုရင် React က
+      array အဟောင်းအတိုင်းပဲ ပြန်ရလို့၊ မပြောင်းဘူး ထင်ပြီး ပြန် render မလုပ်ပါဘူး။ [[mark:draw-copies]]
+      အဲဒီအစား၊ ထည့်ချင်ရင် အဟောင်းတွေကို array အသစ်ထဲ spread နဲ့ ကူးထည့်ပါ။ ဖယ်ချင်ရင် filter၊ တစ်ခု
+      ပြောင်းချင်ရင် map ပါ။ [[mark:draw-sort-copy]] sort ဆိုရင်တော့ အရင် copy ကူးပါ။
+    sources:
+      - title: "Updating Arrays in State"
+        url: "https://react.dev/learn/updating-arrays-in-state"
+    actions:
+      - id: wb-open-array
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [d-title]
+      - id: wb-array-rule
+        type: whiteboard.apply
+        at: { mark: draw-array-rule }
+        upsertIds: [d-note, d-note-underline]
+        drawMs: 1300
+      - id: wb-mutating
+        type: whiteboard.apply
+        at: { mark: draw-mutating }
+        upsertIds: [d-bad-box, d-bad-head, d-bad-1, d-bad-2, d-bad-3, d-bad-4]
+        drawMs: 2200
+      - id: wb-strike-mutating
+        type: whiteboard.apply
+        at: { mark: strike-mutating }
+        upsertIds: [d-bad-1-strike, d-bad-2-strike, d-bad-3-strike, d-bad-4-strike]
+        drawMs: 1600
+      - id: wb-copies
+        type: whiteboard.apply
+        at: { mark: draw-copies }
+        upsertIds: [d-good-box, d-good-head, d-good-1, d-good-2, d-good-4]
+        drawMs: 2200
+      - id: wb-sort-copy
+        type: whiteboard.apply
+        at: { mark: draw-sort-copy }
+        upsertIds: [d-good-3]
+        drawMs: 800
+
+  # ------------------------------------------------------------------ 8
+  - id: order-handlers
+    narration: >
+      [[mark:close-array-board]] ကဲ၊ App ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:open-app]] App က card အားလုံးရဲ့
+      parent ဖြစ်လို့၊ order state ကို ဒီမှာ ထားပါမယ်။ [[mark:type-app-import]] useState ကို အရင် import
+      လုပ်ပြီး၊ order ကို array အလွတ်နဲ့ စပါတယ်။ [[mark:type-handle-add]] ပထမ handler က ဟင်းလျာ ထည့်ပါတယ်။
+      မှာပြီးသားဆို ကျော်ပါတယ်၊ ပန်းကန် အရေအတွက် တိုးတာကို နောက်မှ ရေးမယ့် order panel ထဲက အပေါင်း
+      ခလုတ်နဲ့ လုပ်မှာမို့ပါ။ [[mark:select-spread]] ဒီ array အသစ်ကို ကြည့်ပါ။ spread က အဟောင်းထဲက item
+      တွေကို ကူးထည့်ပြီး၊ နောက်ဆုံးမှာ count 1 ပါတဲ့ ဟင်းလျာ copy ထပ်ထည့်ပါတယ်။ အဟောင်းကို မထိပါဘူး။
+      [[mark:type-handle-remove]] ဒုတိယ handler က ဟင်းလျာ တစ်ခု ဖယ်ပါတယ်။ [[mark:select-filter]] ဒီ filter
+      က အဲဒီ id မပါတော့တဲ့ array အသစ် ပြန်ပေးပါတယ်။ [[mark:type-handle-count]] တတိယက count ကို
+      ပြောင်းပါတယ်။ [[mark:select-map]] ဒီ map က array အသစ် ပြန်ပေးပြီး၊ id ကိုက်တဲ့ item ကိုပဲ count
+      အသစ်နဲ့ copy လုပ်ပါတယ်။ ကျန်တဲ့ item တွေက အဟောင်းအတိုင်းပါပဲ။
+    sources:
+      - title: "Updating Arrays in State"
+        url: "https://react.dev/learn/updating-arrays-in-state"
+      - title: "useState"
+        url: "https://react.dev/reference/react/useState"
+    actions:
+      - id: wb-close-array
+        type: whiteboard.apply
+        at: { mark: close-array-board }
+        open: false
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      - id: type-app-import
+        type: editor.type
+        at: { mark: type-app-import }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: ""
+          occurrence: 1
+        text: "import { useState } from \"react\";\n"
+      - id: type-order-state
+        type: editor.type
+        at: { mark: type-app-import, offsetMs: 1400 }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "export default function App() {\n"
+          occurrence: 1
+        text: "  const [order, setOrder] = useState([]);\n"
+      - id: type-handle-add
+        type: editor.type
+        at: { mark: type-handle-add }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "  const available = menu.filter((dish) => !dish.soldOut).length;\n"
+          occurrence: 1
+        text: "\n  function handleAdd(id) {\n    if (order.some((item) => item.id === id)) return;\n    const dish = menu.find((d) => d.id === id);\n    setOrder([...order, { ...dish, count: 1 }]);\n  }\n"
+      - id: select-spread
+        type: editor.select
+        at: { mark: select-spread }
+        target:
+          file: src/App.jsx
+          text: "[...order, { ...dish, count: 1 }]"
+          occurrence: 1
+      - id: type-handle-remove
+        type: editor.type
+        at: { mark: type-handle-remove }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "    setOrder([...order, { ...dish, count: 1 }]);\n  }\n"
+          occurrence: 1
+        text: "\n  function handleRemove(id) {\n    setOrder(order.filter((item) => item.id !== id));\n  }\n"
+      - id: select-filter
+        type: editor.select
+        at: { mark: select-filter }
+        target:
+          file: src/App.jsx
+          text: "order.filter((item) => item.id !== id)"
+          occurrence: 1
+      - id: type-handle-count
+        type: editor.type
+        at: { mark: type-handle-count }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "    setOrder(order.filter((item) => item.id !== id));\n  }\n"
+          occurrence: 1
+        text: "\n  function handleChangeCount(id, count) {\n    setOrder(\n      order.map((item) => (item.id === id ? { ...item, count } : item)),\n    );\n  }\n"
+      - id: select-map
+        type: editor.select
+        at: { mark: select-map }
+        target:
+          file: src/App.jsx
+          text: "order.map((item) => (item.id === id ? { ...item, count } : item))"
+          occurrence: 1
+
+  # ------------------------------------------------------------------ 9
+  - id: wire-add
+    narration: >
+      card တွေက handleAdd ကို ခေါ်ဖို့ လိုလို့၊ DishCard ထဲ ပြန်သွားရအောင်။ [[mark:type-on-add-prop]]
+      onAdd ဆိုတဲ့ prop ထည့်ပါမယ်။ handler prop ကို on နဲ့၊ handler ကို handle နဲ့ စပေးတာ React ရဲ့
+      ထုံးစံပါ။ [[mark:type-add-button]] ပြီးတော့ မှာမယ့် ခလုတ်ပါ။ ဒီတစ်ခါ onAdd ကို ဟင်းလျာရဲ့ id နဲ့
+      ခေါ်ရမှာမို့၊ onClick ထဲမှာ တိုက်ရိုက် ခေါ်ရေးလို့ မရပါဘူး၊ render တုန်းမှာတင် run သွားမှာမို့ပါ။
+      ဒါကြောင့် function ကို အတိုကောက် ရေးတဲ့ arrow function လေးနဲ့ ထုပ်ထားပြီး၊ click လုပ်မှ အဲဒီထဲက
+      onAdd ကို id နဲ့ ခေါ်ပါတယ်။ ကုန်သွားတဲ့ ဟင်းလျာဆို ခလုတ်ကို ပိတ်ထားပါတယ်။ [[mark:open-app-again]]
+      ကဲ၊ App ထဲ ပြန်ရအောင်။ [[mark:type-pass-on-add]] card တိုင်း handleAdd ကို onAdd အနေနဲ့ ရပါတယ်။
+      [[mark:add-buttons-shown]] page ပြန်ပွင့်တော့ card တိုင်းမှာ မှာမယ့် ခလုတ် ပေါ်လာပြီး၊ ကုန်သွားတဲ့
+      ဟာကတော့ နှိပ်လို့ မရပါဘူး။
+    sources:
+      - title: "Passing event handlers as props"
+        url: "https://react.dev/learn/responding-to-events#passing-event-handlers-as-props"
+      - title: "Naming event handler props"
+        url: "https://react.dev/learn/responding-to-events#naming-event-handler-props"
+    actions:
+      - id: open-dish-card-again
+        type: workspace.openFile
+        at: { scene: start }
+        path: src/DishCard.jsx
+      - id: type-on-add-prop
+        type: editor.type
+        at: { mark: type-on-add-prop }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "soldOut = false"
+          occurrence: 1
+        text: ", onAdd"
+      - id: type-add-button
+        type: editor.type
+        at: { mark: type-add-button }
+        cadence: block
+        target:
+          file: src/DishCard.jsx
+          after: "          +3 ခ\n        </button>\n"
+          occurrence: 1
+        text: "        <button\n          data-testid={`add-${id}`}\n          disabled={soldOut}\n          onClick={() => onAdd(id)}\n        >\n          မှာမယ်\n        </button>\n"
+      - id: open-app-again
+        type: workspace.openFile
+        at: { mark: open-app-again }
+        path: src/App.jsx
+      - id: type-pass-on-add
+        type: editor.type
+        at: { mark: type-pass-on-add }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "<DishCard key={dish.id} {...dish}"
+          occurrence: 1
+        text: " onAdd={handleAdd}"
+      - id: expect-add-button
+        type: expect.preview
+        at: { mark: add-buttons-shown }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-sold-out-disabled
+        type: expect.preview
+        at: { afterAction: expect-add-button }
+        timeoutMs: 5000
+        target: { by: testId, value: add-ohn-no-khao-swe }
+        attribute: { name: disabled, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 10
+  - id: order-panel
+    chapter: "မှာထားတာတွေကို ပြကြည့်ရအောင်"
+    narration: >
+      order ကို screen ပေါ် မမြင်ရသေးလို့၊ OrderPanel ဆိုတဲ့ component တစ်ခု ရေးရအောင်။
+      [[mark:open-order-panel]] ဒီ ဖိုင်ကို ဘယ်ဖိုင်ကမှ import မလုပ်ထားသေးလို့၊ ဒီထဲ ရိုက်တာက run နေတဲ့
+      page ကို မထိပါဘူး။ [[mark:type-panel-head]] ဒီ component က order နဲ့ handler နှစ်ခုကို props အနေနဲ့
+      လက်ခံပါတယ်။ prop နာမည်တွေကို App က ပေးမယ့် နာမည်နဲ့ အတူတူ ထားလို့၊ ဖိုင် နှစ်ဖိုင် ကိုက်ညီနေမှာပါ။
+      [[mark:type-panel-total-line]] ပြီးတော့ စုစုပေါင်းပါ။ row တိုင်းရဲ့ ဈေးနှုန်းနဲ့ count ကို
+      မြှောက်ပြီး ပေါင်းတာပါ။ state ထဲ သိမ်းမထားဘဲ render တိုင်း order ကနေ ပြန်တွက်လို့၊ order နဲ့ အမြဲ
+      ကိုက်နေပါတယ်။ [[mark:type-panel-list]] နောက်တစ်ခုက JSX ပါ။ ခေါင်းစဉ်၊ order အလွတ်တုန်း ပြမယ့်
+      စာသားနဲ့၊ ဟင်းလျာ တစ်ခုစီအတွက် row တစ်ခုစီပါ။ row မှာ နာမည်နဲ့ ပန်းကန် အရေအတွက် ပြပါတယ်။ key ကို
+      ဟင်းလျာရဲ့ id ပေးထားလို့၊ ထည့်လိုက် ဖယ်လိုက်တဲ့အခါ ဘယ် row က ဘယ်ဟာလဲ React က မှတ်မိပါတယ်။
+      [[mark:type-panel-buttons]] row တစ်ခုစီမှာ ခလုတ် သုံးခုပါ။ အနုတ်နဲ့ အပေါင်းက onChangeCount ကို count
+      တစ် လျော့တာ ဒါမှမဟုတ် တစ် ပိုတာနဲ့ ခေါ်ပါတယ်။ count 1 မှာ အနုတ်ကို ပိတ်ထားလို့၊ ပန်းကန် 0 ဘယ်တော့မှ
+      မပေါ်ပါဘူး။ နောက်ဆုံး ခလုတ်ကတော့ onRemove ကို ဟင်းလျာရဲ့ id နဲ့ ခေါ်ပြီး၊ row ကို ဖယ်ပါတယ်။
+      [[mark:type-panel-total]] အောက်ဆုံးမှာတော့ စုစုပေါင်းကို ကျပ်နဲ့ ပြပါတယ်။
+      [[mark:open-app-for-panel]] ကဲ၊ App ထဲမှာ သုံးကြည့်ရအောင်။ [[mark:type-panel-import]] import
+      စာကြောင်းက အရင် လာရပါမယ်။ [[mark:type-panel-usage]] ပြီးတော့ panel ကို menu အပေါ်မှာ order နဲ့
+      handler နှစ်ခုလုံးနဲ့ ထည့်ပါတယ်။ preview မှာ panel ပေါ်လာပြီး၊ မမှာရသေးပါလို့ ပြနေပါတယ်။
+    sources:
+      - title: "Avoid redundant state"
+        url: "https://react.dev/learn/choosing-the-state-structure#avoid-redundant-state"
+      - title: "Rendering Lists: keeping list items in order with key"
+        url: "https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key"
+      - title: "Array.prototype.reduce()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce"
+    actions:
+      - id: open-order-panel
+        type: workspace.openFile
+        at: { mark: open-order-panel }
+        path: src/OrderPanel.jsx
+      - id: type-panel-head
+        type: editor.type
+        at: { mark: type-panel-head }
+        cadence: fast-explainer
+        target:
+          file: src/OrderPanel.jsx
+          after: ""
+          occurrence: 1
+        text: "export default function OrderPanel({ order, onRemove, onChangeCount }) {\n"
+      - id: type-panel-total-line
+        type: editor.type
+        at: { mark: type-panel-total-line }
+        cadence: line-by-line
+        target:
+          file: src/OrderPanel.jsx
+          after: "onChangeCount }) {\n"
+          occurrence: 1
+        text: "  const total = order.reduce((sum, item) => sum + item.price * item.count, 0);\n"
+      - id: select-total
+        type: editor.select
+        at: { mark: type-panel-total-line, offsetMs: 2500 }
+        target:
+          file: src/OrderPanel.jsx
+          text: "order.reduce((sum, item) => sum + item.price * item.count, 0)"
+          occurrence: 1
+      - id: type-panel-list
+        type: editor.type
+        at: { mark: type-panel-list }
+        cadence: line-by-line
+        target:
+          file: src/OrderPanel.jsx
+          after: "item.price * item.count, 0);\n"
+          occurrence: 1
+        text: "\n  return (\n    <section className=\"card\" data-testid=\"order-panel\">\n      <h2>မှာထားတာတွေ</h2>\n      {order.length === 0 && (\n        <p className=\"muted\" data-testid=\"order-empty\">\n          မမှာရသေးပါ\n        </p>\n      )}\n      <ul className=\"list\">\n        {order.map((item) => (\n          <li\n            key={item.id}\n            className=\"order-row\"\n            data-testid={`order-row-${item.id}`}\n          >\n            <span>\n              {item.name} × {item.count}\n            </span>\n"
+      - id: type-panel-buttons
+        type: editor.type
+        at: { mark: type-panel-buttons }
+        cadence: line-by-line
+        target:
+          file: src/OrderPanel.jsx
+          after: "              {item.name} × {item.count}\n            </span>\n"
+          occurrence: 1
+        text: "            <span className=\"row\">\n              <button\n                data-testid={`less-${item.id}`}\n                disabled={item.count === 1}\n                onClick={() => onChangeCount(item.id, item.count - 1)}\n              >\n                −\n              </button>\n              <button\n                data-testid={`more-${item.id}`}\n                onClick={() => onChangeCount(item.id, item.count + 1)}\n              >\n                +\n              </button>\n              <button\n                className=\"secondary\"\n                data-testid={`remove-${item.id}`}\n                onClick={() => onRemove(item.id)}\n              >\n                ဖျက်\n              </button>\n            </span>\n"
+      - id: type-panel-total
+        type: editor.type
+        at: { mark: type-panel-total }
+        cadence: block
+        target:
+          file: src/OrderPanel.jsx
+          after: "                ဖျက်\n              </button>\n            </span>\n"
+          occurrence: 1
+        text: "          </li>\n        ))}\n      </ul>\n      <p data-testid=\"order-total\">\n        စုစုပေါင်း {total.toLocaleString(\"en-US\")} ကျပ်\n      </p>\n    </section>\n  );\n}\n"
+      - id: open-app-for-panel
+        type: workspace.openFile
+        at: { mark: open-app-for-panel }
+        path: src/App.jsx
+      - id: type-panel-import
+        type: editor.type
+        at: { mark: type-panel-import }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "import DishCard from \"./DishCard.jsx\";\n"
+          occurrence: 1
+        text: "import OrderPanel from \"./OrderPanel.jsx\";\n"
+      - id: type-panel-usage
+        type: editor.type
+        at: { mark: type-panel-usage }
+        cadence: block
+        target:
+          file: src/App.jsx
+          after: "        <Header />\n      </header>\n"
+          occurrence: 1
+        text: "      <OrderPanel\n        order={order}\n        onRemove={handleRemove}\n        onChangeCount={handleChangeCount}\n      />\n"
+      - id: expect-panel-empty
+        type: expect.preview
+        at: { afterAction: type-panel-usage }
+        timeoutMs: 5000
+        target: { by: testId, value: order-empty }
+        textContains: "မမှာရသေးပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-total-zero
+        type: expect.preview
+        at: { afterAction: expect-panel-empty }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "စုစုပေါင်း 0 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 11
+  - id: order-demo
+    narration: >
+      ကဲ၊ မှာကြည့်ရအောင်။ [[mark:click-add-nan-gyi]] အရင်ဆုံး နန်းကြီးသုပ်ကို မှာပါမယ်။
+      [[mark:click-add-mohinga]] နောက် မုန့်ဟင်းခါးပါ။ [[mark:click-add-shan]] ပြီးတော့ ရှမ်းခေါက်ဆွဲပါ။
+      panel ထဲမှာ row သုံးခု ဖြစ်သွားပြီး၊ စုစုပေါင်းက 8300 ကျပ်ပါ။ [[mark:click-more-mohinga]]
+      မုန့်ဟင်းခါးကို အပေါင်း ခလုတ်နဲ့ နှစ်ပွဲ လုပ်လိုက်ပါမယ်။ row မှာ 2 ဖြစ်သွားပြီး၊ စုစုပေါင်းက 10800
+      ကျပ်ပါ။ [[mark:click-remove-shan]] အခု ရှမ်းခေါက်ဆွဲကို ဖျက်လိုက်ပါမယ်။ စုစုပေါင်းက 7800 ကျပ်
+      ဖြစ်သွားပြီး၊ ကိုယ်တိုင် ဘာမှ ပေါင်းစရာ မလိုပါဘူး။
+    sources:
+      - title: "Updating Arrays in State"
+        url: "https://react.dev/learn/updating-arrays-in-state"
+      - title: "Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+    actions:
+      - id: click-add-nan-gyi
+        type: preview.click
+        at: { mark: click-add-nan-gyi }
+        timeoutMs: 5000
+        target: { by: testId, value: add-nan-gyi-thoke }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-row-nan-gyi
+        type: expect.preview
+        at: { afterAction: click-add-nan-gyi }
+        timeoutMs: 5000
+        target: { by: testId, value: order-row-nan-gyi-thoke }
+        textContains: "× 1"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: click-add-mohinga
+        type: preview.click
+        at: { mark: click-add-mohinga }
+        timeoutMs: 5000
+        target: { by: testId, value: add-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: click-add-shan
+        type: preview.click
+        at: { mark: click-add-shan }
+        timeoutMs: 5000
+        target: { by: testId, value: add-shan-noodles }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-total-three
+        type: expect.preview
+        at: { afterAction: click-add-shan }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "8,300 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: click-more-mohinga
+        type: preview.click
+        at: { mark: click-more-mohinga }
+        timeoutMs: 5000
+        target: { by: testId, value: more-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-row-mohinga-two
+        type: expect.preview
+        at: { afterAction: click-more-mohinga }
+        timeoutMs: 5000
+        target: { by: testId, value: order-row-mohinga }
+        textContains: "× 2"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: expect-total-more
+        type: expect.preview
+        at: { afterAction: expect-row-mohinga-two }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "10,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 200 }
+      - id: click-remove-shan
+        type: preview.click
+        at: { mark: click-remove-shan }
+        timeoutMs: 5000
+        target: { by: testId, value: remove-shan-noodles }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-total-removed
+        type: expect.preview
+        at: { afterAction: click-remove-shan }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "7,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 200 }
+
+  # ------------------------------------------------------------------ 12
+  - id: hooks-rules
+    chapter: "Hook တွေရဲ့ စည်းကမ်း"
+    narration: >
+      နောက်ဆုံး စည်းကမ်းက hook ကို ဘယ်နေရာမှာ ခေါ်ရမလဲ ဆိုတာပါ။ [[mark:draw-hook-slots]] React က state ကို
+      variable နာမည်နဲ့ မဟုတ်ဘဲ၊ hook ခေါ်တဲ့ အစဉ်နဲ့ မှတ်ပါတယ်။ ဒါကြောင့် render တိုင်း အစဉ် အတူတူ
+      ခေါ်ရပါမယ်။ [[mark:draw-hook-bad]] if ဒါမှမဟုတ် loop ထဲက hook က render တချို့မှာ
+      ကျော်သွားနိုင်ပါတယ်။ အဲဒီအခါ နောက် hook က သူ့ဟာ မဟုတ်တဲ့ state ရပြီး၊ app က error နဲ့ ရပ်သွားပါတယ်။
+      event handler ထဲမှာ ခေါ်ရင်တော့ render အပြင်မှာ ခေါ်တာ ဖြစ်လို့ တန်း error တက်ပါတယ်။
+      [[mark:draw-hook-rule]] ဒါကြောင့် hook ကို component ဒါမှမဟုတ် ကိုယ်တိုင် ရေးတဲ့ custom hook ရဲ့
+      အပေါ်ဆုံးမှာပဲ၊ ဘယ် return မှ မရောက်ခင် ခေါ်ပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ state ဆိုတာ
+      component ရဲ့ မှတ်ဉာဏ် ဖြစ်ပြီး၊ ပြောင်းလိုက်တိုင်း React က ပြန် render လုပ်ပေးပါတယ်။ render
+      တစ်ခုစီက သူ့ snapshot ကိုပဲ မြင်ပါတယ်။ state ထဲက array ကိုလည်း မပြင်ဘဲ အသစ်နဲ့ လဲပါတယ်။ နောက် lesson
+      မှာတော့ input ထဲ ရိုက်တာကို state နဲ့ ချိတ်တာနဲ့၊ component နှစ်ခု တူတူ သုံးရမယ့် state ကို ဘယ်မှာ
+      ထားရမလဲ ဆိုတာ ကြည့်သွားပါမယ်။
+    sources:
+      - title: "Rules of Hooks"
+        url: "https://react.dev/reference/rules/rules-of-hooks"
+      - title: "How does React know which state to return?"
+        url: "https://react.dev/learn/state-a-components-memory#how-does-react-know-which-state-to-return"
+    actions:
+      - id: wb-open-hooks
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [e-title]
+      - id: wb-hook-slots
+        type: whiteboard.apply
+        at: { mark: draw-hook-slots }
+        upsertIds: [e-good-head, e-slot1, e-slot1-text, e-slot2, e-slot2-text, e-why]
+        drawMs: 2600
+      - id: wb-hook-bad
+        type: whiteboard.apply
+        at: { mark: draw-hook-bad }
+        upsertIds: [e-bad-head, e-bad-box, e-bad-l1, e-bad-l2, e-bad-l3]
+        drawMs: 2400
+      - id: wb-hook-rule
+        type: whiteboard.apply
+        at: { mark: draw-hook-rule }
+        upsertIds: [e-rule, e-rule-underline]
+        drawMs: 1300
+      - id: wb-close-hooks
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: expect-file-dish-card
+        type: expect.file
+        at: { mark: recap, offsetMs: 400 }
+        path: src/DishCard.jsx
+        contains: "  function handleLikeThreeQueued() {\n    setLikes((prev) => prev + 1);\n    setLikes((prev) => prev + 1);\n    setLikes((prev) => prev + 1);\n  }\n"
+      - id: expect-file-dish-props
+        type: expect.file
+        at: { afterAction: expect-file-dish-card }
+        path: src/DishCard.jsx
+        contains: "soldOut = false, onAdd }) {\n  const [likes, setLikes] = useState(0);\n"
+      - id: expect-file-app-handlers
+        type: expect.file
+        at: { afterAction: expect-file-dish-props }
+        path: src/App.jsx
+        contains: "    setOrder([...order, { ...dish, count: 1 }]);\n  }\n\n  function handleRemove(id) {\n    setOrder(order.filter((item) => item.id !== id));\n  }\n"
+      - id: expect-file-app-wiring
+        type: expect.file
+        at: { afterAction: expect-file-app-handlers }
+        path: src/App.jsx
+        contains: "<DishCard key={dish.id} {...dish} onAdd={handleAdd} />"
+      - id: expect-file-order-panel
+        type: expect.file
+        at: { afterAction: expect-file-app-wiring }
+        path: src/OrderPanel.jsx
+        contains: "  const total = order.reduce((sum, item) => sum + item.price * item.count, 0);\n"
+      - id: expect-final-total
+        type: expect.preview
+        at: { afterAction: expect-file-order-panel }
+        timeoutMs: 5000
+        target: { by: testId, value: order-total }
+        textContains: "7,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 200 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
