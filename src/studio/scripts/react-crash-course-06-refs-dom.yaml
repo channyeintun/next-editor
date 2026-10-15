@@ -1057,7 +1057,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1691,7 +1690,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b4-title]
       - id: draw-flush-normal
@@ -1854,7 +1852,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-trees }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b5-title]
       - id: draw-react-tree
