@@ -1,0 +1,1674 @@
+# React crash course (Burmese), lesson 1 of 12: Components and JSX.
+#
+# Narration is the edited BURMESE voice script (voice-script.md next to this
+# file is the same text; DESIGN.md is the span-by-span brief): every
+# [[mark:…]] sits where its action begins, at a sentence end or a ၊ pause, and
+# each span carries one piece of meaning. Everything the learner sees (title,
+# chapters, whiteboard labels, UI strings) is Burmese.
+#
+# Shape: two whiteboards (what React is: data -> function -> screen; the shop
+# page cut into components and drawn as a tree), a code tour (index.html,
+# main.jsx, vite.config.js, App.jsx), the shop header written as JSX in App
+# with the three JSX rules and curly braces pointed at in the code, a third
+# whiteboard (JSX -> jsx() call -> element object -> DOM), then DishCard and
+# Menu typed keystroke by keystroke into empty, unimported files and wired
+# into App with two block inserts. The lesson ends on the three identical
+# DishCard lines, which hands over to props in lesson 2.
+#
+# Live-preview safety (no @vitejs/plugin-react, so every .jsx save reloads):
+# - App.jsx is imported by main.jsx, so every App edit is a `block` insert of
+#   complete lines; the constants land before the JSX that reads them, and
+#   the Menu import before the <Menu /> tag.
+# - DishCard.jsx and Menu.jsx are pinned empty and typed while nothing
+#   imports them, so no half-written JSX ever reaches Vite.
+# - runtime.start blocks the Performer until pnpm install has finished and the
+#   dev server has spawned, so the first span after it carries no action for
+#   ~40 s of narration; waitForReady sits on the preview mark, not right after
+#   the start.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-01-components-jsx
+  title: "React crash course 1: Component နဲ့ JSX"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React Crash Course 1
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      public/logo.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <circle cx="48" cy="48" r="45" fill="#fff4e6" stroke="#c2410c" stroke-width="4" />
+          <path d="M36 38c-4-5 4-9 0-14M48 38c-4-5 4-9 0-14M60 38c-4-5 4-9 0-14" fill="none" stroke="#e67700" stroke-width="3" stroke-linecap="round" />
+          <path d="M20 46h56a28 28 0 0 1-56 0z" fill="#c2410c" />
+          <rect x="34" y="74" width="28" height="5" rx="2.5" fill="#c2410c" />
+        </svg>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/App.jsx: |
+        export default function App() {
+          return (
+            <main className="page" data-testid="page">
+            </main>
+          );
+        }
+      src/DishCard.jsx: ""
+      src/Menu.jsx: ""
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 1: the shop header */
+        .logo {
+          width: 72px;
+          height: 72px;
+          justify-self: center;
+        }
+
+        .hours {
+          text-align: center;
+          color: var(--muted);
+        }
+  whiteboardAssets:
+    # Board A — what React is: step-by-step edits vs describing the screen,
+    # and data -> function -> screen.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 330,
+        height: 46,
+        text: "React ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-old-text,
+        kind: text,
+        x: 350,
+        y: 235,
+        width: 380,
+        height: 36,
+        text: "ကိုယ်တိုင် အဆင့်ဆင့် ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 340,
+        y: 235,
+        width: 400,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-new-check,
+        kind: freedraw,
+        stroke: check,
+        x: 296,
+        y: 292,
+        width: 34,
+        height: 32,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-new-text,
+        kind: text,
+        x: 350,
+        y: 290,
+        width: 380,
+        height: 36,
+        text: "ဘာ ပြရမလဲ ဆိုတာပဲ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-data-box,
+        kind: rectangle,
+        x: 290,
+        y: 390,
+        width: 200,
+        height: 80,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-data-label,
+        kind: text,
+        x: 350,
+        y: 410,
+        width: 80,
+        height: 36,
+        text: "data",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 412,
+        width: 70,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-fn-box,
+        kind: rectangle,
+        x: 590,
+        y: 390,
+        width: 200,
+        height: 80,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-fn-label,
+        kind: text,
+        x: 632,
+        y: 410,
+        width: 116,
+        height: 36,
+        text: "function",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 805,
+        y: 412,
+        width: 70,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-screen-box,
+        kind: rectangle,
+        x: 890,
+        y: 390,
+        width: 200,
+        height: 80,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-screen-label,
+        kind: text,
+        x: 915,
+        y: 410,
+        width: 150,
+        height: 36,
+        text: "မျက်နှာပြင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-formula,
+        kind: text,
+        x: 520,
+        y: 520,
+        width: 300,
+        height: 46,
+        text: "UI = f(data)",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+
+    # Board B — the shop page cut into boxes, and the same page as a tree.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "Component ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-page,
+        kind: rectangle,
+        x: 280,
+        y: 225,
+        width: 310,
+        height: 415,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-head,
+        kind: rectangle,
+        x: 298,
+        y: 243,
+        width: 274,
+        height: 78,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: b-head-label,
+        kind: text,
+        x: 316,
+        y: 263,
+        width: 200,
+        height: 36,
+        text: "ဆိုင်ခေါင်းစဉ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-menu,
+        kind: rectangle,
+        x: 298,
+        y: 337,
+        width: 274,
+        height: 285,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-menu-label,
+        kind: text,
+        x: 316,
+        y: 345,
+        width: 210,
+        height: 36,
+        text: "ဟင်းလျာစာရင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-card-1,
+        kind: rectangle,
+        x: 314,
+        y: 395,
+        width: 242,
+        height: 62,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-card-1-label,
+        kind: text,
+        x: 332,
+        y: 408,
+        width: 170,
+        height: 36,
+        text: "ဟင်းလျာ card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-card-2,
+        kind: rectangle,
+        x: 314,
+        y: 470,
+        width: 242,
+        height: 62,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-card-2-label,
+        kind: text,
+        x: 332,
+        y: 483,
+        width: 170,
+        height: 36,
+        text: "ဟင်းလျာ card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-card-3,
+        kind: rectangle,
+        x: 314,
+        y: 545,
+        width: 242,
+        height: 62,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-card-3-label,
+        kind: text,
+        x: 332,
+        y: 558,
+        width: 170,
+        height: 36,
+        text: "ဟင်းလျာ card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-app,
+        kind: rectangle,
+        x: 650,
+        y: 225,
+        width: 430,
+        height: 56,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: t-app-label,
+        kind: text,
+        x: 838,
+        y: 234,
+        width: 56,
+        height: 36,
+        text: "App",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow-tags,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 738,
+        y: 288,
+        width: 30,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-tags,
+        kind: rectangle,
+        x: 650,
+        y: 342,
+        width: 210,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: t-tags-label,
+        kind: text,
+        x: 668,
+        y: 351,
+        width: 170,
+        height: 36,
+        text: "img · h1 · p",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow-menu,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 965,
+        y: 288,
+        width: 30,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-menu,
+        kind: rectangle,
+        x: 900,
+        y: 342,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: t-menu-label,
+        kind: text,
+        x: 943,
+        y: 351,
+        width: 76,
+        height: 36,
+        text: "Menu",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow-cards,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 965,
+        y: 404,
+        width: 30,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-card-1,
+        kind: rectangle,
+        x: 900,
+        y: 452,
+        width: 160,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: t-card-1-label,
+        kind: text,
+        x: 916,
+        y: 459,
+        width: 128,
+        height: 36,
+        text: "DishCard",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-card-2,
+        kind: rectangle,
+        x: 900,
+        y: 512,
+        width: 160,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: t-card-2-label,
+        kind: text,
+        x: 916,
+        y: 519,
+        width: 128,
+        height: 36,
+        text: "DishCard",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-card-3,
+        kind: rectangle,
+        x: 900,
+        y: 572,
+        width: 160,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: t-card-3-label,
+        kind: text,
+        x: 916,
+        y: 579,
+        width: 128,
+        height: 36,
+        text: "DishCard",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-reuse-note,
+        kind: text,
+        x: 650,
+        y: 470,
+        width: 160,
+        height: 80,
+        text: "တစ်ခါ ရေး၊\nသုံးခါ သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-reuse-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 855,
+        y: 494,
+        width: 40,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-case-underline-tags,
+        kind: freedraw,
+        stroke: underline,
+        x: 664,
+        y: 378,
+        width: 178,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-case-underline-menu,
+        kind: freedraw,
+        stroke: underline,
+        x: 938,
+        y: 378,
+        width: 86,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+
+    # Board C — JSX is JavaScript: tag -> function call -> element object -> DOM.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "JSX ဆိုတာ JavaScript ပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-jsx-box,
+        kind: rectangle,
+        x: 280,
+        y: 220,
+        width: 440,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-jsx-code,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 300,
+        height: 36,
+        text: "<h1>{shopName}</h1>",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-jsx-label,
+        kind: text,
+        x: 760,
+        y: 235,
+        width: 70,
+        height: 36,
+        text: "JSX",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 485,
+        y: 289,
+        width: 30,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-call-box,
+        kind: rectangle,
+        x: 280,
+        y: 320,
+        width: 440,
+        height: 66,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-call-code,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 260,
+        height: 36,
+        text: 'jsx("h1", {…})',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-call-label,
+        kind: text,
+        x: 760,
+        y: 335,
+        width: 230,
+        height: 36,
+        text: "function ခေါ်တာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 485,
+        y: 389,
+        width: 30,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-obj-box,
+        kind: rectangle,
+        x: 280,
+        y: 420,
+        width: 440,
+        height: 66,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-obj-code,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 380,
+        height: 36,
+        text: '{ type: "h1", props: {…} }',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-obj-label,
+        kind: text,
+        x: 760,
+        y: 435,
+        width: 250,
+        height: 36,
+        text: "object (element)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 485,
+        y: 489,
+        width: 30,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-dom-box,
+        kind: rectangle,
+        x: 280,
+        y: 520,
+        width: 440,
+        height: 66,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-dom-code,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 300,
+        height: 36,
+        text: "page ထဲက <h1>",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-dom-label,
+        kind: text,
+        x: 760,
+        y: 535,
+        width: 70,
+        height: 36,
+        text: "DOM",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-rule,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 520,
+        height: 40,
+        text: "{ } ထဲမှာ expression ပဲ ထည့်လို့ ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 190301
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: what-is-react
+    chapter: "React ဆိုတာ ဘာလဲ"
+    narration: >
+      မင်္ဂလာပါ ခင်ဗျာ။ React crash course ကို ကြိုဆိုပါတယ်။ ဒီ ပထမ lesson မှာ
+      React ဆိုတာ ဘာလဲ ဆိုတာကနေ စပြီး၊ ပထမဆုံး component တွေကို JSX နဲ့
+      ရေးကြည့်မှာ ဖြစ်ပါတယ်။ [[mark:draw-old-way]] React ဆိုတာ user interface
+      တည်ဆောက်ဖို့ JavaScript library တစ်ခုပါ။ React မပါရင် page ကို
+      ကိုယ်တိုင် တစ်ဆင့်ချင်း ပြင်ရပါတယ်။ ပြင်ချင်တဲ့ နေရာကို ရှာ၊ စာသား
+      ပြောင်း၊ card ထည့်၊ ဒီလို အဆင့်ဆင့်ပါ။ [[mark:draw-new-way]] React
+      နဲ့ဆိုရင်တော့ screen မှာ ဘာ ရှိသင့်လဲ ဆိုတာကိုပဲ ရေးပါတယ်။ page အစစ်ကို
+      အဲဒီအတိုင်း ပြင်တာက React ရဲ့ အလုပ်ပါ။ [[mark:draw-formula]] အတိုချုပ်
+      ပြောရရင်၊ data က function ထဲ ဝင်သွားပြီး၊ မျက်နှာပြင် ထွက်လာတာပါ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ
+      React ကို install လုပ်ပြီး၊ dev server ကို စနေပါပြီ။ dev server ဆိုတာ
+      ကိုယ့် ဖိုင်တွေကို browser ဆီ ပို့ပေးပြီး၊ ဖိုင် ပြောင်းလိုက်တိုင်း page
+      ကို လိုက်ပြောင်းပေးတဲ့ server ပါ။ နောက်ပိုင်း page လိုတဲ့အခါ အသင့်
+      ဖြစ်နေအောင်ပါ။ [[mark:why-describe]] ဒါဆို page ကို ကိုယ်တိုင်
+      ပြင်မယ့်အစား ဘာကြောင့် ဒီလို ရေးရတာလဲ။ data ပြောင်းသွားရင် React က အဲဒီ
+      function ကိုပဲ နောက်တစ်ကြိမ် ပြန်ခေါ်ပြီး၊ page ပေါ်မှာ ကွာသွားတဲ့
+      နေရာကိုပဲ ပြင်ပေးလို့ပါ။ ဘယ် အဆင့်တွေ လုပ်ပြီးသွားပြီလဲ ဆိုတာကို ကိုယ်က
+      လိုက်မှတ်စရာ မလိုတော့ပါဘူး။ [[mark:state-later]] ဒါကို lesson 3 မှာ
+      state နဲ့ လက်တွေ့ မြင်ရမှာ ဖြစ်ပါတယ်။
+    sources:
+      - title: "React — Quick Start"
+        url: "https://react.dev/learn"
+      - title: "React — How declarative UI compares to imperative"
+        url: "https://react.dev/learn/reacting-to-input-with-state#how-declarative-ui-compares-to-imperative"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: []
+      - id: draw-intro-title
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [a-title]
+        drawMs: 900
+      - id: draw-old-way
+        type: whiteboard.apply
+        at: { mark: draw-old-way }
+        upsertIds: [a-old-text]
+        drawMs: 1200
+      - id: draw-new-way
+        type: whiteboard.apply
+        at: { mark: draw-new-way }
+        # The strike-through lands here, as the words contrast the old way
+        # with React's way, not while the old way is still being described.
+        upsertIds: [a-old-strike, a-new-check, a-new-text]
+        drawMs: 1800
+      - id: draw-formula
+        type: whiteboard.apply
+        at: { mark: draw-formula }
+        upsertIds:
+          [
+            a-data-box,
+            a-data-label,
+            a-arrow-1,
+            a-fn-box,
+            a-fn-label,
+            a-arrow-2,
+            a-screen-box,
+            a-screen-label,
+            a-formula,
+          ]
+        drawMs: 3600
+      # Blocks the Performer through boot + pnpm install + spawn, so nothing
+      # else is anchored until the next scene (~40 s of narration later).
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+
+  - id: component-tree
+    chapter: "Component ဆိုတာ ဘာလဲ"
+    narration: >
+      ကဲ၊ ဒီ course မှာ တည်ဆောက်မယ့် app ကတော့ ရန်ကုန်က မုန့်ဟင်းခါးဆိုင်
+      တစ်ဆိုင်ရဲ့ menu page ပါ။ [[mark:draw-page-parts]] အပေါ်ဆုံးမှာ ဆိုင်ရဲ့
+      logo၊ နာမည်နဲ့ ဖွင့်ချိန် ရှိပါတယ်။ သူ့အောက်မှာတော့ ဟင်းလျာစာရင်း
+      ရှိပြီး၊ ဟင်းလျာ တစ်မျိုးစီကို card တစ်ခုစီနဲ့ ပြထားပါတယ်။
+      [[mark:explain-component]] React မှာ ဒီလို page ကို component လို့
+      ခေါ်တဲ့ အပိုင်းလေးတွေအဖြစ် ခွဲလို့ ရပါတယ်။ component ဆိုတာ screen ပေါ်က
+      UI အပိုင်း တစ်ပိုင်းကို ပြန်ပေးတဲ့ JavaScript function တစ်ခုပါ။
+      [[mark:draw-tree]] သစ်ပင် ပုံစံနဲ့ ဆွဲရင်၊ App က page တစ်ခုလုံးပါ။ သူက
+      logo၊ နာမည်နဲ့ ဖွင့်ချိန်ကို သာမန် HTML tag တွေနဲ့ ပြပြီး၊ Menu ဆိုတဲ့
+      component တစ်ခုကိုလည်း သုံးပါတယ်။ [[mark:draw-cards-tree]] Menu ကတော့
+      ဟင်းလျာ card သုံးခု ပြပြီး၊ တစ်ခုစီက DishCard component ပါ။
+      [[mark:draw-reuse]] ဆိုတော့ DishCard ကို တစ်ခါ ရေးပြီး၊ သုံးခါ
+      ပြန်သုံးတာပါ။ [[mark:case-rule]] နာမည်တွေကို သတိထား ကြည့်ပါ။ HTML tag
+      တွေက စာလုံးသေးနဲ့ စပြီး၊ ကိုယ့် component တွေကတော့ စာလုံးကြီးနဲ့ စပါတယ်။
+      ဒါမှ ဘယ်ဟာက tag၊ ဘယ်ဟာက component ဆိုတာ React က ခွဲသိနိုင်တာပါ။
+    sources:
+      - title: "React — Your First Component"
+        url: "https://react.dev/learn/your-first-component"
+      - title: "React — Understanding Your UI as a Tree"
+        url: "https://react.dev/learn/understanding-your-ui-as-a-tree"
+    actions:
+      - id: draw-shop-page
+        type: whiteboard.apply
+        at: { scene: start }
+        clear: true
+        upsertIds: [b-title, b-page]
+        drawMs: 1500
+      - id: draw-page-parts
+        type: whiteboard.apply
+        at: { mark: draw-page-parts }
+        upsertIds:
+          [
+            b-head,
+            b-head-label,
+            b-menu,
+            b-menu-label,
+            b-card-1,
+            b-card-1-label,
+            b-card-2,
+            b-card-2-label,
+            b-card-3,
+            b-card-3-label,
+          ]
+        drawMs: 4000
+      - id: draw-tree
+        type: whiteboard.apply
+        at: { mark: draw-tree }
+        upsertIds:
+          [
+            t-app,
+            t-app-label,
+            t-arrow-tags,
+            t-tags,
+            t-tags-label,
+            t-arrow-menu,
+            t-menu,
+            t-menu-label,
+          ]
+        drawMs: 3200
+      - id: draw-cards-tree
+        type: whiteboard.apply
+        at: { mark: draw-cards-tree }
+        upsertIds:
+          [
+            t-arrow-cards,
+            t-card-1,
+            t-card-1-label,
+            t-card-2,
+            t-card-2-label,
+            t-card-3,
+            t-card-3-label,
+          ]
+        drawMs: 2400
+      - id: draw-reuse
+        type: whiteboard.apply
+        at: { mark: draw-reuse }
+        upsertIds: [t-reuse-note, t-reuse-arrow]
+        drawMs: 1200
+      - id: underline-case
+        type: whiteboard.apply
+        at: { mark: case-rule }
+        upsertIds: [t-case-underline-tags, t-case-underline-menu]
+        drawMs: 1200
+
+  - id: entry-files
+    chapter: "Project ကို လှည့်ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-tree-board]] ကဲ၊ ဒီ project က ဘယ်ကနေ စလဲ ဆိုတာ ကြည့်ရအောင်။
+      editor အောက်က terminal မှာတော့ ခုနက install လုပ်ခဲ့တဲ့ output တွေ
+      ပေါ်နေပါတယ်။ [[mark:open-index]] ဒါက browser က အရင်ဆုံး ဖွင့်တဲ့ index
+      ဆိုတဲ့ HTML ဖိုင်ပါ။ [[mark:select-root-div]] body ထဲမှာ root ဆိုတဲ့ div
+      အလွတ် တစ်ခုပဲ ရှိပြီး၊ React က app တစ်ခုလုံးကို အဲဒီထဲ ထည့်ပြပေးပါတယ်။
+      [[mark:open-main]] နောက်တစ်ခုက main ဖိုင်ပါ။ [[mark:select-create-root]]
+      ဒီ createRoot ကို ကြည့်ပါ။ သူက အဲဒီ div ကို React root တစ်ခု ဖြစ်အောင်
+      လုပ်ပြီး၊ render ကတော့ App ကို သူ့ထဲ ထည့်ပေးပါတယ်။ React 18 ကစပြီး၊ ဒီ
+      project လို browser ထဲမှာပဲ render လုပ်တဲ့ app တွေ ဒီလိုပဲ စပါတယ်။
+      [[mark:removed-apis]] အရင်က ReactDOM ကနေ တိုက်ရိုက် ခေါ်ခဲ့တဲ့ render
+      အဟောင်းနဲ့ unmountComponentAtNode ကိုတော့ React 19 မှာ ဖြုတ်လိုက်ပါပြီ။
+      အခုတော့ ဒီ root ရဲ့ render နဲ့ unmount ကိုပဲ သုံးရပါတယ်။
+      [[mark:select-strict-mode]] App ကို ဝိုင်းထားတဲ့ StrictMode က ကိုယ်
+      ရေးနေတုန်း development မှာ အပို စစ်ဆေးမှုတွေ လုပ်ပြီး၊ တကယ် ထုတ်လိုက်တဲ့
+      production မှာတော့ ဘာမှ မလုပ်ပါဘူး။ lesson 7 မှာ သူ့ကို ပြန်တွေ့ရပါမယ်။
+      [[mark:select-imports]] ဒီ import တွေက install လုပ်ထားတဲ့ React package
+      ကို ယူတာပါ။ React 19 က script tag နဲ့ တန်းသုံးလို့ ရတဲ့ ဖိုင်
+      မထုတ်တော့လို့၊ Vite ဆိုတဲ့ build tool က code ကို browser ဆီ
+      ပို့ပေးပါတယ်။
+    sources:
+      - title: "React — createRoot"
+        url: "https://react.dev/reference/react-dom/client/createRoot"
+      - title: "React 19 Upgrade Guide — Removed: ReactDOM.render"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-reactdom-render"
+      - title: "React 19 Upgrade Guide — Removed: unmountComponentAtNode"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-unmountcomponentatnode"
+      - title: "React — StrictMode"
+        url: "https://react.dev/reference/react/StrictMode"
+      - title: "React 19 Upgrade Guide — UMD builds removed"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#umd-builds-removed"
+      - title: "Vite — index.html and Project Root"
+        url: "https://vite.dev/guide/#index-html-and-project-root"
+    actions:
+      - id: close-tree-board
+        type: whiteboard.apply
+        at: { mark: close-tree-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-root-div
+        type: editor.select
+        at: { mark: select-root-div }
+        target: { file: index.html, text: '<div id="root"></div>', occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.jsx
+      - id: select-create-root
+        type: editor.select
+        at: { mark: select-create-root }
+        target:
+          { file: src/main.jsx, text: 'createRoot(document.getElementById("root"))', occurrence: 1 }
+      - id: select-strict-mode
+        type: editor.select
+        at: { mark: select-strict-mode }
+        target:
+          { file: src/main.jsx, text: "<StrictMode>\n    <App />\n  </StrictMode>", occurrence: 1 }
+      - id: select-imports
+        type: editor.select
+        at: { mark: select-imports }
+        target:
+          file: src/main.jsx
+          text: "import { StrictMode } from \"react\";\nimport { createRoot } from \"react-dom/client\";"
+          occurrence: 1
+
+  - id: vite-config
+    narration: >
+      [[mark:open-vite-config]] Vite ရဲ့ setting တွေက ဒီ ဖိုင်ထဲမှာပါ။
+      [[mark:select-jsx-automatic]] ဒီ automatic setting က JSX အတွက်ပါ။ JSX
+      ဆိုတာ JavaScript ထဲမှာ HTML လို ရေးနည်းပါ။ browser က နားမလည်လို့ Vite က
+      သာမန် JavaScript အဖြစ် ပြောင်းပေးပါတယ်။ ပြောင်းတဲ့အခါ လိုတဲ့ import ကို
+      Vite က သူ့ဘာသာ ထည့်ပေးလို့၊ JSX ရေးတဲ့ ဖိုင်တိုင်းမှာ React ကို import
+      လုပ်စရာ မလိုတော့ပါဘူး။ React 19 ကလည်း ဒီ ပြောင်းနည်းကိုပဲ လိုချင်ပါတယ်။
+      [[mark:plain-functions]] ဆိုတော့ ဒီ project မှာ component တွေက JSX
+      ပြန်ပေးတဲ့ သာမန် function တွေပါပဲ။ အရင်က ရှိခဲ့တဲ့ createFactory လို
+      helper တွေကိုလည်း React 19 မှာ ဖြုတ်လိုက်ပါပြီ။ [[mark:no-plugin]] Vite
+      မှာ React အတွက် plugin ရှိပေမယ့် ဒီ project မှာ မထည့်ထားလို့၊ JavaScript
+      ဖိုင် သိမ်းလိုက်တိုင်း page တစ်ခုလုံး ပြန်ပွင့်တာကို နောက်ပိုင်း
+      တွေ့ရပါမယ်။ [[mark:open-app]] ဒါကတော့ ကိုယ် ရေးမယ့် App ဖိုင်ပါ။
+      [[mark:select-empty-main]] သူက main အလွတ် တစ်ခုပဲ ပြန်ပေးနေပါသေးတယ်။ ဒါက
+      ကိုယ် ဖြည့်မယ့် အကွက်ပါ။ အပေါ်မှာ import တစ်ကြောင်းမှ မပါတာကိုလည်း
+      သတိထား ကြည့်ပါ။ [[mark:preview-opens]] dev server run နေပြီ ဖြစ်လို့၊
+      ညာဘက်မှာ ကိုယ့် page ကို ပြတဲ့ preview ပွင့်လာပါပြီ။ main က အလွတ်
+      ဖြစ်နေသေးလို့ ဘာမှ မပေါ်သေးပါဘူး။
+    sources:
+      - title: "Vite — Features: JSX"
+        url: "https://vite.dev/guide/features.html#jsx"
+      - title: "React 19 Upgrade Guide — New JSX transform is now required"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#new-jsx-transform-is-now-required"
+      - title: "React 19 Upgrade Guide — Removed: createFactory"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#removed-createfactory"
+      - title: "Vite — Hot Module Replacement"
+        url: "https://vite.dev/guide/features.html#hot-module-replacement"
+    actions:
+      - id: open-vite-config
+        type: workspace.openFile
+        at: { mark: open-vite-config }
+        path: vite.config.js
+      - id: select-jsx-automatic
+        type: editor.select
+        at: { mark: select-jsx-automatic }
+        target: { file: vite.config.js, text: 'esbuild: { jsx: "automatic" }', occurrence: 1 }
+      - id: open-app
+        type: workspace.openFile
+        at: { mark: open-app }
+        path: src/App.jsx
+      - id: select-empty-main
+        type: editor.select
+        at: { mark: select-empty-main }
+        target:
+          {
+            file: src/App.jsx,
+            text: "<main className=\"page\" data-testid=\"page\">\n    </main>",
+            occurrence: 1,
+          }
+      # The server was started in the first scene; by now it is normally up,
+      # so this returns at once.
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-blank-page
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: page }
+        retry: { maxAttempts: 3, delayMs: 150 }
+      # The install output has been seen; give the editor its room back.
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-blank-page }
+
+  - id: jsx-values
+    chapter: "JSX ရေးကြည့်ရအောင်"
+    narration: >
+      ကဲ၊ ပထမဆုံး JSX ရေးကြည့်ရအောင်။ [[mark:type-consts]] အရင်ဆုံး component
+      အပေါ်မှာ const နှစ်ခု ထည့်ပါမယ်။ ဆိုင်နာမည်နဲ့ ဖွင့်ချိန်ကို
+      သိမ်းထားဖို့ပါ။ [[mark:why-consts-first]] အခုထိ ဘယ်နေရာကမှ
+      မသုံးသေးပေမယ့် ကိစ္စ မရှိပါဘူး။ ခဏနေ ရေးမယ့် JSX က ဒီ နာမည်တွေကို ဖတ်မှာ
+      ဖြစ်လို့၊ မရှိသေးတဲ့ နာမည် ဖတ်မိပြီး page ပျက်မသွားအောင် အရင်
+      ထည့်ထားတာပါ။ [[mark:type-header-jsx]] အခု main ထဲကို အကြောင်းအရာတွေ
+      တစ်ခါတည်း ထည့်လိုက်ပါမယ်။ logo တစ်ခု၊ ဆိုင်နာမည် ပါတဲ့ ခေါင်းစဉ်
+      တစ်ခုနဲ့၊ ဖွင့်ချိန် ပါတဲ့ စာပိုဒ် တစ်ခုပါ။
+      [[mark:preview-shows-header]] ကြည့်ပါ၊ page ပြန်ပွင့်သွားပြီး၊ logo၊
+      လိမ္မော်ရောင် ဆိုင်နာမည်နဲ့ သူ့အောက်မှာ ဖွင့်ချိန် ပေါ်လာပါပြီ။
+    sources:
+      - title: "React — JavaScript in JSX with Curly Braces"
+        url: "https://react.dev/learn/javascript-in-jsx-with-curly-braces"
+      - title: "React — Writing Markup with JSX"
+        url: "https://react.dev/learn/writing-markup-with-jsx"
+      - title: "MDN — ReferenceError"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ReferenceError"
+    actions:
+      # App.jsx is imported by main.jsx: complete lines in one block, the
+      # constants before the JSX that reads them.
+      - id: type-consts
+        type: editor.type
+        at: { mark: type-consts }
+        cadence: block
+        target: { file: src/App.jsx, after: "", occurrence: 1 }
+        text: "const shopName = \"ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်\";\nconst openHours = \"မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ\";\n\n"
+      - id: type-header-jsx
+        type: editor.type
+        at: { mark: type-header-jsx }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "    <main className=\"page\" data-testid=\"page\">\n",
+            occurrence: 1,
+          }
+        text: "      <img className=\"logo\" src=\"/logo.svg\" alt={shopName} data-testid=\"logo\" />\n      <h1\n        style={{ color: \"#c2410c\", textAlign: \"center\" }}\n        data-testid=\"shop-name\"\n      >\n        {shopName}\n      </h1>\n      <p className=\"hours\" data-testid=\"hours\">\n        ဖွင့်ချိန်<br />\n        {openHours}\n      </p>\n"
+      - id: expect-shop-name
+        type: expect.preview
+        at: { mark: preview-shows-header }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-hours
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 4000
+        target: { by: testId, value: hours }
+        textContains: "မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-logo-alt
+        type: expect.preview
+        at: { afterAction: expect-hours }
+        timeoutMs: 4000
+        target: { by: testId, value: logo }
+        attribute: { name: alt, value: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: jsx-rules
+    narration: >
+      JSX က HTML နဲ့ တူပေမယ့် ပိုတင်းကျပ်ပြီး၊ စည်းမျဉ်း သုံးချက် ရှိပါတယ်။
+      [[mark:select-main-root]] ပထမ စည်းမျဉ်းက၊ component က အပြင်ဆုံး element
+      တစ်ခုတည်းကိုပဲ ပြန်ပေးရပါမယ်။ အဲဒါကို root element လို့ ခေါ်ပြီး၊ ဒီမှာ
+      အားလုံးက main ထဲမှာ ရှိပါတယ်။ [[mark:select-img-tag]] ဒုတိယ စည်းမျဉ်းက၊
+      tag တိုင်း ပိတ်ရပါမယ်။ ဒီ ပုံ ပြတဲ့ tag က HTML မှာ အပိတ် မရှိပေမယ့်၊ JSX
+      မှာတော့ အဆုံးမှာ slash နဲ့ ပိတ်ရပါတယ်။ [[mark:select-br-tag]] line break
+      ကလည်း အတူတူပါပဲ။ [[mark:select-class-name]] တတိယ စည်းမျဉ်းက၊ attribute
+      နာမည် အများစုကို camelCase နဲ့ ရေးရပါမယ်။ class က JavaScript ရဲ့
+      reserved word ဖြစ်လို့၊ ဒီမှာ className ဖြစ်သွားတာပါ။ data တို့ aria
+      တို့နဲ့ စတဲ့ attribute တွေကတော့ HTML အတိုင်း dash နဲ့ပဲ ရေးပါတယ်။
+      [[mark:select-name-text]] ခေါင်းစဉ်ထဲက curly brace ထဲမှာ JavaScript
+      ရေးလို့ ရတဲ့အတွက်၊ page မှာ shopName ဆိုတဲ့ စာလုံး မဟုတ်ဘဲ သူ့ တန်ဖိုး
+      ပေါ်တာပါ။ [[mark:select-alt-attr]] attribute ထဲမှာလည်း curly brace
+      သုံးလို့ ရပါတယ်။ quote က ပုံသေ စာသား၊ curly brace ကတော့ JavaScript
+      တန်ဖိုးပါ။ [[mark:select-style-attr]] ဒီ style attribute မှာ curly brace
+      နှစ်ထပ် ပါပါတယ်။ အပြင်က တစ်ထပ်က JavaScript အတွက် ဖြစ်ပြီး၊ အတွင်းက
+      တစ်ထပ်က သာမန် object တစ်ခုပါ။ သူ့ထဲက CSS နာမည်တွေလည်း textAlign လို
+      camelCase ပါ။
+    sources:
+      - title: "React — Writing Markup with JSX: The Rules of JSX"
+        url: "https://react.dev/learn/writing-markup-with-jsx#the-rules-of-jsx"
+      - title: "React — JavaScript in JSX with Curly Braces"
+        url: "https://react.dev/learn/javascript-in-jsx-with-curly-braces"
+      - title: "MDN — Lexical grammar: Reserved words"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#reserved_words"
+    actions:
+      - id: select-main-root
+        type: editor.select
+        at: { mark: select-main-root }
+        target:
+          { file: src/App.jsx, text: '<main className="page" data-testid="page">', occurrence: 1 }
+      - id: select-img-tag
+        type: editor.select
+        at: { mark: select-img-tag }
+        target:
+          file: src/App.jsx
+          text: '<img className="logo" src="/logo.svg" alt={shopName} data-testid="logo" />'
+          occurrence: 1
+      - id: select-br-tag
+        type: editor.select
+        at: { mark: select-br-tag }
+        target: { file: src/App.jsx, text: "<br />", occurrence: 1 }
+      - id: select-class-name
+        type: editor.select
+        at: { mark: select-class-name }
+        target: { file: src/App.jsx, text: 'className="hours"', occurrence: 1 }
+      - id: select-name-text
+        type: editor.select
+        at: { mark: select-name-text }
+        target: { file: src/App.jsx, text: "{shopName}", occurrence: 2 }
+      - id: select-alt-attr
+        type: editor.select
+        at: { mark: select-alt-attr }
+        target: { file: src/App.jsx, text: "alt={shopName}", occurrence: 1 }
+      - id: select-style-attr
+        type: editor.select
+        at: { mark: select-style-attr }
+        target:
+          {
+            file: src/App.jsx,
+            text: 'style={{ color: "#c2410c", textAlign: "center" }}',
+            occurrence: 1,
+          }
+
+  - id: jsx-is-javascript
+    chapter: "JSX ဆိုတာ JavaScript ပါ"
+    narration: >
+      [[mark:open-jsx-board]] စည်းမျဉ်းတွေ ဘာလို့လဲ။ JSX က တကယ်တော့ JavaScript
+      ဖြစ်လို့ပါ။ [[mark:draw-jsx-row]] ခုနက ဆိုင်နာမည် ပါတဲ့ ခေါင်းစဉ်ကို JSX
+      နဲ့ ဒီလို ရေးထားပါတယ်။ [[mark:draw-call-row]] Vite က အဲဒီ tag ကို
+      function ခေါ်တာ တစ်ခု ဖြစ်အောင် ပြောင်းပါတယ်။ tag နာမည်၊ attribute
+      တွေနဲ့ စာသားက သူ့ argument တွေ ဖြစ်သွားပါတယ်။ [[mark:draw-object-row]]
+      function က သာမန် object တစ်ခု ပြန်ပေးပါတယ်။ ဘာ ပြရမလဲ ဖော်ပြထားတဲ့ ဒီ
+      object လေးကို React က element လို့ ခေါ်ပါတယ်။ [[mark:draw-dom-row]]
+      ပြီးတော့ React DOM က အဲဒီ object ကို ကြည့်ပြီး၊ browser က page ကို
+      မှတ်ထားတဲ့ DOM ထဲမှာ ခေါင်းစဉ် အစစ် ဖန်တီးပေးပါတယ်။
+      [[mark:one-root-why]] ပထမ စည်းမျဉ်း ရှင်းပါပြီ။ function က တန်ဖိုး
+      တစ်ခုပဲ ပြန်ပေးလို့၊ component ကလည်း root element တစ်ခုပဲ ပြန်ပေးရတာပါ။
+      [[mark:draw-braces-rule]] curly brace ထဲ ထည့်တာက function ရဲ့ argument
+      ဖြစ်သွားလို့၊ expression ပဲ ထည့်လို့ ရပါတယ်။ expression ဆိုတာ variable
+      တို့ တွက်ချက်မှု တို့လို တန်ဖိုး တစ်ခု ပေးတဲ့ အရာပါ။ if တို့ for တို့လို
+      statement တွေကိုတော့ အဲဒီထဲ ထည့်လို့ မရပါဘူး။
+    sources:
+      - title: "React — Writing Markup with JSX: JSX, putting markup into JavaScript"
+        url: "https://react.dev/learn/writing-markup-with-jsx#jsx-putting-markup-into-javascript"
+      - title: "React — createElement"
+        url: "https://react.dev/reference/react/createElement"
+      - title: "React — Introducing the new JSX transform"
+        url: "https://react.dev/link/new-jsx-transform"
+      - title: "MDN — Expressions and operators"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_operators"
+    actions:
+      - id: open-jsx-board
+        type: whiteboard.apply
+        at: { mark: open-jsx-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [c-title]
+        drawMs: 900
+      - id: draw-jsx-row
+        type: whiteboard.apply
+        at: { mark: draw-jsx-row }
+        upsertIds: [c-jsx-box, c-jsx-code, c-jsx-label]
+        drawMs: 1500
+      - id: draw-call-row
+        type: whiteboard.apply
+        at: { mark: draw-call-row }
+        upsertIds: [c-arrow-1, c-call-box, c-call-code, c-call-label]
+        drawMs: 1800
+      - id: draw-object-row
+        type: whiteboard.apply
+        at: { mark: draw-object-row }
+        upsertIds: [c-arrow-2, c-obj-box, c-obj-code, c-obj-label]
+        drawMs: 1800
+      - id: draw-dom-row
+        type: whiteboard.apply
+        at: { mark: draw-dom-row }
+        upsertIds: [c-arrow-3, c-dom-box, c-dom-code, c-dom-label]
+        drawMs: 1800
+      - id: draw-braces-rule
+        type: whiteboard.apply
+        at: { mark: draw-braces-rule }
+        upsertIds: [c-rule]
+        drawMs: 1500
+
+  - id: dish-card
+    chapter: "Component ကို ကိုယ်တိုင် ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-jsx-board]] ကဲ၊ ကိုယ်ပိုင် component တစ်ခု ရေးကြည့်ရအောင်။
+      [[mark:open-dish-card]] ဒီ ဖိုင်အလွတ်က DishCard အတွက်ပါ။ ဘယ် ဖိုင်ကမှ
+      သူ့ကို import မလုပ်ရသေးလို့၊ ရိုက်နေတုန်း page မှာ ဘာမှ မပြောင်းပါဘူး။
+      [[mark:type-dish-card]] အစဆုံးက export default က ဒီ component ကို တခြား
+      ဖိုင်တွေက သုံးလို့ ရအောင် ဖွင့်ပေးတာပါ။ ပြီးတော့ component ဆိုတာ
+      function ဖြစ်လို့၊ function ဆိုတဲ့ keyword နဲ့ DishCard ဆိုတဲ့ နာမည်
+      လာပါတယ်။ JSX ကို return နဲ့ ပြန်ပေးပြီး၊ ကွင်းထဲမှာ ထည့်ထားတဲ့အတွက်
+      markup ကို နောက်တစ်ကြောင်းကနေ စရေးလို့ ရပါတယ်။ card က article element
+      တစ်ခုတည်း ဖြစ်ပြီး၊ သူ့ထဲမှာ ဟင်းလျာ နာမည်နဲ့ ဈေးနှုန်း ပါပါတယ်။ အခုတော့
+      card တိုင်းမှာ မုန့်ဟင်းခါး 2500 ကျပ် လို့ပဲ ပြပါမယ်။
+      [[mark:select-dish-name]] ဒီ နာမည်ကို ကြည့်ပါ။ component နာမည်က
+      စာလုံးကြီးနဲ့ စရမယ် ဆိုတဲ့ စည်းမျဉ်းကို ဒီမှာ ပြန်တွေ့ရပါတယ်။
+      [[mark:select-export-default]] ဒီ export default ကိုတော့ တစ်ဖိုင်မှာ
+      တစ်ခုပဲ ထားလို့ ရပြီး၊ import လုပ်တဲ့ ဖိုင်က ကြိုက်တဲ့ နာမည် ပေးလို့
+      ရပါတယ်။
+    sources:
+      - title: "React — Your First Component"
+        url: "https://react.dev/learn/your-first-component"
+      - title: "React — Importing and Exporting Components"
+        url: "https://react.dev/learn/importing-and-exporting-components"
+    actions:
+      - id: close-jsx-board
+        type: whiteboard.apply
+        at: { mark: close-jsx-board }
+        open: false
+      - id: open-dish-card
+        type: workspace.openFile
+        at: { mark: open-dish-card }
+        path: src/DishCard.jsx
+      # Nothing imports DishCard.jsx yet, so keystrokes never reach the page.
+      - id: type-dish-card
+        type: editor.type
+        at: { mark: type-dish-card }
+        cadence: fast-explainer
+        target: { file: src/DishCard.jsx, after: "", occurrence: 1 }
+        text: "export default function DishCard() {\n  return (\n    <article className=\"card\">\n      <h3>မုန့်ဟင်းခါး</h3>\n      <p>2,500 ကျပ်</p>\n    </article>\n  );\n}\n"
+      - id: select-dish-name
+        type: editor.select
+        at: { mark: select-dish-name }
+        target: { file: src/DishCard.jsx, text: "function DishCard()", occurrence: 1 }
+      - id: select-export-default
+        type: editor.select
+        at: { mark: select-export-default }
+        target: { file: src/DishCard.jsx, text: "export default", occurrence: 1 }
+
+  - id: menu-fragment
+    narration: >
+      [[mark:open-menu-file]] Menu အတွက်လည်း ဖိုင်အလွတ် ရှိပါတယ်။
+      [[mark:type-menu]] Menu က DishCard ကို အရင် import လုပ်ပြီး၊ ဒီနေ့
+      ဟင်းလျာ ဆိုတဲ့ ခေါင်းစဉ်နဲ့ DishCard tag သုံးခုကို ပြန်ပေးပါတယ်။
+      ကိုယ်ပိုင် component ကို HTML tag လိုပဲ သုံးလိုက်တာပါ။
+      [[mark:select-fragment]] ဝိုင်းထားတဲ့ ဒီ tag အလွတ် တစ်စုံကို Fragment
+      လို့ ခေါ်ပါတယ်။ Menu က element လေးခု ပြန်ပေးချင်ပေမယ့် root element က
+      တစ်ခုပဲ ရှိရလို့၊ Fragment က page ထဲ element အပို မထည့်ဘဲ အဲဒီ လေးခုကို
+      root element တစ်ခုအဖြစ် စုပေးတာပါ။ [[mark:select-named-export]]
+      ဒီတစ်ခါတော့ default မပါဘဲ named export ပါ။ တစ်ဖိုင်မှာ အများကြီး ရှိလို့
+      ရပြီး၊ import လုပ်တဲ့ ဖိုင်ကလည်း နာမည် အတူတူကိုပဲ curly brace ထဲ
+      ထည့်ပြီး သုံးရပါတယ်။
+    sources:
+      - title: "React — Fragment"
+        url: "https://react.dev/reference/react/Fragment"
+      - title: "React — Importing and Exporting Components"
+        url: "https://react.dev/learn/importing-and-exporting-components"
+    actions:
+      - id: open-menu-file
+        type: workspace.openFile
+        at: { mark: open-menu-file }
+        path: src/Menu.jsx
+      # Nothing imports Menu.jsx yet either. The second component lands line
+      # by line: the keystrokes were already shown on DishCard.
+      - id: type-menu
+        type: editor.type
+        at: { mark: type-menu }
+        cadence: line-by-line
+        target: { file: src/Menu.jsx, after: "", occurrence: 1 }
+        text: "import DishCard from \"./DishCard.jsx\";\n\nexport function Menu() {\n  return (\n    <>\n      <h2 data-testid=\"menu-title\">ဒီနေ့ ဟင်းလျာ</h2>\n      <DishCard />\n      <DishCard />\n      <DishCard />\n    </>\n  );\n}\n"
+      - id: select-fragment
+        type: editor.select
+        at: { mark: select-fragment }
+        target: { file: src/Menu.jsx, text: "<>", occurrence: 1 }
+      - id: select-named-export
+        type: editor.select
+        at: { mark: select-named-export }
+        target: { file: src/Menu.jsx, text: "export function Menu()", occurrence: 1 }
+
+  - id: wire-up
+    chapter: "App ထဲမှာ ချိတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-app-again]] App ဖိုင်ထဲ ပြန်ပြီး Menu ကို ထည့်ရအောင်။
+      [[mark:type-import]] အရင်ဆုံး import စာကြောင်းကို အပေါ်ဆုံးမှာ
+      ထည့်ပါမယ်။ import မလုပ်ဘဲ Menu ကို အရင် သုံးမိရင် page က error နဲ့
+      ရပ်သွားမှာပါ။ [[mark:select-import-name]] Menu က named export ဖြစ်လို့၊
+      ဒီမှာ curly brace ထဲ ထည့်ရတာပါ။ [[mark:type-menu-tag]] အခု ဖွင့်ချိန်
+      အောက်မှာ Menu tag တစ်ခု ထည့်လိုက်ပါမယ်။ [[mark:preview-shows-menu]]
+      ကြည့်ပါ၊ page ပြန်ပွင့်သွားပြီး၊ menu ပေါ်လာပါပြီ။ ခေါင်းစဉ် တစ်ခုနဲ့
+      card သုံးခုပါ။ App က Menu ကို သုံး၊ Menu က DishCard ကို သုံးခါ သုံး၊ အစက
+      ဆွဲခဲ့တဲ့ သစ်ပင်အတိုင်းပါပဲ။
+    sources:
+      - title: "React — Importing and Exporting Components"
+        url: "https://react.dev/learn/importing-and-exporting-components"
+      - title: "React — Understanding Your UI as a Tree"
+        url: "https://react.dev/learn/understanding-your-ui-as-a-tree"
+    actions:
+      - id: open-app-again
+        type: workspace.openFile
+        at: { mark: open-app-again }
+        path: src/App.jsx
+      # The import lands before the tag that uses it (a use before its import
+      # throws "Menu is not defined" in the live preview).
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "", occurrence: 1 }
+        text: "import { Menu } from \"./Menu.jsx\";\n\n"
+      - id: select-import-name
+        type: editor.select
+        at: { mark: select-import-name }
+        target: { file: src/App.jsx, text: "{ Menu }", occurrence: 1 }
+      - id: type-menu-tag
+        type: editor.type
+        at: { mark: type-menu-tag }
+        cadence: block
+        target: { file: src/App.jsx, after: "        {openHours}\n      </p>\n", occurrence: 1 }
+        text: "      <Menu />\n"
+      - id: expect-menu-title
+        type: expect.preview
+        at: { mark: preview-shows-menu }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-title }
+        textContains: "ဒီနေ့ ဟင်းလျာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # DishCard carries no testid (the learner types it; one less token of
+      # noise). Its price appears nowhere else on the page, so the page text
+      # proves the cards rendered.
+      - id: expect-dish-price
+        type: expect.preview
+        at: { afterAction: expect-menu-title }
+        timeoutMs: 4000
+        target: { by: testId, value: page }
+        textContains: "2,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-header-kept
+        type: expect.preview
+        at: { afterAction: expect-dish-price }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-app-file
+        type: expect.file
+        at: { afterAction: expect-header-kept }
+        path: src/App.jsx
+        contains: "        {openHours}\n      </p>\n      <Menu />\n    </main>"
+      - id: expect-app-import
+        type: expect.file
+        at: { afterAction: expect-app-file }
+        path: src/App.jsx
+        contains: "import { Menu } from \"./Menu.jsx\";\n\nconst shopName"
+      - id: expect-menu-file
+        type: expect.file
+        at: { afterAction: expect-app-import }
+        path: src/Menu.jsx
+        contains: "    <>\n      <h2 data-testid=\"menu-title\">ဒီနေ့ ဟင်းလျာ</h2>\n      <DishCard />\n      <DishCard />\n      <DishCard />\n    </>"
+      - id: expect-dish-card-file
+        type: expect.file
+        at: { afterAction: expect-menu-file }
+        path: src/DishCard.jsx
+        contains: "export default function DishCard() {"
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-menu-again]] Menu ကို နောက်ဆုံး တစ်ခေါက် ကြည့်ရအောင်။
+      [[mark:select-three-cards]] ဒီ DishCard သုံးကြောင်းက အတူတူပဲ ဖြစ်နေလို့၊
+      card တိုင်းမှာ မုန့်ဟင်းခါးပဲ ပြနေပါတယ်။ တကယ့် menu မှာတော့ card
+      တစ်ခုစီမှာ ဟင်းလျာ တစ်မျိုးစီ ပြဖို့ လိုပါတယ်။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ component ဆိုတာ စာလုံးကြီးနဲ့ စတဲ့ နာမည် ရှိပြီး JSX
+      ပြန်ပေးတဲ့ function တွေပါ။ JSX မှာ စည်းမျဉ်း သုံးချက် ရှိပြီး၊ curly
+      brace နဲ့ JavaScript တန်ဖိုးတွေ ထည့်လို့ ရပါတယ်။ import နဲ့ export နဲ့
+      component တစ်ခုစီက သူ့ ဖိုင်နဲ့သူ နေလို့ ရပါတယ်။ [[mark:next-lesson]]
+      နောက် lesson မှာတော့ props နဲ့ component ထဲ data ထည့်ပြီး၊ card တစ်ခုစီက
+      ဟင်းလျာ တစ်မျိုးစီ ပြအောင် လုပ်သွားပါမယ်။ ဆိုင်နာမည်နဲ့
+      ဖွင့်ချိန်ကိုလည်း Header ဆိုတဲ့ component တစ်ခုထဲ ရွှေ့ထားတာ တွေ့ရပါမယ်။
+    sources:
+      - title: "React — Passing Props to a Component"
+        url: "https://react.dev/learn/passing-props-to-a-component"
+      - title: "React — Describing the UI"
+        url: "https://react.dev/learn/describing-the-ui"
+    actions:
+      - id: open-menu-again
+        type: workspace.openFile
+        at: { mark: open-menu-again }
+        path: src/Menu.jsx
+      - id: select-three-cards
+        type: editor.select
+        at: { mark: select-three-cards }
+        target:
+          {
+            file: src/Menu.jsx,
+            text: "      <DishCard />\n      <DishCard />\n      <DishCard />\n",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
