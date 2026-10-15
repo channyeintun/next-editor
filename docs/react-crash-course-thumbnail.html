@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React crash course thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      React crash course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Same template as docs/rust-from-zero-thumbnail.html.
+      Click any text to edit it; click a progress square to load that lesson from LESSONS.
+      Screenshot the frame only (DevTools → right-click the #thumb node → Capture node
+      screenshot for an exact 1280×720 PNG), or render the whole set with
+      `bun docs/react-crash-course-thumbnails/render.ts`.
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese runs are set in Noto Sans Myanmar.
+      Mascot: "Orbi", an original atom character drawn for this template (a nucleus
+      with two orbit rings). It is not the React logo and must not be traced from it.
+      Pose, mirror, tilt and the speech bubble are set from the toolbar under the
+      frame, or all at once with window.setThumb({...}) from the console.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 140px;
+        width: 480px;
+        height: 290px;
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.32;
+        letter-spacing: -0.01em;
+        /* Editable text defaults to break-word in Chrome, which splits a long word
+           instead of letting fitTitle shrink it. */
+        overflow-wrap: normal;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, so every Myanmar run
+         in the title is wrapped in .mm (see renderTitle). */
+      .title .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      /* A phrase that must not break across lines (see renderTitle). */
+      .title .nb {
+        white-space: nowrap;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        font: 500 32px/1.2 var(--mono);
+      }
+
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .tag,
+      .src .attr {
+        color: var(--purple);
+      }
+
+      .src .hook {
+        color: var(--teal-dk);
+        font-weight: 700;
+      }
+
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .cm {
+        color: var(--gray);
+      }
+
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 66px;
+        display: flex;
+        gap: 18px;
+      }
+
+      .module {
+        display: flex;
+        gap: 7px;
+      }
+
+      .sq {
+        width: 24px;
+        height: 24px;
+        border-radius: 5px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      /* The mascot stands on the right end of the code card: its box ends at 472px,
+         just over the card's top border (462px), so its feet rest on it. */
+      .mascot {
+        position: absolute;
+        right: 36px;
+        top: 100px;
+        width: 310px;
+        height: 372px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 18px;
+      }
+
+      .bubble {
+        position: relative;
+        max-width: 310px;
+        overflow: hidden;
+        padding: 8px 24px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font:
+          700 34px/1.35 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+        white-space: nowrap;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, and its stacked
+         marks need a taller line than code text. */
+      .bubble.mm {
+        font-family: "Noto Sans Myanmar", "Google Sans", sans-serif;
+        line-height: 1.6;
+        padding: 4px 24px 6px;
+      }
+
+      .bubble.off {
+        display: none;
+      }
+
+      .bubble-tail {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .orbi {
+        width: 310px;
+        height: 200px;
+        flex: none;
+        overflow: visible;
+        transform-origin: center bottom;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid #55555c;
+        border-radius: 8px;
+        background: #3a3a3f;
+        color: #f0f0f3;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .toolbar button[aria-pressed="true"] {
+        border-color: var(--yellow);
+        color: var(--yellow);
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <span class="brace">{</span> React crash course <span class="brace">}</span>
+      </div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" id="file" contenteditable="plaintext-only" spellcheck="false"></div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble" id="bubble" contenteditable="plaintext-only" spellcheck="false"></div>
+        <svg
+          class="orbi"
+          id="orbi"
+          viewBox="-170 -114 340 220"
+          role="img"
+          aria-label="Orbi, the course's atom mascot"
+        ></svg>
+      </div>
+      <!-- The tail sits outside the bubble so the bubble can clip long text. -->
+      <div class="bubble-tail" id="bubble-tail"></div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      Orbi:
+      <button type="button" data-pose="happy">Happy</button>
+      <button type="button" data-pose="thinking">Thinking</button>
+      <button type="button" data-pose="joy">Joy</button>
+      <button type="button" data-action="mirror">Mirror</button>
+      <button type="button" data-tilt="-6">Tilt left</button>
+      <button type="button" data-tilt="0">Straight</button>
+      <button type="button" data-tilt="6">Tilt right</button>
+      <button type="button" data-action="bubble">Bubble</button>
+    </div>
+
+    <p class="help">
+      Click any text to edit it (including Orbi's bubble) · click a square to load that lesson ·
+      pick Orbi's pose above · then screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      /**
+       * Every lesson's thumbnail data lives here and only here; render.ts and the
+       * progress squares both read it. `slug` is the PNG name in
+       * docs/react-crash-course-thumbnails/. `code` is a real line (or a whole
+       * expression from one) of that lesson's final code, short enough to stay at
+       * the full 32px.
+       */
+      const LESSONS = [
+        {
+          number: 1,
+          slug: "01-components-jsx",
+          title: "Component နဲ့ JSX",
+          file: "DishCard.jsx",
+          code: "export default function DishCard() {",
+          bubble: "JSX",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 2,
+          slug: "02-props-lists",
+          title: "Props၊ list နဲ့ condition",
+          file: "App.jsx",
+          code: "<DishCard key={dish.id} {...dish} />",
+          bubble: "key",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 3,
+          slug: "03-state-events",
+          title: "State နဲ့ event",
+          file: "DishCard.jsx",
+          code: "const [likes, setLikes] = useState(0);",
+          bubble: "useState",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 4,
+          slug: "04-forms-shared-state",
+          title: "Form နဲ့ shared state",
+          file: "App.jsx",
+          code: "onQueryChange={setQuery}",
+          bubble: "onChange",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 5,
+          slug: "05-reducer-context",
+          title: "Reducer နဲ့ context",
+          file: "AddButton.jsx",
+          code: 'dispatch({ type: "added", dish })',
+          bubble: "dispatch",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 6,
+          slug: "06-refs-dom",
+          title: "Ref နဲ့ DOM",
+          file: "SearchInput.jsx",
+          code: "function SearchInput({ ref, ...props }) {",
+          bubble: "useRef",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 7,
+          slug: "07-effects-custom-hooks",
+          title: "Effect နဲ့ custom hook",
+          file: "OrderStatus.jsx",
+          code: "return () => connection.disconnect();",
+          bubble: "useEffect",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 8,
+          slug: "08-performance-transitions",
+          title: "Performance နဲ့ transition",
+          file: "App.jsx",
+          code: "const MemoDishList = memo(DishList);",
+          bubble: "useTransition",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 9,
+          slug: "09-suspense-errors",
+          title: "Suspense၊ use နဲ့ error boundary",
+          file: "MenuList.jsx",
+          code: "const dishes = use(promise);",
+          bubble: "use()",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 10,
+          slug: "10-actions-forms",
+          title: "Action နဲ့ form hook တွေ",
+          file: "SubmitButton.jsx",
+          code: "const { pending } = useFormStatus();",
+          bubble: "Actions",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 11,
+          slug: "11-activity-view-transition",
+          title: "Activity နဲ့ ViewTransition",
+          file: "DishPanel.jsx",
+          code: "addTransitionType(dir);",
+          bubble: "19.3",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 12,
+          slug: "12-server-components",
+          title: "Server Component နဲ့ Server Function",
+          file: "actions.js",
+          code: '"use server";',
+          bubble: "use server",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 13,
+          slug: "13-react-19-3-recap",
+          title: "React 19.3 နဲ့ အနှစ်ချုပ်",
+          file: "OrderDetails.jsx",
+          code: "<Fragment ref={groupRef}>",
+          bubble: "19.3",
+          pose: "joy",
+          tilt: -4,
+        },
+      ];
+      window.LESSONS = LESSONS;
+
+      // Modules of the course: lessons 1–4 · 5–7 · 8–11 · 12–13.
+      const MODULES = [4, 3, 4, 2];
+      const KEYWORDS =
+        /^(export|default|function|const|let|var|return|import|from|if|else|new|async|await|true|false|null|undefined|typeof|of|in|for|while|class|extends|this)$/;
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const file = document.getElementById("file");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+      const bubble = document.getElementById("bubble");
+      const bubbleTail = document.getElementById("bubble-tail");
+      const orbi = document.getElementById("orbi");
+      const thumb = document.getElementById("thumb");
+      const toolbar = document.getElementById("toolbar");
+      const mascot = { pose: "happy", mirror: false, tilt: -6, bubble: true };
+
+      // ---- Orbi, the original atom mascot (flat fills, bold ink outline) ----------
+
+      const INK = "#1e1e1e";
+      const RING = { rx: 152, ry: 42, cy: 20 };
+      // Two orbit rings at uneven tilts (deliberately not a symmetric three-ring
+      // emblem), each carrying one electron.
+      const RINGS = [
+        { color: "#4de5d6", angle: -20, electron: -28, electronColor: "#6d57ff" },
+        { color: "#6d57ff", angle: 17, electron: 200, electronColor: "#4de5d6" },
+      ];
+
+      function ringPath(ring, half) {
+        const { rx, ry, cy } = RING;
+        const shape = `cx="0" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"`;
+        const body =
+          `<ellipse ${shape} stroke="${INK}" stroke-width="18"/>` +
+          `<ellipse ${shape} stroke="${ring.color}" stroke-width="8"/>`;
+        const clip = half === "front" ? ` clip-path="url(#orbi-front)"` : "";
+        return `<g transform="rotate(${ring.angle} 0 ${cy})"><g${clip}>${body}</g></g>`;
+      }
+
+      function electron(ring) {
+        const { rx, ry, cy } = RING;
+        const t = (ring.electron * Math.PI) / 180;
+        return (
+          `<g transform="rotate(${ring.angle} 0 ${cy})">` +
+          `<circle cx="${(rx * Math.cos(t)).toFixed(1)}" cy="${(cy + ry * Math.sin(t)).toFixed(1)}" r="13" ` +
+          `fill="${ring.electronColor}" stroke="${INK}" stroke-width="5"/></g>`
+        );
+      }
+
+      function sparkle(x, y, size) {
+        const s = size;
+        const d = `M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z`;
+        return `<path d="${d}" fill="#ffd255" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      }
+
+      const CHEEKS =
+        `<ellipse cx="-50" cy="10" rx="12" ry="7" fill="#ff8f7e" opacity="0.55"/>` +
+        `<ellipse cx="50" cy="10" rx="12" ry="7" fill="#ff8f7e" opacity="0.55"/>`;
+
+      function roundEye(x, y) {
+        return (
+          `<ellipse cx="${x}" cy="${y}" rx="9.5" ry="12.5" fill="${INK}"/>` +
+          `<circle cx="${x + 3}" cy="${y - 5}" r="3.8" fill="#fff"/>`
+        );
+      }
+
+      const FACES = {
+        happy:
+          roundEye(-27, -16) +
+          roundEye(27, -16) +
+          CHEEKS +
+          `<path d="M -21 8 Q 0 36 21 8 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<path d="M -9 22 Q 0 17 9 22 Q 0 28 -9 22 Z" fill="#ff7f72"/>`,
+        thinking:
+          roundEye(-23, -19) +
+          roundEye(31, -19) +
+          `<path d="M -40 -40 L -14 -37" fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round"/>` +
+          `<path d="M 18 -42 Q 31 -53 44 -43" fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -6 17 Q 2 10 10 16 T 26 13" fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round"/>`,
+        joy:
+          `<path d="M -38 -12 Q -27 -30 -16 -12" fill="none" stroke="${INK}" stroke-width="6.5" stroke-linecap="round"/>` +
+          `<path d="M 16 -12 Q 27 -30 38 -12" fill="none" stroke="${INK}" stroke-width="6.5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -25 4 Q 0 48 25 4 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<ellipse cx="0" cy="22" rx="10" ry="5" fill="#ff7f72"/>`,
+      };
+
+      const EXTRAS = {
+        happy: "",
+        thinking: `<circle cx="-92" cy="-70" r="7" fill="#fff" stroke="${INK}" stroke-width="4"/><circle cx="-112" cy="-92" r="10" fill="#fff" stroke="${INK}" stroke-width="4"/>`,
+        joy: sparkle(-96, -78, 17) + sparkle(88, -94, 12),
+      };
+
+      function orbiSvg(pose) {
+        const r = 80;
+        return (
+          `<defs><clipPath id="orbi-front" clipPathUnits="userSpaceOnUse">` +
+          `<rect x="-200" y="${RING.cy}" width="400" height="200"/></clipPath></defs>` +
+          EXTRAS[pose] +
+          // Feet first, so the body sits on them.
+          `<ellipse cx="-30" cy="86" rx="21" ry="12" fill="${INK}"/>` +
+          `<ellipse cx="30" cy="86" rx="21" ry="12" fill="${INK}"/>` +
+          RINGS.map((ring) => ringPath(ring, "back")).join("") +
+          `<circle cx="7" cy="7" r="${r}" fill="${INK}"/>` +
+          `<circle cx="0" cy="0" r="${r}" fill="#ffd255" stroke="${INK}" stroke-width="7"/>` +
+          `<ellipse cx="-36" cy="-48" rx="15" ry="8" fill="#fff" opacity="0.6" transform="rotate(-38 -36 -48)"/>` +
+          FACES[pose] +
+          RINGS.map((ring) => ringPath(ring, "front")).join("") +
+          RINGS.map(electron).join("")
+        );
+      }
+
+      // ---- Progress squares -------------------------------------------------------
+
+      const squares = [];
+      for (const count of MODULES) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${index}`;
+          square.addEventListener("click", () => window.setThumb({ lesson: index }));
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // ---- Text fitting -----------------------------------------------------------
+
+      function escapeHtml(text) {
+        return text.replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Terms that read as one word and must stay on one line.
+      const NO_BREAK_TERMS = ["error boundary"];
+
+      // Wrap each Burmese run in .mm so a single font shapes it, then glue the
+      // particle နဲ့ to the word before it ("Component နဲ့" never splits) and keep
+      // NO_BREAK_TERMS whole. (A no-break space in LESSONS would not survive the
+      // whitespace collapse below, so this happens in markup.)
+      function renderTitle() {
+        const text = title.textContent.replace(/\s+/g, " ").trim();
+        let html = escapeHtml(text);
+        for (const term of NO_BREAK_TERMS)
+          html = html.split(term).join(`<span class="nb">${term}</span>`);
+        html = html
+          .replace(
+            /[\u1000-\u109f\ua9e0-\ua9ff\uaa60-\uaa7f]+/g,
+            (run) => `<span class="mm">${run}</span>`,
+          )
+          .replace(
+            /(^|[\s>])([^\s<>]+) (<span class="mm">နဲ့<\/span>)/g,
+            (_, lead, word, particle) => `${lead}<span class="nb">${word} ${particle}</span>`,
+          );
+        title.innerHTML = html;
+        fitTitle();
+      }
+
+      // Largest size (to 116px) at which the title fits its box.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // Light JS/JSX highlighting, applied whenever the code line is not being edited.
+      function highlight(source) {
+        const token =
+          /(\/\/.*$)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`)|(<\/?)([A-Za-z][\w.]*)|(\b\d[\d_]*(?:\.\d+)?\b)|(\b[A-Za-z][\w-]*(?==(?![=>])))|(\b[A-Za-z_$][\w$]*)/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, comment, string, angle, tag, num, attr, word] = match;
+          if (angle) {
+            html += `${escapeHtml(angle)}<span class="tag">${escapeHtml(tag)}</span>`;
+          } else {
+            let cls = null;
+            if (comment) cls = "cm";
+            else if (string) cls = "str";
+            else if (num) cls = "num";
+            else if (attr) cls = "attr";
+            else if (word && KEYWORDS.test(word)) cls = "kw";
+            else if (word && /^use([A-Z]\w*)?$/.test(word)) cls = "hook";
+            html += cls ? `<span class="${cls}">${escapeHtml(text)}</span>` : escapeHtml(text);
+          }
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Shrink long code lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        code.innerHTML = highlight(code.textContent.replace(/\s*\n\s*/g, " ").trim());
+        fitCode();
+      }
+
+      // Keep the bubble on one line: shrink long words rather than wrap them.
+      function fitBubble() {
+        bubble.classList.toggle("mm", /[\u1000-\u109f]/.test(bubble.textContent));
+        let size = 34;
+        bubble.style.fontSize = `${size}px`;
+        while (size > 18 && bubble.scrollWidth > bubble.clientWidth) {
+          size -= 1;
+          bubble.style.fontSize = `${size}px`;
+        }
+        placeTail();
+      }
+
+      // The tail hangs under the bubble, pointing down at Orbi.
+      function placeTail() {
+        bubbleTail.style.display = mascot.bubble ? "" : "none";
+        if (!mascot.bubble) return;
+        const frame = thumb.getBoundingClientRect();
+        const box = bubble.getBoundingClientRect();
+        bubbleTail.style.left = `${box.left - frame.left + box.width / 2 - 15}px`;
+        bubbleTail.style.top = `${box.bottom - frame.top - 17}px`;
+      }
+
+      function renderMascot() {
+        orbi.innerHTML = orbiSvg(mascot.pose);
+        orbi.style.transform = `scaleX(${mascot.mirror ? -1 : 1}) rotate(${mascot.tilt}deg)`;
+        bubble.classList.toggle("off", !mascot.bubble);
+        for (const button of toolbar.querySelectorAll("button")) {
+          const pressed =
+            button.dataset.pose === mascot.pose ||
+            (button.dataset.tilt !== undefined && Number(button.dataset.tilt) === mascot.tilt) ||
+            (button.dataset.action === "mirror" && mascot.mirror) ||
+            (button.dataset.action === "bubble" && mascot.bubble);
+          button.setAttribute("aria-pressed", String(pressed));
+        }
+        placeTail();
+      }
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        if (button.dataset.pose) mascot.pose = button.dataset.pose;
+        if (button.dataset.tilt !== undefined) mascot.tilt = Number(button.dataset.tilt);
+        if (button.dataset.action === "mirror") mascot.mirror = !mascot.mirror;
+        if (button.dataset.action === "bubble") mascot.bubble = !mascot.bubble;
+        renderMascot();
+      });
+
+      /**
+       * Set any part of the thumbnail at once (used to render the course set):
+       * setThumb({ lesson: 3 }) loads LESSONS[2]; any other field overrides it:
+       * setThumb({ lesson: 3, code: "…", pose: "thinking", mirror: true, tilt: 0, bubble: "?" })
+       * Fields: number, title, file, code, pose (happy | thinking | joy), mirror, tilt,
+       * bubble (`null` hides the speech bubble).
+       */
+      window.setThumb = (input) => {
+        const base =
+          input.lesson !== undefined
+            ? LESSONS.find((l) => l.number === Number(input.lesson))
+            : null;
+        const spec = { ...(base ?? {}), ...input };
+        if (base && input.mirror === undefined) spec.mirror = false;
+        if (spec.number !== undefined) {
+          number.textContent = String(spec.number).padStart(2, "0");
+          const value = Number(spec.number);
+          markLesson(value >= 1 && value <= squares.length ? value : 0);
+        }
+        if (spec.title !== undefined) title.textContent = spec.title;
+        if (spec.file !== undefined) file.textContent = spec.file;
+        if (spec.code !== undefined) code.textContent = spec.code;
+        if (spec.pose !== undefined && FACES[spec.pose]) mascot.pose = spec.pose;
+        if (spec.mirror !== undefined) mascot.mirror = spec.mirror;
+        if (spec.tilt !== undefined) mascot.tilt = spec.tilt;
+        if (spec.bubble !== undefined) {
+          mascot.bubble = spec.bubble !== null;
+          if (spec.bubble !== null) bubble.textContent = spec.bubble;
+        }
+        renderCode();
+        renderMascot();
+        renderTitle();
+        fitBubble();
+      };
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      title.addEventListener("input", fitTitle);
+      title.addEventListener("blur", renderTitle);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+      bubble.addEventListener("input", fitBubble);
+
+      window.setThumb({ lesson: 1 });
+
+      // Load every face up front (Noto Sans Myanmar only loads once Burmese is on
+      // screen), then refit: sizes measured before the fonts arrive are wrong.
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '400 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => {
+          renderCode();
+          renderTitle();
+          fitBubble();
+        });
+    </script>
+  </body>
+</html>
