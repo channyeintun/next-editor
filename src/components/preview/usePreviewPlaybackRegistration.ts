@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction }
 import type { PreviewPatchReplayInput } from "../../core/src/types";
 import { getRrwebReplayLead } from "../../core/src/utils/previewReplayLead";
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
+import type { WorkspaceFile } from "../../types/workspace";
 import type {
   ApiClientReplayState,
   ApiClientRequestTab,
@@ -16,6 +17,7 @@ import type {
 import { arePreviewSizesEqual } from "../../core/src/utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
+import { withRecordedImageSources } from "./recordedImageSources";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
@@ -41,6 +43,8 @@ interface UsePreviewPlaybackRegistrationOptions {
   applyPreviewPanelState: (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => void;
   lastRefreshKeyRef: RefObject<number | undefined>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
+  /** Reads the workspace as playback restored it; recorded images are shown from it. */
+  readWorkspaceFile: (path: string) => WorkspaceFile | null;
   onActiveModeChange?: (mode: PreviewActiveMode) => void;
   onRequestTabChange?: (tab: ApiClientRequestTab) => void;
   onApiClientStateChange?: (state: ApiClientReplayState) => void;
@@ -67,6 +71,7 @@ export function usePreviewPlaybackRegistration({
   applyPreviewPanelState,
   lastRefreshKeyRef,
   replayContainerRef,
+  readWorkspaceFile,
   onActiveModeChange,
   onRequestTabChange,
   onApiClientStateChange,
@@ -141,7 +146,13 @@ export function usePreviewPlaybackRegistration({
       // A segment with a larger lead re-times every event already built.
       if (
         getRrwebReplayLead(newDocuments, newBatches) > lead ||
-        !replayer.appendEvents(buildRrwebReplayEvents(newDocuments, newBatches, lead))
+        !replayer.appendEvents(
+          withRecordedImageSources(
+            buildRrwebReplayEvents(newDocuments, newBatches, lead),
+            readWorkspaceFile,
+            input.initialDocuments.flatMap((document) => document.events ?? []),
+          ),
+        )
       ) {
         return false;
       }
@@ -183,7 +194,10 @@ export function usePreviewPlaybackRegistration({
 
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const lead = getRrwebReplayLead(input.initialDocuments, input.patchBatches);
-        const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches, lead);
+        const events = withRecordedImageSources(
+          buildRrwebReplayEvents(input.initialDocuments, input.patchBatches, lead),
+          readWorkspaceFile,
+        );
         recordRrwebReplayBuild(input, lead);
 
         // rrweb needs at least a Meta + FullSnapshot to build the document.
@@ -227,7 +241,13 @@ export function usePreviewPlaybackRegistration({
     return () => {
       previewHandle.patchReplayApplier.current = null;
     };
-  }, [hasPreviewPatchReplay, isLiveRuntimePreviewActive, previewHandle, replayContainerRef]);
+  }, [
+    hasPreviewPatchReplay,
+    isLiveRuntimePreviewActive,
+    previewHandle,
+    replayContainerRef,
+    readWorkspaceFile,
+  ]);
 
   useEffect(() => {
     previewHandle.snapshotGetter.current = (): PreviewState | null => {

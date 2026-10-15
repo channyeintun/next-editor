@@ -73,6 +73,7 @@ function renderRegistration() {
         applyPreviewPanelState: vi.fn<() => void>(),
         lastRefreshKeyRef: { current: undefined },
         replayContainerRef: { current: container },
+        readWorkspaceFile: () => null,
       }),
     { initialProps: { isRrwebReplayActive: true, isPlaybackPreviewActive: true } },
   );

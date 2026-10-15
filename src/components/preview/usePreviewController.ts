@@ -294,7 +294,7 @@ export function usePreviewController(): PreviewController {
     applyPreviewPanelState,
   } = usePreviewPanel();
   const { startRuntime } = useWebContainerRuntimeActions();
-  const { subscribeWorkspaceSync } = useWorkspaceActions();
+  const { subscribeWorkspaceSync, getFile } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const saveVersion = useWorkspaceSaveVersion();
   const {
@@ -699,6 +699,7 @@ export function usePreviewController(): PreviewController {
     applyPreviewPanelState,
     lastRefreshKeyRef,
     replayContainerRef,
+    readWorkspaceFile: getFile,
     onActiveModeChange: setActiveMode,
     onRequestTabChange: (tab) => apiClientStore.trigger.setRequestTab({ tab }),
     onApiClientStateChange: (apiState) => {
