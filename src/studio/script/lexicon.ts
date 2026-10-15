@@ -100,6 +100,9 @@ const BURMESE_RESPELLINGS: PronunciationLexicon = {
     DOM: "Dom",
     // Read as one run-together word; it is the attribute "class name".
     className: "class name",
+    // Spelled out as A P P; developers say "app" as the word "up".
+    App: "Up",
+    app: "up",
   },
 };
 

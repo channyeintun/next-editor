@@ -48,7 +48,7 @@ reviewers judge drafts by.
   pronunciation lexicon handles speech, never the display text. English
   narration gets the Pocket voice's respellings. Burmese narration gets only a
   short list of English terms the Burmese voice says wrong (Vite → "veet",
-  DOM → "Dom", className → "class name"), and everything else is spoken as
+  DOM → "Dom", className → "class name", App → "Up"), and everything else is spoken as
   written. When the Burmese voice mispronounces another term, add it to that
   list in the studio's pronunciation lexicon rather than respelling the
   narration.

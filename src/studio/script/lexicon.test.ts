@@ -56,5 +56,7 @@ describe("narrationLexiconFor", () => {
     expect(spokenFormOf("vite", burmese)).toBe("veet");
     expect(spokenFormOf("DOM။", burmese)).toBe("Dom။");
     expect(spokenFormOf("className", burmese)).toBe("class name");
+    expect(spokenFormOf("Appက", burmese)).toBe("Upက");
+    expect(spokenFormOf("app", burmese)).toBe("up");
   });
 });
