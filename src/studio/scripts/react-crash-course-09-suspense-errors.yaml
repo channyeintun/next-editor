@@ -1,0 +1,1912 @@
+# React crash course, lesson 9 — Suspense, use() and error boundaries (Burmese, my-MM).
+#
+# Story: data takes time to arrive and can fail. A fake api.js returns
+# promises that resolve after a delay, cached in a module-level Map. MenuList
+# reads the menu with use(promise) behind one <Suspense> boundary; a lazily
+# loaded Reviews panel waits for its code AND its data behind its own
+# boundary. The pinned class ErrorBoundary is read in a code tour; main.jsx
+# gains an onCaughtError root option that writes to an on-page error log
+# (outside React) instead of console.error. Finally a "today's specials"
+# request whose promise rejects (created in a click handler, with a .catch
+# attached so the browser never reports an unhandled rejection) shows the
+# boundary's friendly fallback and one error-log line — with no console error.
+#
+# Insert-only plan: api.js, MenuList.jsx and Specials.jsx are pinned EMPTY and
+# typed while nothing imports them. App.jsx, main.jsx and (once imported)
+# api.js are live, so they only take `block` inserts: whole lines, or the
+# curriculum's atomic suffix inserts into an import list / the createRoot call
+# (", lazy, useState", ", fetchSpecials", ", { onCaughtError }"). The import
+# always lands before its usage. New sections go directly under <Header />,
+# so the newest demo is always at the top of the 432 px preview. Every JS edit
+# reloads the preview (no Fast Refresh), so every click comes after the last
+# edit, and every reload restarts the menu's 4-second fallback.
+#
+# The dev server starts during the first board and is waited on only when the
+# preview opens, about two minutes of narration later.
+#
+# Narration is Burmese (my-MM); voice-script.md next to this file is the
+# source of the narration text (tools/set_narration.py re-wraps it into the
+# YAML), and every visible string (title, chapters, board labels, UI) is
+# Burmese too. DESIGN.md is the writer's brief.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-09-suspense-errors
+  title: "React crash course 9: Suspense၊ use နဲ့ error boundary"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 9
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <ol id="error-log" class="error-log" data-testid="error-log"></ol>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 9: Suspense and error boundaries */
+        .page {
+          padding-bottom: 96px;
+        }
+
+        .card > button,
+        .card > .badge {
+          justify-self: start;
+        }
+
+        .error-log {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          margin: 0;
+          padding: 8px 16px;
+          list-style: none;
+          border-top: 2px solid #e03131;
+          background: #fff5f5;
+          color: #c92a2a;
+          font-size: 0.85rem;
+        }
+
+        .error-log:empty {
+          display: none;
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/reviews.js: |
+        export const reviews = [
+          { id: "r1", text: "မုန့်ဟင်းခါး အရသာ ကောင်းပါတယ်" },
+          { id: "r2", text: "ဆိုင်က သန့်ရှင်းပြီး မြန်ပါတယ်" },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/App.jsx: |
+        import { Header } from "./Header.jsx";
+
+        export default function App() {
+          return (
+            <main className="page">
+              <Header />
+            </main>
+          );
+        }
+      src/ErrorBoundary.jsx: |
+        import { Component } from "react";
+
+        export default class ErrorBoundary extends Component {
+          state = { error: null };
+
+          static getDerivedStateFromError(error) {
+            return { error };
+          }
+
+          componentDidCatch(error, info) {
+            // တကယ့် app မှာ error နဲ့ info.componentStack ကို logging service ဆီ ဒီကနေ ပို့ပါတယ်
+          }
+
+          render() {
+            if (this.state.error) {
+              return this.props.fallback;
+            }
+            return this.props.children;
+          }
+        }
+      src/Reviews.jsx: |
+        import { use } from "react";
+        import { fetchReviews } from "./api.js";
+
+        export default function Reviews() {
+          const reviews = use(fetchReviews());
+          return (
+            <ul className="list" data-testid="reviews">
+              {reviews.map((review) => (
+                <li key={review.id}>{review.text}</li>
+              ))}
+            </ul>
+          );
+        }
+      src/api.js: ""
+      src/MenuList.jsx: ""
+      src/Specials.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — a loading flag in every component vs one Suspense boundary.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 46,
+        text: "Loading ကို ဘယ်မှာ ပြမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-old-head,
+        kind: text,
+        x: 280,
+        y: 232,
+        width: 260,
+        height: 40,
+        text: "အရင် နည်း",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b1-old-box-1,
+        kind: rectangle,
+        x: 280,
+        y: 290,
+        width: 330,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-old-text-1,
+        kind: text,
+        x: 298,
+        y: 298,
+        width: 290,
+        height: 40,
+        text: "MenuList + loading",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-old-box-2,
+        kind: rectangle,
+        x: 280,
+        y: 360,
+        width: 330,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-old-text-2,
+        kind: text,
+        x: 298,
+        y: 368,
+        width: 290,
+        height: 40,
+        text: "Reviews + loading",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-old-box-3,
+        kind: rectangle,
+        x: 280,
+        y: 430,
+        width: 330,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-old-text-3,
+        kind: text,
+        x: 298,
+        y: 438,
+        width: 290,
+        height: 40,
+        text: "Specials + loading",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-old-note,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 330,
+        height: 40,
+        text: "logic သုံးခါ ထပ်ရေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b1-new-head,
+        kind: text,
+        x: 720,
+        y: 232,
+        width: 340,
+        height: 40,
+        text: "Suspense boundary",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b1-new-box,
+        kind: rectangle,
+        x: 720,
+        y: 290,
+        width: 360,
+        height: 196,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-sign-box,
+        kind: rectangle,
+        x: 742,
+        y: 302,
+        width: 316,
+        height: 58,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-sign,
+        kind: text,
+        x: 760,
+        y: 309,
+        width: 280,
+        height: 44,
+        text: "ခဏစောင့်ပါ…",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b1-children-1,
+        kind: text,
+        x: 745,
+        y: 378,
+        width: 310,
+        height: 40,
+        text: "MenuList · Reviews",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-children-2,
+        kind: text,
+        x: 745,
+        y: 428,
+        width: 310,
+        height: 40,
+        text: "Specials",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-rule,
+        kind: text,
+        x: 280,
+        y: 570,
+        width: 800,
+        height: 40,
+        text: "စောင့်နေတဲ့ UI ကို တစ်နေရာတည်းမှာ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-rule-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 578,
+        width: 520,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board 2 — where the promise is created.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 46,
+        text: "Promise ကို ဘယ်မှာ ဖန်တီးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-bad-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 400,
+        height: 210,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-bad-head,
+        kind: text,
+        x: 292,
+        y: 255,
+        width: 240,
+        height: 42,
+        text: "render ထဲမှာ",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: b2-bad-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 288,
+        y: 256,
+        width: 220,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-bad-l1,
+        kind: text,
+        x: 292,
+        y: 320,
+        width: 340,
+        height: 40,
+        text: "render တိုင်း promise အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-bad-l2,
+        kind: text,
+        x: 292,
+        y: 380,
+        width: 340,
+        height: 40,
+        text: "fallback ကနေ မထွက်တော့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-good-box,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 380,
+        height: 210,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-good-head,
+        kind: text,
+        x: 742,
+        y: 255,
+        width: 260,
+        height: 42,
+        text: "render အပြင်မှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b2-good-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1046,
+        y: 254,
+        width: 42,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-good-l1,
+        kind: text,
+        x: 742,
+        y: 320,
+        width: 330,
+        height: 40,
+        text: "cache · handler · state",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-good-l2,
+        kind: text,
+        x: 742,
+        y: 380,
+        width: 330,
+        height: 40,
+        text: "promise တစ်ခုတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-use-note,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 800,
+        height: 40,
+        text: "use – if ထဲမှာ ရ၊ try/catch ထဲမှာ မရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-use-next,
+        kind: text,
+        x: 280,
+        y: 560,
+        width: 800,
+        height: 40,
+        text: "reject → error boundary ဆီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 3 — where an error goes (caught / uncaught); the recap adds the limit row.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Error ဘယ်ကို ရောက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-c-src-box,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 260,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-c-src-text,
+        kind: text,
+        x: 288,
+        y: 240,
+        width: 225,
+        height: 40,
+        text: "render error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-c-src-sub,
+        kind: text,
+        x: 270,
+        y: 300,
+        width: 260,
+        height: 40,
+        text: "use + reject",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 243,
+        width: 50,
+        height: 34,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-c-eb-box,
+        kind: rectangle,
+        x: 600,
+        y: 230,
+        width: 250,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-c-eb-text,
+        kind: text,
+        x: 616,
+        y: 240,
+        width: 222,
+        height: 40,
+        text: "error boundary",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 860,
+        y: 243,
+        width: 50,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-c-fb-box,
+        kind: rectangle,
+        x: 920,
+        y: 230,
+        width: 170,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-c-fb-text,
+        kind: text,
+        x: 938,
+        y: 240,
+        width: 140,
+        height: 40,
+        text: "fallback",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-c-report,
+        kind: text,
+        x: 600,
+        y: 300,
+        width: 480,
+        height: 40,
+        text: "→ onCaughtError",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-c-default,
+        kind: text,
+        x: 600,
+        y: 345,
+        width: 480,
+        height: 40,
+        text: "မရှိရင် console.error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-u-src-box,
+        kind: rectangle,
+        x: 270,
+        y: 420,
+        width: 260,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-u-src-text,
+        kind: text,
+        x: 288,
+        y: 430,
+        width: 225,
+        height: 40,
+        text: "boundary မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-u-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 433,
+        width: 50,
+        height: 34,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-u-handler-box,
+        kind: rectangle,
+        x: 600,
+        y: 420,
+        width: 250,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-u-handler-text,
+        kind: text,
+        x: 612,
+        y: 430,
+        width: 230,
+        height: 40,
+        text: "onUncaughtError",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-u-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 860,
+        y: 433,
+        width: 50,
+        height: 34,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-u-result-box,
+        kind: rectangle,
+        x: 920,
+        y: 420,
+        width: 170,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-u-result-text,
+        kind: text,
+        x: 936,
+        y: 430,
+        width: 140,
+        height: 40,
+        text: "UI ပျောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-owner,
+        kind: text,
+        x: 270,
+        y: 498,
+        width: 800,
+        height: 40,
+        text: "captureOwnerStack() – development မှာပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-not-caught,
+        kind: text,
+        x: 270,
+        y: 548,
+        width: 800,
+        height: 40,
+        text: "handler · setTimeout → boundary မဖမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-not-caught-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 270,
+        y: 556,
+        width: 560,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+
+    # Board 4 — the recap, on a cleared board.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 420,
+        height: 46,
+        text: "ပြန်ချုပ်ရရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-suspense,
+        kind: text,
+        x: 280,
+        y: 255,
+        width: 760,
+        height: 40,
+        text: "Suspense → စောင့်နေတုန်း fallback",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-boundary,
+        kind: text,
+        x: 280,
+        y: 325,
+        width: 760,
+        height: 40,
+        text: "error boundary → မအောင်မြင်ရင် fallback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-report,
+        kind: text,
+        x: 280,
+        y: 395,
+        width: 760,
+        height: 40,
+        text: "onCaughtError → report",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-next,
+        kind: text,
+        x: 280,
+        y: 495,
+        width: 560,
+        height: 40,
+        text: "နောက် lesson – Action",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-next-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 503,
+        width: 320,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 9209
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: suspense-idea
+    chapter: "Suspense ဘာကြောင့် လိုလဲ"
+    narration: >
+      တကယ့် app မှာ data ရောက်ဖို့ အချိန် ယူရပြီး error လည်း တက်တတ်ပါတယ်။
+      ဒါကြောင့် ဒီ lesson မှာ data စောင့်နေတုန်း ဘာ ပြမလဲ၊ error တက်ရင် ဘယ်လို
+      ဖမ်းမလဲ ဆိုတာကို Suspense၊ use နဲ့ error boundary တို့နဲ့
+      ကြည့်သွားပါမယ်။ [[mark:start-server]] ရှင်းပြနေတုန်း dev server ကို
+      နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ [[mark:draw-old]] အရင် နည်းမှာတော့
+      component တိုင်းက loading state တစ်ခုနဲ့ loading စာသား တစ်ခု ကိုယ်စီ
+      ထားရပါတယ်။ component သုံးခုဆိုရင် တူညီတဲ့ logic ကို သုံးခါ ထပ်ရေးရတာပါ။
+      [[mark:draw-suspense]] React ရဲ့ Suspense ကတော့ အဲဒီ logic ကို
+      တစ်နေရာတည်းမှာ စုပေးပါတယ်။ page ရဲ့ အပိုင်း တစ်ပိုင်းကို Suspense နဲ့
+      ထုပ်ပြီး fallback ပေးထားရင်၊ အဲဒါ Suspense boundary ပါ။ fallback ဆိုတာ
+      အထဲက component တွေ စောင့်နေတုန်း ခဏ ပြထားမယ့် UI ပါ။ [[mark:draw-sign]]
+      အဲဒီ အပိုင်းပေါ်မှာ ခဏစောင့်ပါ ဆိုတဲ့ ဆိုင်းဘုတ် ချိတ်ထားသလိုပါပဲ။
+      [[mark:draw-rule]] ဒါဆို component တစ်ခုစီထဲမှာ data ရောက်ရင် ဘာ ပြမလဲ
+      ဆိုတာပဲ ရေးပြီး၊ စောင့်နေတုန်း UI ကို ဘယ်မှာ ပြမလဲ ဆိုတာကိုတော့ ကိုယ်က
+      ရွေးရုံပါပဲ။
+    sources:
+      - title: "React — <Suspense>"
+        url: "https://react.dev/reference/react/Suspense"
+      - title: "React — <Suspense>: Displaying a fallback while content is loading"
+        url: "https://react.dev/reference/react/Suspense#displaying-a-fallback-while-content-is-loading"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-old
+        type: whiteboard.apply
+        at: { mark: draw-old }
+        upsertIds:
+          [
+            b1-old-head,
+            b1-old-box-1,
+            b1-old-text-1,
+            b1-old-box-2,
+            b1-old-text-2,
+            b1-old-box-3,
+            b1-old-text-3,
+            b1-old-note,
+          ]
+        drawMs: 3000
+      - id: draw-suspense
+        type: whiteboard.apply
+        at: { mark: draw-suspense }
+        upsertIds: [b1-new-head, b1-new-box, b1-children-1, b1-children-2]
+        drawMs: 2200
+      - id: draw-sign
+        type: whiteboard.apply
+        at: { mark: draw-sign }
+        upsertIds: [b1-sign-box, b1-sign]
+        drawMs: 1200
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [b1-rule, b1-rule-underline]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 2
+  - id: fake-api
+    chapter: "Promise ကို use နဲ့ ဖတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-board-1]] editor ထဲ ပြန်သွားရအောင်။ တကယ့် server မရှိလို့
+      server အတု သေးသေးလေး တစ်ခု ရေးပါမယ်။ [[mark:open-api]] api ဖိုင်က အခု
+      အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import မလုပ်ထားသေးပါဘူး။ [[mark:type-api-top]] data
+      ဖိုင် နှစ်ခုကနေ ဟင်းလျာ စာရင်းနဲ့ သုံးသပ်ချက်တွေကို ယူပြီး၊ ရပြီးသားကို
+      မှတ်ထားဖို့ Map တစ်ခုကို cache အဖြစ် ထားပါတယ်။ [[mark:type-delay]]
+      promise ဆိုတာ နောက်မှ ရောက်လာမယ့် တန်ဖိုး တစ်ခုကို ကိုယ်စားပြုတဲ့
+      JavaScript object ပါ။ delay က ခဏ ကြာမှ ပြီးမယ့် promise ကို ပြန်ပေးလို့၊
+      network ကနေ အဖြေ ပြန်လာသလိုပါပဲ။ [[mark:type-fetch-menu]] fetchMenu
+      ကတော့ 4 စက္ကန့် ကြာမှ ဟင်းလျာ စာရင်း ရမယ့် promise ကို ပြန်ပေးပါတယ်။
+      စောင့်ရတာ မြင်သာအောင် တမင် နှေးထားတာပါ။ [[mark:select-cache]] cache
+      ထဲမှာ ရှိပြီးလား စစ်တဲ့ အပိုင်းကို ကြည့်ပါ။ ပထမဆုံး ခေါ်တဲ့အခါမှာပဲ
+      promise ကို ဖန်တီးပြီး၊ နောက်ပိုင်း ခေါ်တိုင်း အဲဒီ promise
+      တစ်ခုတည်းကိုပဲ ပြန်ရပါတယ်။ [[mark:type-fetch-reviews]] fetchReviews
+      ကလည်း သုံးသပ်ချက်တွေအတွက် အဲဒီအတိုင်းပါပဲ၊ ဒီတစ်ခါတော့ 3 စက္ကန့်ပါ။
+    sources:
+      - title: "MDN — Promise"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"
+      - title: "MDN — setTimeout()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout"
+      - title: "MDN — Map"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map"
+      - title: "React — use: Caching Promises for Client Components"
+        url: "https://react.dev/reference/react/use#caching-promises-for-client-components"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: open-api
+        type: workspace.openFile
+        at: { mark: open-api }
+        path: src/api.js
+      - id: type-api-top
+        type: editor.type
+        at: { mark: type-api-top }
+        cadence: line-by-line
+        target: { file: src/api.js, after: "", occurrence: 1 }
+        text: "import { menu } from \"./menu.js\";\nimport { reviews } from \"./reviews.js\";\n\nconst cache = new Map();\n"
+      - id: type-delay
+        type: editor.type
+        at: { mark: type-delay }
+        cadence: line-by-line
+        target: { file: src/api.js, after: "const cache = new Map();\n", occurrence: 1 }
+        text: "\nfunction delay(ms, value) {\n  return new Promise((resolve) => {\n    setTimeout(() => resolve(value), ms);\n  });\n}\n"
+      - id: type-fetch-menu
+        type: editor.type
+        at: { mark: type-fetch-menu }
+        cadence: line-by-line
+        target:
+          {
+            file: src/api.js,
+            after: "    setTimeout(() => resolve(value), ms);\n  });\n}\n",
+            occurrence: 1,
+          }
+        text: "\nexport function fetchMenu() {\n  if (!cache.has(\"menu\")) {\n    cache.set(\"menu\", delay(4000, menu));\n  }\n  return cache.get(\"menu\");\n}\n"
+      - id: select-cache
+        type: editor.select
+        at: { mark: select-cache }
+        target:
+          {
+            file: src/api.js,
+            text: "  if (!cache.has(\"menu\")) {\n    cache.set(\"menu\", delay(4000, menu));\n  }\n",
+            occurrence: 1,
+          }
+      - id: type-fetch-reviews
+        type: editor.type
+        at: { mark: type-fetch-reviews }
+        cadence: line-by-line
+        target: { file: src/api.js, after: "  return cache.get(\"menu\");\n}\n", occurrence: 1 }
+        text: "\nexport function fetchReviews() {\n  if (!cache.has(\"reviews\")) {\n    cache.set(\"reviews\", delay(3000, reviews));\n  }\n  return cache.get(\"reviews\");\n}\n"
+
+  # ------------------------------------------------------------------ 3
+  - id: menu-list
+    narration: >
+      [[mark:open-menu-list]] အခု ဟင်းလျာ စာရင်းကို ပြမယ့် component
+      ရေးရအောင်။ MenuList ဖိုင်လည်း အလွတ်ပါပဲ။ [[mark:type-menu-top]] MenuList
+      က promise ကို အပြင်ကနေ prop အနေနဲ့ လက်ခံပါတယ်။ [[mark:type-use-line]]
+      ပြီးတော့ အဲဒီ promise ကို use နဲ့ ဖတ်ပါတယ်။ lesson 5 မှာ context ဖတ်ဖို့
+      သုံးခဲ့တဲ့ React API ပါပဲ။ [[mark:select-use]] use ခေါ်ထားတဲ့ နေရာကို
+      ကြည့်ပါ။ promise ပြီးပြီဆိုရင် use က ရလာတဲ့ တန်ဖိုးကို ပြန်ပေးပါတယ်။
+      မပြီးသေးရင်တော့ component က ခဏ ရပ်စောင့်ပါတယ်။ ဒါကို suspend ဖြစ်တယ်လို့
+      ခေါ်ပါတယ်။ အဲဒီအခါ promise ပြီးတဲ့အထိ React က အနီးဆုံး Suspense ရဲ့
+      fallback ကို ပြထားပါတယ်။ [[mark:type-menu-return]] ကျန်တာက lesson 2 က
+      list အတိုင်းပါပဲ။ ဟင်းလျာ တစ်ခုစီအတွက် စာကြောင်း တစ်ကြောင်းစီ ဖြစ်ပြီး၊
+      key၊ နာမည်နဲ့ ဈေးနှုန်း ပါပါတယ်။ ဒီ component ထဲမှာ loading state လည်း
+      မရှိ၊ effect လည်း မရှိတာကို သတိထား ကြည့်ပါ။
+    sources:
+      - title: "React — use"
+        url: "https://react.dev/reference/react/use"
+      - title: "React — use: Reading a Promise with use"
+        url: "https://react.dev/reference/react/use#reading-a-promise-with-use"
+      - title: "React 19 — New API: use"
+        url: "https://react.dev/blog/2024/12/05/react-19#new-feature-use"
+    actions:
+      - id: open-menu-list
+        type: workspace.openFile
+        at: { mark: open-menu-list, offsetMs: 400 }
+        path: src/MenuList.jsx
+      - id: type-menu-top
+        type: editor.type
+        at: { mark: type-menu-top }
+        cadence: line-by-line
+        target: { file: src/MenuList.jsx, after: "", occurrence: 1 }
+        text: "import { use } from \"react\";\n\nexport default function MenuList({ promise }) {\n"
+      - id: type-use-line
+        type: editor.type
+        at: { mark: type-use-line }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/MenuList.jsx,
+            after: "export default function MenuList({ promise }) {\n",
+            occurrence: 1,
+          }
+        text: "  const dishes = use(promise);\n"
+      - id: select-use
+        type: editor.select
+        at: { mark: select-use }
+        target: { file: src/MenuList.jsx, text: "use(promise)", occurrence: 1 }
+      - id: type-menu-return
+        type: editor.type
+        at: { mark: type-menu-return }
+        cadence: line-by-line
+        target: { file: src/MenuList.jsx, after: "  const dishes = use(promise);\n", occurrence: 1 }
+        text: "  return (\n    <ul className=\"list\" data-testid=\"menu-list\">\n      {dishes.map((dish) => (\n        <li key={dish.id}>\n          <span>{dish.name}</span>\n          <span className=\"muted\">{dish.price.toLocaleString(\"en-US\") + \" ကျပ်\"}</span>\n        </li>\n      ))}\n    </ul>\n  );\n}\n"
+
+  # ------------------------------------------------------------------ 4
+  - id: menu-suspense
+    narration: >
+      [[mark:open-app-menu]] ကဲ၊ ဟင်းလျာ စာရင်းကို page ပေါ် တင်ရအောင်။ App က
+      အခုထိ ဆိုင်ရဲ့ ခေါင်းစဉ်ကိုပဲ ပြနေပါသေးတယ်။ [[mark:wire-react-import]]
+      အရင်ဆုံး လိုမယ့် အရာ သုံးခုကို import လုပ်ပါတယ်။ React ရဲ့ Suspense၊
+      server အတုက fetchMenu နဲ့ ခုနက ရေးခဲ့တဲ့ MenuList ပါ။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်နေပြီမို့ preview ကို
+      ဖွင့်လိုက်ရအောင်။ အခု ထည့်မှာကတော့ ခေါင်းစဉ် ပါတဲ့ ဟင်းလျာ card
+      တစ်ခုနဲ့၊ list ကို ထုပ်ထားတဲ့ Suspense boundary ပါ။
+      [[mark:wire-menu-jsx]] ကြည့်ပါ၊ ခေါင်းစဉ် အောက်မှာ fallback စာကြောင်း
+      ပေါ်နေပါပြီ။ fetchMenu ကို 4 စက္ကန့် ကြာအောင် လုပ်ထားလို့၊ list က ခဏ
+      စောင့်ရပါတယ်။ [[mark:menu-arrives]] promise ပြီးသွားတော့ အဲဒီ နေရာမှာ
+      ဟင်းလျာတွေ ရောက်လာပါပြီ။ [[mark:select-suspense-jsx]] ဒီ boundary က list
+      ကိုပဲ ထုပ်ထားလို့၊ card ရဲ့ ခေါင်းစဉ်က ချက်ချင်း ပေါ်ပြီး list ကပဲ
+      စောင့်ရတာပါ။ Suspense ထားတဲ့ နေရာက page ရဲ့ ဘယ်အပိုင်း စောင့်ရမလဲ
+      ဆိုတာကို ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "React — <Suspense>: Displaying a fallback while content is loading"
+        url: "https://react.dev/reference/react/Suspense#displaying-a-fallback-while-content-is-loading"
+      - title: "React — use: Displaying an error with an Error Boundary"
+        url: "https://react.dev/reference/react/use#displaying-an-error-with-an-error-boundary"
+    actions:
+      - id: open-app-menu
+        type: workspace.openFile
+        at: { mark: open-app-menu, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-react-import
+        type: editor.type
+        at: { mark: wire-react-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "", occurrence: 1 }
+        text: "import { Suspense } from \"react\";\n"
+      - id: wire-menu-import
+        type: editor.type
+        at: { afterAction: wire-react-import }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import { Header } from \"./Header.jsx\";\n", occurrence: 1 }
+        text: "import { fetchMenu } from \"./api.js\";\nimport MenuList from \"./MenuList.jsx\";\n"
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: title }
+        textContains: "ရွှေရန်ကုန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-header }
+      - id: wire-menu-jsx
+        type: editor.type
+        at: { mark: wire-menu-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <section className=\"card\">\n        <h2>ဟင်းလျာစာရင်း</h2>\n        <Suspense fallback={<p className=\"muted\" data-testid=\"menu-loading\">ဟင်းလျာတွေ ယူနေပါတယ်…</p>}>\n          <MenuList promise={fetchMenu()} />\n        </Suspense>\n      </section>\n"
+      - id: expect-menu-loading
+        type: expect.preview
+        at: { afterAction: wire-menu-jsx }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-loading }
+        textContains: "ယူနေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: menu-arrives }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-list }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 2000 }
+      - id: select-suspense-jsx
+        type: editor.select
+        at: { mark: select-suspense-jsx }
+        target:
+          {
+            file: src/App.jsx,
+            text: "        <Suspense fallback={<p className=\"muted\" data-testid=\"menu-loading\">ဟင်းလျာတွေ ယူနေပါတယ်…</p>}>\n          <MenuList promise={fetchMenu()} />\n        </Suspense>\n",
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 5
+  - id: promise-board
+    narration: >
+      ဒါဆို cache က ဘာကြောင့် လိုလဲ။ [[mark:draw-in-render]] promise ကို
+      render ထဲမှာ ဖန်တီးမယ် ဆိုပါစို့။ ပြန် render လုပ်တိုင်း promise အသစ်
+      ဖြစ်ပြီး ထပ် suspend ဖြစ်လို့၊ React က fallback ကနေ ဘယ်တော့မှ
+      ထွက်မလာတော့ပါဘူး။ [[mark:draw-outside]] ဒါကြောင့် promise ကို render
+      အပြင်မှာ ဖန်တီးရပါမယ်၊ cache ထဲမှာ ဒါမှမဟုတ် event handler ထဲမှာ
+      ဖန်တီးပြီး state ထဲ သိမ်းထားတာမျိုးပါ။ App က fetchMenu ကို render
+      လုပ်တိုင်း ခေါ်ပေမယ့်၊ cache ရှိလို့ promise အသစ် မဖြစ်ပါဘူး။
+      [[mark:draw-use-note]] use ကို hook တွေနဲ့ မတူဘဲ if ထဲမှာ ခေါ်လို့
+      ရပါတယ်။ ဒါပေမဲ့ try နဲ့ catch ထဲမှာတော့ မခေါ်ရပါဘူး။ promise ကို
+      စောင့်ဖို့ use က render ကို ရပ်လိုက်တာကို၊ catch က ကြားက
+      ဖမ်းယူသွားနိုင်လို့ပါ။ [[mark:draw-use-next]] promise က တန်ဖိုး
+      မပေးနိုင်ဘဲ error နဲ့ ပြီးသွားတာကို reject ဖြစ်တယ်လို့ ခေါ်ပါတယ်။ အဲဒီ
+      error ကိုတော့ try နဲ့ catch အစား error boundary ဆိုတဲ့ component နဲ့
+      ဖမ်းပါတယ်၊ ခဏနေရင် ကြည့်ပါမယ်။
+    sources:
+      - title: "React — use(promise): Caveats"
+        url: "https://react.dev/reference/react/use#promise-caveats"
+      - title: "React — use: Displaying an error with an Error Boundary"
+        url: "https://react.dev/reference/react/use#displaying-an-error-with-an-error-boundary"
+    actions:
+      - id: board-promise
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-in-render
+        type: whiteboard.apply
+        at: { mark: draw-in-render }
+        upsertIds: [b2-bad-box, b2-bad-head, b2-bad-l1, b2-bad-l2, b2-bad-strike]
+        drawMs: 2600
+      - id: draw-outside
+        type: whiteboard.apply
+        at: { mark: draw-outside }
+        upsertIds: [b2-good-box, b2-good-head, b2-good-l1, b2-good-l2, b2-good-check]
+        drawMs: 2600
+      - id: draw-use-note
+        type: whiteboard.apply
+        at: { mark: draw-use-note }
+        upsertIds: [b2-use-note]
+        drawMs: 1000
+      - id: draw-use-next
+        type: whiteboard.apply
+        at: { mark: draw-use-next }
+        upsertIds: [b2-use-next]
+        drawMs: 900
+
+  # ------------------------------------------------------------------ 6
+  - id: lazy-reviews
+    chapter: "Code ကို lazy နဲ့ လိုမှ ယူရအောင်"
+    narration: >
+      [[mark:close-board-promise]] Suspense က data ကိုသာမက code ကိုလည်း
+      စောင့်ပေးပါတယ်။ ဆိုင်ရဲ့ သုံးသပ်ချက် အပိုင်းနဲ့ ကြည့်ရအောင်။
+      [[mark:open-reviews]] သုံးသပ်ချက်တွေကို ပြတဲ့ Reviews component က
+      ရေးပြီးသားပါ။ [[mark:select-reviews-use]] သူက MenuList လိုပဲ
+      သုံးသပ်ချက်တွေကို use နဲ့ ဖတ်ပါတယ်။ fetchReviews ကို render ထဲမှာ
+      ခေါ်ပေမယ့်၊ cache ကနေ promise တစ်ခုတည်းကိုပဲ ပြန်ရလို့ ရပါတယ်။
+      [[mark:open-app-reviews]] ဧည့်သည် အများစုက သုံးသပ်ချက်ကို
+      ဖွင့်မကြည့်ကြပါဘူး။ ဒါဆို ဒီ code ကို လူတိုင်း download လုပ်ဖို့
+      လိုပါသလား။ [[mark:wire-lazy-import]] React import ထဲကို lazy နဲ့
+      useState ထပ်ထည့်ပါတယ်။ [[mark:wire-lazy-const]] lazy က ဖိုင်ကို import
+      လုပ်မယ့် function တစ်ခုကို ယူပြီး၊ component တစ်ခု ပြန်ပေးပါတယ်။ အဲဒီ
+      function ကို Reviews ပထမဆုံး render လုပ်မှ React က ခေါ်ပါတယ်။
+      [[mark:select-lazy]] function လို ခေါ်ထားတဲ့ ဒီ import ကြောင့်၊
+      production build မှာ Reviews က သီးသန့် ဖိုင် ဖြစ်သွားပြီး လိုမှသာ
+      download လုပ်ပါတယ်။ ဒါကို lazy load လုပ်တယ်လို့ ခေါ်ပါတယ်။
+      [[mark:wire-reviews-state]] သုံးသပ်ချက် ဖွင့်ထားလား ဆိုတာကို state
+      တစ်ခုနဲ့ မှတ်ထားပါတယ်။ [[mark:wire-reviews-jsx]] ပြီးတော့ ခလုတ် ပါတဲ့
+      card တစ်ခု ထည့်ပြီး၊ ခလုတ် နှိပ်မှ Reviews ကို သူ့ကိုယ်ပိုင် Suspense
+      boundary ထဲမှာ ပြလို့၊ fallback က ဒီ card ထဲမှာပဲ ပေါ်ပါတယ်။
+      [[mark:click-reviews]] ဖွင့်ကြည့်ရအောင်။ fallback ကို
+      ကြည့်ပါ။ [[mark:reviews-arrive]] သုံးသပ်ချက်တွေ ရောက်လာပါပြီ။ code
+      ယူတာရော data စောင့်တာရော နှစ်ခုလုံးကို fallback တစ်ခုတည်းက
+      ကိုင်ပေးသွားတာပါ။ [[mark:prewarm-note]] အရင်က component တစ်ခု suspend
+      ဖြစ်ရင်၊ boundary ထဲက ကျန်တဲ့ component တွေ အကုန် render ပြီးမှ fallback
+      ပေါ်ပါတယ်။ React 19 ကစပြီးတော့ fallback ကို ချက်ချင်း ပြပြီး၊ ကျန်တဲ့
+      component တွေကို နောက်ကွယ်မှာ ဆက် render လုပ်ပါတယ်။ ဒါကြောင့် သူတို့ရဲ့
+      request တွေလည်း စောစော စပါတယ်။
+    sources:
+      - title: "React — lazy"
+        url: "https://react.dev/reference/react/lazy"
+      - title: "React — lazy: Suspense for lazy-loaded components"
+        url: "https://react.dev/reference/react/lazy#suspense-for-code-splitting"
+      - title: "Vite — Features: Dynamic Import"
+        url: "https://vite.dev/guide/features.html#dynamic-import"
+      - title: "React 19 Upgrade Guide — Improvements to Suspense"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#improvements-to-suspense"
+    actions:
+      - id: close-board-promise
+        type: whiteboard.apply
+        at: { mark: close-board-promise }
+        open: false
+      - id: open-reviews
+        type: workspace.openFile
+        at: { mark: open-reviews }
+        path: src/Reviews.jsx
+      - id: select-reviews-use
+        type: editor.select
+        at: { mark: select-reviews-use }
+        target: { file: src/Reviews.jsx, text: "use(fetchReviews())", occurrence: 1 }
+      - id: open-app-reviews
+        type: workspace.openFile
+        at: { mark: open-app-reviews }
+        path: src/App.jsx
+      - id: wire-lazy-import
+        type: editor.type
+        at: { mark: wire-lazy-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { Suspense", occurrence: 1 }
+        text: ", lazy, useState"
+      - id: wire-lazy-const
+        type: editor.type
+        at: { mark: wire-lazy-const }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import MenuList from \"./MenuList.jsx\";\n", occurrence: 1 }
+        text: "\nconst Reviews = lazy(() => import(\"./Reviews.jsx\"));\n"
+      - id: select-lazy
+        type: editor.select
+        at: { mark: select-lazy }
+        target: { file: src/App.jsx, text: 'import("./Reviews.jsx")', occurrence: 1 }
+      - id: wire-reviews-state
+        type: editor.type
+        at: { mark: wire-reviews-state }
+        cadence: block
+        target: { file: src/App.jsx, after: "export default function App() {\n", occurrence: 1 }
+        text: "  const [showReviews, setShowReviews] = useState(false);\n\n"
+      - id: wire-reviews-jsx
+        type: editor.type
+        at: { mark: wire-reviews-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <section className=\"card\">\n        <button data-testid=\"show-reviews\" onClick={() => setShowReviews(true)}>\n          သုံးသပ်ချက် ကြည့်မယ်\n        </button>\n        {showReviews && (\n          <Suspense fallback={<p className=\"muted\" data-testid=\"reviews-loading\">သုံးသပ်ချက်တွေ ယူနေပါတယ်…</p>}>\n            <Reviews />\n          </Suspense>\n        )}\n      </section>\n"
+      - id: expect-reviews-button
+        type: expect.preview
+        at: { mark: click-reviews, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: show-reviews }
+        textContains: "သုံးသပ်ချက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-reviews
+        type: preview.click
+        at: { mark: click-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: show-reviews }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-reviews-loading
+        type: expect.preview
+        at: { afterAction: click-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews-loading }
+        textContains: "ယူနေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-reviews
+        type: expect.preview
+        at: { mark: reviews-arrive }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        textContains: "အရသာ"
+        retry: { maxAttempts: 3, delayMs: 1500 }
+
+  # ------------------------------------------------------------------ 7
+  - id: boundary-tour
+    chapter: "Error boundary ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:open-boundary]] နောက်တစ်ခုက request မအောင်မြင်တဲ့အခါပါ။ error
+      boundary ဆိုတာ သူ့အောက်က component error တက်ရင် page တစ်ခုလုံး
+      ပျက်မသွားအောင် ဖမ်းပြီး၊ အစားထိုး UI ပြပေးတဲ့ component ပါ။
+      [[mark:select-extends]] ဒီဖိုင်မှာ ErrorBoundary ကို class component
+      အနေနဲ့ ရေးထားပါတယ်။ class component ဆိုတာ function အစား JavaScript class
+      နဲ့ ရေးတဲ့ ရေးနည်း အဟောင်းပါ။ error boundary အတွက် hook က အခုထိ
+      မရှိသေးလို့၊ ဒီ course မှာ class ဆိုလို့ ဒီတစ်ခုပဲ ပါပါတယ်။
+      [[mark:select-derived]] အောက်က component က error throw လုပ်တာနဲ့ React က
+      getDerivedStateFromError ကို ခေါ်ပြီး၊ သူ ပြန်ပေးတာက boundary ရဲ့ state
+      အသစ် ဖြစ်သွားပါတယ်။ [[mark:select-did-catch]] componentDidCatch ကတော့
+      တကယ့် app မှာ error ကို logging service ဆီ ပို့တဲ့ နေရာပါ၊ ဒီမှာတော့
+      မှတ်ချက် တစ်ကြောင်းပဲ ထားပါတယ်။ [[mark:select-render]] render ကတော့
+      error ရှိရင် fallback prop ကို ပြပြီး၊ မရှိရင် children ကို
+      ပုံမှန်အတိုင်း ပြပါတယ်။
+    sources:
+      - title: "React — Component: Catching rendering errors with an Error Boundary"
+        url: "https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary"
+      - title: "React — Component: static getDerivedStateFromError"
+        url: "https://react.dev/reference/react/Component#static-getderivedstatefromerror"
+      - title: "React — Component: componentDidCatch"
+        url: "https://react.dev/reference/react/Component#componentdidcatch"
+    actions:
+      - id: open-boundary
+        type: workspace.openFile
+        at: { mark: open-boundary }
+        path: src/ErrorBoundary.jsx
+      - id: select-extends
+        type: editor.select
+        at: { mark: select-extends }
+        target:
+          {
+            file: src/ErrorBoundary.jsx,
+            text: "class ErrorBoundary extends Component",
+            occurrence: 1,
+          }
+      - id: select-derived
+        type: editor.select
+        at: { mark: select-derived }
+        target:
+          {
+            file: src/ErrorBoundary.jsx,
+            text: "  static getDerivedStateFromError(error) {\n    return { error };\n  }\n",
+            occurrence: 1,
+          }
+      - id: select-did-catch
+        type: editor.select
+        at: { mark: select-did-catch }
+        target:
+          { file: src/ErrorBoundary.jsx, text: "componentDidCatch(error, info)", occurrence: 1 }
+      - id: select-render
+        type: editor.select
+        at: { mark: select-render }
+        target:
+          {
+            file: src/ErrorBoundary.jsx,
+            text: "    if (this.state.error) {\n      return this.props.fallback;\n    }\n    return this.props.children;\n",
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 8
+  - id: root-on-caught
+    narration: >
+      [[mark:open-main]] main ဖိုင်ကို ကြည့်ရအောင်။ boundary ဖမ်းမိတဲ့ error
+      တွေကို React 19 က default အားဖြင့် console.error နဲ့ report လုပ်ပါတယ်။
+      တကယ့် app မှာ ကိုယ့် logging service ဆီ ပို့ချင်ရင်တော့၊ createRoot ရဲ့
+      option နဲ့ ပြောင်းလို့ ရပါတယ်။ [[mark:type-on-caught]] ဒီ function က
+      console အစား page ပေါ်က error log ထဲ စာကြောင်း တစ်ကြောင်း ထည့်ပါတယ်။
+      [[mark:type-root-option]] ဒီ function ကို createRoot ဆီ onCaughtError
+      အနေနဲ့ ပေးလိုက်တော့၊ boundary က error ဖမ်းမိတိုင်း React က ဒီ function
+      ကို ခေါ်ပါတယ်။ [[mark:select-root-option]] componentDidCatch က boundary
+      တစ်ခုစီအတွက်ပါ၊ ဒီ option ကတော့ app ထဲက boundary အားလုံး ဖမ်းမိတဲ့ error
+      တွေအတွက် တစ်နေရာတည်းပါ။
+    sources:
+      - title: "React — createRoot: Parameters"
+        url: "https://react.dev/reference/react-dom/client/createRoot#parameters"
+      - title: "React — createRoot: Error logging in production"
+        url: "https://react.dev/reference/react-dom/client/createRoot#error-logging-in-production"
+      - title: "React 19 — Better error reporting"
+        url: "https://react.dev/blog/2024/12/05/react-19#error-handling"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.jsx
+      - id: type-on-caught
+        type: editor.type
+        at: { mark: type-on-caught }
+        cadence: block
+        target: { file: src/main.jsx, after: "import \"./styles.css\";\n\n", occurrence: 1 }
+        text: "function onCaughtError(error) {\n  const item = document.createElement(\"li\");\n  item.textContent = \"ဖမ်းမိတဲ့ error – \" + error.message;\n  document.getElementById(\"error-log\").append(item);\n}\n\n"
+      - id: type-root-option
+        type: editor.type
+        at: { mark: type-root-option }
+        cadence: block
+        target:
+          { file: src/main.jsx, after: 'createRoot(document.getElementById("root")', occurrence: 1 }
+        text: ", { onCaughtError }"
+      - id: select-root-option
+        type: editor.select
+        at: { mark: select-root-option }
+        target: { file: src/main.jsx, text: "{ onCaughtError }", occurrence: 1 }
+
+  # ------------------------------------------------------------------ 9
+  - id: error-routes
+    narration: >
+      [[mark:board-routes]] error ဘယ်ကို ရောက်လဲ ပုံဆွဲ ကြည့်ရအောင်။
+      [[mark:draw-caught]] render လုပ်နေတုန်း ဖြစ်တဲ့ error ဖြစ်ဖြစ်၊ reject
+      ဖြစ်တဲ့ promise ဖြစ်ဖြစ်၊ အနီးဆုံး boundary က fallback ကို ပြပြီး၊ error
+      က onCaughtError ဆီ ရောက်ပါတယ်။ [[mark:draw-uncaught]] ဖမ်းမယ့် boundary
+      မရှိရင်တော့ error က uncaught ဖြစ်ပါတယ်။ React က root ရဲ့ UI တစ်ခုလုံးကို
+      ဖယ်ထုတ်ပြီး၊ createRoot ရဲ့ onUncaughtError option ကို ခေါ်ပါတယ်။
+      [[mark:draw-owner-stack]] development မှာပဲ ရတဲ့ captureOwnerStack ကို
+      ဒီ option တွေထဲမှာ ခေါ်ရင်၊ error တက်တဲ့ component ကို ဘယ် component
+      တွေက ဖန်တီးခဲ့လဲ သိရပါတယ်။
+    sources:
+      - title: "React — createRoot: Parameters (onCaughtError, onUncaughtError)"
+        url: "https://react.dev/reference/react-dom/client/createRoot#parameters"
+      - title: "React 19 Upgrade Guide — Errors in render are not re-thrown"
+        url: "https://react.dev/blog/2024/04/25/react-19-upgrade-guide#errors-in-render-are-not-re-thrown"
+      - title: "React — captureOwnerStack"
+        url: "https://react.dev/reference/react/captureOwnerStack"
+    actions:
+      - id: board-routes
+        type: whiteboard.apply
+        at: { mark: board-routes }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: draw-caught
+        type: whiteboard.apply
+        at: { mark: draw-caught }
+        upsertIds:
+          [
+            b3-c-src-box,
+            b3-c-src-text,
+            b3-c-src-sub,
+            b3-c-arrow-1,
+            b3-c-eb-box,
+            b3-c-eb-text,
+            b3-c-arrow-2,
+            b3-c-fb-box,
+            b3-c-fb-text,
+            b3-c-report,
+            b3-c-default,
+          ]
+        drawMs: 3600
+      - id: draw-uncaught
+        type: whiteboard.apply
+        at: { mark: draw-uncaught }
+        upsertIds:
+          [
+            b3-u-src-box,
+            b3-u-src-text,
+            b3-u-arrow-1,
+            b3-u-handler-box,
+            b3-u-handler-text,
+            b3-u-arrow-2,
+            b3-u-result-box,
+            b3-u-result-text,
+          ]
+        drawMs: 3000
+      - id: draw-owner-stack
+        type: whiteboard.apply
+        at: { mark: draw-owner-stack }
+        upsertIds: [b3-owner]
+        drawMs: 1000
+
+  # ------------------------------------------------------------------ 10
+  - id: specials-code
+    chapter: "Error ကို ဖမ်းကြည့်ရအောင်"
+    narration: >
+      [[mark:close-board-routes]] ကဲ၊ server က အဖြေ မပေးနိုင်တဲ့ request
+      တစ်ခုကို အတုလုပ်ပြီး၊ error ကို တကယ် ဖမ်းကြည့်ရအောင်။
+      [[mark:open-api-2]] api ဖိုင်ထဲမှာ ဒီနေ့ special စာရင်း ယူမယ့် function
+      အသစ် တစ်ခု ထည့်ပါမယ်။ [[mark:type-fetch-specials]] fetchSpecials ကတော့
+      ခေါ်တိုင်း promise အသစ် တစ်ခု ဖန်တီးပြီး၊ 4 စက္ကန့် ကြာရင် error နဲ့
+      reject လုပ်ပါတယ်။ render ထဲမှာ မဟုတ်ဘဲ ခလုတ် နှိပ်မှ ခေါ်မှာမို့ cache
+      မလိုပါဘူး။ [[mark:select-catch]] reject ဖြစ်တဲ့ promise ကို ဘယ်သူမှ
+      မကိုင်တွယ်ရင်၊ browser က console ထဲမှာ error ပြပါတယ်။ ဒီ catch အလွတ်က
+      ကိုင်တွယ်ပြီးပြီလို့ browser ကို ပြောလိုက်တာပါ။ use ကတော့ promise
+      ကိုယ်တိုင်ကို ဖတ်လို့ error ကို မြင်နေဆဲပါ။ [[mark:open-specials]]
+      Specials ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:type-specials-head]] Specials ကလည်း
+      MenuList လိုပဲ promise ကို prop နဲ့ ယူပါတယ်။ [[mark:type-specials-use]]
+      ပြီးတော့ use နဲ့ ဖတ်ပါတယ်။ promise reject ဖြစ်သွားရင် use က အဲဒီ error
+      ကို render လုပ်နေချိန်မှာ throw လုပ်လို့၊ boundary က ဖမ်းလို့ ရပါတယ်။
+      [[mark:type-specials-return]] special တွေ တကယ် ရလာရင်တော့ စာကြောင်း
+      တစ်ကြောင်းတည်းနဲ့ ပြမှာပါ။
+    sources:
+      - title: "React — use: Displaying an error with an Error Boundary"
+        url: "https://react.dev/reference/react/use#displaying-an-error-with-an-error-boundary"
+      - title: "MDN — Promise.prototype.catch()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch"
+      - title: "MDN — Window: unhandledrejection event"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event"
+    actions:
+      - id: close-board-routes
+        type: whiteboard.apply
+        at: { mark: close-board-routes }
+        open: false
+      - id: open-api-2
+        type: workspace.openFile
+        at: { mark: open-api-2 }
+        path: src/api.js
+      - id: type-fetch-specials
+        type: editor.type
+        at: { mark: type-fetch-specials }
+        cadence: block
+        target: { file: src/api.js, after: "  return cache.get(\"reviews\");\n}\n", occurrence: 1 }
+        text: "\nexport function fetchSpecials() {\n  const promise = new Promise((resolve, reject) => {\n    setTimeout(() => reject(new Error(\"special စာရင်း မရသေးပါ\")), 4000);\n  });\n  promise.catch(() => {});\n  return promise;\n}\n"
+      - id: select-catch
+        type: editor.select
+        at: { mark: select-catch }
+        target: { file: src/api.js, text: "  promise.catch(() => {});\n", occurrence: 1 }
+      - id: open-specials
+        type: workspace.openFile
+        at: { mark: open-specials }
+        path: src/Specials.jsx
+      - id: type-specials-head
+        type: editor.type
+        at: { mark: type-specials-head }
+        cadence: line-by-line
+        target: { file: src/Specials.jsx, after: "", occurrence: 1 }
+        text: "import { use } from \"react\";\n\nexport default function Specials({ promise }) {\n"
+      - id: type-specials-use
+        type: editor.type
+        at: { mark: type-specials-use }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/Specials.jsx,
+            after: "export default function Specials({ promise }) {\n",
+            occurrence: 1,
+          }
+        text: "  const specials = use(promise);\n"
+      - id: type-specials-return
+        type: editor.type
+        at: { mark: type-specials-return }
+        cadence: line-by-line
+        target:
+          { file: src/Specials.jsx, after: "  const specials = use(promise);\n", occurrence: 1 }
+        text: "  return <p data-testid=\"specials\">{specials.join(\"၊ \")}</p>;\n}\n"
+
+  # ------------------------------------------------------------------ 11
+  - id: specials-error
+    narration: >
+      [[mark:open-app-specials]] App ထဲကို special အပိုင်း ထည့်ကြည့်ရအောင်။
+      [[mark:wire-specials-imports]] အရင်ဆုံး ရေးပြီးသား error boundary၊ ခုနက
+      ရေးခဲ့တဲ့ Specials နဲ့ request လုပ်မယ့် function ကို import လုပ်ပါတယ်။
+      [[mark:wire-specials-state]] promise ကို state ထဲမှာ ထားပါမယ်။ အစမှာတော့
+      ဘာမှ မရှိပါဘူး။ [[mark:wire-specials-jsx]] ခလုတ် နှိပ်တဲ့အခါ click
+      handler က promise ကို ဖန်တီးပြီး state ထဲ သိမ်းလို့၊ request က ခလုတ်
+      နှိပ်မှသာ စပါတယ်။ [[mark:select-boundaries]] ဒီ boundary နှစ်ထပ်ကို
+      ကြည့်ပါ။ စောင့်တာကို အတွင်းက Suspense က၊ မအောင်မြင်တာကို အပြင်က error
+      boundary က ကိုင်ပါတယ်။ [[mark:click-specials]] special ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ fallback ပေါ်လာပါပြီ။ [[mark:specials-failed]]
+      ခဏနေတော့ promise reject ဖြစ်သွားပါတယ်။ boundary က ဧည့်သည်အတွက် စာသားကို
+      ပြပြီး၊ error log ထဲမှာ onCaughtError ကနေ စာကြောင်း တစ်ကြောင်း
+      ရောက်လာပါတယ်။ [[mark:after-error]] ကျန်တဲ့ page က ပုံမှန်အတိုင်း
+      အလုပ်လုပ်နေပြီး၊ console ထဲမှာလည်း error မရှိပါဘူး။
+    sources:
+      - title: "React — Component: Catching rendering errors with an Error Boundary"
+        url: "https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary"
+      - title: "React — use: Displaying an error with an Error Boundary"
+        url: "https://react.dev/reference/react/use#displaying-an-error-with-an-error-boundary"
+      - title: "React — createRoot: Parameters"
+        url: "https://react.dev/reference/react-dom/client/createRoot#parameters"
+    actions:
+      - id: open-app-specials
+        type: workspace.openFile
+        at: { mark: open-app-specials, offsetMs: 400 }
+        path: src/App.jsx
+      - id: wire-specials-imports
+        type: editor.type
+        at: { mark: wire-specials-imports }
+        cadence: block
+        target:
+          { file: src/App.jsx, after: "import MenuList from \"./MenuList.jsx\";\n", occurrence: 1 }
+        text: "import ErrorBoundary from \"./ErrorBoundary.jsx\";\nimport Specials from \"./Specials.jsx\";\n"
+      - id: wire-api-specials
+        type: editor.type
+        at: { afterAction: wire-specials-imports }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { fetchMenu", occurrence: 1 }
+        text: ", fetchSpecials"
+      - id: wire-specials-state
+        type: editor.type
+        at: { mark: wire-specials-state }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "  const [showReviews, setShowReviews] = useState(false);\n",
+            occurrence: 1,
+          }
+        text: "  const [specialsPromise, setSpecialsPromise] = useState(null);\n"
+      - id: wire-specials-jsx
+        type: editor.type
+        at: { mark: wire-specials-jsx }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <section className=\"card\">\n        <button data-testid=\"load-specials\" onClick={() => setSpecialsPromise(fetchSpecials())}>\n          ဒီနေ့ special ကြည့်မယ်\n        </button>\n        {specialsPromise && (\n          <ErrorBoundary fallback={<p className=\"badge warn\" data-testid=\"specials-error\">ဒီနေ့ special မရသေးပါ</p>}>\n            <Suspense fallback={<p className=\"muted\" data-testid=\"specials-loading\">special တွေ ယူနေပါတယ်…</p>}>\n              <Specials promise={specialsPromise} />\n            </Suspense>\n          </ErrorBoundary>\n        )}\n      </section>\n"
+      - id: select-boundaries
+        type: editor.select
+        at: { mark: select-boundaries }
+        target:
+          {
+            file: src/App.jsx,
+            text: "          <ErrorBoundary fallback={<p className=\"badge warn\" data-testid=\"specials-error\">ဒီနေ့ special မရသေးပါ</p>}>\n            <Suspense fallback={<p className=\"muted\" data-testid=\"specials-loading\">special တွေ ယူနေပါတယ်…</p>}>\n              <Specials promise={specialsPromise} />\n            </Suspense>\n          </ErrorBoundary>\n",
+            occurrence: 1,
+          }
+      - id: expect-specials-button
+        type: expect.preview
+        at: { mark: click-specials, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: load-specials }
+        textContains: "special"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-specials
+        type: preview.click
+        at: { mark: click-specials }
+        timeoutMs: 5000
+        target: { by: testId, value: load-specials }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-specials-loading
+        type: expect.preview
+        at: { afterAction: click-specials }
+        timeoutMs: 5000
+        target: { by: testId, value: specials-loading }
+        textContains: "ယူနေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-specials-error
+        type: expect.preview
+        at: { mark: specials-failed }
+        timeoutMs: 5000
+        target: { by: testId, value: specials-error }
+        textContains: "မရသေးပါ"
+        retry: { maxAttempts: 3, delayMs: 2000 }
+      - id: expect-error-log
+        type: expect.preview
+        at: { afterAction: expect-specials-error }
+        timeoutMs: 5000
+        target: { by: testId, value: error-log }
+        textContains: "ဖမ်းမိတဲ့ error – special စာရင်း မရသေးပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-menu-still
+        type: expect.preview
+        at: { mark: after-error }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-list }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 1500 }
+
+  # ------------------------------------------------------------------ 12
+  - id: recap
+    narration: >
+      [[mark:board-recap]] ဒါပေမဲ့ error boundary မှာ ကန့်သတ်ချက် တစ်ခု
+      ရှိပါတယ်။ [[mark:draw-not-caught]] boundary က render နဲ့ effect ထဲက
+      error တွေကို ဖမ်းပေမယ့်၊ သာမန် event handler ထဲက error နဲ့ setTimeout
+      callback ထဲက error တွေကိုတော့ မဖမ်းပါဘူး။ အဲဒါတွေကို try နဲ့ catch နဲ့
+      ကိုယ်တိုင် ဖမ်းရပါမယ်။ special ရဲ့ error လည်း setTimeout ထဲမှာ ဖြစ်တာပါ။
+      boundary ဖမ်းနိုင်ခဲ့တာက use က အဲဒီ error ကို render လုပ်နေချိန်မှာ ပြန်
+      throw လုပ်ပေးလို့ပါ။ startTransition ထဲက error ကတော့ ခြွင်းချက်ပါ၊
+      boundary ဆီ ရောက်ပါတယ်။ [[mark:draw-recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ use နဲ့
+      ဖတ်တဲ့ data ဖြစ်ဖြစ်၊ lazy နဲ့ ယူတဲ့ code ဖြစ်ဖြစ်၊ စောင့်နေတုန်း
+      Suspense က fallback ကို ပြပေးပါတယ်။ error boundary ကတော့ render
+      မအောင်မြင်ရင် fallback ကို ပြပြီး၊ ဖမ်းမိတဲ့ error ကို ဘယ်မှာ report
+      လုပ်မလဲ ဆိုတာကိုတော့ root ရဲ့ onCaughtError နဲ့ ဆုံးဖြတ်ပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ form ပို့တဲ့အခါ pending နဲ့
+      error ကို ကိုင်တွယ်ပေးတဲ့ Action တွေကို ကြည့်သွားပါမယ်။ lesson 12 နဲ့ 13
+      မှာတော့ Server Component တွေ run တဲ့အခါ Suspense ကို ပြန်တွေ့ရပါမယ်။
+    sources:
+      - title: "React — Component: Catching rendering errors with an Error Boundary (caveats)"
+        url: "https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary"
+      - title: "React — <Suspense>"
+        url: "https://react.dev/reference/react/Suspense"
+      - title: "React 19 — Actions"
+        url: "https://react.dev/blog/2024/12/05/react-19#actions"
+    actions:
+      - id: board-recap
+        type: whiteboard.apply
+        at: { mark: board-recap }
+        open: true
+        maximized: true
+        upsertIds: [b3-title]
+      - id: draw-not-caught
+        type: whiteboard.apply
+        at: { mark: draw-not-caught }
+        upsertIds: [b3-not-caught, b3-not-caught-underline]
+        drawMs: 1600
+      - id: draw-recap
+        type: whiteboard.apply
+        at: { mark: draw-recap }
+        clear: true
+        upsertIds: [b4-title, b4-suspense, b4-boundary, b4-report]
+        drawMs: 2400
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b4-next, b4-next-underline]
+        drawMs: 1000
+      - id: expect-api-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/api.js
+        contains: "export function fetchMenu() {\n  if (!cache.has(\"menu\")) {\n    cache.set(\"menu\", delay(4000, menu));\n  }\n  return cache.get(\"menu\");\n}\n"
+      - id: expect-specials-api-file
+        type: expect.file
+        at: { afterAction: expect-api-file }
+        path: src/api.js
+        contains: "  promise.catch(() => {});\n  return promise;\n"
+      - id: expect-menu-list-file
+        type: expect.file
+        at: { afterAction: expect-specials-api-file }
+        path: src/MenuList.jsx
+        contains: "  const dishes = use(promise);\n"
+      - id: expect-specials-file
+        type: expect.file
+        at: { afterAction: expect-menu-list-file }
+        path: src/Specials.jsx
+        contains: "  const specials = use(promise);\n"
+      - id: expect-main-file
+        type: expect.file
+        at: { afterAction: expect-specials-file }
+        path: src/main.jsx
+        contains: 'createRoot(document.getElementById("root"), { onCaughtError }).render('
+      - id: expect-app-imports-file
+        type: expect.file
+        at: { afterAction: expect-main-file }
+        path: src/App.jsx
+        contains: "import { Suspense, lazy, useState } from \"react\";\nimport { Header } from \"./Header.jsx\";\nimport { fetchMenu, fetchSpecials } from \"./api.js\";\n"
+      - id: expect-app-lazy-file
+        type: expect.file
+        at: { afterAction: expect-app-imports-file }
+        path: src/App.jsx
+        contains: "const Reviews = lazy(() => import(\"./Reviews.jsx\"));\n"
+      - id: expect-app-boundary-file
+        type: expect.file
+        at: { afterAction: expect-app-lazy-file }
+        path: src/App.jsx
+        contains: "          </ErrorBoundary>\n        )}\n      </section>\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
