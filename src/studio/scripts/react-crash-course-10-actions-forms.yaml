@@ -1004,7 +1004,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b1-title]
       - id: start-server
@@ -1267,7 +1266,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-form }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b2-title, b2-form-box, b2-form-text]
       - id: draw-form-data
@@ -1675,7 +1673,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-optimistic }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title, b3-click-box, b3-click-text]
       - id: draw-optimistic-row
@@ -1919,7 +1916,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: board-dom }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b4-title]
       - id: draw-meta
