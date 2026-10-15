@@ -34,7 +34,7 @@ describe("estimated dialog lengths", () => {
 
 describe("narrationOf", () => {
   it("speaks each dialog with the lexicon of the script's locale", () => {
-    // The in-page Director respells English narration only; Burmese is spoken as written.
+    // English gets the Pocket respellings; Burmese only its short list, which leaves HTML alone.
     const english = narrationOf(fixtureWith("en-US", "HTML first."));
     const burmese = narrationOf(fixtureWith("my-MM", "HTML first."));
     expect(english.speechTexts[0]).toMatch(/^H T M L first\./);

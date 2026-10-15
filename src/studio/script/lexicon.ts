@@ -84,12 +84,26 @@ export function speechTextOf(tokens: readonly string[], lexicon: PronunciationLe
 /**
  * LEXICON_V1's respellings ("struckt", "funk", letter-by-letter initialisms)
  * are tuned for the English Pocket voice. Handed to the Burmese narrator they
- * are just misspelled English, so Burmese narration speaks (and aligns
- * captions on) its display tokens as written.
+ * are just misspelled English, so Burmese narration keeps its own short list:
+ * only the English terms the Burmese voice says wrong, respelled the way
+ * Burmese developers say them (Chan, 2026-10-15). Every other token is spoken
+ * as written. A respelling changes only the speech text of the dialogs that
+ * contain the term, so only those dialogs are synthesized again.
  */
-const NO_RESPELLINGS: PronunciationLexicon = { version: 0, entries: {} };
+const BURMESE_RESPELLINGS: PronunciationLexicon = {
+  version: 1,
+  entries: {
+    // Read as "vite"; the tool's name is French for "fast", said "veet".
+    Vite: "veet",
+    vite: "veet",
+    // Read as the Burmese syllable ဒွမ်; developers say it as the word "Dom".
+    DOM: "Dom",
+    // Read as one run-together word; it is the attribute "class name".
+    className: "class name",
+  },
+};
 
 /** The lexicon a lesson's narration is spoken with, by its locale. */
 export function narrationLexiconFor(locale: string): PronunciationLexicon {
-  return isBurmeseLocale(locale) ? NO_RESPELLINGS : LEXICON_V1;
+  return isBurmeseLocale(locale) ? BURMESE_RESPELLINGS : LEXICON_V1;
 }

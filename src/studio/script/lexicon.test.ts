@@ -45,8 +45,16 @@ describe("spokenFormOf", () => {
 });
 
 describe("narrationLexiconFor", () => {
-  it("respells English narration and speaks Burmese as written", () => {
+  it("respells English narration and only the mispronounced terms in Burmese", () => {
     expect(narrationLexiconFor("en-US")).toBe(LEXICON_V1);
-    expect(narrationLexiconFor("my-MM").entries).toEqual({});
+    const burmese = narrationLexiconFor("my-MM");
+    // The English Pocket respellings never reach the Burmese voice.
+    expect(spokenFormOf("HTML", burmese)).toBe("HTML");
+    expect(spokenFormOf("struct", burmese)).toBe("struct");
+    // Particles attach straight onto the term in Burmese; they stay put.
+    expect(spokenFormOf("Viteက", burmese)).toBe("veetက");
+    expect(spokenFormOf("vite", burmese)).toBe("veet");
+    expect(spokenFormOf("DOM။", burmese)).toBe("Dom။");
+    expect(spokenFormOf("className", burmese)).toBe("class name");
   });
 });

@@ -45,8 +45,17 @@ reviewers judge drafts by.
 ## Terminology and honesty
 
 - Use the language's own terms (`package`, `func`, `int`) verbatim; the
-  pronunciation lexicon handles speech, never the display text. It applies to
-  English narration only — Burmese narration is spoken as written.
+  pronunciation lexicon handles speech, never the display text. English
+  narration gets the Pocket voice's respellings. Burmese narration gets only a
+  short list of English terms the Burmese voice says wrong (Vite → "veet",
+  DOM → "Dom", className → "class name"), and everything else is spoken as
+  written. When the Burmese voice mispronounces another term, add it to that
+  list in the studio's pronunciation lexicon rather than respelling the
+  narration.
+- In Burmese narration, keep the technical terms Burmese developers say in
+  English in English: screen, tree, memory, component, state and the like,
+  not မျက်နှာပြင်, သစ်ပင် or မှတ်ဉာဏ်. Everyday words that read naturally in
+  Burmese (ခလုတ်, ခေါင်းစဉ်, စာပိုဒ်) stay Burmese.
 - Every factual claim a viewer could quote needs a source on the scene
   (`sources:` in the script — official specs, docs, or tour pages preferred).
 - Never claim the lesson is human-performed. Drafts carry the AI-production
