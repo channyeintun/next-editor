@@ -1833,15 +1833,9 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-purity-board }
         open: false
-      - id: scroll-preview
-        type: preview.scroll
-        at: { mark: scroll-preview }
-        timeoutMs: 5000
-        top: 600
-        retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-final-summary
         type: expect.preview
-        at: { afterAction: scroll-preview }
+        at: { mark: scroll-preview }
         timeoutMs: 5000
         target: { by: testId, value: menu-summary }
         textContains: "4 မျိုး ရနိုင်ပါတယ်"
