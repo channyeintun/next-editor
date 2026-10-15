@@ -425,7 +425,7 @@ lesson:
         y: 410,
         width: 150,
         height: 36,
-        text: "မျက်နှာပြင်",
+        text: "screen",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -975,7 +975,7 @@ scenes:
       ပြောင်း၊ card ထည့်၊ ဒီလို အဆင့်ဆင့်ပါ။ [[mark:draw-new-way]] React
       နဲ့ဆိုရင်တော့ screen မှာ ဘာ ရှိသင့်လဲ ဆိုတာကိုပဲ ရေးပါတယ်။ page အစစ်ကို
       အဲဒီအတိုင်း ပြင်တာက React ရဲ့ အလုပ်ပါ။ [[mark:draw-formula]] အတိုချုပ်
-      ပြောရရင်၊ data က function ထဲ ဝင်သွားပြီး၊ မျက်နှာပြင် ထွက်လာတာပါ။
+      ပြောရရင်၊ data က function ထဲ ဝင်သွားပြီး၊ screen ထွက်လာတာပါ။
       [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ
       React ကို install လုပ်ပြီး၊ dev server ကို စနေပါပြီ။ dev server ဆိုတာ
       ကိုယ့် ဖိုင်တွေကို browser ဆီ ပို့ပေးပြီး၊ ဖိုင် ပြောင်းလိုက်တိုင်း page
@@ -1052,7 +1052,7 @@ scenes:
       [[mark:explain-component]] React မှာ ဒီလို page ကို component လို့
       ခေါ်တဲ့ အပိုင်းလေးတွေအဖြစ် ခွဲလို့ ရပါတယ်။ component ဆိုတာ screen ပေါ်က
       UI အပိုင်း တစ်ပိုင်းကို ပြန်ပေးတဲ့ JavaScript function တစ်ခုပါ။
-      [[mark:draw-tree]] သစ်ပင် ပုံစံနဲ့ ဆွဲရင်၊ App က page တစ်ခုလုံးပါ။ သူက
+      [[mark:draw-tree]] tree ပုံစံနဲ့ ဆွဲရင်၊ App က page တစ်ခုလုံးပါ။ သူက
       logo၊ နာမည်နဲ့ ဖွင့်ချိန်ကို သာမန် HTML tag တွေနဲ့ ပြပြီး၊ Menu ဆိုတဲ့
       component တစ်ခုကိုလည်း သုံးပါတယ်။ [[mark:draw-cards-tree]] Menu ကတော့
       ဟင်းလျာ card သုံးခု ပြပြီး၊ တစ်ခုစီက DishCard component ပါ။
@@ -1562,7 +1562,7 @@ scenes:
       အောက်မှာ Menu tag တစ်ခု ထည့်လိုက်ပါမယ်။ [[mark:preview-shows-menu]]
       ကြည့်ပါ၊ page ပြန်ပွင့်သွားပြီး၊ menu ပေါ်လာပါပြီ။ ခေါင်းစဉ် တစ်ခုနဲ့
       card သုံးခုပါ။ App က Menu ကို သုံး၊ Menu က DishCard ကို သုံးခါ သုံး၊ အစက
-      ဆွဲခဲ့တဲ့ သစ်ပင်အတိုင်းပါပဲ။
+      ဆွဲခဲ့တဲ့ tree အတိုင်းပါပဲ။
     sources:
       - title: "React — Importing and Exporting Components"
         url: "https://react.dev/learn/importing-and-exporting-components"
