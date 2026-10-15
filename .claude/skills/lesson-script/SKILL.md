@@ -43,6 +43,9 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      Run button / dock chevron and preview element before the actions that use
      them, and the pointer hides while typing or under a slide — see "The
      pointer" in the authoring reference.
+   - Never put the whiteboard in full-screen mode: leave `maximized` out of
+     every `whiteboard.apply` (the default board panel is the only one lessons
+     use; a maximized board looks bad in the recorded lesson).
    - The fixture result is the program's exact output, every line
      `\n`-terminated — `result.output` for Go/Kotlin/Zig, `result.stdout` for
      Rust/Haskell/Kite/asm (WebContainer lessons pin the workspace instead of

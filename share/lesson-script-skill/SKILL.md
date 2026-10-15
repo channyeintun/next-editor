@@ -44,6 +44,9 @@ Read, entirely and in order, before writing:
      then let it sit.
    - End insertions that sit in front of existing code with `\n` — the
      performer presses Enter first so existing code moves down naturally.
+   - Never put the whiteboard in full-screen mode: leave `maximized` out of
+     every `whiteboard.apply` (the default board panel is the only one lessons
+     use; a maximized board looks bad in the recorded lesson).
    - The fixture's program output must be exactly what the real program
      prints, every line `\n`-terminated.
    - Studio automatically reserves two quiet seconds before the first dialog
