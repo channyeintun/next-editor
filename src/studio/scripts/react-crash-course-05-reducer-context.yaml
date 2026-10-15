@@ -878,7 +878,6 @@ scenes:
         type: whiteboard.apply
         at: { scene: start, offsetMs: -450 }
         open: true
-        maximized: true
         clear: true
         upsertIds: []
       - id: draw-b1-title
@@ -1063,7 +1062,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-board-2 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b2-title]
         drawMs: 900
@@ -1656,7 +1654,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: open-board-3 }
         open: true
-        maximized: true
         clear: true
         upsertIds: [b3-title]
         drawMs: 900
