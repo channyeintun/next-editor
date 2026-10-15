@@ -1,0 +1,2245 @@
+# React crash course, lesson 8 — Performance, React Compiler and transitions
+# (Burmese, my-MM).
+#
+# Story: a parent's re-render re-renders its children; measure before fixing.
+# DishList carries a <Profiler> whose onRender writes a render counter into a
+# badge that index.html keeps outside React (setting state there would loop).
+# Typing in an unrelated kitchen note makes the badge climb; memo alone does
+# not stop it (a new array and a new function every render, Object.is board);
+# useMemo + useCallback do, while a real search still re-renders the list.
+# React Compiler 1.0 is whiteboard-only (it needs Babel; this Vite 5 workspace
+# compiles JSX with esbuild). A HistoryPanel switches to a deliberately slow
+# tab inside useTransition (pending label first; SlowRow busy-waits 10 ms, so
+# the 250-row render under StrictMode lasts ~5 s and the 100-row deferred
+# render ~2 s, longer than the short act sentence, and the narration predicts
+# each transient state before the action), then searches it through
+# useDeferredValue (a "still searching" label while the memoized SlowList
+# catches up). The close draws React 19.3's independent Transitions.
+#
+# Why the Profiler sits INSIDE DishList (deviation from the curriculum): a
+# harness experiment (tools/exp1.ts) showed that a <Profiler> placed in App
+# around a memo child calls onRender on EVERY App commit, even when the memo
+# child is skipped; only a Profiler inside the memoized component counts the
+# renders memo really skips. Mount fires onRender once under StrictMode.
+#
+# Insert-only plan: DishList.jsx and HistoryPanel.jsx are pinned EMPTY and
+# typed while nothing imports them; every edit to the live App.jsx and (after
+# it is wired) HistoryPanel.jsx is a `block` insert of complete lines or an
+# atomic in-line insert (`memo, ` into the import braces, the `Memo` prefix,
+# the `Memo` / `Stable` suffixes, ` filter={deferredQuery}`), each valid on
+# its own, definitions before uses. Every JS edit reloads the preview (state
+# and the badge reset), so every interaction comes after the last edit.
+#
+# The dev server starts during the first board and is first needed when the
+# preview opens, about two minutes later.
+#
+# Narration is Burmese (my-MM); voice-script.md next to this file is the
+# source (tools/sync_check.py applies it and checks it against the English
+# draft in tools/narration-en.txt). Every visible string (title, chapters,
+# board labels, UI) is Burmese too.
+schemaVersion: 1
+
+lesson:
+  slug: react-crash-course-08-performance-transitions
+  title: "React crash course 8: Performance နဲ့ transition"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: React crash course 8
+    entryFilePath: src/App.jsx
+    files:
+      package.json: |
+        {
+          "name": "react-course-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+
+        export default defineConfig({
+          // JSX through esbuild's automatic runtime: components never import React.
+          esbuild: { jsx: "automatic" },
+          // Pre-bundle every React entry up front so Vite never discovers a new
+          // dependency mid-lesson and force-reloads the preview.
+          optimizeDeps: {
+            include: [
+              "react",
+              "react/jsx-dev-runtime",
+              "react/jsx-runtime",
+              "react-dom",
+              "react-dom/client",
+            ],
+          },
+        });
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>React သင်ခန်းစာ</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <!-- Outside React: DishList's Profiler writes its render count here. -->
+            <p id="commit-count" class="commit-count" data-testid="commit-count">render 0 ကြိမ်</p>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      src/main.jsx: |
+        import { StrictMode } from "react";
+        import { createRoot } from "react-dom/client";
+        import App from "./App.jsx";
+        import "./styles.css";
+
+        createRoot(document.getElementById("root")).render(
+          <StrictMode>
+            <App />
+          </StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          --bg: #f1f3f5;
+          --surface: #ffffff;
+          --text: #1e1e1e;
+          --muted: #5c636a;
+          --line: #dee2e6;
+          --accent: #1971c2;
+          --accent-soft: #e7f1fb;
+          --ok: #2f9e44;
+          --warn: #e67700;
+          --radius: 12px;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Padauk",
+            system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-size: 17px;
+          line-height: 1.8;
+          color: var(--text);
+          background: var(--bg);
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+        }
+
+        .page {
+          max-width: 560px;
+          margin: 0 auto;
+          padding: 20px 16px 40px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid var(--line);
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        h1 {
+          font-size: 1.45rem;
+        }
+
+        h2 {
+          font-size: 1.15rem;
+        }
+
+        p {
+          margin: 0;
+        }
+
+        .muted {
+          color: var(--muted);
+        }
+
+        .card {
+          display: grid;
+          gap: 8px;
+          padding: 14px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.05);
+        }
+
+        .row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .list {
+          display: grid;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .list > li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+
+        button {
+          font: inherit;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--accent);
+          color: white;
+          cursor: pointer;
+        }
+
+        button.secondary {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+
+        button:disabled {
+          background: var(--line);
+          color: var(--muted);
+          cursor: not-allowed;
+        }
+
+        input,
+        select,
+        textarea {
+          font: inherit;
+          width: 100%;
+          padding: 6px 12px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface);
+          color: var(--text);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 0.85rem;
+        }
+
+        .badge.ok {
+          background: #ebfbee;
+          color: var(--ok);
+        }
+
+        .badge.warn {
+          background: #fff4e6;
+          color: var(--warn);
+        }
+
+        /* Lesson 8: performance and transitions */
+        .commit-count {
+          position: fixed;
+          right: 12px;
+          bottom: 12px;
+          margin: 0;
+          padding: 2px 14px;
+          border-radius: 999px;
+          background: #fff4e6;
+          color: var(--warn);
+          font-size: 0.9rem;
+          box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+        }
+
+        .history {
+          max-height: 200px;
+          overflow-y: auto;
+        }
+      src/menu.js: |
+        export const menu = [
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500, spicy: false, soldOut: false },
+          { id: "shan-noodles", name: "ရှမ်းခေါက်ဆွဲ", price: 3000, spicy: false, soldOut: false },
+          { id: "nan-gyi-thoke", name: "နန်းကြီးသုပ်", price: 2800, spicy: true, soldOut: false },
+          { id: "ohn-no-khao-swe", name: "အုန်းနို့ခေါက်ဆွဲ", price: 3500, spicy: false, soldOut: true },
+          { id: "laphet-thoke", name: "လက်ဖက်သုပ်", price: 2000, spicy: true, soldOut: false },
+        ];
+      src/Header.jsx: |
+        export function Header() {
+          return (
+            <>
+              <h1 data-testid="title">ရွှေရန်ကုန် မုန့်ဟင်းခါးဆိုင်</h1>
+              <p className="muted">မနက် ၆ နာရီ မှ ညနေ ၆ နာရီ အထိ</p>
+            </>
+          );
+        }
+      src/SlowList.jsx: |
+        import { memo } from "react";
+        import { menu } from "./menu.js";
+
+        const orders = Array.from({ length: 250 }, (_, i) => ({
+          id: i + 1,
+          dish: menu[i % menu.length],
+        }));
+
+        function SlowRow({ order }) {
+          const start = performance.now();
+          while (performance.now() - start < 10) {
+            // တမင် နှေးအောင် လုပ်ထားတာပါ (row တစ်ခု 10 ms)
+          }
+          return (
+            <li>
+              #{order.id} {order.dish.name}
+            </li>
+          );
+        }
+
+        export const SlowList = memo(function SlowList({ filter = "" }) {
+          const shown = orders.filter((order) => order.dish.name.includes(filter));
+          return (
+            <>
+              <p className="muted" data-testid="history-count">
+                {shown.length} ပွဲ
+              </p>
+              <ul className="list history" data-testid="history-list">
+                {shown.map((order) => (
+                  <SlowRow key={order.id} order={order} />
+                ))}
+              </ul>
+            </>
+          );
+        });
+      src/App.jsx: |
+        import { useState } from "react";
+        import { Header } from "./Header.jsx";
+        import { menu } from "./menu.js";
+
+        export default function App() {
+          const [note, setNote] = useState("");
+          const [query, setQuery] = useState("");
+          const [selectedId, setSelectedId] = useState(null);
+
+          const visible = menu.filter((dish) => dish.name.includes(query));
+          const selected = menu.find((dish) => dish.id === selectedId);
+
+          function handleSelect(id) {
+            setSelectedId(id);
+          }
+
+          return (
+            <main className="page">
+              <Header />
+              <section className="card">
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="မီးဖိုချောင်အတွက် မှတ်ချက်"
+                  data-testid="note-input"
+                />
+              </section>
+              <section className="card">
+                <h2>ဟင်းလျာများ</h2>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="ဟင်းလျာ ရှာရန်"
+                  data-testid="search-input"
+                />
+                <p className="muted" data-testid="selected">
+                  ရွေးထားတာ – {selected ? selected.name : "မရှိသေးပါ"}
+                </p>
+              </section>
+            </main>
+          );
+        }
+      src/DishList.jsx: ""
+      src/HistoryPanel.jsx: ""
+
+  whiteboardAssets:
+    # Board 1 — a parent's re-render re-renders its children.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 46,
+        text: "ဘယ်အချိန် ပြန် render လုပ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-app-box,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 790,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-app-text,
+        kind: text,
+        x: 315,
+        y: 245,
+        width: 480,
+        height: 40,
+        text: "App – state ပြောင်းသွားပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 375,
+        y: 302,
+        width: 40,
+        height: 58,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 302,
+        width: 40,
+        height: 58,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-arrow-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 940,
+        y: 302,
+        width: 40,
+        height: 58,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-header-box,
+        kind: rectangle,
+        x: 290,
+        y: 365,
+        width: 210,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-header-text,
+        kind: text,
+        x: 330,
+        y: 375,
+        width: 140,
+        height: 40,
+        text: "Header",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-list-box,
+        kind: rectangle,
+        x: 560,
+        y: 365,
+        width: 220,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-list-text,
+        kind: text,
+        x: 595,
+        y: 375,
+        width: 160,
+        height: 40,
+        text: "DishList",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-hist-box,
+        kind: rectangle,
+        x: 840,
+        y: 365,
+        width: 240,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-hist-text,
+        kind: text,
+        x: 860,
+        y: 375,
+        width: 200,
+        height: 40,
+        text: "HistoryPanel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cascade,
+        kind: text,
+        x: 290,
+        y: 455,
+        width: 790,
+        height: 40,
+        text: "အောက်က component အားလုံး ပြန် render ဖြစ်ပါတယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cheap,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 790,
+        height: 40,
+        text: "များသောအားဖြင့် မြန်ပါတယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-measure,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 790,
+        height: 40,
+        text: "မှန်းမနေပါနဲ့ – အရင် တိုင်းပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-measure-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 592,
+        width: 420,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+
+    # Board 2 — how memo compares props.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 46,
+        text: "memo က props ကို စစ်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-rule,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 790,
+        height: 40,
+        text: "Object.is(အရင် prop, အသစ် prop)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-str,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 500,
+        height: 40,
+        text: '"ရှမ်း" နဲ့ "ရှမ်း"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-str-res,
+        kind: text,
+        x: 880,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: "→ တူတယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arr,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 500,
+        height: 40,
+        text: "menu.filter(…) → array အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arr-res,
+        kind: text,
+        x: 880,
+        y: 380,
+        width: 200,
+        height: 40,
+        text: "→ မတူဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fn,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 500,
+        height: 40,
+        text: "handleSelect → function အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fn-res,
+        kind: text,
+        x: 880,
+        y: 450,
+        width: 200,
+        height: 40,
+        text: "→ မတူဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-bad-box,
+        kind: rectangle,
+        x: 275,
+        y: 370,
+        width: 820,
+        height: 130,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-fix,
+        kind: text,
+        x: 290,
+        y: 545,
+        width: 790,
+        height: 40,
+        text: "useMemo · useCallback → render ကြား တူတဲ့ တန်ဖိုး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fix-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 552,
+        width: 330,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+
+    # Board 3 — React Compiler: what you write vs what it outputs.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "React Compiler 1.0",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-build,
+        kind: text,
+        x: 290,
+        y: 220,
+        width: 790,
+        height: 40,
+        text: "build လုပ်ချိန်မှာ run တဲ့ Babel plugin",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-before-head,
+        kind: text,
+        x: 290,
+        y: 285,
+        width: 300,
+        height: 40,
+        text: "ကိုယ်ရေးတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-before-box,
+        kind: rectangle,
+        x: 280,
+        y: 335,
+        width: 320,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-before-code,
+        kind: text,
+        x: 295,
+        y: 350,
+        width: 290,
+        height: 80,
+        text: "const visible =\n  menu.filter(…);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 612,
+        y: 370,
+        width: 62,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b3-after-head,
+        kind: text,
+        x: 690,
+        y: 285,
+        width: 400,
+        height: 40,
+        text: "compiler ထုတ်တာ (အတိုချုံး)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-after-box,
+        kind: rectangle,
+        x: 685,
+        y: 335,
+        width: 410,
+        height: 205,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-after-code,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 380,
+        height: 180,
+        text: "const $ = _c(15);\nif ($[0] !== query) {\n  $[0] = query;\n  $[1] = menu.filter(…);\n}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-guidance,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 790,
+        height: 40,
+        text: "useMemo · useCallback → တကယ် လိုမှ သုံးပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 4 — compiler rules, directives, lint, install.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Compiler နဲ့ စည်းကမ်းတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-rules,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 790,
+        height: 40,
+        text: "Rules of React မလိုက်နာရင် → ကျော်ပါတယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-rules-ok,
+        kind: text,
+        x: 290,
+        y: 290,
+        width: 790,
+        height: 40,
+        text: "app ကတော့ ပုံမှန် အလုပ်လုပ်ပါတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-directives,
+        kind: text,
+        x: 290,
+        y: 365,
+        width: 790,
+        height: 40,
+        text: '"use memo" · "use no memo"',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-lint,
+        kind: text,
+        x: 290,
+        y: 435,
+        width: 790,
+        height: 40,
+        text: "eslint-plugin-react-hooks → lint rule တွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-install,
+        kind: text,
+        x: 290,
+        y: 505,
+        width: 790,
+        height: 40,
+        text: "Vite → babel({ presets: [reactCompilerPreset()] })",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-here,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 790,
+        height: 40,
+        text: "ဒီ project – esbuild ပဲ၊ Babel မပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b4-here-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 587,
+        width: 470,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+
+    # Board 5 — urgent updates vs Transitions.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Urgent update နဲ့ Transition",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-urgent-box,
+        kind: rectangle,
+        x: 280,
+        y: 230,
+        width: 380,
+        height: 160,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-urgent-head,
+        kind: text,
+        x: 300,
+        y: 242,
+        width: 200,
+        height: 40,
+        text: "urgent",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b5-urgent-l1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 340,
+        height: 40,
+        text: "စာရိုက်တာ၊ နှိပ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-urgent-l2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 340,
+        height: 40,
+        text: "ချက်ချင်း ပြရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-trans-box,
+        kind: rectangle,
+        x: 700,
+        y: 230,
+        width: 390,
+        height: 160,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-trans-head,
+        kind: text,
+        x: 720,
+        y: 242,
+        width: 220,
+        height: 40,
+        text: "Transition",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: b5-trans-l1,
+        kind: text,
+        x: 720,
+        y: 295,
+        width: 350,
+        height: 40,
+        text: "data များတဲ့ tab ပြောင်းတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-trans-l2,
+        kind: text,
+        x: 720,
+        y: 340,
+        width: 350,
+        height: 40,
+        text: "နောက်ကွယ်မှာ render",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-interrupt,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 790,
+        height: 40,
+        text: "စာရိုက်ရင် Transition ကို ရပ်၊ စာ အရင် ပြ၊ ပြီးမှ ပြန်စ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b5-pending,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 790,
+        height: 40,
+        text: "isPending → ဖွင့်နေပါတယ်…",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-tracks,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 790,
+        height: 40,
+        text: "Chrome DevTools → React Performance Tracks",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board 6 — React 19.3: separate Transitions render independently.
+    - {
+        id: b6-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 700,
+        height: 46,
+        text: "React 19.3 – Transition တွေ သီးခြား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b6-192-label,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 90,
+        height: 40,
+        text: "19.2",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: b6-192-bar,
+        kind: rectangle,
+        x: 420,
+        y: 232,
+        width: 600,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-192-bar-text,
+        kind: text,
+        x: 440,
+        y: 240,
+        width: 400,
+        height: 40,
+        text: "နှေးတဲ့ Transition",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-192-fast,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 380,
+        height: 40,
+        text: "မြန်တဲ့ update → 1.5 s",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b6-193-label,
+        kind: text,
+        x: 290,
+        y: 385,
+        width: 90,
+        height: 40,
+        text: "19.3",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b6-193-bar,
+        kind: rectangle,
+        x: 420,
+        y: 377,
+        width: 600,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-193-bar-text,
+        kind: text,
+        x: 440,
+        y: 385,
+        width: 400,
+        height: 40,
+        text: "နှေးတဲ့ Transition",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b6-193-fast,
+        kind: text,
+        x: 420,
+        y: 445,
+        width: 380,
+        height: 40,
+        text: "မြန်တဲ့ update → 0.3 s",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b6-action,
+        kind: text,
+        x: 290,
+        y: 545,
+        width: 790,
+        height: 40,
+        text: "async Action pending → အတူ batch (lesson 10)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board 7 — recap.
+    - {
+        id: b7-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "ပြန်ချုပ်ရရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b7-measure,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 790,
+        height: 40,
+        text: "Profiler → အရင် တိုင်းပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b7-memo,
+        kind: text,
+        x: 290,
+        y: 305,
+        width: 790,
+        height: 40,
+        text: "memo + useMemo + useCallback → props တူရင် ကျော်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b7-compiler,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 790,
+        height: 40,
+        text: "React Compiler → ကိုယ့်အစား memo လုပ်ပေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b7-transition,
+        kind: text,
+        x: 290,
+        y: 435,
+        width: 790,
+        height: 40,
+        text: "useTransition · useDeferredValue → မြန်မြန် တုံ့ပြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b7-next,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 600,
+        height: 40,
+        text: "နောက် lesson – Suspense",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 8208
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: rerender-idea
+    chapter: "Component တွေ ဘယ်အချိန် ပြန် render လုပ်လဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ Effect နဲ့ React အပြင်ဘက်ကို ချိတ်ခဲ့ပါတယ်။ ဒီ lesson
+      ကတော့ performance အကြောင်းပါ။ React က ဘယ်အချိန် ပြန် render လုပ်လဲ၊ ဘယ်လို
+      တိုင်းပြီး ပြင်မလဲ ကြည့်ပါမယ်။ [[mark:start-server]] ရှင်းပြနေတုန်း dev
+      server ကို နောက်ကွယ်မှာ စ run ထားလိုက်ရအောင်။ [[mark:draw-tree]] component
+      ရဲ့ state ပြောင်းရင် React က သူ့ကို ပြန် render လုပ်ပါတယ်။
+      [[mark:draw-cascade]] ပြီးတော့ သူ့အောက်က component အားလုံးကိုပါ ပြန် render
+      လုပ်ပါတယ်၊ သူတို့ ပြနေတာ ဘာမှ မပြောင်းရင်တောင်ပါပဲ။ [[mark:draw-cheap]]
+      များသောအားဖြင့် ဒါက ကိစ္စ မရှိပါဘူး။ render ဆိုတာ function ခေါ်တာပဲ
+      ဖြစ်ပြီး၊ ရလဒ် ကွာသွားတဲ့ နေရာကိုပဲ React က DOM ထဲမှာ ပြင်ပါတယ်။
+      [[mark:draw-measure]] ဒါကြောင့် မှန်းမနေပါနဲ့။ အရင် တိုင်းကြည့်ပြီး၊ တကယ်
+      နှေးတာကိုပဲ ပြင်ပါ။
+    sources:
+      - title: "React — Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+      - title: "React — memo: Skipping re-rendering when props are unchanged"
+        url: "https://react.dev/reference/react/memo#skipping-re-rendering-when-props-are-unchanged"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-tree
+        type: whiteboard.apply
+        at: { mark: draw-tree }
+        upsertIds: [b1-app-box, b1-app-text]
+        drawMs: 1200
+      - id: draw-cascade
+        type: whiteboard.apply
+        at: { mark: draw-cascade }
+        upsertIds:
+          [
+            b1-arrow-1,
+            b1-arrow-2,
+            b1-arrow-3,
+            b1-header-box,
+            b1-header-text,
+            b1-list-box,
+            b1-list-text,
+            b1-hist-box,
+            b1-hist-text,
+            b1-cascade,
+          ]
+        drawMs: 3200
+      - id: draw-cheap
+        type: whiteboard.apply
+        at: { mark: draw-cheap }
+        upsertIds: [b1-cheap]
+        drawMs: 900
+      - id: draw-measure
+        type: whiteboard.apply
+        at: { mark: draw-measure }
+        upsertIds: [b1-measure, b1-measure-underline]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 2
+  - id: tour-app
+    narration: >
+      [[mark:close-board-1]] ဒီနေ့ စမယ့် code ကို ကြည့်ရအောင်။ App မှာ state
+      သုံးခု ရှိပါတယ်။ မီးဖိုချောင်အတွက် မှတ်ချက်၊ ရှာမယ့် စာလုံးနဲ့ ရွေးထားတဲ့
+      ဟင်းလျာပါ။ [[mark:select-visible]] menu ကို စစ်ထုတ်တဲ့ ဒီ စာကြောင်းက render
+      တိုင်း ပြန် run လို့၊ array အသစ် တစ်ခု ထွက်လာပါတယ်။ [[mark:select-handle]]
+      ရွေးလိုက်တဲ့ ဟင်းလျာကို သိမ်းပေးတဲ့ ဒီ function ကလည်း render တိုင်း အသစ်
+      ပြန်ဆောက်ပါတယ်။ [[mark:select-slot]] ရှာတဲ့ အကွက် အောက်မှာ ဟင်းလျာ
+      စာရင်းအတွက် နေရာ ရှိပါတယ်။ အဲဒါကို ရေးကြည့်ရအောင်။
+    sources:
+      - title: "React — Rendering Lists"
+        url: "https://react.dev/learn/rendering-lists"
+      - title: "MDN — Array.prototype.filter()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { mark: close-board-1 }
+        open: false
+      - id: collapse-dock-early
+        type: runtime.collapseDock
+        at: { afterAction: close-board-1 }
+      - id: select-visible
+        type: editor.select
+        at: { mark: select-visible }
+        target:
+          {
+            file: src/App.jsx,
+            text: "const visible = menu.filter((dish) => dish.name.includes(query));",
+            occurrence: 1,
+          }
+      - id: select-handle
+        type: editor.select
+        at: { mark: select-handle }
+        target:
+          {
+            file: src/App.jsx,
+            text: "  function handleSelect(id) {\n    setSelectedId(id);\n  }\n",
+            occurrence: 1,
+          }
+      - id: select-slot
+        type: editor.select
+        at: { mark: select-slot }
+        target: { file: src/App.jsx, text: 'data-testid="search-input"', occurrence: 1 }
+
+  # ------------------------------------------------------------------ 3
+  - id: profiler-code
+    chapter: "Profiler နဲ့ တိုင်းကြည့်ရအောင်"
+    narration: >
+      [[mark:open-dishlist]] DishList ဖိုင်က အခု အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import
+      မလုပ်ထားသေးပါဘူး။ [[mark:type-dl-import]] Profiler ကို import လုပ်ပါတယ်။ သူက
+      သူ့ထဲက အပိုင်း ဘယ်နှစ်ကြိမ် render ဖြစ်လဲ တိုင်းပေးတဲ့ component ပါ။
+      [[mark:type-dl-onrender]] သူ့ callback onRender ကတော့ အဲဒီ အပိုင်းကို React
+      က commit လုပ်တိုင်း run ပါတယ်။ commit လုပ်တယ် ဆိုတာ ရလဒ် အသစ်ကို screen ပေါ်
+      တင်လိုက်တာပါ။ React က Profiler ရဲ့ id၊ mount လား update လား ဆိုတဲ့ phase နဲ့
+      ကြာချိန် ကိန်းဂဏန်း တချို့ ပေးပါတယ်။ [[mark:select-dl-dom]] render
+      အရေအတွက်ကို ဘယ်မှာ ရေးလဲ ကြည့်ပါ။ state ထဲ မထည့်ပါဘူး။ state ပြောင်းရင်
+      render ထပ်ဖြစ်၊ onRender ထပ်ခေါ်၊ ဒီလိုပဲ အဆုံးမရှိ ဖြစ်သွားမှာ ဖြစ်လို့ပါ။
+      ဒါကြောင့် index.html က React အပြင်ဘက်မှာ ထားတဲ့ badge ထဲ ရေးလိုက်ပါတယ်။
+      [[mark:type-dl-component]] component ကတော့ သာမန် list တစ်ခုပါ။ ဟင်းလျာ
+      တစ်ခုစီမှာ key၊ နာမည်နဲ့ ရွေးမယ့် ခလုတ် ပါပါတယ်။ [[mark:select-dl-profiler]]
+      ဒီ Profiler tag ကို ကြည့်ပါ။ list တစ်ခုလုံး သူ့ထဲ ရှိလို့၊ DishList render
+      တိုင်း ရေတွက်ပေးပါတယ်။
+    sources:
+      - title: "React — <Profiler>"
+        url: "https://react.dev/reference/react/Profiler"
+      - title: "React — Profiler: onRender callback"
+        url: "https://react.dev/reference/react/Profiler#onrender-callback"
+      - title: "MDN — Node.textContent"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent"
+    actions:
+      - id: open-dishlist
+        type: workspace.openFile
+        at: { mark: open-dishlist }
+        path: src/DishList.jsx
+      - id: type-dl-import
+        type: editor.type
+        at: { mark: type-dl-import }
+        cadence: fast-explainer
+        target: { file: src/DishList.jsx, after: "", occurrence: 1 }
+        text: "import { Profiler } from \"react\";\n"
+      - id: type-dl-onrender
+        type: editor.type
+        at: { mark: type-dl-onrender }
+        cadence: line-by-line
+        target:
+          { file: src/DishList.jsx, after: "import { Profiler } from \"react\";\n", occurrence: 1 }
+        text: "\nlet renders = 0;\n\nfunction onRender(id, phase) {\n  renders += 1;\n  document.getElementById(\"commit-count\").textContent =\n    \"render \" + renders + \" ကြိမ် · \" + phase;\n}\n"
+      - id: select-dl-dom
+        type: editor.select
+        at: { mark: select-dl-dom }
+        target:
+          {
+            file: src/DishList.jsx,
+            text: 'document.getElementById("commit-count").textContent',
+            occurrence: 1,
+          }
+      - id: type-dl-component
+        type: editor.type
+        at: { mark: type-dl-component }
+        cadence: block
+        target:
+          {
+            file: src/DishList.jsx,
+            after: "    \"render \" + renders + \" ကြိမ် · \" + phase;\n}\n",
+            occurrence: 1,
+          }
+        text: "\nexport function DishList({ dishes, onSelect }) {\n  return (\n    <Profiler id=\"DishList\" onRender={onRender}>\n      <ul className=\"list\" data-testid=\"dish-list\">\n        {dishes.map((dish) => (\n          <li key={dish.id}>\n            {dish.name}\n            <button\n              className=\"secondary\"\n              data-testid={\"pick-\" + dish.id}\n              onClick={() => onSelect(dish.id)}\n            >\n              ရွေးမယ်\n            </button>\n          </li>\n        ))}\n      </ul>\n    </Profiler>\n  );\n}\n"
+      - id: select-dl-profiler
+        type: editor.select
+        at: { mark: select-dl-profiler }
+        target:
+          {
+            file: src/DishList.jsx,
+            text: '<Profiler id="DishList" onRender={onRender}>',
+            occurrence: 1,
+          }
+
+  # ------------------------------------------------------------------ 4
+  - id: profiler-run
+    narration: >
+      [[mark:open-app-wire]] App ထဲ ထည့်ရအောင်။ [[mark:wire-dl-import]] အရင်ဆုံး
+      DishList ကို import လုပ်ပါတယ်။ [[mark:wire-dl-use]] ပြီးတော့ list ကို ရှာတဲ့
+      အကွက် အောက်မှာ ထည့်ပါတယ်။ [[mark:preview-opens]] dev server ရသွားပြီမို့
+      preview ကို ဖွင့်လိုက်ရအောင်။ အောက်ထောင့်က badge မှာ render 1 ကြိမ်လို့
+      ပြနေပါတယ်။ အဲဒါက mount ပါ။ [[mark:type-note-1]] မီးဖိုချောင်အတွက် မှတ်ချက်
+      ရိုက်ကြည့်ရအောင်။ [[mark:after-note-1]] badge က 2 ဖြစ်သွားပါပြီ။ မှတ်ချက်က
+      list နဲ့ ဘာမှ မဆိုင်ပေမယ့်၊ parent ဖြစ်တဲ့ App က ပြန် render ဖြစ်လို့
+      DishList ကပါ ပြန် render ဖြစ်သွားတာပါ။
+    sources:
+      - title: "React — <Profiler>: Measuring rendering performance programmatically"
+        url: "https://react.dev/reference/react/Profiler#measuring-rendering-performance-programmatically"
+      - title: "React — Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+    actions:
+      - id: open-app-wire
+        type: workspace.openFile
+        at: { mark: open-app-wire }
+        path: src/App.jsx
+      - id: wire-dl-import
+        type: editor.type
+        at: { mark: wire-dl-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { menu } from \"./menu.js\";\n", occurrence: 1 }
+        text: "import { DishList } from \"./DishList.jsx\";\n"
+      - id: wire-dl-use
+        type: editor.type
+        at: { mark: wire-dl-use }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "          data-testid=\"search-input\"\n        />\n",
+            occurrence: 1,
+          }
+        text: "        <DishList dishes={visible} onSelect={handleSelect} />\n"
+      - id: wait-for-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-server }
+        timeoutMs: 15000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-mount-1
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 1 ကြိမ် · mount"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-mount-1 }
+      - id: type-note-1
+        type: preview.input
+        at: { mark: type-note-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note-1
+        type: expect.preview
+        at: { mark: after-note-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 2 ကြိမ် · update"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 5
+  - id: memo-try
+    chapter: "memo၊ useMemo နဲ့ useCallback"
+    narration: >
+      [[mark:wire-memo-import]] memo ကို စမ်းကြည့်ရအောင်။ အရင်ဆုံး memo ကို React
+      ကနေ import လုပ်ပါတယ်။ [[mark:wire-memo-line]] memo က component တစ်ခုကို
+      ထုပ်ပေးပြီး၊ ထွက်လာတဲ့ component အသစ်က props မပြောင်းရင် ပြန် render မလုပ်ဘဲ
+      ကျော်သွားပါတယ်။ [[mark:wire-memo-use]] ခေါ်တဲ့ နေရာမှာ MemoDishList ကို
+      သုံးပါတယ်။ [[mark:after-memo-reload]] ပြင်လိုက်လို့ page ပြန်ပွင့်သွားတော့
+      badge က 1 ပြန်ဖြစ်နေပါတယ်။ [[mark:type-note-2]] မှတ်ချက်ကို
+      ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-2]] 2 ဖြစ်သွားပြန်ပါပြီ။ memo က
+      ဘာလို့ မရတာလဲ။
+    sources:
+      - title: "React — memo"
+        url: "https://react.dev/reference/react/memo"
+      - title: "Vite — Hot Module Replacement"
+        url: "https://vite.dev/guide/features.html#hot-module-replacement"
+    actions:
+      - id: wire-memo-import
+        type: editor.type
+        at: { mark: wire-memo-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { ", occurrence: 1 }
+        text: "memo, "
+      - id: wire-memo-line
+        type: editor.type
+        at: { mark: wire-memo-line }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { DishList } from \"./DishList.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "\nconst MemoDishList = memo(DishList);\n"
+      - id: wire-memo-use
+        type: editor.type
+        at: { mark: wire-memo-use }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "          data-testid=\"search-input\"\n        />\n        <",
+            occurrence: 1,
+          }
+        text: "Memo"
+      - id: expect-mount-2
+        type: expect.preview
+        at: { mark: after-memo-reload }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 1 ကြိမ် · mount"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-note-2
+        type: preview.input
+        at: { mark: type-note-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note-2
+        type: expect.preview
+        at: { mark: after-note-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 2 ကြိမ် · update"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 6
+  - id: object-is-board
+    narration: >
+      memo က prop အသစ် တစ်ခုစီကို အဟောင်းနဲ့ Object.is သုံးပြီး နှိုင်းယှဉ်ပါတယ်။
+      [[mark:draw-same-string]] string ဒါမှမဟုတ် ကိန်းဂဏန်းလို ရိုးရိုး
+      တန်ဖိုးတွေကိုတော့ Object.is က တန်ဖိုးချင်း နှိုင်းယှဉ်လို့၊ စာသား တူရင်
+      တူတယ်လို့ ပြောပါတယ်။ [[mark:draw-new-array]] array နဲ့ function ကိုတော့ အထဲက
+      တန်ဖိုးတွေကို မကြည့်ဘဲ၊ အရင် render က object နဲ့ တစ်ခုတည်း ဟုတ်မဟုတ်ကိုပဲ
+      ကြည့်ပါတယ်။ ဒါပေမဲ့ filter က render တိုင်း array အသစ် ပြန်ပေးလို့၊
+      ဟင်းလျာတွေ တူနေပေမယ့် Object.is က မတူဘူးလို့ ပြောပါတယ်။
+      [[mark:draw-new-function]] handleSelect လည်း အတူတူပါပဲ။ render တိုင်း
+      function အသစ် တစ်ခု ဆောက်နေလို့ပါ။ [[mark:draw-fix]] ဒါကြောင့် render
+      ကြားမှာ မပြောင်းဘဲ တူနေမယ့် တန်ဖိုးတွေ လိုပါတယ်။ အဲဒါကို useMemo နဲ့
+      useCallback က ပေးပါတယ်။
+    sources:
+      - title: "React — memo: Minimizing props changes"
+        url: "https://react.dev/reference/react/memo#minimizing-props-changes"
+      - title: "MDN — Object.is()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is"
+    actions:
+      - id: board-objectis
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b2-title, b2-rule]
+      - id: draw-same-string
+        type: whiteboard.apply
+        at: { mark: draw-same-string }
+        upsertIds: [b2-str, b2-str-res]
+        drawMs: 1200
+      - id: draw-new-array
+        type: whiteboard.apply
+        at: { mark: draw-new-array }
+        upsertIds: [b2-arr, b2-arr-res]
+        drawMs: 1400
+      - id: draw-new-function
+        type: whiteboard.apply
+        at: { mark: draw-new-function }
+        upsertIds: [b2-fn, b2-fn-res, b2-bad-box]
+        drawMs: 1600
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [b2-fix, b2-fix-underline]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 7
+  - id: stable-props
+    narration: >
+      [[mark:close-board-objectis]] App ထဲ ပြန်ရအောင်။ [[mark:wire-hooks-import]]
+      useCallback နဲ့ useMemo import လုပ်ပါတယ်။ [[mark:wire-usememo]] useMemo က
+      စစ်ထုတ်ထားတဲ့ array ကို မှတ်ထားပေးပြီး၊ ရှာတဲ့ စာလုံး ပြောင်းမှသာ
+      ပြန်စစ်ထုတ်ပါတယ်။ [[mark:wire-usecallback]] useCallback ကတော့ function
+      ကိုယ်တိုင်ကို မှတ်ထားပါတယ်။ state setter က ဘယ်တော့မှ မပြောင်းလို့ dependency
+      စာရင်းက အလွတ်ပါ။ [[mark:wire-callsite-dishes]] အခု list က မှတ်ထားတဲ့ array
+      ကို ရပါပြီ။ [[mark:wire-callsite-select]] မှတ်ထားတဲ့ function ကိုလည်း
+      ရပါပြီ။ အပေါ်က filter စာကြောင်း အဟောင်းနဲ့ handleSelect အဟောင်းကို အခု
+      ဘယ်နေရာကမှ မသုံးတော့ပါဘူး။ ကိုယ့် code မှာဆိုရင်တော့ အသစ် မထည့်ဘဲ၊
+      အဟောင်းကိုပဲ နေရာမှာတင် ပြင်လိုက်ရုံပါပဲ။ [[mark:type-note-3]] မှတ်ချက်ကို
+      ထပ်ရိုက်ကြည့်ရအောင်။ [[mark:after-note-3]] badge က 1 မှာပဲပါ။ App ပြန်
+      render ဖြစ်ပေမယ့် DishList ကိုတော့ ကျော်သွားပါတယ်။ [[mark:click-pick]]
+      ဟင်းလျာ ရွေးရအောင်။ [[mark:after-pick]] ရွေးထားတာ ပြောင်းသွားပေမယ့် badge က
+      1 ပဲ ပြနေပါသေးတယ်။ ရွေးထားတဲ့ ဟင်းလျာက App ရဲ့ state ဖြစ်ပြီး list ရဲ့ props
+      ထဲ မပါလို့၊ list အတွက်တော့ ဘာမှ မပြောင်းပါဘူး။ [[mark:type-search]] အခု
+      ရှမ်းခေါက်ဆွဲကို ရှာကြည့်ရအောင်။ [[mark:after-search]] ဒီတစ်ခါတော့ 2
+      ဖြစ်သွားပါပြီ။ list က တကယ် ပြောင်းသွားလို့ပါ။
+    sources:
+      - title: "React — useMemo"
+        url: "https://react.dev/reference/react/useMemo"
+      - title: "React — useCallback"
+        url: "https://react.dev/reference/react/useCallback"
+      - title: "React — useCallback: Skipping re-rendering of components"
+        url: "https://react.dev/reference/react/useCallback#skipping-re-rendering-of-components"
+    actions:
+      - id: close-board-objectis
+        type: whiteboard.apply
+        at: { mark: close-board-objectis }
+        open: false
+      - id: wire-hooks-import
+        type: editor.type
+        at: { mark: wire-hooks-import }
+        cadence: block
+        target: { file: src/App.jsx, after: "import { memo, ", occurrence: 1 }
+        text: "useCallback, useMemo, "
+      - id: wire-usememo
+        type: editor.type
+        at: { mark: wire-usememo }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "  const visible = menu.filter((dish) => dish.name.includes(query));\n",
+            occurrence: 1,
+          }
+        text: "  const visibleMemo = useMemo(\n    () => menu.filter((dish) => dish.name.includes(query)),\n    [query],\n  );\n"
+      - id: wire-usecallback
+        type: editor.type
+        at: { mark: wire-usecallback }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "  function handleSelect(id) {\n    setSelectedId(id);\n  }\n",
+            occurrence: 1,
+          }
+        text: "  const handleSelectStable = useCallback((id) => setSelectedId(id), []);\n"
+      - id: wire-callsite-dishes
+        type: editor.type
+        at: { mark: wire-callsite-dishes }
+        cadence: block
+        target: { file: src/App.jsx, after: "<MemoDishList dishes={visible", occurrence: 1 }
+        text: "Memo"
+      - id: wire-callsite-select
+        type: editor.type
+        at: { mark: wire-callsite-select }
+        cadence: block
+        target: { file: src/App.jsx, after: "onSelect={handleSelect", occurrence: 1 }
+        text: "Stable"
+      - id: expect-mount-3
+        type: expect.preview
+        at: { mark: type-note-3, offsetMs: -600 }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 1 ကြိမ် · mount"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-note-3
+        type: preview.input
+        at: { mark: type-note-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note-value-3
+        type: expect.preview
+        at: { afterAction: type-note-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "ငရုတ်သီး မထည့်ပါနဲ့"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-note-3
+        type: expect.preview
+        at: { mark: after-note-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 1 ကြိမ် · mount"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-pick
+        type: preview.click
+        at: { mark: click-pick }
+        timeoutMs: 5000
+        target: { by: testId, value: pick-shan-noodles }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-picked
+        type: expect.preview
+        at: { mark: after-pick }
+        timeoutMs: 5000
+        target: { by: testId, value: selected }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-picked-count
+        type: expect.preview
+        at: { afterAction: expect-picked }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 1 ကြိမ် · mount"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-search
+        type: preview.input
+        at: { mark: type-search }
+        timeoutMs: 5000
+        target: { by: testId, value: search-input }
+        value: "ရှမ်း"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-search-count
+        type: expect.preview
+        at: { mark: after-search }
+        timeoutMs: 5000
+        target: { by: testId, value: commit-count }
+        textContains: "render 2 ကြိမ် · update"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-search-list
+        type: expect.preview
+        at: { afterAction: expect-search-count }
+        timeoutMs: 5000
+        target: { by: testId, value: dish-list }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  # ------------------------------------------------------------------ 8
+  - id: compiler-board
+    chapter: "React Compiler"
+    narration: >
+      React Compiler 1.0 က ဒါကို ကိုယ့်အစား လုပ်ပေးနိုင်ပါတယ်။ 2025
+      အောက်တိုဘာကတည်းက stable ပါ။ [[mark:draw-compiler-build]] သူက app ကို build
+      လုပ်ချိန်မှာ run ပါတယ်။ အခုတော့ Babel ဆိုတဲ့ JavaScript code ကို ဖတ်ပြီး
+      ပြောင်းရေးပေးတဲ့ tool အတွက် plugin တစ်ခုပါ။ [[mark:draw-compiler-before]]
+      ကိုယ်ရေးတဲ့ သာမန် code ကို ယူပါတယ်၊ ဥပမာ filter စာကြောင်းပါ။
+      [[mark:draw-compiler-after]] ပြီးတော့ ဒီလို code ထုတ်ပေးပါတယ်။ component
+      တစ်ခုစီအတွက် cache သေးသေးလေး တစ်ခု ထားပေးလို့၊ ရှာတဲ့ စာလုံး ပြောင်းမှသာ
+      filter ပြန် run ပါတယ်။ JSX နဲ့ function တွေကိုပါ cache လုပ်ပေးတဲ့အတွက်၊
+      props မပြောင်းတဲ့ child တွေက memo မပါဘဲ render ကို ကျော်သွားပါတယ်။
+      [[mark:draw-compiler-guidance]] ဒါကြောင့် code အသစ်မှာ ဒီ hook တွေ သိပ်
+      မလိုတော့ပါဘူး။ တကယ် လိုတဲ့ နေရာမှာပဲ သုံးပါ၊ ဥပမာ Effect ရဲ့ dependency ထဲ
+      ထည့်ရမယ့် တန်ဖိုး တစ်ခုကို render တိုင်း မပြောင်းစေချင်တဲ့အခါမျိုးပါ။
+      [[mark:board-compiler-rules]] ဒါပေမဲ့ compiler က ကိုယ့် code ဟာ Rules of
+      React ကို လိုက်နာထားမယ်လို့ ယူဆပါတယ်။ ဥပမာ render လုပ်နေတုန်း props
+      ဒါမှမဟုတ် state ကို တိုက်ရိုက် မပြင်ရတာ၊ hook ကို component ရဲ့ အပေါ်ဆုံး
+      အဆင့်ကပဲ ခေါ်ရတာမျိုးပါ။ [[mark:draw-rules]] စည်းကမ်း ချိုးတဲ့ component
+      ကိုတော့ ကျော်သွားပေမယ့်၊ cache မပါဘဲ ပုံမှန်အတိုင်း အလုပ်လုပ်ပါတယ်။
+      [[mark:draw-directives]] component ရဲ့ အပေါ်ဆုံးမှာ use no memo လို့
+      ရေးထားရင် compiler က အဲဒီ component ကို တမင် ကျော်သွားပြီး၊ use memo လို့
+      ရေးရင်တော့ compile လုပ်ဖို့ ရွေးပေးတာပါ။ [[mark:draw-lint]] Rules of React
+      ကို ချိုးထားတာကို React ရဲ့ hooks lint plugin က code ရေးနေတုန်းမှာပဲ
+      သတိပေးပါတယ်။ Vite မှာဆိုရင်တော့ Vite ရဲ့ React plugin အသစ်မှာ compiler အတွက်
+      preset တစ်ခု ပါလာလို့၊ အဲဒါကို Babel plugin တစ်ခုထဲ ထည့်ပေးရုံပါ။
+      [[mark:draw-not-here]] ကိုယ့် project မှာတော့ Vite က JSX ကို esbuild နဲ့ပဲ
+      ပြောင်းပြီး Babel မပါလို့၊ compiler က run မှာ မဟုတ်ပါဘူး။ ဒါကြောင့် hook
+      တွေကို လက်နဲ့ ရေးခဲ့တာပါ။
+    sources:
+      - title: "React — React Compiler v1.0 (blog)"
+        url: "https://react.dev/blog/2025/10/07/react-compiler-1"
+      - title: "React — Introduction to React Compiler"
+        url: "https://react.dev/learn/react-compiler/introduction"
+      - title: "React — React Compiler directives"
+        url: "https://react.dev/reference/react-compiler/directives"
+      - title: "React — React Compiler installation"
+        url: "https://react.dev/learn/react-compiler/installation"
+      - title: "React — Rules of React"
+        url: "https://react.dev/reference/rules"
+      - title: "React 19.2 — eslint-plugin-react-hooks v6"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+    actions:
+      - id: board-compiler
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: draw-compiler-build
+        type: whiteboard.apply
+        at: { mark: draw-compiler-build }
+        upsertIds: [b3-build]
+        drawMs: 1000
+      - id: draw-compiler-before
+        type: whiteboard.apply
+        at: { mark: draw-compiler-before }
+        upsertIds: [b3-before-head, b3-before-box, b3-before-code]
+        drawMs: 1500
+      - id: draw-compiler-after
+        type: whiteboard.apply
+        at: { mark: draw-compiler-after }
+        upsertIds: [b3-arrow, b3-after-head, b3-after-box, b3-after-code]
+        drawMs: 2600
+      - id: draw-compiler-guidance
+        type: whiteboard.apply
+        at: { mark: draw-compiler-guidance }
+        upsertIds: [b3-guidance]
+        drawMs: 1200
+      - id: board-compiler-rules
+        type: whiteboard.apply
+        at: { mark: board-compiler-rules }
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-rules
+        type: whiteboard.apply
+        at: { mark: draw-rules }
+        upsertIds: [b4-rules, b4-rules-ok]
+        drawMs: 1600
+      - id: draw-directives
+        type: whiteboard.apply
+        at: { mark: draw-directives }
+        upsertIds: [b4-directives]
+        drawMs: 1000
+      - id: draw-lint
+        type: whiteboard.apply
+        at: { mark: draw-lint }
+        upsertIds: [b4-lint, b4-install]
+        drawMs: 1800
+      - id: draw-not-here
+        type: whiteboard.apply
+        at: { mark: draw-not-here }
+        upsertIds: [b4-here, b4-here-underline]
+        drawMs: 1300
+
+  # ------------------------------------------------------------------ 9
+  - id: transition-board
+    chapter: "Transition နဲ့ deferred value"
+    narration: >
+      နောက် ပြဿနာ တစ်ခုက render တချို့ တကယ်ကို နှေးတာပါ။ [[mark:draw-urgent]]
+      စာရိုက်တာနဲ့ နှိပ်တာက urgent ပါ၊ ဆိုလိုတာက screen က ချက်ချင်း
+      တုံ့ပြန်ရပါမယ်။ [[mark:draw-transition]] data အများကြီး ပြရတဲ့ tab ကို
+      ပြောင်းတာကတော့ ခဏ စောင့်လို့ ရပါတယ်။ Transition ဆိုတာ အလောတကြီး မဟုတ်တဲ့
+      state update ပါ၊ React က အဲဒါကို နောက်ကွယ်မှာ render လုပ်ပါတယ်။
+      [[mark:draw-interrupt]] အဲဒီကြားထဲ စာရိုက်လိုက်ရင် React က အဲဒီ render ကို
+      ရပ်လိုက်ပြီး၊ ရိုက်တဲ့ စာကို အရင် ပြပါတယ်။ ပြီးမှ Transition ကို အစကနေ ပြန်
+      render လုပ်ပါတယ်။ [[mark:draw-pending]] စောင့်နေတုန်း isPending က true
+      ဖြစ်လို့၊ loading စာသား ပြလို့ ရပါတယ်။ [[mark:draw-tracks]] ဒါကို timeline
+      ပေါ်မှာ ကြည့်ချင်ရင်၊ React 19.2 က Chrome DevTools ထဲ Performance Tracks
+      ထည့်ပေးပါတယ်။
+    sources:
+      - title: "React — useTransition"
+        url: "https://react.dev/reference/react/useTransition"
+      - title: "React — React Performance tracks"
+        url: "https://react.dev/reference/dev-tools/react-performance-tracks"
+      - title: "React 19.2 — Performance Tracks"
+        url: "https://react.dev/blog/2025/10/01/react-19-2"
+    actions:
+      - id: board-transition
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-urgent
+        type: whiteboard.apply
+        at: { mark: draw-urgent }
+        upsertIds: [b5-urgent-box, b5-urgent-head, b5-urgent-l1, b5-urgent-l2]
+        drawMs: 1800
+      - id: draw-transition
+        type: whiteboard.apply
+        at: { mark: draw-transition }
+        upsertIds: [b5-trans-box, b5-trans-head, b5-trans-l1, b5-trans-l2]
+        drawMs: 1800
+      - id: draw-interrupt
+        type: whiteboard.apply
+        at: { mark: draw-interrupt }
+        upsertIds: [b5-interrupt]
+        drawMs: 1200
+      - id: draw-pending
+        type: whiteboard.apply
+        at: { mark: draw-pending }
+        upsertIds: [b5-pending]
+        drawMs: 1000
+      - id: draw-tracks
+        type: whiteboard.apply
+        at: { mark: draw-tracks }
+        upsertIds: [b5-tracks]
+        drawMs: 1000
+
+  # ------------------------------------------------------------------ 10
+  - id: history-transition
+    narration: >
+      [[mark:close-board-transition]] အရင်က order တွေရဲ့ မှတ်တမ်း
+      ဆောက်ကြည့်ရအောင်။ [[mark:open-slowlist]] SlowList က ရေးပြီးသားပါ။
+      [[mark:select-slow-loop]] ဒီ loop က row တိုင်း 10 millisecond တမင်
+      စောင့်စေလို့၊ row 250 ခု render တာ နှေးပါတယ်။ [[mark:select-slowlist-memo]]
+      ပြီးတော့ memo နဲ့ ထုပ်ထားပါတယ်။ ဒါ နောက်မှ လိုပါလိမ့်မယ်။
+      [[mark:open-history]] HistoryPanel ကတော့ အလွတ်ပါ။ [[mark:type-hp-top]]
+      SlowList ကို import လုပ်ပြီး၊ လက်ရှိ tab ကို state ထဲမှာ ထားပါတယ်။ အစမှာ
+      ဒီနေ့ tab ကနေ စပါတယ်။ [[mark:type-hp-transition]] useTransition ကတော့ state
+      update ကို အလောတကြီး မဟုတ်ဘူးလို့ React ကို ပြောပေးပြီး၊ နှစ်ခု
+      ပြန်ပေးပါတယ်။ Transition run နေဆဲလား ပြောတဲ့ isPending နဲ့၊ Transition
+      စပေးတဲ့ startTransition ပါ။ [[mark:type-hp-select]] tab ပြောင်းတာကို
+      startTransition ထဲမှာ လုပ်လို့၊ ဒီ update က urgent မဟုတ်တော့ပါဘူး။
+      [[mark:type-hp-jsx]] JSX မှာတော့ tab ခလုတ် နှစ်ခု၊ pending ဖြစ်နေတုန်း
+      ပြမယ့် loading စာသား၊ ပြီးတော့ ဒီနေ့ စာသား ဒါမှမဟုတ် နှေးတဲ့ list ပါပါတယ်။
+      [[mark:open-app-history]] App မှာ import လုပ်ပါတယ်။ [[mark:wire-hp-use]]
+      ပြီးတော့ ခေါင်းစဉ် အောက်မှာ ထည့်ပါတယ်။ မှတ်တမ်း tab ကို နှိပ်လိုက်ရင်၊ list
+      မရောက်ခင်မှာ loading စာသား အရင် ပေါ်လာပြီး၊ ဒီနေ့ tab ကလည်း ကျန်နေပါမယ်။
+      [[mark:click-history]] ကဲ၊ နှိပ်ကြည့်ရအောင်။ [[mark:after-pending]] loading
+      စာသား ပေါ်နေပြီး၊ ဒီနေ့ tab လည်း ရှိနေပါသေးတယ်။ [[mark:after-history]] အခု
+      order 250 ပွဲလုံး ရောက်လာပါပြီ။
+    sources:
+      - title: "React — useTransition: Updating the parent component in a Transition"
+        url: "https://react.dev/reference/react/useTransition#marking-a-state-update-as-a-non-blocking-transition"
+      - title: "React — useTransition: Displaying a pending visual state"
+        url: "https://react.dev/reference/react/useTransition#displaying-a-pending-visual-state-during-the-transition"
+      - title: "MDN — performance.now()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Performance/now"
+    actions:
+      - id: close-board-transition
+        type: whiteboard.apply
+        at: { mark: close-board-transition }
+        open: false
+      - id: open-slowlist
+        type: workspace.openFile
+        at: { mark: open-slowlist }
+        path: src/SlowList.jsx
+      - id: select-slow-loop
+        type: editor.select
+        at: { mark: select-slow-loop }
+        target:
+          {
+            file: src/SlowList.jsx,
+            text: "while (performance.now() - start < 10) {",
+            occurrence: 1,
+          }
+      - id: select-slowlist-memo
+        type: editor.select
+        at: { mark: select-slowlist-memo }
+        target: { file: src/SlowList.jsx, text: "export const SlowList = memo(", occurrence: 1 }
+      - id: open-history
+        type: workspace.openFile
+        at: { mark: open-history }
+        path: src/HistoryPanel.jsx
+      - id: type-hp-top
+        type: editor.type
+        at: { mark: type-hp-top }
+        cadence: line-by-line
+        target: { file: src/HistoryPanel.jsx, after: "", occurrence: 1 }
+        text: "import { useState, useTransition } from \"react\";\nimport { SlowList } from \"./SlowList.jsx\";\n\nexport function HistoryPanel() {\n  const [tab, setTab] = useState(\"today\");\n"
+      - id: type-hp-transition
+        type: editor.type
+        at: { mark: type-hp-transition }
+        cadence: fast-explainer
+        target:
+          {
+            file: src/HistoryPanel.jsx,
+            after: "  const [tab, setTab] = useState(\"today\");\n",
+            occurrence: 1,
+          }
+        text: "  const [isPending, startTransition] = useTransition();\n"
+      - id: type-hp-select
+        type: editor.type
+        at: { mark: type-hp-select }
+        cadence: line-by-line
+        target:
+          {
+            file: src/HistoryPanel.jsx,
+            after: "  const [isPending, startTransition] = useTransition();\n",
+            occurrence: 1,
+          }
+        text: "\n  function selectTab(nextTab) {\n    startTransition(() => {\n      setTab(nextTab);\n    });\n  }\n"
+      - id: type-hp-jsx
+        type: editor.type
+        at: { mark: type-hp-jsx }
+        cadence: block
+        target:
+          {
+            file: src/HistoryPanel.jsx,
+            after: "      setTab(nextTab);\n    });\n  }\n",
+            occurrence: 1,
+          }
+        text: "\n  return (\n    <section className=\"card\" data-testid=\"history-panel\">\n      <div className=\"row\">\n        <button data-testid=\"tab-today\" onClick={() => selectTab(\"today\")}>\n          ဒီနေ့\n        </button>\n        <button data-testid=\"tab-history\" onClick={() => selectTab(\"history\")}>\n          မှတ်တမ်း\n        </button>\n      </div>\n      {isPending && <p className=\"muted\" data-testid=\"history-pending\">ဖွင့်နေပါတယ်…</p>}\n      {tab === \"today\" ? <p data-testid=\"today-text\">ဒီနေ့ ဆိုင်ဖွင့်ထားပါတယ်</p> : <SlowList />}\n    </section>\n  );\n}\n"
+      - id: open-app-history
+        type: workspace.openFile
+        at: { mark: open-app-history }
+        path: src/App.jsx
+      - id: wire-hp-import
+        type: editor.type
+        at: { afterAction: open-app-history }
+        cadence: block
+        target:
+          {
+            file: src/App.jsx,
+            after: "import { DishList } from \"./DishList.jsx\";\n",
+            occurrence: 1,
+          }
+        text: "import { HistoryPanel } from \"./HistoryPanel.jsx\";\n"
+      - id: wire-hp-use
+        type: editor.type
+        at: { mark: wire-hp-use }
+        cadence: block
+        target: { file: src/App.jsx, after: "      <Header />\n", occurrence: 1 }
+        text: "      <HistoryPanel />\n"
+      - id: expect-today
+        type: expect.preview
+        at: { mark: click-history, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: today-text }
+        textContains: "ဆိုင်ဖွင့်ထားပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-history
+        type: preview.click
+        at: { mark: click-history }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-history }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-pending
+        type: expect.preview
+        at: { afterAction: click-history }
+        timeoutMs: 3000
+        target: { by: testId, value: history-pending }
+        textContains: "ဖွင့်နေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-history
+        type: expect.preview
+        at: { mark: after-history }
+        timeoutMs: 5000
+        target: { by: testId, value: history-count }
+        textContains: "250 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 3000 }
+
+  # ------------------------------------------------------------------ 11
+  - id: deferred-search
+    narration: >
+      [[mark:open-history-2]] အခု မှတ်တမ်းထဲ ရှာလို့ ရတဲ့ အကွက် ထည့်ကြည့်ရအောင်။
+      ဒီတစ်ခါတော့ startTransition ကို မသုံးပါဘူး။ input ထဲ ရိုက်တဲ့ စာက ချက်ချင်း
+      ပေါ်ရမှာ ဖြစ်လို့၊ input ရဲ့ state ကို Transition ထဲ ထည့်လို့ မရပါဘူး။
+      ဒါကြောင့် state ကို ချက်ချင်း ပြောင်းပြီး၊ နှေးတဲ့ list ကို ပေးမယ့်
+      တန်ဖိုးကိုပဲ နောက်ကျစေပါတယ်။ [[mark:wire-deferred-import]] useDeferredValue
+      ကို ယူပါတယ်။ [[mark:wire-deferred-state]] query က input ထဲ ရိုက်ထားတဲ့ စာကို
+      မှတ်ထားတဲ့ state ပါ။ deferredQuery ကတော့ useDeferredValue က ပေးတဲ့၊
+      နောက်ကျပြီးမှ လိုက်ပြောင်းတဲ့ copy ပါ။ [[mark:wire-deferred-input]] input က
+      query ကို ပြလို့ ရိုက်လိုက်တာ ချက်ချင်း ပေါ်ပြီး၊ နှစ်ခု မတူနေတုန်း
+      ရှာနေဆဲပါ ဆိုတဲ့ စာသား ပြပါတယ်။ [[mark:wire-deferred-filter]] SlowList ကတော့
+      deferred တန်ဖိုးကို ရပါတယ်။ urgent render မှာ အဲဒီ တန်ဖိုး မပြောင်းသေးလို့
+      memo က နှေးတဲ့ list ကို ကျော်သွားပါတယ်။ အဲဒီနောက်မှ React က တန်ဖိုး အသစ်နဲ့
+      list ကို နောက်ကွယ်မှာ render လုပ်ပါတယ်။ React 19 ကစပြီး ပထမဆုံး render မှာ
+      ပြထားမယ့် တန်ဖိုး တစ်ခုကိုလည်း ပေးလို့ ရလို့၊ page စဖွင့်ချိန်မှာတောင်
+      နှေးတဲ့ list ကို မစောင့်ဘဲ ကျန်တဲ့ အပိုင်းတွေကို အရင် ပြလို့ ရပါတယ်။
+      [[mark:click-history-2]] page ပြန်ပွင့်သွားလို့ မှတ်တမ်း tab ကို
+      ထပ်ဖွင့်ရအောင်။ list ရောက်လာရင် ခေါက်ဆွဲကို ရှာကြည့်ပါမယ်။ ရိုက်လိုက်တာနဲ့
+      input ထဲက စာက ချက်ချင်း ပေါ်ပြီး၊ list က လိုက်မမီသေးတုန်း ရှာနေဆဲပါ ဆိုတဲ့
+      စာသား ခဏ ပေါ်ပါမယ်။ [[mark:type-history-search]] ကဲ၊ ရိုက်ကြည့်ရအောင်။
+      [[mark:after-stale]] input ထဲက စာက ချက်ချင်း ပြောင်းသွားပြီး၊ list ကတော့
+      ခဏနေမှ လိုက်မီလာပါတယ်။ [[mark:after-filtered]] အခု ခေါက်ဆွဲ order 100 ပွဲပဲ
+      ပြနေပါပြီ။
+    sources:
+      - title: "React — useDeferredValue"
+        url: "https://react.dev/reference/react/useDeferredValue"
+      - title: "React — useTransition: Updating an input in a Transition doesn't work"
+        url: "https://react.dev/reference/react/useTransition#updating-an-input-in-a-transition-doesnt-work"
+      - title: "React — useDeferredValue: Showing stale content while fresh content is loading"
+        url: "https://react.dev/reference/react/useDeferredValue#deferring-re-rendering-for-a-part-of-the-ui"
+      - title: "React 19 — useDeferredValue initial value"
+        url: "https://react.dev/blog/2024/12/05/react-19#use-deferred-value-initial-value"
+    actions:
+      - id: open-history-2
+        type: workspace.openFile
+        at: { mark: open-history-2 }
+        path: src/HistoryPanel.jsx
+      - id: wire-deferred-import
+        type: editor.type
+        at: { mark: wire-deferred-import }
+        cadence: block
+        target: { file: src/HistoryPanel.jsx, after: "import { ", occurrence: 1 }
+        text: "useDeferredValue, "
+      - id: wire-deferred-state
+        type: editor.type
+        at: { mark: wire-deferred-state }
+        cadence: block
+        target:
+          {
+            file: src/HistoryPanel.jsx,
+            after: "  const [isPending, startTransition] = useTransition();\n",
+            occurrence: 1,
+          }
+        text: "  const [query, setQuery] = useState(\"\");\n  const deferredQuery = useDeferredValue(query);\n"
+      - id: wire-deferred-input
+        type: editor.type
+        at: { mark: wire-deferred-input }
+        cadence: block
+        target:
+          {
+            file: src/HistoryPanel.jsx,
+            after: "data-testid=\"history-pending\">ဖွင့်နေပါတယ်…</p>}\n",
+            occurrence: 1,
+          }
+        text: "      <input\n        value={query}\n        onChange={(e) => setQuery(e.target.value)}\n        placeholder=\"မှတ်တမ်းထဲ ရှာရန်\"\n        data-testid=\"history-search\"\n      />\n      {query !== deferredQuery && <p className=\"muted\" data-testid=\"history-stale\">ရှာနေဆဲပါ…</p>}\n"
+      - id: wire-deferred-filter
+        type: editor.type
+        at: { mark: wire-deferred-filter }
+        cadence: block
+        target: { file: src/HistoryPanel.jsx, after: "<SlowList", occurrence: 1 }
+        text: " filter={deferredQuery}"
+      - id: expect-today-2
+        type: expect.preview
+        at: { mark: click-history-2, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: today-text }
+        textContains: "ဆိုင်ဖွင့်ထားပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-history-2
+        type: preview.click
+        at: { mark: click-history-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-history }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-history-2
+        type: expect.preview
+        at: { mark: type-history-search, offsetMs: -600 }
+        timeoutMs: 5000
+        target: { by: testId, value: history-count }
+        textContains: "250 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 3000 }
+      - id: type-history-search
+        type: preview.input
+        at: { mark: type-history-search }
+        timeoutMs: 5000
+        target: { by: testId, value: history-search }
+        value: "ခေါက်ဆွဲ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-stale
+        type: expect.preview
+        at: { afterAction: type-history-search }
+        timeoutMs: 3000
+        target: { by: testId, value: history-stale }
+        textContains: "ရှာနေဆဲပါ"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-search-value
+        type: expect.preview
+        at: { mark: after-stale }
+        timeoutMs: 5000
+        target: { by: testId, value: history-search }
+        value: "ခေါက်ဆွဲ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-filtered
+        type: expect.preview
+        at: { mark: after-filtered }
+        timeoutMs: 5000
+        target: { by: testId, value: history-count }
+        textContains: "100 ပွဲ"
+        retry: { maxAttempts: 3, delayMs: 1500 }
+
+  # ------------------------------------------------------------------ 12
+  - id: independent-recap
+    chapter: "React 19.3 နဲ့ အနှစ်ချုပ်"
+    narration: >
+      React 19.3 က နောက်တစ်ခု ပြောင်းလိုက်ပါတယ်။ [[mark:draw-192]] အရင်က မဆိုင်တဲ့
+      Transition နှစ်ခုကို React က တစ်ခါတလေ တစ်ခုတည်း ပေါင်းပြီး render
+      လုပ်တတ်ပါတယ်။ React 19.2 နဲ့ တိုင်းကြည့်တဲ့ စမ်းသပ်မှု တစ်ခုမှာ၊ မြန်တဲ့
+      update က နှေးတာကို စောင့်နေရပြီး၊ နှစ်ခုလုံး 1.5 စက္ကန့်လောက် ကြာမှ
+      ပေါ်လာပါတယ်။ [[mark:draw-193]] React 19.3 ကတော့ သီးခြား Transition တွေကို
+      တစ်ခုချင်းစီ render လုပ်လို့၊ မြန်တဲ့ update က 0.3 စက္ကန့်လောက်နဲ့
+      ပေါ်လာပါတယ်။ [[mark:draw-action-note]] ခြွင်းချက် တစ်ခုက၊ async Action
+      pending ဖြစ်နေတုန်း စတဲ့ Transition ကတော့ အဲဒီ Action နဲ့ အတူ batch
+      လုပ်နေဆဲပါ။ Action တွေကို lesson 10 မှာ ကြည့်ပါမယ်။
+      [[mark:draw-recap-measure]] ဒါဆို ပြန်ချုပ်ရရင်၊ Profiler နဲ့ အရင် တိုင်းပါ။
+      [[mark:draw-recap-memo]] memo က props မပြောင်းတဲ့ child ကို ကျော်ပေးပြီး၊
+      useMemo နဲ့ useCallback က props တွေ မပြောင်းအောင် ထိန်းပေးပါတယ်။
+      [[mark:draw-recap-compiler]] React Compiler က ကိုယ့်အစား လုပ်ပေးပါတယ်။
+      [[mark:draw-recap-transition]] Transition နဲ့ deferred value ကတော့ စာရိုက်တာ
+      မနှေးစေပါဘူး။ [[mark:next-lesson]] နောက် lesson မှာတော့ data မရောက်ခင်
+      loading ပြပေးတဲ့ Suspense ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "React 19.3 (blog)"
+        url: "https://react.dev/blog/2026/09/09/react-19-3"
+      - title: "React — useTransition"
+        url: "https://react.dev/reference/react/useTransition"
+      - title: "React — Suspense"
+        url: "https://react.dev/reference/react/Suspense"
+    actions:
+      - id: board-independent
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [b6-title]
+      - id: draw-192
+        type: whiteboard.apply
+        at: { mark: draw-192 }
+        upsertIds: [b6-192-label, b6-192-bar, b6-192-bar-text, b6-192-fast]
+        drawMs: 2200
+      - id: draw-193
+        type: whiteboard.apply
+        at: { mark: draw-193 }
+        upsertIds: [b6-193-label, b6-193-bar, b6-193-bar-text, b6-193-fast]
+        drawMs: 2200
+      - id: draw-action-note
+        type: whiteboard.apply
+        at: { mark: draw-action-note }
+        upsertIds: [b6-action]
+        drawMs: 1200
+      - id: draw-recap-measure
+        type: whiteboard.apply
+        at: { mark: draw-recap-measure }
+        clear: true
+        upsertIds: [b7-title, b7-measure]
+        drawMs: 900
+      - id: draw-recap-memo
+        type: whiteboard.apply
+        at: { mark: draw-recap-memo }
+        upsertIds: [b7-memo]
+        drawMs: 1100
+      - id: draw-recap-compiler
+        type: whiteboard.apply
+        at: { mark: draw-recap-compiler }
+        upsertIds: [b7-compiler]
+        drawMs: 1000
+      - id: draw-recap-transition
+        type: whiteboard.apply
+        at: { mark: draw-recap-transition }
+        upsertIds: [b7-transition]
+        drawMs: 1100
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b7-next]
+        drawMs: 800
+      - id: expect-dishlist-file
+        type: expect.file
+        at: { afterAction: draw-next }
+        path: src/DishList.jsx
+        contains: "    <Profiler id=\"DishList\" onRender={onRender}>\n"
+      - id: expect-onrender-file
+        type: expect.file
+        at: { afterAction: expect-dishlist-file }
+        path: src/DishList.jsx
+        contains: "  document.getElementById(\"commit-count\").textContent =\n    \"render \" + renders + \" ကြိမ် · \" + phase;\n"
+      - id: expect-app-memo-file
+        type: expect.file
+        at: { afterAction: expect-onrender-file }
+        path: src/App.jsx
+        contains: "        <MemoDishList dishes={visibleMemo} onSelect={handleSelectStable} />\n"
+      - id: expect-app-hooks-file
+        type: expect.file
+        at: { afterAction: expect-app-memo-file }
+        path: src/App.jsx
+        contains: "  const handleSelectStable = useCallback((id) => setSelectedId(id), []);\n"
+      - id: expect-history-transition-file
+        type: expect.file
+        at: { afterAction: expect-app-hooks-file }
+        path: src/HistoryPanel.jsx
+        contains: "    startTransition(() => {\n      setTab(nextTab);\n    });\n"
+      - id: expect-history-deferred-file
+        type: expect.file
+        at: { afterAction: expect-history-transition-file }
+        path: src/HistoryPanel.jsx
+        contains: "<SlowList filter={deferredQuery} />"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
