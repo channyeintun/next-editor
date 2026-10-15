@@ -448,6 +448,11 @@ export async function runStudioRender(
     },
   });
 
+  // onProgress delivered receipts as they landed, so a background
+  // runtime.start's sits after the actions that ran during its install; the
+  // report and the repeatability semantics take the Performer's plan order.
+  receipts.splice(0, receipts.length, ...performOutcome.receipts);
+
   // ---- Finalize ------------------------------------------------------------
   phase("finalize");
   if (performOutcome.status === "failed") {

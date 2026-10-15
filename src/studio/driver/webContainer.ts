@@ -3,6 +3,7 @@ import type { StudioPreviewCommandResult } from "../../utils/iframeStudioCommand
 import { StudioActionError, abortableSleep, throwIfAborted, waitUntil } from "../async";
 import type { StudioRuntime } from "../plan";
 import { previewCommandTarget, previewExpectationMismatches } from "../previewExpectation";
+import { runtimeStartIsOneShotRun } from "../runtimeContract";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 
@@ -133,7 +134,7 @@ export function webContainerCommands(
       // runtime.start itself must wait for a clean process exit (`ready`) or the
       // lesson could pass after printing the expected line while still hung—or
       // before a later non-zero exit is recorded.
-      if (deps.workspace.getProject().lessonType === "python") {
+      if (runtimeStartIsOneShotRun(deps.workspace.getProject().lessonType)) {
         try {
           await waitUntil(
             () => {

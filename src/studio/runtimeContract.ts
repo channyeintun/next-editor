@@ -42,6 +42,19 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   asm: "asm-playground",
 };
 
+/**
+ * Whether a WebContainer lesson's runtime.start is the program run itself.
+ * Python runs one-shot, so its start acknowledges only once the process has
+ * exited (the driver waits for that) and the Performer keeps it in the
+ * foreground, so edits planned after it go into the next run rather than
+ * racing python3 for the file. JS/TS starts a dev server and acknowledges once
+ * it has spawned. Takes the workspace's wider lesson-type string because the
+ * driver reads it off the live project.
+ */
+export function runtimeStartIsOneShotRun(lessonType: string): boolean {
+  return lessonType === "python";
+}
+
 type PreviewClickAction = Extract<StudioPlanAction, { type: "preview.click" }>;
 type ExpectPreviewAction = Extract<StudioPlanAction, { type: "expect.preview" }>;
 
