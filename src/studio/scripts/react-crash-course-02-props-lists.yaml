@@ -1126,11 +1126,6 @@ scenes:
         at: { mark: start-dev-server }
         timeoutMs: 45000
         retry: { maxAttempts: 2, delayMs: 500 }
-      - id: wait-for-dev-server
-        type: runtime.waitForReady
-        at: { afterAction: start-dev-server }
-        timeoutMs: 20000
-        retry: { maxAttempts: 2, delayMs: 250 }
       - id: select-header
         type: editor.select
         at: { mark: select-header }
@@ -1245,9 +1240,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-props-board }
         open: false
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-preview
         type: preview.open
-        at: { mark: preview-opens }
+        at: { afterAction: wait-for-dev-server }
         timeoutMs: 10000
         mode: docked
         retry: { maxAttempts: 2, delayMs: 250 }
