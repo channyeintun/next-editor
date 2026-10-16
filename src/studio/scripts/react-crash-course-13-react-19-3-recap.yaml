@@ -1969,7 +1969,7 @@ scenes:
       field သုံးခုက element တစ်ခုတည်း ဖြစ်သွားလို့ gap ပျောက်သွားပါတယ်။
       [[mark:draw-frag-ref]] React 19.3 မှာတော့ ref ကို Fragment ပေါ်မှာ တပ်လို့
       ရပါပြီ။ သူ့ ref က FragmentInstance တစ်ခုကို ပေးပြီး၊ အဲဒါက Fragment ထဲက
-      child အားလုံးကို အုပ်စု တစ်ခုလို ကိုင်ပေးပါတယ်။ [[mark:draw-frag-methods]]
+      child အားလုံးကို အုပ်စု တစ်ခုလို handle လုပ်ပေးပါတယ်။ [[mark:draw-frag-methods]]
       သူက ပထမ ဒါမှမဟုတ် နောက်ဆုံး field ကို focus လုပ်တာ၊ child တိုင်းမှာ event
       listener ထည့်တာ၊ observeUsing နဲ့ screen ပေါ် မြင်ရလား၊ အရွယ်အစား ပြောင်းလား
       စောင့်ကြည့်တာတွေ လုပ်နိုင်ပါတယ်။
