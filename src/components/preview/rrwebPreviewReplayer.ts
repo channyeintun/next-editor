@@ -68,6 +68,45 @@ function countEventsBefore(events: readonly eventWithTime[], baselineTime: numbe
   return low;
 }
 
+// rrweb stamps whole milliseconds, so a baseline this far past an event casts it
+// and nothing after it.
+const PAST_EVENT_MS = 0.5;
+
+// rrweb replays a seek from the last Meta at or before its baseline, discarding
+// everything earlier, and casts only the events strictly before the baseline.
+// Its recorder stamps a snapshot's Meta before it serializes the page and the
+// FullSnapshot after, which on a large page is ~100ms later. A baseline between
+// the two therefore cast the Meta alone and left the replay document as it was:
+// the seed rrweb paints on its own when playback started there, or the later
+// state after a seek back. Serializing is synchronous, so the page did not change
+// between the two, and the FullSnapshot already holds the state at such a
+// baseline: the cast goes just past it instead.
+function snapshotSafeBaseline(events: readonly eventWithTime[], baselineTime: number): number {
+  // The events at or before the baseline, then the last Meta among them.
+  let metaIndex = countEventsBefore(events, baselineTime);
+  while (events[metaIndex]?.timestamp === baselineTime) {
+    metaIndex += 1;
+  }
+  metaIndex -= 1;
+  while (metaIndex >= 0 && events[metaIndex].type !== RRWEB_EVENT_TYPE.Meta) {
+    metaIndex -= 1;
+  }
+  if (metaIndex < 0) {
+    return baselineTime;
+  }
+
+  for (let index = metaIndex + 1; index < events.length; index += 1) {
+    const { type, timestamp } = events[index];
+    if (type === RRWEB_EVENT_TYPE.FullSnapshot) {
+      return timestamp < baselineTime ? baselineTime : timestamp + PAST_EVENT_MS;
+    }
+    if (type === RRWEB_EVENT_TYPE.Meta) {
+      break;
+    }
+  }
+  return baselineTime;
+}
+
 // Drives an rrweb `Replayer` from the recording timeline. The host timeline is
 // the single clock: every tick/seek calls `seekToRecordingTime`, which casts all
 // events up to that offset deterministically via `Replayer.pause` (a play that is
@@ -168,9 +207,13 @@ export class RrwebPreviewReplayer {
         }
       }
 
-      this.replayer.pause(offsetMs);
-      this.castEventCount = countEventsBefore(this.events, baselineTime);
-      this.castBaselineTime = baselineTime;
+      // Offset zero stays a fresh Replayer's to paint from its seed (see the
+      // constructor and the restart above).
+      const castBaselineTime =
+        offsetMs > 0 ? snapshotSafeBaseline(this.events, baselineTime) : baselineTime;
+      this.replayer.pause(castBaselineTime - this.firstEventTime);
+      this.castEventCount = countEventsBefore(this.events, castBaselineTime);
+      this.castBaselineTime = castBaselineTime;
       this.lastOffsetMs = offsetMs;
     } catch {
       // A single failed cast must not break the timeline; the next tick retries.

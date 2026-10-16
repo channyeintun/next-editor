@@ -290,3 +290,128 @@ describe("rrweb preview replayer per-tick driving", () => {
     preview.destroy();
   });
 });
+
+// A page whose only element shows a step number, as rrweb serializes it.
+function stepSnapshot(step: number) {
+  return {
+    node: {
+      type: 0,
+      id: 1,
+      childNodes: [
+        { type: 1, id: 2, name: "html", publicId: "", systemId: "" },
+        {
+          type: 2,
+          id: 3,
+          tagName: "html",
+          attributes: {},
+          childNodes: [
+            { type: 2, id: 4, tagName: "head", attributes: {}, childNodes: [] },
+            {
+              type: 2,
+              id: 5,
+              tagName: "body",
+              attributes: {},
+              childNodes: [
+                {
+                  type: 2,
+                  id: 6,
+                  tagName: "div",
+                  attributes: { id: "step" },
+                  childNodes: [{ type: 3, id: 7, textContent: String(step) }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    initialOffset: { left: 0, top: 0 },
+  };
+}
+
+// The step moves 0 -> 1 -> 2 -> 3, with a checkpoint (a corrective snapshot or
+// a reload) at step 2 whose Meta rrweb stamped 20ms before it had serialized the
+// page into the FullSnapshot, as it does with every snapshot.
+function stepsWithCheckpoint(): eventWithTime[] {
+  const meta = (timestamp: number) => ({
+    type: 4,
+    timestamp,
+    data: { href: "http://localhost:5173/", width: 600, height: 400 },
+  });
+  const step = (timestamp: number, value: number) => ({
+    type: 3,
+    timestamp,
+    data: {
+      source: 0,
+      texts: [{ id: 7, value: String(value) }],
+      attributes: [],
+      removes: [],
+      adds: [],
+    },
+  });
+  return [
+    meta(1_000),
+    { type: 2, timestamp: 1_001, data: stepSnapshot(0) },
+    step(1_100, 1),
+    step(1_200, 2),
+    meta(1_300),
+    { type: 2, timestamp: 1_320, data: stepSnapshot(2) },
+    step(1_400, 3),
+  ] as unknown as eventWithTime[];
+}
+
+describe("rrweb preview replayer seeks inside a snapshot", () => {
+  const replayedStep = (root: HTMLElement) =>
+    root.querySelector("iframe")?.contentDocument?.getElementById("step")?.textContent;
+
+  it("shows the checkpoint, not the seed, when playback starts while it was serialized", async () => {
+    const root = mountReplayRoot();
+    // As the app does: the first seek lands before rrweb's own seed paint.
+    const preview = new RrwebPreviewReplayer(
+      { root, events: stepsWithCheckpoint() },
+      CountingReplayer,
+    );
+    preview.seekToRecordingTime(1_310);
+    await sleep(5);
+
+    expect(replayedStep(root)).toBe("2");
+    preview.destroy();
+  });
+
+  it("shows the checkpoint, not the later state, after a seek back into it", async () => {
+    const root = mountReplayRoot();
+    const preview = new RrwebPreviewReplayer(
+      { root, events: stepsWithCheckpoint() },
+      CountingReplayer,
+    );
+    await sleep(5);
+    preview.seekToRecordingTime(1_450);
+    expect(replayedStep(root)).toBe("3");
+
+    preview.seekToRecordingTime(1_310);
+    expect(replayedStep(root)).toBe("2");
+    // Ticks still inside it, and past it, keep that state until the next step.
+    for (const time of [1_315, 1_320, 1_330, 1_399]) {
+      preview.seekToRecordingTime(time);
+      expect(replayedStep(root), `at ${time}`).toBe("2");
+    }
+    preview.seekToRecordingTime(1_401);
+    expect(replayedStep(root)).toBe("3");
+    preview.destroy();
+  });
+
+  it("shows the seed after a seek back into the seed's own serialization", async () => {
+    const root = mountReplayRoot();
+    const preview = new RrwebPreviewReplayer(
+      { root, events: stepsWithCheckpoint() },
+      CountingReplayer,
+    );
+    await sleep(5);
+    preview.seekToRecordingTime(1_150);
+    expect(replayedStep(root)).toBe("1");
+
+    preview.seekToRecordingTime(1_000.5);
+    expect(replayedStep(root)).toBe("0");
+    preview.destroy();
+  });
+});
