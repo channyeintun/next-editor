@@ -138,4 +138,117 @@ describe("withRecordedImageSources", () => {
 
     expect(withRecordedImageSources(events, readWorkspaceFile)).toBe(events);
   });
+
+  // rrweb absolutizes a stylesheet's url(/logo.svg) onto the recorded host.
+  const css = (url: string) =>
+    `.card { background-image: url("${url}"), url('https://example.com/a.png'), url(/relative.svg); }`;
+  const resolvedCss = css(LOGO_DATA_URL);
+
+  it("rewrites stylesheet url()s in inlined stylesheets, style text and style attributes", () => {
+    const snapshot = {
+      type: 2,
+      timestamp: 1,
+      data: {
+        node: {
+          type: 0,
+          childNodes: [
+            // An inlined <link rel="stylesheet">.
+            { type: 2, tagName: "link", attributes: { _cssText: css(`${HOST}/logo.svg`) }, id: 2 },
+            // A <style> (Vite's JS-imported CSS) and its text.
+            {
+              type: 2,
+              tagName: "style",
+              attributes: {},
+              id: 3,
+              childNodes: [{ type: 3, textContent: css(`${HOST}/logo.svg`), id: 4 }],
+            },
+            {
+              type: 2,
+              tagName: "div",
+              attributes: { style: `background: url("${HOST}/logo.svg") no-repeat;` },
+              id: 5,
+            },
+          ],
+        },
+      },
+    };
+
+    const [, result] = withRecordedImageSources(
+      asEvents(meta, snapshot),
+      readWorkspaceFile,
+    ) as unknown as [unknown, typeof snapshot];
+
+    const [link, style, div] = result.data.node.childNodes;
+    expect(link.attributes._cssText).toBe(resolvedCss);
+    expect(style.childNodes?.[0].textContent).toBe(resolvedCss);
+    expect(div.attributes.style).toBe(`background: url("${LOGO_DATA_URL}") no-repeat;`);
+  });
+
+  it("rewrites stylesheet url()s in swapped links, replaced style text and style changes", () => {
+    const mutation = {
+      type: 3,
+      timestamp: 2,
+      data: {
+        source: 0,
+        removes: [],
+        adds: [
+          {
+            parentId: 3,
+            nextId: null,
+            node: { type: 3, textContent: css(`${HOST}/logo.svg`), id: 8 },
+          },
+        ],
+        texts: [{ id: 4, value: css(`${HOST}/logo.svg`) }],
+        attributes: [
+          // Vite's link-mode HMR: the new <link> is inlined once it loads.
+          { id: 9, attributes: { _cssText: css(`${HOST}/logo.svg`) } },
+          { id: 10, attributes: { style: `background: url("${HOST}/logo.svg")` } },
+          {
+            id: 11,
+            attributes: {
+              style: {
+                "background-image": `url("${HOST}/logo.svg")`,
+                mask: [`url("${HOST}/logo.svg")`, "important"],
+                color: "red",
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const [, result] = withRecordedImageSources(
+      asEvents(meta, mutation),
+      readWorkspaceFile,
+    ) as unknown as [unknown, typeof mutation];
+
+    expect(result.data.adds[0].node.textContent).toBe(resolvedCss);
+    expect(result.data.texts[0].value).toBe(resolvedCss);
+    expect(result.data.attributes[0].attributes._cssText).toBe(resolvedCss);
+    expect(result.data.attributes[1].attributes.style).toBe(`background: url("${LOGO_DATA_URL}")`);
+    expect(result.data.attributes[2].attributes.style).toEqual({
+      "background-image": `url("${LOGO_DATA_URL}")`,
+      mask: [`url("${LOGO_DATA_URL}")`, "important"],
+      color: "red",
+    });
+    // The recording's own event is left as it was.
+    expect(mutation.data.texts[0].value).toBe(css(`${HOST}/logo.svg`));
+  });
+
+  it("leaves stylesheet url()s the workspace cannot answer alone", () => {
+    const mutation = {
+      type: 3,
+      timestamp: 2,
+      data: {
+        source: 0,
+        removes: [],
+        adds: [],
+        texts: [{ id: 4, value: `@font-face { src: url("${HOST}/font.woff2"); }` }],
+        attributes: [{ id: 9, attributes: { _cssText: css(`${HOST}/missing.svg`) } }],
+      },
+    };
+    const events = asEvents(meta, mutation);
+
+    expect(withRecordedImageSources(events, readWorkspaceFile)[1]).toBe(events[1]);
+  });
 });
