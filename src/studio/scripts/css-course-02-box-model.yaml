@@ -1,0 +1,1925 @@
+# CSS course (Burmese), lesson 2 of 43: the box model.
+#
+# Narration is Burmese, applied from voice-script.md next to this file
+# (DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese too.
+#
+# Shape: board (recall lesson 1, the 100 → 142 puzzle, everything is a box) →
+# code tour (index.html: the new stamp and tag; empty styles.css) → the stamp
+# grows 100 → 142 live → board (the four areas, the sum, the picture-frame
+# analogy) → padding, border, margin on the menu cards → outline on the badge
+# → board (who decides a box's size: extrinsic vs intrinsic) → fixed height
+# overflows today's special, then height: auto hands the height back to the
+# content → the English tag as an inline-block, then min-content → box-sizing
+# content-box (no change) then border-box (142 → 100) on the stamp → board
+# (the 260 / 200 check) → a 100%-wide hero sticks out of the page, and the
+# global border-box reset at the top of styles.css pulls it back → board
+# (the DevTools box-model diagram) → recap, hand-off to selectors (lesson 3).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every typed
+# state is plain CSS that hot-swaps with no reload, so no interaction is ever
+# lost and no index.html edit is needed. Values were picked so that no prefix
+# of them misleads mid-typing (unitless "padding: 2" is invalid and ignored;
+# colour keywords gold, khaki, tan, tomato and saddlebrown have no valid
+# prefix).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-02-box-model
+  title: "CSS course 2: Box model"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 2
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero (with lesson block: stamp) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <span class="stamp" data-testid="stamp">ဈေးလျှော့</span>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks (with lesson block: tag) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="tag" lang="en" data-testid="tag">Royal Milk Tea</span>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A and B of the course kit WITHOUT the B2 box-sizing
+      # reset (this lesson types it) and without section C, so cards, badges
+      # and the hero start with no padding, border or margin. Section E pins
+      # only the menu list reset (no bullets, no indent): never typed, never
+      # shown, and nothing the lesson's demos rely on being absent.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page basics, so the CSS a lesson types can
+          focus on one idea. Lesson 2 keeps sections A and B only: no box-sizing
+          reset (the lesson types it) and no card furniture.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 2: the drinks list without bullets or indent, so each card's
+           own margin is the only space around it. */
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — recall + the puzzle (left) and the page as boxes in boxes
+    # (right).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "ဘာကြောင့် 142px ဖြစ်နေလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-wrote-label,
+        kind: text,
+        x: 290,
+        y: 252,
+        width: 150,
+        height: 36,
+        text: "ရေးထားတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-wrote-bar,
+        kind: rectangle,
+        x: 480,
+        y: 245,
+        width: 200,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-wrote-num,
+        kind: text,
+        x: 535,
+        y: 252,
+        width: 90,
+        height: 36,
+        text: "100px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-got-label,
+        kind: text,
+        x: 290,
+        y: 332,
+        width: 150,
+        height: 36,
+        text: "မြင်ရတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-got-bar,
+        kind: rectangle,
+        x: 480,
+        y: 325,
+        width: 284,
+        height: 50,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: a-got-num,
+        kind: text,
+        x: 570,
+        y: 332,
+        width: 120,
+        height: 36,
+        text: "142px ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-got-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 550,
+        y: 318,
+        width: 160,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-box-note,
+        kind: text,
+        x: 290,
+        y: 440,
+        width: 300,
+        height: 40,
+        text: "အရာတိုင်း box ပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-box-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 442,
+        width: 130,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-page,
+        kind: rectangle,
+        x: 820,
+        y: 230,
+        width: 270,
+        height: 400,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-page-label,
+        kind: text,
+        x: 835,
+        y: 238,
+        width: 80,
+        height: 36,
+        text: "page",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-hero,
+        kind: rectangle,
+        x: 840,
+        y: 285,
+        width: 230,
+        height: 80,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-hero-label,
+        kind: text,
+        x: 858,
+        y: 305,
+        width: 80,
+        height: 36,
+        text: "hero",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-menu,
+        kind: rectangle,
+        x: 840,
+        y: 385,
+        width: 230,
+        height: 225,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-menu-label,
+        kind: text,
+        x: 858,
+        y: 392,
+        width: 90,
+        height: 36,
+        text: "menu",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-card-1,
+        kind: rectangle,
+        x: 858,
+        y: 437,
+        width: 194,
+        height: 52,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-card-1-label,
+        kind: text,
+        x: 876,
+        y: 445,
+        width: 80,
+        height: 36,
+        text: "card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-card-2,
+        kind: rectangle,
+        x: 858,
+        y: 503,
+        width: 194,
+        height: 52,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-card-2-label,
+        kind: text,
+        x: 876,
+        y: 511,
+        width: 80,
+        height: 36,
+        text: "card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-card-more,
+        kind: text,
+        x: 940,
+        y: 560,
+        width: 40,
+        height: 36,
+        text: "…",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-round-rect,
+        kind: rectangle,
+        x: 300,
+        y: 520,
+        width: 110,
+        height: 110,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-round-circle,
+        kind: ellipse,
+        x: 300,
+        y: 520,
+        width: 110,
+        height: 110,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-round-label,
+        kind: text,
+        x: 440,
+        y: 557,
+        width: 260,
+        height: 36,
+        text: "ဝိုင်းနေလည်း box ပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the four areas, inside out, with the stamp's sum and the
+    # picture-frame analogy. Rings are outlines only (drawn inside out, so a
+    # filled outer ring would cover the inner ones); only the content is
+    # filled.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "Box ရဲ့ အလွှာ လေးလွှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-content,
+        kind: rectangle,
+        x: 430,
+        y: 370,
+        width: 180,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-content-label,
+        kind: text,
+        x: 465,
+        y: 412,
+        width: 120,
+        height: 36,
+        text: "content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-padding,
+        kind: rectangle,
+        x: 380,
+        y: 320,
+        width: 280,
+        height: 220,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-padding-label,
+        kind: text,
+        x: 392,
+        y: 328,
+        width: 120,
+        height: 36,
+        text: "padding",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-border,
+        kind: rectangle,
+        x: 330,
+        y: 270,
+        width: 380,
+        height: 320,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-border-label,
+        kind: text,
+        x: 342,
+        y: 278,
+        width: 100,
+        height: 36,
+        text: "border",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-margin,
+        kind: rectangle,
+        x: 280,
+        y: 220,
+        width: 480,
+        height: 420,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-margin-label,
+        kind: text,
+        x: 292,
+        y: 228,
+        width: 110,
+        height: 36,
+        text: "margin",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-sum-content,
+        kind: text,
+        x: 810,
+        y: 230,
+        width: 70,
+        height: 36,
+        text: "100",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-sum-padding,
+        kind: text,
+        x: 810,
+        y: 275,
+        width: 150,
+        height: 36,
+        text: "+ 20 + 20",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-sum-border,
+        kind: text,
+        x: 810,
+        y: 320,
+        width: 120,
+        height: 36,
+        text: "+ 1 + 1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-sum-total,
+        kind: text,
+        x: 810,
+        y: 365,
+        width: 140,
+        height: 36,
+        text: "= 142px",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-an-photo,
+        kind: text,
+        x: 810,
+        y: 440,
+        width: 250,
+        height: 36,
+        text: "ဓာတ်ပုံ = content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-an-mat,
+        kind: text,
+        x: 810,
+        y: 485,
+        width: 250,
+        height: 36,
+        text: "ကြားနေရာ = padding",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-an-frame,
+        kind: text,
+        x: 810,
+        y: 530,
+        width: 220,
+        height: 36,
+        text: "ဘောင် = border",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-an-wall,
+        kind: text,
+        x: 810,
+        y: 575,
+        width: 220,
+        height: 36,
+        text: "နံရံ = margin",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board C — who decides a box's size: the three inputs, then a fixed box
+    # whose content spills out (extrinsic) next to a box that grows
+    # (intrinsic).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "အရွယ်အစားကို ဘာက ဆုံးဖြတ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-f-display,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 120,
+        height: 36,
+        text: "display",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-f-size,
+        kind: text,
+        x: 470,
+        y: 228,
+        width: 300,
+        height: 36,
+        text: "ကိုယ်ပေးတဲ့ အရွယ်အစား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-f-content,
+        kind: text,
+        x: 880,
+        y: 228,
+        width: 120,
+        height: 36,
+        text: "content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-ext-box,
+        kind: rectangle,
+        x: 300,
+        y: 300,
+        width: 280,
+        height: 120,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-ext-text,
+        kind: text,
+        x: 320,
+        y: 312,
+        width: 130,
+        height: 150,
+        text: "content\ncontent\ncontent\ncontent",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-ext-spill,
+        kind: freedraw,
+        stroke: circle,
+        x: 300,
+        y: 410,
+        width: 180,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-ext-overflow,
+        kind: text,
+        x: 500,
+        y: 432,
+        width: 130,
+        height: 36,
+        text: "overflow",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-ext-caption,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 300,
+        height: 36,
+        text: "extrinsic · ကိုယ်က ပေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-box,
+        kind: rectangle,
+        x: 700,
+        y: 300,
+        width: 280,
+        height: 175,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-int-text,
+        kind: text,
+        x: 720,
+        y: 312,
+        width: 130,
+        height: 150,
+        text: "content\ncontent\ncontent\ncontent",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-check,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 380,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-int-caption,
+        kind: text,
+        x: 700,
+        y: 520,
+        width: 330,
+        height: 36,
+        text: "intrinsic · content က ဆုံးဖြတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-default,
+        kind: text,
+        x: 700,
+        y: 575,
+        width: 260,
+        height: 36,
+        text: "အမြင့်ရဲ့ default",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — the 260 check: the same declarations under content-box and
+    # border-box, drawn to scale (1 board pixel = 1 CSS pixel).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "content-box နဲ့ border-box",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-code,
+        kind: text,
+        x: 300,
+        y: 220,
+        width: 640,
+        height: 36,
+        text: "width: 200px · padding: 20px · border: 10px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-cb-outer,
+        kind: rectangle,
+        x: 290,
+        y: 290,
+        width: 260,
+        height: 140,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-cb-inner,
+        kind: rectangle,
+        x: 320,
+        y: 320,
+        width: 200,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-cb-inner-label,
+        kind: text,
+        x: 395,
+        y: 342,
+        width: 60,
+        height: 36,
+        text: "200",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-cb-sum,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 300,
+        height: 36,
+        text: "200 + 40 + 20 = 260",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-cb-caption,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 300,
+        height: 36,
+        text: "content-box (default)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-bb-outer,
+        kind: rectangle,
+        x: 700,
+        y: 290,
+        width: 200,
+        height: 140,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-bb-inner,
+        kind: rectangle,
+        x: 730,
+        y: 320,
+        width: 140,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-bb-inner-label,
+        kind: text,
+        x: 775,
+        y: 342,
+        width: 60,
+        height: 36,
+        text: "140",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-bb-sum,
+        kind: text,
+        x: 700,
+        y: 450,
+        width: 300,
+        height: 36,
+        text: "200 − 40 − 20 = 140",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-bb-caption,
+        kind: text,
+        x: 700,
+        y: 500,
+        width: 200,
+        height: 36,
+        text: "border-box",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-bb-check,
+        kind: freedraw,
+        stroke: check,
+        x: 930,
+        y: 330,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-note,
+        kind: text,
+        x: 560,
+        y: 575,
+        width: 440,
+        height: 36,
+        text: "ရေးတဲ့ အကျယ် = မြင်ရတဲ့ အကျယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — a sketch of the DevTools box-model diagram for one menu card
+    # (outside in, all at once, so the filled rings stack correctly).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "DevTools ထဲက box model",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-margin,
+        kind: rectangle,
+        x: 290,
+        y: 220,
+        width: 520,
+        height: 400,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: e-border,
+        kind: rectangle,
+        x: 340,
+        y: 270,
+        width: 420,
+        height: 300,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: e-padding,
+        kind: rectangle,
+        x: 390,
+        y: 320,
+        width: 320,
+        height: 200,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-content,
+        kind: rectangle,
+        x: 440,
+        y: 370,
+        width: 220,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: e-margin-label,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 110,
+        height: 36,
+        text: "margin",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-margin-num,
+        kind: text,
+        x: 540,
+        y: 228,
+        width: 40,
+        height: 36,
+        text: "16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-border-label,
+        kind: text,
+        x: 350,
+        y: 278,
+        width: 100,
+        height: 36,
+        text: "border",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-border-num,
+        kind: text,
+        x: 545,
+        y: 278,
+        width: 30,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-padding-label,
+        kind: text,
+        x: 400,
+        y: 328,
+        width: 120,
+        height: 36,
+        text: "padding",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-padding-num,
+        kind: text,
+        x: 560,
+        y: 328,
+        width: 40,
+        height: 36,
+        text: "16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-content-label,
+        kind: text,
+        x: 495,
+        y: 402,
+        width: 120,
+        height: 36,
+        text: "content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-step-elements,
+        kind: text,
+        x: 850,
+        y: 260,
+        width: 150,
+        height: 36,
+        text: "Elements",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-step-computed,
+        kind: text,
+        x: 850,
+        y: 305,
+        width: 180,
+        height: 36,
+        text: "→ Computed",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-try,
+        kind: text,
+        x: 850,
+        y: 380,
+        width: 200,
+        height: 80,
+        text: "ကိုယ်တိုင်\nစမ်းကြည့်ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4102
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-puzzle
+    chapter: "Box model ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ပထမဆုံး CSS rule တွေကို ရေးခဲ့ပါတယ်။ browser ရဲ့ default style ကြောင့်
+      element တချို့က block အနေနဲ့ အပေါ်အောက် ဆင့်နေပြီး၊ တချို့ကတော့ စာကြောင်းထဲမှာ စာလုံးတွေလို
+      ဘေးချင်းကပ် နေတာကိုလည်း မြင်ခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်က editor ထဲမှာ dev server ကို စနေပါပြီ။ ဒါမှ နောက်ပိုင်း page လိုတဲ့အခါ အသင့်
+      ဖြစ်နေမှာပါ။ [[mark:draw-puzzle]] ပဟေဠိလေး တစ်ခုနဲ့ စကြည့်ရအောင်။ box သေးသေးလေး တစ်ခုကို အကျယ်
+      100 pixel ပေးပြီး၊ စာသား ပတ်လည်မှာ နေရာလွတ် ဖြစ်တဲ့ padding နည်းနည်းနဲ့၊ ဘောင်မျဉ်း ဖြစ်တဲ့
+      border ပါးပါးလေး ထည့်တယ် ဆိုပါစို့။ [[mark:draw-142]] ဒါပေမဲ့ screen ပေါ်မှာ မြင်ရတဲ့ box က
+      142 pixel ကျယ်နေပါတယ်။ browser က မှားနေတာ မဟုတ်ပါဘူး။ ဒီ lesson ပြီးတဲ့အခါ ဒီ ဂဏန်း ဘယ်က
+      ထွက်လာလဲ ဆိုတာ ကိုယ်တိုင် တွက်ပြနိုင်သွားပါလိမ့်မယ်။ [[mark:draw-page]] အဲဒီအတွက် ပြီးခဲ့တဲ့
+      lesson က အချက် တစ်ခုကနေ စရပါမယ်။ browser ဆွဲတဲ့ အရာတိုင်းဟာ box တစ်ခု ဖြစ်တယ် ဆိုတာပါ။
+      [[mark:draw-nested]] page တစ်ခုလုံးက box တစ်ခုပါ။ သူ့ထဲမှာ ကြိုဆိုတဲ့ အပိုင်းနဲ့ menu က box
+      တွေ ဖြစ်ပြီး၊ menu ထဲက card တိုင်းကလည်း box တစ်ခုစီပါ။ စကားလုံး တစ်လုံးတည်းတောင် လေးထောင့် box
+      တစ်ခုထဲမှာ ရှိနေပါတယ်။ [[mark:draw-round]] စက်ဝိုင်းလို မြင်ရတဲ့ element တောင်မှ browser
+      အတွက်ကတော့ လေးထောင့် box ပါပဲ။ ဝိုင်းနေတာက ဆွဲပြတဲ့ ပုံစံပဲ ဖြစ်ပြီး၊ နေရာကို
+      လေးထောင့်အတိုင်းပဲ တွက်ပါတယ်။ ဒါကြောင့် တစ်ခုခု နေရာ မဆံ့ရင်၊ ကိုယ် တကယ် ချိန်ညှိနေရတာက
+      လေးထောင့် box တွေရဲ့ အရွယ်အစားပါ။ [[mark:name-box-model]] box တိုင်းကို အလွှာတွေနဲ့
+      ခွဲကြည့်တဲ့ ဒီ နည်းကို box model လို့ ခေါ်ပြီး၊ ဒီ lesson တစ်ခုလုံးမှာ အဲဒီ အကြောင်းကို
+      ကြည့်သွားမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Box Model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — The box model"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Box_model"
+      - title: "CSS Box Model Module Level 3"
+        url: "https://www.w3.org/TR/css-box-3/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-puzzle
+        type: whiteboard.apply
+        at: { mark: draw-puzzle }
+        upsertIds: [a-wrote-label, a-wrote-bar, a-wrote-num]
+        drawMs: 1500
+      - id: draw-142
+        type: whiteboard.apply
+        at: { mark: draw-142 }
+        upsertIds: [a-got-label, a-got-bar, a-got-num, a-got-circle]
+        drawMs: 1800
+      - id: draw-page
+        type: whiteboard.apply
+        at: { mark: draw-page }
+        upsertIds: [a-box-note, a-box-arrow, a-page, a-page-label]
+        drawMs: 1800
+      - id: draw-nested
+        type: whiteboard.apply
+        at: { mark: draw-nested }
+        upsertIds:
+          [
+            a-hero,
+            a-hero-label,
+            a-menu,
+            a-menu-label,
+            a-card-1,
+            a-card-1-label,
+            a-card-2,
+            a-card-2-label,
+            a-card-more,
+          ]
+        drawMs: 3600
+      - id: draw-round
+        type: whiteboard.apply
+        at: { mark: draw-round }
+        upsertIds: [a-round-circle, a-round-rect, a-round-label]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] project ထဲမှာ ဘာတွေ ပါလဲ ကြည့်ရအောင်။ [[mark:open-index]]
+      ဒါက page ရဲ့ HTML ဖိုင်ပါ။ ပြီးခဲ့တဲ့ lesson က လက်ဖက်ရည်ဆိုင် အတိုင်းပါပဲ။ ဒါပေမဲ့ box
+      တွေကို ရှင်းရှင်း မြင်ရအောင် ကြိုဆိုတဲ့ အပိုင်းနဲ့ သောက်စရာ menu ကိုပဲ ချန်ထားပါတယ်။
+      [[mark:select-stamp]] ကြိုဆိုတဲ့ အပိုင်းထဲမှာ ဈေးလျှော့ တံဆိပ်လေး တစ်ခု အသစ်
+      ပါလာပါတယ်။ သူက span element ဖြစ်လို့ default အားဖြင့် inline ပါ။ ပြီးခဲ့တဲ့ lesson မှာ
+      နောက်ခံ အရောင် ပေးခဲ့တဲ့ link တွေလိုပဲ၊ စာကြောင်းထဲမှာ နေရာယူတာပါ။ [[mark:select-tag]]
+      လက်ဖက်ရည် card ထဲမှာလည်း English နာမည်လေး တစ်ခု ပါပါတယ်။ English နဲ့ တမင် ရေးထားတာ
+      ဖြစ်ပြီး၊ အကြောင်းကို အကျယ် ပေးတဲ့အခါ သိရပါမယ်။ [[mark:open-styles]] ဒါကတော့ ကိုယ့်
+      CSS ဖိုင် ဖြစ်ပြီး၊ အလွတ်ပဲ ရှိပါသေးတယ်။ ဆိုင်ရဲ့ အရောင်နဲ့ font တွေကို base ဆိုတဲ့
+      နောက်ထပ် CSS ဖိုင်ကနေ ယူထားပြီး၊ အဲဒီ ဖိုင်က lesson တိုင်းမှာ ပါနေမှာပါ။ ဒါကြောင့်
+      ရိုက်မယ့် CSS အားလုံးက box တွေ အကြောင်းချည်းပါ။ [[mark:preview-opens]] dev server
+      အသင့် ဖြစ်သွားလို့၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။ menu card တွေကို ကြည့်ပါ။ card
+      တစ်ခုစီက box ဖြစ်ပေမယ့်၊ ဘယ်မှာ စပြီး ဘယ်မှာ ဆုံးလဲ မမြင်ရသေးပါဘူး။ page ရဲ့ နောက်ခံ
+      အရောင်ပေါ်မှာ စာသားတွေပဲ ရှိနေပါသေးတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: content and sizing"
+        url: "https://web.dev/learn/css/box-model#content-sizing"
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "MDN — <span>: the Content Span element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/span"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-stamp
+        type: editor.select
+        at: { mark: select-stamp }
+        target:
+          {
+            file: index.html,
+            text: '<span class="stamp" data-testid="stamp">ဈေးလျှော့</span>',
+            occurrence: 1,
+          }
+      - id: select-tag
+        type: editor.select
+        at: { mark: select-tag }
+        target:
+          {
+            file: index.html,
+            text: '<span class="tag" lang="en" data-testid="tag">Royal Milk Tea</span>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-first-card
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-first-card }
+
+  - id: stamp-puzzle
+    chapter: "ဘာကြောင့် 142 pixel ဖြစ်နေလဲ"
+    narration: >
+      ဒါဆို ဒီ ပဟေဠိကို ဈေးလျှော့ တံဆိပ်ပေါ်မှာ တကယ် လုပ်ကြည့်ရအောင်။ [[mark:type-stamp]] အရင်ဆုံး
+      box ကို မြင်ရအောင် ရွှေရောင် နောက်ခံ ပေးပါမယ်။ ပြီးတော့ သူ့ကို inline-block ပြောင်းပါမယ်။
+      inline-block က စာကြောင်းထဲမှာ inline လို နေပေမယ့်၊ အကျယ်နဲ့ အမြင့်ကိုတော့ block လို
+      လက်ခံပါတယ်။ lesson 13 မှာ အသေးစိတ် ကြည့်ပါမယ်။ နောက်ဆုံး အကျယ် 100 pixel ပေးပါမယ်။
+      [[mark:after-stamp]] ကြည့်ပါ၊ ရွှေရောင် တံဆိပ်က အကျယ် 100 pixel အတိအကျ ရှိတဲ့ box
+      ဖြစ်သွားပါပြီ။ [[mark:type-padding]] အခု ဘေးလေးဘက်လုံးမှာ padding 20 pixel စီ ထည့်ပါမယ်။
+      [[mark:after-padding]] ရွှေရောင် အကွက်က ပိုကျယ်လာရုံ မကဘဲ ပိုမြင့်လာပါပြီ။ စာလုံးတွေက
+      အရွယ်အစား မပြောင်းဘဲ၊ သူတို့ ပတ်လည်မှာ နေရာလွတ် အသစ် ထပ်တိုးလာတာပါ။ [[mark:type-border]]
+      ပြီးတော့ 1 pixel ထူတဲ့ border ထည့်ပါမယ်။ အရောင် မပေးထားလို့ border က စာလုံးရဲ့ အရောင်ကို
+      ယူပါမယ်။ [[mark:after-border]] အခု ရွှေရောင် အကွက်ကို မျဉ်း ရင့်ရင့်လေး ပတ်ထားပြီး၊ တံဆိပ်က
+      နည်းနည်း ထပ်ကျယ်သွားပါပြီ။ [[mark:select-numbers]] ဒီ သုံးကြောင်းကို ကြည့်ပါ။ အကျယ်ကို 100
+      pixel ရေးပြီး padding နဲ့ border ထည့်ခဲ့ပေမယ့်၊ မြင်ရတဲ့ box က 142 pixel ကျယ်နေပါတယ်။
+      ဘာကြောင့်လဲ သိဖို့ box ကို ခွဲကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding"
+      - title: "MDN — border"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border"
+      - title: "MDN — display: inline-block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+    actions:
+      - id: type-stamp
+        type: editor.type
+        at: { mark: type-stamp }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".stamp {\n  background: gold;\n  display: inline-block;\n  width: 100px;\n}\n"
+      - id: type-padding
+        type: editor.type
+        at: { mark: type-padding }
+        cadence: natural
+        target: { file: styles.css, after: "  width: 100px;\n", occurrence: 1 }
+        text: "  padding: 20px;\n"
+      - id: type-border
+        type: editor.type
+        at: { mark: type-border }
+        cadence: natural
+        target: { file: styles.css, after: "  padding: 20px;\n", occurrence: 1 }
+        text: "  border: 1px solid;\n"
+      - id: select-stamp-numbers
+        type: editor.select
+        at: { mark: select-numbers }
+        target:
+          {
+            file: styles.css,
+            text: "  width: 100px;\n  padding: 20px;\n  border: 1px solid;\n",
+            occurrence: 1,
+          }
+      - id: expect-stamp
+        type: expect.preview
+        at: { mark: after-border }
+        timeoutMs: 4000
+        target: { by: testId, value: stamp }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: areas-board
+    chapter: "Box ရဲ့ အလွှာ လေးလွှာ"
+    narration: >
+      [[mark:open-areas]] box တစ်ခုမှာ အထဲကနေ အပြင်ကို အလွှာ လေးလွှာ ရှိပါတယ်။
+      [[mark:draw-content]] အလယ်ဆုံးမှာ content ရှိပါတယ်။ သူက စာသား၊ ပုံ ဒါမှမဟုတ် child box
+      တွေ ဖြစ်တဲ့ တကယ့် အကြောင်းအရာပါ။ ကိုယ် ပေးလိုက်တဲ့ အကျယ်က default အားဖြင့် ဒီ
+      အတွင်းဆုံး အပိုင်းရဲ့ အကျယ်ပါ။ တံဆိပ်မှာဆိုရင် အဲဒါက 100 pixel ပါ။
+      [[mark:draw-padding]] content ရဲ့ ပတ်လည်မှာ padding ရှိပါတယ်။ padding ဆိုတာ content
+      နဲ့ border ကြားက နေရာလွတ်ပါ။ box ရဲ့ နောက်ခံ အရောင်က padding ကိုပါ ဖုံးထားလို့၊
+      padding ထည့်လိုက်တော့ ရွှေရောင် အကွက် ကြီးလာတာပါ။ [[mark:draw-border]] နောက်တစ်လွှာက
+      border ဖြစ်ပြီး၊ padding ရဲ့ အပြင်ကနေ ပတ်ထားတဲ့ ဘောင်ပါ။ သူ့ အပြင်ဘက် မျဉ်းက element
+      ရဲ့ အစွန်းပါ။ [[mark:draw-margin]] border ရဲ့ အပြင်ဘက်မှာ margin ရှိပါတယ်။ ဒီ box နဲ့
+      ဘေးက box တွေကြားမှာ ခြားထားတဲ့ နေရာလွတ်ပါ။ နောက်ခံ အရောင်က margin ထဲ ဘယ်တော့မှ
+      မရောက်လို့၊ margin က အမြဲ ကြည်နေပါတယ်။ [[mark:draw-sum]] အခု ပဟေဠိရဲ့ အဖြေ
+      ထွက်လာပါပြီ။ content 100 pixel ရဲ့ အပေါ်မှာ ဘယ်ညာ padding 20 စီ ပေါင်းပြီး၊
+      ဘေးနှစ်ဘက်က border 1 pixel စီ ထပ်ပေါင်းလိုက်တော့ 142 pixel ဖြစ်သွားပါတယ်။ margin ကတော့
+      box ရဲ့ အကျယ်ထဲ ဘယ်တော့မှ မပါလို့ ဒီမှာ ထည့်မတွက်ပါဘူး။ [[mark:draw-analogy]]
+      ဘောင်ခတ်ထားတဲ့ ဓာတ်ပုံ တစ်ပုံနဲ့ စဉ်းစားကြည့်ရင် ပိုမြင်သာပါတယ်။ ဓာတ်ပုံက content၊
+      ဓာတ်ပုံနဲ့ ဘောင်ကြားမှာ ချန်ထားတဲ့ နေရာက padding၊ ဘောင်ကိုယ်တိုင်က border ဖြစ်ပြီး၊
+      နံရံပေါ်မှာ နောက်ပုံ တစ်ပုံနဲ့ ခြားထားတဲ့ အကွာအဝေးက margin ပါ။ [[mark:edges]] အလွှာ
+      တစ်ခုစီရဲ့ အပြင်ဘက် မျဉ်းမှာလည်း နာမည် ရှိပါတယ်။ content edge၊ padding edge၊ border
+      edge နဲ့ margin edge လို့ ခေါ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: the areas of the box model"
+        url: "https://web.dev/learn/css/box-model#areas"
+      - title: "web.dev Learn CSS — Box Model: a useful analogy"
+        url: "https://web.dev/learn/css/box-model#analogy"
+      - title: "MDN — Introduction to the CSS basic box model"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Introduction_to_the_CSS_box_model"
+      - title: "CSS Box Model Module Level 3 — the CSS box model"
+        url: "https://www.w3.org/TR/css-box-3/#box-model"
+    actions:
+      - id: open-areas
+        type: whiteboard.apply
+        at: { mark: open-areas }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-content
+        type: whiteboard.apply
+        at: { mark: draw-content }
+        upsertIds: [b-content, b-content-label]
+        drawMs: 1200
+      - id: draw-padding
+        type: whiteboard.apply
+        at: { mark: draw-padding }
+        upsertIds: [b-padding, b-padding-label]
+        drawMs: 1200
+      - id: draw-border
+        type: whiteboard.apply
+        at: { mark: draw-border }
+        upsertIds: [b-border, b-border-label]
+        drawMs: 1200
+      - id: draw-margin
+        type: whiteboard.apply
+        at: { mark: draw-margin }
+        upsertIds: [b-margin, b-margin-label]
+        drawMs: 1200
+      - id: draw-sum
+        type: whiteboard.apply
+        at: { mark: draw-sum }
+        upsertIds: [b-sum-content, b-sum-padding, b-sum-border, b-sum-total]
+        drawMs: 3200
+      - id: draw-analogy
+        type: whiteboard.apply
+        at: { mark: draw-analogy }
+        upsertIds: [b-an-photo, b-an-mat, b-an-frame, b-an-wall]
+        drawMs: 4000
+
+  - id: card-layers
+    narration: >
+      [[mark:close-areas]] menu card တွေမှာ အလွှာ လေးလွှာလုံး ထည့်ကြည့်ရအောင်။ [[mark:type-card]]
+      card တစ်ခုစီရဲ့ box ကို မြင်ရအောင် အဖြူရောင် နောက်ခံ ပေးပြီး၊ ဘေးလေးဘက်လုံးမှာ padding 16
+      pixel ထည့်ပါမယ်။ ရိုက်နေတုန်း ဘေးက preview ကို လိုက်ကြည့်ပါ။ page တစ်ခုလုံး ပြန်ပွင့်တာ
+      မဟုတ်ဘဲ၊ ပြောင်းသွားတဲ့ style လေးကိုပဲ browser က အစားထိုးလိုက်တာပါ။
+      [[mark:after-card-padding]] အခု card တိုင်းက အဖြူရောင် box တွေ ဖြစ်လာပြီး၊ စာသားတွေက box ရဲ့
+      အစွန်းကနေ ခွာသွားပါပြီ။ နောက်ခံက content ရော padding ပါ ဖုံးထားတဲ့အတွက်၊ အဖြူရောင် အကွက်က
+      content နဲ့ padding ပေါင်းထားတာပါ။ [[mark:type-card-border]] ပြီးရင် padding ရဲ့ အပြင်ဘက်မှာ 4
+      pixel ထူတဲ့ အညိုရောင် border ထည့်ပါမယ်။ [[mark:after-card-border]] card တိုင်းမှာ ဘောင်
+      ပေါ်လာပါပြီ။ card တစ်ခုစီ နည်းနည်း မြင့်လာပေမယ့်၊ ဘေးကို ပိုမကျယ်လာတာကို သတိထား ကြည့်ပါ။ card
+      တွေမှာ အကျယ် မပေးထားလို့၊ block က ရနိုင်တဲ့ အကျယ်ထဲကနေပဲ padding နဲ့ border အတွက် နေရာ
+      ဖယ်ပေးလိုက်တာပါ။ border ပေါ်လာဖို့ အထူတင် မကဘဲ မျဉ်းဆက်လား၊ မျဉ်းပြတ်လား ဆိုတဲ့ မျဉ်းပုံစံ
+      တစ်ခုပါ ပေးရပါတယ်။ မျဉ်းပုံစံ မပေးရင် default မှာ မျဉ်းပုံစံ မရှိတဲ့အတွက်၊ အထူ ပေးထားလည်း
+      border ပေါ်မလာပါဘူး။ [[mark:type-card-margin]] နောက်ဆုံး ဘေးလေးဘက်လုံးမှာ margin 16 pixel စီ
+      ပေးပါမယ်။ ဒီ နေရာလွတ်က border ရဲ့ အပြင်ဘက်မှာ ရှိမှာပါ။ [[mark:after-card-margin]] card
+      တွေကြားမှာ နေရာလွတ်တွေ ပေါ်လာပြီး၊ card တွေက ဘေးနှစ်ဘက်ကနေ အထဲကို ဝင်သွားပါတယ်။ margin က
+      ကြည်နေတဲ့အတွက်၊ အဲဒီ နေရာလွတ်မှာ အဖြူ မဟုတ်ဘဲ page ရဲ့ နောက်ခံ အရောင်ကို မြင်ရတာပါ။
+      [[mark:collapse-note]] card နှစ်ခုကြားက နေရာလွတ်က 32 pixel မဟုတ်ဘဲ 16 pixel ပဲ ရှိတာကို သတိထား
+      ကြည့်ပါ။ block နှစ်ခု အပေါ်အောက် ကပ်နေရင်၊ သူတို့ရဲ့ margin တွေက ပေါင်းမသွားဘဲ ထပ်သွားလို့ပါ။
+      ဒါကို lesson 22 မှာ ရှင်းပြပါမယ်။ [[mark:scrollbars]] padding နဲ့ ပတ်သက်တဲ့ နောက်တစ်ချက်က၊
+      scroll လုပ်လို့ ရတဲ့ box မှာ အမြဲ ပေါ်နေတဲ့ scrollbar က border နဲ့ padding ကြားမှာ ဝင်နေပြီး၊
+      content အတွက် နေရာကို ကျဉ်းသွားစေပါတယ်။ ဒါပေမဲ့ Mac အများစုနဲ့ ဖုန်းတွေမှာ scrollbar က content
+      ပေါ် ထပ်ပေါ်ပြီး နေရာ မယူလို့၊ ကိုယ် သုံးတဲ့ စက်ပေါ် မူတည်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: the areas of the box model"
+        url: "https://web.dev/learn/css/box-model#areas"
+      - title: "MDN — padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding"
+      - title: "MDN — border-style (initial value none)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-style"
+      - title: "MDN — margin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin"
+      - title: "MDN — Mastering margin collapsing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"
+    actions:
+      - id: close-areas
+        type: whiteboard.apply
+        at: { mark: close-areas }
+        open: false
+      - id: type-card
+        type: editor.type
+        at: { mark: type-card }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: 1px solid;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  background: white;\n  padding: 16px;\n}\n"
+      - id: type-card-border
+        type: editor.type
+        at: { mark: type-card-border }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 16px;\n", occurrence: 1 }
+        text: "  border: 4px solid saddlebrown;\n"
+      - id: type-card-margin
+        type: editor.type
+        at: { mark: type-card-margin }
+        cadence: natural
+        target: { file: styles.css, after: "  border: 4px solid saddlebrown;\n", occurrence: 1 }
+        text: "  margin: 16px;\n"
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: after-card-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: outline
+    narration: >
+      [[mark:type-outline]] အခု border နဲ့ outline ကို နှိုင်းယှဉ်ကြည့်ရအောင်။ အသစ် ဆိုတဲ့ badge
+      လေးကို 6 pixel ထူတဲ့ အနီရောင် outline ပေးပါမယ်။ [[mark:after-outline]] လက်ဖက်ရည် card ထဲက
+      badge ကို ကြည့်ပါ။ အနီရောင် မျဉ်း ထူထူ ပတ်ထားပေမယ့် ဘာမှ မရွေ့သွားပါဘူး။ ဘေးက ဈေးနှုန်းရော၊
+      ပတ်လည်က card ပါ နေရာ မပြောင်းပါဘူး။ ခုနက 4 pixel border ထည့်တုန်းက card တိုင်း
+      မြင့်လာခဲ့ပေမယ့်၊ outline ကတော့ ဘာရဲ့ အရွယ်အစားကိုမှ မပြောင်းပါဘူး။ [[mark:outline-why]]
+      outline ဆိုတာ border လို မျဉ်း တစ်ခု ဖြစ်ပေမယ့်၊ border edge ရဲ့ အပြင်ဘက်မှာ ဆွဲပြီး page
+      ပေါ်မှာ နေရာ လုံးဝ မယူပါဘူး။ ဒါကြောင့် အရမ်း ထူရင် ဘေးက အရာတွေပေါ် ထပ်သွားနိုင်ပါတယ်။ ဘာကိုမှ
+      မရွှေ့တဲ့အတွက်၊ code ရေးနေတုန်း box တစ်ခု ဘယ်နေရာမှာ ရှိလဲ စစ်ကြည့်ဖို့ အသုံးဝင်ပါတယ်။
+      [[mark:shadow-note]] အရိပ် ထည့်ပေးတဲ့ box shadow ကလည်း ဒီလိုပါပဲ။ box ပတ်လည်မှာ ဆွဲပေမယ့် နေရာ
+      မယူပါဘူး။ lesson 34 မှာ အရိပ်တွေ ဆွဲကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: the areas of the box model"
+        url: "https://web.dev/learn/css/box-model#areas"
+      - title: "MDN — outline"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/outline"
+      - title: "MDN — box-shadow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow"
+      - title: "CSS Basic User Interface Module Level 4 — outlines"
+        url: "https://www.w3.org/TR/css-ui-4/#outline"
+    actions:
+      - id: type-outline
+        type: editor.type
+        at: { mark: type-outline }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin: 16px;\n}\n", occurrence: 1 }
+        text: "\n.badge {\n  outline: 6px solid tomato;\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-outline }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: sizing-board
+    chapter: "Box ရဲ့ အရွယ်အစားကို ဘာက ဆုံးဖြတ်လဲ"
+    narration: >
+      [[mark:open-sizing]] အခုထိ content ပတ်လည်မှာ အလွှာတွေ ထည့်ခဲ့ပါတယ်။ ဒါဆို content ကိုယ်တိုင်
+      ဘယ်လောက် ကြီးမလဲ ဆိုတာ ဘာက ဆုံးဖြတ်လဲ။ [[mark:draw-factors]] အချက် သုံးချက်က ဆုံးဖြတ်ပါတယ်။
+      box ရဲ့ display တန်ဖိုး၊ ကိုယ်က ပေးတဲ့ အကျယ် အမြင့်နဲ့ သူ့ထဲက content ပါ။ ဥပမာ ပြီးခဲ့တဲ့
+      lesson မှာ မြင်ခဲ့သလို၊ block က ရနိုင်သမျှ အကျယ်ကို ယူပြီး inline ကတော့ စာသား ရှိသလောက်ပဲ
+      ယူပါတယ်။ [[mark:draw-extrinsic]] အရွယ်အစားကို ကိုယ်တိုင် ပုံသေ ပေးလိုက်တာ၊ ဥပမာ အမြင့်ကို
+      pixel နဲ့ သတ်မှတ်လိုက်တာမျိုးကို extrinsic size လို့ ခေါ်ပါတယ်။ အရွယ်အစားက content ရဲ့
+      အပြင်ကနေ လာလို့ပါ။ box က ထဲမှာ ဘာပဲ ရှိရှိ အဲဒီ အရွယ်အစားကို ထိန်းထားလို့၊ content က နေရာ
+      ပိုလိုရင် border ကို ကျော်ပြီး အပြင်ကို လျှံထွက်သွားပါတယ်။ [[mark:draw-overflow]] box ထဲ
+      မဆံ့ဘဲ လျှံထွက်နေတဲ့ content ကို overflow လို့ ခေါ်ပါတယ်။ [[mark:draw-intrinsic]] အရွယ်အစား
+      မပေးထားရင်တော့ box က သူ့ content ဆံ့သလောက် အမြင့်ကို ယူပါတယ်။ inline နဲ့ inline-block box
+      တွေကတော့ အကျယ်ကိုပါ content ကနေ ယူပါတယ်။ အဲဒါကို intrinsic size လို့ ခေါ်ပါတယ်။
+      [[mark:draw-default]] အမြင့်အတွက်ဆိုရင် browser ရဲ့ default က ဒါပါပဲ။ စာသား ပိုလာရင် box က
+      ဆံ့အောင် လိုက်မြင့်ပေးပါတယ်။ block ရဲ့ အကျယ်ကတော့ ခုနက ပြောသလို parent ကနေ လာပါတယ်။
+      [[mark:sizing-advice]] အများအားဖြင့် intrinsic size က ပိုစိတ်ချရပါတယ်။ card တွေပေါ်မှာ
+      နှစ်မျိုးလုံး စမ်းကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: content and sizing"
+        url: "https://web.dev/learn/css/box-model#content-sizing"
+      - title: "MDN — Intrinsic size"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Intrinsic_Size"
+      - title: "CSS Box Sizing Module Level 3 — intrinsic sizes"
+        url: "https://www.w3.org/TR/css-sizing-3/#intrinsic-sizes"
+    actions:
+      - id: open-sizing
+        type: whiteboard.apply
+        at: { mark: open-sizing }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-factors
+        type: whiteboard.apply
+        at: { mark: draw-factors }
+        upsertIds: [c-f-display, c-f-size, c-f-content]
+        drawMs: 2400
+      - id: draw-extrinsic
+        type: whiteboard.apply
+        at: { mark: draw-extrinsic }
+        upsertIds: [c-ext-box, c-ext-text, c-ext-caption]
+        drawMs: 3000
+      - id: draw-overflow
+        type: whiteboard.apply
+        at: { mark: draw-overflow }
+        upsertIds: [c-ext-spill, c-ext-overflow]
+        drawMs: 1400
+      - id: draw-intrinsic
+        type: whiteboard.apply
+        at: { mark: draw-intrinsic }
+        upsertIds: [c-int-box, c-int-text, c-int-check, c-int-caption]
+        drawMs: 3200
+      - id: draw-default
+        type: whiteboard.apply
+        at: { mark: draw-default }
+        upsertIds: [c-int-default]
+        drawMs: 1000
+
+  - id: extrinsic-live
+    narration: >
+      [[mark:close-sizing]] editor ထဲ ပြန်ဝင်ပါမယ်။ [[mark:type-featured-height]] ပထမ card မှာပဲ
+      featured ဆိုတဲ့ class ပါလို့၊ အဲဒီ class နဲ့ လက်ဖက်ရည် card ကို အမြင့် 80 pixel ပုံသေ
+      ပေးပါမယ်။ [[mark:after-height]] ပထမ card ကို ကြည့်ပါ။ အမြင့်က ပုံသေ ဖြစ်သွားပေမယ့် content က
+      နေရာ ပိုလိုနေလို့၊ ဈေးနှုန်း စာကြောင်းက အောက်ဘက် border ကို ကျော်ထွက်နေပါတယ်။ card က content
+      ဆံ့အောင် မကြီးပေးဘဲ အရင်ထက် တိုသွားလို့၊ content က overflow ဖြစ်သွားတာပါ။ ကျန်တဲ့ card
+      တွေကတော့ အမြင့် မပေးထားလို့ သူတို့ content နဲ့ အံကိုက် ဖြစ်နေတုန်းပါ။
+      [[mark:overflow-property]] default အားဖြင့် overflow က ဒီလိုပဲ မြင်နေရပါတယ်။ overflow ဆိုတဲ့
+      property နဲ့ အဲဒီ အပိုကို ဖျောက်ထားလို့ ရသလို၊ box ထဲမှာ scroll လုပ်ခိုင်းလို့လည်း ရပါတယ်။
+      lesson 24 မှာ ကြည့်ပါမယ်။ [[mark:height-fix]] ဒီ card အတွက်တော့ အမြင့်ကို content ပဲ
+      ပြန်ဆုံးဖြတ်ခိုင်းတာ ပိုကောင်းပါတယ်။ [[mark:type-height-auto]] auto ဆိုတဲ့ keyword နဲ့ အမြင့်
+      နောက်တစ်ကြောင်း ထည့်ပါမယ်။ rule တစ်ခုထဲမှာ property တူတူကို နှစ်ခါ ရေးရင်၊ နောက်မှ ရေးတဲ့
+      တစ်ခုက နိုင်ပါတယ်။ [[mark:after-auto]] ဒီ အမြင့် နှစ်ကြောင်းကို ကြည့်ပါ။ auto က နိုင်လို့ card
+      က ပြန်ကြီးလာပြီး အကုန် ဆံ့သွားပါပြီ။ တကယ့် code မှာဆိုရင် ပထမ စာကြောင်းကို ဖျက်လိုက်ရုံပါပဲ၊
+      ဒီမှာတော့ ဘယ်ဟာ နိုင်လဲ မြင်ရအောင် ချန်ထားပါတယ်။ auto ဆိုတာ content ကို ဆုံးဖြတ်ခိုင်းတာ
+      ဖြစ်လို့ intrinsic size ပါ။ အနည်းဆုံး အမြင့် တစ်ခု လိုရင်တော့၊ content များလာရင် ဆက်ကြီးခွင့်
+      ပေးတဲ့ property တစ်ခု ရှိပါတယ်။ lesson 10 မှာ သုံးပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: content and sizing"
+        url: "https://web.dev/learn/css/box-model#content-sizing"
+      - title: "MDN — height"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/height"
+      - title: "MDN — overflow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow"
+      - title: "MDN — min-height"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/min-height"
+    actions:
+      - id: close-sizing
+        type: whiteboard.apply
+        at: { mark: close-sizing }
+        open: false
+      - id: type-featured-height
+        type: editor.type
+        at: { mark: type-featured-height }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline: 6px solid tomato;\n}\n", occurrence: 1 }
+        text: "\n.featured {\n  height: 80px;\n}\n"
+      - id: expect-price
+        type: expect.preview
+        at: { mark: after-height }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-height-auto
+        type: editor.type
+        at: { mark: type-height-auto }
+        cadence: natural
+        target: { file: styles.css, after: "  height: 80px;\n", occurrence: 1 }
+        text: "  height: auto;\n"
+      - id: select-two-heights
+        type: editor.select
+        at: { mark: after-auto }
+        target: { file: styles.css, text: "  height: 80px;\n  height: auto;\n", occurrence: 1 }
+
+  - id: min-content
+    narration: >
+      [[mark:type-tag]] အခု English နာမည်လေးကို ကြည့်ရအောင်။ box ကို မြင်ရအောင်
+      အဝါဖျော့ရောင် နောက်ခံ ပေးပြီး၊ နောက်မှ အကျယ် ပေးလို့ ရအောင် တံဆိပ်လိုပဲ inline-block
+      ပြောင်းပါမယ်။ [[mark:after-tag]] သူ့ box က စကားလုံး သုံးလုံးလုံး တစ်ကြောင်းတည်း
+      ဆံ့သလောက်ပဲ ကျယ်ပါတယ်။ ဘယ်သူမှ အကျယ် မပေးထားလို့ content က ဆုံးဖြတ်လိုက်တာပါ။
+      [[mark:type-min-content]] အခု min-content ဆိုတဲ့ keyword နဲ့ အကျယ်ကို ရနိုင်သမျှ
+      အကျဉ်းဆုံး ဖြစ်အောင် တောင်းကြည့်ပါမယ်။ [[mark:after-min-content]] စကားလုံး တစ်လုံးစီ
+      စာကြောင်း တစ်ကြောင်းစီ ခွဲသွားပြီး၊ box က အရှည်ဆုံး စကားလုံးလောက်ပဲ ကျယ်ပါတော့တယ်။ ဒါက
+      ဘာမှ အပြင် မလျှံဘဲ ရနိုင်တဲ့ အကျဉ်းဆုံး အကျယ်ပါ။ ဘာကြောင့်လဲဆိုတော့၊ browser က English
+      စာကို space နေရာမှာ စာကြောင်း ချိုးလို့ ရပေမယ့်၊ စကားလုံးရဲ့ အလယ်မှာတော့ ဘယ်တော့မှ
+      မချိုးလို့ပါ။ [[mark:card-grew]] လက်ဖက်ရည် card ကလည်း English နာမည် ဆံ့အောင်
+      ပိုမြင့်လာတာကို ကြည့်ပါ။ သူ့ အမြင့်က auto ပြန်ဖြစ်နေလို့ content က ဆုံးဖြတ်တာပါ။
+      [[mark:why-english]] ဒီမှာ English စာကို တမင် သုံးထားတာပါ။ မြန်မာစာမှာ စကားလုံးတွေကြား
+      space မခြားလို့၊ မြန်မာ စာကြောင်းကို ဘယ်နေရာမှာ ချိုးမလဲ ဆိုတာ browser တစ်ခုချင်းစီရဲ့
+      ကိုယ်ပိုင် စကားလုံး စာရင်းပေါ် မူတည်ပါတယ်။ ဒါကြောင့် အကျဉ်းဆုံး အကျယ်က browser
+      တစ်ခုနဲ့ တစ်ခု ကွာနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: content and sizing"
+        url: "https://web.dev/learn/css/box-model#content-sizing"
+      - title: "MDN — min-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/min-content"
+      - title: "CSS Box Sizing Module Level 3 — min-content"
+        url: "https://www.w3.org/TR/css-sizing-3/#valdef-width-min-content"
+      - title: "MDN — word-break (line breaking in languages without spaces)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/word-break"
+    actions:
+      - id: type-tag
+        type: editor.type
+        at: { mark: type-tag }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  height: auto;\n}\n", occurrence: 1 }
+        text: "\n.tag {\n  background: khaki;\n  display: inline-block;\n}\n"
+      - id: type-min-content
+        type: editor.type
+        at: { mark: type-min-content }
+        cadence: natural
+        target:
+          {
+            file: styles.css,
+            after: "  background: khaki;\n  display: inline-block;\n",
+            occurrence: 1,
+          }
+        text: "  width: min-content;\n"
+      - id: expect-tag
+        type: expect.preview
+        at: { mark: after-min-content }
+        timeoutMs: 4000
+        target: { by: testId, value: tag }
+        textContains: "Royal Milk Tea"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: stamp-border-box
+    chapter: "Box sizing ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:select-stamp-rule]] ဈေးလျှော့ တံဆိပ်ရဲ့ အကျယ်၊ padding နဲ့ border သုံးကြောင်းကို
+      ပြန်ကြည့်ရအောင်။ အခုအချိန်မှာ padding နဲ့ border က အကျယ်ရဲ့ အပေါ်မှာ ထပ်ပေါင်းနေပါတယ်။
+      [[mark:type-content-box]] ဒါကို ဆုံးဖြတ်ပေးတဲ့ property ကို box sizing လို့ ခေါ်ပါတယ်။ သူ့
+      default တန်ဖိုးက content box ဖြစ်လို့၊ ရေးထည့်လိုက်လည်း ဘာမှ မပြောင်းပါဘူး။
+      [[mark:after-content-box]] တံဆိပ်က 142 pixel ကျယ်နေတုန်းပါ။ content box ဆိုတာ ကိုယ် ရေးတဲ့
+      အကျယ်က content အတွက်ပဲ ဖြစ်ပြီး၊ padding နဲ့ border က အပြင်ဘက်ကို ထပ်တိုးတယ် ဆိုတဲ့
+      အဓိပ္ပာယ်ပါ။ [[mark:type-border-box]] အခု box sizing နောက်တစ်ကြောင်း ထည့်ပြီး၊ တန်ဖိုးကို
+      border box ပေးပါမယ်။ အမြင့်တုန်းကလိုပဲ နောက်မှ ရေးတဲ့ စာကြောင်းက နိုင်ပါမယ်။
+      [[mark:after-border-box]] တံဆိပ်က 100 pixel အတိအကျ ပြန်ဖြစ်သွားပါပြီ။ border box မှာတော့ ကိုယ်
+      ရေးတဲ့ အကျယ်က border အပါအဝင် box တစ်ခုလုံးရဲ့ အကျယ်ပါ။ padding နဲ့ border ကို 100 pixel ထဲကနေ
+      နှုတ်လိုက်လို့ content အတွက် 58 pixel ပဲ ကျန်ပြီး၊ စာသားအတွက် နေရာ ကျဉ်းသွားပါတယ်။ စာသားက
+      စာကြောင်း နှစ်ကြောင်း ခွဲသွားတာတောင် ဖြစ်နိုင်ပါတယ်။ [[mark:margin-outside]] margin ကတော့
+      နှစ်မျိုးလုံးမှာ အပြင်ဘက်မှာပဲ ရှိပြီး၊ ဘယ်တစ်မျိုးကမှ margin ကို အကျယ်ထဲ မထည့်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: control the box model"
+        url: "https://web.dev/learn/css/box-model#control"
+      - title: "MDN — box-sizing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing"
+      - title: "CSS Box Sizing Module Level 3 — box-sizing"
+        url: "https://www.w3.org/TR/css-sizing-3/#box-sizing"
+    actions:
+      - id: select-stamp-rule
+        type: editor.select
+        at: { mark: select-stamp-rule }
+        target:
+          {
+            file: styles.css,
+            text: "  width: 100px;\n  padding: 20px;\n  border: 1px solid;\n",
+            occurrence: 1,
+          }
+      - id: type-content-box
+        type: editor.type
+        at: { mark: type-content-box }
+        cadence: natural
+        target: { file: styles.css, after: "  border: 1px solid;\n", occurrence: 1 }
+        text: "  box-sizing: content-box;\n"
+      - id: type-border-box
+        type: editor.type
+        at: { mark: type-border-box }
+        cadence: natural
+        target: { file: styles.css, after: "  box-sizing: content-box;\n", occurrence: 1 }
+        text: "  box-sizing: border-box;\n"
+      - id: expect-stamp-still
+        type: expect.preview
+        at: { mark: after-border-box }
+        timeoutMs: 4000
+        target: { by: testId, value: stamp }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: check-260
+    narration: >
+      [[mark:open-260]] ပိုကြီးတဲ့ box တစ်ခုနဲ့ board ပေါ်မှာ စစ်ကြည့်ရအောင်။ အကျယ် 200 pixel၊
+      padding 20 pixel နဲ့ border 10 pixel ရှိပါတယ်။ ပုံ မဆွဲခင် lesson ကို pause လုပ်ပြီး၊ content
+      box နဲ့ဆိုရင် ဘယ်လောက် ကျယ်မလဲ၊ border box နဲ့ဆိုရင် ဘယ်လောက် ကျယ်မလဲ ကိုယ်တိုင် အရင်
+      တွက်ကြည့်ပါ။ [[mark:draw-content-box]] default ဖြစ်တဲ့ content box မှာ 200 pixel က content
+      အတွက်ပဲ ဖြစ်ပါတယ်။ ဘေးနှစ်ဘက်မှာ padding 20 စီ ဆိုတော့ 40၊ border 10 စီ ဆိုတော့ 20 ကို
+      ထပ်ပေါင်းလိုက်ရင် box က 260 pixel ကျယ်ပါတယ်။ [[mark:draw-border-box]] border box မှာတော့
+      declaration သုံးခုလုံး အတူတူ ဖြစ်ပေမယ့် box က 200 pixel အတိအကျ ကျယ်ပါတယ်။ 200 ထဲကနေ padding 40
+      နဲ့ border 20 ကို နှုတ်လိုက်တော့၊ content အတွက် 140 pixel ပဲ ကျန်ပါတယ်။ [[mark:which-one]]
+      ဒါဆို ဘယ်ဟာ သုံးသင့်လဲ။ border box မှာ ကိုယ် ရေးတဲ့ အကျယ်က မြင်ရတဲ့ အကျယ် ဖြစ်လို့ ကြိုတွက်ရ
+      လွယ်ပါတယ်။ ဒါကြောင့် project အများစုက element အားလုံးကို တစ်ခါတည်း border box
+      ပြောင်းထားကြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: check your understanding"
+        url: "https://web.dev/learn/css/box-model#check_your_understanding"
+      - title: "MDN — box-sizing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing"
+    actions:
+      - id: open-260
+        type: whiteboard.apply
+        at: { mark: open-260 }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-code]
+      - id: draw-content-box
+        type: whiteboard.apply
+        at: { mark: draw-content-box }
+        upsertIds: [d-cb-outer, d-cb-inner, d-cb-inner-label, d-cb-sum, d-cb-caption]
+        drawMs: 4000
+      - id: draw-border-box
+        type: whiteboard.apply
+        at: { mark: draw-border-box }
+        upsertIds: [d-bb-outer, d-bb-inner, d-bb-inner-label, d-bb-sum, d-bb-caption]
+        drawMs: 4000
+      - id: draw-which-one
+        type: whiteboard.apply
+        at: { mark: which-one }
+        upsertIds: [d-bb-check, d-note]
+        drawMs: 2000
+
+  - id: global-reset
+    chapter: "Element အားလုံးကို border box ပေးရအောင်"
+    narration: >
+      [[mark:close-260]] content box က တကယ့် page တွေမှာ ဘယ်လို ပြဿနာ ဖြစ်စေလဲ ကြည့်ရအောင်။
+      [[mark:type-hero]] ကြိုဆိုတဲ့ အပိုင်းက block ဖြစ်လို့ အကျယ် မပေးလည်း page အကျယ် အပြည့်ကို
+      ယူပြီးသားပါ။ ဒါပေမဲ့ ပုံတွေ၊ form ထဲက အကွက်တွေနဲ့ နောက်ပိုင်း column တွေမှာ အကျယ်ကို
+      ရာခိုင်နှုန်းနဲ့ ပေးရတာ မကြာခဏ ကြုံရလို့၊ ဒီမှာ အကျယ် 100 ရာခိုင်နှုန်းလို့ တမင်
+      ရေးကြည့်ပါမယ်။ ပြီးတော့ padding နဲ့၊ box ဘယ်မှာ ဆုံးလဲ မြင်ရအောင် border ပါ ထည့်ပါမယ်။
+      [[mark:after-hero]] ကြိုဆိုတဲ့ အပိုင်းရဲ့ ညာဘက်ကို ကြည့်ပါ။ ဘယ်ဘက် border က ရှိနေပေမယ့်၊ ညာဘက်
+      border က preview ရဲ့ အစွန်းကို ကျော်ထွက်သွားပါပြီ။ 100 ရာခိုင်နှုန်းဆိုတာ သူ့ parent ရဲ့
+      content အကျယ် အပြည့်ပါ။ content box မှာ အဲဒီ အကျယ်က content အတွက်ပဲ ဖြစ်လို့၊ padding နဲ့
+      border က အပေါ်မှာ ထပ်ပေါင်းသွားပြီး box က page ထက် ပိုကျယ်သွားတာပါ။ [[mark:better-way]] menu
+      card တွေမှာ မြင်ခဲ့သလို၊ အကျယ် မရေးထားတဲ့ block ဆိုရင် browser က padding နဲ့ border အတွက် နေရာ
+      ချန်ပေးလို့ ဒီ ပြဿနာ မရှိပါဘူး။ အကျယ် ရေးရမယ့် box တွေအတွက်တော့ border box လိုပါတယ်။ box
+      တစ်ခုချင်းစီကို ပေးမယ့်အစား ပိုကောင်းတဲ့ နည်း ရှိပါတယ်။ [[mark:type-reset]] CSS ဖိုင်ရဲ့
+      ထိပ်ဆုံးမှာ element အားလုံးကို border box ပေးတဲ့ rule တစ်ခု ထည့်ပါမယ်။ [[mark:after-reset]]
+      ကြိုဆိုတဲ့ အပိုင်းက page ထဲ ပြန်ဆံ့သွားပြီး၊ ညာဘက် border လည်း ပြန်ပေါ်လာပါပြီ။ သူ့ကိုယ်ပိုင်
+      rule ကိုတော့ ဘာမှ မပြင်ခဲ့ပါဘူး။ တံဆိပ် rule ထဲက box sizing စာကြောင်းတွေကတော့ မလိုတော့ပေမယ့်၊
+      ထားလည်း ဘာမှ မထိခိုက်ပါဘူး။ [[mark:select-universal]] ဒီ ပထမ selector က page ထဲက element
+      အားလုံးကို ရွေးပါတယ်။ selector တွေကို နောက် lesson မှာ ကြည့်ပါမယ်။ [[mark:select-pseudo]]
+      ကျန်တဲ့ selector နှစ်ခုက before နဲ့ after pseudo-element တွေအတွက်ပါ။ သူတို့က element တစ်ခုရဲ့
+      အထဲမှာ CSS နဲ့ ထည့်လို့ ရတဲ့ box အပိုတွေပါ။ ပထမ selector က သူတို့ကို မရွေးတဲ့အတွက် နာမည်နဲ့
+      သီးသန့် ထည့်ရေးရတာပါ။ lesson 26 မှာ အသေးစိတ် ကြည့်ပါမယ်။ [[mark:not-inherited]] box sizing က
+      inherit မဖြစ်တဲ့ property ပါ။ ဆိုလိုတာက အပြင်ဆုံး element ကိုပဲ ပေးထားရင်၊ အထဲက child box တွေက
+      အလိုလို ဆက်မယူပါဘူး။ ဒီ rule က box တိုင်းကို တိုက်ရိုက် ပေးတာပါ။ browser တွေရဲ့ default style
+      ကို ညှိပေးဖို့ project အစမှာ ထည့်လေ့ရှိတဲ့ reset ဖိုင် အများစုက ဒီ rule နဲ့ စကြပြီး၊ နောက်
+      lesson ကစပြီး ဆိုင်ရဲ့ base ဖိုင်ထဲမှာ ပါပြီးသား ဖြစ်နေပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: control the box model"
+        url: "https://web.dev/learn/css/box-model#control"
+      - title: "MDN — box-sizing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing"
+      - title: "MDN — Universal selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Universal_selectors"
+      - title: "Andy Bell — A (more) Modern CSS Reset"
+        url: "https://piccalil.li/blog/a-more-modern-css-reset/"
+    actions:
+      - id: close-260
+        type: whiteboard.apply
+        at: { mark: close-260 }
+        open: false
+      - id: type-hero
+        type: editor.type
+        at: { mark: type-hero }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: min-content;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  width: 100%;\n  padding: 16px;\n  border: 4px solid tan;\n}\n"
+      - id: expect-hero-link
+        type: expect.preview
+        at: { mark: after-hero }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # A complete rule in one block at the very top of the file.
+      - id: type-reset
+        type: editor.type
+        at: { mark: type-reset }
+        cadence: block
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "*,\n*::before,\n*::after {\n  box-sizing: border-box;\n}\n\n"
+      - id: select-universal
+        type: editor.select
+        at: { mark: select-universal }
+        target: { file: styles.css, text: "*,", occurrence: 1 }
+      - id: select-pseudo
+        type: editor.select
+        at: { mark: select-pseudo }
+        target: { file: styles.css, text: "*::before,\n*::after", occurrence: 1 }
+
+  - id: devtools-recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-devtools]] ပြီးခဲ့တဲ့ lesson မှာ မိတ်ဆက်ခဲ့တဲ့ DevTools က box model အတွက်လည်း
+      အသုံးဝင်ပါတယ်။ element တိုင်းရဲ့ အလွှာ လေးလွှာကို ပြပေးပါတယ်။ [[mark:draw-devtools]] Elements
+      panel မှာ element တစ်ခုကို ရွေးပြီး Computed tab ကို ဖွင့်လိုက်ရင်၊ ဒီလို ပုံ တစ်ပုံ
+      တွေ့ရပါမယ်။ margin၊ border၊ padding နဲ့ content တစ်ခုစီကို သူ့ အရွယ်အစားနဲ့ ပြထားပါတယ်။ ဒါက
+      menu card တစ်ခုရဲ့ ပုံပါ။ margin 16 pixel၊ border 4 pixel၊ padding 16 pixel ရှိပြီး၊ အလယ်မှာ
+      content ရှိပါတယ်။ [[mark:draw-try]] ဒီ lesson ထဲက preview မှာတော့ DevTools ကို ဖွင့်လို့
+      မရပါဘူး။ ဒါကြောင့် ကိုယ့် browser မှာ ကြိုက်တဲ့ page တစ်ခုကို ဖွင့်ပြီး၊ element တစ်ခုပေါ်
+      right-click နှိပ်၊ Inspect ကို ရွေးပြီး ဒီ ပုံကို ရှာကြည့်ပါ။ [[mark:ua-public]] ပြီးခဲ့တဲ့
+      lesson မှာ တွေ့ခဲ့တဲ့ browser ရဲ့ default style တွေကလည်း လူတိုင်း ဖွင့်ဖတ်လို့ ရတဲ့
+      ဖိုင်တွေပါ။ စိတ်ဝင်စားရင် ဖတ်ကြည့်လို့ ရပါတယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ element
+      တိုင်းက content၊ padding၊ border နဲ့ margin ဆိုတဲ့ အလွှာ လေးလွှာ ပါတဲ့ box တစ်ခုပါ။ outline
+      နဲ့ box shadow ကတော့ border ရဲ့ အပြင်ဘက်မှာ ဆွဲပြီး နေရာ မယူပါဘူး။ box ရဲ့ အရွယ်အစားကို ကိုယ်က
+      ပေးနိုင်သလို content ကလည်း ဆုံးဖြတ်နိုင်ပြီး၊ ပုံသေ ပေးထားရင် content က overflow
+      ဖြစ်နိုင်ပါတယ်။ box sizing ကတော့ padding နဲ့ border ကို အကျယ်ထဲ ထည့်တွက်မလား ဆုံးဖြတ်ပြီး၊
+      border box မှာ ကိုယ် ရေးတဲ့ အကျယ်က မြင်ရတဲ့ အကျယ် ဖြစ်ပါတယ်။ [[mark:next-lesson]] နောက် lesson
+      မှာတော့ selector တွေကို ကြည့်သွားပါမယ်။ ဒါမှ style ပေးချင်တဲ့ element တွေကိုပဲ ရွေးပြီး၊
+      ကျန်တာတွေကို မထိဘဲ ထားနိုင်မှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Box Model: debug the box model"
+        url: "https://web.dev/learn/css/box-model#debug"
+      - title: "Chrome DevTools — CSS features reference"
+        url: "https://developer.chrome.com/docs/devtools/css/reference"
+      - title: "MDN — What are browser developer tools?"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Tools_and_setup/What_are_browser_developer_tools"
+      - title: "web.dev Learn CSS — Box Model: user agent stylesheets"
+        url: "https://web.dev/learn/css/box-model#user_agent_stylesheets"
+      - title: "Chromium — html.css (the default stylesheet)"
+        url: "https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/html/resources/html.css"
+    actions:
+      - id: open-devtools
+        type: whiteboard.apply
+        at: { mark: open-devtools }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-devtools
+        type: whiteboard.apply
+        at: { mark: draw-devtools }
+        upsertIds:
+          [
+            e-margin,
+            e-border,
+            e-padding,
+            e-content,
+            e-margin-label,
+            e-margin-num,
+            e-border-label,
+            e-border-num,
+            e-padding-label,
+            e-padding-num,
+            e-content-label,
+            e-step-elements,
+            e-step-computed,
+          ]
+        drawMs: 5200
+      - id: draw-try
+        type: whiteboard.apply
+        at: { mark: draw-try }
+        upsertIds: [e-try]
+        drawMs: 1200
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: "*,\n*::before,\n*::after {\n  box-sizing: border-box;\n}\n\n.stamp {\n  background: gold;\n  display: inline-block;\n  width: 100px;\n  padding: 20px;\n  border: 1px solid;\n  box-sizing: content-box;\n  box-sizing: border-box;\n}\n"
+      - id: expect-card-css
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".menu-card {\n  background: white;\n  padding: 16px;\n  border: 4px solid saddlebrown;\n  margin: 16px;\n}\n\n.badge {\n  outline: 6px solid tomato;\n}\n"
+      - id: expect-sizing-css
+        type: expect.file
+        at: { afterAction: expect-card-css }
+        path: styles.css
+        contains: ".featured {\n  height: 80px;\n  height: auto;\n}\n\n.tag {\n  background: khaki;\n  display: inline-block;\n  width: min-content;\n}\n\n.hero {\n  width: 100%;\n  padding: 16px;\n  border: 4px solid tan;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
