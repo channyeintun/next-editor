@@ -986,7 +986,7 @@ scenes:
       ပေးတဲ့ function ပါ၊ အများအားဖြင့် async function ပါ။ React ကိုယ်တိုင်
       ခေါ်ပေးတာ ဖြစ်လို့၊ စောင့်နေဆဲလား၊ error တက်လား၊ ပြီးပြီလား ဆိုတာ React က အမြဲ
       သိပါတယ်။ [[mark:draw-action-gives]] ဒါကြောင့် အဖြေ မရသေးတဲ့ pending ကာလနဲ့
-      form ပြန်ရှင်းတာကို React က ကိုင်ပေးပြီး၊ မမျှော်လင့်ထားတဲ့ error ကိုလည်း
+      form ပြန်ရှင်းတာကို React က handle လုပ်ပေးပြီး၊ မမျှော်လင့်ထားတဲ့ error ကိုလည်း
       error boundary ဆီ ပို့ပေးပါတယ်။ [[mark:draw-hooks]] အဲဒီ အခြေအနေတွေကို
       ယူသုံးဖို့ hook အသစ် သုံးခုက useActionState၊ useFormStatus နဲ့ useOptimistic
       ပါ။
@@ -1038,7 +1038,7 @@ scenes:
     chapter: "အသေးဆုံး Action ရေးကြည့်ရအောင်"
     narration: >
       [[mark:close-board-1]] အရင်ဆုံး အဖြေ ပြန်ရတာ ကြာတဲ့ server တစ်ခု လိုပါတယ်။
-      [[mark:open-api]] ဒီ api ဖိုင် အလွတ်ကို server အတု အဖြစ် သုံးပါမယ်။
+      [[mark:open-api]] ဒီ api ဖိုင် အလွတ်ကို fake server အဖြစ် သုံးပါမယ်။
       [[mark:type-wait]] ဒီ helper က ပေးလိုက်တဲ့ အချိန် ကြာတဲ့အထိ စောင့်ပေးပြီး၊
       အော်ဒါ နံပါတ်တွေကတော့ 12 ကနေ စပါတယ်။ [[mark:type-place-order]] placeOrder
       ကတော့ network နှေးနေသလို 4 စက္ကန့် စောင့်ပါတယ်။ ပြီးတော့ နာမည် မပါရင် error
@@ -1418,7 +1418,7 @@ scenes:
       [[mark:open-app-form]] App ထဲ form ကို ထည့်ကြည့်ရအောင်။
       [[mark:wire-form-import]] import ကို အရင် ထည့်ပါတယ်။ [[mark:wire-form-use]]
       ပြီးတော့ form ကို header အောက်မှာ ထည့်ပါတယ်။ ဖိုင် ပြင်တိုင်း page
-      ပြန်ပွင့်ပြီး၊ server အတုကလည်း browser ထဲမှာပဲ ရှိလို့၊ အော်ဒါ နံပါတ်က 12 ကနေ
+      ပြန်ပွင့်ပြီး၊ fake server ကလည်း browser ထဲမှာပဲ ရှိလို့၊ အော်ဒါ နံပါတ်က 12 ကနေ
       ပြန်စပါတယ်။ နာမည် မထည့်ဘဲ submit လုပ်ကြည့်ရအောင်။ [[mark:click-submit-empty]]
       ခလုတ် ပိတ်သွားပြီး၊ ပို့နေပါတယ် လို့ ပြနေပါတယ်။ [[mark:empty-error]] ပြီးတော့
       နာမည် ထည့်ပါ ဆိုတဲ့ error ပေါ်လာပါတယ်။ Action က ပြန်ပေးတဲ့ state ကနေ
@@ -1429,7 +1429,7 @@ scenes:
       ပြန်ဖြစ်သွားပါပြီ။ Action က throw မလုပ်ရင်၊ submit တိုင်း ပြီးတဲ့အခါ React က
       uncontrolled input တွေကို ပြန်ရှင်းပေးပါတယ်။ ခုနက error submit မှာလည်း
       ဒီအတိုင်းပါပဲ။ [[mark:no-prevent-default]] page ပြန်မပွင့်အောင် React က
-      သူ့ဘာသာ ကိုင်ပေးလို့၊ lesson 4 လို preventDefault ခေါ်စရာ မလိုတော့ပါဘူး။
+      သူ့ဘာသာ handle လုပ်ပေးလို့၊ lesson 4 လို preventDefault ခေါ်စရာ မလိုတော့ပါဘူး။
       ကိုယ်တိုင် ပြန်ရှင်းချင်ရင်တော့ react-dom မှာ requestFormReset ရှိပါတယ်။
     sources:
       - title: "React — <form>"
