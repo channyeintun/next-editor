@@ -17,7 +17,11 @@ import type {
 import { arePreviewSizesEqual } from "../../core/src/utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { withRecordedDevServerUrls } from "./recordedDevServerUrls";
+import {
+  createRecordedDevServerStream,
+  type RecordedDevServerStream,
+  withRecordedDevServerUrls,
+} from "./recordedDevServerUrls";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
@@ -100,6 +104,9 @@ export function usePreviewPlaybackRegistration({
   const rrwebReplayBuiltLastInitialDocRef = useRef<PreviewInitialDocument | undefined>(undefined);
   const rrwebReplayBuiltLastPatchBatchRef = useRef<PreviewDomPatchBatch | undefined>(undefined);
   const rrwebReplayBuiltLeadRef = useRef(-Infinity);
+  // What the dev-server URL rewrite learned from the stream built so far: an
+  // appended chunk's mutations refer to nodes an earlier chunk recorded.
+  const rrwebReplayDevServerStreamRef = useRef<RecordedDevServerStream | null>(null);
 
   const recordRrwebReplayBuild = (input: PreviewPatchReplayInput, lead: number) => {
     rrwebReplayBuiltInitialDocCountRef.current = input.initialDocuments.length;
@@ -130,10 +137,12 @@ export function usePreviewPlaybackRegistration({
     // false means the stream changed some other way and needs a rebuild.
     const appendRrwebReplayGrowth = (input: PreviewPatchReplayInput): boolean => {
       const replayer = rrwebReplayerRef.current;
+      const devServerStream = rrwebReplayDevServerStreamRef.current;
       const builtDocCount = rrwebReplayBuiltInitialDocCountRef.current;
       const builtBatchCount = rrwebReplayBuiltPatchBatchCountRef.current;
       if (
         !replayer ||
+        !devServerStream ||
         input.initialDocuments[builtDocCount - 1] !== rrwebReplayBuiltLastInitialDocRef.current ||
         input.patchBatches[builtBatchCount - 1] !== rrwebReplayBuiltLastPatchBatchRef.current
       ) {
@@ -150,7 +159,7 @@ export function usePreviewPlaybackRegistration({
           withRecordedDevServerUrls(
             buildRrwebReplayEvents(newDocuments, newBatches, lead),
             readWorkspaceFile,
-            input.initialDocuments.flatMap((document) => document.events ?? []),
+            devServerStream,
           ),
         )
       ) {
@@ -194,9 +203,12 @@ export function usePreviewPlaybackRegistration({
 
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const lead = getRrwebReplayLead(input.initialDocuments, input.patchBatches);
+        const devServerStream = createRecordedDevServerStream();
+        rrwebReplayDevServerStreamRef.current = devServerStream;
         const events = withRecordedDevServerUrls(
           buildRrwebReplayEvents(input.initialDocuments, input.patchBatches, lead),
           readWorkspaceFile,
+          devServerStream,
         );
         recordRrwebReplayBuild(input, lead);
 

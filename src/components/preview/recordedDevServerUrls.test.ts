@@ -3,7 +3,7 @@ import type { eventWithTime } from "@rrweb/types";
 import { describe, expect, it } from "vite-plus/test";
 import { createWorkspaceFile } from "../../types/workspaceFiles";
 import type { WorkspaceFile } from "../../types/workspace";
-import { withRecordedDevServerUrls } from "./recordedDevServerUrls";
+import { createRecordedDevServerStream, withRecordedDevServerUrls } from "./recordedDevServerUrls";
 
 const HOST = "https://abc--5173--2ed8f36d.local-corp.webcontainer-api.io";
 const LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
@@ -111,9 +111,13 @@ describe("withRecordedDevServerUrls", () => {
       },
     };
 
-    const [result] = withRecordedDevServerUrls(asEvents(mutation), readWorkspaceFile, [
-      meta,
-    ]) as unknown as [{ data: typeof mutation.data }];
+    const stream = createRecordedDevServerStream();
+    withRecordedDevServerUrls(asEvents(meta), readWorkspaceFile, stream);
+    const [result] = withRecordedDevServerUrls(
+      asEvents(mutation),
+      readWorkspaceFile,
+      stream,
+    ) as unknown as [{ data: typeof mutation.data }];
 
     expect(result.data.adds[0].node.attributes.src).toBe(LOGO_DATA_URL);
   });
@@ -186,6 +190,34 @@ describe("withRecordedDevServerUrls", () => {
     expect(div.attributes.style).toBe(`background: url("${LOGO_DATA_URL}") no-repeat;`);
   });
 
+  // A document with a <style> (id 3) holding one text node (id 4).
+  const styleSnapshot = {
+    type: 2,
+    timestamp: 1,
+    data: {
+      node: {
+        type: 0,
+        id: 1,
+        childNodes: [
+          {
+            type: 2,
+            tagName: "style",
+            attributes: {},
+            id: 3,
+            childNodes: [{ type: 3, textContent: "", id: 4 }],
+          },
+          {
+            type: 2,
+            tagName: "pre",
+            attributes: {},
+            id: 5,
+            childNodes: [{ type: 3, textContent: "", id: 6 }],
+          },
+        ],
+      },
+    },
+  };
+
   it("rewrites stylesheet url()s in swapped links, replaced style text and style changes", () => {
     const mutation = {
       type: 3,
@@ -219,10 +251,14 @@ describe("withRecordedDevServerUrls", () => {
       },
     };
 
-    const [, result] = withRecordedDevServerUrls(
-      asEvents(meta, mutation),
+    // The <style> was recorded in an earlier chunk of the streamed recording.
+    const stream = createRecordedDevServerStream();
+    withRecordedDevServerUrls(asEvents(meta, styleSnapshot), readWorkspaceFile, stream);
+    const [result] = withRecordedDevServerUrls(
+      asEvents(mutation),
       readWorkspaceFile,
-    ) as unknown as [unknown, typeof mutation];
+      stream,
+    ) as unknown as [typeof mutation];
 
     expect(result.data.adds[0].node.textContent).toBe(resolvedCss);
     expect(result.data.texts[0].value).toBe(resolvedCss);
@@ -235,6 +271,31 @@ describe("withRecordedDevServerUrls", () => {
     });
     // The recording's own event is left as it was.
     expect(mutation.data.texts[0].value).toBe(css(`${HOST}/logo.svg`));
+  });
+
+  it("leaves a url() the page shows as text alone", () => {
+    // e.g. a demo printing getComputedStyle(el).backgroundImage.
+    const shown = `background-image: url("${HOST}/logo.svg")`;
+    const text = (id: number) => ({ type: 3, textContent: shown, id });
+    const snapshot = structuredClone(styleSnapshot);
+    snapshot.data.node.childNodes[1].childNodes = [text(6)];
+    const mutation = {
+      type: 3,
+      timestamp: 2,
+      data: {
+        source: 0,
+        removes: [],
+        attributes: [],
+        adds: [{ parentId: 5, nextId: null, node: text(7) }],
+        texts: [{ id: 6, value: shown }],
+      },
+    };
+    const events = asEvents(meta, snapshot, mutation);
+
+    const result = withRecordedDevServerUrls(events, readWorkspaceFile);
+
+    expect(result[1]).toBe(events[1]);
+    expect(result[2]).toBe(events[2]);
   });
 
   it("keeps the fragment that picks an icon out of an SVG sprite", () => {

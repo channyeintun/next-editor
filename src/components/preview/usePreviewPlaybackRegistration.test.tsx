@@ -2,6 +2,8 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createPreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../types/slides";
+import type { WorkspaceFile } from "../../types/workspace";
+import { createWorkspaceFile } from "../../types/workspaceFiles";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
 
 interface FakeReplayerInstance {
@@ -45,7 +47,13 @@ interface ReplayProps {
   isPlaybackPreviewActive: boolean;
 }
 
-function renderRegistration() {
+function renderRegistration({
+  initialDocument = seed,
+  readWorkspaceFile = () => null,
+}: {
+  initialDocument?: PreviewInitialDocument;
+  readWorkspaceFile?: (path: string) => WorkspaceFile | null;
+} = {}) {
   const previewHandle = createPreviewAdapterHandle();
   const container = document.createElement("div");
   document.body.append(container);
@@ -73,14 +81,14 @@ function renderRegistration() {
         applyPreviewPanelState: vi.fn<() => void>(),
         lastRefreshKeyRef: { current: undefined },
         replayContainerRef: { current: container },
-        readWorkspaceFile: () => null,
+        readWorkspaceFile,
       }),
     { initialProps: { isRrwebReplayActive: true, isPlaybackPreviewActive: true } },
   );
 
   // The recording's preview tracks; streaming appends to them in place.
   const tracks = {
-    initialDocuments: [seed] as PreviewInitialDocument[],
+    initialDocuments: [initialDocument] as PreviewInitialDocument[],
     patchBatches: [] as PreviewDomPatchBatch[],
   };
   const applyReplay = (currentTime: number) =>
@@ -149,6 +157,59 @@ describe("usePreviewPlaybackRegistration rrweb replay", () => {
     await vi.waitFor(() => expect(fakeRrweb.instances).toHaveLength(2));
     expect(fakeRrweb.instances[0]?.destroy).toHaveBeenCalledOnce();
     expect(fakeRrweb.instances[0]?.addEvent).not.toHaveBeenCalled();
+  });
+
+  it("rewrites a streamed batch against the <style>s an earlier chunk recorded", async () => {
+    const host = "https://abc--5173--2ed8f36d.local-corp.webcontainer-api.io";
+    const logo = createWorkspaceFile("public/logo.svg", "<svg/>");
+    const style = { type: 2, tagName: "style", attributes: {}, childNodes: [], id: 3 };
+    const { applyReplay, tracks } = renderRegistration({
+      initialDocument: {
+        ...seed,
+        events: [
+          { type: 4, timestamp: 0, data: { href: `${host}/` } },
+          { type: 2, timestamp: 0, data: { node: { type: 0, id: 1, childNodes: [style] } } },
+        ],
+      },
+      readWorkspaceFile: (path) => (path === logo.path ? logo : null),
+    });
+    applyReplay(50);
+    await vi.waitFor(() => expect(fakeRrweb.instances).toHaveLength(1));
+
+    // Vite replacing the <style>'s text on a CSS edit.
+    const text = { type: 3, textContent: `a { background: url("${host}/logo.svg"); }`, id: 9 };
+    tracks.patchBatches.push({
+      ...batch(100, 100),
+      events: [
+        {
+          type: 3,
+          timestamp: 100,
+          data: {
+            source: 0,
+            texts: [],
+            attributes: [],
+            removes: [],
+            adds: [{ parentId: 3, nextId: null, node: text }],
+          },
+        },
+      ],
+    });
+    applyReplay(110);
+
+    expect(fakeRrweb.instances[0]?.addEvent).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          adds: [
+            expect.objectContaining({
+              node: expect.objectContaining({
+                textContent:
+                  'a { background: url("data:image/svg+xml;charset=utf-8,%3Csvg%2F%3E"); }',
+              }),
+            }),
+          ],
+        }),
+      }),
+    );
   });
 
   it("destroys the Replayer on unmount", async () => {

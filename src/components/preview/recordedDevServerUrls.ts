@@ -13,6 +13,7 @@ const RRWEB_TEXT_NODE = 3;
 const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]*))\s*\)/g;
 
 interface RecordedNode {
+  id?: number;
   type?: number;
   tagName?: string;
   attributes?: Record<string, unknown>;
@@ -21,6 +22,25 @@ interface RecordedNode {
 }
 
 type ReadWorkspaceFile = (path: string) => WorkspaceFile | null;
+
+/**
+ * What the chunks of one replay's event stream rewritten so far established.
+ * A streamed recording is rewritten a chunk at a time, and a later chunk's
+ * mutations refer to the dev server and the `<style>` nodes an earlier chunk
+ * recorded. Create one per replay build and pass it with every chunk, in order.
+ */
+export interface RecordedDevServerStream {
+  /** The recorded dev server's origins, from the Meta events. */
+  readonly origins: Set<string>;
+  /** rrweb ids of the current document's `<style>` elements. */
+  readonly styleIds: Set<number>;
+  /** rrweb ids of the text nodes inside those `<style>`s. */
+  readonly styleTextIds: Set<number>;
+}
+
+export function createRecordedDevServerStream(): RecordedDevServerStream {
+  return { origins: new Set(), styleIds: new Set(), styleTextIds: new Set() };
+}
 
 interface RecordedDevServer {
   /** Whether a URL addresses the recorded dev server. */
@@ -59,20 +79,24 @@ interface NodeReplacements {
  * dead dev server. Vite's link-mode CSS HMR swaps in such a link
  * (`styles.css?t=…`) on every edit.
  *
+ * Text is rewritten only inside a `<style>`: a page can also show such a
+ * `url()` as text (a computed style it prints), which must replay as recorded.
+ *
  * Events that need no change are returned as they are; the others are cloned
  * first, because the events belong to the loaded recording.
  *
- * The dev server's origin comes from the Meta events in `originEvents`. A
- * streamed append can be patch batches alone, with no Meta of its own, so the
- * append passes the recording's initial documents there.
+ * The dev server's origin comes from the Meta events. A streamed append can be
+ * patch batches alone, with no Meta of its own, and its text changes refer to
+ * `<style>` nodes an earlier chunk added, so every chunk of one replay passes
+ * the same `stream`.
  */
 export function withRecordedDevServerUrls(
   events: eventWithTime[],
   readWorkspaceFile: ReadWorkspaceFile,
-  originEvents: readonly { type: number; data: unknown }[] = events,
+  stream: RecordedDevServerStream = createRecordedDevServerStream(),
 ): eventWithTime[] {
-  const origins = new Set<string>();
-  for (const event of originEvents) {
+  const { origins } = stream;
+  for (const event of events) {
     if (event.type === RRWEB_EVENT_TYPE.Meta) {
       const origin = originOf((event.data as { href?: unknown }).href);
       if (origin) origins.add(origin);
@@ -106,41 +130,59 @@ export function withRecordedDevServerUrls(
     },
   };
 
-  return events.map((event) => withReplayableUrls(event, devServer));
+  return events.map((event) => withReplayableUrls(event, devServer, stream));
 }
 
-function withReplayableUrls(event: eventWithTime, devServer: RecordedDevServer): eventWithTime {
+function withReplayableUrls(
+  event: eventWithTime,
+  devServer: RecordedDevServer,
+  stream: RecordedDevServerStream,
+): eventWithTime {
   if (event.type === RRWEB_EVENT_TYPE.FullSnapshot) {
+    // A rebuild starts a fresh document, which may renumber its nodes.
+    stream.styleIds.clear();
+    stream.styleTextIds.clear();
     const data = event.data as { node?: RecordedNode };
-    if (!data.node || !hasReplacements(data.node, devServer)) return event;
+    if (!data.node || !scanReplacements(data.node, false, devServer, stream)) return event;
     const copy = structuredClone(event);
-    applyReplacements((copy.data as { node: RecordedNode }).node, devServer);
+    applyReplacements((copy.data as { node: RecordedNode }).node, false, devServer);
     return copy;
   }
 
   if (event.type === RRWEB_EVENT_TYPE.IncrementalSnapshot) {
     const data = event.data as {
       source?: number;
-      adds?: { node: RecordedNode }[];
-      texts?: { value: unknown }[];
+      adds?: { parentId: number; node: RecordedNode }[];
+      texts?: { id: number; value: unknown }[];
       attributes?: { attributes: Record<string, unknown> }[];
     };
     if (data.source !== RRWEB_INCREMENTAL_SOURCE.Mutation) return event;
     const { resolve } = devServer;
-    const changesAdds = data.adds?.some((add) => hasReplacements(add.node, devServer));
+    const { styleIds, styleTextIds } = stream;
+    // rrweb adds a node only after its parent has an id, so a <style> added in
+    // this batch is known before the text added to it. Every add is scanned.
+    let changesAdds = false;
+    for (const add of data.adds ?? []) {
+      const inStyle = styleIds.has(add.parentId);
+      changesAdds = scanReplacements(add.node, inStyle, devServer, stream) || changesAdds;
+    }
     const setsImage = data.attributes?.some(
       (change) => attributeChangeImages(change.attributes, resolve) !== null,
     );
-    const textsImage = data.texts?.some((text) => resolveCssUrls(text.value, resolve) !== null);
+    const styleText = (text: { id: number; value: unknown }) =>
+      styleTextIds.has(text.id) ? resolveCssUrls(text.value, resolve) : null;
+    const textsImage = data.texts?.some((text) => styleText(text) !== null);
     if (!changesAdds && !setsImage && !textsImage) return event;
     const copy = structuredClone(event);
     const copyData = copy.data as typeof data;
-    for (const add of copyData.adds ?? []) applyReplacements(add.node, devServer);
+    for (const add of copyData.adds ?? []) {
+      applyReplacements(add.node, styleIds.has(add.parentId), devServer);
+    }
     for (const change of copyData.attributes ?? []) {
       Object.assign(change.attributes, attributeChangeImages(change.attributes, resolve));
     }
     for (const text of copyData.texts ?? []) {
-      text.value = resolveCssUrls(text.value, resolve) ?? text.value;
+      text.value = styleText(text) ?? text.value;
     }
     return copy;
   }
@@ -152,10 +194,14 @@ function isImage(node: RecordedNode): boolean {
   return node.type === RRWEB_ELEMENT_NODE && node.tagName?.toLowerCase() === "img";
 }
 
+function isStyle(node: RecordedNode): boolean {
+  return node.type === RRWEB_ELEMENT_NODE && node.tagName?.toLowerCase() === "style";
+}
+
 /**
  * `css` with every `url()` the workspace can answer pointed at its data: URL,
  * or null when it has none. rrweb absolutizes only stylesheet text, so a
- * recorded-host `url()` in any text or style value is CSS.
+ * recorded-host `url()` in a stylesheet or style value is CSS.
  */
 function resolveCssUrls(css: unknown, resolve: RecordedDevServer["resolve"]): string | null {
   if (typeof css !== "string" || !css.includes("url(")) return null;
@@ -172,12 +218,17 @@ function resolveCssUrls(css: unknown, resolve: RecordedDevServer["resolve"]): st
   return changed ? resolvedCss : null;
 }
 
-/** The serialized node's own replacements, if it needs any. */
+/**
+ * The serialized node's own replacements, if it needs any. `inStyle`: its
+ * parent is a `<style>`, so its text is CSS.
+ */
 function nodeReplacements(
   node: RecordedNode,
+  inStyle: boolean,
   { serves, resolve }: RecordedDevServer,
 ): NodeReplacements | null {
   if (node.type === RRWEB_TEXT_NODE) {
+    if (!inStyle) return null;
     const textContent = resolveCssUrls(node.textContent, resolve);
     return textContent === null ? null : { textContent };
   }
@@ -239,19 +290,41 @@ function attributeChangeImages(
   return Object.keys(replacements).length > 0 ? replacements : null;
 }
 
-function hasReplacements(node: RecordedNode, devServer: RecordedDevServer): boolean {
-  if (nodeReplacements(node, devServer) !== null) return true;
-  return node.childNodes?.some((child) => hasReplacements(child, devServer)) ?? false;
+/**
+ * Whether `node` or a node inside it needs a replacement. It walks the whole
+ * tree, so that `stream` learns every `<style>` and `<style>` text node in it.
+ */
+function scanReplacements(
+  node: RecordedNode,
+  inStyle: boolean,
+  devServer: RecordedDevServer,
+  stream: RecordedDevServerStream,
+): boolean {
+  const style = isStyle(node);
+  if (node.id !== undefined) {
+    if (style) stream.styleIds.add(node.id);
+    else if (inStyle && node.type === RRWEB_TEXT_NODE) stream.styleTextIds.add(node.id);
+  }
+  let needed = nodeReplacements(node, inStyle, devServer) !== null;
+  for (const child of node.childNodes ?? []) {
+    needed = scanReplacements(child, style, devServer, stream) || needed;
+  }
+  return needed;
 }
 
-function applyReplacements(node: RecordedNode, devServer: RecordedDevServer): void {
-  const replacements = nodeReplacements(node, devServer);
+function applyReplacements(
+  node: RecordedNode,
+  inStyle: boolean,
+  devServer: RecordedDevServer,
+): void {
+  const replacements = nodeReplacements(node, inStyle, devServer);
   if (replacements?.textContent !== undefined) node.textContent = replacements.textContent;
   if (replacements && node.attributes) {
     Object.assign(node.attributes, replacements.attributes);
     for (const name of replacements.removedAttributes ?? []) delete node.attributes[name];
   }
-  for (const child of node.childNodes ?? []) applyReplacements(child, devServer);
+  const style = isStyle(node);
+  for (const child of node.childNodes ?? []) applyReplacements(child, style, devServer);
 }
 
 function originOf(href: unknown): string | null {
