@@ -1,0 +1,2253 @@
+# CSS course (Burmese), lesson 1 of 43: CSS basics.
+#
+# Narration is Burmese, applied from voice-script.md next to this file (the
+# span-by-span brief is DESIGN.md): every [[mark:…]] sits where its action
+# begins, after ။ or a ၊ pause, and each span carries one piece of meaning tied
+# to what is on screen. Everything the learner sees (title, chapters,
+# whiteboard labels, the tea-shop UI) is Burmese too.
+#
+# Shape: two boards (what CSS is next to HTML and JavaScript, with the tea-shop
+# page drawn as boxes; the course map) while the dev server installs, a code
+# tour (index.html, the stylesheet link, the empty styles.css), the unstyled
+# page in the preview (user agent stylesheet), a board on default display
+# values, then rules typed live into styles.css: the body background and text
+# colour, a rule-anatomy board, the Myanmar font stack, a commented heading
+# rule, a deliberately misspelled declaration that the browser skips, a code
+# tour of the three ways to add CSS (pinned <style> element and style
+# attribute), link and heading backgrounds that make inline and block boxes
+# visible, a DevTools board and the recap.
+#
+# Live-preview safety (PLATFORM.md): styles.css is the only typed file and
+# never contains url(, @import or image-set(; every value typed keystroke by
+# keystroke is a colour keyword with no valid shorter prefix (oldlace,
+# saddlebrown, firebrick, darkgreen, khaki), so no intermediate colour flashes.
+# The comment is typed at the end of the file, so its unfinished state hides
+# nothing. index.html is never edited (the <style> element and the style
+# attribute are pinned and only selected), so the preview never reloads.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-01-basics
+  title: "CSS course 1: CSS အခြေခံ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS course 1
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/styles.css" />
+            <style>
+              .tagline { font-style: italic; }
+            </style>
+          </head>
+          <body>
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p style="font-weight: bold" data-testid="hero-text">ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="hours" id="hours" data-testid="hours">
+                <h2>ဖွင့်ချိန်</h2>
+                <ul class="hours-list">
+                  <li>တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ</li>
+                  <li>စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ</li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+  whiteboardAssets:
+    # Board A: three languages, three jobs; the tea-shop page as boxes.
+    # Blue = HTML, orange = CSS (the course's subject), green = JavaScript,
+    # violet = the shop page we will style.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "CSS ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-html-box,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 360,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-html-name,
+        kind: text,
+        x: 290,
+        y: 238,
+        width: 110,
+        height: 40,
+        text: "HTML",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: a-html-role,
+        kind: text,
+        x: 290,
+        y: 284,
+        width: 200,
+        height: 36,
+        text: "ဖွဲ့စည်းပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-css-box,
+        kind: rectangle,
+        x: 270,
+        y: 355,
+        width: 360,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-css-name,
+        kind: text,
+        x: 290,
+        y: 363,
+        width: 90,
+        height: 40,
+        text: "CSS",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-css-role,
+        kind: text,
+        x: 290,
+        y: 409,
+        width: 120,
+        height: 36,
+        text: "ပုံစံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-js-box,
+        kind: rectangle,
+        x: 270,
+        y: 480,
+        width: 360,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-js-name,
+        kind: text,
+        x: 290,
+        y: 488,
+        width: 200,
+        height: 40,
+        text: "JavaScript",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: a-js-role,
+        kind: text,
+        x: 290,
+        y: 534,
+        width: 230,
+        height: 36,
+        text: "လုပ်ဆောင်ချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-shop-frame,
+        kind: rectangle,
+        x: 720,
+        y: 230,
+        width: 360,
+        height: 400,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-shop-label,
+        kind: text,
+        x: 740,
+        y: 238,
+        width: 240,
+        height: 36,
+        text: "လက်ဖက်ရည်ဆိုင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-shop-header,
+        kind: rectangle,
+        x: 740,
+        y: 290,
+        width: 320,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-shop-header-label,
+        kind: text,
+        x: 760,
+        y: 302,
+        width: 180,
+        height: 36,
+        text: "ဆိုင်နာမည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-shop-hero,
+        kind: rectangle,
+        x: 740,
+        y: 365,
+        width: 320,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-shop-hero-label,
+        kind: text,
+        x: 760,
+        y: 377,
+        width: 180,
+        height: 36,
+        text: "မင်္ဂလာပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-shop-menu,
+        kind: rectangle,
+        x: 740,
+        y: 440,
+        width: 320,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-shop-menu-label,
+        kind: text,
+        x: 760,
+        y: 452,
+        width: 100,
+        height: 36,
+        text: "မီနူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-shop-hours,
+        kind: rectangle,
+        x: 740,
+        y: 555,
+        width: 320,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-shop-hours-label,
+        kind: text,
+        x: 760,
+        y: 567,
+        width: 180,
+        height: 36,
+        text: "ဖွင့်ချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-css-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 640,
+        y: 385,
+        width: 70,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+
+    # Board B: the course map (8 parts, 43 lessons, Tailwind last), how to use
+    # a lesson, and the credit. Blue pills = parts, green = the Tailwind
+    # lesson, red = where we are, violet = how to study.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "ဒီ course ရဲ့ လမ်းကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-count,
+        kind: text,
+        x: 850,
+        y: 166,
+        width: 200,
+        height: 36,
+        text: "lesson 43 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p1-pill,
+        kind: rectangle,
+        x: 280,
+        y: 222,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p1-num,
+        kind: text,
+        x: 295,
+        y: 225,
+        width: 80,
+        height: 36,
+        text: "1–8",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p1-name,
+        kind: text,
+        x: 420,
+        y: 225,
+        width: 110,
+        height: 36,
+        text: "အခြေခံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p2-pill,
+        kind: rectangle,
+        x: 280,
+        y: 272,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p2-num,
+        kind: text,
+        x: 295,
+        y: 275,
+        width: 80,
+        height: 36,
+        text: "9–12",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p2-name,
+        kind: text,
+        x: 420,
+        y: 275,
+        width: 180,
+        height: 36,
+        text: "တန်ဖိုးတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p3-pill,
+        kind: rectangle,
+        x: 280,
+        y: 322,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p3-num,
+        kind: text,
+        x: 295,
+        y: 325,
+        width: 80,
+        height: 36,
+        text: "13–25",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p3-name,
+        kind: text,
+        x: 420,
+        y: 325,
+        width: 110,
+        height: 36,
+        text: "Layout",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p4-pill,
+        kind: rectangle,
+        x: 280,
+        y: 372,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p4-num,
+        kind: text,
+        x: 295,
+        y: 375,
+        width: 80,
+        height: 36,
+        text: "26–28",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p4-name,
+        kind: text,
+        x: 420,
+        y: 375,
+        width: 330,
+        height: 36,
+        text: "State နဲ့ interaction",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p5-pill,
+        kind: rectangle,
+        x: 280,
+        y: 422,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p5-num,
+        kind: text,
+        x: 295,
+        y: 425,
+        width: 80,
+        height: 36,
+        text: "29–31",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p5-name,
+        kind: text,
+        x: 420,
+        y: 425,
+        width: 210,
+        height: 36,
+        text: "စာသားနဲ့ list",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p6-pill,
+        kind: rectangle,
+        x: 280,
+        y: 472,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p6-num,
+        kind: text,
+        x: 295,
+        y: 475,
+        width: 80,
+        height: 36,
+        text: "32–37",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p6-name,
+        kind: text,
+        x: 420,
+        y: 475,
+        width: 200,
+        height: 36,
+        text: "အလှဆင်ခြင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p7-pill,
+        kind: rectangle,
+        x: 280,
+        y: 522,
+        width: 120,
+        height: 42,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-p7-num,
+        kind: text,
+        x: 295,
+        y: 525,
+        width: 80,
+        height: 36,
+        text: "38–42",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p7-name,
+        kind: text,
+        x: 420,
+        y: 525,
+        width: 290,
+        height: 36,
+        text: "Motion နဲ့ overlay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-p8-pill,
+        kind: rectangle,
+        x: 280,
+        y: 572,
+        width: 120,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-p8-num,
+        kind: text,
+        x: 295,
+        y: 575,
+        width: 80,
+        height: 36,
+        text: "43",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-p8-name,
+        kind: text,
+        x: 420,
+        y: 575,
+        width: 200,
+        height: 36,
+        text: "Tailwind CSS",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-here-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 266,
+        y: 212,
+        width: 148,
+        height: 62,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-here-label,
+        kind: text,
+        x: 580,
+        y: 225,
+        width: 150,
+        height: 36,
+        text: "အခု ဒီမှာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-how-title,
+        kind: text,
+        x: 790,
+        y: 222,
+        width: 240,
+        height: 36,
+        text: "ဘယ်လို လေ့လာမလဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-step-watch,
+        kind: rectangle,
+        x: 790,
+        y: 265,
+        width: 280,
+        height: 44,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-step-watch-label,
+        kind: text,
+        x: 805,
+        y: 269,
+        width: 100,
+        height: 36,
+        text: "ကြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-step-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 905,
+        y: 312,
+        width: 30,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-step-pause,
+        kind: rectangle,
+        x: 790,
+        y: 343,
+        width: 280,
+        height: 44,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-step-pause-label,
+        kind: text,
+        x: 805,
+        y: 347,
+        width: 100,
+        height: 36,
+        text: "pause",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-step-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 905,
+        y: 390,
+        width: 30,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-step-edit,
+        kind: rectangle,
+        x: 790,
+        y: 421,
+        width: 280,
+        height: 44,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-step-edit-label,
+        kind: text,
+        x: 805,
+        y: 425,
+        width: 240,
+        height: 36,
+        text: "ကိုယ်တိုင် ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-credit-1,
+        kind: text,
+        x: 790,
+        y: 500,
+        width: 270,
+        height: 36,
+        text: "web.dev Learn CSS",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-credit-2,
+        kind: text,
+        x: 790,
+        y: 545,
+        width: 190,
+        height: 36,
+        text: "topic 37 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-credit-3,
+        kind: text,
+        x: 790,
+        y: 590,
+        width: 150,
+        height: 36,
+        text: "CC BY 4.0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C: the parts of the rule just typed. Each colour names one part:
+    # blue = selector, violet = declaration block, green = declaration,
+    # orange = property, red = value.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Rule တစ်ခုရဲ့ အစိတ်အပိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-code-1,
+        kind: text,
+        x: 600,
+        y: 300,
+        width: 120,
+        height: 40,
+        text: "body {",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: c-code-2,
+        kind: text,
+        x: 640,
+        y: 345,
+        width: 360,
+        height: 40,
+        text: "background: oldlace;",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: c-code-3,
+        kind: text,
+        x: 640,
+        y: 390,
+        width: 340,
+        height: 40,
+        text: "color: saddlebrown;",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: c-code-4,
+        kind: text,
+        x: 600,
+        y: 435,
+        width: 30,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: c-sel-label,
+        kind: text,
+        x: 280,
+        y: 300,
+        width: 140,
+        height: 36,
+        text: "selector",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-sel-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 450,
+        y: 302,
+        width: 130,
+        height: 34,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-sel-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 600,
+        y: 304,
+        width: 75,
+        height: 38,
+        strokeColor: "#1971c2",
+      }
+    # The violet box holds only what sits between the braces (the two
+    # declarations), never the selector line or the closing brace.
+    - {
+        id: c-block-box,
+        kind: rectangle,
+        x: 625,
+        y: 337,
+        width: 390,
+        height: 98,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-block-label,
+        kind: text,
+        x: 650,
+        y: 445,
+        width: 280,
+        height: 36,
+        text: "declaration block",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-decl-label,
+        kind: text,
+        x: 280,
+        y: 348,
+        width: 180,
+        height: 36,
+        text: "declaration",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-decl-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 350,
+        width: 120,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-prop-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 640,
+        y: 349,
+        width: 180,
+        height: 38,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-value-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 848,
+        y: 349,
+        width: 128,
+        height: 38,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-prop-label,
+        kind: text,
+        x: 600,
+        y: 545,
+        width: 140,
+        height: 36,
+        text: "property",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-value-label,
+        kind: text,
+        x: 800,
+        y: 545,
+        width: 120,
+        height: 36,
+        text: "တန်ဖိုး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-punct-label,
+        kind: text,
+        x: 600,
+        y: 595,
+        width: 480,
+        height: 36,
+        text: "colon : ခွဲ · semicolon ; ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board D: default display values. Blue = block, green = list-item,
+    # orange = inline, violet = where the values come from.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 330,
+        height: 46,
+        text: "Block နဲ့ inline",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-block-label,
+        kind: text,
+        x: 280,
+        y: 214,
+        width: 100,
+        height: 40,
+        text: "block",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: d-block-frame,
+        kind: rectangle,
+        x: 270,
+        y: 260,
+        width: 380,
+        height: 225,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-bar-1,
+        kind: rectangle,
+        x: 285,
+        y: 275,
+        width: 350,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-bar-1-label,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 170,
+        height: 36,
+        text: "ခေါင်းစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-bar-2,
+        kind: rectangle,
+        x: 285,
+        y: 343,
+        width: 350,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-bar-2-label,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 130,
+        height: 36,
+        text: "စာပိုဒ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-bar-3,
+        kind: rectangle,
+        x: 285,
+        y: 411,
+        width: 350,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-bar-3-label,
+        kind: text,
+        x: 300,
+        y: 418,
+        width: 180,
+        height: 36,
+        text: "• list item",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-block-note,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 280,
+        height: 36,
+        text: "တစ်ကြောင်းလုံး ယူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-inline-label,
+        kind: text,
+        x: 720,
+        y: 214,
+        width: 110,
+        height: 40,
+        text: "inline",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: d-inline-frame,
+        kind: rectangle,
+        x: 710,
+        y: 260,
+        width: 380,
+        height: 225,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-word-1,
+        kind: rectangle,
+        x: 725,
+        y: 280,
+        width: 100,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-word-1-label,
+        kind: text,
+        x: 740,
+        y: 285,
+        width: 70,
+        height: 36,
+        text: "link",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-word-2,
+        kind: rectangle,
+        x: 840,
+        y: 280,
+        width: 180,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-word-2-label,
+        kind: text,
+        x: 850,
+        y: 285,
+        width: 160,
+        height: 36,
+        text: "1,500 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-word-3,
+        kind: rectangle,
+        x: 725,
+        y: 345,
+        width: 90,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-word-3-label,
+        kind: text,
+        x: 740,
+        y: 350,
+        width: 70,
+        height: 36,
+        text: "အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-word-4,
+        kind: rectangle,
+        x: 840,
+        y: 345,
+        width: 100,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-word-4-label,
+        kind: text,
+        x: 855,
+        y: 350,
+        width: 70,
+        height: 36,
+        text: "link",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-inline-note,
+        kind: text,
+        x: 720,
+        y: 500,
+        width: 270,
+        height: 36,
+        text: "စာကြောင်းထဲမှာ စီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-ua-note,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 400,
+        height: 36,
+        text: "browser ရဲ့ default style",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E: a DevTools Styles pane sketch. Orange = overridden, red = not
+    # understood, green = in use, violet = the user agent stylesheet.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 170,
+        height: 46,
+        text: "DevTools",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-sub,
+        kind: text,
+        x: 520,
+        y: 166,
+        width: 490,
+        height: 36,
+        text: "ကိုယ့် browser မှာ ဖွင့်ကြည့်ပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-panel,
+        kind: rectangle,
+        x: 280,
+        y: 220,
+        width: 800,
+        height: 410,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-tab,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 100,
+        height: 36,
+        text: "Styles",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule-sel,
+        kind: text,
+        x: 310,
+        y: 280,
+        width: 80,
+        height: 36,
+        text: "h1 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line-1,
+        kind: text,
+        x: 340,
+        y: 322,
+        width: 270,
+        height: 36,
+        text: "color: firebrick;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line-2,
+        kind: text,
+        x: 340,
+        y: 364,
+        width: 190,
+        height: 36,
+        text: "colr: green;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line-3,
+        kind: text,
+        x: 340,
+        y: 406,
+        width: 270,
+        height: 36,
+        text: "color: darkgreen;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule-end,
+        kind: text,
+        x: 310,
+        y: 448,
+        width: 30,
+        height: 36,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-strike-1,
+        kind: freedraw,
+        stroke: strike,
+        x: 335,
+        y: 322,
+        width: 270,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-strike-2,
+        kind: freedraw,
+        stroke: strike,
+        x: 335,
+        y: 364,
+        width: 195,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-note-1,
+        kind: text,
+        x: 650,
+        y: 322,
+        width: 360,
+        height: 36,
+        text: "နောက်က တစ်ကြောင်း နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-note-2,
+        kind: text,
+        x: 650,
+        y: 364,
+        width: 300,
+        height: 36,
+        text: "⚠ နားမလည်လို့ ကျော်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-note-3,
+        kind: text,
+        x: 650,
+        y: 406,
+        width: 190,
+        height: 36,
+        text: "ဒါက သုံးနေတာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-ua-label,
+        kind: text,
+        x: 310,
+        y: 500,
+        width: 330,
+        height: 36,
+        text: "user agent stylesheet",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-ua-rule,
+        kind: text,
+        x: 310,
+        y: 545,
+        width: 640,
+        height: 36,
+        text: "h1 { display: block; font-weight: bold; }",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4101
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: what-is-css
+    chapter: "CSS ဆိုတာ ဘာလဲ"
+    narration: >
+      မင်္ဂလာပါ ခင်ဗျာ။ CSS course ကို ကြိုဆိုပါတယ်။ ဒီ ပထမ lesson မှာတော့ CSS ဆိုတာ ဘာလဲ၊
+      CSS ကို ဘယ်မှာ ရေးလဲ ဆိုတာ ကြည့်ပြီး၊ CSS ကို ကိုယ်တိုင် စရေးကြည့်ပါမယ်။
+      [[mark:start-server]] board နောက်က editor ထဲမှာတော့ project ကို install လုပ်ပြီး dev
+      server ကို စ run နေပါပြီ။ dev server ဆိုတာ ကိုယ့် ဖိုင်တွေကို browser ဆီ
+      ပို့ပေးပြီး၊ ဖိုင်ကို ပြင်လိုက်တိုင်း page ကို လိုက်ပြောင်းပေးတဲ့ server ပါ။
+      [[mark:draw-html]] page တစ်ခုကို ဘာသာစကား သုံးမျိုးနဲ့ ရေးကြပြီး၊ တစ်မျိုးစီမှာ သူ့
+      တာဝန်နဲ့သူ ရှိပါတယ်။ HTML ကတော့ ခေါင်းစဉ်၊ စာပိုဒ်၊ link လို page ထဲမှာ ဘာတွေ ပါလဲ
+      ဆိုတဲ့ ဖွဲ့စည်းပုံကို ရေးပါတယ်။ [[mark:draw-css]] CSS ကတော့ အဲဒီ page ကို ဘယ်လို
+      ပုံစံ ပေါ်ရမလဲ ဆိုတာ browser ကို ပြောပြတဲ့ ဘာသာစကားပါ။ အရောင်၊ စာလုံး၊
+      နေရာချထားပုံတွေကို CSS နဲ့ ရေးပါတယ်။ [[mark:draw-js]] JavaScript ကတော့ ခလုတ်
+      နှိပ်လိုက်ရင်၊ စာရိုက်လိုက်ရင် page က ဘာလုပ်ရမလဲ ဆိုတာ ပြောပါတယ်။ ဒီ course မှာတော့
+      အလယ်က CSS ကိုပဲ လေ့လာသွားမှာပါ။ [[mark:same-html]] အကြောင်းအရာနဲ့ ပုံစံကို ဖိုင်
+      သပ်သပ်စီ ခွဲရေးထားတဲ့အတွက်၊ HTML တစ်ခုတည်းကိုပဲ CSS မတူတာနဲ့ တွဲလိုက်ရင် လုံးဝ
+      မတူတဲ့ page တစ်ခု ဖြစ်သွားပါတယ်။ CSS တွေ ရေးထားတဲ့ ဖိုင်ကို stylesheet လို့
+      ခေါ်ပါတယ်။ [[mark:cascading]] CSS ရဲ့ နာမည် အပြည့်က Cascading Style Sheets ပါ။
+      Cascading ဆိုတာ style နှစ်ခု ပြိုင်တဲ့အခါ browser က ဘယ်တစ်ခုကို ရွေးမလဲ ဆိုတာနဲ့
+      ဆိုင်ပြီး၊ lesson 5 မှာ ကြည့်ပါမယ်။ [[mark:draw-shop]] ဒီ course တစ်ခုလုံးမှာ
+      ရန်ကုန်က လက်ဖက်ရည်ဆိုင် website လေး တစ်ခုကို CSS နဲ့ အဆင့်ဆင့် ပြင်ဆင်သွားမှာပါ။
+      ဆိုင်နာမည်၊ ကြိုဆိုတဲ့ အပိုင်း၊ သောက်စရာ menu နဲ့ ဖွင့်ချိန် အပိုင်းတွေ ပါပါတယ်။
+      [[mark:draw-shop-arrow]] lesson တိုင်းမှာ ဒီ page ကိုပဲ CSS ထပ်ထည့်သွားလို့၊
+      ရိုးရိုး HTML ကနေ website အပြည့်အစုံ ဖြစ်လာတာကို တစ်ဆင့်ချင်း မြင်ရပါမယ်။
+    sources:
+      - title: "web.dev — Learn CSS: Welcome"
+        url: "https://web.dev/learn/css/welcome"
+      - title: "MDN — What is CSS?"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/What_is_CSS"
+      - title: "W3C — Cascading Style Sheets home page"
+        url: "https://www.w3.org/Style/CSS/"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: open-css-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: []
+      - id: draw-css-title
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [a-title]
+        drawMs: 900
+      # The install runs in the background while the two boards are explained;
+      # the preview is first needed in the third scene, minutes later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-html
+        type: whiteboard.apply
+        at: { mark: draw-html }
+        upsertIds: [a-html-box, a-html-name, a-html-role]
+        drawMs: 1500
+      - id: draw-css
+        type: whiteboard.apply
+        at: { mark: draw-css }
+        upsertIds: [a-css-box, a-css-name, a-css-role]
+        drawMs: 1500
+      - id: draw-js
+        type: whiteboard.apply
+        at: { mark: draw-js }
+        upsertIds: [a-js-box, a-js-name, a-js-role]
+        drawMs: 1500
+      - id: draw-shop
+        type: whiteboard.apply
+        at: { mark: draw-shop }
+        upsertIds:
+          [
+            a-shop-frame,
+            a-shop-label,
+            a-shop-header,
+            a-shop-header-label,
+            a-shop-hero,
+            a-shop-hero-label,
+            a-shop-menu,
+            a-shop-menu-label,
+            a-shop-hours,
+            a-shop-hours-label,
+          ]
+        drawMs: 3600
+      - id: draw-shop-arrow
+        type: whiteboard.apply
+        at: { mark: draw-shop-arrow }
+        upsertIds: [a-css-arrow]
+        drawMs: 800
+
+  - id: course-map
+    chapter: "ဒီ course ကို ဘယ်လို လေ့လာမလဲ"
+    narration: >
+      [[mark:draw-map-title]] code မရေးခင် course ရဲ့ လမ်းကြောင်းကို အရင် ကြည့်ရအောင်။ ဒီ
+      course က CSS ကို လုံးဝ မသိသေးသူတွေအတွက်ရော၊ CSS ကို သုံးနေပြီး ဘာကြောင့် ဒီလို
+      အလုပ်လုပ်လဲ သိချင်တဲ့ developer တွေအတွက်ပါ ရည်ရွယ်ပါတယ်။ [[mark:draw-part-1]] lesson
+      43 ခုကို အပိုင်း ရှစ်ပိုင်း ခွဲထားပါတယ်။ အခု ရောက်နေတာက ပထမ အပိုင်း ဖြစ်တဲ့
+      အခြေခံရဲ့ အစပါ။ ဒီ အပိုင်းမှာ element တိုင်း ဘာကြောင့် box ဖြစ်လဲ၊ style နှစ်ခု
+      ပြိုင်ရင် browser က ဘယ်လို ဆုံးဖြတ်လဲ ဆိုတာတွေ ပါပါတယ်။ [[mark:draw-parts-2-3]]
+      ပြီးရင် အရောင်၊ unit လို တန်ဖိုးတွေကို ကြည့်ပြီး၊ နောက်တော့ အကြီးဆုံး အပိုင်း
+      ဖြစ်တဲ့ layout ကို flexbox၊ grid တို့နဲ့ အတူ လေ့လာပါမယ်။ [[mark:draw-parts-4-7]]
+      အဲဒီနောက် hover၊ focus လို state တွေ၊ စာသားနဲ့ list တွေ၊ gradient၊ shadow လို
+      အလှဆင်တဲ့ အရာတွေ လာပါမယ်။ ပြီးတော့ motion၊ popover နဲ့ dialog တွေ ရှိပါတယ်။
+      [[mark:draw-tailwind]] နောက်ဆုံး lesson ကတော့ လူသုံးများတဲ့ Tailwind CSS ပါ။ သူက ဒီ
+      course မှာ သင်မယ့် CSS အားလုံးပေါ်မှာ အခြေခံထားပါတယ်။ topic သေးသေး တစ်ခုချင်း
+      လေ့လာသွားလို့၊ course ပြီးတဲ့အခါ design တစ်ခုမှာ မြင်ရတဲ့ page အများစုကို ကိုယ်တိုင်
+      ဆောက်နိုင်သွားမှာပါ။ [[mark:two-ways]] lesson တွေကို အစဉ်လိုက် ကြည့်လို့ ရသလို၊
+      လိုတဲ့အချိန်မှာ topic တစ်ခုတည်းကို ရွေးဖွင့်ကြည့်လို့လည်း ရပါတယ်။ ဒါပေမဲ့ HTML
+      အခြေခံကိုတော့ အရင် သိထားဖို့ လိုပါတယ်။ [[mark:draw-steps]] lesson တစ်ခုကို
+      အကောင်းဆုံး လေ့လာနည်းကတော့၊ ကြည့်ရင်းနဲ့ pause လုပ်ပြီး code ကို ကိုယ်တိုင်
+      ပြင်ကြည့်တာပါ။ ကိုယ် ပြင်လိုက်တာက page ထဲမှာ ချက်ချင်း ပေါ်လာပါလိမ့်မယ်။
+      [[mark:draw-credit]] ဒီ course ရဲ့ topic တွေက web.dev မှာ လူတိုင်း ပြန်သုံးခွင့်
+      ပေးထားတဲ့ Learn CSS course ရဲ့ topic 37 ခုလုံးကို အခြေခံထားပါတယ်။ အဲဒီမှာ topic
+      တစ်ခုစီအတွက် interactive demo၊ quiz နဲ့ podcast တွေ ပါလို့၊ ထပ်လေ့ကျင့်ချင်ရင်
+      သွားကြည့်ပါ။
+    sources:
+      - title: "web.dev — Learn CSS: Welcome"
+        url: "https://web.dev/learn/css/welcome"
+      - title: "web.dev — Learn HTML"
+        url: "https://web.dev/learn/html"
+      - title: "MDN — Structuring content with HTML"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Structuring_content"
+      - title: "The CSS Podcast"
+        url: "https://thecsspodcast.libsyn.com/"
+      - title: "Creative Commons — Attribution 4.0 International"
+        url: "https://creativecommons.org/licenses/by/4.0/"
+    actions:
+      - id: draw-map-title
+        type: whiteboard.apply
+        at: { mark: draw-map-title }
+        clear: true
+        upsertIds: [b-title, b-count]
+        drawMs: 1200
+      - id: draw-part-1
+        type: whiteboard.apply
+        at: { mark: draw-part-1 }
+        upsertIds: [b-p1-pill, b-p1-num, b-p1-name, b-here-circle, b-here-label]
+        drawMs: 2000
+      - id: draw-parts-2-3
+        type: whiteboard.apply
+        at: { mark: draw-parts-2-3 }
+        upsertIds: [b-p2-pill, b-p2-num, b-p2-name, b-p3-pill, b-p3-num, b-p3-name]
+        drawMs: 1800
+      - id: draw-parts-4-7
+        type: whiteboard.apply
+        at: { mark: draw-parts-4-7 }
+        upsertIds:
+          [
+            b-p4-pill,
+            b-p4-num,
+            b-p4-name,
+            b-p5-pill,
+            b-p5-num,
+            b-p5-name,
+            b-p6-pill,
+            b-p6-num,
+            b-p6-name,
+            b-p7-pill,
+            b-p7-num,
+            b-p7-name,
+          ]
+        drawMs: 3600
+      - id: draw-tailwind
+        type: whiteboard.apply
+        at: { mark: draw-tailwind }
+        upsertIds: [b-p8-pill, b-p8-num, b-p8-name]
+        drawMs: 1000
+      - id: draw-steps
+        type: whiteboard.apply
+        at: { mark: draw-steps }
+        upsertIds:
+          [
+            b-how-title,
+            b-step-watch,
+            b-step-watch-label,
+            b-step-arrow-1,
+            b-step-pause,
+            b-step-pause-label,
+            b-step-arrow-2,
+            b-step-edit,
+            b-step-edit-label,
+          ]
+        drawMs: 3000
+      - id: draw-credit
+        type: whiteboard.apply
+        at: { mark: draw-credit }
+        upsertIds: [b-credit-1, b-credit-2, b-credit-3]
+        drawMs: 1500
+
+  - id: code-tour
+    chapter: "ဆိုင်ရဲ့ project ကို ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-map]] ကဲ၊ project ကို ဖွင့်ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page
+      ရဲ့ HTML ဖိုင်ပါ။ header၊ ကြိုဆိုတဲ့ အပိုင်း၊ သောက်စရာ menu နဲ့ ဖွင့်ချိန်
+      အပိုင်းတွေ ပါပြီး၊ အများစုက style မပါတဲ့ ရိုးရိုး HTML ပါ။ style ပါတဲ့
+      နှစ်နေရာကိုတော့ နောက်မှ ကြည့်ပါမယ်။ [[mark:select-shop-name]] ဒီ ဆိုင်နာမည်က page
+      ရဲ့ အဓိက ခေါင်းစဉ်ပါ။ သူ့မှာ class တစ်ခု ပါပြီး၊ class ဆိုတာ CSS ကနေ ဒီ element ကို
+      ရွေးချင်တဲ့အခါ သုံးလို့ ရတဲ့ နာမည်ပါ။ class နဲ့ ရွေးတာကိုတော့ lesson 3 မှာ
+      ကြည့်ပါမယ်။ [[mark:select-link]] ဒီ link element ကို ကြည့်ပါ။ page ကို stylesheet
+      နဲ့ ချိတ်ပေးတာက သူပါ။ stylesheet ထဲမှာ rule တွေ ရှိပြီး၊ rule တစ်ခုဆိုတာ ဒီ element
+      တွေကို ဒီလို ပုံစံ ပေးပါ ဆိုတဲ့ ညွှန်ကြားချက်ပါ။ browser က ဒီ link ကို တွေ့တာနဲ့
+      stylesheet ကို ဖတ်ပြီး၊ အဲဒီ rule တွေအတိုင်း page ကို style ပေးပါတယ်။
+      [[mark:open-styles]] ဒါကတော့ link က ချိတ်ထားတဲ့ CSS ဖိုင်ပါ။ အခုချိန်မှာ လုံးဝ
+      အလွတ်ပဲ ရှိပြီး၊ CSS တစ်ကြောင်းမှ မရေးရသေးပါဘူး။ [[mark:open-preview]] ဒါဆို ကိုယ့်
+      CSS မပါဘဲ page က ဘယ်လို ပေါ်နေလဲ။ dev server အသင့် ဖြစ်နေပြီမို့၊ ညာဘက်မှာ preview
+      ပွင့်လာပါပြီ။
+    sources:
+      - title: "MDN — <link>: The External Resource Link element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/link"
+      - title: "HTML Standard — The link element"
+        url: "https://html.spec.whatwg.org/multipage/semantics.html#the-link-element"
+      - title: "Vite — index.html and Project Root"
+        url: "https://vite.dev/guide/#index-html-and-project-root"
+    actions:
+      - id: close-map
+        type: whiteboard.apply
+        at: { mark: close-map }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-shop-name
+        type: editor.select
+        at: { mark: select-shop-name }
+        target:
+          file: index.html
+          text: '<h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>'
+          occurrence: 1
+      - id: select-link
+        type: editor.select
+        at: { mark: select-link }
+        target:
+          { file: index.html, text: '<link rel="stylesheet" href="/styles.css" />', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: open-preview }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-nav-link
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-drinks }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # The install output has been read; give the editor its room back.
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-nav-link }
+
+  - id: user-agent-stylesheet
+    chapter: "Browser ရဲ့ default style တွေ"
+    narration: >
+      [[mark:look-preview]] ကိုယ့် CSS ဖိုင်က အလွတ် ဖြစ်နေပေမယ့်၊ page က လုံးဝ
+      ရိုးရိုးကြီး မဟုတ်ပါဘူး။ ခေါင်းစဉ်တွေက ကြီးကြီး ထူထူ ဖြစ်နေပြီး၊ list ထဲက
+      စာကြောင်းတွေရဲ့ ရှေ့မှာ အစက်လေးတွေ ပါနေပါတယ်။ link တွေက အပြာရောင်နဲ့ အောက်မျဉ်း
+      ပါနေပြီး၊ page ရဲ့ အနားတွေမှာလည်း နေရာလွတ် နည်းနည်း ရှိနေပါတယ်။ [[mark:explain-ua]]
+      ဒါတွေ တစ်ခုမှ ကိုယ် ရေးထားတာ မဟုတ်ပါဘူး။ browser တိုင်းမှာ HTML element
+      တစ်ခုချင်းစီကို default ပုံစံ ပေးထားတဲ့ stylesheet ပါပြီးသားပါ။ အဲဒါကို user agent
+      stylesheet လို့ ခေါ်ပါတယ်။ user agent ဆိုတာ browser ကိုပဲ ခေါ်တာပါ။
+      [[mark:ua-differs]] ဒီ default style တွေက browser တစ်ခုနဲ့ တစ်ခု နည်းနည်းစီ ကွာလို့၊
+      တခြား browser မှာ font နဲ့ နေရာလွတ်တွေက ဒီမှာ မြင်ရတာနဲ့ အတိအကျ မတူတာ
+      ဖြစ်နိုင်ပါတယ်။ ဥပမာ element တစ်ခုတည်းရဲ့ အရောင်ကို ကိုယ့် rule နဲ့ default style
+      နှစ်ခုလုံးက ပေးနေရင်တော့၊ ကိုယ့် rule က နိုင်ပါတယ်။ [[mark:look-lines]] element တွေ
+      နေရာယူပုံကို ကြည့်ပါ။ ခေါင်းစဉ်နဲ့ စာပိုဒ် တစ်ခုစီက စာကြောင်း အသစ်ကနေ စပေမယ့်၊ ပထမ
+      menu card ထဲက ဈေးနှုန်းနဲ့ အသစ် ဆိုတဲ့ badge လေးကတော့ တစ်ကြောင်းတည်းမှာ ဘေးချင်းကပ်
+      ရှိနေပါတယ်။ ဒါကို CSS ရဲ့ display က ဆုံးဖြတ်ပါတယ်။ display က element တစ်ခု ဘယ်လို
+      နေရာယူမလဲ ဆိုတာကို သတ်မှတ်ပြီး၊ element တိုင်းမှာ display တန်ဖိုး တစ်ခုစီ ရှိပါတယ်။
+    sources:
+      - title: "web.dev — Learn CSS: Box Model (user agent styles)"
+        url: "https://web.dev/learn/css/box-model#control"
+      - title: "HTML Standard — Rendering"
+        url: "https://html.spec.whatwg.org/multipage/rendering.html"
+      - title: "MDN — Introduction to the CSS cascade (origin types)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Introduction"
+    actions:
+      - id: expect-hero-style-attribute
+        type: expect.preview
+        at: { mark: look-preview }
+        timeoutMs: 4000
+        target: { by: testId, value: hero-text }
+        attribute: { name: style, value: "font-weight: bold" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # The first card's price line sits below the fold of the unstyled page,
+      # so the page scrolls down to it as the narration turns to it.
+      - id: scroll-to-first-card
+        type: preview.scroll
+        at: { mark: look-lines }
+        timeoutMs: 4000
+        top: 320
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-price-inline
+        type: expect.preview
+        at: { afterAction: scroll-to-first-card }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-badge-inline
+        type: expect.preview
+        at: { afterAction: expect-price-inline }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: default-display
+    narration: >
+      [[mark:draw-display-title]] box အဓိက နှစ်မျိုးကို ဆွဲကြည့်ရအောင်။
+      [[mark:draw-block]] browser က page ပေါ်မှာ ဆွဲတဲ့ element တိုင်းဟာ လေးထောင့် box
+      တစ်ခုပါ။ ခေါင်းစဉ်၊ စာပိုဒ်၊ section တွေက block box တွေပါ။ block box က စာကြောင်း
+      အသစ်ကနေ စပြီး ရနိုင်သမျှ အကျယ်ကို ယူတဲ့အတွက်၊ သူ့နောက်က element က သူ့အောက်ကို
+      ဆင်းသွားပါတယ်။ [[mark:draw-list-item]] list item တွေကလည်း block လိုပဲ နေရာယူပေမယ့်၊
+      အပို တစ်ခု ပါပါတယ်။ သူတို့ရဲ့ display တန်ဖိုးက list item ဖြစ်လို့၊ menu card
+      တိုင်းရဲ့ ရှေ့မှာ အစက်လေး ပေါ်နေတာပါ။ [[mark:draw-inline]] link တွေ၊ span တွေကတော့
+      inline ပါ။ inline box က စာကြောင်းထဲမှာ ဝင်နေပြီး၊ သူ့ထဲက စာသား ရှိသလောက်ပဲ
+      ကျယ်ပါတယ်။ ဒါကြောင့် စာလုံးတွေလိုပဲ တစ်ကြောင်းတည်းမှာ ဘေးချင်းကပ် စီသွားပြီး၊ နေရာ
+      မလောက်တော့ရင် နောက်တစ်ကြောင်းကို ဆင်းသွားပါတယ်။ [[mark:draw-ua-note]] ဒီ display
+      တန်ဖိုးတွေကို ကိုယ် တစ်ခုမှ မရေးထားပါဘူး။ ခေါင်းစဉ်၊ စာပိုဒ်နဲ့ list item တွေကို
+      browser ရဲ့ default style က ပေးထားပြီး၊ link၊ span လို element တွေကတော့ ဘာမှ
+      မပေးထားရင် inline ဖြစ်နေတာပါ။ project တိုင်းလိုလိုမှာ တွေ့ရမယ့် div ကလည်း block ပါ။
+      ဒီ lesson ရဲ့ နောက်ပိုင်းမှာ ဒီ box တွေကို အရောင်နဲ့ မြင်အောင် လုပ်ကြည့်ပါမယ်။
+    sources:
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "web.dev — Learn CSS: Box Model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — The box model"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Box_model"
+    actions:
+      - id: open-display-board
+        type: whiteboard.apply
+        at: { mark: draw-display-title, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: []
+      - id: draw-display-title
+        type: whiteboard.apply
+        at: { mark: draw-display-title }
+        upsertIds: [d-title]
+        drawMs: 800
+      - id: draw-block
+        type: whiteboard.apply
+        at: { mark: draw-block }
+        upsertIds:
+          [
+            d-block-label,
+            d-block-frame,
+            d-bar-1,
+            d-bar-1-label,
+            d-bar-2,
+            d-bar-2-label,
+            d-block-note,
+          ]
+        drawMs: 2800
+      - id: draw-list-item
+        type: whiteboard.apply
+        at: { mark: draw-list-item }
+        upsertIds: [d-bar-3, d-bar-3-label]
+        drawMs: 1000
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds:
+          [
+            d-inline-label,
+            d-inline-frame,
+            d-word-1,
+            d-word-1-label,
+            d-word-2,
+            d-word-2-label,
+            d-word-3,
+            d-word-3-label,
+            d-word-4,
+            d-word-4-label,
+            d-inline-note,
+          ]
+        drawMs: 3400
+      - id: draw-ua-note
+        type: whiteboard.apply
+        at: { mark: draw-ua-note }
+        upsertIds: [d-ua-note]
+        drawMs: 900
+
+  - id: first-rule
+    chapter: "ပထမဆုံး rule ကို ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-display-board]] ကဲ၊ ပထမဆုံး rule ကို ရေးကြည့်ရအောင်။
+      [[mark:type-body-bg]] page ပေါ်မှာ မြင်ရတဲ့ အရာအားလုံးကို ထည့်ထားတဲ့ body element
+      ကနေ စပါမယ်။ သူ့ကို menu စာရွက် အဟောင်းလို နို့နှစ်ရောင် ဖျော့ဖျော့ နောက်ခံ
+      ပေးလိုက်ပါမယ်။ ရိုက်နေတုန်း ဘေးက preview ကို လိုက်ကြည့်ပါ။ [[mark:bg-applied]]
+      ကြည့်ပါ၊ page တစ်ခုလုံး နို့နှစ်ရောင် ဖျော့ဖျော့ ဖြစ်သွားပါပြီ။ CSS ကို ပြင်တဲ့အခါ
+      page တစ်ခုလုံး ပြန်ပွင့်တာ မဟုတ်ဘဲ၊ ပြောင်းသွားတဲ့ style လေးကိုပဲ browser က
+      အစားထိုးလိုက်တာပါ။ [[mark:type-body-color]] နောက်တစ်ဆင့် အနေနဲ့ အဲဒီ rule ထဲမှာပဲ
+      စာသားတွေကို လက်ဖက်ရည်လို အညိုရောင် ပေးလိုက်ပါမယ်။ [[mark:color-applied]] စာသားတွေရော
+      ခေါင်းစဉ်တွေပါ အညိုရောင် ပြောင်းသွားပါပြီ။ ဒါပေမဲ့ link တွေကတော့ အပြာရောင်အတိုင်း
+      ကျန်နေပါတယ်။ ကိုယ့် rule က body ကို ရွေးထားတာ ဖြစ်ပြီး၊ browser ရဲ့ default style
+      ကတော့ link တွေကို တိုက်ရိုက် ရွေးပြီး အပြာရောင် ပေးထားလို့ပါ။ ဘာကြောင့် ဒီလို ဖြစ်လဲ
+      ဆိုတာကို lesson 7 မှာ အသေးစိတ် ကြည့်ပါမယ်။
+    sources:
+      - title: "MDN — CSS syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_syntax/Syntax"
+      - title: "MDN — <named-color>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/named-color"
+      - title: "Vite — Features: CSS"
+        url: "https://vite.dev/guide/features.html#css"
+    actions:
+      - id: close-display-board
+        type: whiteboard.apply
+        at: { mark: close-display-board }
+        open: false
+      # Back to the top, where the shop name and the header links are.
+      - id: scroll-to-top
+        type: preview.scroll
+        at: { mark: close-display-board, offsetMs: 300 }
+        timeoutMs: 4000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-body-bg
+        type: editor.type
+        at: { mark: type-body-bg }
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "body {\n  background: oldlace;\n}\n"
+      - id: type-body-color
+        type: editor.type
+        at: { mark: type-body-color }
+        target: { file: styles.css, after: "  background: oldlace;\n", occurrence: 1 }
+        text: "  color: saddlebrown;\n"
+
+  - id: rule-anatomy
+    chapter: "Rule တစ်ခုမှာ ဘာတွေ ပါလဲ"
+    narration: >
+      [[mark:open-anatomy]] ခုနက ရေးလိုက်တဲ့ rule ရဲ့ အစိတ်အပိုင်းတွေကို နာမည်
+      တပ်ကြည့်ရအောင်။ CSS rule တိုင်းက ဒီ ပုံစံအတိုင်းပဲ ရှိပါတယ်။ [[mark:draw-selector]]
+      rule ရဲ့ အစမှာ ရှိတာက selector ပါ။ page ထဲက ဘယ် element တွေကို style ပေးမလဲ ဆိုတာ
+      ရွေးပေးတဲ့ အပိုင်း ဖြစ်ပြီး၊ ဒီ selector က body element ကို ရွေးပါတယ်။
+      [[mark:draw-block-box]] selector နောက်က curly brace နှစ်ခုကြားမှာ ရှိတာကတော့
+      declaration block ပါ။ ရွေးထားတဲ့ element တွေအတွက် style တွေကို စုထားတဲ့ အပိုင်းပါ။
+      [[mark:draw-declaration]] အဲဒီထဲမှာ ရေးထားတဲ့ style တစ်ခုချင်းစီကို declaration လို့
+      ခေါ်ပါတယ်။ rule တစ်ခုထဲမှာ declaration လိုသလောက် ထည့်လို့ ရပါတယ်။
+      [[mark:draw-prop-value]] declaration တစ်ခုမှာ property နဲ့ တန်ဖိုး တွဲပါပါတယ်။
+      property က element ရဲ့ ဘယ် အချက်ကို ပြောင်းမလဲ ဆိုတဲ့ နာမည်ပါ။ ဒီမှာဆိုရင်
+      နောက်ခံနဲ့ စာသား အရောင်ပါ၊ ခုနက display လည်း property တစ်ခုပါ။ တန်ဖိုးကတော့ အဲဒီ
+      အချက်ကို ဘယ်လို ဖြစ်စေချင်လဲ ဆိုတာပါ။ ဒီ အရောင် နာမည်တွေလို၊ CSS က နာမည်နဲ့
+      ကြိုသတ်မှတ်ပေးထားတဲ့ တန်ဖိုးတွေကို keyword လို့ ခေါ်ပါတယ်။ [[mark:draw-punct]]
+      property နဲ့ တန်ဖိုးကြားကို colon က ခွဲပေးပြီး၊ declaration ရဲ့ အဆုံးကို semicolon က
+      ပိတ်ပေးပါတယ်။ ဒါမှ နောက် declaration ဘယ်က စလဲ ဆိုတာ browser က သိမှာပါ။
+      [[mark:close-anatomy]] ဒီ အပိုင်းတွေကို editor ထဲမှာ ပြန်ရှာကြည့်ရအောင်။
+      [[mark:select-selector]] ဒီ အစပိုင်းက selector ပါ။ [[mark:select-declaration]] ဒီ
+      စာကြောင်း တစ်ကြောင်းလုံးက declaration တစ်ခုပါ။ colon ရဲ့ ရှေ့မှာ property၊ နောက်မှာ
+      တန်ဖိုး ရှိပါတယ်။
+    sources:
+      - title: "web.dev — Learn CSS: Selectors (the parts of a CSS rule)"
+        url: "https://web.dev/learn/css/selectors#the_parts_of_a_css_rule"
+      - title: "MDN — CSS syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_syntax/Syntax"
+      - title: "CSS Syntax Module Level 3"
+        url: "https://www.w3.org/TR/css-syntax-3/"
+    actions:
+      - id: open-anatomy-board
+        type: whiteboard.apply
+        at: { mark: open-anatomy, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: []
+      - id: draw-anatomy-code
+        type: whiteboard.apply
+        at: { mark: open-anatomy }
+        upsertIds: [c-title, c-code-1, c-code-2, c-code-3, c-code-4]
+        drawMs: 2400
+      - id: draw-selector
+        type: whiteboard.apply
+        at: { mark: draw-selector }
+        upsertIds: [c-sel-label, c-sel-arrow, c-sel-underline]
+        drawMs: 1400
+      - id: draw-block-box
+        type: whiteboard.apply
+        at: { mark: draw-block-box }
+        upsertIds: [c-block-box, c-block-label]
+        drawMs: 1400
+      - id: draw-declaration
+        type: whiteboard.apply
+        at: { mark: draw-declaration }
+        upsertIds: [c-decl-label, c-decl-arrow]
+        drawMs: 1200
+      - id: draw-prop-value
+        type: whiteboard.apply
+        at: { mark: draw-prop-value }
+        upsertIds: [c-prop-underline, c-prop-label, c-value-underline, c-value-label]
+        drawMs: 2000
+      - id: draw-punct
+        type: whiteboard.apply
+        at: { mark: draw-punct }
+        upsertIds: [c-punct-label]
+        drawMs: 1200
+      - id: close-anatomy
+        type: whiteboard.apply
+        at: { mark: close-anatomy }
+        open: false
+      - id: select-selector
+        type: editor.select
+        at: { mark: select-selector }
+        target: { file: styles.css, text: "body", occurrence: 1 }
+      - id: select-declaration
+        type: editor.select
+        at: { mark: select-declaration }
+        target: { file: styles.css, text: "  background: oldlace;", occurrence: 1 }
+
+  - id: font-stack
+    narration: >
+      အခု body rule ထဲမှာပဲ page တစ်ခုလုံးအတွက် font ကို ရွေးပေးရအောင်။ font family ဆိုတာ
+      စာလုံး ပုံစံ တစ်မျိုးလုံးကို ခေါ်တဲ့ နာမည်ပါ။ [[mark:type-font]] မြန်မာစာအတွက်
+      လုပ်ထားတဲ့ font တွေကနေ စပြီး နာမည်တွေကို စာရင်းလုပ်ပေးပါမယ်။ [[mark:font-applied]]
+      browser အများစုမှာ header ထဲက အင်္ဂလိပ် စာကြောင်းက default font ကနေ ပိုရိုးရှင်းတဲ့
+      font တစ်ခုကို ပြောင်းသွားပြီး၊ မြန်မာစာတွေကတော့ ကိုယ့် စာရင်းထဲက မြန်မာ font
+      တစ်ခုနဲ့ ပေါ်ပါတယ်။ [[mark:font-fallback]] ဒီ စာရင်းက ဦးစားပေး အစဉ်ပါ။ browser က ပထမ
+      font ကို အရင် ရှာပြီး၊ ကြည့်နေတဲ့သူရဲ့ စက်ထဲမှာ အဲဒီ font မရှိရင် နောက် တစ်ခုကို
+      ဆက်ရှာပါတယ်။ [[mark:font-generic]] နောက်ဆုံး စကားလုံးကတော့ font အမျိုးအစား
+      တစ်ခုလုံးရဲ့ နာမည်ပါ။ ဒါကြောင့် စာရင်းထဲက font တစ်ခုမှ မရှိရင်တောင်၊ browser က အဲဒီ
+      အမျိုးအစားထဲက font တစ်ခုကို ရွေးပေးပါတယ်။
+    sources:
+      - title: "MDN — font-family"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-family"
+      - title: "CSS Fonts Module Level 4 — font-family"
+        url: "https://www.w3.org/TR/css-fonts-4/#font-family-prop"
+    actions:
+      # The narration summarises the comma list as a fallback order, so the two
+      # lines land whole; the first line alone (ending in a comma) is an invalid
+      # declaration the browser skips until the second line completes it.
+      - id: type-font
+        type: editor.type
+        at: { mark: type-font }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  color: saddlebrown;\n", occurrence: 1 }
+        text: "  font-family: \"Noto Sans Myanmar\", \"Myanmar Sangam MN\", \"Myanmar MN\",\n    \"Myanmar Text\", \"Padauk\", system-ui, sans-serif;\n"
+      - id: select-generic-family
+        type: editor.select
+        at: { mark: font-generic }
+        target: { file: styles.css, text: "sans-serif", occurrence: 1 }
+
+  - id: comment-and-heading
+    narration: >
+      [[mark:type-h1]] နောက်တစ်ဆင့် အနေနဲ့ ဆိုင်နာမည်ကို သီးသန့် အရောင် ပေးကြည့်ရအောင်။
+      rule အသစ် မရေးခင်၊ ဒီ အပိုင်းက ဆိုင်နာမည်အတွက် ဖြစ်တယ် ဆိုတာကို မြန်မာလို မှတ်ချက်
+      တိုတိုလေး အရင် ရေးထားပါမယ်။ ပြီးမှ page ရဲ့ အဓိက ခေါင်းစဉ်အတွက် rule တစ်ခု
+      ထည့်ပါမယ်။ [[mark:h1-applied]] ဆိုင်နာမည်က အနီရင့်ရောင် ဖြစ်သွားပြီး၊ ကျန်တဲ့
+      စာသားတွေကတော့ အညိုရောင်အတိုင်း ရှိနေပါတယ်။ [[mark:select-comment]] rule ရဲ့ အပေါ်က
+      ဒီ မှတ်ချက်ကို ကြည့်ပါ။ ဒါကို comment လို့ ခေါ်ပါတယ်။ browser က comment ရဲ့
+      အဖွင့်နဲ့ အပိတ် အမှတ်အသားကြားက စာတွေ အကုန်လုံးကို ကျော်သွားလို့၊ comment တွေက code
+      ဖတ်တဲ့ လူတွေအတွက်ပဲ ဖြစ်ပါတယ်။ CSS မှာ comment ရေးနည်း ဒီ တစ်မျိုးပဲ ရှိပြီး၊
+      ဒီမှာလို မြန်မာစာ အပါအဝင် ဘယ်ဘာသာစကားနဲ့ ရေးရေး ရပါတယ်။
+    sources:
+      - title: "MDN — CSS comments"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_syntax/Comments"
+      - title: "MDN — Type selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Type_selectors"
+    actions:
+      - id: type-h1
+        type: editor.type
+        at: { mark: type-h1 }
+        target: { file: styles.css, after: "sans-serif;\n}\n", occurrence: 1 }
+        text: "\n/* ဆိုင်နာမည် */\nh1 {\n  color: firebrick;\n}\n"
+      - id: select-comment
+        type: editor.select
+        at: { mark: select-comment }
+        target: { file: styles.css, text: "/* ဆိုင်နာမည် */", occurrence: 1 }
+
+  - id: invalid-css
+    chapter: "Browser နားမလည်တဲ့ CSS"
+    narration: >
+      အခု developer တိုင်း တစ်ချိန်ချိန်မှာ မတော်တဆ လုပ်မိတတ်တဲ့ အမှား တစ်ခုကို တမင်
+      လုပ်ကြည့်ပါမယ်။ ခေါင်းစဉ် rule ထဲမှာ အစိမ်းရောင် ပေးတဲ့ declaration တစ်ကြောင်း
+      ထပ်ထည့်ပါမယ်။ [[mark:type-colr]] ဒါပေမဲ့ property နာမည်ကို ရိုက်တဲ့အခါ စာလုံး
+      တစ်လုံးကို ချန်ထားခဲ့ပါမယ်။ [[mark:colr-nothing]] preview ကို ကြည့်ပါ။ ဘာမှ
+      မပြောင်းပါဘူး။ error message လည်း မပေါ်၊ warning လည်း မပြဘဲ၊ page က ပုံမှန်အတိုင်းပဲ
+      ပေါ်နေပါတယ်။ [[mark:why-silent]] စာလုံးပေါင်း မှားနေတဲ့ ဒီ declaration ကို ကြည့်ပါ။
+      browser က နားမလည်တဲ့ declaration ကို တွေ့ရင်၊ အဲဒီ တစ်ခုတည်းကိုပဲ ကျော်ပြီး
+      ဆက်ဖတ်သွားပါတယ်။ ကျန်တဲ့ declaration တွေနဲ့ တခြား rule တွေကတော့ အလုပ်လုပ်နေဆဲပါ။
+      [[mark:type-darkgreen]] အခု သူ့အောက်မှာ အဲဒီ စာကြောင်းကိုပဲ စာလုံးပေါင်း မှန်မှန်နဲ့
+      ထပ်ရေးပြီး၊ ဒီတစ်ခါ အစိမ်းရင့်ရောင် ပေးလိုက်ပါမယ်။ [[mark:darkgreen-applied]]
+      ဒီတစ်ခါတော့ ဆိုင်နာမည်က အစိမ်းရင့်ရောင် ဖြစ်သွားပါပြီ။ browser က ဒီ declaration ကို
+      နားလည်ပြီး၊ rule တစ်ခုတည်းထဲမှာ အနီရောင် declaration ရဲ့ နောက်မှာ ရေးထားလို့ နောက်က
+      declaration က နိုင်သွားတာပါ။ [[mark:silent-advice]] ဆိုတော့ style တစ်ခု မပေါ်လာရင်၊
+      CSS က ဘာကြောင့်လဲ ဆိုတာ ပြောပြမှာ မဟုတ်ပါဘူး။ property နဲ့ တန်ဖိုးရဲ့
+      စာလုံးပေါင်းကို အရင် စစ်ကြည့်ပါ။ ပြီးတော့ selector ကိုယ်တိုင်ကို browser
+      နားမလည်ရင်တော့၊ စာကြောင်း တစ်ကြောင်းတည်း မဟုတ်ဘဲ rule တစ်ခုလုံးကို ကျော်သွားပါတယ်။
+    sources:
+      - title: "web.dev — Learn CSS: The cascade"
+        url: "https://web.dev/learn/css/the-cascade"
+      - title: "MDN — CSS error handling"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Syntax/Error_handling"
+      - title: "CSS Syntax Module Level 3 — Error handling"
+        url: "https://www.w3.org/TR/css-syntax-3/#error-handling"
+    actions:
+      - id: type-colr
+        type: editor.type
+        at: { mark: type-colr }
+        target: { file: styles.css, after: "  color: firebrick;\n", occurrence: 1 }
+        text: "  colr: green;\n"
+      # The preview check is liveness only (no error page replaced the shop);
+      # the file check pins the state the narration describes: the misspelled
+      # line sits right after the red one. (expect.file is also checked against
+      # the final file, so it names only text that stays adjacent.)
+      - id: expect-shop-name-present
+        type: expect.preview
+        at: { mark: colr-nothing }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-misspelled-line
+        type: expect.file
+        at: { afterAction: expect-shop-name-present }
+        path: styles.css
+        contains: "  color: firebrick;\n  colr: green;\n"
+      - id: select-misspelled
+        type: editor.select
+        at: { mark: why-silent }
+        target: { file: styles.css, text: "colr: green;", occurrence: 1 }
+      - id: type-darkgreen
+        type: editor.type
+        at: { mark: type-darkgreen }
+        target: { file: styles.css, after: "  colr: green;\n", occurrence: 1 }
+        text: "  color: darkgreen;\n"
+
+  - id: three-ways
+    chapter: "CSS ထည့်တဲ့ နည်း သုံးမျိုး"
+    narration: >
+      [[mark:open-index-again]] အခုထိ ကိုယ့် CSS အားလုံးက HTML က ချိတ်ထားတဲ့ ဖိုင်
+      တစ်ဖိုင်ထဲမှာ ရှိပါတယ်။ ဒါက page ကို CSS ထည့်တဲ့ နည်း သုံးမျိုးထဲက တစ်မျိုးပါ။
+      [[mark:select-link-again]] ပထမ နည်းက သီးသန့် stylesheet ကို ချိတ်ပေးတဲ့ ဒီ link
+      element ပါ။ အများဆုံး သုံးကြတဲ့ နည်းပါ။ ဖိုင် တစ်ဖိုင်တည်းနဲ့ website ထဲက page
+      တိုင်းကို style ပေးလို့ ရပြီး၊ browser ကလည်း အဲဒီ ဖိုင်ကို သိမ်းထားပြီး ပြန်သုံးလို့
+      ရလို့ပါ။ [[mark:select-style-element]] ဒုတိယ နည်းက HTML ထဲမှာ ရေးထားတဲ့ ဒီ style
+      element ပါ။ သူ့ထဲက rule တွေက ဒီ page တစ်ခုတည်းမှာပဲ အလုပ်လုပ်ပါတယ်။ ဒီ rule က header
+      ထဲက အင်္ဂလိပ် စာကြောင်းကို စာလုံးစောင်း ဖြစ်အောင် လုပ်ထားလို့၊ အဲဒီ စာကြောင်းက
+      အစကတည်းက စောင်းနေတာပါ။ [[mark:select-style-attribute]] တတိယ နည်းက element ရဲ့ tag
+      ထဲမှာ တိုက်ရိုက် ရေးတဲ့ ဒီ style attribute ပါ။ inline style လို့ ခေါ်ပြီး အဲဒီ
+      element ကိုပဲ style ပေးပါတယ်။ ကြိုဆိုတဲ့ စာကြောင်း ထူနေတာ ဒါကြောင့်ပါ။ ဒီနေရာမှာ
+      inline ဆိုတာ tag ထဲမှာ တိုက်ရိုက် ရေးတာကို ပြောတာ ဖြစ်လို့၊ ခုနက ပြောခဲ့တဲ့ inline
+      box နဲ့ မဆိုင်ပါဘူး။ [[mark:avoid-inline]] inline style ကိုတော့ တတ်နိုင်သမျှ
+      နည်းနည်းပဲ သုံးပါ။ HTML tag တွေကြားမှာ ပြန့်ကျဲနေတဲ့ style တွေက ပြန်ရှာရ ခက်ပြီး၊
+      ပြန်သုံးလို့လည်း မရပါဘူး။ ပြီးတော့ stylesheet ထဲက rule တွေကို နိုင်တဲ့အတွက်၊ နောက်မှ
+      ပြင်ရ ခက်ပါတယ်။ [[mark:import-note]] နောက်ထပ် တွေ့ရနိုင်တာ တစ်ခုကတော့၊ stylesheet
+      တစ်ခုထဲကနေ တခြား stylesheet ကို import rule နဲ့ ဆွဲထည့်တာပါ။ ဒီ course မှာတော့ ကိုယ်
+      ရေးမယ့် CSS အများစုကို link နဲ့ ချိတ်ထားတဲ့ CSS ဖိုင်ထဲမှာ ရေးသွားပါမယ်။
+    sources:
+      - title: "web.dev — Learn CSS: The cascade (position and order of appearance)"
+        url: "https://web.dev/learn/css/the-cascade#position_and_order_of_appearance"
+      - title: "MDN — <style>: The Style Information element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style"
+      - title: "MDN — style (global attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/style"
+      - title: "MDN — @import"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@import"
+      - title: "MDN — Handling conflicts"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Handling_conflicts"
+    actions:
+      - id: open-index-again
+        type: workspace.openFile
+        at: { mark: open-index-again }
+        path: index.html
+      - id: select-link-again
+        type: editor.select
+        at: { mark: select-link-again }
+        target:
+          { file: index.html, text: '<link rel="stylesheet" href="/styles.css" />', occurrence: 1 }
+      - id: select-style-element
+        type: editor.select
+        at: { mark: select-style-element }
+        target:
+          file: index.html
+          text: "<style>\n      .tagline { font-style: italic; }\n    </style>"
+          occurrence: 1
+      - id: select-style-attribute
+        type: editor.select
+        at: { mark: select-style-attribute }
+        target: { file: index.html, text: 'style="font-weight: bold"', occurrence: 1 }
+
+  - id: block-and-inline
+    chapter: "Block နဲ့ inline ကို မြင်အောင် လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-styles-again]] CSS ဖိုင်ဆီ ပြန်သွားရအောင်။ board မှာ ဆွဲခဲ့တဲ့ block box
+      နဲ့ inline box တွေကို နောက်ခံ အရောင် ပေးပြီး မြင်အောင် လုပ်ကြည့်ရအောင်။
+      [[mark:type-a]] ပထမဆုံး page ထဲက နှိပ်လို့ ရတဲ့ link အားလုံးအတွက် rule တစ်ခု
+      ရေးပါမယ်။ link တွေကို အဝါဖျော့ရောင် နောက်ခံ ပေးလိုက်ရင်၊ link တစ်ခုစီရဲ့ box က ဘယ်က
+      စပြီး ဘယ်မှာ ဆုံးလဲ ဆိုတာ အတိအကျ မြင်ရပါလိမ့်မယ်။ [[mark:a-applied]] link တွေကို
+      ကြည့်ပါ။ အဝါရောင်က စာလုံးတွေကိုပဲ ဖုံးထားပါတယ်။ link က inline ဖြစ်လို့ သူ့ box က
+      စာသား ရှိသလောက်ပဲ ကျယ်တာပါ။ header ထဲက link တွေက list item တစ်ခုစီထဲမှာ ရှိလို့
+      တစ်ကြောင်းစီ ဖြစ်နေပေမယ့်၊ အဝါရောင်က စာကြောင်း တစ်ကြောင်းလုံး မဖြန့်ပါဘူး။
+      [[mark:type-h2]] အခု ကြိုဆိုတဲ့ ခေါင်းစဉ်နဲ့ သောက်စရာ ခေါင်းစဉ်လို အပိုင်း
+      ခေါင်းစဉ်တွေကိုလည်း အဲဒီ နောက်ခံ အရောင်ပဲ ပေးပါမယ်။ သူတို့ရဲ့ box တွေက link တွေနဲ့
+      ဘယ်လောက် ကွာလဲ ဆိုတာ သတိထား ကြည့်ပါ။ [[mark:h2-applied]] ဒီ ခေါင်းစဉ်တွေမှာ စာလုံး
+      နည်းနည်းပဲ ပါပေမယ့်၊ page အကျယ် တစ်ခုလုံး ဖြန့်နေတဲ့ အဝါရောင် အတန်းကြီးတွေ
+      ဖြစ်သွားပါပြီ။ ခေါင်းစဉ်က block box ဖြစ်လို့၊ စာသားက အဲဒီလောက် မလိုပေမယ့်လည်း
+      ရနိုင်သမျှ အကျယ်ကို အကုန် ယူထားလို့ပါ။ [[mark:boxes-idea]] ဆိုတော့ element တိုင်းဟာ
+      box တစ်ခု ဖြစ်ပြီး၊ အဲဒီ box က နေရာ ဘယ်လို ယူမလဲ ဆိုတာ display တန်ဖိုးက
+      ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "MDN — Block and inline layout in normal flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Display/Block_and_inline_layout"
+      - title: "web.dev — Learn CSS: Box Model"
+        url: "https://web.dev/learn/css/box-model"
+    actions:
+      - id: open-styles-again
+        type: workspace.openFile
+        at: { mark: open-styles-again }
+        path: styles.css
+      - id: type-a
+        type: editor.type
+        at: { mark: type-a }
+        target: { file: styles.css, after: "  color: darkgreen;\n}\n", occurrence: 1 }
+        text: "\na {\n  background: khaki;\n}\n"
+      - id: expect-order-link-present
+        type: expect.preview
+        at: { mark: a-applied }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-link-rule
+        type: expect.file
+        at: { afterAction: expect-order-link-present }
+        path: styles.css
+        contains: "a {\n  background: khaki;\n}"
+      - id: type-h2
+        type: editor.type
+        at: { mark: type-h2 }
+        target: { file: styles.css, after: "a {\n  background: khaki;\n}\n", occurrence: 1 }
+        text: "\nh2 {\n  background: khaki;\n}\n"
+      - id: expect-hero-present
+        type: expect.preview
+        at: { mark: h2-applied }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-heading-bg-rule
+        type: expect.file
+        at: { afterAction: expect-hero-present }
+        path: styles.css
+        contains: "h2 {\n  background: khaki;\n}"
+      - id: expect-body-rule
+        type: expect.file
+        at: { mark: boxes-idea }
+        path: styles.css
+        contains: "body {\n  background: oldlace;\n  color: saddlebrown;\n  font-family: \"Noto Sans Myanmar\", \"Myanmar Sangam MN\", \"Myanmar MN\",\n    \"Myanmar Text\", \"Padauk\", system-ui, sans-serif;\n}\n"
+      - id: expect-heading-rule
+        type: expect.file
+        at: { afterAction: expect-body-rule }
+        path: styles.css
+        contains: "/* ဆိုင်နာမည် */\nh1 {\n  color: firebrick;\n  colr: green;\n  color: darkgreen;\n}\n"
+      - id: expect-box-rules
+        type: expect.file
+        at: { afterAction: expect-heading-rule }
+        path: styles.css
+        contains: "a {\n  background: khaki;\n}\n\nh2 {\n  background: khaki;\n}\n"
+
+  - id: devtools
+    chapter: "DevTools နဲ့ စစ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-devtools-board]] lesson မပြီးခင် tool တစ်ခု မိတ်ဆက်ပေးပါမယ်။
+      ကွန်ပျူတာပေါ်က browser တိုင်းမှာ DevTools ပါပြီးသားပါ။ Chrome နဲ့ Edge မှာ element
+      တစ်ခုပေါ် right-click နှိပ်ပြီး Inspect ကို ရွေးလိုက်ရင်၊ Styles panel က အဲဒီ
+      element ကို style ပေးနေတဲ့ rule အားလုံးကို ပြပါတယ်။ Firefox မှာတော့ အဲဒီ panel ကို
+      Rules လို့ ခေါ်ပါတယ်။ [[mark:draw-devtools-rule]] ဆိုင်နာမည်ကို စစ်ကြည့်ရင်၊ ကိုယ့်
+      ခေါင်းစဉ် rule ကို ဒီလို ပြပါလိမ့်မယ်။ [[mark:draw-overridden]] အနီရောင်
+      စာကြောင်းကို ခြစ်ထားတာက နောက်က declaration နိုင်သွားလို့ပါ။ [[mark:draw-invalid]]
+      စာလုံးပေါင်း မှားတဲ့ စာကြောင်းကိုလည်း သတိပေး အမှတ်အသားနဲ့ ခြစ်ထားပါတယ်။ browser က
+      နားမလည်လို့ပါ။ ဆိုတော့ CSS က ဘယ်တော့မှ မပြောပြတဲ့ အမှားတွေကို DevTools မှာ
+      မြင်ရပါတယ်။ [[mark:draw-in-use]] အစိမ်းရင့်ရောင် စာကြောင်းကတော့ တကယ်
+      အလုပ်လုပ်နေတာပါ။ [[mark:draw-ua-row]] အောက်နားမှာတော့ user agent stylesheet က လာတဲ့
+      rule တစ်ခု ရှိပြီး၊ ခုနက ပြောခဲ့တဲ့ block ဆိုတဲ့ display တန်ဖိုးကို အဲဒီမှာ
+      တွေ့ရပါတယ်။ [[mark:devtools-homework]] ဒီ lesson ထဲမှာ DevTools ကို ပြလို့
+      မရတဲ့အတွက် board ပေါ်မှာ ဆွဲပြထားတာပါ။ ဒါကြောင့် ကိုယ့် browser မှာ ကြိုက်တဲ့ page
+      တစ်ခုကို ဖွင့်ပြီး DevTools ကို စမ်းကြည့်ပါ။ ဒီ course တစ်လျှောက်လုံး အမြဲ သုံးရမယ့်
+      tool ပါ။
+    sources:
+      - title: "web.dev — Learn CSS: The cascade (using DevTools)"
+        url: "https://web.dev/learn/css/the-cascade#using_devtools_to_find_out_why_css_isnt_applying"
+      - title: "MDN — What are browser developer tools?"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Tools_and_setup/What_are_browser_developer_tools"
+      - title: "Chrome DevTools — CSS features reference"
+        url: "https://developer.chrome.com/docs/devtools/css/reference"
+      - title: "Firefox DevTools — Examine and edit CSS (Rules view)"
+        url: "https://firefox-source-docs.mozilla.org/devtools-user/page_inspector/how_to/examine_and_edit_css/"
+    actions:
+      - id: open-devtools-board
+        type: whiteboard.apply
+        at: { mark: open-devtools-board, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: []
+      - id: draw-devtools-panel
+        type: whiteboard.apply
+        at: { mark: open-devtools-board }
+        upsertIds: [e-title, e-sub, e-panel, e-tab]
+        drawMs: 2200
+      - id: draw-devtools-rule
+        type: whiteboard.apply
+        at: { mark: draw-devtools-rule }
+        upsertIds: [e-rule-sel, e-line-1, e-line-2, e-line-3, e-rule-end]
+        drawMs: 1800
+      - id: draw-overridden
+        type: whiteboard.apply
+        at: { mark: draw-overridden }
+        upsertIds: [e-strike-1, e-note-1]
+        drawMs: 1400
+      - id: draw-invalid
+        type: whiteboard.apply
+        at: { mark: draw-invalid }
+        upsertIds: [e-strike-2, e-note-2]
+        drawMs: 1400
+      - id: draw-in-use
+        type: whiteboard.apply
+        at: { mark: draw-in-use }
+        upsertIds: [e-note-3]
+        drawMs: 800
+      - id: draw-ua-row
+        type: whiteboard.apply
+        at: { mark: draw-ua-row }
+        upsertIds: [e-ua-label, e-ua-rule]
+        drawMs: 2000
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-devtools-board]] ဒါဆို ပြန်ချုပ်ရရင်၊ CSS က HTML page ကို ဘယ်လို ပုံစံ
+      ပေါ်ရမလဲ ဆိုတာ browser ကို ပြောပြပါတယ်။ rule တစ်ခုမှာ selector နဲ့ သူ့နောက်က
+      declaration တွေ ပါပြီး၊ declaration တစ်ခုစီမှာ property နဲ့ တန်ဖိုး ပါပါတယ်။
+      နားမလည်တဲ့ declaration ကိုတော့ browser က ဘာမှ မပြောဘဲ ကျော်သွားပါတယ်။
+      [[mark:recap-sources]] CSS ကို link နဲ့ ချိတ်ထားတဲ့ ဖိုင်၊ style element နဲ့ style
+      attribute ကနေ ထည့်လို့ ရပါတယ်။ ကိုယ် ဘာမှ မရေးခင်ကတည်းက၊ browser က element တိုင်းကို
+      default ပုံစံ တစ်ခုနဲ့ display တန်ဖိုး တစ်ခု ပေးထားပါတယ်။ [[mark:next-lesson]] နောက်
+      lesson မှာတော့ box model ကို ကြည့်သွားပါမယ်။ ခုနက အဝါရောင် ခေါင်းစဉ်တွေမှာ
+      မြင်ခဲ့သလို၊ element တိုင်းဟာ box တစ်ခုပါ။ box တစ်ခု တကယ်တမ်း နေရာ ဘယ်လောက် ယူလဲ
+      ဆိုတာ ဆုံးဖြတ်ပေးတဲ့ အလွှာတွေကို အသေးစိတ် ကြည့်ရပါမယ်။
+    sources:
+      - title: "web.dev — Learn CSS: Box Model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — What is CSS?"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/What_is_CSS"
+    actions:
+      - id: close-devtools-board
+        type: whiteboard.apply
+        at: { mark: close-devtools-board }
+        open: false
+      - id: select-final-rules
+        type: editor.select
+        at: { mark: next-lesson }
+        target: { file: styles.css, text: "h2 {\n  background: khaki;\n}", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
