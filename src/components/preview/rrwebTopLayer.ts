@@ -39,6 +39,24 @@ import {
 // invoker, so it closed the parent popover the live page kept open.
 export const POPOVER_OPEN_ATTRIBUTE = "data-next-editor-popover-open";
 
+// The top layer stacks in the order its elements entered it, which no DOM state
+// records either. Replaying the patch stream re-enters them in that order, but a
+// rebuild from a FullSnapshot has only the snapshot: rrweb shows its modal
+// dialogs, in document order, and the popovers then opened above them. A toast
+// shown before a modal covered its backdrop, and a hint popover shown after an
+// auto popover that comes later in the document was closed again when the
+// rebuild opened that popover after it.
+//
+// So every FullSnapshot also records, on each open popover and modal dialog, an
+// increasing number for when it last entered the top layer (from its
+// beforetoggle, which the browser dispatches synchronously just before), and a
+// rebuild re-enters them in that order. An element with no number — from a
+// recording made before this, or a dialog in a browser that fires no
+// beforetoggle for dialogs — keeps the old placement: dialogs where rrweb's
+// rebuild put them, below everything ordered, and popovers in document order
+// above all of it.
+export const TOP_LAYER_ORDER_ATTRIBUTE = "data-next-editor-top-layer-order";
+
 type ReplayPlugin = NonNullable<playerConfig["plugins"]>[number];
 
 /** The parts of rrweb-snapshot's serialized node the recorder marks. */
@@ -55,6 +73,9 @@ export interface RrwebRecordingIdMirror {
 
 /** The invoker a popover was last opened with, if the recorder knows one. */
 export type PopoverInvokerLookup = (popover: Element) => Node | null | undefined;
+
+/** When an element last entered the top layer (increasing), if the recorder knows. */
+export type TopLayerOrderLookup = (element: Element) => number | null | undefined;
 
 export interface PopoverAttributeChange {
   id: number;
@@ -102,6 +123,57 @@ export function markOpenPopovers(
     if (!node) continue;
     if (node.attributes && node.id !== undefined && openIds[node.id] !== undefined) {
       node.attributes[attributeName] = openIds[node.id];
+    }
+    var children = node.childNodes || [];
+    for (var child = 0; child < children.length; child += 1) {
+      pending.push(children[child]);
+    }
+  }
+}
+
+// Marks the open popovers and modal dialogs of `doc` on a FullSnapshot's
+// serialized tree with when each entered the top layer, by their rrweb ids, so
+// a rebuild can stack them in that order. Like markOpenPopovers, it is inlined
+// into the recorder script: keep it self-contained.
+export function markTopLayerOrder(
+  snapshot: SerializedSnapshotNode,
+  mirror: RrwebRecordingIdMirror,
+  doc: Document,
+  attributeName: string,
+  orderOf: TopLayerOrderLookup,
+): void {
+  var orders: Record<number, string> = {};
+  var hasOrder = false;
+  var candidates = doc.querySelectorAll("[popover], dialog");
+  for (var index = 0; index < candidates.length; index += 1) {
+    var element = candidates[index];
+    var inTopLayer = false;
+    try {
+      inTopLayer = element.matches(":modal");
+    } catch {
+      // A browser without :modal: the popover check below still applies.
+    }
+    try {
+      inTopLayer = inTopLayer || element.matches(":popover-open");
+    } catch {
+      // A browser without popovers has none open.
+    }
+    var order = inTopLayer ? orderOf(element) : null;
+    var id = order ? mirror.getId(element) : -1;
+    if (id > 0) {
+      orders[id] = String(order);
+      hasOrder = true;
+    }
+  }
+  if (!hasOrder) return;
+
+  // Iterative walk: a deep document must not overflow the stack.
+  var pending = [snapshot];
+  while (pending.length > 0) {
+    var node = pending.pop();
+    if (!node) continue;
+    if (node.attributes && node.id !== undefined && orders[node.id] !== undefined) {
+      node.attributes[attributeName] = orders[node.id];
     }
     var children = node.childNodes || [];
     for (var child = 0; child < children.length; child += 1) {
@@ -232,6 +304,53 @@ function closeDialog(node: Node, change: RecordedAttributeChange): void {
   }
 }
 
+function matchesSafely(element: Element, selector: string): boolean {
+  try {
+    return element.matches(selector);
+  } catch {
+    return false;
+  }
+}
+
+// Restores a rebuilt FullSnapshot's top layer. rrweb's rebuild has already
+// shown the open modal dialogs, in document order, and no popover is open. The
+// ordered dialogs leave the top layer, then every ordered element re-enters it
+// in the recorded order (a popover through syncPopover, which opens the
+// popovers it nests in first). Unordered popovers open last, in document order.
+function rebuildTopLayer(doc: Document, mirror: ReplayNodeMirror): void {
+  const ordered = Array.from(
+    doc.querySelectorAll<HTMLElement>(`[${TOP_LAYER_ORDER_ATTRIBUTE}]`),
+    (element) => ({ element, order: Number(element.getAttribute(TOP_LAYER_ORDER_ATTRIBUTE)) }),
+  )
+    .filter(({ order }) => order > 0)
+    .sort((left, right) => left.order - right.order);
+  const modalDialogs = new Set<HTMLDialogElement>();
+  for (const { element } of ordered) {
+    const dialog = element as HTMLDialogElement;
+    if (dialog.nodeName !== "DIALOG" || !matchesSafely(dialog, ":modal")) continue;
+    try {
+      dialog.close();
+      modalDialogs.add(dialog);
+    } catch {
+      // Detached: it is not in the top layer to reorder.
+    }
+  }
+  for (const { element } of ordered) {
+    if (!modalDialogs.has(element as HTMLDialogElement)) {
+      syncPopover(element, mirror);
+      continue;
+    }
+    try {
+      (element as HTMLDialogElement).showModal();
+    } catch {
+      // Detached or no longer a dialog: nothing to show.
+    }
+  }
+  for (const popover of doc.querySelectorAll(`[${POPOVER_OPEN_ATTRIBUTE}]`)) {
+    syncPopover(popover, mirror);
+  }
+}
+
 // rrweb calls a plugin's handler right after it casts each event, also while
 // fast-forwarding a seek, so the replayed top layer is updated before the next
 // event is applied. One plugin per Replayer: it follows that Replayer's focus.
@@ -246,10 +365,7 @@ export function createTopLayerReplayPlugin(): ReplayPlugin {
         // focused yet, and a corrective snapshot may renumber them.
         focusedId = null;
         const doc = replayer.iframe.contentDocument;
-        const mirror = replayer.getMirror();
-        for (const popover of doc?.querySelectorAll(`[${POPOVER_OPEN_ATTRIBUTE}]`) ?? []) {
-          syncPopover(popover, mirror);
-        }
+        if (doc) rebuildTopLayer(doc, replayer.getMirror());
         return;
       }
       if (event.type !== RRWEB_EVENT_TYPE.IncrementalSnapshot) return;

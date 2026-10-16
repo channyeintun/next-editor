@@ -11,7 +11,13 @@ import {
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
-import { markOpenPopovers, POPOVER_OPEN_ATTRIBUTE, popoverToggleChange } from "./rrwebTopLayer";
+import {
+  markOpenPopovers,
+  markTopLayerOrder,
+  POPOVER_OPEN_ATTRIBUTE,
+  popoverToggleChange,
+  TOP_LAYER_ORDER_ATTRIBUTE,
+} from "./rrwebTopLayer";
 
 // Corrective-checkpoint throttle. rrweb's incremental mutation capture is lossy in
 // real browsers for some swap patterns (notably htmx innerHTML swaps, where a
@@ -141,6 +147,15 @@ export function createRrwebPreviewRecorderScript({
       function popoverInvokerOf(popover) {
         return popoverInvokers ? popoverInvokers.get(popover) : null;
       }
+      // When each popover or dialog last entered the top layer, so every
+      // snapshot can record their stacking order too (see beforetoggle below).
+      var topLayerOrderAttribute = ${JSON.stringify(TOP_LAYER_ORDER_ATTRIBUTE)};
+      var markTopLayerOrder = ${markTopLayerOrder.toString()};
+      var topLayerOrders = typeof WeakMap === 'function' ? new WeakMap() : null;
+      var topLayerCount = 0;
+      function topLayerOrderOf(element) {
+        return topLayerOrders ? topLayerOrders.get(element) : null;
+      }
 
       function getRecordingMirror() {
         return window.rrwebRecord.record && window.rrwebRecord.record.mirror;
@@ -228,6 +243,7 @@ export function createRrwebPreviewRecorderScript({
             var snapshotMirror = getRecordingMirror();
             if (snapshotMirror && event.data && event.data.node) {
               markOpenPopovers(event.data.node, snapshotMirror, document, popoverOpenAttribute, popoverInvokerOf);
+              markTopLayerOrder(event.data.node, snapshotMirror, document, topLayerOrderAttribute, topLayerOrderOf);
             }
           } catch (e) {}
         }
@@ -311,6 +327,21 @@ export function createRrwebPreviewRecorderScript({
         hostSnapshotRequested = false;
         pendingRefreshMeta = null;
       });
+
+      // The browser dispatches beforetoggle synchronously, just before the
+      // popover (or dialog, where supported) enters the top layer; toggle comes
+      // a task later, after others may have entered. Numbering the elements in
+      // beforetoggle order therefore numbers them in stacking order. A
+      // cancelled open leaves a number on a closed element, which no snapshot
+      // marks; its next open renumbers it.
+      document.addEventListener('beforetoggle', function(event) {
+        try {
+          if (topLayerOrders && event.target && event.newState === 'open') {
+            topLayerCount += 1;
+            topLayerOrders.set(event.target, topLayerCount);
+          }
+        } catch (e) {}
+      }, true);
 
       // A popover opening or closing changes no DOM, so rrweb records nothing.
       // Each toggle event (dispatched at the popover and never bubbling, hence

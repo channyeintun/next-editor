@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createTopLayerReplayPlugin,
   markOpenPopovers,
+  markTopLayerOrder,
   POPOVER_OPEN_ATTRIBUTE,
   popoverToggleChange,
   type RrwebRecordingIdMirror,
   type SerializedSnapshotNode,
+  TOP_LAYER_ORDER_ATTRIBUTE,
 } from "./rrwebTopLayer";
 
 // jsdom parses :popover-open (never matching) but has no popover methods, so
@@ -145,6 +147,55 @@ describe("markOpenPopovers", () => {
       popover: "",
       [POPOVER_OPEN_ATTRIBUTE]: "3",
     });
+  });
+});
+
+describe("markTopLayerOrder", () => {
+  it("marks each open popover and modal dialog with when it entered the top layer", () => {
+    document.body.innerHTML = `
+      <div popover="manual" id="toast"></div>
+      <dialog id="modal"></dialog>
+      <dialog id="plain"></dialog>
+      <div popover id="closed"></div>
+      <div popover id="unknown"></div>`;
+    const element = (id: string) => document.getElementById(id)!;
+    fakePopover(element("toast"), true);
+    fakePopover(element("closed"), false);
+    fakePopover(element("unknown"), true);
+    // jsdom has no :modal; "plain" is open but not modal (show()).
+    for (const id of ["modal", "plain"]) {
+      const matches = element(id).matches.bind(element(id));
+      Object.defineProperty(element(id), "matches", {
+        value: (selector: string) => (selector === ":modal" ? id === "modal" : matches(selector)),
+      });
+    }
+    const ids = ["toast", "modal", "plain", "closed", "unknown"];
+    const snapshot: SerializedSnapshotNode = {
+      id: 1,
+      childNodes: ids.map((_, index) => ({ id: index + 2, attributes: {} })),
+    };
+    const orders = new Map([
+      [element("toast"), 4],
+      [element("modal"), 7],
+      [element("plain"), 8],
+      [element("closed"), 9],
+    ]);
+
+    markTopLayerOrder(
+      snapshot,
+      idMirror(ids.map((id, index) => [element(id), index + 2])),
+      document,
+      TOP_LAYER_ORDER_ATTRIBUTE,
+      (target) => orders.get(target as HTMLElement),
+    );
+
+    expect(snapshot.childNodes?.map((node) => node.attributes)).toEqual([
+      { [TOP_LAYER_ORDER_ATTRIBUTE]: "4" },
+      { [TOP_LAYER_ORDER_ATTRIBUTE]: "7" },
+      {},
+      {},
+      {},
+    ]);
   });
 });
 
@@ -345,6 +396,94 @@ describe("createTopLayerReplayPlugin", () => {
     });
     expect(stack.showPopover("menu")).toHaveBeenCalledWith(undefined);
     expect(stack.openIds()).toEqual(["sub", "menu"]);
+  });
+
+  // A model of the top layer: its elements stack in the order they entered it.
+  // As in the browser, showing an auto popover hides the hint popovers.
+  function fakeTopLayer(ids: string[]) {
+    const layer: HTMLElement[] = [];
+    for (const id of ids) {
+      const element = document.getElementById(id)!;
+      const inLayer = () => layer.includes(element);
+      const enter = () => layer.push(element);
+      const leave = () => {
+        if (inLayer()) layer.splice(layer.indexOf(element), 1);
+      };
+      const matches = element.matches.bind(element);
+      Object.defineProperty(element, "matches", {
+        value: (selector: string) => {
+          if (selector === ":modal") return element.nodeName === "DIALOG" && inLayer();
+          if (selector === ":popover-open") return element.hasAttribute("popover") && inLayer();
+          return matches(selector);
+        },
+      });
+      if (element.nodeName === "DIALOG") {
+        const showModal = vi.fn<() => void>(() => {
+          element.setAttribute("open", "");
+          enter();
+        });
+        const close = vi.fn<() => void>(() => {
+          // close() is a no-op unless the dialog has `open`.
+          if (!element.hasAttribute("open")) return;
+          element.removeAttribute("open");
+          leave();
+        });
+        Object.assign(element, { showModal, close });
+        continue;
+      }
+      const showPopover = () => {
+        if (element.getAttribute("popover") === "") {
+          for (let index = layer.length - 1; index >= 0; index -= 1) {
+            if (layer[index].getAttribute("popover") === "hint") layer.splice(index, 1);
+          }
+        }
+        enter();
+      };
+      Object.assign(element, { showPopover, hidePopover: leave });
+    }
+    return { ids: () => layer.map((element) => element.id) };
+  }
+
+  it("rebuilds the top layer in the recorded order, a toast under a later modal", () => {
+    document.body.innerHTML = `
+      <div popover="manual" id="toast" ${POPOVER_OPEN_ATTRIBUTE} ${TOP_LAYER_ORDER_ATTRIBUTE}="3"></div>
+      <dialog id="late" rr_open_mode="modal" ${TOP_LAYER_ORDER_ATTRIBUTE}="9"></dialog>
+      <dialog id="early" rr_open_mode="modal" ${TOP_LAYER_ORDER_ATTRIBUTE}="5"></dialog>`;
+    const topLayer = fakeTopLayer(["toast", "late", "early"]);
+    // rrweb's rebuild has shown the modal dialogs already, in document order.
+    for (const id of ["late", "early"]) {
+      (document.getElementById(id) as HTMLDialogElement).showModal();
+    }
+
+    createTopLayerReplayPlugin().handler?.(fullSnapshot, true, replayContext(document));
+
+    expect(topLayer.ids()).toEqual(["toast", "early", "late"]);
+  });
+
+  it("rebuilds a hint popover shown after an auto popover still open", () => {
+    // Showing the auto popover after the hint would close the hint again.
+    document.body.innerHTML = `
+      <div popover="hint" id="hint" ${POPOVER_OPEN_ATTRIBUTE} ${TOP_LAYER_ORDER_ATTRIBUTE}="2"></div>
+      <div popover id="menu" ${POPOVER_OPEN_ATTRIBUTE} ${TOP_LAYER_ORDER_ATTRIBUTE}="1"></div>`;
+    const topLayer = fakeTopLayer(["hint", "menu"]);
+
+    createTopLayerReplayPlugin().handler?.(fullSnapshot, true, replayContext(document));
+
+    expect(topLayer.ids()).toEqual(["menu", "hint"]);
+  });
+
+  it("keeps an unordered recording's placement: dialogs as rebuilt, popovers above", () => {
+    document.body.innerHTML = `
+      <div popover="manual" id="toast" ${POPOVER_OPEN_ATTRIBUTE}></div>
+      <dialog id="dialog" rr_open_mode="modal"></dialog>`;
+    const topLayer = fakeTopLayer(["toast", "dialog"]);
+    const dialog = document.getElementById("dialog") as HTMLDialogElement;
+    dialog.showModal();
+
+    createTopLayerReplayPlugin().handler?.(fullSnapshot, true, replayContext(document));
+
+    expect(topLayer.ids()).toEqual(["dialog", "toast"]);
+    expect(dialog.close).not.toHaveBeenCalled();
   });
 
   // jsdom has no top layer: the dialog tracks "modal" itself, like Chrome does

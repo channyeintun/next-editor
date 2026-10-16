@@ -18,7 +18,7 @@ import {
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
 import { createRrwebPreviewRecorderScript } from "./rrwebRecorderScript";
-import { POPOVER_OPEN_ATTRIBUTE } from "./rrwebTopLayer";
+import { POPOVER_OPEN_ATTRIBUTE, TOP_LAYER_ORDER_ATTRIBUTE } from "./rrwebTopLayer";
 
 function event(type: number, timestamp: number): PreviewRecordedEvent {
   return { type, timestamp, data: { tag: timestamp } };
@@ -503,6 +503,85 @@ describe("recorder wiring snapshot handshake", () => {
     } finally {
       const marker = (window as unknown as Record<string, { stop?: () => void } | boolean>)
         .__POPOVER_WIRING_TEST__;
+      if (typeof marker === "object" && typeof marker.stop === "function") {
+        marker.stop();
+      }
+      window.removeEventListener("message", onMessage);
+    }
+  });
+
+  // The top layer stacks in the order its elements entered it, which a rebuild
+  // from a FullSnapshot cannot see; every snapshot records that order.
+  it("records the order popovers and modal dialogs entered the top layer on each FullSnapshot", async () => {
+    document.body.innerHTML = `
+      <dialog id="modal">Modal</dialog>
+      <div popover="manual" id="toast">Toast</div>`;
+    // jsdom has no top layer: each element carries its own state.
+    const inTopLayer = new Set<string>();
+    for (const [id, selector] of [
+      ["modal", ":modal"],
+      ["toast", ":popover-open"],
+    ]) {
+      const element = document.getElementById(id)!;
+      const matches = element.matches.bind(element);
+      Object.defineProperty(element, "matches", {
+        value: (query: string) => (query === selector ? inTopLayer.has(id) : matches(query)),
+      });
+    }
+    // The browser fires beforetoggle just before the element enters.
+    const enterTopLayer = (id: string) => {
+      const beforeToggle = new Event("beforetoggle");
+      Object.defineProperty(beforeToggle, "newState", { value: "open" });
+      document.getElementById(id)!.dispatchEvent(beforeToggle);
+      inTopLayer.add(id);
+    };
+
+    const messages: PostedMessage[] = [];
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as PostedMessage | undefined;
+      if (data?.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE) messages.push(data);
+    };
+    window.addEventListener("message", onMessage);
+    window.requestAnimationFrame ??= (callback) => window.setTimeout(() => callback(0), 16);
+
+    try {
+      // oxlint-disable-next-line no-eval -- running the served script is the point
+      (0, eval)(createRrwebPreviewRecorderScript({ setupMarker: "__TOP_LAYER_WIRING_TEST__" }));
+      await sleep(50);
+      // An earlier test's wiring may still be listening; keep to this one.
+      const { documentId } = messages[0].payload;
+      const takeSnapshot = async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+            source: window,
+          }),
+        );
+        await sleep(50);
+        const refresh = messages.findLast(
+          (message) => message.payload.refresh && message.payload.documentId === documentId,
+        );
+        const root = fullSnapshotRoot(refresh);
+        return (id: string) =>
+          Number(findSerializedById(root, id)?.attributes?.[TOP_LAYER_ORDER_ATTRIBUTE]);
+      };
+
+      // A toast, then a modal dialog over it.
+      enterTopLayer("toast");
+      enterTopLayer("modal");
+      const first = await takeSnapshot();
+      expect(first("toast")).toBeGreaterThan(0);
+      expect(first("modal")).toBeGreaterThan(first("toast"));
+
+      // The toast shows again: now it is the topmost.
+      enterTopLayer("toast");
+      const second = await takeSnapshot();
+      expect(second("toast")).toBeGreaterThan(second("modal"));
+      // The order lives only in the recording, not on the author's page.
+      expect(document.getElementById("toast")!.hasAttribute(TOP_LAYER_ORDER_ATTRIBUTE)).toBe(false);
+    } finally {
+      const marker = (window as unknown as Record<string, { stop?: () => void } | boolean>)
+        .__TOP_LAYER_WIRING_TEST__;
       if (typeof marker === "object" && typeof marker.stop === "function") {
         marker.stop();
       }
