@@ -1,8 +1,9 @@
+import { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
 import { describe, expect, it } from "vite-plus/test";
 import { createWorkspaceFile } from "../../types/workspaceFiles";
 import type { WorkspaceFile } from "../../types/workspace";
-import { withRecordedImageSources } from "./recordedImageSources";
+import { withRecordedDevServerUrls } from "./recordedDevServerUrls";
 
 const HOST = "https://abc--5173--2ed8f36d.local-corp.webcontainer-api.io";
 const LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
@@ -27,7 +28,7 @@ function asEvents(...events: object[]): eventWithTime[] {
   return events as unknown as eventWithTime[];
 }
 
-describe("withRecordedImageSources", () => {
+describe("withRecordedDevServerUrls", () => {
   it("shows a public/ image the recorded dev server served, from the workspace", () => {
     const snapshot = {
       type: 2,
@@ -43,7 +44,7 @@ describe("withRecordedImageSources", () => {
     };
     const events = asEvents(meta, snapshot);
 
-    const result = withRecordedImageSources(events, readWorkspaceFile);
+    const result = withRecordedDevServerUrls(events, readWorkspaceFile);
 
     expect(JSON.stringify(result[1])).toContain(JSON.stringify(LOGO_DATA_URL));
     // The recording's own events are left as they were.
@@ -64,7 +65,7 @@ describe("withRecordedImageSources", () => {
       },
     };
 
-    const [, result] = withRecordedImageSources(
+    const [, result] = withRecordedDevServerUrls(
       asEvents(meta, mutation),
       readWorkspaceFile,
     ) as unknown as [unknown, { data: typeof mutation.data }];
@@ -90,7 +91,7 @@ describe("withRecordedImageSources", () => {
     };
     const events = asEvents(meta, mutation);
 
-    const result = withRecordedImageSources(events, readWorkspaceFile);
+    const result = withRecordedDevServerUrls(events, readWorkspaceFile);
 
     expect(result[1]).toBe(events[1]);
   });
@@ -109,7 +110,7 @@ describe("withRecordedImageSources", () => {
       },
     };
 
-    const [result] = withRecordedImageSources(asEvents(mutation), readWorkspaceFile, [
+    const [result] = withRecordedDevServerUrls(asEvents(mutation), readWorkspaceFile, [
       meta,
     ]) as unknown as [{ data: typeof mutation.data }];
 
@@ -130,13 +131,13 @@ describe("withRecordedImageSources", () => {
     };
     const events = asEvents(meta, mutation);
 
-    expect(withRecordedImageSources(events, readWorkspaceFile)[1]).toBe(events[1]);
+    expect(withRecordedDevServerUrls(events, readWorkspaceFile)[1]).toBe(events[1]);
   });
 
   it("returns the events untouched when the stream has no recorded host", () => {
     const events = asEvents({ type: 3, timestamp: 1, data: { source: 1, positions: [] } });
 
-    expect(withRecordedImageSources(events, readWorkspaceFile)).toBe(events);
+    expect(withRecordedDevServerUrls(events, readWorkspaceFile)).toBe(events);
   });
 
   // rrweb absolutizes a stylesheet's url(/logo.svg) onto the recorded host.
@@ -173,7 +174,7 @@ describe("withRecordedImageSources", () => {
       },
     };
 
-    const [, result] = withRecordedImageSources(
+    const [, result] = withRecordedDevServerUrls(
       asEvents(meta, snapshot),
       readWorkspaceFile,
     ) as unknown as [unknown, typeof snapshot];
@@ -217,7 +218,7 @@ describe("withRecordedImageSources", () => {
       },
     };
 
-    const [, result] = withRecordedImageSources(
+    const [, result] = withRecordedDevServerUrls(
       asEvents(meta, mutation),
       readWorkspaceFile,
     ) as unknown as [unknown, typeof mutation];
@@ -249,6 +250,116 @@ describe("withRecordedImageSources", () => {
     };
     const events = asEvents(meta, mutation);
 
-    expect(withRecordedImageSources(events, readWorkspaceFile)[1]).toBe(events[1]);
+    expect(withRecordedDevServerUrls(events, readWorkspaceFile)[1]).toBe(events[1]);
+  });
+
+  // Vite's link-mode CSS HMR: each edit adds a fresh <link href="…?t=…">, and
+  // rrweb inlines it as a `_cssText` change once it loads.
+  const pendingLink = (href: string, rel = "stylesheet", id = 10) => ({
+    type: 2,
+    tagName: "link",
+    attributes: { rel, href },
+    childNodes: [],
+    id,
+  });
+  const linkSwap = <SerializedNode extends object>(...nodes: SerializedNode[]) => ({
+    type: 3,
+    timestamp: 2,
+    data: {
+      source: 0,
+      texts: [],
+      removes: [],
+      attributes: [],
+      adds: nodes.map((node) => ({ parentId: 3, nextId: null, node })),
+    },
+  });
+
+  it("drops the dead dev-server href of a stylesheet link rrweb has yet to inline", () => {
+    const mutation = linkSwap(pendingLink(`${HOST}/styles.css?t=1`));
+    const events = asEvents(meta, mutation);
+
+    const [, result] = withRecordedDevServerUrls(events, readWorkspaceFile) as unknown as [
+      unknown,
+      typeof mutation,
+    ];
+
+    expect(result.data.adds[0].node.attributes).toEqual({ rel: "stylesheet" });
+    expect(mutation.data.adds[0].node.attributes.href).toBe(`${HOST}/styles.css?t=1`);
+  });
+
+  it("keeps links replay can still load or that are no stylesheet", () => {
+    const events = asEvents(
+      meta,
+      linkSwap(
+        pendingLink("https://fonts.example.com/css?family=Inter", "stylesheet", 10),
+        pendingLink(`${HOST}/favicon.svg`, "icon", 11),
+      ),
+    );
+
+    expect(withRecordedDevServerUrls(events, readWorkspaceFile)[1]).toBe(events[1]);
+  });
+
+  it("still replays the swapped stylesheet once rrweb inlines it", () => {
+    const snapshot = {
+      type: 2,
+      timestamp: 1,
+      data: {
+        initialOffset: { top: 0, left: 0 },
+        node: {
+          type: 0,
+          id: 1,
+          childNodes: [
+            {
+              type: 2,
+              tagName: "html",
+              attributes: {},
+              id: 2,
+              childNodes: [
+                { type: 2, tagName: "head", attributes: {}, childNodes: [], id: 3 },
+                { type: 2, tagName: "body", attributes: {}, childNodes: [], id: 4 },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const inlined = {
+      type: 3,
+      timestamp: 3,
+      data: {
+        source: 0,
+        texts: [],
+        removes: [],
+        adds: [],
+        attributes: [{ id: 10, attributes: { _cssText: ".card { color: rgb(1, 2, 3); }" } }],
+      },
+    };
+    const events = withRecordedDevServerUrls(
+      asEvents(meta, snapshot, linkSwap(pendingLink(`${HOST}/styles.css?t=1`)), inlined),
+      readWorkspaceFile,
+    );
+    const root = document.createElement("div");
+    document.body.append(root);
+    // UNSAFE_replayCanvas skips rrweb's sandboxed-frame guard, which jsdom
+    // cannot satisfy (see rrwebRoundTrip.test.ts).
+    const replayer = new Replayer(events, {
+      root,
+      showWarning: false,
+      useVirtualDom: false,
+      UNSAFE_replayCanvas: true,
+    });
+
+    try {
+      const head = () => root.querySelector("iframe")?.contentDocument?.head;
+      // rrweb casts the events before the offset: here, up to the link swap.
+      replayer.pause(3);
+      expect(head()?.querySelector("link")?.hasAttribute("href")).toBe(false);
+      replayer.pause(10);
+      expect(head()?.querySelector("link")).toBeNull();
+      expect(head()?.querySelector("style")?.textContent).toContain("rgb(1, 2, 3)");
+    } finally {
+      replayer.destroy();
+      root.remove();
+    }
   });
 });

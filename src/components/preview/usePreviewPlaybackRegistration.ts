@@ -17,7 +17,7 @@ import type {
 import { arePreviewSizesEqual } from "../../core/src/utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { withRecordedImageSources } from "./recordedImageSources";
+import { withRecordedDevServerUrls } from "./recordedDevServerUrls";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
@@ -147,7 +147,7 @@ export function usePreviewPlaybackRegistration({
       if (
         getRrwebReplayLead(newDocuments, newBatches) > lead ||
         !replayer.appendEvents(
-          withRecordedImageSources(
+          withRecordedDevServerUrls(
             buildRrwebReplayEvents(newDocuments, newBatches, lead),
             readWorkspaceFile,
             input.initialDocuments.flatMap((document) => document.events ?? []),
@@ -194,7 +194,7 @@ export function usePreviewPlaybackRegistration({
 
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const lead = getRrwebReplayLead(input.initialDocuments, input.patchBatches);
-        const events = withRecordedImageSources(
+        const events = withRecordedDevServerUrls(
           buildRrwebReplayEvents(input.initialDocuments, input.patchBatches, lead),
           readWorkspaceFile,
         );
