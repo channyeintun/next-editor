@@ -112,6 +112,12 @@ export class RrwebPreviewReplayer {
       showDebug: false,
       // Real DOM replay into the mounted iframe (no virtual DOM diffing layer).
       useVirtualDom: false,
+      // rrweb pauses every CSS animation while the Replayer is paused, and every
+      // seek here is a pause, so recorded @keyframes stayed on their first frame
+      // (a fade-in stayed invisible). The Replayer only exists while the lesson
+      // plays — pausing swaps in the live preview and destroys it — so the
+      // animations simply run on the replay document's own clock.
+      pauseAnimation: false,
       insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
     });
     this.makeResponsive(replayer);

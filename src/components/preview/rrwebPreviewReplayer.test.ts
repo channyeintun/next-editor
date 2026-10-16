@@ -6,6 +6,7 @@ import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface FakeReplayerInstance {
+  config: Record<string, unknown>;
   pause: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
   addEvent: ReturnType<typeof vi.fn>;
@@ -22,8 +23,10 @@ vi.mock("@rrweb/replay", () => ({
     readonly pause = vi.fn<(offset?: number) => void>();
     readonly destroy = vi.fn<() => void>(() => this.wrapper.remove());
     readonly addEvent = vi.fn<(event: eventWithTime) => void>();
+    readonly config: { root: HTMLElement };
 
     constructor(_events: unknown[], config: { root: HTMLElement }) {
+      this.config = config;
       this.wrapper.append(this.iframe);
       config.root.append(this.wrapper);
       fakeRrweb.instances.push(this);
@@ -115,6 +118,20 @@ describe("RrwebPreviewReplayer", () => {
 
     expect(fakeRrweb.instances).toHaveLength(2);
     expect(within(root).getByTitle("Runtime Preview")).toBe(root.querySelector("iframe"));
+
+    preview.destroy();
+  });
+
+  it("lets recorded CSS animations run instead of rrweb's paused-animation rule", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100)],
+    });
+
+    // Every seek is a rrweb pause; with its default it would freeze them all.
+    expect(fakeRrweb.instances[0]?.config.pauseAnimation).toBe(false);
 
     preview.destroy();
   });
