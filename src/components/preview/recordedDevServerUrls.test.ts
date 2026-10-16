@@ -70,7 +70,8 @@ describe("withRecordedDevServerUrls", () => {
       readWorkspaceFile,
     ) as unknown as [unknown, { data: typeof mutation.data }];
 
-    expect(result.data.adds[0].node.attributes.src).toBe(LOGO_DATA_URL);
+    // The query is the dev server's; the fragment still applies to the file.
+    expect(result.data.adds[0].node.attributes.src).toBe(`${LOGO_DATA_URL}#x`);
     expect(result.data.attributes[0].attributes.src).toBe(LOGO_DATA_URL);
   });
 
@@ -234,6 +235,39 @@ describe("withRecordedDevServerUrls", () => {
     });
     // The recording's own event is left as it was.
     expect(mutation.data.texts[0].value).toBe(css(`${HOST}/logo.svg`));
+  });
+
+  it("keeps the fragment that picks an icon out of an SVG sprite", () => {
+    const sprite = (icon: string) =>
+      `.${icon} { background-image: url("${HOST}/logo.svg#${icon}"); }`;
+    const snapshot = {
+      type: 2,
+      timestamp: 1,
+      data: {
+        node: {
+          type: 0,
+          childNodes: [
+            {
+              type: 2,
+              tagName: "style",
+              attributes: { _cssText: sprite("check") + sprite("x") },
+              id: 3,
+              childNodes: [],
+            },
+          ],
+        },
+      },
+    };
+
+    const [, result] = withRecordedDevServerUrls(
+      asEvents(meta, snapshot),
+      readWorkspaceFile,
+    ) as unknown as [unknown, typeof snapshot];
+
+    expect(result.data.node.childNodes[0].attributes._cssText).toBe(
+      `.check { background-image: url("${LOGO_DATA_URL}#check"); }` +
+        `.x { background-image: url("${LOGO_DATA_URL}#x"); }`,
+    );
   });
 
   it("leaves stylesheet url()s the workspace cannot answer alone", () => {

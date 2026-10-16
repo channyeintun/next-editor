@@ -99,7 +99,10 @@ export function withRecordedDevServerUrls(
       if (!dataUrls.has(path)) {
         dataUrls.set(path, workspaceDataUrl(path, readWorkspaceFile));
       }
-      return dataUrls.get(path) ?? null;
+      const dataUrl = dataUrls.get(path);
+      // The fragment picks an SVG sprite's <view> (or :target) on the data:
+      // URL just as on the file; without it every icon showed the whole sprite.
+      return dataUrl ? `${dataUrl}${url.hash}` : null;
     },
   };
 
