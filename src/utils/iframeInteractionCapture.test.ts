@@ -41,6 +41,10 @@ class FakeTextAreaElement extends FakeElement {
   value = "";
 }
 
+class FakeSelectElement extends FakeElement {
+  value = "";
+}
+
 type Listener = (event: Record<string, unknown>) => void;
 
 function createListenerTarget() {
@@ -111,6 +115,7 @@ function createCaptureHarness() {
     "Element",
     "HTMLInputElement",
     "HTMLTextAreaElement",
+    "HTMLSelectElement",
     createIframeInteractionCaptureScript(SETUP_MARKER),
   );
   const installWithRouteCapture = new Function(
@@ -119,6 +124,7 @@ function createCaptureHarness() {
     "Element",
     "HTMLInputElement",
     "HTMLTextAreaElement",
+    "HTMLSelectElement",
     createIframeInteractionCaptureScript(SETUP_MARKER, { includeRouteChange: true }),
   );
   const installWithMouseMoveCapture = new Function(
@@ -127,6 +133,7 @@ function createCaptureHarness() {
     "Element",
     "HTMLInputElement",
     "HTMLTextAreaElement",
+    "HTMLSelectElement",
     createIframeInteractionCaptureScript(SETUP_MARKER, { includeMouseMove: true }),
   );
 
@@ -136,6 +143,7 @@ function createCaptureHarness() {
     FakeElement,
     FakeInputElement,
     FakeTextAreaElement,
+    FakeSelectElement,
   ] as const;
 
   const createInput = (type: string) => {
@@ -146,9 +154,17 @@ function createCaptureHarness() {
     return input;
   };
 
+  const createSelect = () => {
+    const select = new FakeSelectElement("SELECT");
+    body.children.push(select);
+    select.parentElement = body;
+    return select;
+  };
+
   return {
     button,
     createInput,
+    createSelect,
     documentTarget,
     frameDocument,
     frameWindow,
@@ -328,6 +344,23 @@ describe("createIframeInteractionCaptureScript", () => {
     expect(revealedInput.data.value).toBe("*******");
     expect(textInput.data.value).toBe("Ada");
     expect(JSON.stringify(payloads)).not.toMatch(/s3cret|hunter2/);
+  });
+
+  it("posts a select's chosen value, so studio's preview.input on it is recorded", () => {
+    const { createSelect, documentTarget, install, parentPostMessage } = createCaptureHarness();
+    const select = createSelect();
+    select.testId = "order-dish";
+
+    install();
+    select.value = "ရှမ်းခေါက်ဆွဲ";
+    documentTarget.emit("input", { target: select });
+
+    const [payload] = parentPostMessage.mock.calls.map(
+      ([message]) =>
+        (message as { payload: { type: string; data: Record<string, unknown> } }).payload,
+    );
+    expect(payload.type).toBe("input");
+    expect(payload.data.value).toBe("ရှမ်းခေါက်ဆွဲ");
   });
 
   it("posts no hover, focus or key events, which nothing reads", () => {

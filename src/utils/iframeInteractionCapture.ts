@@ -321,9 +321,12 @@ export function createIframeInteractionCaptureScript(
         (event) => {
           const target = event.target;
 
+          // A <select> fires input too, and studio's preview.input sets one the
+          // same way it fills a field; the QA gate looks for that interaction.
           if (
             target instanceof HTMLInputElement ||
-            target instanceof HTMLTextAreaElement
+            target instanceof HTMLTextAreaElement ||
+            target instanceof HTMLSelectElement
           ) {
             emit('input', target, {
               // Same-length mask, as rrweb writes it.
