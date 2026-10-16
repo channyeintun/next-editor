@@ -1,7 +1,7 @@
 import type { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
 import { RRWEB_EVENT_TYPE, RRWEB_INCREMENTAL_SOURCE } from "../../core/src/preview";
-import { topLayerReplayPlugin } from "./rrwebTopLayer";
+import { createTopLayerReplayPlugin } from "./rrwebTopLayer";
 
 type ReplayerConstructor = (typeof import("@rrweb/replay"))["Replayer"];
 type ReplayModuleLoader = () => Promise<{ Replayer: ReplayerConstructor }>;
@@ -121,7 +121,7 @@ export class RrwebPreviewReplayer {
       pauseAnimation: false,
       insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
       // Restores the recorded top-layer state rrweb itself does not replay.
-      plugins: [topLayerReplayPlugin],
+      plugins: [createTopLayerReplayPlugin()],
     });
     this.makeResponsive(replayer);
     return replayer;

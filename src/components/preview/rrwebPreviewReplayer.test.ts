@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../types/slides";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreviewReplayer";
-import { topLayerReplayPlugin } from "./rrwebTopLayer";
 
 interface FakeReplayerInstance {
   config: Record<string, unknown>;
@@ -145,7 +144,9 @@ describe("RrwebPreviewReplayer", () => {
       events: [rrwebEvent(4, 100), rrwebEvent(2, 100)],
     });
 
-    expect(fakeRrweb.instances[0]?.config.plugins).toEqual([topLayerReplayPlugin]);
+    expect(fakeRrweb.instances[0]?.config.plugins).toEqual([
+      expect.objectContaining({ handler: expect.any(Function) }),
+    ]);
 
     preview.destroy();
   });

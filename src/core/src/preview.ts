@@ -85,7 +85,8 @@ export interface PreviewRecordedEvent {
  * script inlines them into the code it injects into the preview frame.
  */
 export const RRWEB_EVENT_TYPE = { FullSnapshot: 2, IncrementalSnapshot: 3, Meta: 4 } as const;
-export const RRWEB_INCREMENTAL_SOURCE = { Mutation: 0, MouseMove: 1 } as const;
+export const RRWEB_INCREMENTAL_SOURCE = { Mutation: 0, MouseMove: 1, MouseInteraction: 2 } as const;
+export const RRWEB_MOUSE_INTERACTION = { Focus: 5, Blur: 6 } as const;
 
 export interface PreviewInitialDocument {
   version: number;

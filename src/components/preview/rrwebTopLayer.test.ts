@@ -2,12 +2,12 @@ import type { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+  createTopLayerReplayPlugin,
   markOpenPopovers,
   POPOVER_OPEN_ATTRIBUTE,
   popoverToggleChange,
   type RrwebRecordingIdMirror,
   type SerializedSnapshotNode,
-  topLayerReplayPlugin,
 } from "./rrwebTopLayer";
 
 // jsdom parses :popover-open (never matching) but has no popover methods, so
@@ -142,15 +142,16 @@ describe("popoverToggleChange", () => {
   });
 });
 
-describe("topLayerReplayPlugin", () => {
+describe("createTopLayerReplayPlugin", () => {
   it("opens and closes a replayed popover as its mirrored attribute changes", () => {
     document.body.innerHTML = `<div popover id="menu"></div>`;
     const menu = document.getElementById("menu")!;
     const popover = fakePopover(menu);
     const context = replayContext(document, new Map([[4, menu]]));
+    const plugin = createTopLayerReplayPlugin();
 
     menu.setAttribute(POPOVER_OPEN_ATTRIBUTE, "");
-    topLayerReplayPlugin.handler?.(
+    plugin.handler?.(
       mutation([{ id: 4, attributes: { [POPOVER_OPEN_ATTRIBUTE]: "" } }]),
       true,
       context,
@@ -158,7 +159,7 @@ describe("topLayerReplayPlugin", () => {
     expect(popover.showPopover).toHaveBeenCalledOnce();
 
     menu.removeAttribute(POPOVER_OPEN_ATTRIBUTE);
-    topLayerReplayPlugin.handler?.(
+    plugin.handler?.(
       mutation([{ id: 4, attributes: { [POPOVER_OPEN_ATTRIBUTE]: null } }]),
       true,
       context,
@@ -166,11 +167,7 @@ describe("topLayerReplayPlugin", () => {
     expect(popover.hidePopover).toHaveBeenCalledOnce();
 
     // Other attribute changes never touch the top layer.
-    topLayerReplayPlugin.handler?.(
-      mutation([{ id: 4, attributes: { class: "x" } }]),
-      true,
-      context,
-    );
+    plugin.handler?.(mutation([{ id: 4, attributes: { class: "x" } }]), true, context);
     expect(popover.showPopover).toHaveBeenCalledOnce();
     expect(popover.hidePopover).toHaveBeenCalledOnce();
   });
@@ -180,7 +177,7 @@ describe("topLayerReplayPlugin", () => {
     const open = fakePopover(document.getElementById("open")!);
     const closed = fakePopover(document.getElementById("closed")!);
 
-    topLayerReplayPlugin.handler?.(
+    createTopLayerReplayPlugin().handler?.(
       { type: 2, timestamp: 0, data: {} } as unknown as eventWithTime,
       true,
       replayContext(document),
@@ -189,5 +186,117 @@ describe("topLayerReplayPlugin", () => {
     expect(open.showPopover).toHaveBeenCalledOnce();
     expect(closed.showPopover).not.toHaveBeenCalled();
     expect(closed.hidePopover).not.toHaveBeenCalled();
+  });
+
+  // jsdom has no top layer: the dialog tracks "modal" itself, like Chrome does
+  // after rrweb removed `open` from a dialog it opened with showModal().
+  function fakeModalDialog(dialog: HTMLDialogElement, initiallyModal = true) {
+    let modal = initiallyModal;
+    const matches = dialog.matches.bind(dialog);
+    Object.defineProperty(dialog, "matches", {
+      value: (selector: string) => (selector === ":modal" ? modal : matches(selector)),
+    });
+    const close = vi.fn<() => void>(() => {
+      // close() is a no-op unless the dialog has `open`.
+      if (!dialog.hasAttribute("open")) return;
+      dialog.removeAttribute("open");
+      modal = false;
+    });
+    Object.assign(dialog, { close });
+    return { close, isModal: () => modal };
+  }
+
+  function dialogFixture() {
+    document.body.innerHTML = `<button id="opener">Open</button><dialog id="dialog" rr_open_mode="non-modal"><button id="inside">Close</button></dialog>`;
+    const opener = document.getElementById("opener")!;
+    const dialog = document.getElementById("dialog") as HTMLDialogElement;
+    const nodes = new Map<number, Node>([
+      [1, opener],
+      [2, dialog],
+      [3, document.getElementById("inside")!],
+    ]);
+    return { opener, dialog, context: replayContext(document, nodes) };
+  }
+
+  const focusEvent = (id: number, type = 5) =>
+    ({ type: 3, timestamp: 0, data: { source: 2, type, id } }) as unknown as eventWithTime;
+
+  it("closes a replayed modal dialog whose recorded close rrweb only hid", () => {
+    const { dialog, context } = dialogFixture();
+    const fake = fakeModalDialog(dialog);
+
+    // rrweb has already removed `open` (and replayed rr_open_mode) by now.
+    createTopLayerReplayPlugin().handler?.(
+      mutation([{ id: 2, attributes: { open: null, rr_open_mode: "non-modal" } }]),
+      true,
+      context,
+    );
+
+    expect(fake.close).toHaveBeenCalledOnce();
+    expect(fake.isModal()).toBe(false);
+    expect(dialog.hasAttribute("open")).toBe(false);
+  });
+
+  it("leaves a dialog that stayed modal live to rrweb", () => {
+    const { dialog, context } = dialogFixture();
+    const fake = fakeModalDialog(dialog);
+
+    // Live, removing `open` by hand left the dialog modal; rrweb recorded that.
+    createTopLayerReplayPlugin().handler?.(
+      mutation([{ id: 2, attributes: { open: null, rr_open_mode: "modal" } }]),
+      true,
+      context,
+    );
+
+    expect(fake.close).not.toHaveBeenCalled();
+    expect(fake.isModal()).toBe(true);
+  });
+
+  it("leaves a closed non-modal dialog alone: without `open` it is fully closed", () => {
+    const { dialog, context } = dialogFixture();
+    const fake = fakeModalDialog(dialog, false);
+
+    createTopLayerReplayPlugin().handler?.(
+      mutation([{ id: 2, attributes: { open: null, rr_open_mode: "non-modal" } }]),
+      true,
+      context,
+    );
+
+    expect(fake.close).not.toHaveBeenCalled();
+  });
+
+  it("re-applies the recorded focus that landed before the dialog closed", () => {
+    const { opener, dialog, context } = dialogFixture();
+    fakeModalDialog(dialog);
+    const plugin = createTopLayerReplayPlugin();
+
+    // Live order: close() returns focus to the opener at once, and the
+    // `open` removal is recorded a microtask later. The replayed focus came
+    // while the opener was still inert behind the modal dialog.
+    plugin.handler?.(focusEvent(1), true, context);
+    expect(document.activeElement).not.toBe(opener);
+    plugin.handler?.(
+      mutation([{ id: 2, attributes: { open: null, rr_open_mode: "non-modal" } }]),
+      true,
+      context,
+    );
+
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("re-applies nothing once the recorded focus has blurred", () => {
+    const { opener, dialog, context } = dialogFixture();
+    fakeModalDialog(dialog);
+    const plugin = createTopLayerReplayPlugin();
+
+    plugin.handler?.(focusEvent(1), true, context);
+    plugin.handler?.(focusEvent(1, 6), true, context);
+    plugin.handler?.(
+      mutation([{ id: 2, attributes: { open: null, rr_open_mode: "non-modal" } }]),
+      true,
+      context,
+    );
+
+    expect(document.activeElement).not.toBe(opener);
   });
 });
