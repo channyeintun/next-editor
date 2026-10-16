@@ -1,6 +1,7 @@
 import type { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
 import { RRWEB_EVENT_TYPE, RRWEB_INCREMENTAL_SOURCE } from "../../core/src/preview";
+import { topLayerReplayPlugin } from "./rrwebTopLayer";
 
 type ReplayerConstructor = (typeof import("@rrweb/replay"))["Replayer"];
 type ReplayModuleLoader = () => Promise<{ Replayer: ReplayerConstructor }>;
@@ -119,6 +120,8 @@ export class RrwebPreviewReplayer {
       // animations simply run on the replay document's own clock.
       pauseAnimation: false,
       insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
+      // Restores the recorded top-layer state rrweb itself does not replay.
+      plugins: [topLayerReplayPlugin],
     });
     this.makeResponsive(replayer);
     return replayer;

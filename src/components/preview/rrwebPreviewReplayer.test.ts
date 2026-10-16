@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../types/slides";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreviewReplayer";
+import { topLayerReplayPlugin } from "./rrwebTopLayer";
 
 interface FakeReplayerInstance {
   config: Record<string, unknown>;
@@ -132,6 +133,19 @@ describe("RrwebPreviewReplayer", () => {
 
     // Every seek is a rrweb pause; with its default it would freeze them all.
     expect(fakeRrweb.instances[0]?.config.pauseAnimation).toBe(false);
+
+    preview.destroy();
+  });
+
+  it("replays recorded top-layer state through the top-layer plugin", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100)],
+    });
+
+    expect(fakeRrweb.instances[0]?.config.plugins).toEqual([topLayerReplayPlugin]);
 
     preview.destroy();
   });

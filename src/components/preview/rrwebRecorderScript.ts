@@ -11,6 +11,7 @@ import {
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
+import { markOpenPopovers, POPOVER_OPEN_ATTRIBUTE, popoverToggleChange } from "./rrwebTopLayer";
 
 // Corrective-checkpoint throttle. rrweb's incremental mutation capture is lossy in
 // real browsers for some swap patterns (notably htmx innerHTML swaps, where a
@@ -128,6 +129,17 @@ export function createRrwebPreviewRecorderScript({
       // from the live DOM — the signal that a corrective snapshot is needed.
       var collectStaleMirrorNodeIds = ${collectStaleMirrorNodeIds.toString()};
 
+      // Inlined from rrwebTopLayer.ts (single source of truth): popover open
+      // state is top-layer state, not DOM, so rrweb records none of it. It is
+      // mirrored into the recording as a replay-only attribute instead.
+      var popoverOpenAttribute = ${JSON.stringify(POPOVER_OPEN_ATTRIBUTE)};
+      var markOpenPopovers = ${markOpenPopovers.toString()};
+      var popoverToggleChange = ${popoverToggleChange.toString()};
+
+      function getRecordingMirror() {
+        return window.rrwebRecord.record && window.rrwebRecord.record.mirror;
+      }
+
       function getRoute() {
         return (window.location.pathname || '/') + (window.location.search || '') + (window.location.hash || '');
       }
@@ -203,6 +215,17 @@ export function createRrwebPreviewRecorderScript({
       }
 
       function emit(event) {
+        // Every FullSnapshot — the seed, the host-requested one and corrective
+        // checkpoints — carries which popovers are open as of its serialization.
+        if (event.type === fullSnapshotType) {
+          try {
+            var snapshotMirror = getRecordingMirror();
+            if (snapshotMirror && event.data && event.data.node) {
+              markOpenPopovers(event.data.node, snapshotMirror, document, popoverOpenAttribute);
+            }
+          } catch (e) {}
+        }
+
         // Host-requested snapshot (recording start): bundle the Meta+FullSnapshot
         // pair into a refresh:true initial document instead of the patch stream,
         // so the recording seeds replay from the live recording-start state
@@ -282,6 +305,25 @@ export function createRrwebPreviewRecorderScript({
         hostSnapshotRequested = false;
         pendingRefreshMeta = null;
       });
+
+      // A popover opening or closing changes no DOM, so rrweb records nothing.
+      // Each toggle event (dispatched at the popover and never bubbling, hence
+      // the capture listener) becomes an attribute mutation on the popover's
+      // node in the patch stream; the live element itself is left untouched.
+      document.addEventListener('toggle', function(event) {
+        if (!sentInitial) return;
+        try {
+          var mirror = getRecordingMirror();
+          var change = mirror && popoverToggleChange(event.target, mirror, popoverOpenAttribute);
+          if (!change) return;
+          pendingEvents.push({
+            type: incrementalType,
+            data: { source: mutationSource, texts: [], attributes: [change], removes: [], adds: [] },
+            timestamp: Date.now(),
+          });
+          schedule();
+        } catch (e) {}
+      }, true);
 
       function startRecording() {
         try {

@@ -18,6 +18,7 @@ import {
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
 import { createRrwebPreviewRecorderScript } from "./rrwebRecorderScript";
+import { POPOVER_OPEN_ATTRIBUTE } from "./rrwebTopLayer";
 
 function event(type: number, timestamp: number): PreviewRecordedEvent {
   return { type, timestamp, data: { tag: timestamp } };
@@ -223,9 +224,28 @@ describe("recorder wiring snapshot handshake", () => {
   }
 
   interface SerializedNode {
+    id?: number;
     tagName?: string;
     attributes?: Record<string, string>;
     childNodes?: SerializedNode[];
+  }
+
+  function findSerializedById(
+    node: SerializedNode | undefined,
+    id: string,
+  ): SerializedNode | undefined {
+    if (!node) return undefined;
+    if (node.attributes?.id === id) return node;
+    for (const child of node.childNodes ?? []) {
+      const match = findSerializedById(child, id);
+      if (match) return match;
+    }
+    return undefined;
+  }
+
+  function fullSnapshotRoot(message: PostedMessage | undefined): SerializedNode | undefined {
+    const fullSnapshot = message?.payload.events?.find((event) => event.type === 2);
+    return (fullSnapshot?.data as { node?: SerializedNode } | undefined)?.node;
   }
 
   function findSerializedElement(
@@ -367,6 +387,116 @@ describe("recorder wiring snapshot handshake", () => {
       }
       getContext.mockRestore();
       toDataUrl.mockRestore();
+      window.removeEventListener("message", onMessage);
+    }
+  });
+
+  // A popover opens in the top layer without a DOM mutation, so rrweb alone
+  // records nothing; the wiring mirrors it as a replay-only attribute.
+  it("records popover open state on every FullSnapshot and on each toggle, never on the live DOM", async () => {
+    document.body.innerHTML = `
+      <div popover id="menu">Menu</div>
+      <div popover="manual" id="tip">Tip</div>`;
+    // jsdom has no popover top layer: each popover carries its own state.
+    const openState = new Map<string, boolean>([
+      ["menu", true],
+      ["tip", false],
+    ]);
+    for (const id of openState.keys()) {
+      const element = document.getElementById(id);
+      if (!element) throw new Error("missing popover fixture");
+      const matches = element.matches.bind(element);
+      Object.defineProperty(element, "matches", {
+        value: (selector: string) =>
+          selector === ":popover-open" ? openState.get(id) === true : matches(selector),
+      });
+    }
+    const tip = document.getElementById("tip")!;
+    const menu = document.getElementById("menu")!;
+
+    const messages: PostedMessage[] = [];
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as PostedMessage | undefined;
+      if (
+        data?.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE ||
+        data?.type === RUNTIME_PATCH_BATCH_MESSAGE_TYPE
+      ) {
+        messages.push(data);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    window.requestAnimationFrame ??= (callback) => window.setTimeout(() => callback(0), 16);
+
+    try {
+      // oxlint-disable-next-line no-eval -- running the served script is the point
+      (0, eval)(createRrwebPreviewRecorderScript({ setupMarker: "__POPOVER_WIRING_TEST__" }));
+      await sleep(50);
+
+      const [seed] = messages.filter(
+        (message) => message.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
+      );
+      // An earlier test's wiring may still be listening; keep to this one.
+      const documentId = seed.payload.documentId;
+      const ownPatchEvents = () =>
+        messages
+          .filter(
+            (message) =>
+              message.type === RUNTIME_PATCH_BATCH_MESSAGE_TYPE &&
+              message.payload.documentId === documentId,
+          )
+          .flatMap((message) => message.payload.events ?? []);
+      const seedRoot = fullSnapshotRoot(seed);
+      expect(findSerializedById(seedRoot, "menu")?.attributes?.[POPOVER_OPEN_ATTRIBUTE]).toBe("");
+      expect(findSerializedById(seedRoot, "tip")?.attributes).not.toHaveProperty(
+        POPOVER_OPEN_ATTRIBUTE,
+      );
+      const tipId = findSerializedById(seedRoot, "tip")?.id;
+      const menuId = findSerializedById(seedRoot, "menu")?.id;
+
+      openState.set("tip", true);
+      tip.dispatchEvent(new Event("toggle"));
+      openState.set("menu", false);
+      menu.dispatchEvent(new Event("toggle"));
+      await sleep(50);
+
+      const changes = ownPatchEvents()
+        .filter((event) => event.type === 3)
+        .flatMap(
+          (event) =>
+            (event.data as { attributes?: { id: number; attributes: object }[] }).attributes ?? [],
+        );
+      expect(changes).toEqual([
+        { id: tipId, attributes: { [POPOVER_OPEN_ATTRIBUTE]: "" } },
+        { id: menuId, attributes: { [POPOVER_OPEN_ATTRIBUTE]: null } },
+      ]);
+      // The mirror lives only in the recording, not on the author's page.
+      expect(tip.hasAttribute(POPOVER_OPEN_ATTRIBUTE)).toBe(false);
+
+      // The host's recording-start snapshot carries the state as of now.
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+          source: window,
+        }),
+      );
+      await sleep(50);
+      const refresh = messages.find(
+        (message) =>
+          message.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE &&
+          message.payload.refresh &&
+          message.payload.documentId === documentId,
+      );
+      const refreshRoot = fullSnapshotRoot(refresh);
+      expect(findSerializedById(refreshRoot, "tip")?.attributes?.[POPOVER_OPEN_ATTRIBUTE]).toBe("");
+      expect(findSerializedById(refreshRoot, "menu")?.attributes).not.toHaveProperty(
+        POPOVER_OPEN_ATTRIBUTE,
+      );
+    } finally {
+      const marker = (window as unknown as Record<string, { stop?: () => void } | boolean>)
+        .__POPOVER_WIRING_TEST__;
+      if (typeof marker === "object" && typeof marker.stop === "function") {
+        marker.stop();
+      }
       window.removeEventListener("message", onMessage);
     }
   });
