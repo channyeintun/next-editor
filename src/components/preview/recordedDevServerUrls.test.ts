@@ -232,7 +232,9 @@ describe("withRecordedDevServerUrls", () => {
             node: { type: 3, textContent: css(`${HOST}/logo.svg`), id: 8 },
           },
         ],
-        texts: [{ id: 4, value: css(`${HOST}/logo.svg`) }],
+        // rrweb records in-place text and element.style changes as written:
+        // their url()s are relative to the page.
+        texts: [{ id: 4, value: css("/logo.svg") }],
         attributes: [
           // Vite's link-mode HMR: the new <link> is inlined once it loads.
           { id: 9, attributes: { _cssText: css(`${HOST}/logo.svg`) } },
@@ -241,8 +243,8 @@ describe("withRecordedDevServerUrls", () => {
             id: 11,
             attributes: {
               style: {
-                "background-image": `url("${HOST}/logo.svg")`,
-                mask: [`url("${HOST}/logo.svg")`, "important"],
+                "background-image": 'url("/logo.svg")',
+                mask: ["url(logo.svg)", "important"],
                 color: "red",
               },
             },
@@ -270,7 +272,7 @@ describe("withRecordedDevServerUrls", () => {
       color: "red",
     });
     // The recording's own event is left as it was.
-    expect(mutation.data.texts[0].value).toBe(css(`${HOST}/logo.svg`));
+    expect(mutation.data.texts[0].value).toBe(css("/logo.svg"));
   });
 
   it("leaves a url() the page shows as text alone", () => {

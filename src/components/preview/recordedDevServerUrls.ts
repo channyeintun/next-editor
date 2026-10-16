@@ -32,6 +32,8 @@ type ReadWorkspaceFile = (path: string) => WorkspaceFile | null;
 export interface RecordedDevServerStream {
   /** The recorded dev server's origins, from the Meta events. */
   readonly origins: Set<string>;
+  /** The recorded page's URL, from the latest Meta event. */
+  pageHref: string | undefined;
   /** rrweb ids of the current document's `<style>` elements. */
   readonly styleIds: Set<number>;
   /** rrweb ids of the text nodes inside those `<style>`s. */
@@ -39,7 +41,7 @@ export interface RecordedDevServerStream {
 }
 
 export function createRecordedDevServerStream(): RecordedDevServerStream {
-  return { origins: new Set(), styleIds: new Set(), styleTextIds: new Set() };
+  return { origins: new Set(), pageHref: undefined, styleIds: new Set(), styleTextIds: new Set() };
 }
 
 interface RecordedDevServer {
@@ -72,6 +74,11 @@ interface NodeReplacements {
  * playback, so a file the dev server served from `public/` (or by its own
  * path) is still there to show. Images the workspace cannot answer with text
  * keep their URL.
+ *
+ * rrweb records a style property set through `element.style`, and a
+ * `<style>`'s text changed in place, as written (`url("/logo.svg")`). A
+ * relative `url()` resolves against the recorded page's URL, as it did live;
+ * in the replay frame it would resolve against nexteditor.dev.
  *
  * A stylesheet `<link>` rrweb has not inlined yet loses its `href`: rrweb
  * inlines it as `_cssText` once it loads, and replay then turns the link into
@@ -112,7 +119,7 @@ export function withRecordedDevServerUrls(
       let url: URL;
       let path: string;
       try {
-        url = new URL(src);
+        url = new URL(src, stream.pageHref);
         // A stray "%" survives new URL() and makes decodeURIComponent throw; that
         // would escape the replay step, so such a src just keeps its URL.
         path = decodeURIComponent(url.pathname).replace(/^\/+/, "");
@@ -130,7 +137,16 @@ export function withRecordedDevServerUrls(
     },
   };
 
-  return events.map((event) => withReplayableUrls(event, devServer, stream));
+  return events.map((event) => {
+    if (event.type === RRWEB_EVENT_TYPE.Meta) {
+      const { href } = event.data as { href?: unknown };
+      // Only a valid base: new URL() throws on an invalid one, even for an
+      // absolute URL.
+      if (typeof href === "string" && originOf(href)) stream.pageHref = href;
+      return event;
+    }
+    return withReplayableUrls(event, devServer, stream);
+  });
 }
 
 function withReplayableUrls(
