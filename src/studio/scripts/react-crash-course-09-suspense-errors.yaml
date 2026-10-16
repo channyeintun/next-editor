@@ -1077,7 +1077,7 @@ scenes:
     chapter: "Promise ကို use နဲ့ ဖတ်ကြည့်ရအောင်"
     narration: >
       [[mark:close-board-1]] editor ထဲ ပြန်သွားရအောင်။ တကယ့် server မရှိလို့
-      server အတု သေးသေးလေး တစ်ခု ရေးပါမယ်။ [[mark:open-api]] api ဖိုင်က အခု
+      fake server သေးသေးလေး တစ်ခု ရေးပါမယ်။ [[mark:open-api]] api ဖိုင်က အခု
       အလွတ်ပါ၊ ဘယ်ဖိုင်ကမှ import မလုပ်ထားသေးပါဘူး။ [[mark:type-api-top]] data
       ဖိုင် နှစ်ခုကနေ ဟင်းလျာ စာရင်းနဲ့ သုံးသပ်ချက်တွေကို ယူပြီး၊ ရပြီးသားကို
       မှတ်ထားဖို့ Map တစ်ခုကို cache အဖြစ် ထားပါတယ်။ [[mark:type-delay]]
@@ -1211,7 +1211,7 @@ scenes:
       [[mark:open-app-menu]] ကဲ၊ ဟင်းလျာ စာရင်းကို page ပေါ် တင်ရအောင်။ App က
       အခုထိ ဆိုင်ရဲ့ ခေါင်းစဉ်ကိုပဲ ပြနေပါသေးတယ်။ [[mark:wire-react-import]]
       အရင်ဆုံး လိုမယ့် အရာ သုံးခုကို import လုပ်ပါတယ်။ React ရဲ့ Suspense၊
-      server အတုက fetchMenu နဲ့ ခုနက ရေးခဲ့တဲ့ MenuList ပါ။
+      fake server က fetchMenu နဲ့ ခုနက ရေးခဲ့တဲ့ MenuList ပါ။
       [[mark:preview-opens]] dev server အသင့် ဖြစ်နေပြီမို့ preview ကို
       ဖွင့်လိုက်ရအောင်။ အခု ထည့်မှာကတော့ ခေါင်းစဉ် ပါတဲ့ ဟင်းလျာ card
       တစ်ခုနဲ့၊ list ကို ထုပ်ထားတဲ့ Suspense boundary ပါ။
@@ -1372,7 +1372,7 @@ scenes:
       [[mark:click-reviews]] ဖွင့်ကြည့်ရအောင်။ fallback ကို
       ကြည့်ပါ။ [[mark:reviews-arrive]] သုံးသပ်ချက်တွေ ရောက်လာပါပြီ။ code
       ယူတာရော data စောင့်တာရော နှစ်ခုလုံးကို fallback တစ်ခုတည်းက
-      ကိုင်ပေးသွားတာပါ။ [[mark:prewarm-note]] အရင်က component တစ်ခု suspend
+      handle လုပ်ပေးသွားတာပါ။ [[mark:prewarm-note]] အရင်က component တစ်ခု suspend
       ဖြစ်ရင်၊ boundary ထဲက ကျန်တဲ့ component တွေ အကုန် render ပြီးမှ fallback
       ပေါ်ပါတယ်။ React 19 ကစပြီးတော့ fallback ကို ချက်ချင်း ပြပြီး၊ ကျန်တဲ့
       component တွေကို နောက်ကွယ်မှာ ဆက် render လုပ်ပါတယ်။ ဒါကြောင့် သူတို့ရဲ့
