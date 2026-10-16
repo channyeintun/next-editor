@@ -2138,7 +2138,7 @@ scenes:
       [[mark:draw-tt-title]] အစက စာရင်းထဲက နောက်ဆုံး တစ်ခုကတော့ Trusted Types ပါ။
       [[mark:draw-tt-rule]] တချို့ site တွေက browser ရဲ့ security စည်းကမ်း
       တစ်ခုကို ဖွင့်ထားပြီး၊ စစ်ပြီးသား HTML နဲ့ script URL ကိုပဲ လက်ခံပါတယ်။
-      ဒါကြောင့် ထိုးထည့်တဲ့ script တွေကို တားနိုင်ပါတယ်။ [[mark:draw-tt-before]]
+      ဒါကြောင့် inject လုပ်တဲ့ script တွေကို တားနိုင်ပါတယ်။ [[mark:draw-tt-before]]
       React 19.3 မတိုင်ခင်က attribute ထဲက ခွင့်ပြုပြီးသား တန်ဖိုးတွေကို React က
       string အဖြစ် ပြောင်းလိုက်လို့၊ browser က လက်မခံခဲ့ပါဘူး။
       [[mark:draw-tt-now]] အခုတော့ React က မပြောင်းဘဲ ဒီအတိုင်း ပို့ပေးပါတယ်။
