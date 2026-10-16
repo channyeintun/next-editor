@@ -59,7 +59,8 @@ or changes what it reports. A change to this guide bumps the version here and
   narration.
 - In Burmese narration, keep the technical terms Burmese developers say in
   English in English: screen, tree, memory, component, state and the like,
-  not မျက်နှာပြင်, သစ်ပင် or မှတ်ဉာဏ်. Everyday words that read naturally in
+  not မျက်နှာပြင်, သစ်ပင် or မှတ်ဉာဏ်. Say "handle လုပ်ပေး" for
+  handle, never ကိုင်ပေး, and "fake server", never server အတု. Everyday words that read naturally in
   Burmese (ခလုတ်, ခေါင်းစဉ်, စာပိုဒ်) stay Burmese.
 - Every factual claim a viewer could quote needs a source on the scene
   (`sources:` in the script — official specs, docs, or tour pages preferred).
