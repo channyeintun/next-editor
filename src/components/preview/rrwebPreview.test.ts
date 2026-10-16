@@ -396,7 +396,8 @@ describe("recorder wiring snapshot handshake", () => {
   it("records popover open state on every FullSnapshot and on each toggle, never on the live DOM", async () => {
     document.body.innerHTML = `
       <div popover id="menu">Menu</div>
-      <div popover="manual" id="tip">Tip</div>`;
+      <div popover="manual" id="tip">Tip</div>
+      <button id="opener" popovertarget="tip">Open tip</button>`;
     // jsdom has no popover top layer: each popover carries its own state.
     const openState = new Map<string, boolean>([
       ["menu", true],
@@ -453,8 +454,13 @@ describe("recorder wiring snapshot handshake", () => {
       const tipId = findSerializedById(seedRoot, "tip")?.id;
       const menuId = findSerializedById(seedRoot, "menu")?.id;
 
+      const openerId = findSerializedById(seedRoot, "opener")?.id;
+
+      // The invoker rides along (ToggleEvent.source), so replay can nest it.
       openState.set("tip", true);
-      tip.dispatchEvent(new Event("toggle"));
+      const opened = new Event("toggle");
+      Object.defineProperty(opened, "source", { value: document.getElementById("opener") });
+      tip.dispatchEvent(opened);
       openState.set("menu", false);
       menu.dispatchEvent(new Event("toggle"));
       await sleep(50);
@@ -466,7 +472,7 @@ describe("recorder wiring snapshot handshake", () => {
             (event.data as { attributes?: { id: number; attributes: object }[] }).attributes ?? [],
         );
       expect(changes).toEqual([
-        { id: tipId, attributes: { [POPOVER_OPEN_ATTRIBUTE]: "" } },
+        { id: tipId, attributes: { [POPOVER_OPEN_ATTRIBUTE]: String(openerId) } },
         { id: menuId, attributes: { [POPOVER_OPEN_ATTRIBUTE]: null } },
       ]);
       // The mirror lives only in the recording, not on the author's page.
@@ -487,7 +493,10 @@ describe("recorder wiring snapshot handshake", () => {
           message.payload.documentId === documentId,
       );
       const refreshRoot = fullSnapshotRoot(refresh);
-      expect(findSerializedById(refreshRoot, "tip")?.attributes?.[POPOVER_OPEN_ATTRIBUTE]).toBe("");
+      // The snapshot renumbers nodes; the invoker is looked up afresh.
+      expect(findSerializedById(refreshRoot, "tip")?.attributes?.[POPOVER_OPEN_ATTRIBUTE]).toBe(
+        String(findSerializedById(refreshRoot, "opener")?.id),
+      );
       expect(findSerializedById(refreshRoot, "menu")?.attributes).not.toHaveProperty(
         POPOVER_OPEN_ATTRIBUTE,
       );

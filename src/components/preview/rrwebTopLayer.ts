@@ -30,6 +30,13 @@ import {
 // records a microtask later. Replay therefore focused an element that was still
 // hidden or inert, and the focus was lost; the plugin re-applies the recorded
 // focus once the top layer has changed.
+//
+// The attribute's value is the rrweb id of the popover's invoker (the
+// popovertarget/commandfor button, or showPopover's `source`), or "" when it
+// had none or the browser did not report one. The invoker decides nesting: a
+// popover opened from a button inside another popover keeps that one open even
+// when it is not its DOM descendant. A bare showPopover() in replay has no
+// invoker, so it closed the parent popover the live page kept open.
 export const POPOVER_OPEN_ATTRIBUTE = "data-next-editor-popover-open";
 
 type ReplayPlugin = NonNullable<playerConfig["plugins"]>[number];
@@ -46,14 +53,17 @@ export interface RrwebRecordingIdMirror {
   getId(node: Node): number;
 }
 
+/** The invoker a popover was last opened with, if the recorder knows one. */
+export type PopoverInvokerLookup = (popover: Element) => Node | null | undefined;
+
 export interface PopoverAttributeChange {
   id: number;
   attributes: Record<string, string | null>;
 }
 
 // Marks the popovers that are open in `doc` on a FullSnapshot's serialized
-// tree, by their rrweb ids. The snapshot must be the one rrweb just serialized
-// from `doc` with `mirror`, so the ids match.
+// tree, by their rrweb ids, each with its invoker's id. The snapshot must be the
+// one rrweb just serialized from `doc` with `mirror`, so the ids match.
 //
 // This and popoverToggleChange are inlined verbatim, via .toString(), into the
 // injected recorder script that runs inside the preview realm: plain var /
@@ -63,8 +73,9 @@ export function markOpenPopovers(
   mirror: RrwebRecordingIdMirror,
   doc: Document,
   attributeName: string,
+  invokerOf: PopoverInvokerLookup,
 ): void {
-  var openIds: Record<number, boolean> = {};
+  var openIds: Record<number, string> = {};
   var hasOpen = false;
   var popovers = doc.querySelectorAll("[popover]");
   for (var index = 0; index < popovers.length; index += 1) {
@@ -76,7 +87,9 @@ export function markOpenPopovers(
     }
     var id = isOpen ? mirror.getId(popovers[index]) : -1;
     if (id > 0) {
-      openIds[id] = true;
+      var invoker = invokerOf(popovers[index]);
+      var invokerId = invoker ? mirror.getId(invoker) : -1;
+      openIds[id] = invokerId > 0 ? String(invokerId) : "";
       hasOpen = true;
     }
   }
@@ -87,8 +100,8 @@ export function markOpenPopovers(
   while (pending.length > 0) {
     var node = pending.pop();
     if (!node) continue;
-    if (node.attributes && node.id !== undefined && openIds[node.id]) {
-      node.attributes[attributeName] = "";
+    if (node.attributes && node.id !== undefined && openIds[node.id] !== undefined) {
+      node.attributes[attributeName] = openIds[node.id];
     }
     var children = node.childNodes || [];
     for (var child = 0; child < children.length; child += 1) {
@@ -100,11 +113,13 @@ export function markOpenPopovers(
 // The attribute change that mirrors a `toggle` event into the recording, or
 // null when the target is not a popover rrweb has recorded. Reads the state
 // itself rather than the event's newState: toggle events coalesce, so an open
-// and close in one task arrive as a single event.
+// and close in one task arrive as a single event. `invoker` is the element that
+// opened it (ToggleEvent.source), when the browser reports one.
 export function popoverToggleChange(
   target: EventTarget | null,
   mirror: RrwebRecordingIdMirror,
   attributeName: string,
+  invoker: Node | null | undefined,
 ): PopoverAttributeChange | null {
   var element = target as Element | null;
   if (!element || typeof element.hasAttribute !== "function" || !element.hasAttribute("popover")) {
@@ -118,8 +133,9 @@ export function popoverToggleChange(
   } catch {
     return null;
   }
+  var invokerId = isOpen && invoker ? mirror.getId(invoker) : -1;
   var attributes: Record<string, string | null> = {};
-  attributes[attributeName] = isOpen ? "" : null;
+  attributes[attributeName] = isOpen ? (invokerId > 0 ? String(invokerId) : "") : null;
   return { id: id, attributes: attributes };
 }
 
@@ -128,20 +144,64 @@ interface RecordedAttributeChange {
   attributes: Record<string, unknown>;
 }
 
+/** The replay mirror, seen as rrweb id -> node. */
+interface ReplayNodeMirror {
+  getNode(id: number): Node | null;
+}
+
+// Deeper than any real menu tree; stops a cycle of popovers invoking each other.
+const MAX_POPOVER_NESTING = 32;
+
+// The element that opened a replayed popover live: the recorded invoker, or —
+// for recordings and browsers without one — a popovertarget/commandfor button
+// for it that sits in another open popover. The recording says both were open
+// at once, which a non-descendant popover only manages through such a button.
+function popoverInvoker(popover: HTMLElement, mirror: ReplayNodeMirror): HTMLElement | null {
+  const invokerId = Number(popover.getAttribute(POPOVER_OPEN_ATTRIBUTE));
+  const recorded = invokerId > 0 ? mirror.getNode(invokerId) : null;
+  if (recorded?.nodeType === 1) return recorded as HTMLElement;
+  if (!popover.id) return null;
+  const root = popover.getRootNode() as ParentNode;
+  for (const candidate of root.querySelectorAll?.("[popovertarget], [commandfor]") ?? []) {
+    const target = candidate.getAttribute("popovertarget") ?? candidate.getAttribute("commandfor");
+    if (
+      target === popover.id &&
+      !popover.contains(candidate) &&
+      candidate.closest(`[${POPOVER_OPEN_ATTRIBUTE}]`) !== null
+    ) {
+      return candidate as HTMLElement;
+    }
+  }
+  return null;
+}
+
 // Opens or closes a replayed popover to match its mirrored attribute. Called
 // from the host realm on a node of the replay frame, so it duck-types rather
 // than using instanceof.
-function syncPopover(node: Node): void {
+//
+// Opening shows the popovers it nests in first — its DOM ancestors' and its
+// invoker's — then shows it with its invoker as `source`, so the browser
+// works out the same popover ancestry as live and leaves those open. Showing a
+// parent after its child, or the child without an invoker, closes the other.
+function syncPopover(node: Node, mirror: ReplayNodeMirror, depth = 0): void {
   const popover = node as HTMLElement;
   if (typeof popover.showPopover !== "function") return;
   const shouldBeOpen = popover.hasAttribute(POPOVER_OPEN_ATTRIBUTE);
   try {
     if (popover.matches(":popover-open") === shouldBeOpen) return;
-    if (shouldBeOpen) {
-      popover.showPopover();
-    } else {
+    if (!shouldBeOpen) {
       popover.hidePopover();
+      return;
     }
+    const source = popoverInvoker(popover, mirror);
+    if (depth < MAX_POPOVER_NESTING) {
+      for (const inner of [popover.parentElement, source]) {
+        const outer = inner?.closest(`[${POPOVER_OPEN_ATTRIBUTE}]`);
+        if (outer && outer !== popover) syncPopover(outer, mirror, depth + 1);
+      }
+    }
+    if (popover.matches(":popover-open")) return;
+    popover.showPopover(source ? { source } : undefined);
   } catch {
     // No longer a popover, or detached: the next change or rebuild resyncs it.
   }
@@ -186,8 +246,9 @@ export function createTopLayerReplayPlugin(): ReplayPlugin {
         // focused yet, and a corrective snapshot may renumber them.
         focusedId = null;
         const doc = replayer.iframe.contentDocument;
+        const mirror = replayer.getMirror();
         for (const popover of doc?.querySelectorAll(`[${POPOVER_OPEN_ATTRIBUTE}]`) ?? []) {
-          syncPopover(popover);
+          syncPopover(popover, mirror);
         }
         return;
       }
@@ -216,7 +277,7 @@ export function createTopLayerReplayPlugin(): ReplayPlugin {
         if (!isPopoverChange && !("open" in change.attributes)) continue;
         const node = mirror.getNode(change.id);
         if (!node) continue;
-        if (isPopoverChange) syncPopover(node);
+        if (isPopoverChange) syncPopover(node, mirror);
         closeDialog(node, change);
         topLayerChanged = true;
       }

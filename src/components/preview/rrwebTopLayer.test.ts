@@ -91,6 +91,7 @@ describe("markOpenPopovers", () => {
       ]),
       document,
       POPOVER_OPEN_ATTRIBUTE,
+      () => null,
     );
 
     const [body] = snapshot.childNodes!;
@@ -104,9 +105,46 @@ describe("markOpenPopovers", () => {
     fakePopover(document.getElementById("closed")!, false);
     const snapshot: SerializedSnapshotNode = { id: 1, attributes: {} };
 
-    markOpenPopovers(snapshot, idMirror([]), document, POPOVER_OPEN_ATTRIBUTE);
+    markOpenPopovers(snapshot, idMirror([]), document, POPOVER_OPEN_ATTRIBUTE, () => null);
 
     expect(snapshot).toEqual({ id: 1, attributes: {} });
+  });
+
+  it("records the invoker each open popover was opened with, by its rrweb id", () => {
+    document.body.innerHTML = `<div popover id="menu"><button id="item">Sub</button></div><div popover id="sub"></div>`;
+    const menu = document.getElementById("menu")!;
+    const sub = document.getElementById("sub")!;
+    const item = document.getElementById("item")!;
+    fakePopover(menu, true);
+    fakePopover(sub, true);
+    const snapshot: SerializedSnapshotNode = {
+      id: 1,
+      childNodes: [
+        { id: 2, attributes: { popover: "" }, childNodes: [{ id: 3, attributes: {} }] },
+        { id: 4, attributes: { popover: "" } },
+      ],
+    };
+
+    markOpenPopovers(
+      snapshot,
+      idMirror([
+        [menu, 2],
+        [item, 3],
+        [sub, 4],
+      ]),
+      document,
+      POPOVER_OPEN_ATTRIBUTE,
+      (popover) => (popover === sub ? item : null),
+    );
+
+    expect(snapshot.childNodes?.[0].attributes).toEqual({
+      popover: "",
+      [POPOVER_OPEN_ATTRIBUTE]: "",
+    });
+    expect(snapshot.childNodes?.[1].attributes).toEqual({
+      popover: "",
+      [POPOVER_OPEN_ATTRIBUTE]: "3",
+    });
   });
 });
 
@@ -117,13 +155,34 @@ describe("popoverToggleChange", () => {
     const popover = fakePopover(menu, true);
     const mirror = idMirror([[menu, 7]]);
 
-    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE)).toEqual({
+    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE, null)).toEqual({
       id: 7,
       attributes: { [POPOVER_OPEN_ATTRIBUTE]: "" },
     });
     // A coalesced open+close arrives as one toggle: the state wins, not the event.
     popover.setOpen(false);
-    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE)).toEqual({
+    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE, null)).toEqual({
+      id: 7,
+      attributes: { [POPOVER_OPEN_ATTRIBUTE]: null },
+    });
+  });
+
+  it("records the invoker of an opening popover, and none once it closes", () => {
+    document.body.innerHTML = `<button id="opener"></button><div popover id="menu"></div>`;
+    const menu = document.getElementById("menu")!;
+    const opener = document.getElementById("opener")!;
+    const popover = fakePopover(menu, true);
+    const mirror = idMirror([
+      [opener, 5],
+      [menu, 7],
+    ]);
+
+    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE, opener)).toEqual({
+      id: 7,
+      attributes: { [POPOVER_OPEN_ATTRIBUTE]: "5" },
+    });
+    popover.setOpen(false);
+    expect(popoverToggleChange(menu, mirror, POPOVER_OPEN_ATTRIBUTE, opener)).toEqual({
       id: 7,
       attributes: { [POPOVER_OPEN_ATTRIBUTE]: null },
     });
@@ -136,9 +195,9 @@ describe("popoverToggleChange", () => {
     fakePopover(unrecorded, true);
     const mirror = idMirror([[details, 2]]);
 
-    expect(popoverToggleChange(details, mirror, POPOVER_OPEN_ATTRIBUTE)).toBeNull();
-    expect(popoverToggleChange(unrecorded, mirror, POPOVER_OPEN_ATTRIBUTE)).toBeNull();
-    expect(popoverToggleChange(null, mirror, POPOVER_OPEN_ATTRIBUTE)).toBeNull();
+    expect(popoverToggleChange(details, mirror, POPOVER_OPEN_ATTRIBUTE, null)).toBeNull();
+    expect(popoverToggleChange(unrecorded, mirror, POPOVER_OPEN_ATTRIBUTE, null)).toBeNull();
+    expect(popoverToggleChange(null, mirror, POPOVER_OPEN_ATTRIBUTE, null)).toBeNull();
   });
 });
 
@@ -186,6 +245,106 @@ describe("createTopLayerReplayPlugin", () => {
     expect(open.showPopover).toHaveBeenCalledOnce();
     expect(closed.showPopover).not.toHaveBeenCalled();
     expect(closed.hidePopover).not.toHaveBeenCalled();
+  });
+
+  // A model of the auto-popover stack: showing a popover hides every open one
+  // that is not its popover ancestor — found through its DOM parents or, as in
+  // the browser, through the invoker passed as `source`.
+  function fakeAutoPopovers(ids: string[]) {
+    const open = new Set<HTMLElement>();
+    const elements = ids.map((id) => document.getElementById(id)!);
+    const ancestorOf = (element: HTMLElement, source?: HTMLElement) => {
+      for (const start of [element.parentElement, source]) {
+        let node = start ?? null;
+        while (node && !(open.has(node) && node !== element)) node = node.parentElement;
+        if (node) return node;
+      }
+      return null;
+    };
+    type ShowPopover = (options?: { source?: HTMLElement }) => void;
+    const shown = new Map<HTMLElement, ReturnType<typeof vi.fn<ShowPopover>>>();
+    for (const element of elements) {
+      const matches = element.matches.bind(element);
+      Object.defineProperty(element, "matches", {
+        value: (selector: string) =>
+          selector === ":popover-open" ? open.has(element) : matches(selector),
+      });
+      const showPopover = vi.fn<ShowPopover>((options) => {
+        const keep = new Set<HTMLElement>();
+        for (let node = ancestorOf(element, options?.source); node; node = ancestorOf(node)) {
+          keep.add(node);
+        }
+        // Deleting the entry being visited is safe while iterating a Set.
+        for (const other of open) if (!keep.has(other)) open.delete(other);
+        open.add(element);
+      });
+      shown.set(element, showPopover);
+      Object.assign(element, { showPopover, hidePopover: () => open.delete(element) });
+    }
+    return {
+      openIds: () => elements.filter((element) => open.has(element)).map((element) => element.id),
+      showPopover: (id: string) => shown.get(document.getElementById(id)!)!,
+    };
+  }
+
+  const fullSnapshot = { type: 2, timestamp: 0, data: {} } as unknown as eventWithTime;
+
+  it("opens a popover from its recorded invoker, keeping the popover that invoker sits in open", () => {
+    document.body.innerHTML = `
+      <div popover id="menu" ${POPOVER_OPEN_ATTRIBUTE}><button id="item">Sub</button></div>
+      <div popover id="sub"></div>`;
+    const item = document.getElementById("item")!;
+    const sub = document.getElementById("sub")!;
+    const stack = fakeAutoPopovers(["menu", "sub"]);
+    const plugin = createTopLayerReplayPlugin();
+    const context = replayContext(
+      document,
+      new Map<number, Node>([
+        [2, document.getElementById("menu")!],
+        [3, item],
+        [4, sub],
+      ]),
+    );
+    plugin.handler?.(fullSnapshot, true, context);
+
+    sub.setAttribute(POPOVER_OPEN_ATTRIBUTE, "3");
+    plugin.handler?.(
+      mutation([{ id: 4, attributes: { [POPOVER_OPEN_ATTRIBUTE]: "3" } }]),
+      true,
+      context,
+    );
+
+    expect(stack.showPopover("sub")).toHaveBeenCalledWith({ source: item });
+    expect(stack.openIds()).toEqual(["menu", "sub"]);
+  });
+
+  it("rebuilds nested popovers parent first, whatever their document order", () => {
+    // The submenu comes first in the document, and nests only via its invoker.
+    document.body.innerHTML = `
+      <div popover id="sub" ${POPOVER_OPEN_ATTRIBUTE}="3"></div>
+      <div popover id="menu" ${POPOVER_OPEN_ATTRIBUTE}><button id="item">Sub</button></div>`;
+    const stack = fakeAutoPopovers(["sub", "menu"]);
+    const context = replayContext(document, new Map([[3, document.getElementById("item")!]]));
+
+    createTopLayerReplayPlugin().handler?.(fullSnapshot, true, context);
+
+    expect(stack.openIds()).toEqual(["sub", "menu"]);
+  });
+
+  it("falls back to a popovertarget button inside an open popover when no invoker was recorded", () => {
+    document.body.innerHTML = `
+      <button popovertarget="menu">Menu</button>
+      <div popover id="sub" ${POPOVER_OPEN_ATTRIBUTE}></div>
+      <div popover id="menu" ${POPOVER_OPEN_ATTRIBUTE}><button id="item" popovertarget="sub">Sub</button></div>`;
+    const stack = fakeAutoPopovers(["sub", "menu"]);
+
+    createTopLayerReplayPlugin().handler?.(fullSnapshot, true, replayContext(document));
+
+    expect(stack.showPopover("sub")).toHaveBeenCalledWith({
+      source: document.getElementById("item"),
+    });
+    expect(stack.showPopover("menu")).toHaveBeenCalledWith(undefined);
+    expect(stack.openIds()).toEqual(["sub", "menu"]);
   });
 
   // jsdom has no top layer: the dialog tracks "modal" itself, like Chrome does

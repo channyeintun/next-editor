@@ -135,6 +135,12 @@ export function createRrwebPreviewRecorderScript({
       var popoverOpenAttribute = ${JSON.stringify(POPOVER_OPEN_ATTRIBUTE)};
       var markOpenPopovers = ${markOpenPopovers.toString()};
       var popoverToggleChange = ${popoverToggleChange.toString()};
+      // The invoker each open popover was opened with (ToggleEvent.source), so
+      // every snapshot can record it too: replay needs it to nest popovers.
+      var popoverInvokers = typeof WeakMap === 'function' ? new WeakMap() : null;
+      function popoverInvokerOf(popover) {
+        return popoverInvokers ? popoverInvokers.get(popover) : null;
+      }
 
       function getRecordingMirror() {
         return window.rrwebRecord.record && window.rrwebRecord.record.mirror;
@@ -221,7 +227,7 @@ export function createRrwebPreviewRecorderScript({
           try {
             var snapshotMirror = getRecordingMirror();
             if (snapshotMirror && event.data && event.data.node) {
-              markOpenPopovers(event.data.node, snapshotMirror, document, popoverOpenAttribute);
+              markOpenPopovers(event.data.node, snapshotMirror, document, popoverOpenAttribute, popoverInvokerOf);
             }
           } catch (e) {}
         }
@@ -311,10 +317,16 @@ export function createRrwebPreviewRecorderScript({
       // the capture listener) becomes an attribute mutation on the popover's
       // node in the patch stream; the live element itself is left untouched.
       document.addEventListener('toggle', function(event) {
+        try {
+          if (popoverInvokers && event.target) {
+            if (event.source) popoverInvokers.set(event.target, event.source);
+            else popoverInvokers.delete(event.target);
+          }
+        } catch (e) {}
         if (!sentInitial) return;
         try {
           var mirror = getRecordingMirror();
-          var change = mirror && popoverToggleChange(event.target, mirror, popoverOpenAttribute);
+          var change = mirror && popoverToggleChange(event.target, mirror, popoverOpenAttribute, popoverInvokerOf(event.target));
           if (!change) return;
           pendingEvents.push({
             type: incrementalType,
