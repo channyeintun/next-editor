@@ -1,0 +1,1085 @@
+# THROWAWAY pronunciation probe for "SRE from zero" (never commit to
+# src/studio/scripts/; import it into /studio with Import… to render it).
+#
+# Purpose: hear, in Chan's VoxCPM2 voice, how the course's English terms and
+# numbers come out before the first real lesson renders, and decide which
+# entries go into BURMESE_RESPELLINGS (src/studio/script/lexicon.ts).
+#
+# How to listen: every sentence is its own dialog (split by marks), so each
+# one is a separate VoxCPM2 take. A term the glossary is unsure about
+# (glossary.md section 4.2) is spoken twice, in the same sentence:
+#   1st take = the spelling lessons will use (what the voice gets today)
+#   2nd take = the candidate respelling, written exactly as the speech text
+#              would read once that entry is in BURMESE_RESPELLINGS
+#              (e.g. "SLO ကို" -> "S L O ကို", "Padauk ရဲ့" -> "ပိတောက် ရဲ့").
+# Numbers (board 6) are spoken three times: Latin digits, Burmese digits,
+# Burmese words; 99.95 (board 7) twice: Latin digits, Burmese digits.
+# "3,000" can never be fixed by the lexicon (a comma breaks its token match),
+# so board 5 also says "3000", the comma-free form a respelling could reach.
+# The respellings sit in the narration ONLY because this is a probe; real
+# lessons never respell inside narration (glossary 3.1 / 4.3).
+#
+# Terms spoken once, with no second take (Priority C, "fine by precedent"):
+# RPO, RTO, MTTR; spoken unchanged in both takes: incident, latency,
+# error budget, 3000.
+schemaVersion: 1
+
+lesson:
+  slug: sre-pronunciation-probe
+  title: "SRE from zero · pronunciation probe"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE pronunciation probe
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # အသံထွက် စမ်းသပ်ချက်
+
+        1. SRE · SLO · SLI · SLA  →  S R E · S L O · S L I · S L A
+        2. RPO · RTO · MTTR (တစ်ခါပဲ) · STPA · CAST  →  S T P A · cast
+        3. on-call · postmortem · toil  →  on call · post mortem · toyl
+        4. canary · rollout · rollback  →  ka nairy · roll out · roll back
+        5. Padauk · Thingyan  →  ပိတောက် · သင်္ကြန်
+        6. 99.9 · 3,000 · 43  →  ၉၉.၉ · ၃,၀၀၀ · ၄၃  →  Burmese words
+        7. 99.95  →  ၉၉.၉၅
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>အသံထွက် စမ်းသပ်ချက်</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card"><h1>အသံထွက် စမ်းသပ်ချက်</h1></main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Colour jobs: blue = the spelling lessons use (1st take), violet = the
+    # candidate respelling (2nd take), green = Burmese words (3rd take).
+    # Board 1: initialisms that end in a vowel
+    - {
+        id: b1-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "1 · SRE · SLO · SLI · SLA",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-head-a,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "1 · ရေးနေကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-head-b,
+        kind: text,
+        x: 690,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "2 · ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-a,
+        kind: rectangle,
+        x: 270,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-box-b,
+        kind: rectangle,
+        x: 680,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b1-a1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "SRE",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-a2,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "SLI",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-a3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "SLO",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-a4,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "SLA",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-b1,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "S R E",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-b2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "S L I",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-b3,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "S L O",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-b4,
+        kind: text,
+        x: 700,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "S L A",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 2: the other initialisms, and CAST
+    - {
+        id: b2-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 720,
+        height: 46,
+        text: "2 · RPO · RTO · MTTR · STPA · CAST",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-head-a,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "1 · ရေးနေကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-head-b,
+        kind: text,
+        x: 690,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "2 · ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-box-a,
+        kind: rectangle,
+        x: 270,
+        y: 280,
+        width: 380,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-box-b,
+        kind: rectangle,
+        x: 680,
+        y: 280,
+        width: 380,
+        height: 190,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b2-a1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 340,
+        height: 36,
+        text: "RPO · RTO · MTTR",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-a2,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "STPA",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-a3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "CAST",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-b1,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "တစ်ခါပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-b2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "S T P A",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-b3,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "cast",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 3: run-together and hyphenated words
+    - {
+        id: b3-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 680,
+        height: 46,
+        text: "3 · on-call · postmortem · toil",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-head-a,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "1 · ရေးနေကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-head-b,
+        kind: text,
+        x: 690,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "2 · ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-box-a,
+        kind: rectangle,
+        x: 270,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-box-b,
+        kind: rectangle,
+        x: 680,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b3-a1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "on-call",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-a2,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "incident",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-a3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "postmortem",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-a4,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "toil",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-b1,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "on call",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-b2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "မပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-b3,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "post mortem",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b3-b4,
+        kind: text,
+        x: 700,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "toyl",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 4: release words
+    - {
+        id: b4-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 680,
+        height: 46,
+        text: "4 · canary · rollout · rollback",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-head-a,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "1 · ရေးနေကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-head-b,
+        kind: text,
+        x: 690,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "2 · ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-box-a,
+        kind: rectangle,
+        x: 270,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b4-box-b,
+        kind: rectangle,
+        x: 680,
+        y: 280,
+        width: 380,
+        height: 250,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b4-a1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "canary",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-a2,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "rollout",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-a3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 340,
+        height: 36,
+        text: "latency · error budget",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-a4,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "rollback",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-b1,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "ka nairy",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-b2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "roll out",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-b3,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "မပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b4-b4,
+        kind: text,
+        x: 700,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "roll back",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 5: Burmese names in Latin letters
+    - {
+        id: b5-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "5 · Padauk · Thingyan",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-head-a,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "1 · ရေးနေကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-head-b,
+        kind: text,
+        x: 690,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "2 · ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b5-box-a,
+        kind: rectangle,
+        x: 270,
+        y: 280,
+        width: 380,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b5-box-b,
+        kind: rectangle,
+        x: 680,
+        y: 280,
+        width: 380,
+        height: 190,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b5-a1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "Padauk",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-a2,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "3000",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-a3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "Thingyan",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-b1,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "ပိတောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-b2,
+        kind: text,
+        x: 700,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "မပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-b3,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "သင်္ကြန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 6: the Send money SLO numbers, three ways
+    - {
+        id: b6-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "6 · 99.9 · 3,000 · 43",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b6-box-1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 820,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b6-box-2,
+        kind: rectangle,
+        x: 270,
+        y: 350,
+        width: 820,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b6-box-3,
+        kind: rectangle,
+        x: 270,
+        y: 460,
+        width: 820,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b6-row-1,
+        kind: text,
+        x: 285,
+        y: 262,
+        width: 790,
+        height: 36,
+        text: "1 · 99.9 · 3,000 · 43",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b6-row-2,
+        kind: text,
+        x: 285,
+        y: 372,
+        width: 790,
+        height: 36,
+        text: "2 · ၉၉.၉ · ၃,၀၀၀ · ၄၃",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b6-row-3,
+        kind: text,
+        x: 285,
+        y: 482,
+        width: 800,
+        height: 36,
+        text: "3 · ကိုးဆယ့်ကိုး ဒသမ ကိုး · သုံးထောင် · လေးဆယ့်သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board 7: the stricter target, two ways (Burmese words skipped: same
+    # digit-by-digit pattern as board 6, and the probe stays under 2 minutes)
+    - {
+        id: b7-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "7 · 99.95",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b7-box-1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 820,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b7-box-2,
+        kind: rectangle,
+        x: 270,
+        y: 350,
+        width: 820,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b7-row-1,
+        kind: text,
+        x: 285,
+        y: 262,
+        width: 790,
+        height: 36,
+        text: "1 · 99.95",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b7-row-2,
+        kind: text,
+        x: 285,
+        y: 372,
+        width: 790,
+        height: 36,
+        text: "2 · ၉၉.၉၅",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps this for the Burmese provider chosen in the render console
+  # (pick မြန်မာ · VoxCPM2 with Chan's reference).
+  voiceProfile: pocket-alba-v1
+  seed: 2027
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: acronyms
+    chapter: "1 · SRE · SLO · SLI · SLA"
+    narration: >
+      SRE တွေက SLI နဲ့ တိုင်းပြီး SLO ပစ်မှတ် ထားပါတယ်။
+      [[mark:s1-b1]] S R E တွေက S L I နဲ့ တိုင်းပြီး S L O ပစ်မှတ် ထားပါတယ်။
+      [[mark:s1-a2]] SLA ကတော့ SLO ထက် လျော့ထားတဲ့ customer ကတိပါ။
+      [[mark:s1-b2]] S L A ကတော့ S L O ထက် လျော့ထားတဲ့ customer ကတိပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1900 } }
+      - id: board-1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1600 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            b1-title,
+            b1-head-a,
+            b1-head-b,
+            b1-box-a,
+            b1-box-b,
+            b1-a1,
+            b1-a2,
+            b1-a3,
+            b1-a4,
+            b1-b1,
+            b1-b2,
+            b1-b3,
+            b1-b4,
+          ]
+
+  - id: initialisms
+    chapter: "2 · RPO · RTO · MTTR · STPA · CAST"
+    narration: >
+      RPO နဲ့ RTO ကို ကြိုသတ်မှတ်ပြီး MTTR ကို လတိုင်း ကြည့်ပါတယ်။
+      [[mark:s2-a1]] STPA ကို design မှာ သုံးပြီး CAST ကို incident ပြီးမှ
+      သုံးပါတယ်။
+      [[mark:s2-b1]] S T P A ကို design မှာ သုံးပြီး cast ကို incident ပြီးမှ
+      သုံးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-2
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds:
+          [
+            b2-title,
+            b2-head-a,
+            b2-head-b,
+            b2-box-a,
+            b2-box-b,
+            b2-a1,
+            b2-a2,
+            b2-a3,
+            b2-b1,
+            b2-b2,
+            b2-b3,
+          ]
+
+  - id: compounds
+    chapter: "3 · on-call · postmortem · toil"
+    narration: >
+      on-call ကျတဲ့သူက incident ပြီးရင် postmortem ရေးပါတယ်။
+      [[mark:s3-b1]] on call ကျတဲ့သူက incident ပြီးရင် post mortem ရေးပါတယ်။
+      [[mark:s3-a2]] toil များလာရင် on-call ကျတဲ့သူတွေ ပင်ပန်းပါတယ်။
+      [[mark:s3-b2]] toyl များလာရင် on call ကျတဲ့သူတွေ ပင်ပန်းပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-3
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds:
+          [
+            b3-title,
+            b3-head-a,
+            b3-head-b,
+            b3-box-a,
+            b3-box-b,
+            b3-a1,
+            b3-a2,
+            b3-a3,
+            b3-a4,
+            b3-b1,
+            b3-b2,
+            b3-b3,
+            b3-b4,
+          ]
+
+  - id: releases
+    chapter: "4 · canary · rollout · rollback"
+    narration: >
+      canary နဲ့ user နည်းနည်းဆီ အရင် rollout လုပ်ပါတယ်။
+      [[mark:s4-b1]] ka nairy နဲ့ user နည်းနည်းဆီ အရင် roll out လုပ်ပါတယ်။
+      [[mark:s4-a2]] latency တက်လို့ error budget ကုန်ရင် rollback လုပ်ပါတယ်။
+      [[mark:s4-b2]] latency တက်လို့ error budget ကုန်ရင် roll back လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-4
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds:
+          [
+            b4-title,
+            b4-head-a,
+            b4-head-b,
+            b4-box-a,
+            b4-box-b,
+            b4-a1,
+            b4-a2,
+            b4-a3,
+            b4-a4,
+            b4-b1,
+            b4-b2,
+            b4-b3,
+            b4-b4,
+          ]
+
+  - id: names
+    chapter: "5 · Padauk · Thingyan"
+    narration: >
+      Padauk က တစ်စက္ကန့် request 3000 ခံနိုင်ပေမဲ့၊ Thingyan ညမှာ မလောက်ပါဘူး။
+      [[mark:s5-b1]] ပိတောက် က တစ်စက္ကန့် request 3000 ခံနိုင်ပေမဲ့၊ သင်္ကြန်
+      ညမှာ မလောက်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-5
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds:
+          [
+            b5-title,
+            b5-head-a,
+            b5-head-b,
+            b5-box-a,
+            b5-box-b,
+            b5-a1,
+            b5-a2,
+            b5-a3,
+            b5-b1,
+            b5-b2,
+            b5-b3,
+          ]
+
+  - id: budget-numbers
+    chapter: "6 · 99.9 · 3,000 · 43"
+    narration: >
+      SLO က 99.9 ရာခိုင်နှုန်း ဆိုရင်၊ error budget က ငွေလွှဲ
+      3,000 ခု၊ မိနစ် 43 လောက်ပါ။
+      [[mark:s6-n2]] SLO က ၉၉.၉ ရာခိုင်နှုန်း ဆိုရင်၊ error budget က ငွေလွှဲ
+      ၃,၀၀၀ ခု၊ မိနစ် ၄၃ လောက်ပါ။
+      [[mark:s6-n3]] SLO က ကိုးဆယ့်ကိုး ဒသမ ကိုး ရာခိုင်နှုန်း ဆိုရင်၊ error
+      budget က ငွေလွှဲ သုံးထောင် ခု၊ မိနစ် လေးဆယ့်သုံး လောက်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-6
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds: [b6-title, b6-box-1, b6-box-2, b6-box-3, b6-row-1, b6-row-2, b6-row-3]
+
+  - id: stricter-target
+    chapter: "7 · 99.95"
+    narration: >
+      99.95 ရာခိုင်နှုန်းအထိ တင်ရင် error budget တစ်ဝက် လျော့ပါတယ်။
+      [[mark:s7-n2]] ၉၉.၉၅ ရာခိုင်နှုန်းအထိ တင်ရင် error budget တစ်ဝက်
+      လျော့ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, table of contents",
+          url: "https://sre.google/sre-book/table-of-contents/",
+        }
+    actions:
+      - id: board-7
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds: [b7-title, b7-box-1, b7-box-2, b7-row-1, b7-row-2]
+
+checks:
+  # 300: no deck pages in this probe.
+  - { type: timing.p95Ms, max: 300 }
