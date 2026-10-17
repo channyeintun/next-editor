@@ -1,0 +1,2399 @@
+# CSS course (Burmese), lesson 42 of 43: view transitions.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text with
+# notes; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board A (recall lesson 41; a single-page app swaps its content in one
+# step, and the old content is gone before anything could animate) → code tour
+# (index.html: the menu view with three dish buttons, the hidden dish view, two
+# hidden status lines; main.js: show() changes the DOM, go() only calls show(),
+# the click listener marks the clicked card .is-picked) → clicks: the dish view
+# replaces the menu in one step and back (the problem, live — main.js has no
+# view transition yet) → board B (the five steps of startViewTransition; the
+# page can't be clicked while it runs) → ONE block insert into go(): feature
+# detection, the options object with update + types, finished → status line,
+# return; the old show() line stays below as the fallback (the page reloads) →
+# click a dish (vt-status "forwards"), honest replay note, board C (default
+# cross-fade in three frames, 0.25 s ease, plus-lighter) → board D (the
+# pseudo-element tree; root comes from the UA stylesheet on html) → typed CSS:
+# group(root) 1.5 s (old/new inherit the timing) → slide keyframes on old/new +
+# board E (three frames) → types: mirrored keyframes inside
+# html:active-view-transition-type(backwards) with nesting, click back
+# (vt-status "backwards") → view-transition-name: dish-photo on the big photo
+# and the picked card's thumbnail, the photo group's own duration, click a dish
+# (class "dish-card is-picked") + board F (the morph in three frames) → board G
+# (one element per name before and after; duplicates skip the animation;
+# display: none doesn't count; list-to-detail naming; match-element;
+# view-transition-class) → board H + typed height: 100% / object-fit: cover on
+# the photo's old/new; fit-content for text; a still header → reduced motion
+# media query, click back → recap (cross-document @view-transition,
+# element-scoped transitions, one quiz question), hand-off to Tailwind (43).
+#
+# Replay honesty (PLATFORM.md §3): document.startViewTransition shows only the
+# final state in the recording (the snapshots and ::view-transition
+# pseudo-elements are not DOM). So every animation is drawn on a whiteboard as
+# frames, the narration says so once (after-palata) and invites learners to run
+# the project in their own browser, and each transition leaves a DOM fact: the
+# finished promise writes its type into the hidden vt-status line.
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only keystroke-typed
+# file and never contains url(, @import or image-set(; no postcss config. A
+# keystroke-typed "(" swallows everything after it until its ")", so every CSS
+# edit is APPENDED at the end of the file (nothing follows it). None of the
+# typed CSS changes the still page: it only styles a running transition.
+# main.js gets ONE block insert of complete statements (Vite reloads the page,
+# which returns to the menu view); every click comes after its last edit. The
+# feature check also asks for the types option (Chrome 125, Safari 18.2,
+# Firefox 147): older versions have startViewTransition but reject the options
+# object, so they take the plain show() fallback. No HTML edit. No kit.js
+# (main.js owns the clicks).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-42-view-transitions
+  title: "CSS course 42: View transition"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 42
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (shop name only), then the lesson block
+      # vt-views: #menu-view (three dish buttons, each a square thumbnail, a
+      # name and a price) and the hidden #dish-view (big photo, name, back
+      # button), plus two hidden status lines (view-status: which view
+      # show() put on screen; vt-status: the type of the last view transition
+      # that finished). main.js instead of kit.js.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (shop name only) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+            </header>
+
+            <main class="page" id="main">
+              <!-- lesson block: vt-views (one page, two views; main.js swaps them) -->
+              <section class="menu-view" id="menu-view" data-testid="menu-view">
+                <h2>စားစရာ</h2>
+                <ul class="dish-list">
+                  <li>
+                    <button class="dish-card" type="button" data-testid="open-mohinga">
+                      <img class="thumb" src="/mohinga.svg" alt="" width="72" height="72" />
+                      <span class="name">မုန့်ဟင်းခါး</span>
+                      <span class="price">2,500 ကျပ်</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dish-card" type="button" data-testid="open-palata">
+                      <img class="thumb" src="/palata.svg" alt="" width="72" height="72" />
+                      <span class="name">ပလာတာ</span>
+                      <span class="price">1,200 ကျပ်</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dish-card" type="button" data-testid="open-laphet-thoke">
+                      <img class="thumb" src="/laphet-thoke.svg" alt="" width="72" height="72" />
+                      <span class="name">လက်ဖက်သုပ်</span>
+                      <span class="price">2,000 ကျပ်</span>
+                    </button>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="dish-view" id="dish-view" data-testid="dish-view" hidden>
+                <img class="dish-photo" src="/mohinga.svg" alt="" width="320" height="200" data-testid="dish-photo" />
+                <h2 class="dish-name" tabindex="-1" data-testid="dish-name">မုန့်ဟင်းခါး</h2>
+                <button class="order-btn back-button" type="button" data-testid="back-button">← မီနူး</button>
+              </section>
+
+              <p class="visually-hidden" id="view-status" data-testid="view-status">menu</p>
+              <p class="visually-hidden" id="vt-status" data-testid="vt-status"></p>
+            </main>
+
+            <script type="module" src="/main.js"></script>
+          </body>
+        </html>
+      # main.js: pinned complete, never keystroke-typed. go() only calls show()
+      # until the lesson block-inserts the view transition at its top. show()
+      # also moves keyboard focus into the view it shows (the dish heading, or
+      # back to the picked card), since the focused button was just hidden.
+      main.js: |
+        // main.js: a tiny single-page app. One page holds two views, the menu
+        // and one dish, and a click swaps them without loading a new page.
+        const menuView = document.querySelector("#menu-view");
+        const dishView = document.querySelector("#dish-view");
+        const dishPhoto = document.querySelector(".dish-photo");
+        const dishName = document.querySelector(".dish-name");
+
+        // Two hidden status lines that only the lesson's checks read.
+        const viewStatus = document.querySelector("#view-status");
+        const vtStatus = document.querySelector("#vt-status");
+
+        // Update the DOM: fill in the dish, hide one view and show the other.
+        function show(view, card) {
+          if (card) {
+            dishPhoto.src = card.querySelector(".thumb").src;
+            dishName.textContent = card.querySelector(".name").textContent;
+          }
+          menuView.hidden = view !== "menu";
+          dishView.hidden = view !== "dish";
+          viewStatus.textContent = view;
+          // Move keyboard focus into the view on screen; the focused button
+          // was just hidden, and focus would otherwise fall back to the page.
+          if (view === "dish") {
+            dishName.focus();
+          } else {
+            document.querySelector(".is-picked")?.focus();
+          }
+        }
+
+        // Go to a view.
+        function go(view, card) {
+          show(view, card);
+        }
+
+        document.addEventListener("click", (event) => {
+          const card = event.target.closest(".dish-card");
+          if (card) {
+            // Mark the clicked card, so CSS can find its photo.
+            for (const picked of document.querySelectorAll(".is-picked")) {
+              picked.classList.remove("is-picked");
+            }
+            card.classList.add("is-picked");
+            go("dish", card);
+          }
+          if (event.target.closest(".back-button")) {
+            go("menu");
+          }
+        });
+      # base.css: kit sections A, B, B2 and C (section D dropped). Section E:
+      # the look of the dish list, the cards, the square thumbnails (cropped
+      # with object-fit on the real <img>, never shown) and the wide dish photo.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 42 keeps A, B, B2 and C (section D dropped). Section E pins the
+          look of the two views; nothing here names a view transition.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 42: the two views of the single-page app. The menu view is a
+           list of dish buttons with square thumbnails; the dish view has a wide
+           photo. Their view transitions are typed in the lesson. */
+        .menu-view,
+        .dish-view {
+          padding-top: 16px;
+        }
+
+        .dish-list {
+          display: grid;
+          gap: 12px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .dish-card {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          width: 100%;
+          padding: 8px 16px 8px 8px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: #fff;
+          color: inherit;
+          font: inherit;
+          text-align: start;
+          cursor: pointer;
+        }
+
+        .dish-card .name {
+          flex: 1;
+          font-weight: 700;
+        }
+
+        .thumb {
+          display: block;
+          width: 72px;
+          height: 72px;
+          object-fit: cover;
+          border-radius: 8px;
+        }
+
+        .dish-photo {
+          display: block;
+          width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        .dish-name {
+          margin: 12px 0 0;
+        }
+
+        /* main.js moves focus to this heading (tabindex -1) when the dish view
+           opens, so screen readers announce it; it isn't a control, so no ring. */
+        .dish-name:focus {
+          outline: none;
+        }
+      public/mohinga.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#8b5a2b"/>
+          <g fill="#7a4a22"><rect x="0" y="40" width="320" height="4"/><rect x="0" y="150" width="320" height="4"/></g>
+          <ellipse cx="160" cy="104" rx="104" ry="72" fill="#fff8ec"/>
+          <ellipse cx="160" cy="100" rx="80" ry="52" fill="#e39a32"/>
+          <g fill="none" stroke="#fff3d6" stroke-width="5" stroke-linecap="round">
+            <path d="M104 92q14-12 28 0t28 0 28 0 28 0"/>
+            <path d="M100 108q14-12 28 0t28 0 28 0 28 0"/>
+            <path d="M112 124q14-12 28 0t28 0 28 0"/>
+          </g>
+          <circle cx="196" cy="84" r="13" fill="#fff" stroke="#f2c14e" stroke-width="7"/>
+          <g fill="#2f6b3a"><circle cx="128" cy="78" r="5"/><circle cx="150" cy="70" r="4"/><circle cx="170" cy="130" r="5"/><circle cx="214" cy="112" r="4"/></g>
+          <g fill="#c9a227"><rect x="122" y="112" width="18" height="10" rx="3"/><rect x="176" y="104" width="16" height="9" rx="3"/></g>
+        </svg>
+      public/palata.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#3b5d4a"/>
+          <ellipse cx="160" cy="104" rx="118" ry="74" fill="#fff8ec"/>
+          <path d="M70 120 L160 44 L238 128 Z" fill="#f2c56b" stroke="#c98a2b" stroke-width="5" stroke-linejoin="round"/>
+          <path d="M96 116 L160 62 L214 122" fill="none" stroke="#d99c3a" stroke-width="4"/>
+          <g fill="#c98a2b"><circle cx="150" cy="96" r="5"/><circle cx="176" cy="104" r="4"/><circle cx="132" cy="110" r="4"/></g>
+          <circle cx="232" cy="150" r="24" fill="#b23a2b" stroke="#fff8ec" stroke-width="5"/>
+          <circle cx="232" cy="150" r="14" fill="#d9773a"/>
+        </svg>
+      public/laphet-thoke.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#c9a27e"/>
+          <ellipse cx="160" cy="104" rx="112" ry="72" fill="#fff8ec"/>
+          <g fill="#2f6b3a">
+            <ellipse cx="140" cy="96" rx="34" ry="16" transform="rotate(-20 140 96)"/>
+            <ellipse cx="180" cy="92" rx="32" ry="15" transform="rotate(18 180 92)"/>
+            <ellipse cx="160" cy="114" rx="36" ry="15"/>
+          </g>
+          <g fill="#4f8f3a"><ellipse cx="124" cy="116" rx="18" ry="9"/><ellipse cx="200" cy="114" rx="18" ry="9"/></g>
+          <g fill="#d9a35b"><circle cx="128" cy="84" r="6"/><circle cx="196" cy="80" r="6"/><circle cx="214" cy="104" r="6"/><circle cx="110" cy="104" r="6"/><circle cx="170" cy="134" r="6"/></g>
+          <g fill="#b23a2b"><circle cx="152" cy="80" r="4"/><circle cx="186" cy="124" r="4"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the single-page app problem. Blue = the old view, green = the
+    # new view, orange = what JavaScript does, red = what is lost, violet = the
+    # view transition.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "Single-page app ရဲ့ ပြဿနာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-old,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 220,
+        height: 150,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-old-l,
+        kind: text,
+        x: 340,
+        y: 295,
+        width: 130,
+        height: 36,
+        text: "မီနူး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 290,
+        width: 100,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-new,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 220,
+        height: 150,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: a-new-l,
+        kind: text,
+        x: 740,
+        y: 295,
+        width: 130,
+        height: 36,
+        text: "ဟင်းလျာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-swap,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 620,
+        height: 36,
+        text: "JavaScript က အကြောင်းအရာကို လဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-instant,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 620,
+        height: 36,
+        text: "တစ်ခါတည်း ချက်ချင်း ပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 300,
+        y: 240,
+        width: 220,
+        height: 150,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-gone,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 620,
+        height: 36,
+        text: "အဟောင်းကို ဖယ်ပြီး ဒါမှမဟုတ် ဖျောက်ပြီး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-need,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 700,
+        height: 36,
+        text: "view transition · အဟောင်း + အသစ် တစ်ပြိုင်နက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the five steps. Blue = the old snapshot, orange = our
+    # callback, green = the new snapshot, violet = the animation, black = the
+    # clean-up and the call, red = the page can't be clicked.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "View transition ရဲ့ အဆင့်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-call,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 640,
+        height: 36,
+        text: "document.startViewTransition(callback)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 700,
+        height: 36,
+        text: "① အဟောင်းကို snapshot ရိုက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-2,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 700,
+        height: 36,
+        text: "② callback က DOM ကို ပြင် · မပြသေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-3,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "③ အသစ်ကို snapshot ရိုက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-4,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 36,
+        text: "④ pseudo-element တွေနဲ့ CSS animation",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-5,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 700,
+        height: 36,
+        text: "⑤ pseudo-element တွေကို ဖယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-block,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 700,
+        height: 36,
+        text: "run နေတုန်း page ကို နှိပ်လို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — the default cross-fade in three frames. Blue = old, violet =
+    # both half visible, green = new, orange = timing and arrows.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Default က cross-fade",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-f1,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 140,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-f1-l,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 180,
+        height: 36,
+        text: "အဟောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 512,
+        y: 290,
+        width: 56,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-f2,
+        kind: rectangle,
+        x: 580,
+        y: 240,
+        width: 200,
+        height: 140,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: c-f2-l,
+        kind: text,
+        x: 580,
+        y: 395,
+        width: 180,
+        height: 36,
+        text: "တစ်ဝက်စီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 792,
+        y: 290,
+        width: 56,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-f3,
+        kind: rectangle,
+        x: 860,
+        y: 240,
+        width: 200,
+        height: 140,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: c-f3-l,
+        kind: text,
+        x: 860,
+        y: 395,
+        width: 180,
+        height: 36,
+        text: "အသစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-timing,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 560,
+        height: 36,
+        text: "0.25 စက္ကန့် · ease",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-blend,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 700,
+        height: 36,
+        text: "plus-lighter · အလယ်မှာ မမှောင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — the pseudo-element tree. Black = the overlay, orange = the
+    # group, violet = the image pair, blue = old, green = new, red = where the
+    # name root comes from.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Pseudo-element tree",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-root,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "::view-transition",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-root-n,
+        kind: text,
+        x: 660,
+        y: 230,
+        width: 400,
+        height: 36,
+        text: "page အပေါ်က အလွှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-group,
+        kind: text,
+        x: 330,
+        y: 290,
+        width: 460,
+        height: 36,
+        text: "::view-transition-group(root)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-group-n,
+        kind: text,
+        x: 850,
+        y: 290,
+        width: 220,
+        height: 36,
+        text: "နေရာ · အရွယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-pair,
+        kind: text,
+        x: 360,
+        y: 350,
+        width: 560,
+        height: 36,
+        text: "::view-transition-image-pair(root)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-old,
+        kind: text,
+        x: 390,
+        y: 410,
+        width: 440,
+        height: 36,
+        text: "::view-transition-old(root)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-old-n,
+        kind: text,
+        x: 870,
+        y: 410,
+        width: 210,
+        height: 36,
+        text: "ပုံသေ ပုံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-new,
+        kind: text,
+        x: 390,
+        y: 470,
+        width: 440,
+        height: 36,
+        text: "::view-transition-new(root)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-new-n,
+        kind: text,
+        x: 870,
+        y: 470,
+        width: 210,
+        height: 36,
+        text: "live ပုံ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-name,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 700,
+        height: 36,
+        text: "html { view-transition-name: root }",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board E — the slide in three frames. Black = the screen, blue = old,
+    # green = new, red = the mirrored slide for "backwards".
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Fade အစား slide",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: e-v1, kind: rectangle, x: 290, y: 240, width: 160, height: 130, strokeColor: "#1e1e1e" }
+    - {
+        id: e-o1,
+        kind: rectangle,
+        x: 300,
+        y: 250,
+        width: 140,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - { id: e-v2, kind: rectangle, x: 560, y: 240, width: 160, height: 130, strokeColor: "#1e1e1e" }
+    - {
+        id: e-o2,
+        kind: rectangle,
+        x: 495,
+        y: 250,
+        width: 140,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: e-n2,
+        kind: rectangle,
+        x: 645,
+        y: 250,
+        width: 140,
+        height: 110,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - { id: e-v3, kind: rectangle, x: 840, y: 240, width: 160, height: 130, strokeColor: "#1e1e1e" }
+    - {
+        id: e-n3,
+        kind: rectangle,
+        x: 850,
+        y: 250,
+        width: 140,
+        height: 110,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: e-out,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 620,
+        height: 36,
+        text: "အဟောင်း ← ဘယ်ဘက်ကို ထွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-in,
+        kind: text,
+        x: 290,
+        y: 475,
+        width: 620,
+        height: 36,
+        text: "အသစ် ← ညာဘက်က ဝင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-back,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 720,
+        height: 36,
+        text: "backwards · ညာဘက်ကို ထွက်၊ ဘယ်ဘက်က ဝင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — the shared photo in three frames. Black = the screen, orange =
+    # the dish-photo group, blue = the rest of the page (root).
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "Element တစ်ခုတည်း ရွှေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: f-v1, kind: rectangle, x: 290, y: 240, width: 160, height: 180, strokeColor: "#1e1e1e" }
+    - {
+        id: f-p1,
+        kind: rectangle,
+        x: 302,
+        y: 300,
+        width: 40,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - { id: f-v2, kind: rectangle, x: 560, y: 240, width: 160, height: 180, strokeColor: "#1e1e1e" }
+    - {
+        id: f-p2,
+        kind: rectangle,
+        x: 576,
+        y: 272,
+        width: 96,
+        height: 62,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - { id: f-v3, kind: rectangle, x: 840, y: 240, width: 160, height: 180, strokeColor: "#1e1e1e" }
+    - {
+        id: f-p3,
+        kind: rectangle,
+        x: 850,
+        y: 250,
+        width: 140,
+        height: 88,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: f-l1,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 720,
+        height: 36,
+        text: "dish-photo group · ရွှေ့ပြီး ကြီးလာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-l2,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 720,
+        height: 36,
+        text: "ကျန်တာ အားလုံး · root နဲ့ slide",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board G — one name, one element. Green = valid, red = a duplicate,
+    # violet = hidden elements, blue = list-to-detail naming, orange = helpers.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "နာမည် တစ်ခု · element တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-ok,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 720,
+        height: 36,
+        text: "မတိုင်ခင် 1 ခု · ပြီးနောက် 1 ခု ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-bad,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 720,
+        height: 36,
+        text: "3 ခုမှာ နာမည်တူ → animation ကျော် ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-bad-2,
+        kind: text,
+        x: 340,
+        y: 340,
+        width: 680,
+        height: 36,
+        text: "DOM တော့ ပြောင်း · console မှာ error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-hidden,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 720,
+        height: 36,
+        text: "display none → မပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-ids,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 720,
+        height: 36,
+        text: "① item တိုင်း id နဲ့ နာမည် · dish-12-photo",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-js,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 720,
+        height: 36,
+        text: "② နှိပ်တဲ့ item ကိုပဲ နာမည်ပေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-match,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 300,
+        height: 36,
+        text: "match-element",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-class,
+        kind: text,
+        x: 660,
+        y: 590,
+        width: 400,
+        height: 36,
+        text: "view-transition-class",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board H — different aspect ratios. Black = the group's box, red = the
+    # default square picture hanging out, green = the fix, violet = lesson 33.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "ပုံသဏ္ဌာန် မတူရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-group1,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 240,
+        height: 130,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: h-sq, kind: rectangle, x: 300, y: 240, width: 240, height: 240, strokeColor: "#e03131" }
+    - {
+        id: h-bad,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 360,
+        height: 36,
+        text: "default · အမြင့် auto",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: h-group2,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 240,
+        height: 130,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-fill,
+        kind: rectangle,
+        x: 726,
+        y: 246,
+        width: 228,
+        height: 118,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: h-good,
+        kind: text,
+        x: 720,
+        y: 400,
+        width: 340,
+        height: 36,
+        text: "100% + cover",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-33,
+        kind: text,
+        x: 720,
+        y: 455,
+        width: 360,
+        height: 36,
+        text: "lesson 33 ရဲ့ cover လို",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4142
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: vt-intro
+    chapter: "View transition ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ popover လို element တစ်ခု ပေါ်တာ ပျောက်တာကို
+      animation ထည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ page ရဲ့ ပုံစံ တစ်ခုလုံး
+      ပြောင်းသွားတာကို animation ထည့်ကြည့်ပါမယ်။ [[mark:start-server]] board
+      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-spa]] single-page app မှာ
+      browser က page တစ်ခုတည်းကိုပဲ ဖွင့်ထားပါတယ်။ တစ်ခုခု နှိပ်လိုက်ရင် page
+      အသစ် မဖွင့်ဘဲ၊ JavaScript က page ထဲက အကြောင်းအရာကို လဲပေးတာပါ။ အဲဒီလို
+      လဲပြီး ပြတဲ့ screen တစ်ခုစီကို view လို့ ခေါ်ပါတယ်။ [[mark:draw-instant]]
+      အဲဒီလို လဲတာက တစ်ခါတည်း ဖြစ်သွားလို့၊ view အသစ်က ချက်ချင်း ပေါ်လာပါတယ်။
+      [[mark:draw-gone]] animation ထည့်ချင်ရင် view အဟောင်းက ဖြည်းဖြည်း
+      ပျောက်နေတုန်း၊ အသစ်က ပေါ်လာရပါမယ်။ ဒါပေမဲ့ DOM ပြောင်းလိုက်တာနဲ့
+      အဟောင်းကို ဖယ်ပြီးသား ဒါမှမဟုတ် ဖျောက်ပြီးသား ဖြစ်နေပါတယ်။
+      [[mark:draw-need]] ဒီ ပြဿနာကို view transition က ဖြေရှင်းပေးပါတယ်။ view
+      transition ဆိုတာ page ရဲ့ ပုံစံ ပြောင်းသွားတဲ့အခါ၊ browser က အဟောင်းနဲ့
+      အသစ်ကြားမှာ animation ထည့်ပေးတဲ့ feature ပါ။ ဒါအတွက် browser က view
+      အဟောင်းကို ပုံ ရိုက်ထားပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — View transitions for single-page apps"
+        url: "https://web.dev/learn/css/view-transitions-spas"
+      - title: "MDN — View Transition API"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the code tour, well over 40 s later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-spa
+        type: whiteboard.apply
+        at: { mark: draw-spa }
+        upsertIds: [a-old, a-old-l, a-arrow, a-new, a-new-l, a-swap]
+        drawMs: 2800
+      - id: draw-instant
+        type: whiteboard.apply
+        at: { mark: draw-instant }
+        upsertIds: [a-instant]
+        drawMs: 1000
+      - id: draw-gone
+        type: whiteboard.apply
+        at: { mark: draw-gone }
+        upsertIds: [a-strike, a-gone]
+        drawMs: 1600
+      - id: draw-need
+        type: whiteboard.apply
+        at: { mark: draw-need }
+        upsertIds: [a-need]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]]
+      ဒါက HTML ဖိုင်ပါ။ [[mark:select-menu-view]] menu view မှာ ဟင်းလျာ
+      သုံးမျိုး ရှိပြီး၊ တစ်မျိုးစီက စတုရန်း ပုံသေး၊ နာမည်နဲ့ ဈေးနှုန်း ပါတဲ့
+      ခလုတ် တစ်ခုစီပါ။ [[mark:select-dish-view]] ဟင်းလျာ view မှာ ပုံကြီး၊
+      နာမည်နဲ့ နောက်ပြန် ခလုတ် ပါပြီး၊ hidden attribute နဲ့ ဖျောက်ထားပါတယ်။
+      [[mark:select-status]] အဆုံးက ဖျောက်ထားတဲ့ စာကြောင်း နှစ်ကြောင်းကို lesson
+      က စစ်ဖို့ပဲ သုံးပါတယ်။ [[mark:open-main]] ဒါက JavaScript ဖိုင်ပါ။
+      [[mark:select-show]] show function က DOM ကို ပြောင်းပါတယ်။ နှိပ်လိုက်တဲ့
+      ဟင်းလျာရဲ့ ပုံနဲ့ နာမည်ကို ထည့်ပြီး၊ view တစ်ခုကို ဖျောက်၊ နောက်တစ်ခုကို
+      ပြပါတယ်။ [[mark:select-go]] go function က view တစ်ခုဆီ ဘယ်လို သွားမလဲ
+      ဆုံးဖြတ်ပါတယ်။ အခုတော့ show ကိုပဲ ခေါ်ပါတယ်။ [[mark:select-listener]]
+      click listener ကတော့ နှိပ်လိုက်တဲ့ card ကို picked ဆိုတဲ့ class ပေးပြီးမှ၊
+      ဟင်းလျာ view ကို သွားပါတယ်။ ဒီ class ကို နောက်မှ သုံးပါမယ်။
+      [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]]
+      preview ပွင့်လာပါပြီ။ ဟင်းလျာ သုံးမျိုး ပါတဲ့ menu ကို မြင်ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — View transitions for single-page apps"
+        url: "https://web.dev/learn/css/view-transitions-spas"
+      - title: "MDN — The hidden attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/hidden"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-menu-view
+        type: editor.select
+        at: { mark: select-menu-view }
+        target:
+          {
+            file: index.html,
+            text: '<section class="menu-view" id="menu-view" data-testid="menu-view">',
+            occurrence: 1,
+          }
+      - id: select-dish-view
+        type: editor.select
+        at: { mark: select-dish-view }
+        target:
+          {
+            file: index.html,
+            text: '<section class="dish-view" id="dish-view" data-testid="dish-view" hidden>',
+            occurrence: 1,
+          }
+      - id: select-status
+        type: editor.select
+        at: { mark: select-status }
+        target:
+          {
+            file: index.html,
+            text: "      <p class=\"visually-hidden\" id=\"view-status\" data-testid=\"view-status\">menu</p>\n      <p class=\"visually-hidden\" id=\"vt-status\" data-testid=\"vt-status\"></p>\n",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.js
+      - id: select-show
+        type: editor.select
+        at: { mark: select-show }
+        target: { file: main.js, text: "function show(view, card) {", occurrence: 1 }
+      - id: select-go
+        type: editor.select
+        at: { mark: select-go }
+        target:
+          {
+            file: main.js,
+            text: "function go(view, card) {\n  show(view, card);\n}",
+            occurrence: 1,
+          }
+      - id: select-listener
+        type: editor.select
+        at: { mark: select-listener }
+        target:
+          {
+            file: main.js,
+            text: "    card.classList.add(\"is-picked\");\n    go(\"dish\", card);",
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-menu-start
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: open-mohinga }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-status-start
+        type: expect.preview
+        at: { afterAction: expect-menu-start }
+        timeoutMs: 5000
+        target: { by: testId, value: view-status }
+        textContains: "menu"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-status-start }
+
+  - id: instant-swap
+    narration: >
+      [[mark:click-mohinga]] မုန့်ဟင်းခါးကို နှိပ်ပါမယ်။ [[mark:after-mohinga]]
+      ဟင်းလျာ view က menu ရဲ့ နေရာကို တစ်ခါတည်း ဝင်ယူသွားပါပြီ။ frame တစ်ခုမှာ
+      menu၊ နောက် frame မှာ ဟင်းလျာ ဖြစ်ပြီး၊ ကြားထဲမှာ ဘာမှ မရှိပါဘူး။
+      [[mark:click-back]] နောက်ပြန် ခလုတ်ကို နှိပ်ပါမယ်။ [[mark:after-back]]
+      menu ပြန်ရောက်လာပြီး၊ ဒီတစ်ခါလည်း တစ်ခါတည်း ပြောင်းသွားပါတယ်။ board ပေါ်က
+      ပြဿနာက ဒါပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — View transitions for single-page apps"
+        url: "https://web.dev/learn/css/view-transitions-spas"
+    actions:
+      - id: click-mohinga
+        type: preview.click
+        at: { mark: click-mohinga }
+        timeoutMs: 5000
+        target: { by: testId, value: open-mohinga }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-dish-mohinga
+        type: expect.preview
+        at: { mark: after-mohinga }
+        timeoutMs: 4000
+        target: { by: testId, value: view-status }
+        textContains: "dish"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-name-mohinga
+        type: expect.preview
+        at: { afterAction: expect-dish-mohinga }
+        timeoutMs: 4000
+        target: { by: testId, value: dish-name }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-back
+        type: preview.click
+        at: { mark: click-back }
+        timeoutMs: 5000
+        target: { by: testId, value: back-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-menu-back
+        type: expect.preview
+        at: { mark: after-back }
+        timeoutMs: 4000
+        target: { by: testId, value: view-status }
+        textContains: "menu"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: how-it-works
+    chapter: "Browser က ဘယ်လို animation လုပ်လဲ"
+    narration: >
+      [[mark:open-steps]] ဒါဆို browser က ဘာလုပ်တာလဲ။ ကိုယ်က start view
+      transition ကို ခေါ်ပြီး၊ DOM ကို ပြင်မယ့် function ကို callback အဖြစ်
+      ပေးပါတယ်။ [[mark:draw-step-1]] ပထမဆုံး browser က လက်ရှိ view ကို snapshot
+      ရိုက်ပါတယ်။ snapshot ဆိုတာ page ရဲ့ ပုံ တစ်ပုံပါ။ [[mark:draw-step-2]]
+      ပြီးတော့ screen ပေါ် ဆွဲတာကို ခဏရပ်ပြီး callback ကို ခေါ်ပါတယ်။ callback က
+      DOM ကို ပြင်ပေမယ့်၊ screen ပေါ်မှာ မပြသေးပါဘူး။ [[mark:draw-step-3]]
+      callback ပြီးတာနဲ့ browser က view အသစ်ကိုလည်း snapshot ရိုက်ပါတယ်။
+      callback က နောက်မှ ပြီးမယ့် အလုပ်ကို promise အဖြစ် ပြန်ပေးရင်တော့၊ အဲဒီ
+      promise ပြီးတဲ့အထိ စောင့်ပါတယ်။ [[mark:draw-step-4]] နောက်တော့ page ရဲ့
+      အပေါ်မှာ pseudo-element tree တစ်ခု ဆောက်ပြီး၊ ပုံ အဟောင်းကနေ view
+      အသစ်ဆီကို သာမန် CSS animation တွေနဲ့ ပြောင်းပြပါတယ်။ [[mark:draw-step-5]]
+      အဆုံးမှာ pseudo-element တွေကို ဖယ်လိုက်လို့၊ page အစစ်ပဲ ကျန်ပါတယ်။
+      [[mark:draw-blocked]] transition run နေတုန်း ပုံတွေက page ကို ဖုံးထားလို့၊
+      နှိပ်တာတွေက page ဆီ မရောက်ပါဘူး။ ဒါကြောင့်လည်း view transition တွေကို
+      တိုတိုပဲ ထားသင့်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Full page transitions"
+        url: "https://web.dev/learn/css/view-transitions-spas#full_page_transitions"
+      - title: "MDN — Using the View Transition API (the view transition process)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API/Using"
+      - title: "CSS View Transitions Module Level 1"
+        url: "https://www.w3.org/TR/css-view-transitions-1/"
+    actions:
+      - id: open-steps
+        type: whiteboard.apply
+        at: { mark: open-steps }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-call]
+      - id: draw-step-1
+        type: whiteboard.apply
+        at: { mark: draw-step-1 }
+        upsertIds: [b-1]
+        drawMs: 1200
+      - id: draw-step-2
+        type: whiteboard.apply
+        at: { mark: draw-step-2 }
+        upsertIds: [b-2]
+        drawMs: 1200
+      - id: draw-step-3
+        type: whiteboard.apply
+        at: { mark: draw-step-3 }
+        upsertIds: [b-3]
+        drawMs: 1200
+      - id: draw-step-4
+        type: whiteboard.apply
+        at: { mark: draw-step-4 }
+        upsertIds: [b-4]
+        drawMs: 1200
+      - id: draw-step-5
+        type: whiteboard.apply
+        at: { mark: draw-step-5 }
+        upsertIds: [b-5]
+        drawMs: 1000
+      - id: draw-blocked
+        type: whiteboard.apply
+        at: { mark: draw-blocked }
+        upsertIds: [b-block]
+        drawMs: 1000
+
+  - id: start-vt
+    chapter: "JavaScript ကနေ view transition စကြည့်ရအောင်"
+    narration: >
+      [[mark:close-steps]] ကဲ၊ ထည့်ကြည့်ရအောင်။ [[mark:open-main-2]] JavaScript
+      ဖိုင်ကို ပြန်ဖွင့်ပါမယ်။ [[mark:insert-vt]] go function ရဲ့ အစမှာ code
+      အပိုင်း တစ်ခုကို တစ်ခါတည်း ထည့်ပါမယ်။ JavaScript ဖိုင်ကို ပြင်ရင် page
+      တစ်ခုလုံး ပြန်ပွင့်လို့၊ menu ကနေ ပြန်စပါတယ်။ [[mark:select-detect]] ဒီ
+      condition က start view transition ရှိလား၊ browser က types ကိုပါ
+      နားလည်လားလို့ အရင် စစ်ပါတယ်။ types ပါတဲ့ ပုံစံက အဓိက browser အားလုံးမှာ
+      2026 ခုနှစ် အစကတည်းက ရပေမယ့်၊ browser အဟောင်းတွေမှာ မရှိလို့ပါ။
+      [[mark:select-fallback]] မရှိရင် if အပိုင်းကို ကျော်ပြီး၊ အောက်က မူလ
+      စာကြောင်းကိုပဲ run ပါတယ်။ animation မပါပေမယ့်၊ page ကတော့ ပုံမှန်အတိုင်း
+      အလုပ်လုပ်ပါတယ်။ [[mark:select-update]] အထဲမှာ start view transition ကို
+      object တစ်ခုနဲ့ ခေါ်ပါတယ်။ object ထဲက update က ကိုယ့် callback ဖြစ်ပြီး၊
+      show ကိုပဲ ခေါ်ပါတယ်။ [[mark:select-types]] ဒီ object က types စာရင်း
+      တစ်ခုလည်း ယူပါတယ်။ ဟင်းလျာ ဖွင့်ရင် forwards၊ နောက်ပြန်သွားရင် backwards
+      ပါ။ [[mark:select-finished]] ခေါ်လိုက်ရင် view transition object တစ်ခု
+      ပြန်ရပြီး၊ promise သုံးခု ပါပါတယ်။ update callback done က DOM
+      ပြောင်းပြီးတဲ့အခါ၊ ready က animation စခါနီးမှာ၊ finished က animation
+      ပြီးတဲ့အခါ ပြီးပါတယ်။ skip transition နဲ့ animation ကို
+      ကျော်ခိုင်းလို့လည်း ရပါတယ်။ ဒီမှာတော့ finished ပြီးရင် type ကို status
+      စာကြောင်းထဲ ရေးပါတယ်။ [[mark:select-return]] return က function ကို ဒီမှာ
+      ရပ်ပေးလို့၊ show က နှစ်ခါ မ run ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Full page transitions (feature detection)"
+        url: "https://web.dev/learn/css/view-transitions-spas#full_page_transitions"
+      - title: "MDN — Document.startViewTransition()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/startViewTransition"
+      - title: "MDN — ViewTransition (updateCallbackDone, ready, finished, skipTransition)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/ViewTransition"
+      - title: "webstatus.dev — View transitions (same-document), Baseline 2025"
+        url: "https://webstatus.dev/features/view-transitions"
+      - title: "webstatus.dev — View transition types, Baseline 2026"
+        url: "https://webstatus.dev/features/active-view-transition"
+    actions:
+      - id: close-steps
+        type: whiteboard.apply
+        at: { mark: close-steps }
+        open: false
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: main.js
+      # One block of complete statements; Vite reloads the page (menu view).
+      - id: insert-vt
+        type: editor.type
+        at: { mark: insert-vt }
+        cadence: block
+        target: { file: main.js, after: "function go(view, card) {\n", occurrence: 1 }
+        text: "  if (document.startViewTransition && \"types\" in ViewTransition.prototype) {\n    const type = view === \"dish\" ? \"forwards\" : \"backwards\";\n    const transition = document.startViewTransition({\n      update: () => show(view, card),\n      types: [type],\n    });\n    transition.finished.then(() => {\n      vtStatus.textContent = type;\n    });\n    return;\n  }\n"
+      # Before the insert, open-mohinga still carries is-picked from instant-swap
+      # (going back doesn't remove it); only the reload brings back a plain card.
+      - id: expect-reload-menu
+        type: expect.preview
+        at: { mark: select-detect }
+        timeoutMs: 5000
+        target: { by: testId, value: open-mohinga }
+        attribute: { name: class, value: "dish-card" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: select-detect
+        type: editor.select
+        at: { mark: select-detect }
+        target:
+          {
+            file: main.js,
+            text: 'if (document.startViewTransition && "types" in ViewTransition.prototype) {',
+            occurrence: 1,
+          }
+      - id: select-fallback
+        type: editor.select
+        at: { mark: select-fallback }
+        target: { file: main.js, text: "  show(view, card);\n}", occurrence: 1 }
+      - id: select-update
+        type: editor.select
+        at: { mark: select-update }
+        target: { file: main.js, text: "update: () => show(view, card),", occurrence: 1 }
+      - id: select-types
+        type: editor.select
+        at: { mark: select-types }
+        target: { file: main.js, text: "types: [type],", occurrence: 1 }
+      - id: select-finished
+        type: editor.select
+        at: { mark: select-finished }
+        target:
+          {
+            file: main.js,
+            text: "    transition.finished.then(() => {\n      vtStatus.textContent = type;\n    });",
+            occurrence: 1,
+          }
+      - id: select-return
+        type: editor.select
+        at: { mark: select-return }
+        target: { file: main.js, text: "    return;", occurrence: 1 }
+
+  - id: default-fade
+    narration: >
+      [[mark:click-palata]] ပလာတာကို နှိပ်ပါမယ်။ [[mark:after-palata]] ဒီ lesson
+      ထဲမှာတော့ ဒီတစ်ခါလည်း ချက်ချင်း ပြောင်းသွားပါတယ်။ browser က animation ကို
+      DOM အပြင်၊ page အပေါ်မှာ ဆွဲပြီး၊ lesson က page ထဲက ပြောင်းလဲမှုတွေကိုပဲ
+      ပြန်ပြလို့ပါ။ status စာကြောင်းထဲမှာတော့ forwards ရောက်နေပါပြီ။ animation
+      ကို ကြည့်ချင်ရင် lesson ကို pause လုပ်ပြီး ကိုယ်တိုင် run၊ ဟင်းလျာ
+      တစ်ခုကို နှိပ်ကြည့်ပါ။ [[mark:open-fade]] ကိုယ့် CSS မပါရင် default က
+      cross-fade ပါ။ [[mark:draw-fade-1]] အစမှာ view အဟောင်းကိုပဲ မြင်ရပါတယ်။
+      [[mark:draw-fade-2]] တစ်ဝက်ရောက်ရင် အဟောင်းက တစ်ဝက် ဖျော့သွားပြီး၊ အသစ်က
+      တစ်ဝက် ပေါ်လာပါပြီ။ [[mark:draw-fade-3]] အဆုံးမှာတော့ view အသစ်ပဲ
+      ကျန်ပါတယ်။ [[mark:draw-timing]] ဒါက စက္ကန့် လေးပုံ တစ်ပုံ ကြာပြီး ease
+      ဆိုတဲ့ easing နဲ့ ပြောင်းပါတယ်။ ပုံနှစ်ပုံကို ရောတဲ့အခါ၊ အလယ်မှာ
+      ပိုမှောင်မသွားအောင် ရောပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Full page transitions (the default cross-fade)"
+        url: "https://web.dev/learn/css/view-transitions-spas#full_page_transitions"
+      - title: "CSS View Transitions Level 1 — UA styles (0.25s, plus-lighter)"
+        url: "https://drafts.csswg.org/css-view-transitions-1/#ua-styles"
+    actions:
+      - id: click-palata
+        type: preview.click
+        at: { mark: click-palata }
+        timeoutMs: 5000
+        target: { by: testId, value: open-palata }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-dish-palata
+        type: expect.preview
+        at: { mark: after-palata }
+        timeoutMs: 4000
+        target: { by: testId, value: dish-name }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-vt-forwards-1
+        type: expect.preview
+        at: { afterAction: expect-dish-palata }
+        timeoutMs: 4000
+        target: { by: testId, value: vt-status }
+        textContains: "forwards"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: open-fade
+        type: whiteboard.apply
+        at: { mark: open-fade }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-fade-1
+        type: whiteboard.apply
+        at: { mark: draw-fade-1 }
+        upsertIds: [c-f1, c-f1-l]
+        drawMs: 1000
+      - id: draw-fade-2
+        type: whiteboard.apply
+        at: { mark: draw-fade-2 }
+        upsertIds: [c-a1, c-f2, c-f2-l]
+        drawMs: 1400
+      - id: draw-fade-3
+        type: whiteboard.apply
+        at: { mark: draw-fade-3 }
+        upsertIds: [c-a2, c-f3, c-f3-l]
+        drawMs: 1200
+      - id: draw-timing
+        type: whiteboard.apply
+        at: { mark: draw-timing }
+        upsertIds: [c-timing, c-blend]
+        drawMs: 1600
+
+  - id: pseudo-tree
+    chapter: "Pseudo-element တွေရဲ့ tree"
+    narration: >
+      [[mark:open-tree]] ဒီ ပုံတွေက ဘယ်မှာ ရှိနေတာလဲ။ [[mark:draw-tree-root]]
+      transition ဖြစ်နေတုန်း၊ view transition pseudo-element တစ်ခုက page
+      တစ်ခုလုံးကို ဖုံးထားပါတယ်။ [[mark:draw-tree-group]] browser က သီးသန့် ပုံ
+      ရိုက်တဲ့ အပိုင်း တစ်ခုစီကို view transition name ဆိုတဲ့ နာမည်နဲ့
+      ခွဲသိပြီး၊ အထဲမှာ နာမည် တစ်ခုစီအတွက် group တစ်ခုစီ ရှိပါတယ်။ ကိုယ့် page
+      မှာ အခုထိ root ဆိုတဲ့ နာမည် တစ်ခုပဲ ရှိပါတယ်။ group က box အဟောင်းကနေ
+      အသစ်ဆီ ရွေ့ပြီး အရွယ် ပြောင်းပါတယ်။ [[mark:draw-tree-pair]] group ထဲက
+      image pair က ပုံနှစ်ပုံကို တွဲထားပါတယ်။ [[mark:draw-tree-old]] ပုံ
+      အဟောင်းဖြစ်တဲ့ view transition old က ပြောင်းလဲမှု မတိုင်ခင် view ရဲ့ ပုံသေ
+      ပုံပါ။ နှိပ်လို့လည်း မရ၊ ပြင်လို့လည်း မရပါဘူး။ [[mark:draw-tree-new]] ပုံ
+      အသစ်ဖြစ်တဲ့ view transition new က view အသစ်ကို live ပြပေမယ့် ပုံပါပဲ။
+      [[mark:draw-tree-name]] root ဆိုတဲ့ နာမည်က browser ရဲ့ ကိုယ်ပိုင်
+      stylesheet ကနေ လာပါတယ်။ သူက html element ကို root ဆိုတဲ့ view transition
+      name ပေးထားလို့၊ page တစ်ခုလုံးက ပုံ တစ်ပုံအနေနဲ့ cross-fade ဖြစ်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Customizing the transition"
+        url: "https://web.dev/learn/css/view-transitions-spas#customizing_the_transition"
+      - title: "MDN — ::view-transition"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::view-transition"
+      - title: "MDN — ::view-transition-image-pair()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::view-transition-image-pair"
+      - title: "MDN — ::view-transition-old() and ::view-transition-new()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::view-transition-old"
+    actions:
+      - id: open-tree
+        type: whiteboard.apply
+        at: { mark: open-tree }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-tree-root
+        type: whiteboard.apply
+        at: { mark: draw-tree-root }
+        upsertIds: [d-root, d-root-n]
+        drawMs: 1400
+      - id: draw-tree-group
+        type: whiteboard.apply
+        at: { mark: draw-tree-group }
+        upsertIds: [d-group, d-group-n]
+        drawMs: 1600
+      - id: draw-tree-pair
+        type: whiteboard.apply
+        at: { mark: draw-tree-pair }
+        upsertIds: [d-pair]
+        drawMs: 1200
+      - id: draw-tree-old
+        type: whiteboard.apply
+        at: { mark: draw-tree-old }
+        upsertIds: [d-old, d-old-n]
+        drawMs: 1400
+      - id: draw-tree-new
+        type: whiteboard.apply
+        at: { mark: draw-tree-new }
+        upsertIds: [d-new, d-new-n]
+        drawMs: 1400
+      - id: draw-tree-name
+        type: whiteboard.apply
+        at: { mark: draw-tree-name }
+        upsertIds: [d-name]
+        drawMs: 1400
+
+  - id: slow-down
+    narration: >
+      [[mark:close-tree]] ဒီ pseudo-element တွေကို တခြား element လိုပဲ style
+      ပေးလို့ ရပါတယ်။ [[mark:type-duration]] root group ရဲ့ animation
+      ကြာချိန်ကို တစ်စက္ကန့်ခွဲ ပေးကြည့်ရအောင်။ တကယ့် website အတွက်တော့ အရမ်း
+      နှေးပါတယ်။ ဒါပေမဲ့ ကိုယ်တိုင် စမ်းတဲ့အခါ သေချာ မြင်ရအောင် နှေးထားတာပါ။
+      [[mark:explain-inherit]] ဘာလို့ group ကိုပဲ ပေးတာလဲ။ image pair နဲ့ ပုံ
+      အဟောင်း၊ ပုံ အသစ်က timing ကို group ဆီကနေ inherit ဖြစ်လို့၊ ကြာချိန်
+      တစ်ခုတည်းနဲ့ အားလုံး နှေးသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Customizing the transition (::view-transition-group)"
+        url: "https://web.dev/learn/css/view-transitions-spas#customizing_the_transition"
+      - title: "MDN — ::view-transition-group()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::view-transition-group"
+      - title: "CSS View Transitions Level 1 — UA styles (old and new inherit the group's timing)"
+        url: "https://drafts.csswg.org/css-view-transitions-1/#ua-styles"
+    actions:
+      - id: close-tree
+        type: whiteboard.apply
+        at: { mark: close-tree }
+        open: false
+      - id: open-styles-1
+        type: workspace.openFile
+        at: { mark: close-tree, offsetMs: 700 }
+        path: styles.css
+      - id: type-duration
+        type: editor.type
+        at: { mark: type-duration }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "::view-transition-group(root) {\n  animation-duration: 1.5s;\n}\n"
+      - id: select-group
+        type: editor.select
+        at: { mark: explain-inherit }
+        target: { file: styles.css, text: "::view-transition-group(root)", occurrence: 1 }
+
+  - id: slide
+    chapter: "Fade အစား slide ပြောင်းကြည့်ရအောင်"
+    narration: >
+      [[mark:type-keyframes]] အခု fade အစား slide ဖြစ်အောင် လုပ်ကြည့်ရအောင်။
+      ဒါတွေက lesson 39 က သာမန် keyframes rule တွေပါပဲ။ တစ်ခုက element ကို သူ့
+      အကျယ် အပြည့် ဘယ်ဘက်ကို ရွှေ့ထုတ်ပြီး၊ နောက်တစ်ခုက ညာဘက်ကနေ ဝင်လာစေပါတယ်။
+      [[mark:type-old-new]] ပြီးတော့ root ရဲ့ ပုံ အဟောင်းကို ထွက်သွားတဲ့ slide၊
+      ပုံ အသစ်ကို ဝင်လာတဲ့ slide ပေးပါမယ်။ lesson 39 က easing၊ delay စတာတွေလည်း
+      ဒီမှာ သုံးလို့ ရပါတယ်။ [[mark:open-slide]] အဆင့် သုံးဆင့်နဲ့ ကြည့်ရအောင်။
+      [[mark:draw-slide-1]] အစမှာ view အဟောင်းက screen ကို ပြည့်နေပါတယ်။
+      [[mark:draw-slide-2]] တစ်ဝက်ရောက်ရင် အဟောင်းက ဘယ်ဘက်ကို တစ်ဝက်
+      ထွက်သွားပြီး၊ အသစ်က ညာဘက်ကနေ တစ်ဝက် ဝင်လာပါပြီ။ [[mark:draw-slide-3]]
+      အဆုံးမှာ view အသစ်က screen ကို ပြည့်သွားပါတယ်။ ကြာချိန်က group ဆီကပဲ
+      လာနေလို့ ဒါလည်း တစ်စက္ကန့်ခွဲ ကြာပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Customizing the transition (custom keyframes)"
+        url: "https://web.dev/learn/css/view-transitions-spas#customizing_the_transition"
+      - title: "MDN — Using the View Transition API (customizing animations)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API/Using"
+      - title: "web.dev Learn CSS — Animations"
+        url: "https://web.dev/learn/css/animations"
+    actions:
+      - id: type-keyframes
+        type: editor.type
+        at: { mark: type-keyframes }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "::view-transition-group(root) {\n  animation-duration: 1.5s;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n@keyframes slide-out {\n  to { translate: -100% 0; }\n}\n\n@keyframes slide-in {\n  from { translate: 100% 0; }\n}\n"
+      - id: type-old-new
+        type: editor.type
+        at: { mark: type-old-new }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  from { translate: 100% 0; }\n}\n", occurrence: 1 }
+        text: "\n::view-transition-old(root) {\n  animation-name: slide-out;\n}\n\n::view-transition-new(root) {\n  animation-name: slide-in;\n}\n"
+      - id: open-slide
+        type: whiteboard.apply
+        at: { mark: open-slide }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-slide-1
+        type: whiteboard.apply
+        at: { mark: draw-slide-1 }
+        upsertIds: [e-v1, e-o1]
+        drawMs: 1000
+      - id: draw-slide-2
+        type: whiteboard.apply
+        at: { mark: draw-slide-2 }
+        upsertIds: [e-v2, e-o2, e-n2, e-out, e-in]
+        drawMs: 2400
+      - id: draw-slide-3
+        type: whiteboard.apply
+        at: { mark: draw-slide-3 }
+        upsertIds: [e-v3, e-n3]
+        drawMs: 1000
+
+  - id: types
+    chapter: "Transition type နဲ့ နောက်ပြန် slide"
+    narration: >
+      [[mark:close-slide]] ဒါပေမဲ့ menu ပြန်သွားရင်လည်း ဘယ်ဘက်ကိုပဲ slide
+      ဖြစ်ပါတယ်။ နောက်ပြန်သွားရင် ဦးတည်ချက် ပြောင်းပြန် ဖြစ်သင့်ပါတယ်။
+      [[mark:select-types-2]] ခုနက ထည့်ခဲ့တဲ့ types က ဒါအတွက်ပါ။ forwards၊
+      backwards ဆိုတဲ့ နာမည်တွေကို ကိုယ်ကြိုက်သလို ပေးလို့ ရပါတယ်။
+      [[mark:type-back-keyframes]] ပထမဆုံး ဦးတည်ချက် ပြောင်းပြန် keyframes rule
+      နှစ်ခု ရေးပါမယ်။ တစ်ခုက ညာဘက်ကို ထွက်သွားပြီး၊ နောက်တစ်ခုက ဘယ်ဘက်ကနေ
+      ဝင်လာပါတယ်။ [[mark:type-back-rule]] ပြီးတော့ active view transition type
+      pseudo-class ကို သုံးပါမယ်။ သူက အဲဒီ type ပါတဲ့ transition run
+      နေတုန်းမှာပဲ html element ကို ရွေးပါတယ်။ အထဲမှာတော့ lesson 8 က nesting ကို
+      သုံးပြီး၊ ပုံ အဟောင်းနဲ့ ပုံ အသစ်ကို ပြောင်းပြန် slide တွေ ပေးပါတယ်။ ဒီ
+      selector က အပေါ်က rule တွေထက် specificity ပိုများလို့ နိုင်ပါတယ်။
+      [[mark:click-back-2]] နောက်ပြန် သွားပါမယ်။ [[mark:after-back-2]] menu
+      ပြန်ရောက်လာပြီး၊ status စာကြောင်းထဲမှာလည်း backwards ရောက်နေပါပြီ။ ကိုယ့်
+      browser မှာဆိုရင် အခု view အဟောင်းက ညာဘက်ကို ထွက်သွားမှာပါ။
+      [[mark:draw-back]] board ပေါ်က အဆင့် သုံးဆင့်က တူပြီး၊ ဦးတည်ချက်ပဲ
+      ပြောင်းပြန်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Different transitions based on context"
+        url: "https://web.dev/learn/css/view-transitions-spas#different_transitions_based_on_context"
+      - title: "MDN — :active-view-transition-type()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:active-view-transition-type"
+      - title: "MDN — Document.startViewTransition() (the types option)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/startViewTransition"
+    actions:
+      - id: close-slide
+        type: whiteboard.apply
+        at: { mark: close-slide }
+        open: false
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: select-types-2 }
+        path: main.js
+      - id: select-types-2
+        type: editor.select
+        at: { mark: select-types-2, offsetMs: 700 }
+        target:
+          {
+            file: main.js,
+            text: 'const type = view === "dish" ? "forwards" : "backwards";',
+            occurrence: 1,
+          }
+      - id: open-styles-2
+        type: workspace.openFile
+        at: { mark: type-back-keyframes }
+        path: styles.css
+      - id: type-back-keyframes
+        type: editor.type
+        at: { mark: type-back-keyframes, offsetMs: 600 }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  animation-name: slide-in;\n}\n", occurrence: 1 }
+        text: "\n@keyframes slide-out-right {\n  to { translate: 100% 0; }\n}\n\n@keyframes slide-in-left {\n  from { translate: -100% 0; }\n}\n"
+      - id: type-back-rule
+        type: editor.type
+        at: { mark: type-back-rule }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  from { translate: -100% 0; }\n}\n", occurrence: 1 }
+        text: "\nhtml:active-view-transition-type(backwards) {\n  &::view-transition-old(root) {\n    animation-name: slide-out-right;\n  }\n\n  &::view-transition-new(root) {\n    animation-name: slide-in-left;\n  }\n}\n"
+      - id: click-back-2
+        type: preview.click
+        at: { mark: click-back-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: back-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-menu-back-2
+        type: expect.preview
+        at: { mark: after-back-2 }
+        timeoutMs: 4000
+        target: { by: testId, value: view-status }
+        textContains: "menu"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-vt-backwards
+        type: expect.preview
+        at: { afterAction: expect-menu-back-2 }
+        timeoutMs: 4000
+        target: { by: testId, value: vt-status }
+        textContains: "backwards"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: draw-back
+        type: whiteboard.apply
+        at: { mark: draw-back }
+        open: true
+        upsertIds: [e-back]
+        drawMs: 1600
+
+  - id: shared-element
+    chapter: "Element တစ်ခုကို သီးသန့် ရွှေ့ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-back-board]] အခုထိ page တစ်ခုလုံးက ပုံ တစ်ပုံအနေနဲ့
+      ရွေ့ပါတယ်။ ဒါပေမဲ့ ဟင်းလျာ ပုံက view နှစ်ခုလုံးမှာ ပါပြီး၊ စာရင်းထဲမှာ
+      သေးပြီး ဟင်းလျာ view မှာ ကြီးပါတယ်။ အဲဒီ ပုံကိုယ်တိုင် ရွေ့ပြီး ကြီးလာရင်
+      ပိုကြည့်ကောင်းပါမယ်။ [[mark:type-name]] ဒါကြောင့် ပုံကို သူ့ကိုယ်ပိုင်
+      view transition name ပေးပါမယ်။ နာမည်က ပုံကြီးမှာ အမြဲ ရှိပြီး၊
+      စာရင်းထဲမှာတော့ picked card ထဲက ပုံသေးမှာပဲ ရှိပါတယ်။
+      [[mark:select-picked]] click listener ကို ပြန်ကြည့်ပါ။ go ကို မခေါ်ခင်
+      card ကို picked class ပေးလို့၊ snapshot အဟောင်း ရိုက်တဲ့အခါ နာမည်
+      ရှိပြီးသားပါ။ [[mark:explain-own-group]] အခု browser က ပုံကို သီးသန့်
+      ရိုက်ပြီး၊ သူ့ group ထဲမှာ ထားပါတယ်။ ခုနက ကြာချိန် ပေးခဲ့တာက root အတွက်ပဲ
+      ဖြစ်ပါတယ်။ [[mark:type-photo-duration]] ဒါကြောင့် ပုံရဲ့ group ကိုလည်း
+      တစ်စက္ကန့်ခွဲ ပေးပါမယ်။ မပေးရင် ပုံက page ထက် အများကြီး စောပြီး
+      ပြီးသွားမှာပါ။ [[mark:click-laphet]] လက်ဖက်သုပ်ကို နှိပ်ပါမယ်။
+      [[mark:after-laphet]] လက်ဖက်သုပ်ရဲ့ ပုံကြီးနဲ့ နာမည် ပေါ်လာပြီး၊ forwards
+      transition လည်း ပြီးသွားပါပြီ။ [[mark:open-morph]] ကိုယ့် browser
+      မှာဆိုရင် ဒီလို မြင်ရမှာပါ။ [[mark:draw-morph-1]] အစမှာ စတုရန်း ပုံသေးလေးက
+      စာရင်းထဲမှာ ရှိပါတယ်။ [[mark:draw-morph-2]] ပြီးတော့ ပုံရဲ့ group က
+      နေရာအသစ်ဆီ ရွေ့ရင်း ကြီးလာပြီး၊ ကျန်တဲ့ page က သူ့အောက်မှာ slide
+      ဖြစ်ပါတယ်။ [[mark:draw-morph-3]] အဆုံးမှာ အပေါ်ဆုံးက ပုံကြီး
+      ဖြစ်သွားပါတယ်။ နာမည်ပါတဲ့ element တွေက သီးသန့် ရွေ့ပြီး၊ ကျန်တာ
+      အားလုံးကတော့ root နဲ့ အတူ ပါသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitioning specific elements"
+        url: "https://web.dev/learn/css/view-transitions-spas#transitioning_specific_elements"
+      - title: "MDN — view-transition-name"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/view-transition-name"
+    actions:
+      - id: close-back-board
+        type: whiteboard.apply
+        at: { mark: close-back-board }
+        open: false
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "    animation-name: slide-in-left;\n  }\n}\n", occurrence: 1 }
+        text: "\n.dish-photo,\n.is-picked .thumb {\n  view-transition-name: dish-photo;\n}\n"
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: select-picked }
+        path: main.js
+      - id: select-picked
+        type: editor.select
+        at: { mark: select-picked, offsetMs: 700 }
+        target:
+          {
+            file: main.js,
+            text: "    card.classList.add(\"is-picked\");\n    go(\"dish\", card);",
+            occurrence: 1,
+          }
+      - id: open-styles-3
+        type: workspace.openFile
+        at: { mark: explain-own-group }
+        path: styles.css
+      - id: type-photo-duration
+        type: editor.type
+        at: { mark: type-photo-duration }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "  view-transition-name: dish-photo;\n}\n", occurrence: 1 }
+        text: "\n::view-transition-group(dish-photo) {\n  animation-duration: 1.5s;\n}\n"
+      - id: click-laphet
+        type: preview.click
+        at: { mark: click-laphet, offsetMs: 200 }
+        timeoutMs: 5000
+        target: { by: testId, value: open-laphet-thoke }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-picked
+        type: expect.preview
+        at: { mark: after-laphet }
+        timeoutMs: 4000
+        target: { by: testId, value: open-laphet-thoke }
+        attribute: { name: class, value: "dish-card is-picked" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-name-laphet
+        type: expect.preview
+        at: { afterAction: expect-picked }
+        timeoutMs: 4000
+        target: { by: testId, value: dish-name }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-vt-forwards-2
+        type: expect.preview
+        at: { afterAction: expect-name-laphet }
+        timeoutMs: 4000
+        target: { by: testId, value: vt-status }
+        textContains: "forwards"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: open-morph
+        type: whiteboard.apply
+        at: { mark: open-morph }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-morph-1
+        type: whiteboard.apply
+        at: { mark: draw-morph-1 }
+        upsertIds: [f-v1, f-p1]
+        drawMs: 1000
+      - id: draw-morph-2
+        type: whiteboard.apply
+        at: { mark: draw-morph-2 }
+        upsertIds: [f-v2, f-p2, f-l1, f-l2]
+        drawMs: 2400
+      - id: draw-morph-3
+        type: whiteboard.apply
+        at: { mark: draw-morph-3 }
+        upsertIds: [f-v3, f-p3]
+        drawMs: 1000
+
+  - id: name-rules
+    chapter: "View transition name ရဲ့ စည်းမျဉ်း"
+    narration: >
+      [[mark:open-unique]] ဒီ နာမည်တွေမှာ စည်းမျဉ်း ရှိပါတယ်။
+      [[mark:draw-unique-ok]] နာမည် တစ်ခုစီက start view transition
+      ခေါ်တဲ့အချိန်မှာ element တစ်ခုတည်းမှာပဲ ရှိရပြီး၊ callback
+      ပြီးတဲ့အချိန်မှာလည်း ဒီအတိုင်းပါပဲ။ [[mark:draw-unique-bad]] စာရင်းထဲက
+      ပုံတိုင်းကို ဒီ နာမည် ပေးခဲ့ရင် element သုံးခုမှာ နာမည် တူနေမှာ ဖြစ်လို့၊
+      browser က animation ကို ကျော်သွားပါမယ်။ DOM ကတော့ ပြောင်းပေမယ့်၊ console
+      မှာ error တက်ပါတယ်။ [[mark:draw-unique-hidden]] ဖျောက်ထားတဲ့ element
+      တွေကိုတော့ မရေတွက်ပါဘူး။ display none ဆိုရင် snapshot မရိုက်လို့၊
+      ဖျောက်ထားတဲ့ ပုံကြီးမှာ နာမည် ရှိနေလည်း ရပါတယ်။ [[mark:draw-unique-ids]]
+      စာရင်းထဲက ဘယ် item ကို နှိပ်မလဲ ကြိုမသိပါဘူး။ နည်း တစ်ခုက item တိုင်းကို
+      id ပါတဲ့ နာမည် ကိုယ်စီ ပေးပြီး၊ သူ့ အသေးစိတ် view မှာလည်း အဲဒီ နာမည်ပဲ
+      ပေးတာပါ။ [[mark:draw-unique-js]] နောက်တစ်နည်းကတော့ ကိုယ် သုံးခဲ့တဲ့
+      နည်းပါ။ နာမည် တစ်ခုတည်းကို transition မစခင် နှိပ်လိုက်တဲ့ item ကိုပဲ
+      ပေးတာပါ။ [[mark:draw-unique-match]] browser အသစ်တွေမှာ match element
+      ဆိုတဲ့ တန်ဖိုးလည်း ရှိပါတယ်။ သူက element တိုင်းကို နာမည် ကိုယ်စီ
+      အလိုအလျောက် ပေးပေမယ့်၊ element တစ်ခုတည်းရဲ့ အဟောင်းနဲ့ အသစ်ကိုပဲ
+      တွဲပေးလို့၊ ပုံသေးနဲ့ ပုံကြီးလို element နှစ်ခုကို မတွဲပေးပါဘူး။
+      [[mark:draw-unique-class]] view transition class ကတော့ နာမည် မတူတဲ့
+      element တွေကို class တစ်ခုတည်း ပေးလို့၊ group rule တစ်ခုနဲ့ အားလုံးကို
+      style ပေးနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitioning specific elements (one element per name)"
+        url: "https://web.dev/learn/css/view-transitions-spas#transitioning_specific_elements"
+      - title: "MDN — view-transition-name (match-element)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/view-transition-name"
+      - title: "MDN — view-transition-class"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/view-transition-class"
+      - title: "CSS View Transitions Level 2 — view-transition-class"
+        url: "https://drafts.csswg.org/css-view-transitions-2/#view-transition-class-prop"
+    actions:
+      - id: open-unique
+        type: whiteboard.apply
+        at: { mark: open-unique }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-unique-ok
+        type: whiteboard.apply
+        at: { mark: draw-unique-ok }
+        upsertIds: [g-ok]
+        drawMs: 1200
+      - id: draw-unique-bad
+        type: whiteboard.apply
+        at: { mark: draw-unique-bad }
+        upsertIds: [g-bad, g-bad-2]
+        drawMs: 1600
+      - id: draw-unique-hidden
+        type: whiteboard.apply
+        at: { mark: draw-unique-hidden }
+        upsertIds: [g-hidden]
+        drawMs: 1000
+      - id: draw-unique-ids
+        type: whiteboard.apply
+        at: { mark: draw-unique-ids }
+        upsertIds: [g-ids]
+        drawMs: 1200
+      - id: draw-unique-js
+        type: whiteboard.apply
+        at: { mark: draw-unique-js }
+        upsertIds: [g-js]
+        drawMs: 1000
+      - id: draw-unique-match
+        type: whiteboard.apply
+        at: { mark: draw-unique-match }
+        upsertIds: [g-match]
+        drawMs: 800
+      - id: draw-unique-class
+        type: whiteboard.apply
+        at: { mark: draw-unique-class }
+        upsertIds: [g-class]
+        drawMs: 800
+
+  - id: aspect-ratio
+    chapter: "ပုံသဏ္ဌာန် မပျက်အောင်"
+    narration: >
+      [[mark:open-aspect]] ပုံမှာ ပြဿနာ တစ်ခု ကျန်ပါသေးတယ်။
+      [[mark:draw-aspect-bad]] ပုံသေးက စတုရန်း ဖြစ်ပြီး၊ ပုံကြီးက ဘေးတိုက်
+      ကျယ်ပါတယ်။ default အားဖြင့် ပုံ တစ်ပုံစီက group ရဲ့ အကျယ် အပြည့်ကို ယူပြီး
+      သူ့ အချိုးကို ထိန်းထားလို့၊ group ကြီးလာနေတုန်း စတုရန်း ပုံက အောက်ကို
+      ကျော်ထွက်ပြီး၊ ကျယ်တဲ့ ပုံက group ကို မပြည့်ပါဘူး။ [[mark:close-aspect]]
+      ပြင်ကြည့်ရအောင်။ [[mark:type-cover]] ဟင်းလျာ ပုံရဲ့ ပုံ အဟောင်းနဲ့ ပုံ
+      အသစ်ကို group ရဲ့ အမြင့် အပြည့် ပေးပြီး၊ object fit ကို cover ပေးပါမယ်။
+      object fit က ပုံကို box ထဲမှာ ဘယ်လို ထည့်မလဲ ဆုံးဖြတ်ပါတယ်။
+      [[mark:draw-aspect-good]] အခု အဆင့်တိုင်းမှာ ပုံနှစ်ပုံလုံး group ကို
+      ပြည့်နေပါပြီ။ lesson 33 က background size cover လိုပဲ၊ ပုံသဏ္ဌာန် မပျက်ဘဲ
+      ပိုနေတဲ့ အပိုင်းက ပြတ်သွားပါတယ်။ [[mark:explain-design]] animation
+      ကြည့်ကောင်းအောင် ဒီလို အသေးစိတ်တွေ ပြင်ရတတ်ပါတယ်။
+      [[mark:explain-fit-content]] ခေါင်းစဉ်လို စာသားကို နာမည် ပေးပြီး
+      ရွှေ့ရင်လည်း ဒီလို ပြဿနာ ရှိပါတယ်။ ခေါင်းစဉ်က container အကျယ် အပြည့်
+      ယူလို့၊ view နှစ်ခုမှာ အကျယ် မတူရင် စာသားက ကြီးလာ သေးသွား ဖြစ်ပါတယ်။ width
+      ကို fit content ပေးရင် box က စာသား အကျယ်လောက်ပဲ ဖြစ်ပါတယ်။
+      [[mark:explain-header]] header လို မရွေ့စေချင်တဲ့ အပိုင်းကိုလည်း
+      သူ့ကိုယ်ပိုင် နာမည် ပေးလို့ ရပါတယ်။ အဲဒီအခါ ကျန်တာ slide ဖြစ်နေတုန်း သူက
+      နေရာမှာပဲ ငြိမ်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Designing transitions (fit-content, object-fit)"
+        url: "https://web.dev/learn/css/view-transitions-spas#designing_transitions"
+      - title: "MDN — object-fit"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/object-fit"
+      - title: "CSS View Transitions Level 1 — UA styles (old and new: full width, auto height)"
+        url: "https://drafts.csswg.org/css-view-transitions-1/#ua-styles"
+    actions:
+      - id: open-aspect
+        type: whiteboard.apply
+        at: { mark: open-aspect }
+        open: true
+        clear: true
+        upsertIds: [h-title]
+      - id: draw-aspect-bad
+        type: whiteboard.apply
+        at: { mark: draw-aspect-bad }
+        upsertIds: [h-group1, h-sq, h-bad]
+        drawMs: 2000
+      - id: close-aspect
+        type: whiteboard.apply
+        at: { mark: close-aspect }
+        open: false
+      - id: type-cover
+        type: editor.type
+        at: { mark: type-cover }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "::view-transition-group(dish-photo) {\n  animation-duration: 1.5s;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n::view-transition-old(dish-photo),\n::view-transition-new(dish-photo) {\n  height: 100%;\n  object-fit: cover;\n}\n"
+      - id: draw-aspect-good
+        type: whiteboard.apply
+        at: { mark: draw-aspect-good }
+        open: true
+        upsertIds: [h-group2, h-fill, h-good, h-33]
+        drawMs: 2000
+
+  - id: reduced-motion
+    chapter: "Reduced motion"
+    narration: >
+      [[mark:close-aspect-2]] လှုပ်ရှားမှုက တချို့လူတွေကို နေမကောင်း
+      ဖြစ်စေနိုင်ပါတယ်။ [[mark:explain-vestibular]] screen ကို ဖြတ်ပြီး ကြီးကြီး
+      ရွေ့တာက၊ လှုပ်ရှားမှုကြောင့် မူးလွယ်တဲ့သူတွေကို မူးဝေ
+      ပျို့အန်စေနိုင်ပါတယ်။ ဒါကြောင့် အဲဒီလို လူတွေက ကိုယ့် စက်မှာ reduced
+      motion ဖွင့်ထားကြပါတယ်။ [[mark:type-reduced]] reduced motion media query
+      ထဲမှာ၊ နာမည် ဘာပဲ ဖြစ်ဖြစ် group တွေ၊ ပုံ အဟောင်းနဲ့ ပုံ အသစ် အားလုံးရဲ့
+      animation ကို ပိတ်ပါမယ်။ အပေါ်က slide rule တွေက specificity ပိုများပေမယ့်၊
+      important တပ်ထားလို့ ဒီ declaration က နိုင်ပါတယ်။ [[mark:explain-reduced]]
+      DOM ကတော့ ပြောင်းပြီး view အသစ်က ချက်ချင်း ပေါ်ပါတယ်။ နောက်တစ်နည်းက fade
+      တိုတို ထားတာပါ။ [[mark:click-back-3]] menu ကို ပြန်သွားကြည့်ရအောင်။
+      [[mark:after-back-3]] reduced motion ဖွင့်ထားရင် ကိုယ့် browser က view ကို
+      ချက်ချင်း ပြောင်းပြီး၊ မဖွင့်ရင် slide ကို မြင်ရပါမယ်။ ဒီ lesson ထဲမှာတော့
+      နှစ်မျိုးလုံး တူတူပဲ ဖြစ်လို့၊ setting နှစ်မျိုးနဲ့ ကိုယ်တိုင်
+      စမ်းကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Respecting prefers-reduced-motion"
+        url: "https://web.dev/learn/css/view-transitions-spas#respecting_prefers-reduced-motion"
+      - title: "MDN — prefers-reduced-motion"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+    actions:
+      - id: close-aspect-2
+        type: whiteboard.apply
+        at: { mark: close-aspect-2 }
+        open: false
+      - id: type-reduced
+        type: editor.type
+        at: { mark: type-reduced }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "  height: 100%;\n  object-fit: cover;\n}\n", occurrence: 1 }
+        text: "\n@media (prefers-reduced-motion: reduce) {\n  ::view-transition-group(*),\n  ::view-transition-old(*),\n  ::view-transition-new(*) {\n    animation: none !important;\n  }\n}\n"
+      - id: click-back-3
+        type: preview.click
+        at: { mark: click-back-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: back-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-menu-back-3
+        type: expect.preview
+        at: { mark: after-back-3 }
+        timeoutMs: 4000
+        target: { by: testId, value: view-status }
+        textContains: "menu"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-vt-backwards-2
+        type: expect.preview
+        at: { afterAction: expect-menu-back-3 }
+        timeoutMs: 4000
+        target: { by: testId, value: vt-status }
+        textContains: "backwards"
+        retry: { maxAttempts: 3, delayMs: 1000 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:explain-mpa]] နောက်ထပ် သိထားစရာ နှစ်ခု ရှိပါသေးတယ်။ page တွေ
+      ခွဲထားတဲ့ website မှာ JavaScript မပါဘဲ page တစ်ခုနဲ့ တစ်ခုကြား view
+      transition ထည့်လို့ ရပါတယ်။ page နှစ်ခုလုံးမှာ view transition at-rule ကို
+      navigation auto နဲ့ ရေးရပြီး၊ Firefox မှာတော့ မရသေးပါဘူး။
+      [[mark:explain-scoped]] ပြီးတော့ Chrome မှာ page တစ်ခုလုံး မဟုတ်ဘဲ element
+      တစ်ခုထဲမှာပဲ view transition လုပ်လို့ ရလာပြီး၊ ဒါက စမ်းသပ်ဆဲ အဆင့်ပါ။
+      [[mark:open-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ ပြောင်းလဲမှု မတိုင်ခင်က
+      view ကို ဘယ် pseudo-element က ပြလဲ။ [[mark:quiz-answer]] view transition
+      old pseudo-element ပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ start view
+      transition က DOM မပြင်ခင်နဲ့ ပြင်ပြီးနောက် ပုံ ရိုက်ပြီး၊ ကြားမှာ
+      animation လုပ်ပေးပါတယ်။ pseudo-element တွေကို keyframe တွေနဲ့ animate
+      လုပ်နိုင်ပြီး၊ types နဲ့ ဦးတည်ချက် အလိုက် ခွဲလို့ ရပါတယ်။ နာမည် ပေးထားတဲ့
+      element က သီးသန့် ရွေ့ပြီး၊ reduced motion ဖွင့်ထားတဲ့ user တွေအတွက်တော့
+      animation ကို ပိတ်ပေးရပါမယ်။ [[mark:next-lesson]] ဒီ lesson နဲ့ ဒီ course
+      ရဲ့ CSS သက်သက် အပိုင်း ပြီးသွားပါပြီ။ နောက်ဆုံး lesson မှာတော့ ကိုယ်
+      လေ့လာခဲ့တဲ့ CSS ကို HTML ထဲမှာ class သေးသေးလေးတွေအဖြစ် ရေးတဲ့ Tailwind CSS
+      ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "MDN — @view-transition (cross-document view transitions)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@view-transition"
+      - title: "webstatus.dev — Cross-document view transitions (limited availability)"
+        url: "https://webstatus.dev/features/cross-document-view-transitions"
+      - title: "Chrome for Developers — Same-document view transitions (element-scoped transitions)"
+        url: "https://developer.chrome.com/docs/web-platform/view-transitions/same-document"
+      - title: "web.dev Learn CSS — View transitions: check your understanding"
+        url: "https://web.dev/learn/css/view-transitions-spas#check_your_understanding"
+    actions:
+      - id: expect-final-menu
+        type: expect.preview
+        at: { mark: explain-mpa }
+        timeoutMs: 4000
+        target: { by: testId, value: open-palata }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: open-quiz }
+        path: styles.css
+        contains: "::view-transition-group(root) {\n  animation-duration: 1.5s;\n}\n\n@keyframes slide-out {\n  to { translate: -100% 0; }\n}\n\n@keyframes slide-in {\n  from { translate: 100% 0; }\n}\n\n::view-transition-old(root) {\n  animation-name: slide-out;\n}\n\n::view-transition-new(root) {\n  animation-name: slide-in;\n}\n\n@keyframes slide-out-right {\n  to { translate: 100% 0; }\n}\n\n@keyframes slide-in-left {\n  from { translate: -100% 0; }\n}\n\nhtml:active-view-transition-type(backwards) {\n  &::view-transition-old(root) {\n    animation-name: slide-out-right;\n  }\n\n  &::view-transition-new(root) {\n    animation-name: slide-in-left;\n  }\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".dish-photo,\n.is-picked .thumb {\n  view-transition-name: dish-photo;\n}\n\n::view-transition-group(dish-photo) {\n  animation-duration: 1.5s;\n}\n\n::view-transition-old(dish-photo),\n::view-transition-new(dish-photo) {\n  height: 100%;\n  object-fit: cover;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  ::view-transition-group(*),\n  ::view-transition-old(*),\n  ::view-transition-new(*) {\n    animation: none !important;\n  }\n}\n"
+      - id: expect-final-js
+        type: expect.file
+        at: { afterAction: expect-final-css-2 }
+        path: main.js
+        contains: "function go(view, card) {\n  if (document.startViewTransition && \"types\" in ViewTransition.prototype) {\n    const type = view === \"dish\" ? \"forwards\" : \"backwards\";\n    const transition = document.startViewTransition({\n      update: () => show(view, card),\n      types: [type],\n    });\n    transition.finished.then(() => {\n      vtStatus.textContent = type;\n    });\n    return;\n  }\n  show(view, card);\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
