@@ -106,7 +106,7 @@ the glossary. These are the changes from the separately reviewed drafts:
 
 **Whole module**
 
-1. **Pacing is a curriculum question, not a wording one.** The guide wants something on screen to
+1. **Pacing (decided, listed for information).** The guide wants something on screen to
    change at least every 30 seconds, but many scenes get only one page or board step. These hold
    longer, estimated from one page advance or board step to the next:
    - L01: l01_p02 73 s, l01_p03 64 s, l01_p04 55 s, l01_p01 52 s, B2 step 1 33 s.
@@ -118,9 +118,9 @@ the glossary. These are the changes from the separately reviewed drafts:
    - L05: l05_p04 84 s, l05_p03 55 s, l05_p05 54 s, l05_p02 53 s; B2 step 1 43 s, B3 step 2 42 s.
 
    Also, L05's B2 step 1 draws four boxes plus a circle, over the limit of three new elements per
-   step. Fixing either problem means adding pages or board steps in the specs. Two examples: split
-   "three meanings of SRE" off l02_p03, or give L04 a B1 step 4 with an orange "control plane: 1 နာရီ၊
-   customer ထောင်ချီ". Should we amend the specs, or accept this for Module 1?
+   step. **Decided (no input needed):** when the YAML is built, long stretches get extra page advances
+   or board steps (a second page, or a board split into more steps) placed at existing sentence ends.
+   The spoken narration you approve stays word for word; only the on-screen plan and markers change.
 
 2. **Pronunciation probe before the first render.** Please check these by ear (glossary 4.2–4.3):
    - Padauk → ပိတောက်
