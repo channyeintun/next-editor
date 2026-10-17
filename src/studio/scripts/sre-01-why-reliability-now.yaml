@@ -1,0 +1,1302 @@
+# SRE from zero, lesson 1: why running software is the long, hard part.
+#
+# A concept lesson: nothing runs. Deck pages (deck SRE 1) and four whiteboard
+# boards carry the lesson, and the recap highlights the key terms in notes.md.
+# The narration is the approved Burmese voice script
+# docs/sre-course/voice-scripts/sre-01-why-reliability-now.md, word for word:
+# each ⟪…⟫ marker became a [[mark:…]] at the same place. Marks with a letter
+# suffix (p01b, b1-step2b, …) were added at existing sentence ends so that
+# something on screen changes at least every ~35 s; they add no spoken text.
+# ask-question (recap) is one more mark at an existing sentence end: the
+# question-line select hangs off it so the ⟪pause 3s⟫ is real silence.
+#
+# Deck: every page points at deck SRE 1's placeholder /pub URL until Chan
+# publishes the deck; the Director's unreachable-deck warning is expected.
+# Page plan (kit fields per page): ~/Documents/sre-course/work/pages/sre-01-why-reliability-now.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-01-why-reliability-now.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-01-why-reliability-now.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-01-why-reliability-now
+  title: "SRE from zero 1: SRE ဘာကြောင့် လိုလာတာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SRE ဘာကြောင့် လိုလာတာလဲ
+
+        - Site Reliability Engineering — service ကြီးတွေကို user တွေအတွက် software နဲ့ စိတ်ချရအောင် ထိန်းတဲ့ engineering
+        - build နဲ့ run — build လုပ်တာ ခဏ၊ run တာ နှစ်နဲ့ချီ
+        - technical debt — ဖြတ်လမ်းက ချေးတာ၊ လက်နဲ့ ပြင်ရတာနဲ့ ပြောင်းရမှာ ကြောက်တာက အတိုး၊ outage က ဆပ်ရမယ့် နေ့
+        - ကြိုသဘောတူထားတဲ့ risk အကန့်အသတ် — ဘယ်အထိ ချေးမလဲ ပြဿနာ မတက်ခင် သဘောတူ
+        - sociotechnical — code၊ server နဲ့ လူ၊ အဖွဲ့ အားလုံး system တစ်ခုတည်း
+
+        မေးခွန်း: fail ဖြစ်တဲ့ job တစ်ခုကို သောကြာနေ့တိုင်း လက်နဲ့ ပြန် run ရတယ်။ ဒါ အကြွေးလား၊ အတိုးလား၊ ဆပ်ရမယ့် နေ့လား?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SRE ဘာကြောင့် လိုလာတာလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 1</p>
+              <h1>SRE ဘာကြောင့် လိုလာတာလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #6d57ff;
+          font-weight: 600;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.6;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - {
+        id: l01_p01,
+        contentType: google,
+        name: "Cover: Thingyan eve at Padauk",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p01,
+      }
+    - {
+        id: l01_p01b,
+        contentType: google,
+        name: "Cover: which one will users remember?",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p01b,
+      }
+    - {
+        id: l01_p02,
+        contentType: google,
+        name: "Hope it holds vs engineer it",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p02,
+      }
+    - {
+        id: l01_p02b,
+        contentType: google,
+        name: "Hope vs engineer: Site Reliability Engineering",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p02b,
+      }
+    - {
+        id: l01_p02c,
+        contentType: google,
+        name: "Sociotechnical system",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p02c,
+      }
+    - {
+        id: l01_p03,
+        contentType: google,
+        name: "What Padauk agreed (title)",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p03,
+      }
+    - {
+        id: l01_p03b,
+        contentType: google,
+        name: "What Padauk agreed afterwards",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p03b,
+      }
+    - {
+        id: l01_p03c,
+        contentType: google,
+        name: "What SREs do with the list",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p03c,
+      }
+    - {
+        id: l01_p04,
+        contentType: google,
+        name: "Start without an SRE team (1)",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p04,
+      }
+    - {
+        id: l01_p04b,
+        contentType: google,
+        name: "Start without an SRE team",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p04b,
+      }
+    - {
+        id: l01_p04c,
+        contentType: google,
+        name: "Keeping it going is harder",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p04c,
+      }
+    - {
+        id: l01_p05,
+        contentType: google,
+        name: "This week",
+        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p05,
+      }
+  whiteboardAssets:
+    # Board B1 (P5 bars): build short, run long. blue = build, violet = run, orange = caveat, red = still hard
+    - {
+        id: l01-b1-axis,
+        kind: freedraw,
+        stroke: "underline",
+        x: 280,
+        y: 305,
+        width: 800,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b1-build,
+        kind: rectangle,
+        x: 290,
+        y: 280,
+        width: 60,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l01-b1-build-label,
+        kind: text,
+        x: 280,
+        y: 222,
+        width: 340,
+        height: 35,
+        text: "build: နေ့လယ် တစ်ခင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-run,
+        kind: rectangle,
+        x: 360,
+        y: 280,
+        width: 710,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l01-b1-run-label,
+        kind: text,
+        x: 700,
+        y: 222,
+        width: 250,
+        height: 35,
+        text: "run: နှစ်နဲ့ချီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-ops-1,
+        kind: text,
+        x: 400,
+        y: 365,
+        width: 320,
+        height: 35,
+        text: "monitoring · on-call",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-ops-2,
+        kind: text,
+        x: 400,
+        y: 415,
+        width: 230,
+        height: 35,
+        text: "upgrade · data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-ops-3,
+        kind: text,
+        x: 400,
+        y: 465,
+        width: 320,
+        height: 35,
+        text: "capacity · ပိတ်သိမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-ai,
+        kind: text,
+        x: 280,
+        y: 550,
+        width: 400,
+        height: 35,
+        text: "AI ကြောင့် build ဈေးပေါလာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-hard,
+        kind: text,
+        x: 720,
+        y: 550,
+        width: 290,
+        height: 35,
+        text: "run တာက ခက်တုန်းပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board B2 (P8 timeline): Padauk's loan. Ticks at x 290 / 330 (promo, every Monday) and
+    # 580 / 620 (months later, Thingyan eve); labels alternate above and below the axis.
+    # blue = the loan, violet = interest, red = the due date, orange = interest growing.
+    # Two-line labels are as wide as their whole text x 0.55 em (the overflow rule counts
+    # both lines), so the late ticks sit at x 620 or less to keep those boxes on canvas
+    - {
+        id: l01-b2-axis,
+        kind: freedraw,
+        stroke: "underline",
+        x: 280,
+        y: 290,
+        width: 640,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b2-tick-promo,
+        kind: rectangle,
+        x: 290,
+        y: 303,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b2-promo,
+        kind: text,
+        x: 290,
+        y: 266,
+        width: 165,
+        height: 35,
+        text: "promo အပတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-key,
+        kind: text,
+        x: 290,
+        y: 218,
+        width: 290,
+        height: 35,
+        text: "key ချန်ခဲ့ (ချေး)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-tick-monday,
+        kind: rectangle,
+        x: 330,
+        y: 303,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b2-monday,
+        kind: text,
+        x: 330,
+        y: 345,
+        width: 210,
+        height: 35,
+        text: "တနင်္လာတိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-interest,
+        kind: text,
+        x: 330,
+        y: 393,
+        width: 410,
+        height: 70,
+        text: "လက်နဲ့ ပြင် 3 နာရီ\n(အတိုး)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-tick-months,
+        kind: rectangle,
+        x: 580,
+        y: 303,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b2-months,
+        kind: text,
+        x: 580,
+        y: 266,
+        width: 195,
+        height: 35,
+        text: "လတွေ ကြာပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-retry,
+        kind: text,
+        x: 580,
+        y: 218,
+        width: 370,
+        height: 35,
+        text: "retry ကို ဘယ်သူမှ မထိရဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-tick-thingyan,
+        kind: rectangle,
+        x: 620,
+        y: 303,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b2-thingyan,
+        kind: text,
+        x: 620,
+        y: 345,
+        width: 240,
+        height: 35,
+        text: "သင်္ကြန် အကြိုည",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-due,
+        kind: text,
+        x: 620,
+        y: 393,
+        width: 475,
+        height: 70,
+        text: "ငွေ နှစ်ခါ ဖြတ်\n(ဆပ်ရမယ့် နေ့)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-grows,
+        kind: text,
+        x: 330,
+        y: 483,
+        width: 550,
+        height: 70,
+        text: "3 နာရီ → 6 နာရီ\nအတိုး တိတ်တိတ် တိုး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board B3 (P1 flow + P2 comb): the Padauk service map, reused as furniture later.
+    # blue = the products, violet = request flow, ink = app, gateway, bus and partners
+    - {
+        id: l01-b3-app,
+        kind: rectangle,
+        x: 260,
+        y: 340,
+        width: 175,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b3-app-label,
+        kind: text,
+        x: 272,
+        y: 357,
+        width: 160,
+        height: 35,
+        text: "Padauk app",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-arrow-app,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 440,
+        y: 355,
+        width: 40,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-gateway,
+        kind: rectangle,
+        x: 485,
+        y: 340,
+        width: 135,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b3-gateway-label,
+        kind: text,
+        x: 497,
+        y: 357,
+        width: 115,
+        height: 35,
+        text: "gateway",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-arrow-gateway,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 625,
+        y: 355,
+        width: 35,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-bus,
+        kind: rectangle,
+        x: 664,
+        y: 250,
+        width: 10,
+        height: 250,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b3-arrow-wallet,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 678,
+        y: 265,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-arrow-topup,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 678,
+        y: 355,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-arrow-billpay,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 678,
+        y: 445,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-wallet,
+        kind: rectangle,
+        x: 714,
+        y: 250,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l01-b3-wallet-label,
+        kind: text,
+        x: 728,
+        y: 267,
+        width: 100,
+        height: 35,
+        text: "Wallet",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-topup,
+        kind: rectangle,
+        x: 714,
+        y: 340,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l01-b3-topup-label,
+        kind: text,
+        x: 728,
+        y: 357,
+        width: 100,
+        height: 35,
+        text: "Top-up",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-billpay,
+        kind: rectangle,
+        x: 714,
+        y: 430,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l01-b3-billpay-label,
+        kind: text,
+        x: 728,
+        y: 447,
+        width: 130,
+        height: 35,
+        text: "Bill Pay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-arrow-banks,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 868,
+        y: 265,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-banks,
+        kind: text,
+        x: 905,
+        y: 267,
+        width: 105,
+        height: 35,
+        text: "ဘဏ်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-arrow-operators,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 868,
+        y: 355,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b3-operators,
+        kind: text,
+        x: 905,
+        y: 357,
+        width: 190,
+        height: 35,
+        text: "Operator တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b3-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 825,
+        height: 45,
+        text: "Padauk: engineer 25 ယောက်၊ SRE အဖွဲ့ မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    # Board B4 (P3 ring): the Padauk reliability loop, outline only (L02 fills it in).
+    # Five stations clockwise from the top; violet = the ring and its travel, blue = the
+    # stations, green = the people in the hub. Station boxes are filled white, which
+    # paints as the dark canvas, so the ring does not run through their labels
+    - {
+        id: l01-b4-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 470,
+        height: 45,
+        text: "Padauk reliability loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l01-b4-ring,
+        kind: ellipse,
+        x: 430,
+        y: 250,
+        width: 500,
+        height: 330,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b4-agree,
+        kind: rectangle,
+        x: 605,
+        y: 222,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l01-b4-agree-label,
+        kind: text,
+        x: 618,
+        y: 232,
+        width: 110,
+        height: 35,
+        text: "သဘောတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b4-notice,
+        kind: rectangle,
+        x: 843,
+        y: 336,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l01-b4-notice-label,
+        kind: text,
+        x: 856,
+        y: 346,
+        width: 130,
+        height: 35,
+        text: "သတိထားမိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b4-respond,
+        kind: rectangle,
+        x: 752,
+        y: 520,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l01-b4-respond-label,
+        kind: text,
+        x: 765,
+        y: 530,
+        width: 130,
+        height: 35,
+        text: "တုံ့ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b4-learn,
+        kind: rectangle,
+        x: 458,
+        y: 520,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l01-b4-learn-label,
+        kind: text,
+        x: 471,
+        y: 530,
+        width: 110,
+        height: 35,
+        text: "သင်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b4-build,
+        kind: rectangle,
+        x: 367,
+        y: 336,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l01-b4-build-label,
+        kind: text,
+        x: 380,
+        y: 346,
+        width: 130,
+        height: 35,
+        text: "တည်ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b4-arrow-top,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 768,
+        y: 252,
+        width: 60,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b4-arrow-right,
+        kind: freedraw,
+        stroke: "arrow-down",
+        x: 910,
+        y: 420,
+        width: 30,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b4-doll-head,
+        kind: ellipse,
+        x: 658,
+        y: 335,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l01-b4-doll-body,
+        kind: ellipse,
+        x: 643,
+        y: 381,
+        width: 74,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l01-b4-people,
+        kind: text,
+        x: 643,
+        y: 458,
+        width: 95,
+        height: 35,
+        text: "လူတွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2601
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "သင်္ကြန် အကြိုည"
+    narration: >
+      [[mark:p01]] မင်္ဂလာပါ ခင်ဗျာ။ ဒီသင်တန်းမှာ user တွေ အားကိုးနေတဲ့ software ကို စိတ်ချရအောင်
+      ဘယ်လို run ထားမလဲ ဆိုတာ အခြေခံကစ လေ့လာသွားပါမယ်။ သင်တန်း တစ်လျှောက်လုံး Padauk ဆိုတဲ့ ရန်ကုန်က
+      စိတ်ကူးယဉ် fintech app တစ်ခုရဲ့ ဇာတ်လမ်းကို လိုက်ကြည့်ကြမှာပါ။ သင်္ကြန် အကြိုနေ့မှာ Padauk ရဲ့
+      developer တစ်ယောက်က AI assistant နဲ့ rewards screen အသစ်ကို နေ့လယ် တစ်ခင်းတည်းနဲ့ ဆောက်ပြီး
+      ထုတ်လိုက်ပါတယ်။ [[mark:p01b]] ဒါပေမဲ့ ညရောက်တော့ ဖုန်းဘေလ် ဖြည့်တဲ့ top-up တချို့ fail ဖြစ်တယ်၊
+      တချို့က စက္ကန့် 40 လောက် စောင့်ရတယ်၊ ပိုဆိုးတာက တချို့ user တွေ ငွေ နှစ်ခါ ဖြတ်ခံလိုက်ရပါတယ်။
+      Top-up ရဲ့ backend developer မသီရိကတော့ ပွဲတော်ညမှာ ငွေ ပြန်အမ်းရမယ့် user တွေကို တစ်ယောက်ချင်း
+      လိုက်ရှာနေရပါတယ်။ ဒါဆို user တွေ မှတ်မိနေမှာက rewards screen အသစ်လေးလား၊ ငွေ နှစ်ခါ
+      ဖြတ်ခံရတာလား?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l01_p01 }
+      - { id: show-p01b, type: slide.show, at: { mark: p01b }, slideId: l01_p01b }
+
+  - id: hoping-vs-engineering
+    narration: >
+      [[mark:p02]] အဖြေကတော့ ငွေ နှစ်ခါ ဖြတ်ခံရတာပါ။ ဒီလို ဖြစ်ရတာက Padauk က ဘယ်ဘက်ခြမ်းမှာ ပြထားသလို
+      မပျက်ဖို့ပဲ မျှော်လင့်ပြီး အလုပ်လုပ်နေလို့ပါ။ ပျက်မှ လိုက်ပြင်တယ်၊ ထုတ်ပြီးရင် ဆုတောင်းထားတယ်၊
+      ပြဿနာ တက်ရင် ညဘက်မှာ hero တစ်ယောက်ယောက်က ကယ်ပေးလိမ့်မယ်လို့ အားကိုးထားတယ်။ ညာဘက်ခြမ်းကတော့
+      engineering နဲ့ ထိန်းတဲ့ နည်းပါ။ user ခံစားရတာကို တိုင်းတယ်၊ ဘယ်လောက်ဆို လုံလောက်လဲ ဆိုတာ
+      ကြိုသဘောတူထားတယ်၊ လူကို ပိုပင်ပန်းအောင် မလုပ်ဘဲ system ကို ပြောင်းလိုက်တယ်။ [[mark:p02b]]
+      ဒီနည်းကို Site Reliability Engineering၊ အတိုကောက် SRE လို့ ခေါ်ပါတယ်။ SRE ဆိုတာ
+      စက်အများကြီးပေါ်မှာ run နေတဲ့ service ကြီးတွေကို၊ သူတို့ကို အားကိုးနေတဲ့ user တွေအတွက်
+      စိတ်ချရအောင် software ရေးပြီး ထိန်းပေးတဲ့ engineer တွေရဲ့ အလုပ်ပါ။ ဒီလို စိတ်ချရတာကို
+      reliability လို့ ခေါ်ပါတယ်။ ဒီအလုပ်ကို DevOps engineer၊ platform engineer လို နာမည်
+      အမျိုးမျိုးနဲ့ ခေါ်ကြပေမဲ့ လုပ်ရတာကတော့ အတူတူပါပဲ။ [[mark:p02c]] ပြီးတော့ ဒီလို system တွေထဲမှာ
+      code နဲ့ server တွေ တင်မကဘဲ အဲဒါတွေကို run တဲ့ လူတွေ၊ အဖွဲ့တွေပါ ပါနေလို့ sociotechnical system
+      လို့ ခေါ်ပါတယ်။ ဒါကြောင့် လူတွေက tool တွေနဲ့ တန်းတူ အရေးကြီးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "SRE book, 1st ed: Foreword", url: "https://sre.google/sre-book/foreword/" }
+      - { title: "SRE book, 1st ed: Preface", url: "https://sre.google/sre-book/preface/" }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l01_p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: p02b }, slideId: l01_p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: p02c }, slideId: l01_p02c }
+
+  - id: build-short-run-long
+    chapter: "build နဲ့ run"
+    narration: >
+      [[mark:close-p02c]] [[mark:b1-step1]] ဒီ အပြာရောင် အကွက်လေးက rewards screen ကို build လုပ်ခဲ့တဲ့
+      အချိန်ပါ၊ နေ့လယ် တစ်ခင်းပဲ ကြာပါတယ်။ [[mark:b1-step2]] ဒါပေမဲ့ ထုတ်လိုက်တဲ့ နေ့ကစပြီး run ရတဲ့
+      အလုပ်က ဒီ ခရမ်းရောင် bar ရှည်ကြီးလိုပဲ နှစ်နဲ့ချီ ကြာပါတယ်။ [[mark:b1-step2b]] အဲဒီ နှစ်တွေမှာ
+      monitoring လုပ်ရတယ်၊ ညသန်းခေါင် ပြဿနာ တက်ရင် on-call ကျနေတဲ့သူက ထဖြေရှင်းရတယ်၊ upgrade လုပ်ရတယ်၊
+      data ကို ထိန်းရတယ်၊ user များလာရင် capacity တိုးရတယ်၊ မလိုတော့တဲ့ နေ့မှာလည်း ဘေးကင်းကင်း
+      ပိတ်သိမ်းရပါတယ်။ လက်ဖက်ရည်ဆိုင် တစ်ဆိုင် ဖွင့်တာ တစ်ပတ်ပဲ ကြာပေမဲ့ နေ့တိုင်း ရောင်းရတာက
+      နှစ်နဲ့ချီ ဖြစ်သလိုပါပဲ။ [[mark:b1-step3]] အခု AI ကြောင့် build လုပ်တာ မြန်ပြီး ဈေးပေါလာပေမဲ့
+      run တာကတော့ ခက်တုန်းပါပဲ။ server တွေကို cloud ကနေ ငှားသုံးလာပေမဲ့ အလုပ်က ပျောက်မသွားဘဲ၊ ဘာကို
+      ငှားမလဲ ရွေးတာ၊ ဘယ်လို config လုပ်မလဲ ဆုံးဖြတ်တာ၊ ငှားထားတဲ့ အပိုင်းတွေ ဘယ်လို ပျက်တတ်လဲ
+      နားလည်တာဆီကို ရွှေ့သွားတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "SRE book, 1st ed: Preface", url: "https://sre.google/sre-book/preface/" }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - {
+          id: b1-step1,
+          type: whiteboard.apply,
+          at: { mark: b1-step1 },
+          open: true,
+          clear: true,
+          upsertIds: [l01-b1-axis, l01-b1-build, l01-b1-build-label],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-step2,
+          type: whiteboard.apply,
+          at: { mark: b1-step2 },
+          upsertIds: [l01-b1-run, l01-b1-run-label],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-step2b,
+          type: whiteboard.apply,
+          at: { mark: b1-step2b },
+          upsertIds: [l01-b1-ops-1, l01-b1-ops-2, l01-b1-ops-3],
+          drawMs: 2000,
+        }
+      - {
+          id: b1-step3,
+          type: whiteboard.apply,
+          at: { mark: b1-step3 },
+          upsertIds: [l01-b1-ai, l01-b1-hard],
+          drawMs: 1600,
+        }
+
+  - id: padauk-loan
+    chapter: "ဖြတ်လမ်းဆိုတာ အကြွေး"
+    narration: >
+      ဒါဆို ငွေ နှစ်ခါ ဖြတ်တဲ့ ပြဿနာက ဘယ်က စလာတာလဲ။ [[mark:b2-step1]] လအနည်းငယ် အရင်က Top-up အဖွဲ့က
+      promo တစ်ခုကို အချိန်မီ ထုတ်နိုင်ဖို့ idempotency key ထည့်တာကို ချန်ထားခဲ့ပါတယ်။ ဒီ key က top-up
+      တစ်ခုချင်းကို သီးသန့် နံပါတ် ပေးထားပြီး ပြန်ပို့ရင်လည်း အဲဒီ နံပါတ်ပဲ ပါလို့၊ ငွေကို တစ်ခါပဲ
+      ဖြတ်ပါတယ်။ ဒီလို ဖြတ်လမ်းလိုက်တာက ချေးငွေ ယူလိုက်တာနဲ့ တူပါတယ်။ [[mark:b2-step1b]] promo က
+      အချိန်မီ ထွက်သွားပေမဲ့ အတိုး စပေးရပါပြီ။ key မရှိတော့ တစ်ခါတလေ ငွေ နှစ်ခါ ဖြတ်မိလို့၊ မသီရိတို့
+      အဖွဲ့က တနင်္လာနေ့တိုင်း လက်နဲ့ တိုက်စစ်ပြီး ငွေ ပြန်အမ်းရတာ 3 နာရီ ကြာပါတယ်။ [[mark:b2-step2]]
+      လတွေ ကြာလာတော့ retry code ကို ထိရင် ဘာ ပျက်မလဲ မသိလို့ ဘယ်သူမှ မထိရဲတော့ပါဘူး၊ ဒါလည်း အတိုးပါပဲ။
+      [[mark:b2-step2b]] ပြီးတော့ သင်္ကြန် အကြိုည peak အချိန်မှာ ဖုန်းကုမ္ပဏီ Operator B က
+      နှေးသွားပါတယ်။ app က အဖြေ မရတော့ retry လုပ်ပါတယ်၊ key မပါတဲ့အတွက် Top-up service က retry
+      တိုင်းကို top-up အသစ်လို့ ထင်ပြီး ငွေ ထပ်ဖြတ်လိုက်ပါတယ်။ ဒါက ဆပ်ရမယ့် နေ့ ရောက်လာတာပါ။
+      [[mark:b2-step3]] တနင်္လာနေ့ အလုပ်ကလည်း 3 နာရီကနေ 6 နာရီအထိ ဘယ်သူမှ သတိမထားမိဘဲ တိတ်တိတ်လေး
+      တိုးလာခဲ့ပါတယ်။ developer တွေက ဒီလို အကြွေးကို technical debt လို့ ခေါ်ပါတယ်။ ဖြတ်လမ်းက ချေးတာ၊
+      လက်နဲ့ ပြင်ရတဲ့ အချိန်နဲ့ code ကို ထိရမှာ ကြောက်တာက အတိုး၊ outage က ဆပ်ရမယ့် နေ့ပါ။ ဆပ်ရမယ့် နေ့
+      နောက်တစ်မျိုးလည်း ရှိပါသေးတယ်၊ ကြောက်လွန်းလို့ ဘယ်သူမှ deploy မလုပ်ရဲတော့တဲ့ နေ့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "SRE book, 1st ed: Preface", url: "https://sre.google/sre-book/preface/" }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - {
+          id: b2-step1,
+          type: whiteboard.apply,
+          at: { mark: b2-step1 },
+          open: true,
+          clear: true,
+          upsertIds: [l01-b2-axis, l01-b2-tick-promo, l01-b2-promo, l01-b2-key],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-step1b,
+          type: whiteboard.apply,
+          at: { mark: b2-step1b },
+          upsertIds: [l01-b2-tick-monday, l01-b2-monday, l01-b2-interest],
+          drawMs: 1600,
+        }
+      - {
+          id: b2-step2,
+          type: whiteboard.apply,
+          at: { mark: b2-step2 },
+          upsertIds: [l01-b2-tick-months, l01-b2-months, l01-b2-retry],
+          drawMs: 1600,
+        }
+      - {
+          id: b2-step2b,
+          type: whiteboard.apply,
+          at: { mark: b2-step2b },
+          upsertIds: [l01-b2-tick-thingyan, l01-b2-thingyan, l01-b2-due],
+          drawMs: 1600,
+        }
+      - {
+          id: b2-step3,
+          type: whiteboard.apply,
+          at: { mark: b2-step3 },
+          upsertIds: [l01-b2-grows],
+          drawMs: 1200,
+        }
+
+  - id: padauk-agreed
+    narration: >
+      [[mark:close-b2]] [[mark:p03]] သင်္ကြန် ပြီးတော့ Padauk အဖွဲ့ ထိုင်ဆွေးနွေးကြပါတယ်။ ဘယ်အဖွဲ့မှ
+      အကြွေး လုံးဝ မရှိဘဲ မနေနိုင်ပါဘူး၊ အဲဒီလို ကြိုးစားရင်လည်း feature တစ်ခုမှ အချိန်မီ ထုတ်နိုင်မှာ
+      မဟုတ်ပါဘူး။ ဒါကြောင့် ဘယ်အထိ ချေးလို့ရလဲ ဆိုတာကို နောက် ပြဿနာ မတက်ခင် ကြိုသဘောတူလိုက်ကြပါတယ်။
+      [[mark:p03b]] စည်းကမ်းက သုံးချက်ပါ။ အကြွေး အားလုံးကို စာရင်း တစ်ခုထဲ ရေးမယ်၊ အတိုးက တစ်ပတ်ကို 5
+      နာရီ ကျော်ရင် နောက် sprint မှာ ဆပ်မယ်၊ နောက် peak မရောက်ခင် ဆပ်ပြီးအောင် လုပ်မယ်။ Top-up ရဲ့ 6
+      နာရီက 5 နာရီ စည်းကို ကျော်နေလို့ စာရင်း ထိပ်ဆုံးကို ရောက်သွားပါတယ်။ ဒီလို ကြိုသဘောတူထားတဲ့ risk
+      အကန့်အသတ်ကို နောက်ပိုင်းမှာ သူ့ နာမည် အမှန်နဲ့ ပြန်တွေ့ရပါမယ်။ [[mark:p03c]] SRE တွေက ဒီ
+      စာရင်းထဲက အကြွေးတွေကို code ရေးပြီး ကိုယ်တိုင် ဆပ်ပေးသလို၊ ဖြတ်လမ်း အသစ် တစ်ခု လိုက်ရင် risk
+      ဘယ်လောက် ရှိလဲ ဆိုတာလည်း အကြံပေးပါတယ်။ feature အသစ်တွေ ဝင်လာတိုင်း အကြွေး အသစ်တွေ ပေါ်လာမှာမို့
+      ဒီ စာရင်းကို တစ်ခါ ရေးပြီး ပစ်ထားလို့ မရပါဘူး၊ reliability ဆိုတာ ဘယ်တော့မှ ပြီးမသွားတဲ့ အလုပ်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l01_p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: p03b }, slideId: l01_p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: p03c }, slideId: l01_p03c }
+
+  - id: any-company
+    chapter: "SRE အဖွဲ့ မရှိဘဲ စလို့ရ"
+    narration: >
+      [[mark:p04]] ဆွေးနွေးပွဲ အဆုံးမှာ CTO ကိုနေလင်းက မသီရိကို Top-up အလုပ်နဲ့ တွဲပြီး reliability
+      ကိုပါ ကြည့်ပေးဖို့ ပြောပါတယ်။ SRE အလေ့အကျင့်တွေက အဖွဲ့ ဘယ်လို ဖွဲ့ထားလဲ ဆိုတာနဲ့ မဆိုင်လို့ SRE
+      အဖွဲ့ မရှိဘဲ စလို့ရပါတယ်။ ဥပမာ developer တွေက ကိုယ်ရေးတဲ့ service ကို ကိုယ်တိုင် run ပြီး
+      on-call ပါ ယူနိုင်ပါတယ်။ [[mark:p04b]] user အနည်းစုဆီ အရင် ထုတ်ကြည့်ပြီးမှ တဖြည်းဖြည်း rollout
+      လုပ်တာလို ဘေးကင်းတဲ့ နည်းတွေအတွက်လည်း အဖွဲ့ သီးသန့် မလိုပါဘူး။ ကုမ္ပဏီ သေးသေး ဖြစ်ဖြစ်၊ system
+      ဟောင်းဟောင်း ဖြစ်ဖြစ်၊ ဘဏ်လို စည်းမျဉ်း တင်းတဲ့ လုပ်ငန်း ဖြစ်ဖြစ် စလို့ရပါတယ်။ [[mark:p04c]]
+      ဒါပေမဲ့ ဒီအလုပ်ကိုပဲ တာဝန်ယူထားတဲ့သူ မရှိရင် စတာထက် ဆက်လုပ်နေဖို့က ပိုခက်ပါတယ်။ အပိုအလုပ်အဖြစ်
+      လုပ်ရတဲ့ reliability က feature deadline တွေကြားမှာ အမြဲ နောက်ကျ ကျန်ခဲ့တတ်လို့၊ lesson 5
+      အဆုံးမှာ Padauk က မသီရိကို အချိန်ပြည့် SRE အဖြစ် ခန့်လိုက်မှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l01_p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: p04b }, slideId: l01_p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: p04c }, slideId: l01_p04c }
+
+  - id: meet-padauk
+    chapter: "Padauk နဲ့ သင်တန်း မြေပုံ"
+    narration: >
+      [[mark:close-p04c]] [[mark:b3-step1]] Padauk ကို သေချာ မိတ်ဆက်ပေးပါရစေ။ Padauk က တစ်လကို user 12
+      သိန်းလောက် သုံးနေတဲ့ app ပါ။ app ကနေ ပို့တဲ့ request တိုင်းက gateway ကို အရင် ရောက်ပါတယ်။
+      [[mark:b3-step2]] အဲဒီကနေ ငွေလွှဲတာ၊ QR နဲ့ ငွေချေတာအတွက် Wallet၊ ဖုန်းဘေလ် ဖြည့်ဖို့ Top-up၊
+      မကြာခင် launch လုပ်မယ့် မီတာခ ရေခ ဆောင်ဖို့ Bill Pay ဆီ ခွဲသွားပါတယ်။ [[mark:b3-step3]] Wallet က
+      ဘဏ်တွေနဲ့၊ Top-up က Operator A၊ B၊ C ဆိုတဲ့ ဖုန်းကုမ္ပဏီတွေနဲ့ ချိတ်ထားပါတယ်။ engineer 25 ယောက်
+      ရှိပေမဲ့ SRE အဖွဲ့ မရှိသေးပါဘူး။ ဒီသင်တန်းရဲ့ လမ်းပြကတော့ Top-up ရဲ့ backend developer မသီရိပါ။
+      CTO ကိုနေလင်းကတော့ feature တွေ မြန်မြန် ထုတ်ချင်ပြီး app ကလည်း 100 ရာခိုင်နှုန်း
+      အလုပ်လုပ်နေစေချင်တဲ့သူပါ။ Wallet ရဲ့ product manager မနှင်းကတော့ business ဘက်ကို
+      ကိုယ်စားပြုတဲ့သူပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - { id: close-p04c, type: slide.close, at: { mark: close-p04c, offsetMs: -400 } }
+      - {
+          id: b3-step1,
+          type: whiteboard.apply,
+          at: { mark: b3-step1 },
+          open: true,
+          clear: true,
+          upsertIds:
+            [l01-b3-app, l01-b3-app-label, l01-b3-arrow-app, l01-b3-gateway, l01-b3-gateway-label],
+          drawMs: 1800,
+        }
+      - {
+          id: b3-step2,
+          type: whiteboard.apply,
+          at: { mark: b3-step2 },
+          upsertIds:
+            [
+              l01-b3-arrow-gateway,
+              l01-b3-bus,
+              l01-b3-arrow-wallet,
+              l01-b3-wallet,
+              l01-b3-wallet-label,
+              l01-b3-arrow-topup,
+              l01-b3-topup,
+              l01-b3-topup-label,
+              l01-b3-arrow-billpay,
+              l01-b3-billpay,
+              l01-b3-billpay-label,
+            ],
+          drawMs: 2600,
+        }
+      - {
+          id: b3-step3,
+          type: whiteboard.apply,
+          at: { mark: b3-step3 },
+          upsertIds:
+            [
+              l01-b3-arrow-banks,
+              l01-b3-banks,
+              l01-b3-arrow-operators,
+              l01-b3-operators,
+              l01-b3-title,
+            ],
+          drawMs: 2000,
+        }
+
+  - id: course-loop
+    narration: >
+      [[mark:b4-step1]] ဒီသင်တန်း တစ်ခုလုံးကို Padauk reliability loop ဆိုတဲ့ စက်ဝိုင်းနဲ့
+      ကြည့်ရအောင်။ Padauk မှာ ပြဿနာ ဖြစ်တိုင်း ဒီ စက်ဝိုင်းကို ပတ်ရပါတယ်။ ဘယ်လောက် စိတ်ချရရင်
+      လုံလောက်လဲ သဘောတူတယ်၊ user ထိခိုက်နေတာကို သတိထားမိတယ်၊ တုံ့ပြန်တယ်၊ သင်ယူတယ်၊ ပြီးတော့
+      သင်ခန်းစာကို system ထဲ ထည့်တည်ဆောက်ပြီး အစကို ပြန်ရောက်ပါတယ်။ Module 2 မှာ သဘောတူတာနဲ့
+      သတိထားမိတာ၊ Module 3 မှာ တုံ့ပြန်တာနဲ့ သင်ယူတာ၊ Module 5 မှာ system ထဲ ထည့်တည်ဆောက်တာကို
+      လေ့လာပါမယ်။ [[mark:b4-step2]] အလယ်မှာတော့ လဲတိုင်း ပြန်ထတဲ့ ပစ်တိုင်းထောင် အရုပ်လေး ရှိပါတယ်၊
+      အဲဒါက ဒီ စက်ဝိုင်းကို ဆက်လည်နေအောင် လုပ်ပေးတဲ့ လူတွေပါ။ Module 4 က အဲဒီ လူတွေ အကြောင်း ဖြစ်ပြီး၊
+      Module 6 မှာတော့ AI ကို စက်ဝိုင်းပေါ် ခေါ်လာပြီး စက်ဝိုင်းကို ဘယ်လုပ်ငန်းမှာမဆို ဘယ်လို သုံးမလဲ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - { title: "SRE book, 1st ed: Foreword", url: "https://sre.google/sre-book/foreword/" }
+    actions:
+      - {
+          id: b4-step1,
+          type: whiteboard.apply,
+          at: { mark: b4-step1 },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              l01-b4-title,
+              l01-b4-ring,
+              l01-b4-agree,
+              l01-b4-agree-label,
+              l01-b4-notice,
+              l01-b4-notice-label,
+              l01-b4-respond,
+              l01-b4-respond-label,
+              l01-b4-learn,
+              l01-b4-learn-label,
+              l01-b4-build,
+              l01-b4-build-label,
+              l01-b4-arrow-top,
+              l01-b4-arrow-right,
+            ],
+        }
+      - {
+          id: b4-step2,
+          type: whiteboard.apply,
+          at: { mark: b4-step2 },
+          upsertIds: [l01-b4-doll-head, l01-b4-doll-body, l01-b4-people],
+          drawMs: 1400,
+        }
+
+  - id: this-week
+    narration: >
+      [[mark:close-b4]] [[mark:p05]] ဒီအပတ်ထဲမှာ SRE အဖွဲ့နဲ့ tool အသစ် မလိုဘဲ လုပ်ကြည့်လို့ရတာ သုံးခု
+      ရှိပါတယ်။ ပထမ၊ ကိုယ့်အဖွဲ့က အခုထိ အတိုး ပေးနေရတဲ့ ဖြတ်လမ်း သုံးခုကို စာရင်း ချရေးကြည့်ပါ။ ဒုတိယ၊
+      ကိုယ့် service နှေးသွားရင် user ဘက်က ဘာ ခံစားရမလဲ ဆိုတာ အဖွဲ့ထဲမှာ မေးကြည့်ပါ။ တတိယ၊ တစ်ခုခု
+      ပျက်ရင် အရင်ဆုံး ကာကွယ်ရမယ့် service တစ်ခုကို ရွေးထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l01_p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:notes]] ပြန်ချုပ်ကြည့်ရအောင်။ [[mark:sel-sre]] SRE ဆိုတာ ကံကို
+      အားမကိုးဘဲ engineering နဲ့ service တွေကို စိတ်ချရအောင် ထိန်းတဲ့ အလုပ်ပါ။ [[mark:sel-build-run]]
+      build လုပ်တာက ခဏပဲ ကြာပေမဲ့ run တာကတော့ နှစ်နဲ့ချီ ကြာပါတယ်။ [[mark:sel-debt]] ဖြတ်လမ်းက ချေးတာ၊
+      လက်နဲ့ ပြင်ရတာနဲ့ ပြောင်းရမှာ ကြောက်တာက အတိုး၊ outage က ဆပ်ရမယ့် နေ့ပါ။ [[mark:sel-risk-limit]]
+      ဘယ်အထိ ချေးမလဲ ဆိုတာကို ပြဿနာ မတက်ခင် ကြိုသဘောတူထားရပါတယ်။ [[mark:sel-socio]] reliability
+      ဆိုတာလည်း tool တွေချည်း မဟုတ်ဘဲ လူတွေ၊ အဖွဲ့တွေနဲ့ပါ အတူ တည်ဆောက်ရတာပါ။ မေးခွန်း တစ်ခု မေးပါရစေ။
+      ကိုယ့်အဖွဲ့က fail ဖြစ်တဲ့ job တစ်ခုကို သောကြာနေ့တိုင်း လက်နဲ့ ပြန် run ပေးနေရတယ် ဆိုပါစို့။ [[mark:ask-question]] ဒါက
+      အကြွေးလား၊ အတိုးလား၊ ဒါမှမဟုတ် ဆပ်ရမယ့် နေ့လား? [[mark:pause-question]] အဖြေကတော့ အတိုးပါ။ job
+      ကို သေချာ မပြင်ခဲ့တာက အကြွေး ဖြစ်ပြီး၊ သောကြာနေ့တိုင်း လက်နဲ့ ပြန် run နေရတာက သူ့ရဲ့ အတိုးပါ။
+      နောက် lesson မှာတော့ config ထဲက typo တစ်ခုကြောင့် user တွေ မိနစ် 20 လုံးလုံး ဝန်ဆောင်ခ 10 ဆ
+      ပေးခဲ့ရပါတယ်။ ဘာကို အရင်ဆုံး ပြင်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "SRE book, 1st ed: Foreword", url: "https://sre.google/sre-book/foreword/" }
+      - { title: "SRE book, 1st ed: Preface", url: "https://sre.google/sre-book/preface/" }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-sre,
+          type: editor.select,
+          at: { mark: sel-sre },
+          target: { file: notes.md, text: "Site Reliability Engineering", occurrence: 1 },
+        }
+      - {
+          id: sel-build-run,
+          type: editor.select,
+          at: { mark: sel-build-run },
+          target: { file: notes.md, text: "build နဲ့ run", occurrence: 1 },
+        }
+      - {
+          id: sel-debt,
+          type: editor.select,
+          at: { mark: sel-debt },
+          target: { file: notes.md, text: "technical debt", occurrence: 1 },
+        }
+      - {
+          id: sel-risk-limit,
+          type: editor.select,
+          at: { mark: sel-risk-limit },
+          target: { file: notes.md, text: "ကြိုသဘောတူထားတဲ့ risk အကန့်အသတ်", occurrence: 1 },
+        }
+      - {
+          id: sel-socio,
+          type: editor.select,
+          at: { mark: sel-socio },
+          target: { file: notes.md, text: "sociotechnical", occurrence: 1 },
+        }
+      # ⟪pause 3s⟫: the question line is swept after the question ends, and the answer at
+      # pause-question waits for the drag (the scheduler holds the next dialog until a select
+      # anchored to an earlier dialog finishes). ask-question, one more mark at an existing
+      # sentence end, makes the question its own short dialog so the offset tracks its end
+      # at any speaking rate. 4500 ms leaves about 2.8 / 2.0 / 0.7 s of quiet after the
+      # question at 55 / 70 / 95 ms per character; more trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - {
+          id: pause-question,
+          type: editor.select,
+          at: { mark: ask-question, offsetMs: 4500 },
+          target:
+            {
+              file: notes.md,
+              text: "မေးခွန်း: fail ဖြစ်တဲ့ job တစ်ခုကို သောကြာနေ့တိုင်း လက်နဲ့ ပြန် run ရတယ်။ ဒါ အကြွေးလား၊ အတိုးလား၊ ဆပ်ရမယ့် နေ့လား?",
+              occurrence: 1,
+            },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
