@@ -1,0 +1,1942 @@
+# CSS course (Burmese), lesson 8 of 43: nesting. Closes Part 1 (Foundations).
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 7; the same five card rules flat and nested;
+# no build step, Baseline 2023) → code tour (index.html: the note inside the
+# lime juice card, the footer's promo line; empty styles.css) → one .menu-card
+# rule grows nested rules live: descendant h3 and .price, the leading child
+# combinator (> p skips the note's paragraph), &.featured vs & .badge →
+# board (& as a placeholder, &:hover vs & :hover, & optional for descendants)
+# → &:hover + a click on the coffee card → & + & spaces the cards → the
+# context flip .site-footer & turns the footer price gold → board (depth
+# ladder, declarations first) → a media query nested in .hero centres the
+# welcome text → the ID-in-a-list trap keeps the promo link green → board
+# (& = :is(), 1·0·1 vs 0·1·1) → &p is dropped, p& works → recap of the
+# lesson and of Part 1, hand-off to colour (lesson 9).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every typed
+# state is plain CSS that hot-swaps with no reload. While a nested rule is
+# typed into .menu-card, that rule is the LAST rule in the file, so a
+# half-typed inner block can never swallow a later rule. Colour keywords have
+# no misleading valid prefix (saddlebrown, firebrick, darkorange, wheat, gold,
+# lightgreen, orange); unitless "padding: 1", "margin-top: 1" and
+# "font-size: 2" are invalid and ignored mid-typing.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-08-nesting
+  title: "CSS course 8: Nesting"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 8
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero (its paragraph has class lead) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p class="lead" data-testid="lead">ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks (lesson block: note, in the lime juice card) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2 data-testid="drinks-title">သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <div class="note" data-testid="note">
+                      <p>ရေခဲ မပါဘဲလည်း မှာလို့ ရပါတယ်</p>
+                    </div>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <!-- kit block: footer (with lesson block: promo) -->
+            <footer class="site-footer" data-testid="footer">
+              <p class="promo" data-testid="promo">ဒီနေ့ အီကြာကွေး <span class="price" data-testid="price-promo">600 ကျပ်</span> · <a href="#drinks" data-testid="promo-link">မီနူး ကြည့်ရန်</a></p>
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789">09 123 456 789</a> · <a href="https://facebook.com/">Facebook</a></p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: sections A, B, B2, C and D of the course kit. From C the
+      # .menu-card rule drops its background, padding and margin (the lesson
+      # types the first two, and the & + & rule adds the space between cards;
+      # a pinned bottom margin would collapse with it and hide the change), and
+      # its border is 2px instead of 1px so the featured card's border colour
+      # reads clearly. Section E pins the look of the lime juice card's note.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 8 keeps sections A, B, B2, C and D, minus the
+          menu card's background, padding and margin (the lesson types them), with
+          a 2px card border so a border colour change reads clearly.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          border: 2px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 8: the note inside the lime juice card, a second paragraph that is
+           not a direct child of the card. */
+        .note {
+          margin-top: 4px;
+          padding-left: 8px;
+          border-left: 3px solid var(--line);
+        }
+
+        .note p {
+          margin: 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — the same five card rules, flat (left, the repeated prefix
+    # circled) and nested (right), then the "no build step" note.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Flat CSS နဲ့ nesting",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-flat-label,
+        kind: text,
+        x: 270,
+        y: 215,
+        width: 240,
+        height: 36,
+        text: "အရင် ရေးနည်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-flat-1,
+        kind: text,
+        x: 270,
+        y: 260,
+        width: 400,
+        height: 36,
+        text: ".menu-card h3 { … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-flat-2,
+        kind: text,
+        x: 270,
+        y: 305,
+        width: 400,
+        height: 36,
+        text: ".menu-card .price { … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-flat-3,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 400,
+        height: 36,
+        text: ".menu-card > p { … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-flat-4,
+        kind: text,
+        x: 270,
+        y: 395,
+        width: 400,
+        height: 36,
+        text: ".menu-card.featured { … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-flat-5,
+        kind: text,
+        x: 270,
+        y: 440,
+        width: 400,
+        height: 36,
+        text: ".menu-card:hover { … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-repeat-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 255,
+        y: 250,
+        width: 185,
+        height: 240,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-repeat-label,
+        kind: text,
+        x: 270,
+        y: 510,
+        width: 320,
+        height: 36,
+        text: "card selector 5 ခါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-nested-label,
+        kind: text,
+        x: 720,
+        y: 215,
+        width: 220,
+        height: 36,
+        text: "Nesting နဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-open,
+        kind: text,
+        x: 720,
+        y: 260,
+        width: 220,
+        height: 36,
+        text: ".menu-card {",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-1,
+        kind: text,
+        x: 760,
+        y: 305,
+        width: 200,
+        height: 36,
+        text: "h3 { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-2,
+        kind: text,
+        x: 760,
+        y: 350,
+        width: 220,
+        height: 36,
+        text: ".price { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-3,
+        kind: text,
+        x: 760,
+        y: 395,
+        width: 200,
+        height: 36,
+        text: "> p { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-4,
+        kind: text,
+        x: 760,
+        y: 440,
+        width: 280,
+        height: 36,
+        text: "&.featured { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-5,
+        kind: text,
+        x: 760,
+        y: 485,
+        width: 240,
+        height: 36,
+        text: "&:hover { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-nest-close,
+        kind: text,
+        x: 720,
+        y: 530,
+        width: 40,
+        height: 36,
+        text: "}",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-once-label,
+        kind: text,
+        x: 800,
+        y: 530,
+        width: 220,
+        height: 36,
+        text: "တစ်ခါပဲ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-once-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1030,
+        y: 520,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-native-note,
+        kind: text,
+        x: 270,
+        y: 590,
+        width: 600,
+        height: 36,
+        text: "Build step မလို · browser အားလုံး ✓",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the ampersand replaced by the outer selector: no space = the
+    # same element, a space = inside it; the hover pair; & optional for a
+    # plain descendant.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 580,
+        height: 46,
+        text: "Ampersand = အပြင်က selector",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-r1-code,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 180,
+        height: 36,
+        text: "&.featured",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 232,
+        width: 90,
+        height: 32,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r1-flat,
+        kind: text,
+        x: 600,
+        y: 230,
+        width: 330,
+        height: 36,
+        text: ".menu-card.featured",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-note,
+        kind: text,
+        x: 600,
+        y: 272,
+        width: 320,
+        height: 36,
+        text: "element တစ်ခုတည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-code,
+        kind: text,
+        x: 280,
+        y: 335,
+        width: 180,
+        height: 36,
+        text: "& .badge",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 337,
+        width: 90,
+        height: 32,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r2-flat,
+        kind: text,
+        x: 600,
+        y: 335,
+        width: 320,
+        height: 36,
+        text: ".menu-card .badge",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-note,
+        kind: text,
+        x: 600,
+        y: 377,
+        width: 300,
+        height: 36,
+        text: "card ရဲ့ အထဲမှာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-code,
+        kind: text,
+        x: 280,
+        y: 445,
+        width: 160,
+        height: 36,
+        text: "&:hover",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 447,
+        width: 90,
+        height: 32,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r3-note,
+        kind: text,
+        x: 600,
+        y: 445,
+        width: 300,
+        height: 36,
+        text: "card ကိုယ်တိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r4-code,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 160,
+        height: 36,
+        text: "& :hover",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r4-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 502,
+        width: 90,
+        height: 32,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r4-note,
+        kind: text,
+        x: 600,
+        y: 500,
+        width: 300,
+        height: 36,
+        text: "card ထဲက element",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r5-code,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 200,
+        height: 36,
+        text: "h3  =  & h3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-r5-note,
+        kind: text,
+        x: 530,
+        y: 585,
+        width: 380,
+        height: 36,
+        text: "ampersand မထည့်လည်း ရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — the depth ladder (the selector grows each level), then
+    # "declarations first, nested rules after".
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ဘယ်နှစ်ဆင့် nest လုပ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 280,
+        y: 225,
+        width: 240,
+        height: 36,
+        text: ".menu-card h3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-n1,
+        kind: text,
+        x: 580,
+        y: 225,
+        width: 120,
+        height: 36,
+        text: "1 ဆင့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 280,
+        y: 275,
+        width: 310,
+        height: 36,
+        text: ".menu-card .note p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-n2,
+        kind: text,
+        x: 640,
+        y: 275,
+        width: 120,
+        height: 36,
+        text: "2 ဆင့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        x: 280,
+        y: 325,
+        width: 340,
+        height: 36,
+        text: ".menu-card .note p a",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-n3,
+        kind: text,
+        x: 680,
+        y: 325,
+        width: 120,
+        height: 36,
+        text: "3 ဆင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-stop,
+        kind: text,
+        x: 280,
+        y: 380,
+        width: 400,
+        height: 36,
+        text: "ဒီထက် နက်ရင် ပြန်ခွဲပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-stop-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 410,
+        width: 380,
+        height: 14,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-o-rule,
+        kind: text,
+        x: 280,
+        y: 450,
+        width: 220,
+        height: 36,
+        text: ".menu-card {",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-decl,
+        kind: text,
+        x: 320,
+        y: 495,
+        width: 310,
+        height: 36,
+        text: "background: white;",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-nested,
+        kind: text,
+        x: 320,
+        y: 540,
+        width: 180,
+        height: 36,
+        text: "h3 { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-close,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 40,
+        height: 36,
+        text: "}",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-decl-label,
+        kind: text,
+        x: 670,
+        y: 495,
+        width: 290,
+        height: 36,
+        text: "declaration အရင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-nested-label,
+        kind: text,
+        x: 670,
+        y: 540,
+        width: 330,
+        height: 36,
+        text: "nested rule နောက်မှ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-o-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1020,
+        y: 500,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-o-old,
+        kind: text,
+        x: 420,
+        y: 595,
+        width: 560,
+        height: 36,
+        text: "browser အဟောင်းမှာ အစဉ် ပြောင်းနိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board D — why the promo link stays green: & behaves like :is() around
+    # the parent list, so the ID's weight reaches every nested match.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "Ampersand ရဲ့ အလေးချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-nested,
+        kind: text,
+        x: 280,
+        y: 225,
+        width: 560,
+        height: 36,
+        text: "#site-header, .promo { & a { … } }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 268,
+        width: 40,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-is,
+        kind: text,
+        x: 280,
+        y: 325,
+        width: 440,
+        height: 36,
+        text: ":is(#site-header, .promo) a",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-cols,
+        kind: text,
+        x: 640,
+        y: 400,
+        width: 340,
+        height: 36,
+        text: "ID · class · element",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row-is,
+        kind: text,
+        x: 280,
+        y: 450,
+        width: 200,
+        height: 36,
+        text: ":is(…) a",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-score-is,
+        kind: text,
+        x: 660,
+        y: 450,
+        width: 180,
+        height: 36,
+        text: "1 · 0 · 1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-win,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 440,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-row-promo,
+        kind: text,
+        x: 280,
+        y: 505,
+        width: 200,
+        height: 36,
+        text: ".promo a",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-score-promo,
+        kind: text,
+        x: 660,
+        y: 505,
+        width: 180,
+        height: 36,
+        text: "0 · 1 · 1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-tip,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 480,
+        height: 36,
+        text: "Sass နဲ့ မတူ · ID ကို ရှောင်ပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4108
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-overview
+    chapter: "Nesting ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ parent ရဲ့ တန်ဖိုးတွေ child ဆီ inheritance နဲ့ ဆင်းသွားတာကို
+      မြင်ခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-flat]] ဒီ lesson မှာတော့ selector တူတူကို ထပ်ခါထပ်ခါ မရေးရအောင်
+      လုပ်ပါမယ်။ ဒါက menu card တွေအတွက် rule ငါးခုကို အခုထိ ရေးခဲ့တဲ့ အတိုင်း ရေးထားတာပါ။
+      [[mark:circle-repeat]] စာကြောင်းတိုင်းက card selector နဲ့ စနေလို့ ငါးခါ ထပ်နေပါတယ်။ class
+      နာမည် ပြောင်းရင် ငါးနေရာ လိုက်ပြင်ရပါမယ်။ [[mark:draw-nested]] ညာဘက်မှာတော့ card selector ကို
+      တစ်ခါပဲ ရေးပြီး၊ ကျန်တဲ့ rule တွေကို သူ့ rule ထဲမှာ ထည့်ရေးထားပါတယ်။ browser က အထဲက selector
+      တစ်ခုစီကို အပြင်က selector နဲ့ ဆက်ဖတ်လို့၊ ဘယ်ဘက်က selector ငါးခုနဲ့ အတူတူပဲ ဖြစ်ပါတယ်။
+      [[mark:name-nesting]] rule ထဲမှာ rule တွေကို ဒီလို ထည့်ရေးတာကို nesting လို့ ခေါ်ပါတယ်။
+      component တစ်ခုရဲ့ style တွေ block တစ်ခုထဲ စုနေပြီး၊ CSS ကိုလည်း HTML ရဲ့ ဖွဲ့စည်းပုံအတိုင်း
+      စီရေးလို့ ရပါတယ်။ [[mark:draw-native]] Sass လို tool တွေမှာ nesting ကို နှစ်ပေါင်းများစွာ
+      သုံးလာကြပေမယ့်၊ ရိုးရိုး CSS ပြန်ပြောင်းပေးတဲ့ build step တစ်ခု လိုပါတယ်။ အခုတော့ browser
+      ကိုယ်တိုင် nesting ကို နားလည်ပြီး၊ 2023 ခုနှစ် နှစ်ကုန်ကတည်းက browser အဓိက အားလုံးမှာ သုံးလို့
+      ရနေပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Nesting"
+        url: "https://web.dev/learn/css/nesting"
+      - title: "MDN — Using CSS nesting"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Using_CSS_nesting"
+      - title: "CSS Nesting Module Level 1"
+        url: "https://drafts.csswg.org/css-nesting-1/"
+      - title: "web.dev — Baseline"
+        url: "https://web.dev/baseline"
+      - title: "Web Platform Status — CSS nesting"
+        url: "https://webstatus.dev/features/nesting"
+    actions:
+      - id: open-overview-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-flat
+        type: whiteboard.apply
+        at: { mark: draw-flat }
+        upsertIds: [a-flat-label, a-flat-1, a-flat-2, a-flat-3, a-flat-4, a-flat-5]
+        drawMs: 3000
+      - id: circle-repeat
+        type: whiteboard.apply
+        at: { mark: circle-repeat }
+        upsertIds: [a-repeat-circle, a-repeat-label]
+        drawMs: 1600
+      - id: draw-nested
+        type: whiteboard.apply
+        at: { mark: draw-nested }
+        upsertIds:
+          [
+            a-nested-label,
+            a-nest-open,
+            a-nest-1,
+            a-nest-2,
+            a-nest-3,
+            a-nest-4,
+            a-nest-5,
+            a-nest-close,
+          ]
+        drawMs: 4000
+      - id: name-nesting
+        type: whiteboard.apply
+        at: { mark: name-nesting }
+        upsertIds: [a-once-label, a-once-check]
+        drawMs: 1200
+      - id: draw-native
+        type: whiteboard.apply
+        at: { mark: draw-native }
+        upsertIds: [a-native-note]
+        drawMs: 1500
+
+  - id: code-tour
+    narration: >
+      [[mark:close-overview-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML
+      ဖိုင်ပါ၊ အရင် lesson တွေက လက်ဖက်ရည်ဆိုင် အတိုင်းပါပဲ။ header၊ ကြိုဆိုတဲ့ အပိုင်း၊ သောက်စရာ
+      menu နဲ့ footer ပါပါတယ်။ [[mark:select-note]] သံပုရာရည် card ထဲမှာ box တစ်ခုနဲ့ ထုပ်ထားတဲ့
+      မှတ်ချက် တိုတိုလေး အသစ် ပါပါတယ်။ ဒါကြောင့် ဒီ card မှာ စာပိုဒ် နှစ်ခု ရှိပေမယ့်၊ card ရဲ့
+      တိုက်ရိုက် child ဖြစ်တာက တစ်ခုပဲ ရှိပါတယ်။ [[mark:select-promo]] footer မှာလည်း ဈေးနှုန်းနဲ့
+      link ပါတဲ့ promo စာကြောင်း အသစ် ပါပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်
+      ပြန်ဖြစ်နေပါတယ်။ ဒီတစ်ခါ base ဖိုင်မှာ card တွေရဲ့ နောက်ခံ၊ padding နဲ့ card တွေကြားက နေရာလွတ်
+      မပါပါဘူး။ အဲဒါတွေကို ဒီ lesson မှာ ကိုယ်တိုင် ထည့်သွားပါမယ်။ [[mark:preview-opens]] preview
+      ပွင့်လာပြီး၊ menu card တွေဆီ scroll ဆင်းထားပါတယ်။ card တွေက တစ်ခုနဲ့ တစ်ခု ကပ်နေပြီး၊
+      စာသားတွေကလည်း ဘောင်နဲ့ ထိနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting"
+        url: "https://web.dev/learn/css/nesting"
+      - title: "MDN — Child combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Child_combinator"
+    actions:
+      - id: close-overview-board
+        type: whiteboard.apply
+        at: { mark: close-overview-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-note
+        type: editor.select
+        at: { mark: select-note }
+        target:
+          {
+            file: index.html,
+            text: "<div class=\"note\" data-testid=\"note\">\n              <p>ရေခဲ မပါဘဲလည်း မှာလို့ ရပါတယ်</p>\n            </div>",
+            occurrence: 1,
+          }
+      - id: select-promo
+        type: editor.select
+        at: { mark: select-promo }
+        target: { file: index.html, text: '<p class="promo" data-testid="promo">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-note
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: note }
+        textContains: "ရေခဲ မပါဘဲလည်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-to-cards
+        type: preview.scroll
+        at: { afterAction: expect-note }
+        timeoutMs: 5000
+        top: 420
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: scroll-to-cards }
+
+  - id: nest-descendant
+    chapter: "Card rule ထဲမှာ rule တွေ ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:type-card]] menu card အတွက် ရိုးရိုး rule တစ်ခုနဲ့ စကြည့်ရအောင်။ ထဲမှာ သိပြီးသား
+      declaration တွေပဲ ပါပါတယ်။ အဖြူရောင် နောက်ခံ ပေးပြီး၊ စာသားတွေ ဘောင်ကနေ ခွာသွားအောင် padding
+      ထည့်ပါမယ်။ [[mark:after-card]] card တွေ အဖြူရောင် box ဖြစ်သွားပါပြီ။ [[mark:type-h3]] အခု card
+      selector နဲ့ စတဲ့ rule နောက်တစ်ခု ထပ်ရေးမယ့်အစား၊ သောက်စရာ နာမည်တွေအတွက် rule ကို card rule
+      ထဲမှာပဲ ထည့်ရေးပါမယ်။ [[mark:after-h3]] နာမည်တွေ အညိုရောင် ဖြစ်သွားပါပြီ။ [[mark:select-h3]]
+      အထဲက selector ကို ကြည့်ပါ။ ခေါင်းစဉ် element ရဲ့ နာမည် သက်သက်ပဲ ဖြစ်ပြီး ရှေ့မှာ ဘာမှ
+      မပါပါဘူး။ browser က သူ့ကို အပြင်က selector ရဲ့ descendant အဖြစ် ဆက်ဖတ်လို့၊ menu card ထဲမှာ
+      ဘယ်လောက် နက်နက် ရှိတဲ့ ခေါင်းစဉ်ကို မဆို ရွေးပါတယ်။ board ပေါ်က ရိုးရိုး rule နဲ့ အတူတူပါပဲ။
+      [[mark:relaxed]] nesting ကို စထည့်ခဲ့တဲ့ browser version တွေမှာတော့ element နာမည်ရှေ့မှာ
+      သင်္ကေတ တစ်ခု ထည့်ရခဲ့ပါတယ်။ tutorial အဟောင်းတွေမှာ အဲဒီလို တွေ့နိုင်ပေမယ့်၊ အခု browser
+      တွေမှာ မလိုတော့ပါဘူး။ [[mark:type-price]] ဈေးနှုန်းအတွက်လည်း rule တစ်ခု nest လုပ်ပါမယ်။
+      ဒီတစ်ခါ အထဲက selector က class ဖြစ်ပေမယ့် အလုပ်လုပ်ပုံ အတူတူပါပဲ။ menu card ထဲက ဈေးနှုန်းကို
+      ရွေးတာပါ။ [[mark:after-price]] card ဈေးနှုန်းတွေ အနီရောင် ဖြစ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: grouping and establishing relationships"
+        url: "https://web.dev/learn/css/nesting#grouping_and_establishing_relationships"
+      - title: "MDN — Using CSS nesting"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Using_CSS_nesting"
+      - title: "CSS Nesting Module Level 1 — syntax"
+        url: "https://drafts.csswg.org/css-nesting-1/#syntax"
+      - title: "Chrome for Developers — CSS nesting relaxed syntax update"
+        url: "https://developer.chrome.com/blog/css-nesting-relaxed-syntax-update"
+    actions:
+      - id: type-card
+        type: editor.type
+        at: { mark: type-card }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".menu-card {\n  background: white;\n  padding: 12px;\n}\n"
+      - id: expect-cards
+        type: expect.preview
+        at: { mark: after-card }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-h3
+        type: editor.type
+        at: { mark: type-h3 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 12px;\n", occurrence: 1 }
+        text: "\n  h3 {\n    color: saddlebrown;\n  }\n"
+      - id: select-h3
+        type: editor.select
+        at: { mark: select-h3 }
+        target: { file: styles.css, text: "h3 {", occurrence: 1 }
+      - id: type-price
+        type: editor.type
+        at: { mark: type-price }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    color: saddlebrown;\n  }\n", occurrence: 1 }
+        text: "\n  .price {\n    color: firebrick;\n  }\n"
+      - id: expect-card-price
+        type: expect.preview
+        at: { mark: after-price }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: leading-combinator
+    narration: >
+      [[mark:type-child]] nested selector ကို combinator နဲ့လည်း စလို့ ရပါတယ်။ စာပိုဒ်တွေအတွက်
+      selector ကို child combinator နဲ့ စကြည့်ရအောင်။ [[mark:after-child]] ဖော်ပြချက်တွေ
+      စာလုံးစောင်း ဖြစ်သွားပါပြီ။ [[mark:select-child]] ဒီ selector က menu card ရဲ့ တိုက်ရိုက် child
+      ဖြစ်တဲ့ စာပိုဒ်တွေကိုပဲ ရွေးပါတယ်။ ဒါကြောင့် သံပုရာရည် card ထဲက မှတ်ချက် စာပိုဒ်ကတော့
+      မစောင်းပါဘူး။ သူက card ထဲမှာ ရှိပေမယ့် မှတ်ချက် box ထဲမှာ ထပ်ရှိနေလို့၊ card ရဲ့ တိုက်ရိုက်
+      child မဟုတ်ပါဘူး။ [[mark:siblings]] sibling combinator တွေနဲ့လည်း စလို့ ရပါတယ်။ ဒါပေမဲ့ အဲဒီ
+      rule က card ထဲက element ကို မဟုတ်ဘဲ card ရဲ့ နောက်က sibling ကို style ပေးပါတယ်။ ဒါကြောင့် nest
+      လုပ်ထားတဲ့ rule တိုင်းက card ထဲက element ကို ရွေးတာ မဟုတ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: grouping and establishing relationships"
+        url: "https://web.dev/learn/css/nesting#grouping_and_establishing_relationships"
+      - title: "MDN — Using CSS nesting: combinators"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Using_CSS_nesting"
+      - title: "MDN — Child combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Child_combinator"
+      - title: "MDN — Next-sibling combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Next-sibling_combinator"
+    actions:
+      - id: type-child
+        type: editor.type
+        at: { mark: type-child }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    color: firebrick;\n  }\n", occurrence: 1 }
+        text: "\n  > p {\n    font-style: italic;\n  }\n"
+      - id: select-child
+        type: editor.select
+        at: { mark: select-child }
+        target: { file: styles.css, text: "> p {", occurrence: 1 }
+      - id: expect-note-still-there
+        type: expect.preview
+        at: { mark: after-child }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "ရေခဲ မပါဘဲလည်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: ampersand
+    chapter: "Ampersand က ဘာကို ကိုယ်စားပြုလဲ"
+    narration: >
+      [[mark:type-featured]] တစ်ခါတလေ card ကိုယ်တိုင်ကို style ပေးချင်ပါတယ်၊ ဥပမာ featured class
+      ပါတဲ့ လက်ဖက်ရည် card ရဲ့ border ကိုပဲ ပြောင်းချင်တာမျိုးပါ။ class ကိုပဲ nest လုပ်လိုက်ရင်
+      browser က card ရဲ့ အထဲမှာ ရှာမှာ ဖြစ်လို့၊ nesting selector ဖြစ်တဲ့ ampersand ကို သုံးရပါတယ်။
+      [[mark:after-featured]] လက်ဖက်ရည် card တစ်ခုတည်းမှာပဲ border လိမ္မော်ရောင် ဖြစ်သွားပါပြီ။
+      [[mark:select-amp-featured]] ဒီ ampersand က အပြင်က selector ကို ကိုယ်စားပြုပါတယ်။ class နဲ့
+      space မခြားဘဲ ကပ်ရေးထားလို့၊ featured class လည်း ပါတဲ့ menu card လို့ ဆိုလိုပါတယ်။ ဒါကြောင့်
+      compound selector ဖြစ်ပါတယ်။ [[mark:type-badge]] ampersand ကို နောက်တစ်ခါ ရေးပါမယ်။
+      ဒီတစ်ခါတော့ ampersand နောက်မှာ space တစ်ခု ခြားပြီး၊ card ထဲက badge ကို ရွေးပါမယ်။
+      လိမ္မော်ရောင် နောက်ခံပေါ်မှာ ဖတ်ရ လွယ်အောင် စာလုံးကို အနက် ပေးပါမယ်။ [[mark:after-badge]] အသစ်
+      ဆိုတဲ့ badge လေး လိမ္မော်ရောင် ဖြစ်သွားပါပြီ။ [[mark:select-amp-badge]] ဒီ selector မှာတော့
+      space ခြားထားလို့ descendant ဖြစ်ပြီး၊ menu card ထဲက badge ကို ရွေးပါတယ်။ space တစ်ခုနဲ့တင်
+      ရွေးတဲ့ element ပြောင်းသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: define explicit relationships with the & selector"
+        url: "https://web.dev/learn/css/nesting#define_explicit_relationships_with_the_selector"
+      - title: "MDN — & nesting selector"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector"
+      - title: "CSS Nesting Module Level 1 — the nesting selector"
+        url: "https://drafts.csswg.org/css-nesting-1/#nest-selector"
+    actions:
+      - id: type-featured
+        type: editor.type
+        at: { mark: type-featured }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    font-style: italic;\n  }\n", occurrence: 1 }
+        text: "\n  &.featured {\n    border-color: darkorange;\n  }\n"
+      - id: expect-featured
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-amp-featured
+        type: editor.select
+        at: { mark: select-amp-featured }
+        target: { file: styles.css, text: "&.featured", occurrence: 1 }
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    border-color: darkorange;\n  }\n", occurrence: 1 }
+        text: "\n  & .badge {\n    background: darkorange;\n    color: black;\n  }\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-amp-badge
+        type: editor.select
+        at: { mark: select-amp-badge }
+        target: { file: styles.css, text: "& .badge", occurrence: 1 }
+
+  - id: ampersand-board
+    narration: >
+      [[mark:open-amp-board]] နှစ်ခုကို ယှဉ်ကြည့်ရအောင်။ [[mark:draw-amp-same]] ampersand နေရာမှာ
+      အပြင်က selector ကို အစားထိုးကြည့်ပါ။ space မခြားရင် အပိုင်းတွေ ပေါင်းပြီး compound selector
+      တစ်ခု ဖြစ်သွားလို့၊ element တစ်ခုတည်းကိုပဲ ပြောတာပါ။ [[mark:draw-amp-inside]] space
+      ခြားရင်တော့ descendant ဖြစ်လို့၊ badge က card ရဲ့ အထဲမှာ ရှိရပါမယ်။ [[mark:draw-amp-hover]]
+      pseudo-class တွေမှာ ဒီ ကွာခြားချက်က အရေးအကြီးဆုံးပါ။ space မခြားရင် pointer တင်ထားတဲ့ card
+      ကိုယ်တိုင်ပါ။ space ခြားရင်တော့ card ထဲမှာ pointer အောက် ရောက်နေတဲ့ ဘယ် element မဆို
+      ဖြစ်သွားလို့၊ များသောအားဖြင့် ကိုယ် လိုချင်တာ မဟုတ်ပါဘူး။ [[mark:draw-amp-optional]] ခေါင်းစဉ်
+      rule လို ရိုးရိုး descendant အတွက်တော့ ampersand ထည့်စရာ မလိုပါဘူး။ ထည့်ရေးရင် ဆက်စပ်ပုံ
+      ပိုမြင်သာရုံပါပဲ၊ ရလဒ်ကတော့ အတူတူပါ။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: when is & required"
+        url: "https://web.dev/learn/css/nesting#when_is_required"
+      - title: "MDN — & nesting selector"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector"
+      - title: "MDN — Compound selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors/Selector_structure#compound_selector"
+    actions:
+      - id: open-amp-board
+        type: whiteboard.apply
+        at: { mark: open-amp-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-amp-same
+        type: whiteboard.apply
+        at: { mark: draw-amp-same }
+        upsertIds: [b-r1-code, b-r1-arrow, b-r1-flat, b-r1-note]
+        drawMs: 2400
+      - id: draw-amp-inside
+        type: whiteboard.apply
+        at: { mark: draw-amp-inside }
+        upsertIds: [b-r2-code, b-r2-arrow, b-r2-flat, b-r2-note]
+        drawMs: 2400
+      - id: draw-amp-hover
+        type: whiteboard.apply
+        at: { mark: draw-amp-hover }
+        upsertIds: [b-r3-code, b-r3-arrow, b-r3-note, b-r4-code, b-r4-arrow, b-r4-note]
+        drawMs: 3200
+      - id: draw-amp-optional
+        type: whiteboard.apply
+        at: { mark: draw-amp-optional }
+        upsertIds: [b-r5-code, b-r5-note]
+        drawMs: 1600
+
+  - id: hover-demo
+    narration: >
+      [[mark:close-amp-board]] space မခြားတဲ့ ပုံစံနဲ့ hover style တစ်ခု ရေးကြည့်ရအောင်။
+      [[mark:type-hover]] ampersand နဲ့ hover pseudo-class ကို ကပ်ရေးပါမယ်။ hover က pointer
+      တင်ထားတဲ့ အခြေအနေ ဖြစ်လို့၊ pointer ရောက်နေတုန်း card နောက်ခံ ဝါဖျော့ဖျော့ ဖြစ်ပါမယ်။
+      [[mark:click-card]] pointer တင်ထားရုံနဲ့တော့ lesson ထဲမှာ hover ကို မပြနိုင်လို့၊ ကော်ဖီ card
+      ကို နှိပ်လိုက်ပါမယ်။ နှိပ်လိုက်တဲ့ card ကို lesson က pointer တင်ထားသလို ပြပေးပါတယ်။
+      [[mark:after-hover]] ကော်ဖီ card ရဲ့ နောက်ခံ ဝါဖျော့ဖျော့ ဖြစ်သွားပြီး၊ ကျန်တဲ့ card တွေက
+      အဖြူအတိုင်းပါ။ [[mark:unhover-card]] တခြား နေရာကို နှိပ်လိုက်ရင်တော့ pointer ဖယ်လိုက်သလိုပဲ၊
+      ကော်ဖီ card အဖြူ ပြန်ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "MDN — :hover"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:hover"
+      - title: "web.dev Learn CSS — Nesting: when is & required"
+        url: "https://web.dev/learn/css/nesting#when_is_required"
+    actions:
+      - id: close-amp-board
+        type: whiteboard.apply
+        at: { mark: close-amp-board }
+        open: false
+      - id: type-hover
+        type: editor.type
+        at: { mark: type-hover }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    color: black;\n  }\n", occurrence: 1 }
+        text: "\n  &:hover {\n    background: wheat;\n  }\n"
+      - id: click-card
+        type: preview.click
+        at: { mark: click-card, offsetMs: 500 }
+        timeoutMs: 5000
+        target: { by: testId, value: card-coffee }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-coffee
+        type: expect.preview
+        at: { afterAction: click-card }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Moves rrweb's replay hover emulation off the coffee card: the drinks
+      # heading is not an ancestor of any card, so every card is white again.
+      - id: unhover-card
+        type: preview.click
+        at: { mark: unhover-card, offsetMs: 500 }
+        timeoutMs: 5000
+        target: { by: testId, value: drinks-title }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-drinks-title
+        type: expect.preview
+        at: { afterAction: unhover-card }
+        timeoutMs: 4000
+        target: { by: testId, value: drinks-title }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: sibling-and-flip
+    narration: >
+      [[mark:type-sibling]] ampersand ကို selector တစ်ခုထဲမှာ နှစ်ခါလည်း ရေးလို့ ရပါတယ်။ card
+      တွေကြားမှာ နေရာလွတ် ထည့်ဖို့ ampersand နှစ်ခုကို next-sibling combinator နဲ့ ဆက်ပြီး၊
+      အပေါ်ဘက်မှာ margin ပေးပါမယ်။ [[mark:after-sibling]] card တွေကြားမှာ နေရာလွတ် ပေါ်လာပေမယ့်၊ ပထမ
+      card ရဲ့ အပေါ်မှာတော့ မရှိပါဘူး။ [[mark:select-sibling]] ဒီ selector က menu card နောက်မှာ
+      ကပ်လျက် ရှိတဲ့ menu card ကို ရွေးလို့၊ ရှေ့မှာ card မရှိတဲ့ ပထမ card က မကိုက်ပါဘူး။
+      [[mark:scroll-footer]] အခု footer ကို ကြည့်ရအောင်။ promo စာကြောင်းထဲက ဈေးနှုန်းက အရောင်ရင့်တဲ့
+      နောက်ခံပေါ်မှာ အညိုရောင် ဖြစ်နေလို့ ဖတ်ရ ခက်ပါတယ်။ သူက card ထဲမှာ မရှိလို့ ခုနက ဈေးနှုန်း rule
+      နဲ့ မကိုက်ပါဘူး။ [[mark:type-flip]] ဒါကြောင့် ဈေးနှုန်းအတွက် rule တစ်ခု ရေးပြီး၊ သူ့ထဲမှာ
+      footer ရဲ့ selector ကို ရှေ့မှာ၊ ampersand ကို နောက်ဆုံးမှာ ထားပါမယ်။ [[mark:after-flip]]
+      footer ဈေးနှုန်း ရွှေရောင် ဖြစ်ပြီး၊ card ဈေးနှုန်းတွေ အနီအတိုင်းပါ။ [[mark:select-flip]] ဒီ
+      selector မှာ ampersand က နောက်ဆုံးမှာ ရှိလို့၊ footer ထဲမှာ ရှိတဲ့ ဈေးနှုန်းလို့ ဖတ်ရပါတယ်။
+      ဒီနည်းနဲ့ ဈေးနှုန်းရဲ့ နေရာအလိုက် ပုံစံတွေကို သူ့ rule ထဲမှာပဲ စုထားနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: define explicit relationships with the & selector"
+        url: "https://web.dev/learn/css/nesting#define_explicit_relationships_with_the_selector"
+      - title: "MDN — & nesting selector: appending the & nesting selector"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector"
+      - title: "MDN — Next-sibling combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Next-sibling_combinator"
+    actions:
+      - id: type-sibling
+        type: editor.type
+        at: { mark: type-sibling }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    background: wheat;\n  }\n", occurrence: 1 }
+        text: "\n  & + & {\n    margin-top: 12px;\n  }\n"
+      - id: expect-falooda
+        type: expect.preview
+        at: { mark: after-sibling }
+        timeoutMs: 4000
+        target: { by: testId, value: card-falooda }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-sibling
+        type: editor.select
+        at: { mark: select-sibling }
+        target: { file: styles.css, text: "& + &", occurrence: 1 }
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-flip
+        type: editor.type
+        at: { mark: type-flip }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    margin-top: 12px;\n  }\n}\n", occurrence: 1 }
+        text: "\n.price {\n  .site-footer & {\n    color: gold;\n  }\n}\n"
+      - id: expect-promo-price
+        type: expect.preview
+        at: { mark: after-flip }
+        timeoutMs: 4000
+        target: { by: testId, value: price-promo }
+        textContains: "600 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flip
+        type: editor.select
+        at: { mark: select-flip }
+        target: { file: styles.css, text: ".site-footer &", occurrence: 1 }
+
+  - id: depth-board
+    chapter: "ဘယ်လောက် နက်နက် ရေးသင့်လဲ"
+    narration: >
+      [[mark:open-depth]] nested rule ထဲမှာလည်း nested rule တွေ ထပ်ထည့်လို့ ရပါတယ်။
+      [[mark:draw-depth-1]] တစ်ဆင့်ဆိုရင် card ထဲက ခေါင်းစဉ်ပါ။ [[mark:draw-depth-2]] နှစ်ဆင့်ဆိုရင်
+      card ထဲက မှတ်ချက်ထဲမှာ ရှိတဲ့ စာပိုဒ်ပါ။ [[mark:draw-depth-3]] သုံးဆင့်လည်း ရပြီး၊ CSS မှာ
+      အဆင့် ကန့်သတ်ချက် မရှိပါဘူး။ [[mark:draw-depth-stop]] ဒါပေမဲ့ တစ်ဆင့် တိုးတိုင်း selector က
+      ရှည်လာပြီး အလေးချိန် များလာလို့ နောက်မှ override လုပ်ရ ခက်ပါတယ်။ ပြီးတော့ HTML ကို နည်းနည်း
+      ပြင်တာနဲ့ CSS ပါ လိုက်ပြင်ရနိုင်ပါတယ်။ ဒါကြောင့် နှစ်ဆင့် သုံးဆင့်မှာ ရပ်ပြီး၊ ဒီထက် နက်လာရင်
+      rule ကို ခွဲရေးလိုက်ပါ။ [[mark:draw-order]] နောက် အလေ့အကျင့် တစ်ခုက၊ ကိုယ်ပိုင် declaration
+      တွေကို အရင် ရေးပြီး nested rule တွေကို နောက်မှ ရေးတာပါ။ [[mark:draw-order-why]] nested rule
+      နောက်မှာ ရေးထားတဲ့ declaration ကို အခု browser တွေက ရေးထားတဲ့ နေရာအတိုင်း ထားပေမယ့်၊ browser
+      အဟောင်းတွေက အပေါ်ဆုံးကို ရွှေ့လိုက်လို့ ရလဒ် ကွာနိုင်ပါတယ်။ declaration ကို အရင် ရေးထားရင်တော့
+      ဘယ် browser မှာမဆို အတူတူ ဖြစ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: nesting more than one level deep"
+        url: "https://web.dev/learn/css/nesting"
+      - title: "MDN — CSSNestedDeclarations"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/CSSNestedDeclarations"
+      - title: "CSS Nesting Module Level 1 — the nested declarations rule"
+        url: "https://drafts.csswg.org/css-nesting-1/#nested-declarations-rule"
+    actions:
+      - id: open-depth
+        type: whiteboard.apply
+        at: { mark: open-depth }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-depth-1
+        type: whiteboard.apply
+        at: { mark: draw-depth-1 }
+        upsertIds: [c-l1, c-n1]
+        drawMs: 1200
+      - id: draw-depth-2
+        type: whiteboard.apply
+        at: { mark: draw-depth-2 }
+        upsertIds: [c-l2, c-n2]
+        drawMs: 1200
+      - id: draw-depth-3
+        type: whiteboard.apply
+        at: { mark: draw-depth-3 }
+        upsertIds: [c-l3, c-n3]
+        drawMs: 1200
+      - id: draw-depth-stop
+        type: whiteboard.apply
+        at: { mark: draw-depth-stop }
+        upsertIds: [c-stop, c-stop-line]
+        drawMs: 1600
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds:
+          [c-o-rule, c-o-decl, c-o-nested, c-o-close, c-o-decl-label, c-o-nested-label, c-o-check]
+        drawMs: 3200
+      - id: draw-order-why
+        type: whiteboard.apply
+        at: { mark: draw-order-why }
+        upsertIds: [c-o-old]
+        drawMs: 1400
+
+  - id: nested-media
+    chapter: "Rule ထဲမှာ media query ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-depth]] nest လုပ်လို့ ရတာ rule တွေတင် မဟုတ်ပါဘူး။ [[mark:scroll-top]] ကြိုဆိုတဲ့
+      အပိုင်းဆီ ပြန်တက်ကြည့်ရအောင်။ [[mark:type-media]] ကြိုဆိုတဲ့ အပိုင်းရဲ့ rule ထဲမှာ screen
+      အကျယ် 40 em ထက် ကျဉ်းမှ အလုပ်လုပ်မယ့် media query တစ်ခု ထည့်ပြီး၊ သူ့ထဲမှာ စာသားကို
+      အလယ်ပို့တဲ့ declaration တစ်ခု ထည့်ပါမယ်။ lesson 5 က media query မျိုးပါပဲ၊ ဒီတစ်ခါ rule ထဲမှာ
+      ရေးတာပဲ ကွာပါတယ်။ [[mark:after-media]] ကြိုဆိုတဲ့ စာသားတွေ အလယ်ကို ရောက်သွားပါပြီ။ preview က
+      ဖုန်းလောက်ပဲ ကျယ်ပြီး 40 em ထက် အများကြီး ကျဉ်းလို့၊ အခြေအနေ မှန်နေတာပါ။ [[mark:select-media]]
+      ဒီ declaration ကို ကြည့်ပါ။ media query ထဲမှာ selector မပါဘဲ တိုက်ရိုက် ရေးထားလို့ ကြိုဆိုတဲ့
+      အပိုင်းကို style ပေးပါတယ်၊ ဒါပေမဲ့ အခြေအနေ မှန်မှပဲ ဖြစ်ပါတယ်။ ဒီလို screen အကျယ်အလိုက်
+      ပြောင်းတဲ့ style တွေကို component ရဲ့ တခြား style ဘေးမှာပဲ ထားနိုင်ပါတယ်။
+      [[mark:other-at-rules]] media query လို at sign နဲ့ စတဲ့ rule တွေကို at-rule လို့ ခေါ်ပါတယ်။
+      layer၊ browser က feature တစ်ခု နားလည်မှ အလုပ်လုပ်တဲ့ supports နဲ့ နောက်ပိုင်း သင်မယ့်
+      container query ကိုလည်း nest လုပ်လို့ ရပါတယ်။ import ကိုတော့ nest လုပ်လို့ မရဘဲ ဖိုင်
+      ထိပ်ဆုံးမှာပဲ ရေးရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: nesting at-rules"
+        url: "https://web.dev/learn/css/nesting#nesting_at-rules"
+      - title: "MDN — CSS nesting at-rules"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Nesting_at-rules"
+      - title: "CSS Nesting Module Level 1 — nesting conditional rules"
+        url: "https://drafts.csswg.org/css-nesting-1/#conditionals"
+      - title: "MDN — @import"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@import"
+    actions:
+      - id: close-depth
+        type: whiteboard.apply
+        at: { mark: close-depth }
+        open: false
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-media
+        type: editor.type
+        at: { mark: type-media }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    color: gold;\n  }\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  @media (width < 40em) {\n    text-align: center;\n  }\n}\n"
+      - id: expect-hero-centred
+        type: expect.preview
+        at: { mark: after-media }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-media
+        type: editor.select
+        at: { mark: select-media }
+        target: { file: styles.css, text: "text-align: center;", occurrence: 1 }
+
+  - id: specificity-trap
+    chapter: "Nesting နဲ့ specificity"
+    narration: >
+      [[mark:type-trap]] selector list ရဲ့ rule ထဲမှာလည်း nest လုပ်လို့ ရပါတယ်။ link တွေကို
+      နှစ်နေရာမှာ style ပေးကြည့်ရအောင်။ header ကို သူ့ ID နဲ့၊ footer ထဲက promo စာကြောင်းကို သူ့
+      class နဲ့ ရွေးပါမယ်။ ထဲမှာတော့ ampersand နဲ့ နှစ်နေရာလုံးက link တွေကို ရွေးပြီး အစိမ်းနုရောင်
+      ပေးပါမယ်။ [[mark:after-trap]] header link တွေ အစိမ်းနုရောင် ဖြစ်သွားပါပြီ။
+      [[mark:scroll-bottom]] footer မှာလည်း promo link က အစိမ်းနုရောင် ဖြစ်နေပေမယ့်၊ promo
+      စာကြောင်းထဲ မပါတဲ့ ဖုန်းနံပါတ်နဲ့ Facebook link တွေကတော့ မပြောင်းပါဘူး။ [[mark:type-promo-a]]
+      promo link ကို လိမ္မော်ရောင် ပေးချင်လို့၊ promo စာကြောင်းထဲက link တွေအတွက် ရိုးရိုး rule
+      တစ်ခုကို ဖိုင်ရဲ့ နောက်ပိုင်းမှာ ထည့်ပါမယ်။ [[mark:after-promo-a]] ဘာမှ မပြောင်းပါဘူး။
+      လိမ္မော်ရောင် rule က နောက်မှ ရေးထားပေမယ့် promo link က အစိမ်းနုရောင်အတိုင်းပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: nesting and specificity"
+        url: "https://web.dev/learn/css/nesting#nesting_and_specificity"
+      - title: "MDN — Nesting and specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Nesting_and_specificity"
+    actions:
+      - id: type-trap
+        type: editor.type
+        at: { mark: type-trap }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    text-align: center;\n  }\n}\n", occurrence: 1 }
+        text: "\n#site-header,\n.promo {\n  & a {\n    color: lightgreen;\n  }\n}\n"
+      - id: expect-nav
+        type: expect.preview
+        at: { mark: after-trap }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-drinks }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-bottom
+        type: preview.scroll
+        at: { mark: scroll-bottom }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-promo-a
+        type: editor.type
+        at: { mark: type-promo-a }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    color: lightgreen;\n  }\n}\n", occurrence: 1 }
+        text: "\n.promo a {\n  color: orange;\n}\n"
+      - id: expect-promo-link
+        type: expect.preview
+        at: { mark: after-promo-a }
+        timeoutMs: 4000
+        target: { by: testId, value: promo-link }
+        textContains: "မီနူး ကြည့်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: is-board
+    narration: >
+      [[mark:open-is-board]] ဘာကြောင့်လဲ ကြည့်ရအောင်။ [[mark:draw-is]] ampersand က အပြင်က selector
+      list ကို is pseudo-class နဲ့ ထုပ်ထားသလို အလုပ်လုပ်ပါတယ်။ [[mark:draw-is-score]] lesson 6 မှာ
+      မြင်ခဲ့သလို is က သူ့ထဲက အလေးဆုံး selector၊ ဒီမှာဆိုရင် ID ရဲ့ အလေးချိန်ကို ယူပါတယ်။ ဒါကြောင့်
+      class နဲ့ ကိုက်တဲ့ promo link တောင် ID အကွက်မှာ တစ်၊ class အကွက်မှာ သုည၊ element အကွက်မှာ တစ်
+      ရပါတယ်။ [[mark:draw-is-other]] လိမ္မော်ရောင် rule ကတော့ class တစ်ခုနဲ့ element တစ်ခုပဲ ရပါတယ်။
+      ID အကွက်ကို အရင် နှိုင်းယှဉ်လို့ အစိမ်းနုရောင် rule က နိုင်ပါတယ်။ [[mark:draw-is-tip]]
+      ဒါကြောင့် အပြင်က selector list ထဲမှာ အလေးချိန် မတူတဲ့ selector တွေ ရောနေရင် သတိထားပါ။ ID
+      မပါလည်း ဒီလိုပဲ ဖြစ်ပေမယ့်၊ ID ပါရင် ကွာခြားချက် အကြီးဆုံးပါ။ Sass က selector တစ်ခုချင်းစီကို
+      သီးသန့် ခွဲရေးပေးလို့၊ Sass ကနေ ပြောင်းလာတဲ့ code မှာ ရလဒ် ကွာနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: nesting and specificity"
+        url: "https://web.dev/learn/css/nesting#nesting_and_specificity"
+      - title: "MDN — Nesting and specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Nesting_and_specificity"
+      - title: "MDN — :is()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:is"
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+    actions:
+      - id: open-is-board
+        type: whiteboard.apply
+        at: { mark: open-is-board }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-nested]
+      - id: draw-is
+        type: whiteboard.apply
+        at: { mark: draw-is }
+        upsertIds: [d-arrow, d-is]
+        drawMs: 1800
+      - id: draw-is-score
+        type: whiteboard.apply
+        at: { mark: draw-is-score }
+        upsertIds: [d-cols, d-row-is, d-score-is]
+        drawMs: 2400
+      - id: draw-is-other
+        type: whiteboard.apply
+        at: { mark: draw-is-other }
+        upsertIds: [d-row-promo, d-score-promo, d-win]
+        drawMs: 2000
+      - id: draw-is-tip
+        type: whiteboard.apply
+        at: { mark: draw-is-tip }
+        upsertIds: [d-tip]
+        drawMs: 1400
+
+  - id: invalid-forms
+    chapter: "Nesting မှာ မရတဲ့ ရေးနည်းတွေ"
+    narration: >
+      [[mark:close-is-board]] ကြိုဆိုတဲ့ အပိုင်းကို ပြန်ကြည့်ရအောင်။ သူ့ စာပိုဒ်မှာ lead class
+      ပါပါတယ်။ [[mark:type-bad-p]] lead class ရဲ့ rule ထဲမှာ၊ ဒီ class ပါတဲ့ စာပိုဒ်ကို ရွေးပြီး
+      font size ကြီးကြီး ပေးကြည့်ပါမယ်။ ampersand ကို အရင် ရေးပြီး element နာမည်ကို နောက်မှ ရေးတဲ့
+      ပုံစံကို တမင် စမ်းကြည့်တာပါ။ [[mark:after-bad-p]] ဘာမှ မပြောင်းပါဘူး။ compound selector မှာ
+      element နာမည်က ရှေ့ဆုံးမှာ ရှိရလို့ ဒီ selector က မမှန်ပါဘူး။ ဒါကြောင့် browser က ဒီ nested
+      rule ကို ကျော်သွားပါတယ်။ [[mark:type-good-p]] အခု ပြောင်းပြန် ရေးကြည့်ရအောင်။ element နာမည်ကို
+      အရင် ရေးပြီး ampersand ကို နောက်မှ ထည့်ပါမယ်။ font size ကတော့ အတူတူပါ။ [[mark:after-good-p]]
+      ကြိုဆိုတဲ့ စာပိုဒ် ကြီးလာပါပြီ။ lead class ပါ ရှိတဲ့ စာပိုဒ် ဖြစ်လို့ ကိုက်သွားတာပါ။
+      [[mark:select-both]] ဒီ rule နှစ်ခုကို ကြည့်ပါ။ browser က မမှန်တဲ့ rule ကို ကျော်သွားပေမယ့်
+      ကျန်တဲ့ rule က အလုပ်လုပ်နေပါတယ်။ nested rule တစ်ခု မှားရင် အဲဒီ rule ပဲ ပျက်ပါတယ်။
+      [[mark:no-concat]] nesting က Sass လို စာသားတွေကို ဆက်ပေးတာလည်း မဟုတ်ပါဘူး။ Sass မှာ ampersand
+      နောက် စာလုံးတွေ ဆက်ရေးရင် ပိုရှည်တဲ့ class နာမည် တစ်ခု ဖြစ်သွားပါတယ်။ CSS မှာတော့ ampersand က
+      selector တစ်ခုလုံးကို ကိုယ်စားပြုလို့ class နာမည်ကို အပြည့် ရေးရပါတယ်။
+      [[mark:no-pseudo-element]] ပြီးတော့ ampersand က pseudo-element ကို ကိုယ်စား မပြုနိုင်ပါဘူး။
+      ဥပမာ card နဲ့ card ရဲ့ before ကို selector list တစ်ခုထဲ ရေးပြီး ampersand နဲ့ style ပေးရင်၊
+      card ပဲ ရပြီး before ကတော့ မရပါဘူး။ ampersand နောက်မှာ before ဒါမှမဟုတ် after ရေးတာကတော့
+      ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Nesting: invalid nesting"
+        url: "https://web.dev/learn/css/nesting#invalid_nesting"
+      - title: "MDN — Using CSS nesting: concatenation is not possible"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Using_CSS_nesting"
+      - title: "MDN — & nesting selector"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector"
+      - title: "CSS Nesting Module Level 1 — the nesting selector"
+        url: "https://drafts.csswg.org/css-nesting-1/#nest-selector"
+    actions:
+      - id: close-is-board
+        type: whiteboard.apply
+        at: { mark: close-is-board }
+        open: false
+      - id: scroll-top-again
+        type: preview.scroll
+        at: { mark: close-is-board }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-bad-p
+        type: editor.type
+        at: { mark: type-bad-p }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: orange;\n}\n", occurrence: 1 }
+        text: "\n.lead {\n  &p {\n    font-size: 20px;\n  }\n}\n"
+      - id: type-good-p
+        type: editor.type
+        at: { mark: type-good-p }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  &p {\n    font-size: 20px;\n  }\n", occurrence: 1 }
+        text: "\n  p& {\n    font-size: 20px;\n  }\n"
+      - id: expect-lead
+        type: expect.preview
+        at: { mark: after-good-p }
+        timeoutMs: 4000
+        target: { by: testId, value: lead }
+        attribute: { name: class, value: lead }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-both
+        type: editor.select
+        at: { mark: select-both }
+        target:
+          {
+            file: styles.css,
+            text: "  &p {\n    font-size: 20px;\n  }\n\n  p& {\n    font-size: 20px;\n  }\n",
+            occurrence: 1,
+          }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      ampersand ကို ဘယ် rule ထဲမှာမှ မထည့်ဘဲ ရေးရင်တော့ page ရဲ့ root ဖြစ်တဲ့ html element ကို
+      ဆိုလိုပါတယ်၊ ဒါပေမဲ့ သုံးဖို့ ရှားပါတယ်။ [[mark:quiz]] ကိုယ့်ဘာသာ စစ်ကြည့်ပါ။ nesting က
+      နှစ်ဆင့်ပဲ ရသလား၊ import ကို rule ထဲ ထည့်လို့ ရသလား။ အဆင့် ကန့်သတ်ချက် မရှိပါဘူး၊ import ကတော့
+      မရပါဘူး။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ nested selector က descendant ဖြစ်ပြီး၊ combinator
+      နဲ့လည်း စလို့ ရပါတယ်။ ampersand ကိုတော့ အပြင်က element ကိုယ်တိုင်ကို ရွေးဖို့၊ ဒါမှမဟုတ်
+      footer လို နေရာ တစ်ခုကို ampersand ရှေ့မှာ ထည့်ပြီး အဲဒီ နေရာထဲမှာ ရှိမှ ရွေးဖို့ သုံးပါတယ်။
+      media query နဲ့ တခြား at-rule တွေကိုလည်း nest လုပ်လို့ ရပါတယ်။ ampersand ရဲ့ အလေးချိန်ကို is
+      လိုပဲ တွက်လို့၊ nested rule တိုင်းက အပြင်က list ထဲက အလေးဆုံး selector ရဲ့ အလေးချိန်ကို
+      ယူပါတယ်။ [[mark:part-recap]] ဒါနဲ့ course ရဲ့ ပထမ အပိုင်း ပြီးပါပြီ။ rule၊ box model၊
+      selector၊ cascade၊ specificity၊ inheritance နဲ့ nesting ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ တန်ဖိုးတွေ အကြောင်း စပြီး၊ အရောင် ရေးနည်း
+      အမျိုးမျိုးကို ကြည့်သွားပါမယ်။ ဒါမှ အခုထိ သုံးခဲ့တဲ့ အရောင် နာမည်တွေထက် အများကြီး ပိုတိကျတဲ့
+      အရောင်တွေကို ရွေးလို့ ရမှာပါ။
+    sources:
+      - title: "MDN — & nesting selector: & outside a rule"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector"
+      - title: "web.dev Learn CSS — Nesting: check your understanding"
+        url: "https://web.dev/learn/css/nesting"
+      - title: "web.dev Learn CSS — Color"
+        url: "https://web.dev/learn/css/color"
+    actions:
+      - id: expect-card-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".menu-card {\n  background: white;\n  padding: 12px;\n\n  h3 {\n    color: saddlebrown;\n  }\n\n  .price {\n    color: firebrick;\n  }\n\n  > p {\n    font-style: italic;\n  }\n\n  &.featured {\n    border-color: darkorange;\n  }\n\n  & .badge {\n    background: darkorange;\n    color: black;\n  }\n\n  &:hover {\n    background: wheat;\n  }\n\n  & + & {\n    margin-top: 12px;\n  }\n}\n"
+      - id: expect-flip-media-css
+        type: expect.file
+        at: { afterAction: expect-card-css }
+        path: styles.css
+        contains: "\n.price {\n  .site-footer & {\n    color: gold;\n  }\n}\n\n.hero {\n  @media (width < 40em) {\n    text-align: center;\n  }\n}\n"
+      - id: expect-trap-lead-css
+        type: expect.file
+        at: { afterAction: expect-flip-media-css }
+        path: styles.css
+        contains: "\n#site-header,\n.promo {\n  & a {\n    color: lightgreen;\n  }\n}\n\n.promo a {\n  color: orange;\n}\n\n.lead {\n  &p {\n    font-size: 20px;\n  }\n\n  p& {\n    font-size: 20px;\n  }\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
