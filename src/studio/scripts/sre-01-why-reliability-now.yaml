@@ -97,84 +97,84 @@ lesson:
         id: l01_p01,
         contentType: google,
         name: "Cover: Thingyan eve at Padauk",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p01,
       }
     - {
         id: l01_p01b,
         contentType: google,
         name: "Cover: which one will users remember?",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p01b,
       }
     - {
         id: l01_p02,
         contentType: google,
         name: "Hope it holds vs engineer it",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p02,
       }
     - {
         id: l01_p02b,
         contentType: google,
         name: "Hope vs engineer: Site Reliability Engineering",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p02b,
       }
     - {
         id: l01_p02c,
         contentType: google,
         name: "Sociotechnical system",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p02c,
       }
     - {
         id: l01_p03,
         contentType: google,
         name: "What Padauk agreed (title)",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p03,
       }
     - {
         id: l01_p03b,
         contentType: google,
         name: "What Padauk agreed afterwards",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p03b,
       }
     - {
         id: l01_p03c,
         contentType: google,
         name: "What SREs do with the list",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p03c,
       }
     - {
         id: l01_p04,
         contentType: google,
         name: "Start without an SRE team (1)",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p04,
       }
     - {
         id: l01_p04b,
         contentType: google,
         name: "Start without an SRE team",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p04b,
       }
     - {
         id: l01_p04c,
         contentType: google,
         name: "Keeping it going is harder",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p04c,
       }
     - {
         id: l01_p05,
         contentType: google,
         name: "This week",
-        deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub",
+        deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub",
         pageId: l01_p05,
       }
   whiteboardAssets:
