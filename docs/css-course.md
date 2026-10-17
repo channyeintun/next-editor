@@ -1,7 +1,7 @@
 # CSS course — course guide
 
 A 43-lesson CSS course narrated in Burmese. It covers everything in
-[web.dev Learn CSS](https://web.dev/learn/css) (all 38 modules, every section) and ends with a
+[web.dev Learn CSS](https://web.dev/learn/css) (all 37 topic modules plus the Welcome and Conclusion pages, every section) and ends with a
 Tailwind CSS lesson. CSS terms stay in English and the code is shown as written. Every lesson is a
 studio LessonScript in `src/studio/scripts/` (locale `my-MM`) that runs a plain HTML and CSS site
 with Vite in the WebContainer. CSS is typed live into a linked stylesheet while the preview updates,
