@@ -1,0 +1,1542 @@
+# SRE from zero, lesson 3: Reliability ရဲ့ တန်ဖိုး (the value of reliability).
+#
+# A no-code concept lesson: Google deck pages (deck SRE 1) and the whiteboard
+# carry it, notes.md closes it, and nothing runs. Built from the approved voice
+# script docs/sre-course/voice-scripts/sre-03-value-of-reliability.md: every
+# scene's narration is that script's spoken lines, byte for byte, with each
+# ⟪…⟫ marker turned into a [[mark:…]]. Marks the script does not have only
+# split a dialog at a sentence end (one voice-script line, one dialog) or add
+# a pacing step, so something on screen changes at least every ~35 s at
+# 70 ms/char: continuation pages (l03_p01b, p02b/c, p03b/c/d, p04b/c) and the
+# split board steps b1-step3b and b2-step3b. One more, ask-question, sits after
+# the recap question's ၊ pause so the question-line select can make the voice
+# script's 3-second pause before the answer (see that action).
+#
+# Boards: B1 the real bill (comb), B2 system decay (ring), B3 cost per
+# 10 minutes down (bars), B4 Bill Pay staff by hand vs templates + CI/CD.
+# Colour jobs: #1e1e1e ink (paints white), blue the thing named and data,
+# green healthy, red failure, orange the caveat, violet the result.
+# Two-line board labels are two stacked text assets, one per line, so each
+# box is sized to its own line by the 0.55 em rule.
+#
+# The deck URL is a placeholder until deck SRE 1 is published to the web; the
+# Director's unreachable-deck warning is expected until then.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-03-value-of-reliability.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-03-value-of-reliability.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-03-value-of-reliability
+  title: "SRE from zero 3: Reliability ရဲ့ တန်ဖိုး"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Reliability ရဲ့ တန်ဖိုး
+
+        - outage ရဲ့ တကယ့် ကုန်ကျစရိတ် — မိနစ် မဟုတ်၊ လူတွေရဲ့ နာရီ + ဆုံးရှုံးတဲ့ အရောင်း
+        - system ဆွေးမြေ့တာ — မထိန်းသိမ်းရင် ဘယ်သူမှ မထိရဲတော့
+        - 100% က မှားတဲ့ ပစ်မှတ် — ဒီ service အတွက် လုံလောက်တဲ့ ပစ်မှတ် (SLO) ကို ရွေး
+        - error budget — SLO နဲ့ 100% ကြားက ပျက်ခွင့်
+        - ops အလုပ်ရဲ့ ကန့်သတ်ချက် — ဘယ်သူမဆို အချိန်ရဲ့ တစ်ဝက်ထက် မကျော်၊ ပစ်မှတ် မဟုတ်
+
+        မေးခွန်း: ကိုယ့် service က 99% reliable ဖြစ်ရင် လုံလောက်တယ်။ ကျန်တဲ့ 1% ကွာဟချက်ကို ဘာလို့ ခေါ်လဲ၊ ဘယ်သူတွေ သဘောတူ သတ်မှတ်ရမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Reliability ရဲ့ တန်ဖိုး</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 3</p>
+              <h1>Reliability ရဲ့ တန်ဖိုး</h1>
+              <p class="hook">outage ရဲ့ တကယ့် ကုန်ကျစရိတ်နဲ့ 100% က ဘာလို့ မှားလဲ</p>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          max-width: 36rem;
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 1rem;
+          line-height: 1.6;
+        }
+
+        .course {
+          margin: 0;
+          color: #6d57ff;
+          font-weight: 700;
+        }
+
+        h1 {
+          margin: 0.5rem 0;
+        }
+
+        .hook {
+          margin: 0;
+          color: #80868b;
+        }
+      package.json: |
+        {
+          "name": "sre-from-zero-03",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l03_p01
+      contentType: google
+      name: "K1 · Cover"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p01
+    - id: l03_p01b
+      contentType: google
+      name: "K1 · Cover: the question"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p01b
+    - id: l03_p02
+      contentType: google
+      name: "K2 · Why not 100%: one"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p02
+    - id: l03_p02b
+      contentType: google
+      name: "K2 · Why not 100%: two"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p02b
+    - id: l03_p02c
+      contentType: google
+      name: "K2 · Why not 100%: three"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p02c
+    - id: l03_p03
+      contentType: google
+      name: "K3 · Ops team vs SRE: ops"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p03
+    - id: l03_p03b
+      contentType: google
+      name: "K3 · Ops team vs SRE: SRE"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p03b
+    - id: l03_p03c
+      contentType: google
+      name: "K3 · Ops team vs SRE: all"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p03c
+    - id: l03_p03d
+      contentType: google
+      name: "K3 · Ops team vs SRE: the ceiling"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p03d
+    - id: l03_p04
+      contentType: google
+      name: "K2 · First-year list: two"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p04
+    - id: l03_p04b
+      contentType: google
+      name: "K2 · First-year list: three"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p04b
+    - id: l03_p04c
+      contentType: google
+      name: "K2 · Reliability as an investment"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p04c
+    - id: l03_p05
+      contentType: google
+      name: "K2 · This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l03_p05
+  whiteboardAssets:
+    # Board B1: the real bill (P2 comb): red source, bus, five tines, violet total
+    - {
+        id: "l03-b1-src",
+        kind: "rectangle",
+        x: 255,
+        y: 285,
+        width: 250,
+        height: 90,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: "l03-b1-src-t",
+        kind: "text",
+        x: 275,
+        y: 312,
+        width: 215,
+        height: 35,
+        text: "30 မိနစ် ပျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-in",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 515,
+        y: 310,
+        width: 105,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-bus",
+        kind: "rectangle",
+        x: 632,
+        y: 175,
+        width: 12,
+        height: 455,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t1-a",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 652,
+        y: 191,
+        width: 52,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t1-l1",
+        kind: "text",
+        x: 715,
+        y: 175,
+        width: 335,
+        height: 35,
+        text: "user 1,800 × 10 မိနစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t1-l2",
+        kind: "text",
+        x: 715,
+        y: 210,
+        width: 165,
+        height: 35,
+        text: "= 300 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t2-a",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 652,
+        y: 286,
+        width: 52,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t2-l1",
+        kind: "text",
+        x: 715,
+        y: 270,
+        width: 365,
+        height: 35,
+        text: "message 1,500 × 6 မိနစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t2-l2",
+        kind: "text",
+        x: 715,
+        y: 305,
+        width: 165,
+        height: 35,
+        text: "= 150 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t3-a",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 652,
+        y: 381,
+        width: 52,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t3-l1",
+        kind: "text",
+        x: 715,
+        y: 365,
+        width: 350,
+        height: 35,
+        text: "refund 3 ယောက် × 2 ရက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t3-l2",
+        kind: "text",
+        x: 715,
+        y: 400,
+        width: 150,
+        height: 35,
+        text: "= 48 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t4-a",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 652,
+        y: 476,
+        width: 52,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t4-l1",
+        kind: "text",
+        x: 715,
+        y: 460,
+        width: 290,
+        height: 35,
+        text: "ဆိုင် 120 ရောင်းမရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t4-l2",
+        kind: "text",
+        x: 715,
+        y: 495,
+        width: 195,
+        height: 35,
+        text: "ကျပ်သိန်း 36",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t5-a",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 652,
+        y: 571,
+        width: 52,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b1-t5-l1",
+        kind: "text",
+        x: 715,
+        y: 555,
+        width: 215,
+        height: 35,
+        text: "နောက် feature",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-t5-l2",
+        kind: "text",
+        x: 715,
+        y: 590,
+        width: 215,
+        height: 35,
+        text: "2 ပတ် နောက်ကျ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b1-tot1",
+        kind: "text",
+        x: 255,
+        y: 405,
+        width: 190,
+        height: 40,
+        text: "≈ 500 နာရီ",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: "l03-b1-tot2",
+        kind: "text",
+        x: 255,
+        y: 452,
+        width: 350,
+        height: 35,
+        text: "+ ဆုံးရှုံးတဲ့ အရောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board B2: how a neglected system decays (P3 ring, clockwise)
+    - {
+        id: "l03-b2-title",
+        kind: "text",
+        x: 280,
+        y: 160,
+        width: 490,
+        height: 45,
+        text: "system ဘယ်လို ဆွေးမြေ့လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: "l03-b2-ring",
+        kind: "ellipse",
+        x: 350,
+        y: 262,
+        width: 650,
+        height: 340,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b2-n1",
+        kind: "rectangle",
+        x: 440,
+        y: 232,
+        width: 210,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: "l03-b2-n1-t",
+        kind: "text",
+        x: 455,
+        y: 245,
+        width: 180,
+        height: 35,
+        text: "မထိန်းသိမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n2",
+        kind: "rectangle",
+        x: 770,
+        y: 250,
+        width: 270,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: "l03-b2-n2-t1",
+        kind: "text",
+        x: 785,
+        y: 262,
+        width: 245,
+        height: 35,
+        text: "API နဲ့ library",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n2-t2",
+        kind: "text",
+        x: 785,
+        y: 297,
+        width: 120,
+        height: 35,
+        text: "ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n3",
+        kind: "rectangle",
+        x: 740,
+        y: 520,
+        width: 240,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: "l03-b2-n3-t1",
+        kind: "text",
+        x: 755,
+        y: 532,
+        width: 195,
+        height: 35,
+        text: "ပြင်စရာ အသေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n3-t2",
+        kind: "text",
+        x: 755,
+        y: 567,
+        width: 195,
+        height: 35,
+        text: "project ဖြစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n4",
+        kind: "rectangle",
+        x: 400,
+        y: 550,
+        width: 210,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: "l03-b2-n4-t",
+        kind: "text",
+        x: 415,
+        y: 563,
+        width: 180,
+        height: 35,
+        text: "မထင်ဘဲ ပျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-n5",
+        kind: "rectangle",
+        x: 280,
+        y: 400,
+        width: 140,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: "l03-b2-n5-t",
+        kind: "text",
+        x: 297,
+        y: 413,
+        width: 105,
+        height: 35,
+        text: "မထိနဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b2-arr-top",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 675,
+        y: 240,
+        width: 75,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b2-arr-right",
+        kind: "freedraw",
+        stroke: "arrow-down",
+        x: 982,
+        y: 385,
+        width: 36,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    # Board B3: cost per 10 minutes down (P5 bars); violet = Thingyan eve
+    - {
+        id: "l03-b3-title",
+        kind: "text",
+        x: 280,
+        y: 155,
+        width: 665,
+        height: 45,
+        text: "ပျက်တဲ့ 10 မိနစ်စီရဲ့ ကုန်ကျစရိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: "l03-b3-axis",
+        kind: "freedraw",
+        stroke: "underline",
+        x: 300,
+        y: 548,
+        width: 690,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b3-x10",
+        kind: "text",
+        x: 355,
+        y: 588,
+        width: 45,
+        height: 35,
+        text: "10",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-x20",
+        kind: "text",
+        x: 535,
+        y: 588,
+        width: 45,
+        height: 35,
+        text: "20",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-x30",
+        kind: "text",
+        x: 715,
+        y: 588,
+        width: 45,
+        height: 35,
+        text: "30",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-x40",
+        kind: "text",
+        x: 895,
+        y: 588,
+        width: 135,
+        height: 35,
+        text: "40 မိနစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-g1",
+        kind: "rectangle",
+        x: 320,
+        y: 532,
+        width: 50,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l03-b3-g-label",
+        kind: "text",
+        x: 275,
+        y: 440,
+        width: 195,
+        height: 35,
+        text: "ပြန်ကြိုးစား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-r2",
+        kind: "rectangle",
+        x: 500,
+        y: 442,
+        width: 50,
+        height: 130,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b3-r3",
+        kind: "rectangle",
+        x: 680,
+        y: 372,
+        width: 50,
+        height: 200,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b3-r4",
+        kind: "rectangle",
+        x: 860,
+        y: 302,
+        width: 50,
+        height: 270,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b3-r-label",
+        kind: "text",
+        x: 420,
+        y: 300,
+        width: 275,
+        height: 35,
+        text: "တခြား app ပြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b3-v1",
+        kind: "rectangle",
+        x: 376,
+        y: 492,
+        width: 50,
+        height: 80,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: "l03-b3-v2",
+        kind: "rectangle",
+        x: 556,
+        y: 372,
+        width: 50,
+        height: 200,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: "l03-b3-v3",
+        kind: "rectangle",
+        x: 736,
+        y: 312,
+        width: 50,
+        height: 260,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: "l03-b3-v4",
+        kind: "rectangle",
+        x: 916,
+        y: 272,
+        width: 50,
+        height: 300,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: "l03-b3-v-label",
+        kind: "text",
+        x: 840,
+        y: 225,
+        width: 245,
+        height: 35,
+        text: "သင်္ကြန် အကြိုည",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board B4: Bill Pay ops staff, by hand (red) vs templates + CI/CD (green)
+    - {
+        id: "l03-b4-title",
+        kind: "text",
+        x: 280,
+        y: 160,
+        width: 510,
+        height: 45,
+        text: "Bill Pay: မြို့ 1 → 3 → 5",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: "l03-b4-axis",
+        kind: "freedraw",
+        stroke: "underline",
+        x: 280,
+        y: 548,
+        width: 520,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l03-b4-x1",
+        kind: "text",
+        x: 305,
+        y: 588,
+        width: 120,
+        height: 35,
+        text: "1 မြို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-x3",
+        kind: "text",
+        x: 475,
+        y: 588,
+        width: 120,
+        height: 35,
+        text: "3 မြို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-x5",
+        kind: "text",
+        x: 645,
+        y: 588,
+        width: 120,
+        height: 35,
+        text: "5 မြို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-r1",
+        kind: "rectangle",
+        x: 300,
+        y: 520,
+        width: 55,
+        height: 52,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b4-r1-v",
+        kind: "text",
+        x: 315,
+        y: 480,
+        width: 30,
+        height: 35,
+        text: "2",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-r2",
+        kind: "rectangle",
+        x: 470,
+        y: 416,
+        width: 55,
+        height: 156,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b4-r2-v",
+        kind: "text",
+        x: 485,
+        y: 376,
+        width: 30,
+        height: 35,
+        text: "6",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-r3",
+        kind: "rectangle",
+        x: 640,
+        y: 312,
+        width: 55,
+        height: 260,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l03-b4-r3-v",
+        kind: "text",
+        x: 655,
+        y: 272,
+        width: 45,
+        height: 35,
+        text: "10",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-leg-r",
+        kind: "text",
+        x: 300,
+        y: 222,
+        width: 335,
+        height: 35,
+        text: "လက်နဲ့ဆို ops ဝန်ထမ်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-g1",
+        kind: "rectangle",
+        x: 362,
+        y: 520,
+        width: 55,
+        height: 52,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l03-b4-g1-v",
+        kind: "text",
+        x: 377,
+        y: 480,
+        width: 30,
+        height: 35,
+        text: "2",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-g2",
+        kind: "rectangle",
+        x: 532,
+        y: 507,
+        width: 55,
+        height: 65,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l03-b4-g2-v",
+        kind: "text",
+        x: 547,
+        y: 467,
+        width: 60,
+        height: 35,
+        text: "2.5",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-g3",
+        kind: "rectangle",
+        x: 702,
+        y: 494,
+        width: 55,
+        height: 78,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l03-b4-g3-v",
+        kind: "text",
+        x: 717,
+        y: 454,
+        width: 30,
+        height: 35,
+        text: "3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-leg-g",
+        kind: "text",
+        x: 300,
+        y: 265,
+        width: 260,
+        height: 35,
+        text: "template + CI/CD",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l03-b4-gap",
+        kind: "rectangle",
+        x: 770,
+        y: 312,
+        width: 10,
+        height: 182,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: "l03-b4-gap-t",
+        kind: "text",
+        x: 795,
+        y: 385,
+        width: 290,
+        height: 35,
+        text: "SRE ပေးတဲ့ တန်ဖိုး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2603
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "Outage ရဲ့ တကယ့် ကုန်ကျစရိတ်"
+    narration: >
+      [[mark:show-p01]] ငွေ နှစ်ခါ ဖြတ်တဲ့ ညနဲ့ ဝန်ဆောင်ခ 10 ဆ ယူမိတဲ့ ည ပြီးကတည်းက Padauk မှာ config
+      check နဲ့ ဝန်ဆောင်ခ alert တွေ ရှိလာပါပြီ။ ဒီနေ့ နေ့လယ်စာချိန်မှာတော့ ဆိုင်တွေမှာ Padauk QR နဲ့
+      ငွေချေလို့ မရတော့ပါဘူး။ [[mark:hook-line2]] ဆိုင်တွေက alert မတက်ခင်ကတည်းက support ကို
+      ဖုန်းဆက်လာကြပါတယ်။ အဖွဲ့ကလည်း ဘယ်သူ့ကို ခေါ်ရမလဲ ရှာရင်း အချိန်ကုန်ပြီး၊ release အသစ်ကို လက်နဲ့
+      rollback လုပ်ရလို့ ပြန်ကောင်းဖို့ 30 မိနစ် ကြာပါတယ်။ [[mark:show-p01b]] CTO ကိုနေလင်းက ပျက်ခဲ့တာ
+      30 မိနစ်ပဲ ဆိုတော့ သိပ်မဆိုးဘူးလို့ ထင်ပေမဲ့၊ user နဲ့ ဆိုင်တွေဘက်က တွက်ရင်တော့ လူတွေရဲ့ အချိန်
+      500 နာရီလောက် ကုန်ပါတယ်။ ဘယ်ဂဏန်းက တကယ့် ကုန်ကျစရိတ်လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms
+      # pushes the first dialog past the 2 s opening handle, which
+      # src/studio/plans/index.test.ts rejects (same offsets as lessons 1, 2, 4, 5).
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { scene: "start", offsetMs: -1750 }
+      - id: show-p01
+        type: slide.show
+        at: { mark: "show-p01", offsetMs: -1450 }
+        slideId: l03_p01
+      - id: show-p01b
+        type: slide.show
+        at: { mark: "show-p01b" }
+        slideId: l03_p01b
+
+  - id: real-bill
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-step1]] မသီရိ တွက်ထားတဲ့ စာရင်းကို ကြည့်ရအောင်။ ဆိုင်တိုင်းမှာ QR
+      နဲ့ ငွေချေတာ အားလုံး ထိသွားတော့ blast radius၊ ဆိုလိုတာက ထိခိုက်တဲ့ နယ်ပယ်က ကျယ်ပြီး စာရင်းကလည်း
+      ရှည်ပါတယ်။ [[mark:b1-step2]] user 1800 လောက်က တစ်ယောက် 10 မိနစ်စီ ထပ်ကြိုးစားရင်း စောင့်ရလို့
+      300 နာရီ ကုန်ပါတယ်။ မစုရဲ့ support အဖွဲ့က message 1500 ကို တစ်ခု 6 မိနစ်စီ ဖြေရလို့ 150 နာရီ၊
+      finance က 3 ယောက် 2 ရက်လုံး refund လုပ်ရလို့ 48 နာရီ ထပ်ကုန်ပါတယ်။ [[mark:b1-step3]] ဆိုင် 120
+      ကလည်း နေ့လယ်စာ အရောင်းရဆုံး အချိန်မှာ ရောင်းမရလို့ ကျပ်သိန်း 36 လောက် ဆုံးရှုံးပါတယ်။ engineer
+      တွေက ပြင်ရတဲ့ အလုပ်ထဲ ဆွဲခံရလို့ နောက် feature က 2 ပတ် နောက်ကျပြီး၊ ဆိုင်ရှင်တွေရဲ့ ယုံကြည်မှု
+      ပြန်ရဖို့လည်း ကြာပါဦးမယ်။ [[mark:b1-step3b]] ဒီတော့ တကယ့် ကုန်ကျစရိတ်က 30 မိနစ် မဟုတ်ဘဲ လူတွေရဲ့
+      အချိန် 500 နာရီလောက်နဲ့ ဆိုင်တွေ ဆုံးရှုံးတဲ့ အရောင်းပါ။ [[mark:bill-invisible]]
+      ကြိုကာကွယ်ထားလို့ မဖြစ်ခဲ့တဲ့ outage တွေကိုတော့ ဘယ်သူမှ မမြင်ရလို့ ကျေးဇူးတင်မယ့်သူ မရှိပါဘူး။
+      ဒါကြောင့် ပျက်ခဲ့တဲ့ နေ့ကို ဒီလို တွက်ပြရတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+    actions:
+      - id: close-p01b
+        type: slide.close
+        at: { mark: "close-p01b", offsetMs: -400 }
+      - id: b1-step1
+        type: whiteboard.apply
+        at: { mark: "b1-step1" }
+        open: true
+        clear: true
+        upsertIds:
+          - l03-b1-src
+          - l03-b1-src-t
+          - l03-b1-in
+          - l03-b1-bus
+        drawMs: 1600
+      - id: b1-step2
+        type: whiteboard.apply
+        at: { mark: "b1-step2" }
+        upsertIds:
+          - l03-b1-t1-a
+          - l03-b1-t1-l1
+          - l03-b1-t1-l2
+          - l03-b1-t2-a
+          - l03-b1-t2-l1
+          - l03-b1-t2-l2
+          - l03-b1-t3-a
+          - l03-b1-t3-l1
+          - l03-b1-t3-l2
+        drawMs: 2600
+      - id: b1-step3
+        type: whiteboard.apply
+        at: { mark: "b1-step3" }
+        upsertIds:
+          - l03-b1-t4-a
+          - l03-b1-t4-l1
+          - l03-b1-t4-l2
+          - l03-b1-t5-a
+          - l03-b1-t5-l1
+          - l03-b1-t5-l2
+        drawMs: 2200
+      - id: b1-step3b
+        type: whiteboard.apply
+        at: { mark: "b1-step3b" }
+        upsertIds:
+          - l03-b1-tot1
+          - l03-b1-tot2
+        drawMs: 1200
+
+  - id: system-decay
+    narration: >
+      [[mark:b2-step1]] နောက်ထပ် ပျက်နိုင်တဲ့ နေရာတွေထဲမှာ မသီရိ အစိုးရိမ်ဆုံးက SMS code ပို့တဲ့
+      integration အဟောင်းပါ။ ဒါကို 2 နှစ်လောက် ဘယ်သူမှ မထိ၊ မထိန်းသိမ်းဘဲ ထားခဲ့ပေမဲ့ အဲဒီအတွင်း SMS
+      partner က API ကို ပြောင်းသွားပြီး library တွေမှာလည်း version အသစ်တွေ ထွက်လာပါတယ်။
+      [[mark:b2-step2]] ဒီတော့ SMS စာသား တစ်ကြောင်း ပြင်ဖို့တောင် library တွေကို အရင် update လုပ်ရလို့
+      ပြင်စရာ အသေးလေးက project ဖြစ်သွားပြီး၊ ပြင်လိုက်တိုင်း တခြားနေရာတွေက မထင်ထားဘဲ ပျက်လာပါတယ်။
+      [[mark:b2-step3]] အဲဒီအခါ ဒါကို မထိနဲ့ ဆိုတဲ့ စကား ပေါ်လာပါတယ်။ [[mark:b2-step3b]] ဘယ်သူမှ
+      မထိရဲတော့ ထိန်းသိမ်းမှု ပိုနည်းလာပြီး ပိုပျက်လာလို့ စက်ဝိုင်းက ဆက်ပတ်နေပါတယ်။ ဒါကို system
+      ဆွေးမြေ့တာလို့ ခေါ်ပါတယ်။ လက္ခဏာကတော့ code ကို လက်နဲ့ ပြန်ပို့ပေးရတာ များလာပြီး SMS ရောက်ဖို့
+      မထင်ထားလောက်အောင် ကြာလာတာပါ။ [[mark:decay-way-out]] ထွက်ပေါက်ကတော့ SMS code ဘယ်လောက် မြန်မြန်
+      ရောက်ရမလဲ ဆိုတဲ့ ပစ်မှတ်ကို သဘောတူထားပြီး ဆွေးမြေ့တာကို အဲဒီ ပစ်မှတ်နဲ့ တိုင်းဖို့နဲ့၊ လက်နဲ့
+      ထပ်ခါထပ်ခါ လုပ်ရပြီး ရေရှည် တန်ဖိုး မကျန်တဲ့ toil ကို လျှော့ဖို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+    actions:
+      - id: b2-step1-ring
+        type: whiteboard.apply
+        at: { mark: "b2-step1" }
+        open: true
+        clear: true
+        upsertIds:
+          - l03-b2-title
+          - l03-b2-ring
+      - id: b2-step1
+        type: whiteboard.apply
+        at: { mark: "b2-step1", offsetMs: 200 }
+        upsertIds:
+          - l03-b2-n1
+          - l03-b2-n1-t
+          - l03-b2-n2
+          - l03-b2-n2-t1
+          - l03-b2-n2-t2
+        drawMs: 2000
+      - id: b2-step2
+        type: whiteboard.apply
+        at: { mark: "b2-step2" }
+        upsertIds:
+          - l03-b2-n3
+          - l03-b2-n3-t1
+          - l03-b2-n3-t2
+          - l03-b2-n4
+          - l03-b2-n4-t
+        drawMs: 1800
+      - id: b2-step3
+        type: whiteboard.apply
+        at: { mark: "b2-step3" }
+        upsertIds:
+          - l03-b2-n5
+          - l03-b2-n5-t
+        drawMs: 1000
+      - id: b2-step3b
+        type: whiteboard.apply
+        at: { mark: "b2-step3b" }
+        upsertIds:
+          - l03-b2-arr-top
+          - l03-b2-arr-right
+        drawMs: 1200
+
+  - id: time-and-timing
+    narration: >
+      [[mark:b3-step1]] outage ရဲ့ ကုန်ကျစရိတ်က မိနစ်နဲ့ အချိုးကျ မတက်ပါဘူး။ ဒီ bar တွေက ပျက်နေတဲ့ 10
+      မိနစ်စီရဲ့ ကုန်ကျစရိတ်ပါ။ ပထမ 10 မိနစ်မှာ user တွေက ခဏနေ ပြန်ကြိုးစားကြလို့ ဆုံးရှုံးမှု
+      နည်းပါသေးတယ်။ ဒါပေမဲ့ ကြာလာလေ တခြား app ကို ပြောင်းသွားကြလေမို့ နောက်ပိုင်း bar တွေ အများကြီး
+      မြင့်လာပါတယ်။ ဒီလို ကိုယ့် app ကို စွန့်သွားတာကို churn လို့ ခေါ်ပြီး၊ တချို့ဆို
+      ပြန်မလာကြတော့ပါဘူး။ [[mark:b3-step2]] ဘယ်အချိန်မှာ ပျက်လဲ ဆိုတာကလည်း အရေးကြီးပါတယ်။ မနက် 2
+      နာရီမှာ 3 မိနစ် ပျက်တာကို သတိထားမိတဲ့သူ သိပ်မရှိပေမဲ့၊ သင်္ကြန် အကြိုညမှာ 40 မိနစ် ပျက်ရင်တော့
+      လူတိုင်း top-up လုပ်နေတဲ့ ညမို့ ဒီ ခရမ်းရောင် bar တွေလို ကုန်ကျစရိတ်က အများကြီး ပိုမြင့်ပါတယ်။
+      ဒါကြောင့် marketing အဖွဲ့ဆီက campaign ပြက္ခဒိန်ကို ကြိုတောင်းထားပြီး အဲဒီလို ညတွေမှာ
+      ပိုဂရုစိုက်ရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+    actions:
+      - id: b3-step1-axis
+        type: whiteboard.apply
+        at: { mark: "b3-step1" }
+        open: true
+        clear: true
+        upsertIds:
+          - l03-b3-title
+          - l03-b3-axis
+          - l03-b3-x10
+          - l03-b3-x20
+          - l03-b3-x30
+          - l03-b3-x40
+      - id: b3-step1
+        type: whiteboard.apply
+        at: { mark: "b3-step1", offsetMs: 200 }
+        upsertIds:
+          - l03-b3-g1
+          - l03-b3-g-label
+          - l03-b3-r2
+          - l03-b3-r3
+          - l03-b3-r4
+          - l03-b3-r-label
+        drawMs: 2400
+      - id: b3-step2
+        type: whiteboard.apply
+        at: { mark: "b3-step2" }
+        upsertIds:
+          - l03-b3-v1
+          - l03-b3-v2
+          - l03-b3-v3
+          - l03-b3-v4
+          - l03-b3-v-label
+        drawMs: 2000
+
+  - id: not-100
+    chapter: "100% က ဘာလို့ မှားလဲ"
+    narration: >
+      [[mark:close-b3]] [[mark:show-p02]] ဒါတွေ မြင်တော့ ကိုနေလင်းက ဘယ်တော့မှ မပျက်အောင် 100
+      ရာခိုင်နှုန်း လုပ်ကြမယ်လို့ ပြောပါတယ်။ ဒါပေမဲ့ 100 ရာခိုင်နှုန်းက မှားတဲ့ ပစ်မှတ်ပါ။ ပထမ
+      အကြောင်းက nine တစ်လုံး တိုးတိုင်း ကုန်ကျစရိတ် အများကြီး တက်တာပါ။ 99.9 ရာခိုင်နှုန်း၊ nine
+      သုံးလုံးကနေ nine လေးလုံးကို တက်ဖို့ဆိုရင် server၊ လူနဲ့ စစ်ဆေးမှုတွေ အများကြီး ပိုလိုပြီး
+      feature ထုတ်တာလည်း နှေးသွားပါတယ်။ [[mark:show-p02b]] ဒုတိယ အကြောင်းက user က ဘာကွာလဲ
+      မသိနိုင်တာပါ။ လိုင်း အားနည်းတဲ့ user ဆိုရင် သူ့ဖုန်းလိုင်းက ကိုယ့် service ထက် အများကြီး
+      ပိုပြတ်နေတော့၊ ကိုယ်က 99.99 ရာခိုင်နှုန်း ဖြစ်ဖြစ် 100 ရာခိုင်နှုန်း ဖြစ်ဖြစ် သူ့အတွက်
+      မထူးပါဘူး။ [[mark:first-question]] ဒါကြောင့် ပထမဆုံး မေးရမှာက ဒီ service အတွက် reliability
+      ဘယ်လောက် လိုလဲ ဆိုတာပါ။ အဖြေက ပျက်ရင် ဘယ်လောက် ကုန်ကျလဲ ဆိုတာကနေ လာပြီး၊ ကုမ္ပဏီ ကြီးလာရင်
+      ပြောင်းတတ်သလို တခြား ကုမ္ပဏီဆီက ကူးလို့လည်း မရပါဘူး။ [[mark:show-p02c]] ဒီလို သဘောတူထားတဲ့
+      ပစ်မှတ်ကို service level objective၊ အတိုကောက် SLO လို့ ခေါ်ပါတယ်။ [[mark:gap-is-budget]]
+      ပစ်မှတ်နဲ့ 100 ရာခိုင်နှုန်းကြားက ကွာဟချက်ကတော့ error budget ပါ၊ SLO က ခွင့်ပြုထားတဲ့
+      ပျက်ခွင့်ပါ။ lesson 1 က ကြိုသဘောတူထားတဲ့ risk အကန့်အသတ်ကို ဒီ နာမည်တွေနဲ့ ခေါ်တာပါ။ budget
+      ကျန်သေးရင် feature ဆက်ထုတ်ပြီး ကုန်သွားရင် အရင်ပြင်ရတာကို lesson 6 မှာ လေ့လာပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+      - {
+          title: "SRE book, 1st ed: Availability Table",
+          url: "https://sre.google/sre-book/availability-table/",
+        }
+    actions:
+      - id: close-b3
+        type: whiteboard.apply
+        at: { mark: "close-b3", offsetMs: -400 }
+        open: false
+      - id: show-p02
+        type: slide.show
+        at: { mark: "show-p02" }
+        slideId: l03_p02
+      - id: show-p02b
+        type: slide.show
+        at: { mark: "show-p02b" }
+        slideId: l03_p02b
+      - id: show-p02c
+        type: slide.show
+        at: { mark: "show-p02c" }
+        slideId: l03_p02c
+
+  - id: ops-vs-sre
+    chapter: "Ops အဖွဲ့နဲ့ SRE"
+    narration: >
+      [[mark:show-p03]] ကိုနေလင်းက server တွေကို တစ်နေ့ 24 နာရီ၊ ရက်တိုင်း စောင့်ကြည့်မယ့် ops အဖွဲ့
+      ခန့်ရင်ရော လို့ မေးပါတယ်။ ဘယ်ဘက်က ops အဖွဲ့ ပုံစံမှာ server တွေ up နေအောင် ထိန်းဖို့ပဲ
+      တာဝန်ယူပြီး ဘာမှ မပြောင်းမှ ချီးမွမ်းခံရတော့ ပြောင်းလဲမှုတိုင်းကို တားချင်လာပါတယ်။ developer
+      တွေကတော့ မြန်မြန် ထုတ်မှ ချီးမွမ်းခံရလို့ နှစ်ဖက်ကြားမှာ နံရံ ဖြစ်လာပါတယ်။ ops အဖွဲ့က လက်နဲ့
+      ပြင်တာမို့ အလုပ်များရင် လူ ထပ်ခန့်ရပါတယ်။ [[mark:show-p03b]] ညာဘက်က Site Reliability
+      Engineering၊ SRE ပုံစံမှာတော့ product အောင်မြင်ဖို့ကို developer တွေနဲ့ အတူ တာဝန်ယူပါတယ်။
+      ပြောင်းလဲမှုတွေကိုလည်း သဘောတူထားတဲ့ error budget ကို သုံးပြီး ခွင့်ပြုပါတယ်။ [[mark:show-p03c]]
+      SRE တွေက ops ပြဿနာကို software နဲ့ ဖြေရှင်းတဲ့ engineer တွေမို့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ အလုပ်တွေကို
+      automate လုပ်ပြီး၊ toil အပါအဝင် ops အလုပ်ကို ဘယ်သူမဆို ကိုယ့်အချိန်ရဲ့ တစ်ဝက်ထက် မကျော်အောင်
+      ထားပါတယ်။ [[mark:show-p03d]] ဒါက အမြင့်ဆုံး ကန့်သတ်ချက်ပါ၊ ပစ်မှတ် မဟုတ်ပါဘူး။ [[mark:handback]]
+      service တစ်ခုက ပစ်မှတ်ကို ခဏခဏ မမီရင်၊ ဒါမှမဟုတ် ညဘက်ပါ alert တက်လွန်းလို့ on-call ကျတဲ့သူတွေ
+      ပင်ပန်းနေရင်၊ SRE က on-call တာဝန်ကို ပြင်ပြီးတဲ့အထိ developer တွေဆီ ပြန်လွှဲလို့ ရပါတယ်။
+      ဒါကြောင့် နှစ်ဖက်လုံး reliability ကို ဂရုစိုက်ကြရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Introduction",
+          url: "https://sre.google/sre-book/introduction/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+    actions:
+      - id: show-p03
+        type: slide.show
+        at: { mark: "show-p03" }
+        slideId: l03_p03
+      - id: show-p03b
+        type: slide.show
+        at: { mark: "show-p03b" }
+        slideId: l03_p03b
+      - id: show-p03c
+        type: slide.show
+        at: { mark: "show-p03c" }
+        slideId: l03_p03c
+      - id: show-p03d
+        type: slide.show
+        at: { mark: "show-p03d" }
+        slideId: l03_p03d
+
+  - id: growth-without-hiring
+    narration: >
+      [[mark:close-p03]] [[mark:b4-step1]] ဒီ ကွာခြားချက်ကို Bill Pay နဲ့ ကြည့်ရအောင်။ ကိုနေလင်းက
+      မကြာခင် launch လုပ်မယ့် Bill Pay ကို 1 မြို့ကနေ 3 မြို့၊ 5 မြို့အထိ ချဲ့ချင်ပါတယ်။
+      မြို့တိုင်းမှာ server တွေ၊ setting တွေကို လက်နဲ့ ဆင်ရရင် ops ဝန်ထမ်း 2 ယောက်ကနေ 6 ယောက်၊
+      နောက်ဆုံး 10 ယောက်အထိ တိုးရပါမယ်။ [[mark:b4-step2]] ဒါပေမဲ့ ကောင်းတဲ့ setting တွေ ပါပြီးသား
+      template တွေနဲ့၊ code ပြောင်းတိုင်း အလိုအလျောက် test လုပ်ပြီး production အထိ ပို့ပေးတဲ့ CI CD
+      ကို သုံးရင်တော့ 3 ယောက်လောက်ပဲ လိုပါတော့တယ်။ [[mark:b4-step3]] ဒီ ကွာဟချက်က SRE ပေးတဲ့
+      တန်ဖိုးပါ၊ business ကြီးလာသလောက် လူ လိုက်မတိုးရတာပါ။ ဆိုင်အသစ်တွေကို လက်နဲ့ စစ်ပြီး approve
+      လုပ်တာကလည်း merchant 200 မှာ တစ်ပတ်ကို 2 နာရီခွဲပဲ ကြာပေမဲ့၊ merchant 2000 ဆိုရင် တစ်ပတ်ရဲ့
+      အလုပ်ချိန် အများစု ကုန်ပါမယ်။ ဒါက toil ပါ၊ automate လုပ်ပြီး မဖယ်ရှားရင် business နဲ့အတူ
+      လိုက်ကြီးလာမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Introduction",
+          url: "https://sre.google/sre-book/introduction/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+    actions:
+      - id: close-p03
+        type: slide.close
+        at: { mark: "close-p03", offsetMs: -400 }
+      - id: b4-step1-axis
+        type: whiteboard.apply
+        at: { mark: "b4-step1" }
+        open: true
+        clear: true
+        upsertIds:
+          - l03-b4-title
+          - l03-b4-axis
+          - l03-b4-x1
+          - l03-b4-x3
+          - l03-b4-x5
+      - id: b4-step1
+        type: whiteboard.apply
+        at: { mark: "b4-step1", offsetMs: 200 }
+        upsertIds:
+          - l03-b4-r1
+          - l03-b4-r1-v
+          - l03-b4-r2
+          - l03-b4-r2-v
+          - l03-b4-r3
+          - l03-b4-r3-v
+          - l03-b4-leg-r
+        drawMs: 2400
+      - id: b4-step2
+        type: whiteboard.apply
+        at: { mark: "b4-step2" }
+        upsertIds:
+          - l03-b4-g1
+          - l03-b4-g1-v
+          - l03-b4-g2
+          - l03-b4-g2-v
+          - l03-b4-g3
+          - l03-b4-g3-v
+          - l03-b4-leg-g
+        drawMs: 2400
+      - id: b4-step3
+        type: whiteboard.apply
+        at: { mark: "b4-step3" }
+        upsertIds:
+          - l03-b4-gap
+          - l03-b4-gap-t
+        drawMs: 1200
+
+  - id: first-year-list
+    chapter: "ဘယ်ကနေ စမလဲ"
+    narration: >
+      [[mark:close-b4]] [[mark:show-p04]] နောက်ဆုံးတော့ ကိုနေလင်းက reliability အတွက် လူနဲ့ အချိန်
+      ပေးဖို့ သဘောတူပါတယ်။ မသီရိက နေ့လယ်က outage ကို ပြန်ကြည့်ပြီး ပထမနှစ်အတွက် အလုပ် သုံးခု
+      ရွေးပါတယ်။ rollback ကို လက်နဲ့ လုပ်ရလို့ ကြာခဲ့တာမို့ ပထမက ခလုတ် တစ်ချက်နဲ့ rollback
+      လုပ်နိုင်ဖို့ပါ။ ဆိုင်တွေက alert ထက် အရင် သိခဲ့တာမို့ ဒုတိယက fail ဖြစ်တဲ့ top-up တွေအတွက် alert
+      ပါ၊ သူ အကျွမ်းဆုံး Top-up ကနေ စတာပါ။ [[mark:show-p04b]] ဘယ်သူ့ကို ခေါ်ရမလဲ ရှာခဲ့ရတာမို့ တတိယက
+      ရေးထားတဲ့ on-call စာရင်းပါ။ နောက်တော့ အန္တရာယ်ရှိတဲ့ ပြောင်းလဲမှုတွေကို 15 မိနစ် ထိုင်စစ်တဲ့
+      review လေးလည်း ထည့်ပါတယ်။ ဒါတွေကို အစောကြီး လုပ်ရင် ဈေးပေါပေမဲ့၊ system ကြီးလာမှ နောက်ကနေ
+      လိုက်ထည့်ရင် အများကြီး ပိုကုန်ပါတယ်။ [[mark:show-p04c]] ဒါကြောင့် reliability ကို
+      ရင်းနှီးမြှုပ်နှံမှု တစ်ခုလို စီစဉ်ရပါမယ်။ အခု လူနဲ့ အချိန် ထည့်ရပေမဲ့ outage နည်းလာတာ၊ ops
+      ကုန်ကျစရိတ်က business ထက် ဖြည်းဖြည်း တက်တာ၊ engineer တွေမှာ အသစ်တွေ ဆောက်ဖို့ အချိန် ပိုရတာ
+      ဆိုပြီး အကျိုး ပြန်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+    actions:
+      - id: close-b4
+        type: whiteboard.apply
+        at: { mark: "close-b4", offsetMs: -400 }
+        open: false
+      - id: show-p04
+        type: slide.show
+        at: { mark: "show-p04" }
+        slideId: l03_p04
+      - id: show-p04b
+        type: slide.show
+        at: { mark: "show-p04b" }
+        slideId: l03_p04b
+      - id: show-p04c
+        type: slide.show
+        at: { mark: "show-p04c" }
+        slideId: l03_p04c
+
+  - id: this-week
+    narration: >
+      [[mark:show-p05]] ဒီအပတ် စလုပ်ကြည့်ဖို့ အကြံ သုံးခု ပေးပါရစေ။ ကိုယ့်အဖွဲ့ရဲ့ နောက်ဆုံး outage
+      ကို မိနစ်နဲ့ မဟုတ်ဘဲ လူတွေ ကုန်တဲ့ နာရီတွေနဲ့ ပြန်တွက်ကြည့်ပါ။ marketing အဖွဲ့ဆီက campaign
+      ပြက္ခဒိန်ကိုလည်း တောင်းထားပါ။ ပြီးတော့ Padauk ရဲ့ စာရင်းထဲက တစ်ခုကို ကိုယ့် service မှာ
+      ထည့်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+    actions:
+      - id: show-p05
+        type: slide.show
+        at: { mark: "show-p05" }
+        slideId: l03_p05
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:recap-notes]] ဒီနေ့ သင်ခဲ့တာတွေကို ပြန်ချုပ်ကြည့်ရအောင်။
+      [[mark:sel-cost]] outage ရဲ့ တကယ့် ကုန်ကျစရိတ်က မိနစ်တွေ မဟုတ်ဘဲ လူတွေရဲ့ နာရီတွေနဲ့
+      ဆုံးရှုံးတဲ့ အရောင်းတွေပါ။ [[mark:sel-decay]] မထိဘဲ ပစ်ထားတဲ့ system က ဆွေးမြေ့လာပြီး ဘယ်သူမှ
+      မထိရဲတော့ပါဘူး။ [[mark:sel-100]] 100 ရာခိုင်နှုန်းအစား လုံလောက်တဲ့ ပစ်မှတ်ကို ရွေးရပြီး၊
+      [[mark:sel-budget]] ကွာဟချက်က error budget ပါ။ [[mark:sel-ops]] ops အလုပ်ကလည်း ဘယ်သူမဆို
+      ကိုယ့်အချိန်ရဲ့ တစ်ဝက်ထက် မကျော်ရပါဘူး။ [[mark:ask-yourself]] ကိုယ်တိုင် ဖြေကြည့်ပါ။ ကိုယ့်
+      service အတွက် 99 ရာခိုင်နှုန်း reliable ဖြစ်ရင် လုံလောက်ပြီ ဆိုရင်၊ ကျန်တဲ့ 1 ရာခိုင်နှုန်း
+      ကွာဟချက်ကို ဘာလို့ ခေါ်လဲ၊ [[mark:ask-question]] ဘယ်သူတွေ သဘောတူ သတ်မှတ်ရမလဲ?
+      [[mark:pause-question]] ဒီ ကွာဟချက်က
+      error budget ပါ၊ business ဘက်နဲ့ engineering ဘက် အတူတူ သဘောတူ သတ်မှတ်ရပါမယ်။ Padauk ရဲ့
+      နောက်ပြဿနာမှာတော့ server တွေ အားလုံး အစိမ်းရောင် ပြနေပေမဲ့ Bank Y ကို ငွေလွှဲတာ 20 စက္ကန့်
+      ကြာနေပါတယ်။ dashboard နဲ့ user ဘယ်သူ မှန်လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Embracing Risk",
+          url: "https://sre.google/sre-book/embracing-risk/",
+        }
+      - {
+          title: "SRE book, 1st ed: Availability Table",
+          url: "https://sre.google/sre-book/availability-table/",
+        }
+      - {
+          title: "SRE book, 1st ed: Introduction",
+          url: "https://sre.google/sre-book/introduction/",
+        }
+    actions:
+      - id: close-p05
+        type: slide.close
+        at: { mark: "close-p05" }
+      - id: open-notes
+        type: workspace.openFile
+        at: { mark: "recap-notes", offsetMs: 300 }
+        path: notes.md
+      - id: sel-cost
+        type: editor.select
+        at: { mark: "sel-cost" }
+        target:
+          file: "notes.md"
+          text: "outage ရဲ့ တကယ့် ကုန်ကျစရိတ်"
+          occurrence: 1
+      - id: sel-decay
+        type: editor.select
+        at: { mark: "sel-decay" }
+        target:
+          file: "notes.md"
+          text: "system ဆွေးမြေ့တာ"
+          occurrence: 1
+      - id: sel-100
+        type: editor.select
+        at: { mark: "sel-100" }
+        target:
+          file: "notes.md"
+          text: "100% က မှားတဲ့ ပစ်မှတ်"
+          occurrence: 1
+      - id: sel-budget
+        type: editor.select
+        at: { mark: "sel-budget" }
+        target:
+          file: "notes.md"
+          text: "error budget"
+          occurrence: 1
+      - id: sel-ops
+        type: editor.select
+        at: { mark: "sel-ops" }
+        target:
+          file: "notes.md"
+          text: "ops အလုပ်ရဲ့ ကန့်သတ်ချက်"
+          occurrence: 1
+      # The voice script's ⟪pause 3s⟫ before the answer. A select anchored at
+      # pause-question would run under the answer's first words (the scheduler
+      # starts a dialog 350 ms after the one before it), so it hangs off
+      # ask-question, an extra mark after the question's ၊ pause: the short
+      # last clause ends, the select starts in silence, and the answer at
+      # pause-question waits for its drag. Silence before the answer at
+      # 55/70/95 ms per char: about 2.7/2.3/1.6 s (under the 2.5 s
+      # inserted-silence warning at every rate).
+      - id: pause-question
+        type: editor.select
+        at: { mark: "ask-question", offsetMs: 3200 }
+        target:
+          file: "notes.md"
+          text: "မေးခွန်း: ကိုယ့် service က 99% reliable ဖြစ်ရင် လုံလောက်တယ်။ ကျန်တဲ့ 1% ကွာဟချက်ကို ဘာလို့ ခေါ်လဲ၊ ဘယ်သူတွေ သဘောတူ သတ်မှတ်ရမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
