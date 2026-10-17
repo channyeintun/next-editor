@@ -1,0 +1,2088 @@
+# CSS course (Burmese), lesson 11 of 43: custom properties.
+#
+# Narration below is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next
+# to this file is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 10; one brown typed in five places; name it once
+# and read it by name) → code tour (index.html: header, theme buttons,
+# today's special, the cup, the broken button; empty styles.css; the header,
+# prices and buttons have no colour yet) → :root { --brand; --space } changes
+# nothing → var(--brand) in three rules paints them → one appended line turns
+# the whole page green → .featured { --brand } changes one branch, board
+# (inheritance tree) → padding from --space, a media query changes the value;
+# where var() may not appear → var() fallback (nested), then --price-color on
+# the featured card only → --size: 20 and var(--size)px collapses the hero
+# padding; calc(var(--size) * 1px) fixes it → background-color: 12px is
+# skipped, var(--space) on the broken button removes its background, board
+# (invalid at computed-value time) → @property --tea-level fills the cup to
+# its initial 30%, board (syntax / inherits / initial-value), 70% on the fill,
+# then "lots" falls back to 30%; inherits: false explained; animation handed
+# to lesson 38 → kit.js setProperty on <html>, clicks on the coffee and tea
+# buttons re-theme the page; getPropertyValue and CSS.registerProperty named
+# → recap, hand-off to CSS functions (lesson 12).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Mid-typing states: a keystroke-typed var(--name) passes through undefined
+# names (--b, --br, …), which would make an element that already reads it
+# flash to "unset" for a moment. So every line that (re)declares a custom
+# property something already reads, and every rule whose var() reads an
+# existing property, lands whole (line-by-line). Keystroke typing is used only
+# where every prefix is harmless: the first :root block (nothing reads it
+# yet), --size (nothing reads it yet), the hero padding (it collapses to 0 at
+# the first prefix and stays 0, the narrated result), calc() typed into the
+# LAST rule (its open bracket can only swallow the end of its own rule), the
+# two background-color rules at the end of the file (12px is never a colour;
+# the var() one is transparent from its first valid prefix on), and the two
+# --tea-level values (a registered <percentage>: every prefix that is not a
+# percentage fails the syntax check at computed-value time, so the fill shows
+# the initial 30% until "70%" lands, and again from the first letter of "lots").
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-11-custom-properties
+  title: "CSS course 11: Custom property တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 11
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit blocks header, hero, drinks (today's special has the
+      # class "featured"), order-form (plus one extra button with the class
+      # "broken") and kit-script; lesson blocks theme-buttons (three kit.js
+      # buttons that set --brand on <html> and write their name into the
+      # hidden theme-status line) and cup (the kit's cup without lesson 38's
+      # fill button). Order: header, theme buttons, hero, drinks, cup, form.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- lesson block: theme-buttons (kit.js sets --brand on <html>) -->
+              <div class="theme-buttons" role="group" aria-label="ဆိုင်ရဲ့ အရောင်" data-testid="theme-buttons">
+                <button type="button" data-set-property="--brand" data-value="#8b4513" data-say="လက်ဖက်ရည်" data-target="#theme-status" data-testid="theme-tea">လက်ဖက်ရည်</button>
+                <button type="button" data-set-property="--brand" data-value="#2f6b3a" data-say="လက်ဖက်စိမ်း" data-target="#theme-status" data-testid="theme-green">လက်ဖက်စိမ်း</button>
+                <button type="button" data-set-property="--brand" data-value="#4a2c1d" data-say="ကော်ဖီ" data-target="#theme-status" data-testid="theme-coffee">ကော်ဖီ</button>
+              </div>
+              <p class="visually-hidden" id="theme-status" data-testid="theme-status"></p>
+
+              <!-- kit block: hero -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: cup (a registered --tea-level fills it; lesson 38 pours it) -->
+              <section class="pour" data-testid="pour">
+                <h2>လက်ဖက်ရည် တစ်ခွက်</h2>
+                <div class="cup" data-testid="cup"><div class="cup-fill"></div></div>
+              </section>
+
+              <!-- kit block: order-form (plus one extra button, class "broken") -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ ကိုအောင်" data-testid="input-name" />
+                <label for="phone">ဖုန်း</label>
+                <input id="phone" name="phone" type="tel" required pattern="09[0-9]{7,9}" placeholder="09…" data-testid="input-phone" />
+                <label for="cups">ခွက်ရေ</label>
+                <input id="cups" name="cups" type="number" min="1" max="10" value="1" data-testid="input-cups" />
+                <label class="extra"><input type="checkbox" name="milk" data-report="#milk-status" data-testid="check-milk" /> နို့ဆီ အပို</label>
+                <p class="visually-hidden" id="milk-status" data-testid="milk-status"></p>
+                <button class="order-btn" type="button" data-testid="order-button" data-say="မှာပြီးပါပြီ" data-target="#order-status">မှာမယ်</button>
+                <button class="order-btn broken" type="button" data-testid="broken-button">ဖုန်းဆက်ရန်</button>
+                <p class="order-status" id="order-status" data-testid="order-status" aria-live="polite"></p>
+              </form>
+            </main>
+
+            <!-- kit block: kit-script -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and C of the course kit WITHOUT the header
+      # background, the price colour and the button background (the lesson
+      # paints all three from --brand) and without the sold-out opacity (no
+      # sold-out card here), and with a cream tagline so it reads on every brand
+      # colour the header gets (the kit's tan only works on the kit's dark
+      # header). Section D is not needed. Section E pins the theme
+      # buttons' look, the broken button's dashed marker (so it stays visible
+      # once its background is gone), the cup section's margin, and the cup:
+      # an 80 x 120 content box whose fill sits at the bottom (flex end) and
+      # has no height until the lesson types one.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 11 keeps sections A, B, B2 and C without the
+          header background, the price colour and the button background (the lesson
+          paints all three from one custom property), gives the tagline the header's
+          cream so it reads on every brand colour, and pins the theme buttons, the
+          broken button's marker and the cup in section E.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 11: the theme buttons, the broken button's marker and the cup. */
+        .theme-buttons {
+          display: flex;
+          gap: 8px;
+          margin-top: 16px;
+        }
+
+        .theme-buttons button {
+          padding: 4px 12px;
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          background: #fff;
+          color: var(--ink);
+          font: inherit;
+        }
+
+        .broken {
+          color: var(--ink);
+          outline: 2px dashed var(--chili);
+          outline-offset: 2px;
+        }
+
+        .pour {
+          margin: 24px 0;
+        }
+
+        .cup {
+          box-sizing: content-box;
+          display: flex;
+          align-items: flex-end;
+          width: 80px;
+          height: 120px;
+          border: 3px solid var(--tea-dark);
+          border-top: 0;
+          border-radius: 0 0 16px 16px;
+          background: #fff;
+          overflow: hidden;
+        }
+
+        .cup-fill {
+          width: 100%;
+          background: var(--tea);
+        }
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — one brown typed in five places (red, circled), named once
+    # (green) and read by name everywhere (blue).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "အညိုရောင် တစ်ခု၊ ငါးနေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-r1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 330,
+        height: 36,
+        text: "header · saddlebrown",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-r2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 330,
+        height: 36,
+        text: "price · saddlebrown",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-r3,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 330,
+        height: 36,
+        text: "button · saddlebrown",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-r4,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 330,
+        height: 36,
+        text: "link · saddlebrown",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-r5,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 330,
+        height: 36,
+        text: "border · saddlebrown",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 212,
+        width: 400,
+        height: 272,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-problem,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 360,
+        height: 36,
+        text: "ပြောင်းရင် ငါးနေရာ ပြင်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 700,
+        y: 320,
+        width: 70,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-store-box,
+        kind: rectangle,
+        x: 800,
+        y: 222,
+        width: 200,
+        height: 56,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-store,
+        kind: text,
+        x: 840,
+        y: 232,
+        width: 130,
+        height: 36,
+        text: "--brand",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-store-label,
+        kind: text,
+        x: 800,
+        y: 292,
+        width: 260,
+        height: 36,
+        text: "တစ်နေရာမှာ သိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-read,
+        kind: text,
+        x: 800,
+        y: 370,
+        width: 220,
+        height: 36,
+        text: "var(--brand)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-read-label,
+        kind: text,
+        x: 800,
+        y: 420,
+        width: 260,
+        height: 36,
+        text: "နေရာတိုင်းက ဖတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-one,
+        kind: text,
+        x: 800,
+        y: 505,
+        width: 260,
+        height: 36,
+        text: "တစ်ကြောင်းပဲ ပြင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-aka,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 520,
+        height: 36,
+        text: "custom property = CSS variable",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — inheritance tree: root's green flows down (green); the
+    # featured card's own value turns one branch gold (orange).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Custom property တွေ inherit ဖြစ်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-root-box,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 540,
+        height: 52,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-root,
+        kind: text,
+        x: 320,
+        y: 230,
+        width: 260,
+        height: 36,
+        text: "root · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-arr-header,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 280,
+        width: 40,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-arr-menu,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 700,
+        y: 280,
+        width: 40,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-header-box,
+        kind: rectangle,
+        x: 300,
+        y: 326,
+        width: 240,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-header,
+        kind: text,
+        x: 315,
+        y: 333,
+        width: 210,
+        height: 36,
+        text: "header · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-menu-box,
+        kind: rectangle,
+        x: 620,
+        y: 326,
+        width: 220,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-menu,
+        kind: text,
+        x: 635,
+        y: 333,
+        width: 190,
+        height: 36,
+        text: "menu · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-arr-featured,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 640,
+        y: 382,
+        width: 40,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-arr-card,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 815,
+        y: 382,
+        width: 40,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-featured-box,
+        kind: rectangle,
+        x: 470,
+        y: 428,
+        width: 310,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-featured,
+        kind: text,
+        x: 485,
+        y: 435,
+        width: 260,
+        height: 36,
+        text: "featured · ရွှေရောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-card-box,
+        kind: rectangle,
+        x: 840,
+        y: 428,
+        width: 210,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-card,
+        kind: text,
+        x: 852,
+        y: 435,
+        width: 190,
+        height: 36,
+        text: "card · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-arr-gold,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 484,
+        width: 40,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-arr-green,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 925,
+        y: 484,
+        width: 40,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-price-gold,
+        kind: text,
+        x: 500,
+        y: 532,
+        width: 250,
+        height: 36,
+        text: "price · ရွှေရောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-price-green,
+        kind: text,
+        x: 860,
+        y: 532,
+        width: 200,
+        height: 36,
+        text: "price · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 560,
+        height: 36,
+        text: "သာမန် declaration လို cascade က ရွေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — the same wrong value written directly (skipped while reading:
+    # red, the green stays) and through var() (accepted, wins, substituted,
+    # invalid: behaves like unset).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "တန်ဖိုး မှားရင် ဘာဖြစ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-d-code,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 340,
+        height: 36,
+        text: "background-color: 12px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-d-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 670,
+        y: 220,
+        width: 60,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-d-skip,
+        kind: text,
+        x: 760,
+        y: 222,
+        width: 280,
+        height: 36,
+        text: "ဖတ်ချိန်မှာ ကျော်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-d-keep,
+        kind: text,
+        x: 760,
+        y: 266,
+        width: 240,
+        height: 36,
+        text: "အစိမ်း ကျန်  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-code,
+        kind: text,
+        x: 300,
+        y: 322,
+        width: 470,
+        height: 36,
+        text: "background-color: var(--space)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-1,
+        kind: text,
+        x: 320,
+        y: 372,
+        width: 380,
+        height: 36,
+        text: "1 · ဖတ်ချိန် လက်ခံ  ✓",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-2,
+        kind: text,
+        x: 320,
+        y: 417,
+        width: 420,
+        height: 36,
+        text: "2 · cascade မှာ နိုင်၊ အစိမ်း ရှုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-3,
+        kind: text,
+        x: 320,
+        y: 462,
+        width: 340,
+        height: 36,
+        text: "3 · var → length",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-4,
+        kind: text,
+        x: 320,
+        y: 507,
+        width: 340,
+        height: 36,
+        text: "4 · အရောင် မဟုတ်  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-v-5,
+        kind: text,
+        x: 320,
+        y: 552,
+        width: 380,
+        height: 36,
+        text: "unset → transparent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-fallback,
+        kind: text,
+        x: 800,
+        y: 462,
+        width: 240,
+        height: 36,
+        text: "fallback မသုံး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-term,
+        kind: text,
+        x: 300,
+        y: 602,
+        width: 520,
+        height: 36,
+        text: "invalid at computed-value time",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — the three descriptors of the property at-rule (one colour
+    # each), and what happens when one is missing (red).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Property at-rule ထဲက သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-frame,
+        kind: rectangle,
+        x: 290,
+        y: 222,
+        width: 800,
+        height: 230,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-syn-k,
+        kind: text,
+        x: 320,
+        y: 245,
+        width: 200,
+        height: 36,
+        text: "syntax",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-syn-v,
+        kind: text,
+        x: 580,
+        y: 245,
+        width: 460,
+        height: 36,
+        text: '"<percentage>" · type စစ်',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-inh-k,
+        kind: text,
+        x: 320,
+        y: 315,
+        width: 200,
+        height: 36,
+        text: "inherits",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-inh-v,
+        kind: text,
+        x: 580,
+        y: 315,
+        width: 460,
+        height: 36,
+        text: "false · child ဆီ မရောက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-ini-k,
+        kind: text,
+        x: 320,
+        y: 385,
+        width: 220,
+        height: 36,
+        text: "initial-value",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-ini-v,
+        kind: text,
+        x: 580,
+        y: 385,
+        width: 400,
+        height: 36,
+        text: "30% · စတန်ဖိုး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-missing,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 600,
+        height: 36,
+        text: "တစ်ခု မပါရင် rule တစ်ခုလုံး မသုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4111
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: why-variables
+    chapter: "Custom property ဘာကြောင့် လိုလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ unit နဲ့ အရွယ်အစားကို ကြည့်ခဲ့ပါတယ်။ တကယ့် page မှာ အရောင် တစ်ခု၊ အရွယ်အစား
+      တစ်ခုကို rule အများကြီးမှာ ထပ်ရေးရလေ့ ရှိပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-repeats]] ဒါက တွေ့နေကျ CSS ဖိုင် တစ်ခုပါ။ header၊
+      ဈေးနှုန်း၊ ခလုတ်၊ link နဲ့ card ရဲ့ border အတွက်၊ အညိုရောင် တစ်ခုတည်းကို ငါးနေရာမှာ ထပ်ရေးထားပါတယ်။
+      [[mark:circle-repeats]] ဆိုင်ရှင်က အရောင် ပြောင်းချင်ရင် နေရာတိုင်းကို လိုက်ရှာ ပြင်ရပါမယ်။ တစ်နေရာ
+      ကျန်ခဲ့ရင် page မှာ အညိုရောင် နှစ်မျိုး ရောနေပါမယ်။ [[mark:draw-store]] ဒါကို custom property နဲ့
+      ဖြေရှင်းပါတယ်။ custom property ဆိုတာ ကိုယ်တိုင် နာမည်ပေးပြီး တန်ဖိုး သိမ်းထားတဲ့ property ပါ။
+      အညိုရောင်ကို brand လို နာမည်နဲ့ တစ်ခါပဲ သိမ်းပါမယ်။ [[mark:draw-read]] အညိုရောင် လိုတဲ့ rule တိုင်းက
+      အဲဒီ နာမည်နဲ့ ဖတ်ယူလို့၊ အရောင် ပြောင်းချင်ရင် တစ်ကြောင်းပဲ ပြင်ရပါတော့တယ်။ [[mark:draw-aka]] custom
+      property ကို CSS variable လို့လည်း ခေါ်ကြပါတယ်။ ပြီးတော့ brand လို နာမည်ကို မြင်တာနဲ့၊ ဒီ အရောင်ကို
+      ဘာအတွက် သုံးလဲ ဆိုတာ တန်းသိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties"
+        url: "https://web.dev/learn/css/custom-properties"
+      - title: "MDN — Using CSS custom properties (variables)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties"
+      - title: "CSS Custom Properties for Cascading Variables Module Level 1"
+        url: "https://www.w3.org/TR/css-variables-1/"
+    actions:
+      - id: open-why-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the next scene, well over 40 s of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-repeats
+        type: whiteboard.apply
+        at: { mark: draw-repeats }
+        upsertIds: [a-r1, a-r2, a-r3, a-r4, a-r5]
+        drawMs: 4000
+      - id: circle-repeats
+        type: whiteboard.apply
+        at: { mark: circle-repeats }
+        upsertIds: [a-circle, a-problem]
+        drawMs: 2400
+      - id: draw-store
+        type: whiteboard.apply
+        at: { mark: draw-store }
+        upsertIds: [a-arrow, a-store-box, a-store, a-store-label]
+        drawMs: 3000
+      - id: draw-read
+        type: whiteboard.apply
+        at: { mark: draw-read }
+        upsertIds: [a-read, a-read-label, a-one]
+        drawMs: 2600
+      - id: draw-aka
+        type: whiteboard.apply
+        at: { mark: draw-aka }
+        upsertIds: [a-aka]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-why]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-header]] အပေါ်ဆုံးမှာ ဆိုင်နာမည် ပါတဲ့ header ရှိပါတယ်။ [[mark:select-theme]] header
+      အောက်မှာ ခလုတ် သုံးခု ပါတဲ့ တန်း အသစ် ရှိပါတယ်။ lesson အဆုံးမှာ ဒီ ခလုတ်တွေနဲ့ ဆိုင်ရဲ့ အရောင်ကို
+      JavaScript ကနေ ပြောင်းပါမယ်။ [[mark:select-featured]] သောက်စရာ menu ထဲက ဒီနေ့ အထူး card မှာ featured
+      ဆိုတဲ့ class အပို ပါပါတယ်။ [[mark:select-cup]] အောက်ဘက်မှာ လက်ဖက်ရည် ခွက်အလွတ် တစ်ခု ရှိပါတယ်။
+      [[mark:select-broken]] အော်ဒါ form မှာလည်း broken ဆိုတဲ့ class ပါတဲ့ ဒုတိယ ခလုတ် ရှိပါတယ်။
+      [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ ဒီတစ်ခါ base ဖိုင်မှာ header ရဲ့ နောက်ခံ၊ ဈေးနှုန်း
+      အရောင်နဲ့ ခလုတ်တွေရဲ့ နောက်ခံ မပါလို့၊ အဲဒီ သုံးခုလုံးကို တစ်နေရာတည်းကနေ ပေးပါမယ်။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ နောက်ခံ မရှိလို့ header ထဲက
+      အရောင်ဖျော့ စာလုံးတွေ မမြင်ရသလောက်ပါ။ ဈေးနှုန်းနဲ့ မှာယူရန် link ဆီလည်း ဆိုင်ရဲ့ အရောင်
+      မရောက်သေးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties"
+        url: "https://web.dev/learn/css/custom-properties"
+      - title: "MDN — HTML class global attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/class"
+    actions:
+      - id: close-why-board
+        type: whiteboard.apply
+        at: { mark: close-why }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-header
+        type: editor.select
+        at: { mark: select-header }
+        target:
+          {
+            file: index.html,
+            text: '<header class="site-header" id="site-header" data-testid="site-header">',
+            occurrence: 1,
+          }
+      - id: select-theme
+        type: editor.select
+        at: { mark: select-theme }
+        target:
+          {
+            file: index.html,
+            text: '<div class="theme-buttons" role="group" aria-label="ဆိုင်ရဲ့ အရောင်" data-testid="theme-buttons">',
+            occurrence: 1,
+          }
+      - id: select-featured
+        type: editor.select
+        at: { mark: select-featured }
+        target:
+          {
+            file: index.html,
+            text: '<li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">',
+            occurrence: 1,
+          }
+      - id: select-cup
+        type: editor.select
+        at: { mark: select-cup }
+        target:
+          {
+            file: index.html,
+            text: '<div class="cup" data-testid="cup"><div class="cup-fill"></div></div>',
+            occurrence: 1,
+          }
+      - id: select-broken
+        type: editor.select
+        at: { mark: select-broken }
+        target:
+          {
+            file: index.html,
+            text: '<button class="order-btn broken" type="button" data-testid="broken-button">ဖုန်းဆက်ရန်</button>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-theme-buttons
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: theme-buttons }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-theme-buttons }
+
+  - id: declare
+    chapter: "ဆိုင်ရဲ့ အရောင်ကို custom property ထဲ ထည့်ရအောင်"
+    narration: >
+      [[mark:type-root]] ဖိုင်ရဲ့ အပေါ်ဆုံးမှာ custom property နှစ်ခု ကြေညာကြည့်ရအောင်။ brand က ဆိုင်ရဲ့
+      အရောင်၊ space က padding အတွက် နေရာလွတ် ပမာဏပါ။ ရိုက်နေတုန်း preview ကို ကြည့်ထားပါ။
+      [[mark:after-root]] ဘာမှ မပြောင်းပါဘူး။ ကြေညာတာက တန်ဖိုးကို သိမ်းထားရုံပဲ ဖြစ်ပြီး၊ ဖတ်မယ့် rule
+      မရှိသေးလို့ပါ။ [[mark:select-name]] နာမည်ကို ကြည့်ပါ။ တုံးတို နှစ်ခုနဲ့ အမြဲ စပါတယ်။ browser ရဲ့
+      property တွေထဲမှာ ဒီလို စတာ မရှိလို့၊ နောက်ပိုင်း property အသစ် ထွက်လာရင်တောင် ကိုယ့် နာမည်နဲ့
+      မထပ်ပါဘူး။ နာမည်က စာလုံး အကြီး အသေးလည်း ခွဲပါတယ်။ b အသေးနဲ့ ရေးတဲ့ brand နဲ့ B အကြီးနဲ့ ရေးတဲ့ brand
+      က မတူတဲ့ property နှစ်ခုပါ။ [[mark:select-root]] အခု root selector ကို ကြည့်ပါ။ သူက page
+      တစ်ခုလုံးကို ထုပ်ထားတဲ့ html element ကို ရွေးလို့၊ ဒီမှာ သိမ်းတဲ့ တန်ဖိုးကို ဘယ် element ကမဆို
+      ဖတ်လို့ ရပါတယ်။ ဒါကြောင့် page တစ်ခုလုံးမှာ သုံးမယ့် တန်ဖိုးတွေကို root မှာ ထားကြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: creating properties"
+        url: "https://web.dev/learn/css/custom-properties#creating_properties"
+      - title: "MDN — Custom properties (--*)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/--*"
+      - title: "MDN — :root"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:root"
+      - title: "CSS Custom Properties Level 1 — defining custom properties"
+        url: "https://www.w3.org/TR/css-variables-1/#defining-variables"
+    actions:
+      - id: type-root
+        type: editor.type
+        at: { mark: type-root }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ":root {\n  --brand: saddlebrown;\n  --space: 12px;\n}\n"
+      - id: expect-root-header
+        type: expect.preview
+        at: { mark: after-root }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target: { file: styles.css, text: "--brand", occurrence: 1 }
+      - id: select-root
+        type: editor.select
+        at: { mark: select-root }
+        target: { file: styles.css, text: ":root", occurrence: 1 }
+
+  - id: use-var
+    narration: >
+      [[mark:type-uses]] အခု brand ကို rule သုံးခုကနေ ဖတ်ကြည့်ရအောင်။ header ရဲ့ နောက်ခံ၊ ဈေးနှုန်းရဲ့
+      အရောင်၊ ပြီးတော့ မှာယူရန် link နဲ့ form ထဲက ခလုတ်တွေရဲ့ နောက်ခံပါ။ [[mark:after-uses]] header မှာ အညိုရောင် ပေါ်လာပြီး၊ မှာယူရန် link နဲ့ ဈေးနှုန်းလည်း အညိုရောင် ရပါပြီ။ [[mark:select-var]] ဒီ var
+      function ကို ကြည့်ပါ။ သူက custom property ရဲ့ နာမည်ကို ယူပြီး၊ သူ့ကို သုံးတဲ့ element မှာ ရှိနေတဲ့
+      တန်ဖိုးနဲ့ အစားထိုးပေးပါတယ်။ ဒါကြောင့် rule သုံးခုလုံးက အညိုရောင်ကို တစ်ကြောင်းတည်းကနေ ယူတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: using a custom property"
+        url: "https://web.dev/learn/css/custom-properties#using_a_custom_property"
+      - title: "web.dev Learn CSS — Functions: custom properties and var()"
+        url: "https://web.dev/learn/css/functions"
+      - title: "MDN — var()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/var"
+    actions:
+      - id: type-uses
+        type: editor.type
+        at: { mark: type-uses }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  --space: 12px;\n}\n", occurrence: 1 }
+        text: "\n.site-header {\n  background: var(--brand);\n}\n\n.price {\n  color: var(--brand);\n}\n\n.order-link,\n.order-btn {\n  background: var(--brand);\n}\n"
+      - id: expect-order-link
+        type: expect.preview
+        at: { mark: after-uses }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-var
+        type: editor.select
+        at: { mark: select-var }
+        target: { file: styles.css, text: "var(--brand)", occurrence: 1 }
+
+  - id: retheme
+    narration: >
+      [[mark:type-green]] အခု အသုံးဝင်ပုံကို မြင်ရပါမယ်။ အညိုရောင် declaration အောက်မှာ brand ကို
+      အစိမ်းရောင် ထပ်ပေးပါမယ်။ [[mark:after-green]] header၊ မှာယူရန် link နဲ့ ဈေးနှုန်း တစ်ပြိုင်နက်
+      အစိမ်းရောင် ပြောင်းသွားပါပြီ။ cascade lesson မှာ တွေ့ခဲ့သလို နောက်မှ ရေးတာ နိုင်ပြီး၊ brand ကို
+      ဖတ်တဲ့ နေရာတိုင်းက လိုက်ပြောင်းတာပါ။ [[mark:live-note]] ဒီ brand လို custom property တွေက page
+      ပွင့်နေသရွေ့ browser ထဲမှာ ရှိနေလို့၊ တန်ဖိုး ပြောင်းတာနဲ့ သုံးထားတဲ့ နေရာတိုင်း လိုက်ပြောင်းပါတယ်။ Sass လို
+      tool တွေရဲ့ variable တွေကတော့ browser ဆီ မရောက်ခင်ပဲ ရိုးရိုး တန်ဖိုး ဖြစ်သွားလို့ ဒီလို မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties"
+        url: "https://web.dev/learn/css/custom-properties"
+      - title: "MDN — Using CSS custom properties: values are computed when used"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties"
+    actions:
+      - id: type-green
+        type: editor.type
+        at: { mark: type-green }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  --brand: saddlebrown;\n", occurrence: 1 }
+        text: "  --brand: darkgreen;\n"
+      - id: expect-green-header
+        type: expect.preview
+        at: { mark: after-green }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-green
+        type: editor.select
+        at: { mark: live-note }
+        target: { file: styles.css, text: "  --brand: darkgreen;", occurrence: 1 }
+
+  - id: inherit-live
+    chapter: "Inherit ဖြစ်ပုံနဲ့ override လုပ်ပုံ"
+    narration: >
+      [[mark:scroll-drinks]] သောက်စရာ menu ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-featured]] featured card
+      ကိုတော့ ကိုယ်ပိုင် brand အဖြစ် ရွှေရောင်ရင့် ပေးပါမယ်။ [[mark:after-featured]] ဒီနေ့ အထူး card ပဲ
+      ပြောင်းပါတယ်။ သူ့ ဈေးနှုန်းက ရွှေရောင် ဖြစ်ပြီး၊ ကျန်တာတွေက အစိမ်းရောင် အတိုင်းပါ။
+      [[mark:open-tree]] ဘာလို့ ဒီ card တစ်ခုပဲလဲ။ page ကို tree နဲ့ ဆွဲကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: overriding and inheritance"
+        url: "https://web.dev/learn/css/custom-properties#overriding_and_inheritance"
+      - title: "MDN — Using CSS custom properties: inheritance"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties#inheritance_of_custom_properties"
+    actions:
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: scroll-drinks }
+        timeoutMs: 5000
+        top: 478
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-featured
+        type: editor.type
+        at: { mark: type-featured }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".order-btn {\n  background: var(--brand);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.featured {\n  --brand: #8b6914;\n}\n"
+      - id: expect-featured-price
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-tree
+        type: whiteboard.apply
+        at: { mark: open-tree }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+
+  - id: inherit-board
+    narration: >
+      [[mark:draw-root]] custom property တွေလည်း inheritance lesson က စာလုံး အရောင်လို inherit ဖြစ်ပါတယ်။
+      root မှာ အစိမ်းရောင် ရှိပါတယ်။ [[mark:draw-children]] ဒါကြောင့် header နဲ့ menu က အစိမ်းရောင် ရပြီး၊
+      menu ထဲက card တိုင်းလည်း အစိမ်းရောင် ရပါတယ်။ [[mark:draw-featured]] ဒါပေမဲ့ featured card က
+      ကိုယ်ပိုင် တန်ဖိုး ပေးထားပါတယ်။ element က ကိုယ်ပိုင် တန်ဖိုး မရှိမှ inherit ဖြစ်တဲ့ တန်ဖိုးကို
+      ယူလို့၊ ဒီ card က ရွှေရောင်ကို သုံးပါတယ်။ [[mark:draw-prices]] ဈေးနှုန်း တစ်ခုစီက သူ့ card ဆီက
+      inherit ဖြစ်လို့၊ ဒီနေ့ အထူး card ထဲမှာ ရွှေရောင်၊ ကျန်တဲ့ နေရာမှာ အစိမ်းရောင်ပါ။ rule တစ်ခုက tree
+      ရဲ့ branch တစ်ခုကိုပဲ ပြောင်းပြီး၊ branch အပြင်ကို မထိပါဘူး။ [[mark:draw-note]] custom property
+      ကလည်း သာမန် declaration ဖြစ်လို့ cascade က သူ့ တန်ဖိုးကို တခြား declaration တွေလိုပဲ ရွေးပါတယ်။
+      specificity၊ ရေးထားတဲ့ အစဉ်၊ layer တွေ အကုန် သက်ဆိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: overriding and inheritance"
+        url: "https://web.dev/learn/css/custom-properties#overriding_and_inheritance"
+      - title: "CSS Custom Properties Level 1 — custom properties are ordinary, inherited properties"
+        url: "https://www.w3.org/TR/css-variables-1/#defining-variables"
+      - title: "web.dev Learn CSS — Inheritance"
+        url: "https://web.dev/learn/css/inheritance"
+    actions:
+      - id: draw-root
+        type: whiteboard.apply
+        at: { mark: draw-root }
+        upsertIds: [b-root-box, b-root]
+        drawMs: 1400
+      - id: draw-children
+        type: whiteboard.apply
+        at: { mark: draw-children }
+        upsertIds:
+          [
+            b-arr-header,
+            b-header-box,
+            b-header,
+            b-arr-menu,
+            b-menu-box,
+            b-menu,
+            b-arr-card,
+            b-card-box,
+            b-card,
+          ]
+        drawMs: 4500
+      - id: draw-featured
+        type: whiteboard.apply
+        at: { mark: draw-featured }
+        upsertIds: [b-arr-featured, b-featured-box, b-featured]
+        drawMs: 2000
+      - id: draw-prices
+        type: whiteboard.apply
+        at: { mark: draw-prices }
+        upsertIds: [b-arr-gold, b-price-gold, b-arr-green, b-price-green]
+        drawMs: 3000
+      - id: draw-note
+        type: whiteboard.apply
+        at: { mark: draw-note }
+        upsertIds: [b-note]
+        drawMs: 1600
+
+  - id: space-media
+    narration: >
+      [[mark:close-tree]] space တန်ဖိုးလည်း ဒီလိုပဲ အလုပ်လုပ်ပါတယ်။ [[mark:type-space]] menu card
+      တိုင်းရဲ့ padding ကို space ကနေ ယူကြည့်ရအောင်။ [[mark:after-space]] အခု card တွေရဲ့ လေးဘက်လုံးမှာ
+      နေရာလွတ် တူတူ ရပါပြီ။ [[mark:type-media]] နောက်တစ်ဆင့်က screen အကျယ် 40 em ထက် ကျဉ်းရင် space
+      တန်ဖိုးကို ပြောင်းပေးမယ့် media query ပါ။ [[mark:after-media]] card တွေရဲ့ အထဲမှာ နေရာလွတ်
+      ပိုချောင်လာပါပြီ။ preview က 27 em လောက်ပဲ ကျယ်လို့ ဒီ media query က အလုပ်လုပ်ပါတယ်။ screen
+      ကျယ်ရင်တော့ နေရာလွတ် သေးသေး အတိုင်းပဲ ကျန်ပါမယ်။ [[mark:select-media]] ဒီ media query ကို ကြည့်ပါ။
+      card တွေကို လုံးဝ မရွေးထားပါဘူး။ တန်ဖိုးကိုပဲ ပြောင်းပေးပြီး၊ အဲဒီ တန်ဖိုးကို ဖတ်တဲ့ rule တိုင်းက
+      လိုက်ပြောင်းသွားတာပါ။ [[mark:no-var-in-query]] ပြောင်းပြန် လုပ်လို့တော့ မရပါဘူး။ var function ကို
+      property ရဲ့ တန်ဖိုးထဲမှာပဲ သုံးလို့ ရပြီး၊ media query ရဲ့ အခြေအနေ၊ selector နဲ့ property
+      နာမည်ထဲမှာ ထည့်လို့ မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: overriding and inheritance (media queries)"
+        url: "https://web.dev/learn/css/custom-properties#overriding_and_inheritance"
+      - title: "MDN — var(): where it can be used"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/var"
+      - title: "CSS Custom Properties Level 1 — using cascading variables"
+        url: "https://www.w3.org/TR/css-variables-1/#using-variables"
+    actions:
+      - id: close-tree
+        type: whiteboard.apply
+        at: { mark: close-tree }
+        open: false
+      - id: type-space
+        type: editor.type
+        at: { mark: type-space }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  --brand: #8b6914;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  padding: var(--space);\n}\n"
+      - id: expect-space-card
+        type: expect.preview
+        at: { mark: after-space }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-media
+        type: editor.type
+        at: { mark: type-media }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  padding: var(--space);\n}\n", occurrence: 1 }
+        text: "\n@media (width < 40em) {\n  :root {\n    --space: 20px;\n  }\n}\n"
+      - id: expect-media-card
+        type: expect.preview
+        at: { mark: after-media }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-media
+        type: editor.select
+        at: { mark: select-media }
+        target: { file: styles.css, text: "@media (width < 40em) {", occurrence: 1 }
+
+  - id: fallback
+    chapter: "Fallback တန်ဖိုး"
+    narration: >
+      [[mark:type-fallback]] custom property တစ်ခုကို ဘယ်မှာမှ မပေးထားရင် ဘာဖြစ်မလဲ။ ဈေးနှုန်း အရောင်ကို
+      price color ဆိုတဲ့ property ကနေ ဖတ်ခိုင်းပြီး၊ comma နောက်မှာ ဒုတိယ တန်ဖိုး တစ်ခု ထည့်ကြည့်ရအောင်။
+      [[mark:after-fallback]] ဘာမှ မပြောင်းပါဘူး။ price color မရှိလို့ var က ပထမ comma နောက်က တန်ဖိုးကို
+      ယူပါတယ်။ cascade lesson က fallback declaration လိုပဲ၊ ဒါက var ရဲ့ fallback ပါ။
+      [[mark:select-fallback]] ဒီ var function ကို ကြည့်ပါ။ သူ့ fallback က brand ကို ဖတ်တဲ့ နောက်ထပ် var
+      တစ်ခုပါ။ ဒါကို nested fallback လို့ ခေါ်ပြီး၊ price color ကို အရင် ရှာ၊ မရှိရင် brand ကို သုံး
+      ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ဖတ်ရ ရှင်းအောင် ဒီလို ဆင့်တာကို တိုတိုပဲ ထားပါ။ [[mark:type-price-color]] အခု
+      price color ကို featured card မှာပဲ ပေးကြည့်ရအောင်။ [[mark:after-price-color]] သူ့ ဈေးနှုန်း
+      အနီရောင် ဖြစ်သွားပြီး၊ ကျန်တာတွေကတော့ fallback ဖြစ်တဲ့ brand ကို ဆက်သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: fallbacks"
+        url: "https://web.dev/learn/css/custom-properties#fallbacks"
+      - title: "web.dev Learn CSS — Functions: custom properties and var()"
+        url: "https://web.dev/learn/css/functions"
+      - title: "MDN — var(): syntax and fallback values"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/var#syntax"
+    actions:
+      - id: type-fallback
+        type: editor.type
+        at: { mark: type-fallback }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  color: var(--brand);\n", occurrence: 1 }
+        text: "  color: var(--price-color, var(--brand));\n"
+      - id: expect-fallback-price
+        type: expect.preview
+        at: { mark: after-fallback }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-fallback
+        type: editor.select
+        at: { mark: select-fallback }
+        target: { file: styles.css, text: "var(--price-color, var(--brand))", occurrence: 1 }
+      - id: type-price-color
+        type: editor.type
+        at: { mark: type-price-color }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  --brand: #8b6914;\n", occurrence: 1 }
+        text: "  --price-color: crimson;\n"
+      - id: expect-price-color
+        type: expect.preview
+        at: { mark: after-price-color }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: unit-trap
+    chapter: "တန်ဖိုး မှားရင် ဘာဖြစ်လဲ"
+    narration: >
+      [[mark:scroll-hero]] custom property ကို တခြား function ထဲမှာလည်း သုံးလို့ ရပေမယ့်၊ unit မှာ
+      သတိထားစရာ ရှိပါတယ်။ [[mark:type-size]] root မှာ unit မပါတဲ့ ဂဏန်း 20 ကို size ဆိုတဲ့ နာမည်နဲ့
+      သိမ်းပါမယ်။ [[mark:type-hero-px]] ပြီးရင် ကြိုဆိုတဲ့ အပိုင်းကို အဲဒီ ဂဏန်းနဲ့ padding ပေးပြီး၊ var
+      function ရဲ့ နောက်မှာ pixel unit ကို တန်းကပ်ရေးပါမယ်။ [[mark:after-hero-px]] ကြိုဆိုတဲ့ အပိုင်းက 20
+      pixel မရပါဘူး။ မူလ 16 pixel တောင် ပျောက်သွားလို့၊ စာသားတွေက အစွန်းနဲ့ ကပ်နေပါပြီ။
+      [[mark:select-px]] ဒီ padding ကို ကြည့်ပါ။ var က တန်ဖိုးကို သီးသန့် အပိုင်း အဖြစ် ထည့်လို့၊ ရလဒ်က 20
+      ဆိုတဲ့ ဂဏန်းနဲ့ သီးခြား unit တစ်ခု ဖြစ်နေပါတယ်။ အပိုင်း နှစ်ခုက length တစ်ခု မဟုတ်လို့ တန်ဖိုး
+      မှားပါတယ်။ မူလ padding ဘာကြောင့် ပျောက်လဲ ဆိုတာ ခဏနေ ကြည့်ပါမယ်။ [[mark:type-calc]] ဖြေရှင်းနည်းက
+      calc ထဲမှာ ဂဏန်းကို 1 pixel နဲ့ မြှောက်တာပါ။ ဂဏန်းကို length နဲ့ မြှောက်ရင် length ရလို့၊ browser က
+      မှန်တဲ့ တန်ဖိုး တစ်ခုတည်းကို ရပါတယ်။ [[mark:after-calc]] အခု စာသားနဲ့ အစွန်းကြားမှာ 20 pixel
+      နေရာလွတ် ရပါပြီ။ calc ကို နောက် lesson မှာ ကြည့်ပါမယ်။ အရောင် function တွေမှာလည်း ဒီလိုပဲ၊ custom property ထဲက hue ကို
+      OKLCH အရောင်ထဲ ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: using a custom property (inside other functions)"
+        url: "https://web.dev/learn/css/custom-properties#using_a_custom_property"
+      - title: "MDN — var(): values substitute as tokens"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/var"
+      - title: "MDN — calc()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/calc"
+    actions:
+      - id: scroll-hero
+        type: preview.scroll
+        at: { mark: scroll-hero }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size }
+        cadence: natural
+        target: { file: styles.css, after: "  --space: 12px;\n", occurrence: 1 }
+        text: "  --size: 20;\n"
+      - id: type-hero-px
+        type: editor.type
+        at: { mark: type-hero-px }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    --space: 20px;\n  }\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  padding: var(--size)px;\n}\n"
+      - id: expect-hero-px
+        type: expect.preview
+        at: { mark: after-hero-px }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-px
+        type: editor.select
+        at: { mark: select-px }
+        target: { file: styles.css, text: "var(--size)px", occurrence: 1 }
+      # Typed into the LAST rule of the file: while calc( is open it can only
+      # swallow the end of its own rule.
+      - id: type-calc
+        type: editor.type
+        at: { mark: type-calc }
+        cadence: natural
+        target: { file: styles.css, after: "  padding: var(--size)px;\n", occurrence: 1 }
+        text: "  padding: calc(var(--size) * 1px);\n"
+      - id: expect-hero-calc
+        type: expect.preview
+        at: { mark: after-calc }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: iacvt-live
+    narration: >
+      [[mark:scroll-form]] အော်ဒါ form ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-direct]] ပထမ form ထဲက ခလုတ်
+      နှစ်ခုလုံးကို နောက်ခံ အရောင်အဖြစ် 12 pixel ဆိုတဲ့ length ကို တမင် ပေးကြည့်ပါမယ်။ [[mark:after-direct]]
+      ဘာမှ မပြောင်းပါဘူး။ length က ဘယ်တော့မှ အရောင် မဖြစ်လို့၊ lesson 1 က စာလုံးပေါင်း မှားတဲ့ declaration
+      လိုပဲ browser က ဖိုင်ကို ဖတ်တုန်းမှာ ကျော်သွားပါတယ်။ အစိမ်းရောင် ကျန်ပါတယ်။ [[mark:type-broken]] အခု
+      broken ခလုတ်ကိုပဲ အဲဒီလို မှားတဲ့ တန်ဖိုးမျိုး ပေးကြည့်ရအောင်။ ဒီတစ်ခါတော့ length တစ်ခု
+      သိမ်းထားတဲ့ space property ကနေ တစ်ဆင့် ပေးပါမယ်။ [[mark:after-broken]] ဒီတစ်ခါ ခလုတ်ရဲ့ နောက်ခံ
+      လုံးဝ ပျောက်သွားပါပြီ။ ပတ်ပတ်လည်က အနီရောင် မျဉ်းပြတ်လေးကပဲ ခလုတ် ရှိတဲ့ နေရာကို ပြနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: invalid values"
+        url: "https://web.dev/learn/css/custom-properties#invalid_values"
+      - title: "MDN — Using CSS custom properties: invalid custom properties"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties#invalid_custom_properties"
+    actions:
+      - id: scroll-form
+        type: preview.scroll
+        at: { mark: scroll-form }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-direct
+        type: editor.type
+        at: { mark: type-direct }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  padding: calc(var(--size) * 1px);\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  background-color: 12px;\n}\n"
+      - id: expect-order-button
+        type: expect.preview
+        at: { mark: after-direct }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-broken
+        type: editor.type
+        at: { mark: type-broken }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-color: 12px;\n}\n", occurrence: 1 }
+        text: "\n.order-btn.broken {\n  background-color: var(--space);\n}\n"
+      - id: expect-broken-button
+        type: expect.preview
+        at: { mark: after-broken }
+        timeoutMs: 4000
+        target: { by: testId, value: broken-button }
+        textContains: "ဖုန်းဆက်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: iacvt-board
+    narration: >
+      [[mark:open-iacvt]] ရလဒ် နှစ်ခု ဘာကြောင့် မတူတာလဲ။ [[mark:draw-direct]] browser က ဖိုင်ကို ဖတ်တဲ့အခါ
+      declaration တစ်ခုချင်းကို စစ်ပါတယ်။ 12 pixel က အရောင် မဟုတ်မှန်း တန်းသိလို့၊ အဲဒီ declaration ကို
+      အဲဒီမှာတင် ကျော်လိုက်ပြီး၊ အရင်က အစိမ်းရောင်က ဆက်နိုင်နေပါတယ်။ [[mark:draw-var-code]] var ပါတဲ့
+      declaration ကိုတော့ ဖတ်တုန်းမှာ မစစ်နိုင်ပါဘူး။ custom property ထဲမှာ ဘာ တန်ဖိုး ရှိမလဲ ဆိုတာ
+      browser က မသိသေးလို့ပါ။ [[mark:draw-accept]] ဒါကြောင့် လက်ခံပါတယ်။ [[mark:draw-wins]] သူ့ selector က
+      specificity ပိုများလို့ cascade က သူ့ကို ရွေးပြီး၊ အစိမ်းရောင် declaration က ရှုံးသွားပါတယ်။
+      [[mark:draw-substitute]] အဲဒီနောက်မှ browser က space ထဲက length ကို အစားထိုး ထည့်ပါတယ်။
+      [[mark:draw-not-colour]] length က အရောင် မဟုတ်ပေမယ့်၊ အစိမ်းရောင် declaration က ရှုံးပြီးသားပါ။
+      [[mark:draw-unset]] ဒါကြောင့် property က unset ပေးထားသလို ဖြစ်သွားပါတယ်။ နောက်ခံ အရောင်က inherit
+      မဖြစ်လို့၊ initial value ဖြစ်တဲ့ transparent ကို ရပါတယ်။ [[mark:draw-term]] invalid at
+      computed-value time ဆိုတာ တန်ဖိုး ထည့်ပြီးမှ မှားမှန်း သိတာပါ။ ကြိုဆိုတဲ့ အပိုင်း padding
+      ပျောက်တာလည်း ဒါကြောင့်ပါ။ [[mark:draw-no-fallback]] ဒီနေရာမှာ fallback က မကူညီနိုင်ပါဘူး။ fallback
+      ကို custom property မရှိမှပဲ သုံးတာ ဖြစ်ပြီး၊ ရှိပေမယ့် တန်ဖိုး မှားနေရင် မသုံးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: invalid values"
+        url: "https://web.dev/learn/css/custom-properties#invalid_values"
+      - title: "CSS Custom Properties Level 1 — invalid at computed-value time"
+        url: "https://www.w3.org/TR/css-variables-1/#invalid-at-computed-value-time"
+      - title: "MDN — unset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/unset"
+    actions:
+      - id: open-iacvt
+        type: whiteboard.apply
+        at: { mark: open-iacvt }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-direct
+        type: whiteboard.apply
+        at: { mark: draw-direct }
+        upsertIds: [c-d-code, c-d-arrow, c-d-skip, c-d-keep]
+        drawMs: 3600
+      - id: draw-var-code
+        type: whiteboard.apply
+        at: { mark: draw-var-code }
+        upsertIds: [c-v-code]
+        drawMs: 1800
+      - id: draw-accept
+        type: whiteboard.apply
+        at: { mark: draw-accept }
+        upsertIds: [c-v-1]
+        drawMs: 1000
+      - id: draw-wins
+        type: whiteboard.apply
+        at: { mark: draw-wins }
+        upsertIds: [c-v-2]
+        drawMs: 1400
+      - id: draw-substitute
+        type: whiteboard.apply
+        at: { mark: draw-substitute }
+        upsertIds: [c-v-3]
+        drawMs: 1200
+      - id: draw-not-colour
+        type: whiteboard.apply
+        at: { mark: draw-not-colour }
+        upsertIds: [c-v-4]
+        drawMs: 1200
+      - id: draw-unset
+        type: whiteboard.apply
+        at: { mark: draw-unset }
+        upsertIds: [c-v-5]
+        drawMs: 1400
+      - id: draw-term
+        type: whiteboard.apply
+        at: { mark: draw-term }
+        upsertIds: [c-term]
+        drawMs: 1600
+      - id: draw-no-fallback
+        type: whiteboard.apply
+        at: { mark: draw-no-fallback }
+        upsertIds: [c-fallback]
+        drawMs: 1000
+
+  - id: at-property
+    chapter: "Property at-rule နဲ့ type ပေးရအောင်"
+    narration: >
+      [[mark:close-iacvt]] custom property ရဲ့ type ကို browser က စစ်ပေးနိုင်ရင် ဘယ်လိုလဲ။
+      [[mark:scroll-cup]] ခွက်အလွတ်ကို ဖြည့်ကြည့်ရအောင်။ [[mark:type-property]] property at-rule နဲ့ tea
+      level ဆိုတဲ့ custom property ကို type နဲ့ register လုပ်ပြီး၊ ခွက်ထဲက လက်ဖက်ရည်ရဲ့ အမြင့်ကို အဲဒါကနေ
+      ဖတ်ခိုင်းပါမယ်။ [[mark:after-property]] ခွက်ထဲမှာ 30 ရာခိုင်နှုန်း ပြည့်နေပါပြီ။ tea level ကို
+      ဘယ်မှာမှ မပေးရသေးလို့၊ register လုပ်တုန်းက စတန်ဖိုးကို သုံးနေတာပါ။
+      [[mark:open-prop-board]] at-rule ထဲမှာ အချက် သုံးခု ပါပါတယ်။ [[mark:draw-syntax]] syntax က ဘယ် type
+      တန်ဖိုးကို လက်ခံမလဲ ပြောပါတယ်။ ဒီမှာတော့ ရာခိုင်နှုန်းပါ။ [[mark:draw-inherits]] inherits က child
+      တွေဆီ တန်ဖိုး ရောက်မရောက် ပြောပါတယ်။ ဒီမှာတော့ မရောက်ပါဘူး။ နာမည်ရဲ့ အဆုံးမှာ s ပါတာကို သတိထားပါ။
+      [[mark:draw-initial]] initial value က property ရဲ့ စတန်ဖိုးပါ။ browser က element ကို မကြည့်ဘဲ
+      သိနိုင်တဲ့ တန်ဖိုး ဖြစ်ရလို့၊ 30 ရာခိုင်နှုန်း ရပေမယ့် font size ပေါ် မူတည်တဲ့ em မရပါဘူး။
+      [[mark:draw-missing]]
+      syntax နဲ့ inherits က အမြဲ ပါရပါမယ်။ initial value လည်း ပါရပြီး၊ syntax က ဘာမဆို လက်ခံမှသာ ချန်လို့
+      ရပါတယ်။ တစ်ခု မပါရင် browser က rule တစ်ခုလုံးကို မသုံးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: more control with @property"
+        url: "https://web.dev/learn/css/custom-properties#more_control_with_property"
+      - title: "MDN — @property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@property"
+      - title: "CSS Properties and Values API Level 1 — the @property rule"
+        url: "https://www.w3.org/TR/css-properties-values-api-1/#at-property-rule"
+    actions:
+      - id: close-iacvt
+        type: whiteboard.apply
+        at: { mark: close-iacvt }
+        open: false
+      - id: scroll-cup
+        type: preview.scroll
+        at: { mark: scroll-cup }
+        timeoutMs: 5000
+        top: 1070
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-property
+        type: editor.type
+        at: { mark: type-property }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background-color: var(--space);\n}\n", occurrence: 1 }
+        text: "\n@property --tea-level {\n  syntax: \"<percentage>\";\n  inherits: false;\n  initial-value: 30%;\n}\n\n.cup-fill {\n  height: var(--tea-level);\n}\n"
+      - id: expect-cup
+        type: expect.preview
+        at: { mark: after-property }
+        timeoutMs: 4000
+        target: { by: testId, value: pour }
+        textContains: "လက်ဖက်ရည် တစ်ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-prop-board
+        type: whiteboard.apply
+        at: { mark: open-prop-board }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-frame]
+      - id: draw-syntax
+        type: whiteboard.apply
+        at: { mark: draw-syntax }
+        upsertIds: [d-syn-k, d-syn-v]
+        drawMs: 1800
+      - id: draw-inherits
+        type: whiteboard.apply
+        at: { mark: draw-inherits }
+        upsertIds: [d-inh-k, d-inh-v]
+        drawMs: 1800
+      - id: draw-initial
+        type: whiteboard.apply
+        at: { mark: draw-initial }
+        upsertIds: [d-ini-k, d-ini-v]
+        drawMs: 1800
+      - id: draw-missing
+        type: whiteboard.apply
+        at: { mark: draw-missing }
+        upsertIds: [d-missing]
+        drawMs: 1600
+
+  - id: at-property-live
+    narration: >
+      [[mark:close-prop-board]] tea level ကို ခွက်ထဲက လက်ဖက်ရည်မှာ ပေးကြည့်ရအောင်။ [[mark:type-seventy]]
+      ဖတ်နေတဲ့ element ကိုယ်တိုင်မှာပဲ 70 ရာခိုင်နှုန်း ပေးပါမယ်။ [[mark:after-seventy]] ခွက်က 70
+      ရာခိုင်နှုန်းထိ ပြည့်ပါပြီ။ [[mark:type-lots]] အခု ရာခိုင်နှုန်း လုံးဝ မဟုတ်တဲ့ lots ဆိုတဲ့
+      စကားလုံးကို ပေးကြည့်ပါမယ်။ [[mark:after-lots]] ခွက်က 30 ရာခိုင်နှုန်း ပြန်ဖြစ်ပါပြီ။
+      [[mark:select-syntax]] ဒီ syntax ကို ကြည့်ပါ။ register လုပ်ထားတဲ့ property ရဲ့ တန်ဖိုးကို cascade
+      ပြီးမှ syntax နဲ့ စစ်လို့၊ 70 ရာခိုင်နှုန်းက ရှုံးပြီးသားပါ။ ဒါကြောင့် tea level က unset လို
+      ဖြစ်ပြီး၊ inherit မဖြစ်လို့ initial value ကို ရပါတယ်။ register မလုပ်ရင်တော့ အမြင့်က unset ဖြစ်ပြီး
+      ခွက် အလွတ် ဖြစ်မှာပါ။ [[mark:select-inherits]] ဒီ inherits ကို ကြည့်ပါ။ tea level ကို ခွက်မှာ မပေးဘဲ
+      ဘာလို့ အထဲက လက်ဖက်ရည်မှာ ပေးတာလဲ။ inherits က false ဖြစ်လို့ ခွက်မှာ ပေးရင် အထဲကို မရောက်ဘဲ၊ 30
+      ရာခိုင်နှုန်းမှာပဲ ကျန်နေမှာမို့ပါ။ [[mark:animate-note]] register လုပ်ရင် browser က type ကို
+      သိလို့ တန်ဖိုးကို ချောချောမွေ့မွေ့ animate လုပ်နိုင်ပါသေးတယ်။ lesson 38 မှာ ဒီ ခွက်ကို transition နဲ့
+      ဖြည့်ပါမယ်။ property at-rule ကို 2024 ခုနှစ်ကတည်းက browser အဓိက အားလုံးမှာ သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: more control with @property"
+        url: "https://web.dev/learn/css/custom-properties#more_control_with_property"
+      - title: "MDN — @property: inherits"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@property/inherits"
+      - title: "MDN — @property: initial-value"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@property/initial-value"
+      - title: "MDN — @property: syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@property/syntax"
+      - title: "web.dev — @property: Next-gen CSS variables now with universal browser support"
+        url: "https://web.dev/blog/at-property-baseline"
+    actions:
+      - id: close-prop-board
+        type: whiteboard.apply
+        at: { mark: close-prop-board }
+        open: false
+      - id: type-seventy
+        type: editor.type
+        at: { mark: type-seventy }
+        cadence: natural
+        target: { file: styles.css, after: "  height: var(--tea-level);\n", occurrence: 1 }
+        text: "  --tea-level: 70%;\n"
+      - id: expect-seventy
+        type: expect.preview
+        at: { mark: after-seventy }
+        timeoutMs: 4000
+        target: { by: testId, value: pour }
+        textContains: "လက်ဖက်ရည် တစ်ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-lots
+        type: editor.type
+        at: { mark: type-lots }
+        cadence: natural
+        target: { file: styles.css, after: "  --tea-level: 70%;\n", occurrence: 1 }
+        text: "  --tea-level: lots;\n"
+      - id: select-syntax
+        type: editor.select
+        at: { mark: select-syntax }
+        target: { file: styles.css, text: '  syntax: "<percentage>";', occurrence: 1 }
+      - id: select-inherits
+        type: editor.select
+        at: { mark: select-inherits }
+        target: { file: styles.css, text: "  inherits: false;", occurrence: 1 }
+
+  - id: javascript
+    chapter: "JavaScript ကနေ ပြောင်းရအောင်"
+    narration: >
+      [[mark:scroll-top]] နောက်ဆုံး၊ custom property ကို JavaScript ကနေ ပြောင်းကြည့်ရအောင်။
+      [[mark:open-index-js]] HTML ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:select-coffee]] ကော်ဖီ ခလုတ်ကို ကြည့်ပါ။
+      သူ့ data attribute တွေမှာ brand property ရဲ့ နာမည်နဲ့ ကော်ဖီလို အညိုရင့်ရောင် ပါပါတယ်။
+      [[mark:open-kit]] ခလုတ် နှိပ်တာကို project ထဲက script လေးက handle လုပ်ပေးပါတယ်။
+      [[mark:select-setproperty]] ဒီ set property ကို ကြည့်ပါ။ html element ရဲ့ style ပေါ်မှာ သူ့ကို
+      ခေါ်ပြီး၊ နာမည်နဲ့ တန်ဖိုးကို ပေးလိုက်တာပါ။ အဲဒါက custom property ကို style attribute ထဲ ရေးလို့၊
+      inline style အနေနဲ့ ကိုယ့် root rule ကို နိုင်ပါတယ်။ [[mark:click-coffee]] ကော်ဖီ ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-coffee]] header နဲ့ မှာယူရန် link က ကော်ဖီရောင် ပြောင်းပြီး၊ အောက်က ဈေးနှုန်းနဲ့ ခလုတ်တွေလည်း ပြောင်းသွားပါတယ်။ ဒီနေ့ အထူး card ရဲ့ ဈေးနှုန်းကတော့
+      အနီရောင် အတိုင်းပါ။ card မှာ ပေးထားတဲ့ price color ကို ဖတ်နေလို့၊ brand ပြောင်းတာနဲ့ မဆိုင်ပါဘူး။
+      [[mark:click-tea]] လက်ဖက်ရည် ခလုတ်က ဆိုင်ရဲ့ အညိုရောင်ကို
+      ပြန်ယူလာပါတယ်။ [[mark:read-value]] တန်ဖိုးကို ဖတ်ချင်ရင် element ကို ပေးပြီး get computed style ကို
+      ခေါ်၊ ပြီးမှ နာမည်နဲ့ get property value ကို ခေါ်ပါ။ cascade နဲ့ inheritance ပြီးတဲ့ တန်ဖိုးကို
+      ရပါတယ်။ online ဥပမာ တချို့က အဲဒီ computed style ပေါ်မှာ set property ခေါ်ထားပေမယ့်၊ သူက ဖတ်ဖို့ပဲ
+      ရလို့ တန်ဖိုး ပေးရင် element ရဲ့ style ကိုပဲ သုံးပါ။ [[mark:register-js]] ပြီးတော့ CSS object ပေါ်က
+      register property က property at-rule ရဲ့ JavaScript version ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: updating custom properties with JavaScript"
+        url: "https://web.dev/learn/css/custom-properties#updating_custom_properties_with_javascript"
+      - title: "MDN — CSSStyleDeclaration: setProperty()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleDeclaration/setProperty"
+      - title: "MDN — CSSStyleDeclaration: getPropertyValue()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleDeclaration/getPropertyValue"
+      - title: "MDN — Window: getComputedStyle()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/getComputedStyle"
+      - title: "MDN — CSS: registerProperty() static method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/CSS/registerProperty_static"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-index-js
+        type: workspace.openFile
+        at: { mark: open-index-js }
+        path: index.html
+      - id: select-coffee
+        type: editor.select
+        at: { mark: select-coffee }
+        target:
+          {
+            file: index.html,
+            text: 'data-set-property="--brand" data-value="#4a2c1d"',
+            occurrence: 1,
+          }
+      - id: open-kit
+        type: workspace.openFile
+        at: { mark: open-kit }
+        path: kit.js
+      - id: select-setproperty
+        type: editor.select
+        at: { mark: select-setproperty }
+        target:
+          {
+            file: kit.js,
+            text: 'document.documentElement.style.setProperty(setProperty, value ?? "")',
+            occurrence: 1,
+          }
+      - id: click-coffee
+        type: preview.click
+        at: { mark: click-coffee }
+        timeoutMs: 5000
+        target: { by: testId, value: theme-coffee }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-coffee
+        type: expect.preview
+        at: { mark: after-coffee }
+        timeoutMs: 4000
+        target: { by: testId, value: theme-status }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-tea
+        type: preview.click
+        at: { mark: click-tea }
+        timeoutMs: 5000
+        target: { by: testId, value: theme-tea }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-tea
+        type: expect.preview
+        at: { mark: read-value }
+        timeoutMs: 4000
+        target: { by: testId, value: theme-status }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ custom property က တုံးတို နှစ်ခုနဲ့ စတဲ့ နာမည်အောက်မှာ တန်ဖိုး
+      သိမ်းပြီး၊ var function က ဖတ်ပါတယ်။ page တစ်ခုလုံး သုံးမယ့် တန်ဖိုးတွေကို root မှာ ထားပြီး၊ inherit
+      ဖြစ်လို့ အောက်က element မှာ ပေးရင် အဲဒီ branch ပဲ ပြောင်းပါတယ်။ fallback က မရှိတဲ့ custom property
+      အတွက်ပဲ ဖြစ်ပြီး၊ မှားတဲ့ တန်ဖိုးကတော့ property ကို unset လို ဖြစ်စေပါတယ်။ property at-rule က custom
+      property ကို type နဲ့ စတန်ဖိုး ပေးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ calc နဲ့
+      တန်ဖိုးတွေကို တွက်ပေးတဲ့ တခြား CSS function တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties"
+        url: "https://web.dev/learn/css/custom-properties"
+      - title: "MDN — Using CSS custom properties (variables)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties"
+      - title: "web.dev Learn CSS — Functions (next lesson)"
+        url: "https://web.dev/learn/css/functions"
+    actions:
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ":root {\n  --brand: saddlebrown;\n  --brand: darkgreen;\n  --space: 12px;\n  --size: 20;\n}\n\n.site-header {\n  background: var(--brand);\n}\n\n.price {\n  color: var(--brand);\n  color: var(--price-color, var(--brand));\n}\n\n.order-link,\n.order-btn {\n  background: var(--brand);\n}\n\n.featured {\n  --brand: #8b6914;\n  --price-color: crimson;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".menu-card {\n  padding: var(--space);\n}\n\n@media (width < 40em) {\n  :root {\n    --space: 20px;\n  }\n}\n\n.hero {\n  padding: var(--size)px;\n  padding: calc(var(--size) * 1px);\n}\n\n.order-btn {\n  background-color: 12px;\n}\n\n.order-btn.broken {\n  background-color: var(--space);\n}\n\n@property --tea-level {\n  syntax: \"<percentage>\";\n  inherits: false;\n  initial-value: 30%;\n}\n\n.cup-fill {\n  height: var(--tea-level);\n  --tea-level: 70%;\n  --tea-level: lots;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
