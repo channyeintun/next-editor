@@ -1,0 +1,2271 @@
+# CSS course (Burmese), lesson 41 of 43: popover and dialog.
+#
+# Narration is the final Burmese (voice-script.md next to this file mirrors it
+# span by span; DESIGN.md is the design brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end or right after a ၊ pause; each span carries
+# one piece of meaning. Everything the learner sees (title, chapters,
+# whiteboard labels, UI strings) is Burmese.
+#
+# Shape: board (recall lesson 40; z-index wars, the top layer above every
+# stacking context, the backdrop) → code tour (sugar button + popovertarget,
+# the sugar and milk popovers, the manual toast, the confirm dialog; nothing
+# shows) → click: the sugar popover opens centred with the UA border (UA
+# fixed + inset 0 + margin auto), a second click closes it → board (auto /
+# manual / hint, light dismiss drawn not shown, hint support, never modal) →
+# sugar then milk: the auto popovers close each other, the click reached the
+# page → [popover] { display: grid } shows all three closed popovers, inserting
+# :popover-open hides them again; open → a column → position-area: bottom
+# span-right drops it under its button (implicit anchor; auto margins → 0),
+# margin: unset (anchor() insets keep auto margins) → #sugar::backdrop → board (three
+# states, display flips with allow-discrete) → closed/open rules: opens with no
+# fade, closes with a fade → @starting-style: fades in → overlay / Firefox →
+# the manual toast stays while sugar opens and closes; popovertargetaction=hide
+# closes it; the JS methods → board (popover stack, closing rules; dialog
+# popover) → dialog element, open attribute, kit.js showModal(); click: modal
+# with the faint UA backdrop → dialog::backdrop 40% and dialog:modal radius
+# typed while it is open → confirm: form method=dialog closes it (returnValue)
+# → command/commandfor, closedby, toggle events → board (popover or modal
+# dialog) → quiz + recap, hand-off to view transitions (lesson 42).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no HTML or JS
+# edit, so the page never reloads and popover/dialog state survives every CSS
+# edit. The two keystroke edits with rgb( are each the LAST rule of the file
+# while typed (an unclosed "(" would swallow later rules); the multi-line
+# transition list and the @starting-style block are line-by-line at the end of
+# the file (an unclosed "{" or a trailing comma only affects that last rule,
+# and the popover is closed while they appear).
+#
+# Open/closed state is asserted through the hidden status lines kit.js fills
+# on every toggle event (data-report), because a popover has no open attribute
+# and a closed dialog has none to compare (COURSE-KIT.md §4.2).
+#
+# Measured in headless Chrome 155 at 432 × 720 (probe/stages.ts, same anchors):
+# sugar button 32,171 140 × 43; sugar popover centred 138,336 156 × 49 (row of
+# three); [popover] { display: grid } → sugar 179,293, milk 169,293, toast
+# 143,317 piled in the middle; open as a grid 179,293 74 × 134; with
+# position-area 32,214 (left edge = the button's, top = its bottom; margin:
+# unset changes nothing in Chrome 155); exit transition 150 ms in: opacity
+# 0.42, y 209; with @starting-style 150 ms in: opacity 0.65; toast 143,317;
+# dialog 112,293 207 × 134 (:modal), returnValue "ok" after confirm.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-41-popover-dialog
+  title: "CSS course 41: Popover နဲ့ dialog"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 41
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and nav left out), the lesson block
+      # order-panel holding the kit sugar-popover block with its button, the
+      # milk-popover block (a second auto popover, testids milk-button, milk,
+      # milk-pop-status), the order button (popovertarget="toast") and the
+      # confirm button (data-show-modal), the kit toast block (manual popover,
+      # close button with popovertargetaction="hide") and the kit
+      # confirm-dialog block (form method="dialog"); then the kit drinks block
+      # (its first three cards) for the backdrop to dim. kit.js fills the four
+      # hidden status lines on every toggle and opens the dialog.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and nav left out) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- lesson block: order-panel (the popovers, the toast and the dialog) -->
+              <section class="order-panel" data-testid="order-panel">
+                <h2>အော်ဒါမှာရန်</h2>
+                <div class="picks">
+                  <button class="pick" type="button" popovertarget="sugar" data-testid="sugar-button">သကြား ပမာဏ</button>
+                  <button class="pick" type="button" popovertarget="milk" data-testid="milk-button">နို့ ပမာဏ</button>
+                </div>
+
+                <!-- kit block: sugar-popover -->
+                <div id="sugar" popover data-report="#sugar-status" data-testid="sugar">
+                  <button type="button">ချို</button>
+                  <button type="button">ချိုပေါ့</button>
+                  <button type="button">ကျ</button>
+                </div>
+                <p class="visually-hidden" id="sugar-status" data-testid="sugar-status"></p>
+
+                <!-- lesson block: milk-popover -->
+                <div id="milk" popover data-report="#milk-pop-status" data-testid="milk">
+                  <button type="button">များများ</button>
+                  <button type="button">နည်းနည်း</button>
+                  <button type="button">မထည့်</button>
+                </div>
+                <p class="visually-hidden" id="milk-pop-status" data-testid="milk-pop-status"></p>
+
+                <div class="actions">
+                  <button class="order-btn" type="button" popovertarget="toast" data-testid="order-button">မှာမယ်</button>
+                  <button class="order-btn" type="button" data-show-modal="#confirm" data-testid="open-confirm">အော်ဒါ အတည်ပြုမယ်</button>
+                </div>
+
+                <!-- kit block: toast (a manual popover opened by the order button) -->
+                <div id="toast" popover="manual" data-report="#toast-status" data-testid="toast">
+                  အော်ဒါ တင်ပြီးပါပြီ
+                  <button type="button" popovertarget="toast" popovertargetaction="hide" data-testid="toast-close">ပိတ်</button>
+                </div>
+                <p class="visually-hidden" id="toast-status" data-testid="toast-status"></p>
+
+                <!-- kit block: confirm-dialog (kit.js opens it with showModal()) -->
+                <dialog id="confirm" data-report="#confirm-status" data-testid="confirm">
+                  <p>အော်ဒါ အတည်ပြုမလား</p>
+                  <form method="dialog">
+                    <button value="cancel">ပယ်ဖျက်</button>
+                    <button value="ok" data-testid="confirm-ok">အတည်ပြု</button>
+                  </form>
+                </dialog>
+                <p class="visually-hidden" id="confirm-status" data-testid="confirm-status"></p>
+              </section>
+
+              <!-- kit block: drinks (the first three cards) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <!-- kit block: kit-script -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (section D dropped). Section E:
+      # the cream order panel, the two pill buttons in a wrapping row, the
+      # action row, and padding + font: inherit on the buttons inside the
+      # popovers and the dialog. Nothing styles a popover, the dialog or a
+      # backdrop: the lesson types all of it.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 41 keeps A, B, B2 and C; section D dropped; section E pins the order
+          panel, its two pill buttons and font: inherit on the buttons inside the
+          popovers and the dialog. Nothing styles a popover, a dialog or a backdrop.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 41: the order panel with its two pill buttons that open the sugar and
+           milk popovers, and a row for the order and confirm buttons. The popovers,
+           the toast and the dialog keep the browser's own styles; the lesson types
+           everything else about them. */
+        .order-panel {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .picks,
+        .actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .pick {
+          padding: 6px 16px;
+          border: 1px solid var(--tea);
+          border-radius: 999px;
+          background: #fff;
+          color: var(--tea);
+          font: inherit;
+        }
+
+        [popover] button,
+        dialog button {
+          padding: 2px 12px;
+          font: inherit;
+        }
+      # kit.js: pinned verbatim from the course kit, never typed. Its
+      # data-show-modal helper calls showModal(); its toggle listener writes
+      # open / closed into the status line a data-report attribute names.
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the top layer. Blue = the page's own layers, red = a big
+    # z-index that still can't get above them, orange = the backdrop, violet =
+    # the popover in the top layer, green = what no longer matters.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Top layer",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-page,
+        kind: rectangle,
+        x: 300,
+        y: 500,
+        width: 400,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-page-l,
+        kind: text,
+        x: 750,
+        y: 517,
+        width: 300,
+        height: 36,
+        text: "page ရဲ့ အလွှာတွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-card,
+        kind: rectangle,
+        x: 330,
+        y: 420,
+        width: 200,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+      }
+    - {
+        id: a-card-l,
+        kind: text,
+        x: 750,
+        y: 432,
+        width: 320,
+        height: 36,
+        text: "z-index 9999 · မမီ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-top,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 420,
+        height: 160,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-top-l,
+        kind: text,
+        x: 750,
+        y: 190,
+        width: 300,
+        height: 36,
+        text: "top layer",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-backdrop,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 400,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-backdrop-l,
+        kind: text,
+        x: 750,
+        y: 330,
+        width: 300,
+        height: 36,
+        text: "backdrop",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-popover,
+        kind: rectangle,
+        x: 420,
+        y: 250,
+        width: 180,
+        height: 56,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: a-popover-l,
+        kind: text,
+        x: 750,
+        y: 280,
+        width: 350,
+        height: 36,
+        text: "popover · modal dialog",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-free,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 700,
+        height: 36,
+        text: "overflow hidden · မဖြတ်နိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board B — the three popover types. Blue = auto, orange = manual, violet
+    # = hint (each row its own colour), black = the column headings, red = the
+    # support warning, green = none of them is modal.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Popover သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-h1,
+        kind: text,
+        x: 490,
+        y: 230,
+        width: 240,
+        height: 36,
+        text: "light dismiss",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-h2,
+        kind: text,
+        x: 800,
+        y: 230,
+        width: 280,
+        height: 36,
+        text: "ဖွင့်ရင် ဘာ ပိတ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 140,
+        height: 36,
+        text: "auto",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto-1,
+        kind: text,
+        x: 490,
+        y: 290,
+        width: 250,
+        height: 36,
+        text: "ရ · အပြင်၊ Esc",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto-2,
+        kind: text,
+        x: 800,
+        y: 290,
+        width: 280,
+        height: 36,
+        text: "auto၊ hint",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-manual,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 140,
+        height: 36,
+        text: "manual",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-manual-1,
+        kind: text,
+        x: 490,
+        y: 355,
+        width: 250,
+        height: 36,
+        text: "မရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-manual-2,
+        kind: text,
+        x: 800,
+        y: 355,
+        width: 280,
+        height: 36,
+        text: "ဘာမှ မပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-hint,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 140,
+        height: 36,
+        text: "hint",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-hint-1,
+        kind: text,
+        x: 490,
+        y: 420,
+        width: 250,
+        height: 36,
+        text: "ရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-hint-2,
+        kind: text,
+        x: 800,
+        y: 420,
+        width: 280,
+        height: 36,
+        text: "hint တွေပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-support,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 640,
+        height: 36,
+        text: "hint · Safari မှာ မရသေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-modal,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 640,
+        height: 36,
+        text: "ဘယ်ဟာမှ modal မဟုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — three animation states. Violet = starting style (where the
+    # entry starts), green = open, orange = closed (where the exit ends), red =
+    # display with allow-discrete and its two flip points.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "အခြေအနေ သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-closed,
+        kind: rectangle,
+        x: 860,
+        y: 240,
+        width: 220,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-closed-l,
+        kind: text,
+        x: 890,
+        y: 266,
+        width: 160,
+        height: 36,
+        text: "ပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-closed-d,
+        kind: text,
+        x: 860,
+        y: 345,
+        width: 230,
+        height: 36,
+        text: "ဖောက်ထွင်း · အပေါ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-open,
+        kind: rectangle,
+        x: 580,
+        y: 240,
+        width: 220,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: c-open-l,
+        kind: text,
+        x: 610,
+        y: 266,
+        width: 160,
+        height: 36,
+        text: "ပွင့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-open-d,
+        kind: text,
+        x: 580,
+        y: 345,
+        width: 230,
+        height: 36,
+        text: "အပြည့် · နေရာမှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-start,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 250,
+        height: 90,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: c-start-l,
+        kind: text,
+        x: 305,
+        y: 266,
+        width: 220,
+        height: 36,
+        text: "starting style",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-start-d,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 240,
+        height: 36,
+        text: "ပွင့်ခါစ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-display,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 560,
+        height: 36,
+        text: "display · allow-discrete",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-flip-open,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 620,
+        height: 36,
+        text: "ဖွင့်ရင် → အစမှာ ပြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-flip-close,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 620,
+        height: 36,
+        text: "ပိတ်ရင် → အဆုံးမှာ ပြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — nested popovers and which types close which. The colours keep
+    # board B's jobs: blue = auto (the menu and the auto rule), violet = hint
+    # (the sub-menu stacked on top of the menu, overlapping it, and the hint
+    # rule), orange = manual; green = closing the stack.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Popover stack",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-menu,
+        kind: rectangle,
+        x: 320,
+        y: 270,
+        width: 280,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-menu-l,
+        kind: text,
+        x: 340,
+        y: 345,
+        width: 120,
+        height: 36,
+        text: "menu",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-sub,
+        kind: rectangle,
+        x: 480,
+        y: 220,
+        width: 280,
+        height: 120,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: d-sub-l,
+        kind: text,
+        x: 600,
+        y: 240,
+        width: 150,
+        height: 36,
+        text: "sub-menu",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-close,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 720,
+        height: 36,
+        text: "menu ပိတ်ရင် sub-menu ပါ ပိတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule-auto,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 720,
+        height: 36,
+        text: "auto ဖွင့် → auto၊ hint ပိတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule-hint,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 720,
+        height: 36,
+        text: "hint ဖွင့် → hint ပဲ ပိတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule-manual,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 720,
+        height: 36,
+        text: "manual → အလိုလို မပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board E — popover or modal dialog. Blue = popover, red = modal dialog,
+    # green = what both share.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Popover လား dialog လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-pop,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 370,
+        height: 280,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-pop-h,
+        kind: text,
+        x: 310,
+        y: 245,
+        width: 300,
+        height: 36,
+        text: "popover",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-pop-1,
+        kind: text,
+        x: 310,
+        y: 305,
+        width: 330,
+        height: 36,
+        text: "menu၊ tooltip၊ toast",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-pop-2,
+        kind: text,
+        x: 310,
+        y: 365,
+        width: 330,
+        height: 36,
+        text: "page ကို သုံးလို့ ရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-pop-3,
+        kind: text,
+        x: 310,
+        y: 425,
+        width: 330,
+        height: 36,
+        text: "auto · light dismiss",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-dlg,
+        kind: rectangle,
+        x: 710,
+        y: 230,
+        width: 370,
+        height: 280,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-dlg-h,
+        kind: text,
+        x: 730,
+        y: 245,
+        width: 300,
+        height: 36,
+        text: "modal dialog",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-dlg-1,
+        kind: text,
+        x: 730,
+        y: 305,
+        width: 330,
+        height: 36,
+        text: "အော်ဒါ အတည်ပြု",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-dlg-2,
+        kind: text,
+        x: 730,
+        y: 365,
+        width: 330,
+        height: 36,
+        text: "page ကို သုံးလို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-dlg-3,
+        kind: text,
+        x: 730,
+        y: 425,
+        width: 330,
+        height: 36,
+        text: "ဖြေမှ ဆက်သွား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-both,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 780,
+        height: 36,
+        text: "နှစ်ခုလုံး · top layer · backdrop · animation",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz. Blue = question, green = answer.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 720,
+        height: 40,
+        text: "ဘယ် popover အမျိုးအစားက modal လဲ?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 720,
+        height: 36,
+        text: "ဘယ်ဟာမှ မဟုတ် · modal ဆိုရင် dialog",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4141
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Popover ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ anchor positioning နဲ့ element နှစ်ခုကို ကပ်ထားခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      page ပေါ်မှာ ပွင့်လာတဲ့ menu၊ ရွေးစရာ box၊ message တိုတို လို popover တွေနဲ့ dialog box ကို
+      လုပ်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-page]] lesson 23 မှာ browser က page ကို အလွှာလိုက် ဆွဲတယ် ဆိုတာနဲ့၊ z-index က သူ့
+      stacking context အပြင်ကို ကျော်မထွက်နိုင်ဘူး ဆိုတာ မြင်ခဲ့ပါတယ်။ [[mark:draw-card]] ဒါကြောင့်
+      card ထဲက menu ကို နောက် card က ဖုံးသွားတတ်ပြီး၊ developer တွေက z-index ကို ပိုကြီးကြီး ပေးတာ၊
+      script နဲ့ ဖြေရှင်းတာမျိုး လုပ်ခဲ့ကြပါတယ်။ [[mark:draw-top]] popover နဲ့ modal dialog တွေကတော့
+      အဲဒါတွေ မလိုပါဘူး။ ပွင့်လာတာနဲ့ browser က သူတို့ကို page အလွှာ အားလုံးရဲ့ အပေါ်ဆုံးမှာ သီးသန့်
+      ရှိတဲ့ top layer ထဲ ရွှေ့ပေးလို့ပါ။ [[mark:draw-free]] ဒါကြောင့် page ပေါ်က ဘယ်အရာမှ z-index
+      ဘယ်လောက် ကြီးကြီး သူ့ကို မဖုံးနိုင်သလို၊ overflow hidden ပါတဲ့ parent ကလည်း မဖြတ်နိုင်ပါဘူး။
+      [[mark:draw-backdrop]] သူ့အောက်မှာ နောက်က page ကို ဖုံးတဲ့ backdrop ကိုလည်း browser က
+      ဆွဲပေးနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog"
+        url: "https://web.dev/learn/css/popover-and-dialog"
+      - title: "MDN — Top layer"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Top_layer"
+      - title: "CSS Positioned Layout Module Level 4 — the top layer"
+        url: "https://drafts.csswg.org/css-position-4/#top-layer"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-page
+        type: whiteboard.apply
+        at: { mark: draw-page }
+        upsertIds: [a-page, a-page-l]
+        drawMs: 1600
+      - id: draw-card
+        type: whiteboard.apply
+        at: { mark: draw-card }
+        upsertIds: [a-card, a-card-l]
+        drawMs: 1600
+      - id: draw-top
+        type: whiteboard.apply
+        at: { mark: draw-top }
+        upsertIds: [a-top, a-top-l, a-popover, a-popover-l]
+        drawMs: 2400
+      - id: draw-free
+        type: whiteboard.apply
+        at: { mark: draw-free }
+        upsertIds: [a-free]
+        drawMs: 1600
+      - id: draw-backdrop
+        type: whiteboard.apply
+        at: { mark: draw-backdrop }
+        upsertIds: [a-backdrop, a-backdrop-l]
+        drawMs: 1600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-target]] သကြား ပမာဏ ခလုတ်မှာ popover target attribute ပါပြီး၊ သူ ဖွင့်ပေးမယ့်
+      element ရဲ့ id ကို ညွှန်းထားပါတယ်။ [[mark:select-sugar]] ဒါက အဲဒီ element ပါ။ popover attribute
+      ပါတဲ့ div ဖြစ်ပြီး၊ ထဲမှာ သကြား ရွေးစရာ သုံးခု ရှိပါတယ်။ [[mark:select-milk]] နို့ ပမာဏ ခလုတ်နဲ့
+      သူ့ popover ကလည်း ဒီအတိုင်းပါပဲ။ [[mark:select-toast]] မှာမယ် ခလုတ်ကတော့ toast လို့ ခေါ်တဲ့
+      message တိုတို တစ်ခုကို ဖွင့်ပါတယ်။ toast ရဲ့ popover attribute ကတော့ manual ပါ။
+      [[mark:select-dialog]] နောက်ဆုံးမှာ ဝယ်သူကို အော်ဒါ အတည်ပြုခိုင်းတဲ့ dialog element ရှိပါတယ်။
+      [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။
+      ခလုတ်တွေနဲ့ သောက်စရာ card တွေ ရှိပေမယ့် popover နဲ့ dialog မပေါ်ပါဘူး။ popover attribute
+      တစ်ခုတည်းက element ကို မဖွင့်မချင်း ဖျောက်ထားလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: controlling popovers declaratively"
+        url: "https://web.dev/learn/css/popover-and-dialog#declaratively"
+      - title: "MDN — popover global attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/popover"
+      - title: "MDN — <dialog>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-target
+        type: editor.select
+        at: { mark: select-target }
+        target: { file: index.html, text: 'popovertarget="sugar"', occurrence: 1 }
+      - id: select-sugar
+        type: editor.select
+        at: { mark: select-sugar }
+        target: { file: index.html, text: '<div id="sugar" popover', occurrence: 1 }
+      - id: select-milk
+        type: editor.select
+        at: { mark: select-milk }
+        target: { file: index.html, text: '<div id="milk" popover', occurrence: 1 }
+      - id: select-toast
+        type: editor.select
+        at: { mark: select-toast }
+        target: { file: index.html, text: 'popover="manual"', occurrence: 1 }
+      - id: select-dialog
+        type: editor.select
+        at: { mark: select-dialog }
+        target: { file: index.html, text: '<dialog id="confirm"', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-sugar-button
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        textContains: "သကြား ပမာဏ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-menu
+        type: expect.preview
+        at: { afterAction: expect-sugar-button }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-drinks }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-menu }
+
+  - id: first-open
+    chapter: "Popover ကို ဖွင့်ကြည့်ရအောင်"
+    narration: >
+      [[mark:click-sugar]] သကြား ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:after-sugar]] သကြား ရွေးစရာတွေက
+      screen ရဲ့ အလယ်၊ သောက်စရာ card တွေရဲ့ အပေါ်မှာ ဘောင်မည်းပါတဲ့ box အဖြူထဲမှာ ပေါ်လာပါပြီ။ script
+      မလိုဘဲ attribute တစ်ခုတည်းနဲ့ လုံလောက်ပါတယ်။ [[mark:explain-center]] ဘာလို့ အလယ်မှာ ပေါ်တာလဲ။
+      browser ရဲ့ default style က popover တိုင်းကို position fixed ပေးပြီး၊ inset လေးဘက်လုံးကို သုည၊
+      margin ကို auto ပေးထားပါတယ်။ auto margin တွေက ကျန်တဲ့ နေရာလွတ်ကို ခွဲယူလို့ box က အလယ်ကို
+      ရောက်တာပါ။ [[mark:click-sugar-close]] ခလုတ်ကို နောက်တစ်ခါ နှိပ်ပါမယ်။ [[mark:after-sugar-close]]
+      ထပ်နှိပ်တော့ ပြန်ပိတ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: positioning your popover"
+        url: "https://web.dev/learn/css/popover-and-dialog#positioning_your_popover"
+      - title: "HTML Standard — popovertarget and the popover rendering rules"
+        url: "https://html.spec.whatwg.org/multipage/popover.html"
+      - title: "MDN — Using the Popover API"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using"
+    actions:
+      - id: click-sugar
+        type: preview.click
+        at: { mark: click-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-open
+        type: expect.preview
+        at: { mark: after-sugar }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sugar-close
+        type: preview.click
+        at: { mark: click-sugar-close }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-closed
+        type: expect.preview
+        at: { mark: after-sugar-close }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: types
+    chapter: "Popover သုံးမျိုး"
+    narration: >
+      [[mark:open-types]] ကိုယ့် page လိုပဲ popover attribute ကို တန်ဖိုး မပေးရင် auto popover
+      ဖြစ်ပါတယ်။ [[mark:draw-auto]] popover အပြင်ကို နှိပ်တာ၊ Escape key နှိပ်တာနဲ့ ပိတ်သွားတာကို
+      light dismiss လို့ ခေါ်ပြီး၊ auto popover မှာ ဒါ ရှိပါတယ်။ ဒီ lesson ထဲမှာ အပြင်ကို နှိပ်ပြလို့
+      မရတဲ့အတွက် pause လုပ်ပြီး ကိုယ်တိုင် run ကြည့်ပါ။ auto ဖွင့်ရင် တခြား auto နဲ့ hint တွေ
+      ပိတ်သွားပါတယ်။ [[mark:draw-manual]] ဒုတိယ အမျိုးအစား manual မှာ light dismiss မရှိသလို၊
+      ဖွင့်ရင်လည်း တခြား popover ကို မပိတ်ပါဘူး။ ဒါပေမယ့် သူ့ ခလုတ်ကို နှိပ်တာက auto popover ရဲ့
+      အပြင်ကို နှိပ်တာမို့၊ ပွင့်နေတဲ့ auto ကို ပိတ်သွားစေပါတယ်။ [[mark:draw-hint]] တတိယ အမျိုးအစား
+      hint က tooltip တွေအတွက်ပါ။ light dismiss ရှိပြီး၊ ဖွင့်ရင် တခြား hint တွေကိုပဲ ပိတ်ပါတယ်။
+      [[mark:draw-support]] Safari မှာ hint ကို မရသေးပါဘူး။ ဒီ တန်ဖိုးကို မသိတဲ့ browser က manual
+      လို့ပဲ ယူပါတယ်။ [[mark:draw-modal]] ပြီးတော့ သုံးမျိုးလုံး ဘယ်ဟာမှ modal မဟုတ်ပါဘူး။ popover
+      ပွင့်နေတုန်း page ကို ဆက်သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: types of popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#types_of_popovers"
+      - title: "MDN — popover attribute (auto, manual, hint; invalid values map to manual)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/popover"
+      - title: "webstatus.dev — popover hint"
+        url: "https://webstatus.dev/features/popover-hint"
+    actions:
+      - id: open-types-board
+        type: whiteboard.apply
+        at: { mark: open-types }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-h1, b-h2]
+      - id: draw-auto
+        type: whiteboard.apply
+        at: { mark: draw-auto }
+        upsertIds: [b-auto, b-auto-1, b-auto-2]
+        drawMs: 2000
+      - id: draw-manual
+        type: whiteboard.apply
+        at: { mark: draw-manual }
+        upsertIds: [b-manual, b-manual-1, b-manual-2]
+        drawMs: 1600
+      - id: draw-hint
+        type: whiteboard.apply
+        at: { mark: draw-hint }
+        upsertIds: [b-hint, b-hint-1, b-hint-2]
+        drawMs: 1600
+      - id: draw-support
+        type: whiteboard.apply
+        at: { mark: draw-support }
+        upsertIds: [b-support]
+        drawMs: 1200
+      - id: draw-modal
+        type: whiteboard.apply
+        at: { mark: draw-modal }
+        upsertIds: [b-modal]
+        drawMs: 1200
+
+  - id: auto-closes
+    narration: >
+      [[mark:close-types]] auto စည်းမျဉ်းကို စမ်းကြည့်ရအောင်။ [[mark:click-sugar-2]] သကြား
+      ရွေးစရာတွေကို ပြန်ဖွင့်ပါမယ်။ [[mark:click-milk]] အခု နို့ ခလုတ်ကို နှိပ်ပါမယ်။
+      [[mark:after-milk]] နို့ ရွေးစရာတွေ ပွင့်လာပြီး သကြား ရွေးစရာတွေ ပိတ်သွားပါပြီ။ popover
+      ပွင့်နေတုန်း နှိပ်တာက နို့ ခလုတ်ဆီ ရောက်လို့၊ page ကို ပိတ်ဆို့မထားဘူး ဆိုတာလည်း တွေ့ရပါတယ်။
+      [[mark:click-milk-close]] နို့ ရွေးစရာတွေကို သူ့ ခလုတ်နဲ့ ပြန်ပိတ်ရအောင်။
+      [[mark:after-milk-close]] နှစ်ခုလုံး ပိတ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: auto popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#auto_popovers"
+      - title: "MDN — Using the Popover API: auto state and light dismiss"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using#auto_state_and_light_dismiss"
+    actions:
+      - id: close-types-board
+        type: whiteboard.apply
+        at: { mark: close-types }
+        open: false
+      - id: click-sugar-2
+        type: preview.click
+        at: { mark: click-sugar-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-open-2
+        type: expect.preview
+        at: { afterAction: click-sugar-2 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-milk
+        type: preview.click
+        at: { mark: click-milk }
+        timeoutMs: 5000
+        target: { by: testId, value: milk-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-milk-open
+        type: expect.preview
+        at: { mark: after-milk }
+        timeoutMs: 4000
+        target: { by: testId, value: milk-pop-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-sugar-auto-closed
+        type: expect.preview
+        at: { afterAction: expect-milk-open }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-milk-close
+        type: preview.click
+        at: { mark: click-milk-close }
+        timeoutMs: 5000
+        target: { by: testId, value: milk-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-milk-closed
+        type: expect.preview
+        at: { mark: after-milk-close }
+        timeoutMs: 4000
+        target: { by: testId, value: milk-pop-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: popover-open
+    chapter: "Popover ပွင့်နေမှ style ပေးရအောင်"
+    narration: >
+      [[mark:type-grid]] အခု ရွေးစရာတွေကို grid နဲ့ စီပြီး၊ ကြားမှာ 8 pixel စီ ခြားထားပါမယ်။
+      လောလောဆယ်တော့ selector က popover attribute ပါတဲ့ element တိုင်းကို ရွေးပါတယ်။
+      [[mark:after-grid]] တစ်ခုခု မှားနေပါပြီ။ popover သုံးခုလုံး အလယ်မှာ စုပုံ ပေါ်လာပေမယ့်၊
+      ဘယ်တစ်ခုကိုမှ ဖွင့်ထားတာ မဟုတ်ပါဘူး။ [[mark:explain-grid]] ဒီ display declaration ကို ကြည့်ပါ။
+      browser က ပိတ်နေတဲ့ popover ကို display none နဲ့ ဖျောက်ပါတယ်။ ဒါက default ပဲ ဖြစ်လို့၊ ကိုယ့်
+      display grid က popover ပွင့်ပွင့် ပိတ်ပိတ် သူ့ကို နိုင်သွားတာပါ။ [[mark:type-open]]
+      ဖြေရှင်းနည်းက popover open pseudo-class ပါ။ သူက popover ကို ပွင့်နေတဲ့ အချိန်မှာပဲ ရွေးပါတယ်။
+      [[mark:after-open]] ပိတ်နေတဲ့ popover တွေ ပြန်ပျောက်သွားပါပြီ။ [[mark:click-sugar-3]] သကြား
+      ရွေးစရာတွေကို ဖွင့်ပါမယ်။ [[mark:after-sugar-3]] အခု ရွေးစရာတွေက column တစ်ခုအဖြစ် စီနေပါပြီ။
+      grid က ပွင့်နေမှပဲ သက်ရောက်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: the :popover-open pseudo-class"
+        url: "https://web.dev/learn/css/popover-and-dialog#the_popover-open_pseudo_class"
+      - title: "MDN — :popover-open"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:popover-open"
+      - title: "HTML Standard — popover rendering (closed popovers get display: none)"
+        url: "https://html.spec.whatwg.org/multipage/rendering.html#flow-content-3"
+    actions:
+      - id: type-grid
+        type: editor.type
+        at: { mark: type-grid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "[popover] {\n  display: grid;\n  gap: 8px;\n}\n"
+      - id: expect-grid-closed
+        type: expect.preview
+        at: { mark: after-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-grid
+        type: editor.select
+        at: { mark: explain-grid }
+        target: { file: styles.css, text: "display: grid;", occurrence: 1 }
+      - id: type-open
+        type: editor.type
+        at: { mark: type-open }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "[popover]", occurrence: 1 }
+        text: ":popover-open"
+      - id: expect-open-hidden
+        type: expect.preview
+        at: { mark: after-open }
+        timeoutMs: 4000
+        target: { by: testId, value: milk-pop-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sugar-3
+        type: preview.click
+        at: { mark: click-sugar-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-open-3
+        type: expect.preview
+        at: { mark: after-sugar-3 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: anchor
+    chapter: "ခလုတ်ရဲ့ အောက်မှာ ကပ်ရအောင်"
+    narration: >
+      [[mark:type-area]] ရွေးစရာ box က သူ့ ခလုတ်ရဲ့ အောက်မှာ ကျလာသင့်ပါတယ်။ lesson 40 မှာ absolute၊
+      anchor name နဲ့ position anchor လိုခဲ့ပါတယ်။ popover က fixed ဖြစ်ပြီးသားမို့ ဒီမှာတော့ position
+      area ကို bottom span right ပေးရုံပါပဲ။ [[mark:after-area]] သကြား ရွေးစရာတွေက ခလုတ်ရဲ့ အောက်ကို
+      ခုန်ရောက်သွားပြီး၊ ခလုတ်ရဲ့ ဘယ်အစွန်းကနေ စနေပါပြီ။ [[mark:explain-implicit]] ဒီ position area
+      ကို ကြည့်ပါ။ anchor name မပေးခဲ့ပါဘူး။ popover target နဲ့ ဖွင့်တဲ့ ခလုတ်က အလိုလို popover ရဲ့
+      implicit anchor ဖြစ်လို့ပါ။ [[mark:explain-margin]] ခုနက အလယ်ပို့ပေးခဲ့တာက auto margin တွေပါ။
+      position area သုံးရင် auto margin ကို သုညလို့ တွက်ပါတယ်။ lesson 40 က anchor function
+      နဲ့ဆိုရင်တော့ auto margin တွေ ဆက်အလုပ်လုပ်လို့၊ guide တွေက margin ကို reset လုပ်ခိုင်းကြပါတယ်။
+      [[mark:type-margin]] ဘယ်နည်း သုံးသုံး အဆင်ပြေအောင် margin unset ထည့်ပါမယ်။ [[mark:after-margin]]
+      ဒီမှာတော့ ဘာမှ မရွေ့ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: positioning your popover"
+        url: "https://web.dev/learn/css/popover-and-dialog#positioning_your_popover"
+      - title: "web.dev Learn CSS — Anchor positioning: implicit tethers"
+        url: "https://web.dev/learn/css/anchor-positioning#implicit_tethers"
+      - title: "CSS Anchor Positioning — position-area (auto margins resolve to 0)"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#position-area"
+      - title: "MDN — Using CSS anchor positioning: implicit anchor association"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning/Using"
+    actions:
+      - id: type-area
+        type: editor.type
+        at: { mark: type-area }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 8px;\n}\n", occurrence: 1 }
+        text: "\n#sugar {\n  position-area: bottom span-right;\n}\n"
+      - id: expect-area
+        type: expect.preview
+        at: { mark: after-area }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-area
+        type: editor.select
+        at: { mark: explain-implicit }
+        target: { file: styles.css, text: "position-area: bottom span-right;", occurrence: 1 }
+      - id: type-margin
+        type: editor.type
+        at: { mark: type-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: bottom span-right;\n", occurrence: 1 }
+        text: "  margin: unset;\n"
+      - id: expect-margin
+        type: expect.preview
+        at: { mark: after-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: backdrop
+    chapter: "Backdrop"
+    narration: >
+      [[mark:type-backdrop]] နောက်တစ်ခုက သကြား popover ရဲ့ backdrop ပါ။ သူက screen တစ်ခုလုံးကို
+      ဖုံးလို့ အရောင် နည်းနည်းလေးပဲ ပေးပါမယ်။ 12 ရာခိုင်နှုန်းပဲ မြင်ရတဲ့ အညိုရင့် အရောင်ပါ။
+      [[mark:after-backdrop]] ရွေးစရာတွေရဲ့ နောက်က page က နည်းနည်း မှိန်သွားပါပြီ။
+      [[mark:explain-backdrop]] ဒီ backdrop pseudo-element ကို ကြည့်ပါ။ သူက top layer ထဲမှာ popover
+      ရဲ့ အောက်မှာ ရှိပါတယ်။ popover ရဲ့ backdrop က default အားဖြင့် ဖောက်ထွင်း မြင်ရပြီး၊
+      နှိပ်ရင်လည်း နောက်က page ဆီ ရောက်ပါတယ်။ modal dialog နဲ့ full screen element တွေမှာလည်း backdrop
+      ရှိပါတယ်။ [[mark:explain-light]] popover ရဲ့ backdrop ကို ဖျော့ဖျော့ပဲ ထားပါ။ ရင့်ရင့် ဒါမှမဟုတ်
+      ဝါးဝါး ဖြစ်နေရင် page ကို ပိတ်ထားသလို ထင်ရပေမယ့် popover က မပိတ်ဆို့ပါဘူး။
+      [[mark:click-sugar-off]] ရွေးစရာတွေကို ခဏ ပိတ်ထားရအောင်။ [[mark:after-sugar-off]] backdrop ပါ
+      ပျောက်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: the ::backdrop pseudo-element"
+        url: "https://web.dev/learn/css/popover-and-dialog#the_backdrop_pseudo_element"
+      - title: "web.dev Learn CSS — Pseudo-elements: ::backdrop"
+        url: "https://web.dev/learn/css/pseudo-elements#backdrop"
+      - title: "MDN — ::backdrop"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::backdrop"
+    actions:
+      - id: type-backdrop
+        type: editor.type
+        at: { mark: type-backdrop }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin: unset;\n}\n", occurrence: 1 }
+        text: "\n#sugar::backdrop {\n  background: rgb(40 20 0 / 12%);\n}\n"
+      - id: expect-backdrop
+        type: expect.preview
+        at: { mark: after-backdrop }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-backdrop
+        type: editor.select
+        at: { mark: explain-backdrop }
+        target: { file: styles.css, text: "#sugar::backdrop", occurrence: 1 }
+      - id: click-sugar-off
+        type: preview.click
+        at: { mark: click-sugar-off }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-off
+        type: expect.preview
+        at: { mark: after-sugar-off }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: three-states
+    chapter: "Popover ကို animation ထည့်ရအောင်"
+    narration: >
+      [[mark:open-states]] အခု သကြား ရွေးစရာတွေ ပွင့်ရင် ဖြည်းဖြည်း ပေါ်၊ ပိတ်ရင် ဖြည်းဖြည်း
+      ပျောက်အောင် လုပ်ရအောင်။ ဒါအတွက် အခြေအနေ သုံးခု လိုပါတယ်။ [[mark:draw-start]] ပထမက ပွင့်လာတဲ့
+      animation ရဲ့ အစပါ။ မပွင့်ခင် popover က display none ဖြစ်နေလို့ စရမယ့် style မရှိပါဘူး။ starting
+      style က အဲဒါကို ပေးပါတယ်။ [[mark:draw-open]] ဒုတိယက ပွင့်နေတဲ့ အခြေအနေပါ။ အပြည့် မြင်ရပြီး
+      နေရာမှာ ရှိပါတယ်။ [[mark:draw-closed]] တတိယက ပိတ်နေတဲ့ အခြေအနေ၊ ပိတ်သွားတဲ့ animation ဆုံးတဲ့
+      နေရာပါ။ ဖောက်ထွင်းပြီး နည်းနည်း အပေါ်မှာ ရှိပါတယ်။ [[mark:draw-display]] lesson 38 မှာ display
+      လို အလယ် တန်ဖိုး မရှိတဲ့ discrete property က ချက်ချင်း ပြောင်းတာ မြင်ခဲ့ပါတယ်။ allow discrete က
+      သူ့ကို transition ထဲ ပါခွင့် ပေးပါတယ်။ [[mark:draw-flips]] ပွင့်တဲ့အခါ display က အစဆုံးမှာ
+      ပြောင်းပြီး၊ ပိတ်တဲ့အခါ အဆုံးဆုံးမှာမှ ပြောင်းလို့ ပိတ်သွားတဲ့ animation ကို ပြချိန် ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: animating popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#animating_popovers"
+      - title: "MDN — @starting-style"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@starting-style"
+      - title: "MDN — transition-behavior (display flips at 0% on show, 100% on hide)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/transition-behavior"
+      - title: "CSS Transitions Level 2"
+        url: "https://drafts.csswg.org/css-transitions-2/"
+    actions:
+      - id: open-states-board
+        type: whiteboard.apply
+        at: { mark: open-states }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-start
+        type: whiteboard.apply
+        at: { mark: draw-start }
+        upsertIds: [c-start, c-start-l, c-start-d]
+        drawMs: 1800
+      - id: draw-open
+        type: whiteboard.apply
+        at: { mark: draw-open }
+        upsertIds: [c-open, c-open-l, c-open-d]
+        drawMs: 1600
+      - id: draw-closed
+        type: whiteboard.apply
+        at: { mark: draw-closed }
+        upsertIds: [c-closed, c-closed-l, c-closed-d]
+        drawMs: 1600
+      - id: draw-display
+        type: whiteboard.apply
+        at: { mark: draw-display }
+        upsertIds: [c-display]
+        drawMs: 1200
+      - id: draw-flips
+        type: whiteboard.apply
+        at: { mark: draw-flips }
+        upsertIds: [c-flip-open, c-flip-close]
+        drawMs: 2000
+
+  - id: transition-code
+    narration: >
+      [[mark:close-states]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-closed]] ပိတ်နေတဲ့ အခြေအနေအတွက် rule
+      ရေးပါမယ်။ opacity သုည ပေးပြီး 8 pixel အပေါ်ကို ရွှေ့ထားပါတယ်။ transition စာရင်းမှာ opacity နဲ့
+      translate က 400 millisecond ကြာပြီး၊ display နဲ့ overlay ကိုလည်း အချိန်တူ allow discrete နဲ့
+      ပေးထားပါတယ်။ overlay ကို ခဏနေ ရှင်းပြပါမယ်။ [[mark:select-discrete]] ဒီ allow discrete က
+      transition behavior ရဲ့ တန်ဖိုး ဖြစ်ပြီး၊ အဲဒီ property ကို သီးသန့်လည်း ရေးနိုင်ပါတယ်။
+      [[mark:type-open-state]] ပြီးတော့ ပွင့်နေတဲ့ အခြေအနေပါ။ အပြည့် မြင်ရပြီး မူလ နေရာကို
+      ပြန်ရောက်ပါတယ်။ selector မှာ popover open pseudo-class ပါလို့ specificity ပိုများပြီး၊
+      ပွင့်နေတုန်း ဒီ rule က နိုင်ပါတယ်။ [[mark:click-open-4]] ရွေးစရာတွေကို ဖွင့်ပါမယ်။
+      [[mark:after-open-4]] ဖြည်းဖြည်း မပေါ်ဘဲ ချက်ချင်း ပေါ်လာပါတယ်။ [[mark:explain-first]]
+      transition က စမယ့် တန်ဖိုး လိုပါတယ်။ display none ဖြစ်နေခဲ့တဲ့ element ဒါမှမဟုတ် page ထဲ အခုမှ
+      ထည့်တဲ့ element မှာ အဲဒါ မရှိလို့၊ ပထမဆုံး style က transition မပါဘဲ တန်းသက်ရောက်ပါတယ်။
+      [[mark:click-close-4]] အခု ပြန်ပိတ်ကြည့်ရအောင်။ [[mark:after-close-4]] ပိတ်တာကတော့ ဖြည်းဖြည်း
+      ပျောက်ပြီး အပေါ်ကို လျှောတက်သွားပါတယ်။ display က အဆုံးထိ စောင့်ပေးလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: animating popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#animating_popovers"
+      - title: "web.dev Learn CSS — Transitions: transition-behavior"
+        url: "https://web.dev/learn/css/transitions#transition-behavior"
+      - title: "MDN — Using CSS transitions (no transition on first style)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_transitions/Using_CSS_transitions"
+      - title: "MDN — transition-behavior"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/transition-behavior"
+    actions:
+      - id: close-states-board
+        type: whiteboard.apply
+        at: { mark: close-states }
+        open: false
+      - id: type-closed
+        type: editor.type
+        at: { mark: type-closed }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background: rgb(40 20 0 / 12%);\n}\n", occurrence: 1 }
+        text: "\n#sugar {\n  opacity: 0;\n  translate: 0 -8px;\n  transition:\n    opacity 0.4s,\n    translate 0.4s,\n    display 0.4s allow-discrete,\n    overlay 0.4s allow-discrete;\n}\n"
+      - id: select-discrete
+        type: editor.select
+        at: { mark: select-discrete }
+        target: { file: styles.css, text: "allow-discrete", occurrence: 1 }
+      - id: type-open-state
+        type: editor.type
+        at: { mark: type-open-state }
+        cadence: line-by-line
+        target: { file: styles.css, after: "    overlay 0.4s allow-discrete;\n}\n", occurrence: 1 }
+        text: "\n#sugar:popover-open {\n  opacity: 1;\n  translate: 0 0;\n}\n"
+      - id: click-open-4
+        type: preview.click
+        at: { mark: click-open-4 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-open-4
+        type: expect.preview
+        at: { mark: after-open-4 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-close-4
+        type: preview.click
+        at: { mark: click-close-4 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-close-4
+        type: expect.preview
+        at: { mark: after-close-4 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: starting-style
+    narration: >
+      [[mark:type-starting]] လိုနေတဲ့ အပိုင်းက starting style ပါ။ သူ့ထဲမှာ ပွင့်နေတဲ့ popover ရဲ့ rule
+      ကို ထပ်ရေးပြီး၊ ပွင့်လာတဲ့ animation စမယ့် တန်ဖိုး ပေးပါမယ်။ ဖောက်ထွင်းပြီး 8 pixel အပေါ်မှာပါ။
+      starting style က specificity မတိုးလို့ ပွင့်နေတဲ့ rule နောက်မှာ ရေးပြီး၊ နောက်မှ ရေးတဲ့ rule က
+      နိုင်ပါတယ်။ [[mark:click-open-5]] နောက်တစ်ခါ ဖွင့်ကြည့်ရအောင်။ [[mark:after-open-5]] အခုတော့
+      ဖြည်းဖြည်း ပေါ်ပြီး နေရာထဲ လျှောဆင်းလာပါပြီ။ [[mark:click-close-5]] ပြန်ပိတ်ပါမယ်။
+      [[mark:after-close-5]] ဖြည်းဖြည်း ပျောက်သွားပါတယ်။ [[mark:explain-overlay]] ဒီ overlay ကို
+      ကြည့်ပါ။ သူက ပိတ်လိုက်တဲ့ popover ကို animation ပြီးတဲ့အထိ top layer ထဲမှာ ခလုတ်နဲ့ ကပ်ပြီး
+      ထားပေးပါတယ်။ overlay ကို Chromium browser တွေပဲ သိပါသေးတယ်။ Firefox က display ကို animate
+      မလုပ်နိုင်သေးလို့ ပိတ်တာနဲ့ popover ချက်ချင်း ပျောက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: animating popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#animating_popovers"
+      - title: "web.dev Learn CSS — Transitions: @starting-style"
+        url: "https://web.dev/learn/css/transitions#starting-style"
+      - title: "MDN — @starting-style"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@starting-style"
+      - title: "MDN — overlay (Chromium only)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overlay"
+    actions:
+      - id: type-starting
+        type: editor.type
+        at: { mark: type-starting }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  translate: 0 0;\n}\n", occurrence: 1 }
+        text: "\n@starting-style {\n  #sugar:popover-open {\n    opacity: 0;\n    translate: 0 -8px;\n  }\n}\n"
+      - id: click-open-5
+        type: preview.click
+        at: { mark: click-open-5 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-open-5
+        type: expect.preview
+        at: { mark: after-open-5 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-close-5
+        type: preview.click
+        at: { mark: click-close-5 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-close-5
+        type: expect.preview
+        at: { mark: after-close-5 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-overlay
+        type: editor.select
+        at: { mark: explain-overlay }
+        target: { file: styles.css, text: "overlay 0.4s allow-discrete", occurrence: 1 }
+
+  - id: manual
+    chapter: "Manual popover"
+    narration: >
+      [[mark:click-order]] အခု manual popover ကို ကြည့်ရအောင်။ မှာမယ် ခလုတ်ကို နှိပ်ပါမယ်။
+      [[mark:after-toast]] toast က screen ရဲ့ အလယ်မှာ ပွင့်လာပါပြီ။ [[mark:click-sugar-6]] သကြား
+      ရွေးစရာတွေကိုလည်း ဖွင့်ပါမယ်။ [[mark:after-sugar-6]] နှစ်ခုလုံး ပွင့်နေပါတယ်။ auto popover
+      ဖွင့်တာက manual ကိုတော့ မပိတ်ပါဘူး။ [[mark:click-sugar-6b]] သကြား ရွေးစရာတွေကို ပိတ်ပါမယ်။
+      [[mark:after-sugar-6b]] toast က ဆက်ပွင့်နေပါတယ်။ အပြင်ကို နှိပ်တာ၊ Escape key နှိပ်တာနဲ့လည်း သူ
+      ပိတ်မှာ မဟုတ်ပါဘူး။ [[mark:open-index-2]] toast ကို ပိတ်တဲ့ ခလုတ်က HTML ထဲမှာပါ။
+      [[mark:select-hide]] ဒီ popover target action ကို ကြည့်ပါ။ hide ဆိုရင် ခလုတ်က ပိတ်ပဲ ပိတ်ပြီး၊
+      show ဆိုရင် ဖွင့်ပဲ ဖွင့်ပါတယ်။ default ဖြစ်တဲ့ toggle က နှစ်မျိုးလုံး လုပ်ပါတယ်။
+      [[mark:click-toast-close]] နှိပ်ကြည့်ပါမယ်။ [[mark:after-toast-close]] toast ပျောက်သွားပါပြီ။
+      [[mark:explain-js]] JavaScript မှာလည်း show popover၊ hide popover၊ toggle popover method တွေက
+      ဒီအလုပ်ကိုပဲ လုပ်ပါတယ်။ source ခလုတ် ပေးရင် အဲဒီ ခလုတ်က implicit anchor ဖြစ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: manual popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#manual_popovers"
+      - title: "web.dev Learn CSS — Popover and dialog: with JavaScript"
+        url: "https://web.dev/learn/css/popover-and-dialog#with_javascript"
+      - title: "MDN — button popovertargetaction"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#popovertargetaction"
+      - title: "MDN — HTMLElement.showPopover() (source option)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/showPopover"
+    actions:
+      - id: click-order
+        type: preview.click
+        at: { mark: click-order }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-toast-open
+        type: expect.preview
+        at: { mark: after-toast }
+        timeoutMs: 4000
+        target: { by: testId, value: toast-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sugar-6
+        type: preview.click
+        at: { mark: click-sugar-6 }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-open-6
+        type: expect.preview
+        at: { mark: after-sugar-6 }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-toast-still-6
+        type: expect.preview
+        at: { afterAction: expect-sugar-open-6 }
+        timeoutMs: 4000
+        target: { by: testId, value: toast-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-sugar-6b
+        type: preview.click
+        at: { mark: click-sugar-6b }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-sugar-closed-6
+        type: expect.preview
+        at: { mark: after-sugar-6b }
+        timeoutMs: 4000
+        target: { by: testId, value: sugar-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-toast-stays
+        type: expect.preview
+        at: { afterAction: expect-sugar-closed-6 }
+        timeoutMs: 4000
+        target: { by: testId, value: toast-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-index-2
+        type: workspace.openFile
+        at: { mark: open-index-2 }
+        path: index.html
+      - id: select-hide
+        type: editor.select
+        at: { mark: select-hide }
+        target: { file: index.html, text: 'popovertargetaction="hide"', occurrence: 1 }
+      - id: click-toast-close
+        type: preview.click
+        at: { mark: click-toast-close }
+        timeoutMs: 5000
+        target: { by: testId, value: toast-close }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-toast-closed
+        type: expect.preview
+        at: { mark: after-toast-close }
+        timeoutMs: 4000
+        target: { by: testId, value: toast-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: nesting
+    narration: >
+      [[mark:open-stack]] popover က တခြား popover ကိုလည်း ဖွင့်နိုင်ပါတယ်။ [[mark:draw-stack]]
+      ပွင့်နေတဲ့ auto popover ထဲက ခလုတ်က ဒုတိယ popover ကို ဖွင့်ရင်၊ menu နဲ့ သူ့ sub-menu လို stack
+      တစ်ခု ဖြစ်သွားပြီး menu က ပွင့်နေဆဲပါ။ [[mark:draw-stack-close]] menu ကို ပိတ်ရင်၊ stack ထဲမှာ
+      သူ့အပေါ်က ဆင့်ပွင့်နေတဲ့ sub-menu တွေပါ ပိတ်သွားပါတယ်။ [[mark:draw-rules]] အမျိုးအစားချင်း
+      ကြည့်ရင်၊ auto ဖွင့်တာက တခြား auto တွေနဲ့ ပွင့်နေတဲ့ hint အားလုံးကို ပိတ်ပြီး၊ hint ဖွင့်တာက
+      တခြား hint တွေကိုပဲ ပိတ်ပါတယ်။ [[mark:draw-manual-rule]] manual popover ကိုတော့ တခြား popover က
+      ဘယ်တော့မှ မပိတ်ပါဘူး။ [[mark:explain-dialog-popover]] ပြီးတော့ dialog element မှာ popover
+      attribute ထည့်ရင် popover လို အလုပ်လုပ်ပြီး၊ screen reader ကတော့ dialog အဖြစ်ပဲ ဖတ်ပြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: nested popovers"
+        url: "https://web.dev/learn/css/popover-and-dialog#nested_popovers"
+      - title: "web.dev Learn CSS — Popover and dialog: closing other popover types"
+        url: "https://web.dev/learn/css/popover-and-dialog#closing_other_popover_types"
+      - title: "MDN — Using the Popover API: nested popovers"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using#nested_popovers"
+    actions:
+      - id: open-stack-board
+        type: whiteboard.apply
+        at: { mark: open-stack }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-stack
+        type: whiteboard.apply
+        at: { mark: draw-stack }
+        upsertIds: [d-menu, d-menu-l, d-sub, d-sub-l]
+        drawMs: 2000
+      - id: draw-stack-close
+        type: whiteboard.apply
+        at: { mark: draw-stack-close }
+        upsertIds: [d-close]
+        drawMs: 1400
+      - id: draw-rules
+        type: whiteboard.apply
+        at: { mark: draw-rules }
+        upsertIds: [d-rule-auto, d-rule-hint]
+        drawMs: 2000
+      - id: draw-manual-rule
+        type: whiteboard.apply
+        at: { mark: draw-manual-rule }
+        upsertIds: [d-rule-manual]
+        drawMs: 1200
+
+  - id: dialog
+    chapter: "Modal dialog"
+    narration: >
+      [[mark:close-stack]] ဝယ်သူက ရှေ့မဆက်ခင် အရင် ဖြေရမယ့် အခါမျိုးမှာတော့ modal dialog ကို သုံးပါ။
+      [[mark:select-dialog-2]] ဒီ dialog element ကို ကြည့်ပါ။ dialog ဆိုတာ page အပေါ်မှာ ပေါ်တဲ့
+      မေးခွန်း ဒါမှမဟုတ် form box ဖြစ်ပြီး default အားဖြင့် ပိတ်နေပါတယ်။ open attribute ထည့်ရင်လည်း
+      ပေါ်ပေမယ့် top layer ထဲ မရောက်သလို modal လည်း မဖြစ်လို့၊ ကိုယ်တိုင် မထည့်ပါနဲ့။
+      [[mark:open-kit]] အော်ဒါ အတည်ပြုမယ် ခလုတ် နှိပ်တာကို project ထဲက script လေးက handle
+      လုပ်ပေးပါတယ်။ [[mark:select-showmodal]] ဒီ show modal ကို ကြည့်ပါ။ သူက dialog ကို top layer
+      ထဲမှာ အလယ်တည့်တည့် ဖွင့်ပြီး ကျန်တဲ့ page ကို inert ဖြစ်စေလို့၊ အဲဒါကို နှိပ်လို့လည်း မရ၊ Tab
+      key နဲ့ ရောက်လို့လည်း မရပါဘူး။ focus က dialog ထဲ ရွှေ့ပါတယ်။ modal မပါတဲ့ show က သာမန် dialog
+      ကို ဖွင့်ပြီး close က ပိတ်ပါတယ်။ [[mark:click-confirm]] အော်ဒါ အတည်ပြုမယ် ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-confirm]] dialog က အလယ်မှာ ပွင့်လာပြီး ပထမ ခလုတ်မှာ focus
+      ရနေပါတယ်။ page ကိုလည်း backdrop ဖျော့ဖျော့ တစ်ခုက ဖုံးထားပါတယ်။
+    sources:
+      - title: "MDN — <dialog> (open attribute, modal and non-modal)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog"
+      - title: "MDN — HTMLDialogElement.showModal()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal"
+      - title: "HTML Standard — the dialog element"
+        url: "https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element"
+    actions:
+      - id: close-stack-board
+        type: whiteboard.apply
+        at: { mark: close-stack }
+        open: false
+      - id: select-dialog-2
+        type: editor.select
+        at: { mark: select-dialog-2 }
+        target: { file: index.html, text: '<dialog id="confirm"', occurrence: 1 }
+      - id: open-kit
+        type: workspace.openFile
+        at: { mark: open-kit }
+        path: kit.js
+      - id: select-showmodal
+        type: editor.select
+        at: { mark: select-showmodal }
+        target: { file: kit.js, text: "dialog.showModal()", occurrence: 1 }
+      - id: click-confirm
+        type: preview.click
+        at: { mark: click-confirm }
+        timeoutMs: 5000
+        target: { by: testId, value: open-confirm }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-confirm-open
+        type: expect.preview
+        at: { mark: after-confirm }
+        timeoutMs: 4000
+        target: { by: testId, value: confirm-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: dialog-style
+    narration: >
+      [[mark:open-styles-2]] CSS ကို ပြန်ဖွင့်ပါမယ်။ [[mark:type-dbackdrop]] ဒီမှာတော့ backdrop ရင့်တာ
+      မှန်ပါတယ်။ နောက်က page ကို တကယ် ပိတ်ဆို့ထားလို့ပါ။ browser ရဲ့ default က 10 ရာခိုင်နှုန်းပဲ
+      မြင်ရတဲ့ အမည်းရောင်ပါ။ 40 ရာခိုင်နှုန်း ပေးကြည့်ရအောင်။ [[mark:after-dbackdrop]] page
+      မှောင်သွားပါပြီ။ ဒီ အမှောင်က ဝယ်သူ မဖြေမချင်း page ကို သုံးလို့ မရဘူး ဆိုတာကို အမှန်အတိုင်း
+      ပြနေတာပါ။ [[mark:type-modal]] modal pseudo-class က show modal နဲ့ ဖွင့်ထားတဲ့ dialog ကိုပဲ
+      ရွေးပါတယ်။ အဲဒီ dialog ရဲ့ ထောင့်တွေကို ဝိုင်းအောင် လုပ်ပါမယ်။ [[mark:after-modal]] ထောင့်တွေ
+      ဝိုင်းသွားပါပြီ။ show နဲ့ ဖွင့်ထားတဲ့ dialog ဆိုရင်တော့ ဒီ rule နဲ့ မကိုက်ပါဘူး။
+      [[mark:click-ok]] အခု အော်ဒါကို အတည်ပြုရအောင်။ [[mark:after-ok]] ကိုယ့် script မပါဘဲ dialog
+      ပိတ်သွားပါပြီ။ method dialog ပါတဲ့ form ကို submit လုပ်ရင် dialog ပိတ်ပြီး၊ submit လုပ်တဲ့
+      ခလုတ်ရဲ့ တန်ဖိုး၊ ဒီမှာဆိုရင် ok က dialog ရဲ့ return value ဖြစ်ပါတယ်။ Escape key နဲ့လည်း modal
+      dialog ပိတ်ပါတယ်။
+    sources:
+      - title: "MDN — ::backdrop"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::backdrop"
+      - title: "MDN — :modal"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:modal"
+      - title: 'MDN — <form> method="dialog" and HTMLDialogElement.returnValue'
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/returnValue"
+    actions:
+      - id: open-styles-2
+        type: workspace.openFile
+        at: { mark: open-styles-2 }
+        path: styles.css
+      - id: type-dbackdrop
+        type: editor.type
+        at: { mark: type-dbackdrop }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    translate: 0 -8px;\n  }\n}\n", occurrence: 1 }
+        text: "\ndialog::backdrop {\n  background: rgb(0 0 0 / 40%);\n}\n"
+      - id: expect-dbackdrop
+        type: expect.preview
+        at: { mark: after-dbackdrop }
+        timeoutMs: 4000
+        target: { by: testId, value: confirm-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-modal
+        type: editor.type
+        at: { mark: type-modal }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: rgb(0 0 0 / 40%);\n}\n", occurrence: 1 }
+        text: "\ndialog:modal {\n  border-radius: 12px;\n}\n"
+      - id: expect-modal
+        type: expect.preview
+        at: { mark: after-modal }
+        timeoutMs: 4000
+        target: { by: testId, value: confirm-status }
+        textContains: "open"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-ok
+        type: preview.click
+        at: { mark: click-ok }
+        timeoutMs: 5000
+        target: { by: testId, value: confirm-ok }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-confirm-closed
+        type: expect.preview
+        at: { mark: after-ok }
+        timeoutMs: 4000
+        target: { by: testId, value: confirm-status }
+        textContains: "closed"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Point at the form while after-ok explains method dialog and the
+      # return value (the invokers scene then finds index.html already open).
+      - id: open-index-form
+        type: workspace.openFile
+        at: { mark: after-ok, offsetMs: 1200 }
+        path: index.html
+      - id: select-form
+        type: editor.select
+        at: { mark: after-ok, offsetMs: 2200 }
+        target: { file: index.html, text: '<form method="dialog">', occurrence: 1 }
+
+  - id: invokers
+    narration: >
+      [[mark:explain-command]] ဒီ attribute ကို ကြည့်ပါ။ ကိုယ့် page က dialog ကို script နဲ့
+      ဖွင့်ပေမယ့် browser အသစ်တွေမှာ script မလိုတော့ပါဘူး။ ခလုတ်ကို show modal command ပေးပြီး command
+      for attribute နဲ့ dialog ကို ညွှန်းရုံပါပဲ။ command ခလုတ်တွေက dialog ပိတ်တာ၊ popover toggle
+      လုပ်တာလည်း လုပ်နိုင်ပါတယ်။ [[mark:explain-closedby]] closed by attribute နဲ့ အပြင်ကို နှိပ်ရင်
+      modal dialog ကို ပိတ်ခိုင်းလို့ ရပေမယ့်၊ Safari မှာတော့ မရသေးပါဘူး။ [[mark:explain-toggle]]
+      popover ရော dialog ပါ ဖွင့်တိုင်း ပိတ်တိုင်း၊ မပြောင်းခင် before toggle၊ ပြောင်းပြီးမှ toggle
+      event ကို fire လုပ်ပါတယ်။
+    sources:
+      - title: "MDN — <button> command and commandfor"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#command"
+      - title: "MDN — <dialog> closedby"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog#closedby"
+      - title: "MDN — HTMLElement toggle event"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/toggle_event"
+    actions:
+      - id: open-index-3
+        type: workspace.openFile
+        at: { mark: explain-command }
+        path: index.html
+      - id: select-data-show
+        type: editor.select
+        at: { mark: explain-command, offsetMs: 900 }
+        target: { file: index.html, text: 'data-show-modal="#confirm"', occurrence: 1 }
+
+  - id: choose
+    chapter: "Popover လား dialog လား"
+    narration: >
+      [[mark:open-choose]] ဒါဆို ဘယ်ဟာကို သုံးမလဲ။ [[mark:draw-popover-side]] popover က ပေါ့ပါးပါတယ်။
+      menu၊ ရွေးစရာ box၊ tooltip၊ toast တွေအတွက်ပါ။ page ကို ဆက်သုံးလို့ ရပြီး၊ auto ဆိုရင် light
+      dismiss နဲ့ ပိတ်ပါတယ်။ [[mark:draw-dialog-side]] modal dialog ကတော့ အော်ဒါ အတည်ပြုတာ၊ login
+      ဝင်တာလို အခါမျိုးမှာ အားလုံးကို ရပ်ထားပါတယ်။ သုံးသူ မဖြေမချင်း page က inert ဖြစ်နေပါတယ်။
+      [[mark:draw-both]] နှစ်ခုလုံး top layer ထဲမှာ ပေါ်ပြီး backdrop ရှိပါတယ်။ အခြေအနေ သုံးခုနဲ့ပဲ
+      animation ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog"
+        url: "https://web.dev/learn/css/popover-and-dialog"
+      - title: "MDN — Popover API: popovers vs dialogs"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Popover_API"
+    actions:
+      - id: open-choose-board
+        type: whiteboard.apply
+        at: { mark: open-choose }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-popover-side
+        type: whiteboard.apply
+        at: { mark: draw-popover-side }
+        upsertIds: [e-pop, e-pop-h, e-pop-1, e-pop-2, e-pop-3]
+        drawMs: 2400
+      - id: draw-dialog-side
+        type: whiteboard.apply
+        at: { mark: draw-dialog-side }
+        upsertIds: [e-dlg, e-dlg-h, e-dlg-1, e-dlg-2, e-dlg-3]
+        drawMs: 2400
+      - id: draw-both
+        type: whiteboard.apply
+        at: { mark: draw-both }
+        upsertIds: [e-both]
+        drawMs: 1400
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း မေးကြည့်ရအောင်။ ဘယ် popover အမျိုးအစားက modal လဲ။
+      [[mark:quiz-answer]] ဘယ်ဟာမှ မဟုတ်ပါဘူး။ modal လိုရင် dialog ကို show modal နဲ့ ဖွင့်ပါ။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ popover attribute နဲ့ popover target ခလုတ်က script မပါဘဲ top
+      layer ထဲမှာ box တစ်ခု ဖွင့်ပေးပါတယ်။ layout ကို popover open မှာ ပေးပြီး backdrop ကို ဖျော့ဖျော့
+      ထားပါ။ animation ကိုတော့ starting style နဲ့ allow discrete သုံးပြီး ထည့်ပါတယ်။ modal dialog
+      ကတော့ page ကို ပိတ်ဆို့ပြီး သူ့ form ကနေ ပိတ်လို့ ရပါတယ်။ [[mark:next-lesson]] ဒီနေ့ element
+      တစ်ခု ပေါ်တာ ပျောက်တာကို animation ထည့်ခဲ့ပါတယ်။ နောက် lesson မှာတော့ page ရဲ့ ပုံစံ တစ်ခုလုံး
+      ပြောင်းသွားတာကို animation ထည့်ပေးတဲ့ view transition ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Popover and dialog: check your understanding"
+        url: "https://web.dev/learn/css/popover-and-dialog#check_your_understanding"
+      - title: "web.dev Learn CSS — View transitions (next lesson)"
+        url: "https://web.dev/learn/css/view-transitions-spas"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        clear: true
+        upsertIds: [f-title, f-q]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: "[popover]:popover-open {\n  display: grid;\n  gap: 8px;\n}\n\n#sugar {\n  position-area: bottom span-right;\n  margin: unset;\n}\n\n#sugar::backdrop {\n  background: rgb(40 20 0 / 12%);\n}\n\n#sugar {\n  opacity: 0;\n  translate: 0 -8px;\n  transition:\n    opacity 0.4s,\n    translate 0.4s,\n    display 0.4s allow-discrete,\n    overlay 0.4s allow-discrete;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "#sugar:popover-open {\n  opacity: 1;\n  translate: 0 0;\n}\n\n@starting-style {\n  #sugar:popover-open {\n    opacity: 0;\n    translate: 0 -8px;\n  }\n}\n\ndialog::backdrop {\n  background: rgb(0 0 0 / 40%);\n}\n\ndialog:modal {\n  border-radius: 12px;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
