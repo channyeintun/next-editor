@@ -1,0 +1,1801 @@
+# CSS course (Burmese), lesson 5 of 43: the cascade and cascade layers.
+#
+# Narration is Burmese, applied from voice-script.md next to this file
+# (DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese too.
+#
+# Shape: board (two rules disagree about the order button; the cascade as an
+# ordered list of questions) while the dev server installs → code tour
+# (index.html: the two stylesheet links, two buttons, the teal style
+# attribute; empty styles.css) → order of appearance (green, then blue; why
+# styles.css beats base.css) → a <style> element after the link (one reload,
+# red) → fallback declarations (clamp on the welcome heading; a deliberately
+# broken copy on the form heading keeps its fallback) → specificity before
+# order (gold class text survives a later element rule) → board: origins, then
+# the browser's body margin loses to our plain element rule → the style
+# attribute step, a normal rule that changes nothing, then important turns
+# both buttons indigo → board: the importance ladder and the !important flip
+# → media queries and relevance (a wide-screen rule that never competes, the
+# flipped condition that applies) → board: layer trays → layers live on the
+# menu cards (later layer beats a heavier, later-written selector; one
+# unlayered rule at the top of the file beats both) → board: DevTools
+# strike-through, scope in one sentence, the funnel again as the recap.
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only CSS file typed;
+# it never contains url(, @import or image-set(; no postcss config. Colour
+# keywords typed keystroke by keystroke (seagreen, steelblue, gold, black,
+# indigo, orange, lightgreen, lightpink, white) have no valid shorter prefix,
+# so no wrong colour flashes. Rules with an open parenthesis (clamp, @media)
+# are typed at the end of the file, so a half-typed function never swallows a
+# later rule. The one index.html edit is a single block insert of a complete
+# <style> element (one reload), asserted after it lands. The rule typed at
+# the top of styles.css is a single block insert.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-05-cascade
+  title: "CSS course 5: Cascade နဲ့ layer တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS course 5
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: order-form (lesson 5: heading and buttons only) -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
+                <button class="order-btn" type="button" style="background: teal" data-testid="inline-button">ဖုန်းဆက်ရန်</button>
+              </form>
+
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C with two declarations left out
+      # (DESIGN.md "The page and the workspace"): body keeps the browser's
+      # 8px margin (the user agent origin demo types body { margin: 0; }),
+      # and .menu-card has no background (an unlayered base.css background
+      # would beat every layered rule and hide the layer demo). Section D is
+      # not needed. Never typed, never shown.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types
+          can focus on one idea. Lesson 5 leaves out the body margin and the
+          menu card background, because the lesson types both.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 5: the order form keeps only its heading and buttons, so it
+           needs its own gap before the drinks menu. */
+        .order-form {
+          margin-bottom: 16px;
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the conflict (left) and the cascade as an ordered list of
+    # questions (right). Re-shown, without drawing, as the recap.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ဘယ် declaration က နိုင်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-rule1-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 250,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-rule1-text,
+        kind: text,
+        x: 298,
+        y: 250,
+        width: 200,
+        height: 36,
+        text: "rule 1 · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule2-box,
+        kind: rectangle,
+        x: 280,
+        y: 316,
+        width: 250,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-rule2-text,
+        kind: text,
+        x: 298,
+        y: 326,
+        width: 200,
+        height: 36,
+        text: "rule 2 · အပြာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: a-arrow, kind: freedraw, stroke: arrow-down, x: 380, y: 384, width: 50, height: 60 }
+    - {
+        id: a-button,
+        kind: rectangle,
+        x: 300,
+        y: 456,
+        width: 210,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-button-text,
+        kind: text,
+        x: 330,
+        y: 468,
+        width: 150,
+        height: 36,
+        text: "မှာမယ် ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-one-value,
+        kind: text,
+        x: 280,
+        y: 548,
+        width: 250,
+        height: 36,
+        text: "တန်ဖိုး တစ်ခုပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-steps-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 236,
+        width: 30,
+        height: 360,
+      }
+    - {
+        id: a-step1,
+        kind: text,
+        x: 650,
+        y: 230,
+        width: 330,
+        height: 36,
+        text: "1 · relevance (ကိုက်လား)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-step2,
+        kind: text,
+        x: 650,
+        y: 282,
+        width: 330,
+        height: 36,
+        text: "2 · origin နဲ့ important",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-step3,
+        kind: text,
+        x: 650,
+        y: 334,
+        width: 330,
+        height: 36,
+        text: "3 · context (shadow DOM)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-step4,
+        kind: text,
+        x: 650,
+        y: 386,
+        width: 330,
+        height: 36,
+        text: "4 · style attribute",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-step5,
+        kind: text,
+        x: 650,
+        y: 438,
+        width: 330,
+        height: 36,
+        text: "5 · layer",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-step6,
+        kind: text,
+        x: 650,
+        y: 490,
+        width: 330,
+        height: 36,
+        text: "6 · specificity",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-step7,
+        kind: text,
+        x: 650,
+        y: 542,
+        width: 330,
+        height: 36,
+        text: "7 · ရေးထားတဲ့ အစဉ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-tie-note,
+        kind: text,
+        x: 650,
+        y: 604,
+        width: 330,
+        height: 36,
+        text: "တူနေမှ နောက်တစ်ဆင့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — origins (bottom three rungs, scene origins), then the whole
+    # importance ladder (scene importance-board). Low at the bottom.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Origin နဲ့ important",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-normal-box,
+        kind: rectangle,
+        x: 400,
+        y: 490,
+        width: 440,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-ua,
+        kind: text,
+        x: 420,
+        y: 596,
+        width: 300,
+        height: 36,
+        text: "browser ရဲ့ default",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-user,
+        kind: text,
+        x: 420,
+        y: 548,
+        width: 300,
+        height: 36,
+        text: "user ရဲ့ setting",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-author,
+        kind: text,
+        x: 420,
+        y: 500,
+        width: 300,
+        height: 36,
+        text: "ကိုယ့် CSS (author)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-anim,
+        kind: text,
+        x: 420,
+        y: 440,
+        width: 300,
+        height: 36,
+        text: "animation",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-important-box,
+        kind: rectangle,
+        x: 400,
+        y: 278,
+        width: 440,
+        height: 150,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-author-imp,
+        kind: text,
+        x: 420,
+        y: 384,
+        width: 330,
+        height: 36,
+        text: "ကိုယ့် CSS · important",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-user-imp,
+        kind: text,
+        x: 420,
+        y: 336,
+        width: 300,
+        height: 36,
+        text: "user · important",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-ua-imp,
+        kind: text,
+        x: 420,
+        y: 288,
+        width: 300,
+        height: 36,
+        text: "browser · important",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-transition,
+        kind: text,
+        x: 420,
+        y: 230,
+        width: 300,
+        height: 36,
+        text: "transition",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-stronger,
+        kind: text,
+        x: 890,
+        y: 230,
+        width: 200,
+        height: 36,
+        text: "↑ ပိုနိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-flip,
+        kind: text,
+        x: 900,
+        y: 340,
+        width: 180,
+        height: 36,
+        text: "ပြောင်းပြန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-flip-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 878,
+        y: 322,
+        width: 215,
+        height: 72,
+        strokeColor: "#e03131",
+      }
+
+    # Board C — cascade layers as stacked trays, the statement that orders
+    # them, and unlayered styles on top.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "Cascade layer တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-statement,
+        kind: text,
+        x: 300,
+        y: 224,
+        width: 420,
+        height: 36,
+        text: "@layer components, theme;",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-tray-components,
+        kind: rectangle,
+        x: 320,
+        y: 520,
+        width: 420,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-tray-components-label,
+        kind: text,
+        x: 345,
+        y: 537,
+        width: 300,
+        height: 36,
+        text: "components layer",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-tray-theme,
+        kind: rectangle,
+        x: 320,
+        y: 420,
+        width: 420,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-tray-theme-label,
+        kind: text,
+        x: 345,
+        y: 437,
+        width: 300,
+        height: 36,
+        text: "theme layer",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-tray-none,
+        kind: rectangle,
+        x: 320,
+        y: 300,
+        width: 420,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-tray-none-label,
+        kind: text,
+        x: 345,
+        y: 317,
+        width: 300,
+        height: 36,
+        text: "layer မရှိတဲ့ style",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-later-wins,
+        kind: text,
+        x: 800,
+        y: 437,
+        width: 260,
+        height: 36,
+        text: "နောက်က layer နိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-no-weight,
+        kind: text,
+        x: 800,
+        y: 487,
+        width: 260,
+        height: 36,
+        text: "selector မဆိုင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-none-wins,
+        kind: text,
+        x: 800,
+        y: 317,
+        width: 260,
+        height: 36,
+        text: "အကုန် နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-none-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1030,
+        y: 304,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board D — a sketch of DevTools' Styles panel for the order button.
+    # Rules are listed by specificity and source order, not by importance:
+    # the later <style> rule (crimson) sits above the styles.css rule that
+    # wins with !important. The winner is the one row not struck through
+    # (and the check); the rule that never matched is missing.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "DevTools · Styles",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-panel,
+        kind: rectangle,
+        x: 290,
+        y: 220,
+        width: 640,
+        height: 300,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-row1,
+        kind: text,
+        x: 315,
+        y: 310,
+        width: 480,
+        height: 36,
+        text: "background: indigo !important",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-row1-check,
+        kind: freedraw,
+        stroke: check,
+        x: 840,
+        y: 300,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-row2,
+        kind: text,
+        x: 315,
+        y: 240,
+        width: 320,
+        height: 36,
+        text: "background: crimson",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row3,
+        kind: text,
+        x: 315,
+        y: 380,
+        width: 320,
+        height: 36,
+        text: "background: steelblue",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row4,
+        kind: text,
+        x: 315,
+        y: 450,
+        width: 320,
+        height: 36,
+        text: "background: seagreen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-strike2,
+        kind: freedraw,
+        stroke: strike,
+        x: 310,
+        y: 240,
+        width: 330,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-strike3,
+        kind: freedraw,
+        stroke: strike,
+        x: 310,
+        y: 380,
+        width: 340,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-strike4,
+        kind: freedraw,
+        stroke: strike,
+        x: 310,
+        y: 450,
+        width: 330,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-lost,
+        kind: text,
+        x: 700,
+        y: 380,
+        width: 200,
+        height: 36,
+        text: "ရှုံးတာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-missing,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 560,
+        height: 36,
+        text: "@media (width >= 60em) → မပေါ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-try,
+        kind: text,
+        x: 300,
+        y: 610,
+        width: 400,
+        height: 36,
+        text: "ကိုယ့် browser မှာ စမ်းကြည့်ပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4105
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: cascade-board
+    chapter: "Cascade ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson ရဲ့ အဆုံးမှာ rule အများကြီးက card တစ်ခုတည်းကို style ပေးနေတာ မြင်ခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ rule တွေ ပြိုင်တဲ့အခါ browser က ဘယ်ဟာကို ရွေးလဲ ကြည့်ပါမယ်။ [[mark:start-server]]
+      ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ dev server ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့်
+      ဖြစ်နေမှာပါ။ [[mark:draw-conflict]] rule နှစ်ခုက မှာမယ် ခလုတ် တစ်ခုတည်းကို ရွေးပြီး၊ တစ်ခုက
+      နောက်ခံကို အစိမ်း၊ တစ်ခုက အပြာ ပေးနေတယ် ဆိုပါစို့။ browser က တစ်ခုကိုပဲ ရွေးရပါတယ်။
+      [[mark:name-cascade]] ဒီလို ရွေးတဲ့ နည်းကို cascade လို့ ခေါ်ပြီး၊ CSS ရဲ့ C ဆိုတာ ဒီ cascade ပါ။
+      သူ့ကြောင့် style တွေ နေရာ အမျိုးမျိုးက လာပေမယ့်၊ property တိုင်းမှာ တန်ဖိုး တစ်ခုပဲ ရပါတယ်။
+      [[mark:draw-steps]] ဘယ်ဟာ နိုင်မလဲ ဆိုတာ browser က မေးခွန်း တစ်စုနဲ့ အဆင့်လိုက် စစ်ပါတယ်။ မေးခွန်း
+      တစ်ခုမှာ နှစ်ဖက် တူနေမှသာ နောက် မေးခွန်းကို ဆက်သွားပါတယ်။ [[mark:draw-relevance]] ပထမ မေးခွန်းက
+      relevance ပါ။ selector က element နဲ့ ကိုက်ပြီး၊ အခြေအနေတွေလည်း မှန်နေတဲ့ declaration တွေပဲ
+      ပြိုင်ပွဲထဲ ဝင်ခွင့် ရပါတယ်။ [[mark:draw-origin]] ဒုတိယက style ဘယ်က လာလဲ ဆိုတဲ့ origin နဲ့၊
+      declaration ကို ဦးစားပေးခိုင်းတဲ့ important keyword တပ်ထားလား ဆိုတာပါ။ [[mark:draw-context]] တတိယက
+      context ပါ။ shadow DOM သုံးတဲ့ web component တွေမှာပဲ အရေးပါလို့ ဒီ course မှာ မလိုပါဘူး။
+      [[mark:draw-attribute]] စတုတ္ထက element ပေါ်မှာ တိုက်ရိုက် ရေးထားတဲ့ style attribute ပါ။
+      [[mark:draw-layers]] ပြီးရင် ကိုယ့် CSS ကို အုပ်စုခွဲထားတဲ့ cascade layer၊ သူ့နောက်မှာ selector ရဲ့
+      အလေးချိန် ဖြစ်တဲ့ specificity ပါ။ [[mark:draw-order]] အဆုံးဆုံးမှာမှ declaration တွေ ရေးထားတဲ့
+      အစဉ်ကို ကြည့်ပါတယ်။ [[mark:bottom-up]] ဒီ စာရင်းကို အောက်ဆုံးကနေ စကြည့်ပါမယ်။ ရေးထားတဲ့ အစဉ်က မြင်ရ
+      အလွယ်ဆုံး ဖြစ်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — The cascade"
+        url: "https://web.dev/learn/css/the-cascade"
+      - title: "MDN — Introduction to the CSS cascade"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Introduction"
+      - title: "CSS Cascading and Inheritance Level 5 — Cascade sorting order"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-sort"
+      - title: "CSS Cascading and Inheritance Level 5 — Cascade contexts"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-context"
+    actions:
+      - id: open-cascade-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-conflict
+        type: whiteboard.apply
+        at: { mark: draw-conflict }
+        upsertIds:
+          [a-rule1-box, a-rule1-text, a-rule2-box, a-rule2-text, a-arrow, a-button, a-button-text]
+        drawMs: 3000
+      - id: draw-one-value
+        type: whiteboard.apply
+        at: { mark: name-cascade }
+        upsertIds: [a-one-value]
+        drawMs: 900
+      - id: draw-steps
+        type: whiteboard.apply
+        at: { mark: draw-steps }
+        upsertIds: [a-steps-arrow, a-tie-note]
+        drawMs: 1500
+      - id: draw-relevance
+        type: whiteboard.apply
+        at: { mark: draw-relevance }
+        upsertIds: [a-step1]
+        drawMs: 900
+      - id: draw-origin
+        type: whiteboard.apply
+        at: { mark: draw-origin }
+        upsertIds: [a-step2]
+        drawMs: 900
+      - id: draw-context
+        type: whiteboard.apply
+        at: { mark: draw-context }
+        upsertIds: [a-step3]
+        drawMs: 900
+      - id: draw-attribute
+        type: whiteboard.apply
+        at: { mark: draw-attribute }
+        upsertIds: [a-step4]
+        drawMs: 900
+      - id: draw-layers
+        type: whiteboard.apply
+        at: { mark: draw-layers }
+        upsertIds: [a-step5, a-step6]
+        drawMs: 1400
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [a-step7]
+        drawMs: 900
+
+  - id: code-tour
+    narration: >
+      [[mark:close-cascade-board]] editor ထဲ သွားရအောင်။ [[mark:open-index]] ဒါက အရင်က လက်ဖက်ရည်ဆိုင် page
+      ရဲ့ HTML ဖိုင်ပါ။ [[mark:select-links]] head ထဲက ဒီ link နှစ်ခုကို ကြည့်ပါ။ ပထမက ဆိုင်ရဲ့ အရောင်နဲ့
+      အခြေခံ ပုံစံတွေ ပါတဲ့ base CSS ဖိုင်၊ ဒုတိယက ကိုယ့် styles CSS ဖိုင်ပါ။ ဒီ အစဉ်ကို မှတ်ထားပါ။
+      [[mark:select-buttons]] form ထဲမှာ class တူတူ ပေးထားတဲ့ ခလုတ် နှစ်ခု ရှိပါတယ်။ [[mark:select-teal]]
+      ဒုတိယ ခလုတ်မှာတော့ နောက်ခံကို စိမ်းပြာ ပေးထားတဲ့ style attribute လည်း ရှိပါတယ်။ သူ့ကို နောက်မှ
+      ပြန်ကြည့်ပါမယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] dev
+      server အသင့် ဖြစ်လို့၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။ မှာမယ် ခလုတ်က base CSS ဖိုင်ကြောင့် အညိုရောင်၊
+      ဖုန်းဆက်ရန် ခလုတ်က စိမ်းပြာ ဖြစ်နေပါတယ်။ [[mark:look-header]] အညိုရင့် header ပတ်လည်က အရောင်ဖျော့
+      အစင်း ပါးပါးလေးကိုလည်း သတိထား ကြည့်ပါ။ ဘယ်က လာလဲ နောက်မှ သိရပါမယ်။
+    sources:
+      - title: "MDN — Handling conflicts"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Handling_conflicts"
+      - title: "MDN — <link>: the External Resource Link element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/link"
+      - title: "MDN — style (global attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/style"
+    actions:
+      - id: close-cascade-board
+        type: whiteboard.apply
+        at: { mark: close-cascade-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-links
+        type: editor.select
+        at: { mark: select-links }
+        target:
+          file: index.html
+          text: "<link rel=\"stylesheet\" href=\"/base.css\" />\n    <link rel=\"stylesheet\" href=\"/styles.css\" />"
+          occurrence: 1
+      - id: select-buttons
+        type: editor.select
+        at: { mark: select-buttons }
+        target:
+          file: index.html
+          text: "<button class=\"order-btn\" type=\"button\" data-testid=\"order-button\">မှာမယ်</button>\n        <button class=\"order-btn\" type=\"button\" style=\"background: teal\" data-testid=\"inline-button\">ဖုန်းဆက်ရန်</button>"
+          occurrence: 1
+      - id: select-teal
+        type: editor.select
+        at: { mark: select-teal }
+        target: { file: index.html, text: 'style="background: teal"', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-order-button
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-teal-attribute
+        type: expect.preview
+        at: { afterAction: expect-order-button }
+        timeoutMs: 5000
+        target: { by: testId, value: inline-button }
+        attribute: { name: style, value: "background: teal" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: expect-teal-attribute }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-header }
+
+  - id: order-of-appearance
+    chapter: "ရေးထားတဲ့ အစဉ်"
+    narration: >
+      [[mark:type-green]] စာရင်းရဲ့ နောက်ဆုံး မေးခွန်းကနေ စကြည့်ရအောင်။ ပထမ rule က class နဲ့ ခလုတ်တွေကို
+      ရွေးပြီး အစိမ်းရောင် နောက်ခံ ပေးပါတယ်။ [[mark:green-done]] ခလုတ် အစိမ်းရောင် ဖြစ်သွားပေမယ့်၊ class
+      တူတဲ့ ဖုန်းဆက်ရန် ခလုတ်ကတော့ စိမ်းပြာ အတိုင်းပဲ ကျန်နေပါတယ်။ ဒါကို မှတ်ထားပါ။ [[mark:type-blue]] အခု
+      selector တူတူနဲ့ ဒုတိယ rule ကို အောက်မှာ ရေးပြီး ခလုတ်ကို အပြာ ပေးပါမယ်။ [[mark:blue-done]] ခလုတ်
+      အပြာ ဖြစ်သွားပါပြီ။ ဒီ အပြာ declaration ကို ကြည့်ပါ။ rule နှစ်ခုက တစ်ဖိုင်တည်းမှာ ရှိပြီး
+      အလေးချိန်လည်း တူလို့၊ အရင် မေးခွန်းတွေမှာ အကုန် တူနေပါတယ်။ ဒါဆို source order လို့ ခေါ်တဲ့ ရေးထားတဲ့
+      အစဉ်ကပဲ ဆုံးဖြတ်ပြီး၊ နောက်မှ ရေးတာ နိုင်ပါတယ်။ [[mark:across-files]] ဖိုင်တွေကြားမှာလည်း ဒီလိုပဲ
+      ဖြစ်ပြီးသားပါ။ base CSS ဖိုင်ကလည်း ဒီ ခလုတ်ကို အလေးချိန်တူ selector နဲ့ အညိုရောင် ပေးထားပါတယ်။
+      ဒါပေမဲ့ ကိုယ့် ဖိုင်ကို သူ့နောက်မှာ ချိတ်ထားတဲ့အတွက် browser က နောက်မှ ဖတ်ပြီး၊ ကိုယ့် rule တွေက
+      နိုင်သွားတာပါ။ [[mark:same-rule]] ပထမ lesson မှာ မြင်ခဲ့သလို၊ rule တစ်ခုတည်းထဲမှာ property တစ်ခုကို
+      နှစ်ခါ ရေးရင်လည်း နောက်က တစ်ခုက နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: position and order of appearance"
+        url: "https://web.dev/learn/css/the-cascade#position_and_order_of_appearance"
+      - title: "CSS Cascading and Inheritance Level 5 — Order of appearance"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-order"
+      - title: "MDN — Handling conflicts: source order"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Handling_conflicts"
+    actions:
+      - id: type-green
+        type: editor.type
+        at: { mark: type-green }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".order-btn {\n  background: seagreen;\n}\n"
+      - id: type-blue
+        type: editor.type
+        at: { mark: type-blue }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: seagreen;\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  background: steelblue;\n}\n"
+      - id: select-later
+        type: editor.select
+        at: { mark: blue-done }
+        target: { file: styles.css, text: "  background: steelblue;", occurrence: 1 }
+      - id: expect-blue-rule
+        type: expect.file
+        at: { mark: across-files }
+        path: styles.css
+        contains: ".order-btn {\n  background: seagreen;\n}\n\n.order-btn {\n  background: steelblue;\n}\n"
+
+  - id: style-element
+    narration: >
+      [[mark:open-index-style]] link နဲ့ style element ကြားမှာလည်း အစဉ်က အရေးပါပါတယ်။ HTML ဖိုင်ထဲမှာ
+      ကိုယ့် CSS ဖိုင်ရဲ့ link နောက်မှာ style element တစ်ခု ထည့်ပြီး၊ ခလုတ်ကို အနီရောင် ပေးပါမယ်။
+      [[mark:insert-style]] HTML ဖိုင်ကို ပြင်ရင် page တစ်ခုလုံး ပြန်ပွင့်ပါတယ်။ [[mark:red-done]] မှာမယ်
+      ခလုတ် အနီရောင် ဖြစ်သွားပါပြီ။ ဒီ style element က link ရဲ့ နောက်မှာ ရှိလို့၊ နောက်မှ ဖတ်ပြီး
+      နိုင်သွားတာပါ။ [[mark:quiz-above]] ဒီ style element ကို link ရဲ့ အပေါ်မှာ ထားခဲ့ရင်တော့၊ ကိုယ့် CSS
+      ဖိုင်က နောက်မှ ရောက်လာလို့ အပြာက ပြန်နိုင်ပါလိမ့်မယ်။ ဆိုတော့ ဆုံးဖြတ်တာက element အမျိုးအစား မဟုတ်ဘဲ
+      page ထဲက နေရာပါ။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: position and order of appearance"
+        url: "https://web.dev/learn/css/the-cascade#position_and_order_of_appearance"
+      - title: "MDN — <style>: the Style Information element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style"
+      - title: "CSS Cascading and Inheritance Level 5 — Order of appearance"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-order"
+    actions:
+      - id: open-index-style
+        type: workspace.openFile
+        at: { mark: open-index-style }
+        path: index.html
+      # One complete element in one block insert: one reload, no half-typed
+      # HTML states.
+      - id: insert-style
+        type: editor.type
+        at: { mark: insert-style }
+        cadence: block
+        target:
+          { file: index.html, after: '<link rel="stylesheet" href="/styles.css" />', occurrence: 1 }
+        text: "\n    <style>\n      .order-btn { background: crimson; }\n    </style>"
+      - id: expect-red-reload
+        type: expect.preview
+        at: { mark: red-done }
+        timeoutMs: 8000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: select-style-element
+        type: editor.select
+        at: { mark: red-done, offsetMs: 300 }
+        target:
+          file: index.html
+          text: "<style>\n      .order-btn { background: crimson; }\n    </style>"
+          occurrence: 1
+      - id: expect-style-element
+        type: expect.file
+        at: { mark: quiz-above }
+        path: index.html
+        contains: "<link rel=\"stylesheet\" href=\"/styles.css\" />\n    <style>\n      .order-btn { background: crimson; }\n    </style>\n  </head>"
+
+  - id: fallback
+    chapter: "Fallback declaration"
+    narration: >
+      [[mark:open-styles-fallback]] CSS ဖိုင်ကို ပြန်သွားရအောင်။ နောက်မှ ရေးတာ နိုင်တယ် ဆိုတာကနေ
+      အသုံးဝင်တဲ့ နည်း တစ်ခု ရပါတယ်။ [[mark:type-fallback]] ပထမဆုံး ကြိုဆိုတဲ့ အပိုင်းက ခေါင်းစဉ်ကို ပုံသေ
+      အရွယ်အစားနဲ့ ကြီးအောင် လုပ်ပါမယ်။ [[mark:type-clamp]] ပြီးတော့ အဲဒီ rule ထဲမှာပဲ အရွယ်အစားကို clamp
+      နဲ့ ထပ်ပေးပါမယ်။ clamp က အလယ်က တန်ဖိုးကို အငယ်ဆုံးနဲ့ အကြီးဆုံးကြားမှာ ထိန်းပေးတဲ့ function ပါ။
+      ဒီမှာ အလယ်တန်ဖိုးက screen အကျယ်နဲ့ လိုက်ပြောင်းပါတယ်။ နောက်ပိုင်းမှာ လေ့လာပါမယ်။ [[mark:clamp-done]]
+      ခေါင်းစဉ် ထပ်ကြီးလာပါပြီ။ ဒီ browser က clamp ကို နားလည်လို့ ဒုတိယ declaration က နိုင်တာပါ။
+      [[mark:why-fallback]] ဒီ declaration နှစ်ခုကို ကြည့်ပါ။ clamp ကို မသိတဲ့ browser အဟောင်းက ဒုတိယ
+      declaration ကို နားမလည်လို့ ကျော်သွားပြီး၊ ပထမ declaration ကိုပဲ သုံးပါတယ်။ အဲဒီလို အရန်ထားတဲ့
+      declaration ကို fallback လို့ ခေါ်ပါတယ်။ [[mark:type-broken]] fallback အလုပ်လုပ်ပုံ မြင်ရအောင်၊ form
+      ခေါင်းစဉ်အတွက်လည်း ဒီ အတွဲကိုပဲ ရေးပါမယ်။ ဒါပေမဲ့ ဒုတိယ declaration မှာ တန်ဖိုးတွေကြားက comma
+      တစ်ခုကို တမင် ချန်ထားပါမယ်။ [[mark:broken-done]] form ခေါင်းစဉ်က ပုံသေ အရွယ်အစားလောက်ပဲ ကြီးပါတယ်။
+      ဒီ မှားနေတဲ့ တန်ဖိုးကို ကြည့်ပါ။ browser က error ဘာမှ မပြပါဘူး။ browser အဟောင်းက clamp ကို
+      ကျော်သလိုပဲ ဒီ declaration ကို ကျော်သွားပြီး၊ အပေါ်က fallback ကို သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: position and order of appearance"
+        url: "https://web.dev/learn/css/the-cascade#position_and_order_of_appearance"
+      - title: "MDN — clamp()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clamp"
+      - title: "MDN — CSS error handling"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Syntax/Error_handling"
+      - title: "CSS Syntax Module Level 3 — Error handling"
+        url: "https://www.w3.org/TR/css-syntax-3/#error-handling"
+    actions:
+      - id: open-styles-fallback
+        type: workspace.openFile
+        at: { mark: open-styles-fallback }
+        path: styles.css
+      - id: type-fallback
+        type: editor.type
+        at: { mark: type-fallback }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: steelblue;\n}\n", occurrence: 1 }
+        text: "\n.hero-title {\n  font-size: 28px;\n}\n"
+      # Typed while this rule is the last one in the file: a half-typed clamp(
+      # can only swallow this rule's own closing brace.
+      - id: type-clamp
+        type: editor.type
+        at: { mark: type-clamp }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-size: 28px;\n", occurrence: 1 }
+        text: "  font-size: clamp(32px, 9vw, 44px);\n"
+      - id: select-fallback-pair
+        type: editor.select
+        at: { mark: why-fallback }
+        target:
+          {
+            file: styles.css,
+            text: "  font-size: 28px;\n  font-size: clamp(32px, 9vw, 44px);\n",
+            occurrence: 1,
+          }
+      - id: type-broken
+        type: editor.type
+        at: { mark: type-broken }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "  font-size: clamp(32px, 9vw, 44px);\n}\n", occurrence: 1 }
+        text: "\n.order-form h2 {\n  font-size: 28px;\n  font-size: clamp(32px 9vw, 44px);\n}\n"
+      - id: select-broken
+        type: editor.select
+        at: { mark: broken-done }
+        target: { file: styles.css, text: "clamp(32px 9vw, 44px)", occurrence: 1 }
+      - id: expect-form-heading
+        type: expect.preview
+        at: { afterAction: select-broken }
+        timeoutMs: 4000
+        target: { by: testId, value: order-form }
+        textContains: "အော်ဒါမှာရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: specificity-stage
+    chapter: "နောက်မှ ရေးတာ ဘာကြောင့် ရှုံးလဲ"
+    narration: >
+      [[mark:type-gold]] အခု စာရင်းမှာ တစ်ဆင့် ထပ်တက်ကြည့်ရအောင်။ rule အသစ်က ခလုတ်တွေကို class နဲ့
+      ရွေးပြီး စာလုံးကို ရွှေရောင် ပေးပါတယ်။ [[mark:type-black]] သူ့အောက်မှာတော့ type selector နဲ့ ခလုတ်
+      အားလုံးကို ရွေးပြီး စာလုံးကို အမည်းရောင် ပေးပါမယ်။ [[mark:black-done]] preview ကို ကြည့်ပါ၊ စာလုံးက
+      ရွှေရောင် အတိုင်းပဲ ကျန်နေပါတယ်။ ဒီ အမည်းရောင် rule က နောက်မှ ရေးထားပေမယ့်၊ အစဉ်က နောက်ဆုံး အဆင့်ပါ။
+      အဲဒီ မတိုင်ခင် browser က specificity ကို နှိုင်းယှဉ်ပြီး၊ class က type selector ထက် ပိုလေးပါတယ်။
+      [[mark:spec-next]] ဒါကြောင့် အရင် ရေးထားပေမယ့် ပိုလေးတဲ့ ဒီ class rule က နိုင်တာပါ။ အလေးချိန်
+      တွက်ပုံကိုတော့ နောက် lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: specificity"
+        url: "https://web.dev/learn/css/the-cascade#specificity"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+      - title: "Selectors Level 4 — Calculating a selector's specificity"
+        url: "https://www.w3.org/TR/selectors-4/#specificity-rules"
+    actions:
+      - id: type-gold
+        type: editor.type
+        at: { mark: type-gold }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  font-size: clamp(32px 9vw, 44px);\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  color: gold;\n}\n"
+      - id: type-black
+        type: editor.type
+        at: { mark: type-black }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: gold;\n}\n", occurrence: 1 }
+        text: "\nbutton {\n  color: black;\n}\n"
+      - id: select-button-rule
+        type: editor.select
+        at: { mark: black-done }
+        target: { file: styles.css, text: "button {\n  color: black;\n}", occurrence: 1 }
+      - id: select-gold-rule
+        type: editor.select
+        at: { mark: spec-next }
+        target: { file: styles.css, text: ".order-btn {\n  color: gold;\n}", occurrence: 1 }
+
+  - id: origins
+    chapter: "Style တွေ ဘယ်က လာလဲ"
+    narration: >
+      [[mark:open-origins]] စာရင်းမှာ origin အဆင့်ထိ တက်ကြည့်ရအောင်။ origin ဆိုတာ style တစ်ခု ဘယ်က လာလဲ
+      ဆိုတာပါ။ [[mark:draw-ua]] ပထမ origin က browser ကိုယ်တိုင်ပါ။ ပထမ lesson မှာ တွေ့ခဲ့တဲ့ user agent
+      stylesheet ဆိုတဲ့ default style တွေပါ။ [[mark:draw-user]] ဒုတိယက user၊ page ကို ဖတ်နေတဲ့သူပါ။ သူ့
+      setting တွေ၊ သူ install လုပ်ထားတဲ့ extension ဒါမှမဟုတ် user stylesheet တွေက page ရဲ့ ပုံစံကို
+      ပြောင်းနိုင်ပါတယ်။ ဒါတွေက ဖတ်သူ တစ်ယောက်ချင်းစီရဲ့ ကွန်ပျူတာပေါ်မှာပဲ ရှိလို့ preview မှာ ပြလို့
+      မရပါဘူး။ [[mark:draw-author]] တတိယက author ဖြစ်ပြီး၊ page ရဲ့ CSS ကို ရေးတဲ့ ကိုယ်ပါ။ ပုံမှန်
+      declaration တွေမှာ author က user ကို နိုင်ပြီး၊ user က browser ကို နိုင်ပါတယ်။
+      [[mark:close-origins]] browser ရဲ့ style ကို ကိုယ့် CSS နဲ့ နိုင်ကြည့်ရအောင်။ အညိုရင့် header
+      ပတ်လည်က အစင်းလေးက body ရဲ့ margin ဖြစ်ပြီး၊ browser ရဲ့ default stylesheet က 8 pixel ပေးထားတာပါ။
+      [[mark:type-body]] body ရဲ့ margin ကို type selector ရိုးရိုး တစ်ခုနဲ့ သုည ပေးပါမယ်။
+      [[mark:body-done]] အစင်းလေး ပျောက်သွားပြီး header က အစွန်းတွေနဲ့ ကပ်သွားပါပြီ။ origin ကို
+      specificity မတိုင်ခင် စစ်လို့၊ ကိုယ့် ဖိုင်ထဲက အပေါ့ဆုံး selector တောင် browser ရဲ့ default rule
+      တွေကို နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: origin"
+        url: "https://web.dev/learn/css/the-cascade#origin"
+      - title: "MDN — Introduction to the CSS cascade: origin types"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Introduction"
+      - title: "CSS Cascading and Inheritance Level 5 — Cascading origins"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascading-origins"
+      - title: "HTML Standard — Rendering: the page (body margin)"
+        url: "https://html.spec.whatwg.org/multipage/rendering.html#the-page"
+    actions:
+      - id: open-origins
+        type: whiteboard.apply
+        at: { mark: open-origins }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-stronger]
+      - id: draw-ua
+        type: whiteboard.apply
+        at: { mark: draw-ua }
+        upsertIds: [b-normal-box, b-ua]
+        drawMs: 1500
+      - id: draw-user
+        type: whiteboard.apply
+        at: { mark: draw-user }
+        upsertIds: [b-user]
+        drawMs: 900
+      - id: draw-author
+        type: whiteboard.apply
+        at: { mark: draw-author }
+        upsertIds: [b-author]
+        drawMs: 900
+      - id: close-origins
+        type: whiteboard.apply
+        at: { mark: close-origins }
+        open: false
+      - id: type-body
+        type: editor.type
+        at: { mark: type-body }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: black;\n}\n", occurrence: 1 }
+        text: "\nbody {\n  margin: 0;\n}\n"
+      - id: expect-header-after-margin
+        type: expect.preview
+        at: { mark: body-done }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: inline-important
+    chapter: "Style attribute နဲ့ important"
+    narration: >
+      [[mark:open-index-inline]] ဖုန်းဆက်ရန် ခလုတ်ကို ပြန်ကြည့်ရအောင်။ [[mark:select-inline]] ဒီ style
+      attribute ကို ကြည့်ပါ။ ပထမ lesson မှာ တွေ့ခဲ့တဲ့ inline style ပါ။ cascade မှာ သူက specificity အမှတ်
+      မဟုတ်ဘဲ၊ layer နဲ့ specificity မတိုင်ခင် စစ်တဲ့ သီးသန့် အဆင့် ဖြစ်လို့ selector ဘယ်လောက် လေးလေး
+      သူ့ကို မနိုင်ပါဘူး။ ခုနက rule တွေ ဘယ်လိုပဲ ရေးရေး ဒီ ခလုတ် စိမ်းပြာ ကျန်ခဲ့တာ ဒါကြောင့်ပါ။
+      [[mark:open-styles-important]] ဒါဆို CSS ဖိုင်ကနေ ပြောင်းကြည့်ရအောင်။ [[mark:type-indigo]] rule အသစ်
+      တစ်ခုက ခုနက class selector နဲ့ပဲ ခလုတ် နှစ်ခုလုံးကို ခရမ်းရင့်ရောင် နောက်ခံ ပေးပါတယ်။
+      [[mark:indigo-nothing]] ဘာမှ မပြောင်းပါဘူး။ ဖုန်းဆက်ရန် ခလုတ်မှာ style attribute ရှိနေပြီး၊ မှာမယ်
+      ခလုတ်ကလည်း နောက်မှ လာတဲ့ style element ရဲ့ အနီကို ယူထားပါတယ်။ [[mark:type-important]] အခု အရောင်
+      နာမည်ရဲ့ နောက်မှာ important ဆိုတဲ့ keyword ကို ထည့်ပါမယ်။ [[mark:important-done]] ခလုတ် နှစ်ခုလုံး
+      ခရမ်းရင့်ရောင် ဖြစ်သွားပါပြီ။ ဒီ important ကို ကြည့်ပါ။ သူက selector ကို ပိုလေးအောင် လုပ်တာ မဟုတ်ဘဲ၊
+      declaration ကို ပိုအားကောင်းတဲ့ အုပ်စုထဲ ရွှေ့လိုက်တာပါ။ အဲဒီ အုပ်စုကို origin နဲ့ important
+      အဆင့်မှာ စစ်လို့၊ style attribute ကို မစစ်ခင်မှာတင် ဆုံးဖြတ်ပြီးသားပါ။ [[mark:last-resort]]
+      ဒါကြောင့် သူက အလွယ်တကူ နိုင်သွားပေမယ့်၊ နောက်ဆုံး နည်းလမ်းအဖြစ်ပဲ သုံးသင့်ပါတယ်။ တစ်ခါ သုံးလိုက်ရင်
+      important declaration နောက်တစ်ခုနဲ့မှပဲ ပြန်ကျော်လို့ ရတော့လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: importance"
+        url: "https://web.dev/learn/css/the-cascade#importance"
+      - title: "MDN — !important"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/important"
+      - title: "CSS Cascading and Inheritance Level 5 — Element-attached styles"
+        url: "https://www.w3.org/TR/css-cascade-5/#style-attr"
+    actions:
+      - id: open-index-inline
+        type: workspace.openFile
+        at: { mark: open-index-inline }
+        path: index.html
+      - id: select-inline
+        type: editor.select
+        at: { mark: select-inline }
+        target: { file: index.html, text: 'style="background: teal"', occurrence: 1 }
+      - id: open-styles-important
+        type: workspace.openFile
+        at: { mark: open-styles-important }
+        path: styles.css
+      - id: type-indigo
+        type: editor.type
+        at: { mark: type-indigo }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin: 0;\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  background: indigo;\n}\n"
+      - id: type-important
+        type: editor.type
+        at: { mark: type-important }
+        cadence: natural
+        target: { file: styles.css, after: "  background: indigo", occurrence: 1 }
+        text: " !important"
+      - id: select-important
+        type: editor.select
+        at: { mark: important-done }
+        target: { file: styles.css, text: "!important", occurrence: 1 }
+      - id: expect-inline-still-attached
+        type: expect.preview
+        at: { afterAction: select-important }
+        timeoutMs: 4000
+        target: { by: testId, value: inline-button }
+        attribute: { name: style, value: "background: teal" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: importance-board
+    narration: >
+      [[mark:open-ladder]] origin board ပေါ်မှာ important ကို ထပ်ထည့်ကြည့်ရအောင်။ [[mark:draw-animation]]
+      ကိုယ့် ပုံမှန် CSS ရဲ့ အပေါ်မှာ animation တွေ ရှိပါတယ်။ run နေတဲ့ animation က style attribute
+      အပါအဝင် ပုံမှန် CSS အားလုံးကို နိုင်ပါတယ်။ [[mark:draw-important]] သူ့အပေါ်မှာ important declaration
+      တွေ ရှိပြီး၊ ဒီမှာ အစဉ်က ပြောင်းပြန် ဖြစ်သွားပါတယ်။ important ထဲမှာ အောက်ဆုံးက ကိုယ့် CSS ရဲ့
+      important၊ သူ့အပေါ်မှာ user ရဲ့ important၊ အပေါ်ဆုံးမှာ browser ရဲ့ important ပါ။ [[mark:why-flip]]
+      ဒီ ပြောင်းပြန်က တမင် လုပ်ထားတာပါ။ စာလုံး ပိုကြီးကြီး ဒါမှမဟုတ် အရောင် ပိုကွဲကွဲပြားပြား လိုတဲ့
+      ဖတ်သူက သူ့ style ကို important တပ်ထားရင်၊ ဘယ် website ကမှ ကျော်လို့ မရပါဘူး။ browser ကလည်း သူ
+      မဖြစ်မနေ ထိန်းရမယ့် အချက် နည်းနည်းကို ကာကွယ်ထားပါတယ်။ [[mark:draw-transition]] အပေါ်ဆုံးမှာတော့
+      transition တွေ ရှိပါတယ်။ transition က တန်ဖိုး တစ်ခုကနေ နောက်တစ်ခုကို ဖြည်းဖြည်း ပြောင်းသွားတာကို
+      ပြလို့၊ run နေတုန်း အကုန်လုံးကို နိုင်ရပါတယ်။ animation ရော transition ပါ နောက်ပိုင်းမှာ သီးသန့်
+      လေ့လာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: importance"
+        url: "https://web.dev/learn/css/the-cascade#importance"
+      - title: "MDN — Introduction to the CSS cascade: cascading order"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Introduction"
+      - title: "CSS Cascading and Inheritance Level 5 — Important declarations"
+        url: "https://www.w3.org/TR/css-cascade-5/#importance"
+    actions:
+      - id: open-ladder
+        type: whiteboard.apply
+        at: { mark: open-ladder }
+        open: true
+      - id: draw-animation
+        type: whiteboard.apply
+        at: { mark: draw-animation }
+        upsertIds: [b-anim]
+        drawMs: 900
+      - id: draw-important
+        type: whiteboard.apply
+        at: { mark: draw-important }
+        upsertIds: [b-important-box, b-author-imp, b-user-imp, b-ua-imp]
+        drawMs: 3000
+      - id: draw-flip
+        type: whiteboard.apply
+        at: { mark: why-flip }
+        upsertIds: [b-flip, b-flip-circle]
+        drawMs: 1500
+      - id: draw-transition
+        type: whiteboard.apply
+        at: { mark: draw-transition }
+        upsertIds: [b-transition]
+        drawMs: 900
+
+  - id: media-relevance
+    chapter: "Media query နဲ့ relevance"
+    narration: >
+      [[mark:close-ladder]] အခု စာရင်းရဲ့ ပထမ မေးခွန်း relevance ကို ကြည့်ရအောင်။ media query နဲ့ဆိုရင်
+      မြင်သာပါတယ်။ [[mark:type-wide]] media query က rule တွေကို အခြေအနေ တစ်ခု မှန်မှသာ အလုပ်လုပ်စေပါတယ်။
+      ဒီ တစ်ခုက page ကို မြင်ရတဲ့ နေရာ၊ viewport က အနည်းဆုံး 60 em ကျယ်ဖို့ လိုပါတယ်။ သင်္ချာမှာလို
+      အကျယ်ကို တိုက်ရိုက် နှိုင်းယှဉ်တာကို range syntax လို့ ခေါ်ပြီး၊ code အဟောင်းတွေမှာ min width နဲ့
+      ရေးပါတယ်။ အထဲမှာ ခလုတ်တွေကို လိမ္မော်ရောင် border ပေးထားပါတယ်။ [[mark:wide-nothing]] ဘာမှ
+      မပြောင်းပါဘူး။ ဒီ အခြေအနေကို ကြည့်ပါ။ media query မှာ 1 em က များသောအားဖြင့် 16 pixel ဖြစ်လို့၊ ဒီ
+      rule က 960 pixel နဲ့ အထက် လိုပါတယ်။ preview က 432 pixel လောက်ပဲ ကျယ်လို့ အခြေအနေ မမှန်ပါဘူး။
+      [[mark:never-enters]] ဆိုတော့ ဒီ rule က ပြိုင်ပြီး ရှုံးတာ မဟုတ်ပါဘူး။ ပထမဆုံး အဆင့်မှာတင်
+      စစ်ထုတ်ခံရလို့ ပြိုင်ပွဲထဲကို လုံးဝ မဝင်ရတာပါ။ [[mark:type-narrow]] အခု အခြေအနေကို
+      ပြောင်းပြန်လုပ်ပြီး၊ 60 em ထက် ကျဉ်းရင် ဆိုတဲ့ rule ရေးပါမယ်။ [[mark:narrow-done]] ခလုတ်
+      နှစ်ခုလုံးမှာ border ပေါ်လာပါပြီ။ media query က အလေးချိန် ဘာမှ မထည့်ပါဘူး။ သူ့ rule တွေ ပြိုင်ပွဲ
+      ဝင်ရမလား ဆိုတာကိုပဲ ဆုံးဖြတ်ပါတယ်။ [[mark:selector-relevance]] selector တွေလည်း ဒီလိုပါပဲ။ element
+      နဲ့ selector မကိုက်တဲ့ rule က အဲဒီ element အတွက် ဘယ်တော့မှ မပြိုင်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — The cascade"
+        url: "https://web.dev/learn/css/the-cascade"
+      - title: "MDN — Using media queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_media_queries/Using_media_queries"
+      - title: "Media Queries Level 4 — Range context"
+        url: "https://www.w3.org/TR/mediaqueries-4/#mq-range-context"
+      - title: "CSS Cascading and Inheritance Level 5 — Relevance"
+        url: "https://www.w3.org/TR/css-cascade-5/#filtering"
+    actions:
+      - id: close-ladder
+        type: whiteboard.apply
+        at: { mark: close-ladder }
+        open: false
+      - id: type-wide
+        type: editor.type
+        at: { mark: type-wide }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: indigo !important;\n}\n", occurrence: 1 }
+        text: "\n@media (width >= 60em) {\n  .order-btn {\n    border: 4px solid orange;\n  }\n}\n"
+      - id: select-wide-condition
+        type: editor.select
+        at: { mark: wide-nothing }
+        target: { file: styles.css, text: "(width >= 60em)", occurrence: 1 }
+      - id: type-narrow
+        type: editor.type
+        at: { mark: type-narrow }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "    border: 4px solid orange;\n  }\n}\n", occurrence: 1 }
+        text: "\n@media (width < 60em) {\n  .order-btn {\n    border: 4px solid orange;\n  }\n}\n"
+      - id: expect-buttons-bordered
+        type: expect.preview
+        at: { mark: narrow-done }
+        timeoutMs: 4000
+        target: { by: testId, value: inline-button }
+        textContains: "ဖုန်းဆက်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: layers-board
+    chapter: "Cascade layer တွေ"
+    narration: >
+      [[mark:open-trays]] ကျန်နေတဲ့ အဆင့် တစ်ခုက specificity မတိုင်ခင် စစ်တဲ့ cascade layer ပါ။
+      [[mark:draw-trays]] cascade layer ဆိုတာ ကိုယ့် CSS ကို အုပ်စုခွဲပြီး အစဉ် သတ်မှတ်တဲ့ နည်းပါ။ ဗန်းတွေ
+      ထပ်ဆင့်ထားသလိုပါပဲ။ rule တွေကို နာမည်ပေးထားတဲ့ ဗန်းထဲ ထည့်ပြီး၊ ဗန်းတွေရဲ့ အစဉ်ကိုတော့ layer
+      statement နဲ့ ကြိုသတ်မှတ်ပါတယ်။ [[mark:draw-later-wins]] နောက်က ဗန်းထဲက rule က ရှေ့က ဗန်းထဲက rule
+      ကို နိုင်ပါတယ်။ selector ဘယ်လောက် လေးလေး၊ ဖိုင်ထဲမှာ ဘယ်နေရာမှာ ရေးရေး မဆိုင်ပါဘူး။
+      [[mark:draw-unlayered]] layer ထဲ မပါတဲ့ style တွေက ဗန်း အားလုံးရဲ့ အပေါ်မှာ ရှိလို့၊ layer ထဲက style
+      အားလုံးကို နိုင်ပါတယ်။ important declaration တွေမှာတော့ origin တုန်းကလိုပဲ ဒီ အစဉ် ပြောင်းပြန်
+      ဖြစ်ပါတယ်။ [[mark:why-layers]] ဒါကြောင့် team တစ်ခု ဒါမှမဟုတ် Tailwind လို framework က reset၊
+      component နဲ့ theme တွေကို selector အလေးချိန်နဲ့ မပြိုင်ရဘဲ အစဉ်တကျ ထားနိုင်ပါတယ်။
+    sources:
+      - title: "MDN — @layer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@layer"
+      - title: "MDN — Cascade layers"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Cascade_layers"
+      - title: "CSS Cascading and Inheritance Level 5 — Cascade layers"
+        url: "https://www.w3.org/TR/css-cascade-5/#layering"
+    actions:
+      - id: open-trays
+        type: whiteboard.apply
+        at: { mark: open-trays }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-trays
+        type: whiteboard.apply
+        at: { mark: draw-trays }
+        upsertIds:
+          [
+            c-tray-components,
+            c-tray-components-label,
+            c-tray-theme,
+            c-tray-theme-label,
+            c-statement,
+          ]
+        drawMs: 3000
+      - id: draw-later-wins
+        type: whiteboard.apply
+        at: { mark: draw-later-wins }
+        upsertIds: [c-later-wins, c-no-weight]
+        drawMs: 1500
+      - id: draw-unlayered
+        type: whiteboard.apply
+        at: { mark: draw-unlayered }
+        upsertIds: [c-tray-none, c-tray-none-label, c-none-wins, c-none-check]
+        drawMs: 2200
+
+  - id: layers-live
+    narration: >
+      [[mark:close-trays]] menu card တွေမှာ စမ်းကြည့်ရအောင်။ သူတို့မှာ နောက်ခံ အရောင် မရှိသေးပါဘူး။
+      [[mark:type-layer-order]] ပထမဆုံး layer statement က components နဲ့ theme ဆိုတဲ့ layer နှစ်ခုရဲ့
+      အစဉ်ကို သတ်မှတ်ပါတယ်။ theme က နောက်မှ လာလို့ နိုင်ပါမယ်။ [[mark:type-theme]] theme layer ထဲမှာ menu
+      card တိုင်းကို အစိမ်းနု နောက်ခံ ပေးပါမယ်။ layer block က media query လိုပဲ rule တွေကို စုထားပြီး၊
+      အထဲက rule တိုင်းက အဲဒီ layer ထဲ ပါသွားပါတယ်။ [[mark:theme-done]] card အားလုံး အစိမ်းနု
+      ဖြစ်သွားပါပြီ။ [[mark:type-components]] အခု components layer ကို ဖိုင်ရဲ့ အောက်ဘက်မှာ ရေးပါမယ်။
+      class နှစ်ခု ပါလို့ ပိုလေးတဲ့ selector နဲ့ featured class ပါတဲ့ လက်ဖက်ရည် card ကိုပဲ ပန်းရောင်
+      ပေးပါတယ်။ ပုံမှန်ဆိုရင် ဒီ rule က နိုင်ရမှာပါ။ [[mark:components-done]] လက်ဖက်ရည် card က အစိမ်းနု
+      အတိုင်းပဲ ကျန်နေပါတယ်။ ဒီ layer statement ကို ကြည့်ပါ။ components က theme ရဲ့ ရှေ့မှာ ရှိလို့၊
+      ဖိုင်ထဲမှာ နောက်မှ ရေးထားပေမယ့် specificity ကို မစစ်ခင်မှာတင် ရှုံးသွားတာပါ။ [[mark:type-unlayered]]
+      နောက်ဆုံးအနေနဲ့၊ ဖိုင်ရဲ့ ထိပ်ဆုံးမှာ layer အပြင်ဘက်က rule ရိုးရိုး တစ်ခုနဲ့ card တွေကို အဖြူရောင်
+      ပေးပါမယ်။ [[mark:unlayered-done]] card တိုင်း အဖြူ ဖြစ်သွားပါပြီ။ ဒီ rule က ဖိုင်ထိပ်ဆုံးမှာ ရှိပြီး
+      selector လည်း အပေါ့ဆုံးပါ။ ဒါပေမဲ့ layer ထဲ မပါလို့ layer အားလုံးကို နိုင်ပါတယ်။
+    sources:
+      - title: "MDN — @layer: statement and block syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@layer"
+      - title: "MDN — Cascade layers"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Cascade_layers"
+      - title: "CSS Cascading and Inheritance Level 5 — Layer ordering"
+        url: "https://www.w3.org/TR/css-cascade-5/#layer-ordering"
+    actions:
+      - id: close-trays
+        type: whiteboard.apply
+        at: { mark: close-trays }
+        open: false
+      # The cards sit below the first screen of the 720 px preview.
+      - id: scroll-to-cards
+        type: preview.scroll
+        at: { mark: close-trays, offsetMs: 300 }
+        timeoutMs: 4000
+        top: 360
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-layer-order
+        type: editor.type
+        at: { mark: type-layer-order }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "    border: 4px solid orange;\n  }\n}\n", occurrence: 2 }
+        text: "\n@layer components, theme;\n"
+      - id: type-theme
+        type: editor.type
+        at: { mark: type-theme }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "@layer components, theme;\n", occurrence: 1 }
+        text: "\n@layer theme {\n  .menu-card {\n    background: lightgreen;\n  }\n}\n"
+      - id: expect-cards-present
+        type: expect.preview
+        at: { mark: theme-done }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-components
+        type: editor.type
+        at: { mark: type-components }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    background: lightgreen;\n  }\n}\n", occurrence: 1 }
+        text: "\n@layer components {\n  .menu-card.featured {\n    background: lightpink;\n  }\n}\n"
+      - id: select-components
+        type: editor.select
+        at: { mark: components-done }
+        target: { file: styles.css, text: "@layer components, theme;", occurrence: 1 }
+      # A single block insert at the top of the file: typing an unclosed rule
+      # in front of existing rules would swallow them for a moment.
+      - id: type-unlayered
+        type: editor.type
+        at: { mark: type-unlayered }
+        cadence: block
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".menu-card {\n  background: white;\n}\n\n"
+      - id: select-unlayered
+        type: editor.select
+        at: { mark: unlayered-done }
+        target: { file: styles.css, text: ".menu-card {\n  background: white;\n}", occurrence: 1 }
+      - id: expect-featured-card
+        type: expect.preview
+        at: { afterAction: select-unlayered }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: devtools-recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-devtools]] style တစ်ခု မပေါ်လာရင်၊ ဘယ် declaration က နိုင်ပြီး ဘယ်ဟာ ရှုံးလဲ ဆိုတာ
+      DevTools မှာ ကြည့်လို့ ရပါတယ်။ [[mark:draw-panel]] Styles panel မှာ element နဲ့ ကိုက်တဲ့ rule
+      တိုင်းကို ပြထားပြီး၊ ရှုံးတဲ့ declaration တိုင်းကို မျဉ်းဖြတ်ထားပါတယ်။ important ပါတဲ့ ဒီ
+      declaration က အပေါ်ဆုံး မဟုတ်ပေမယ့် မျဉ်းမဖြတ်ဘဲ နိုင်နေပါတယ်။ [[mark:draw-missing]] ခုနက screen
+      ကျယ်မှ အလုပ်လုပ်တဲ့ media query လို၊ စာရင်းထဲမှာ လုံးဝ မပါတဲ့ rule ကတော့ မကိုက်ခဲ့တာပါ။ selector၊
+      အခြေအနေ ဒါမှမဟုတ် စာလုံးပေါင်း မှားနေလား စစ်ကြည့်ပါ။ ကိုယ့် browser မှာ စမ်းကြည့်ပါ။
+      [[mark:scope-note]] specificity နဲ့ ရေးထားတဲ့ အစဉ်ကြားမှာ scope proximity ဆိုတဲ့ အဆင့်အသစ်လည်း
+      ရှိပါတယ်။ page ရဲ့ အပိုင်း တစ်ပိုင်းထဲ ကန့်သတ်ထားတဲ့ style တွေအတွက်ပါ။ နောက်ပိုင်းမှာ တွေ့ရပါမယ်။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ browser က relevance ကို အရင် စစ်ပြီး၊ origin နဲ့ important၊
+      style attribute၊ layer၊ specificity၊ နောက်ဆုံးမှာ ရေးထားတဲ့ အစဉ်ကို စစ်ပါတယ်။ [[mark:next-lesson]]
+      နောက် lesson မှာတော့ specificity ကို တွက်ပြီး၊ class က နောက်မှ ရေးထားတဲ့ type selector ကို ဘာကြောင့်
+      နိုင်လဲ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — The cascade: using DevTools"
+        url: "https://web.dev/learn/css/the-cascade#using_devtools_to_find_out_why_css_isnt_applying"
+      - title: "Chrome DevTools — CSS features reference"
+        url: "https://developer.chrome.com/docs/devtools/css/reference"
+      - title: "MDN — @scope"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@scope"
+      - title: "CSS Cascading and Inheritance Level 6 — Scope proximity"
+        url: "https://drafts.csswg.org/css-cascade-6/#cascade-proximity"
+    actions:
+      - id: open-devtools
+        type: whiteboard.apply
+        at: { mark: open-devtools }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-panel
+        type: whiteboard.apply
+        at: { mark: draw-panel }
+        upsertIds:
+          [
+            d-panel,
+            d-row2,
+            d-strike2,
+            d-row1,
+            d-row1-check,
+            d-row3,
+            d-row4,
+            d-strike3,
+            d-strike4,
+            d-lost,
+          ]
+        drawMs: 4500
+      - id: draw-missing
+        type: whiteboard.apply
+        at: { mark: draw-missing }
+        upsertIds: [d-missing, d-try]
+        drawMs: 1800
+      # The recap re-shows the cascade list from the first board, all at once.
+      - id: recap-board
+        type: whiteboard.apply
+        at: { mark: recap }
+        clear: true
+        upsertIds:
+          [
+            a-title,
+            a-rule1-box,
+            a-rule1-text,
+            a-rule2-box,
+            a-rule2-text,
+            a-arrow,
+            a-button,
+            a-button-text,
+            a-one-value,
+            a-steps-arrow,
+            a-step1,
+            a-step2,
+            a-step3,
+            a-step4,
+            a-step5,
+            a-step6,
+            a-step7,
+            a-tie-note,
+          ]
+      - id: expect-final-buttons-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".order-btn {\n  color: gold;\n}\n\nbutton {\n  color: black;\n}\n\nbody {\n  margin: 0;\n}\n\n.order-btn {\n  background: indigo !important;\n}\n"
+      - id: expect-final-fallback-css
+        type: expect.file
+        at: { afterAction: expect-final-buttons-css }
+        path: styles.css
+        contains: ".hero-title {\n  font-size: 28px;\n  font-size: clamp(32px, 9vw, 44px);\n}\n\n.order-form h2 {\n  font-size: 28px;\n  font-size: clamp(32px 9vw, 44px);\n}\n"
+      - id: expect-final-media-css
+        type: expect.file
+        at: { afterAction: expect-final-fallback-css }
+        path: styles.css
+        contains: "@media (width >= 60em) {\n  .order-btn {\n    border: 4px solid orange;\n  }\n}\n\n@media (width < 60em) {\n  .order-btn {\n    border: 4px solid orange;\n  }\n}\n"
+      - id: expect-final-layers-css
+        type: expect.file
+        at: { afterAction: expect-final-media-css }
+        path: styles.css
+        contains: "@layer components, theme;\n\n@layer theme {\n  .menu-card {\n    background: lightgreen;\n  }\n}\n\n@layer components {\n  .menu-card.featured {\n    background: lightpink;\n  }\n}\n"
+      - id: expect-final-unlayered-css
+        type: expect.file
+        at: { afterAction: expect-final-layers-css }
+        path: styles.css
+        contains: ".menu-card {\n  background: white;\n}\n\n.order-btn {\n  background: seagreen;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
