@@ -1,0 +1,1993 @@
+# CSS course (Burmese), lesson 14 of 43: position and transform.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text,
+# span by span; DESIGN.md is the design brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+#
+# Shape: board (recall lesson 13's normal flow; the five position values, in
+# flow or not, measured from what; out of flow; the offsets and inset) → code
+# tour (index.html: the special's price and badge, the stamp, the cups, the
+# call button; empty styles.css) → relative price (space kept) → absolute badge
+# (predict first, then its offsets fly it to the page corner) → board (the
+# containing-block search) → the card made relative catches the badge → fixed
+# call button + scrolls → sticky menu headings + scrolls (in flow, stuck, gone
+# with its section; z-index: 1) → quiz (does an offset take a box out of
+# flow?) → board (position changes layout, transform only paints; the
+# function list; origin; translate %) → stamp: rotate, scale, translate (each
+# declaration repeats the list) and skew on the order button → the individual
+# rotate/scale/translate properties on the logo → two cups, same functions in
+# opposite order → board (the moving-paper model) → the special turns in 3-D:
+# rotateY, transform-origin left, perspective on the list; perspective()
+# named → recap, hand-off to flexbox (lesson 15).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every keystroke-typed value has no misleading valid prefix (unitless "10",
+# "8", "16", "600" lengths and "-1", "3" angles are invalid and ignored;
+# "scale: 1" equals the untransformed state). The stamp's 2nd and 3rd
+# transform declarations and both cup rules are line-by-line: keystroke
+# typing would pass through valid shorter lists ("translate(80px" alone
+# moves the cup, a half-typed second function drops the whole list for
+# seconds).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-14-position-transform
+  title: "CSS course 14: Position နဲ့ transform"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 14
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit blocks header, hero (with the lesson block stamp),
+      # drinks (the featured card ends with its badge), the lesson block
+      # cups-row (two cups in a .stage), snacks (to make the page scroll),
+      # footer, and the lesson block call-button (in a call-row paragraph that
+      # gives the in-flow spacing) at the end of <body>. No
+      # kit.js: nothing is clicked (the call button is a tel: link and is
+      # never clicked).
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" data-testid="logo" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero (with lesson block: stamp) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <span class="stamp" data-testid="stamp">ဈေးလျှော့</span>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2 data-testid="drinks-heading">သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: cups-row -->
+              <div class="stage cups-row" data-testid="cups-row">
+                <img class="cup-icon cup-a" src="/cup.svg" alt="" width="64" height="64" data-testid="cup-a" />
+                <img class="cup-icon cup-b" src="/cup.svg" alt="" width="64" height="64" data-testid="cup-b" />
+              </div>
+
+              <!-- kit block: snacks -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <!-- kit block: footer -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789">09 123 456 789</a> · <a href="https://facebook.com/">Facebook</a></p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+
+            <!-- lesson block: call-button -->
+            <p class="call-row"><a class="call-btn" href="tel:+959123456789" data-testid="call-button">ဖုန်းဆက်ရန်</a></p>
+          </body>
+        </html>
+      # base.css: sections A, B, B2, C and D of the course kit, unchanged.
+      # Section E pins the nav row (lesson 13 typed it), the looks of the sale
+      # stamp (inline-block, so transforms apply), the call button and the
+      # cups, and a page-coloured background on the menu headings so cards
+      # slide UNDER a stuck heading. Nothing the lesson types is present.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 14 keeps sections A, B, B2, C and D, and pins in
+          section E the nav row (lesson 13 typed it), the looks of the sale stamp,
+          the call button and the cups, and a background on the menu headings (so
+          cards slide under a stuck heading instead of showing through it).
+          Everything the lesson types (position, offsets, transforms) is absent.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 14: the nav links sit in a row (lesson 13 typed this). */
+        .nav ul {
+          display: flex;
+          gap: 16px;
+        }
+
+        /* The sale stamp is a gold pill (inline-block, so transforms apply). */
+        .stamp {
+          display: inline-block;
+          padding: 2px 12px;
+          border-radius: 999px;
+          background: var(--gold);
+          color: var(--tea-dark);
+          font-weight: 700;
+        }
+
+        /* The call button's look; its position is typed. The row around it
+           gives the in-flow spacing, so the button itself has no margin and a
+           fixed button sits exactly at its offsets. */
+        .call-row {
+          margin: 0;
+          padding: 12px 16px;
+        }
+
+        .call-btn {
+          display: inline-block;
+          padding: 8px 16px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          text-decoration: none;
+        }
+
+        /* Menu headings get the page colour, so cards pass under a stuck heading. */
+        .menu-section h2 {
+          padding-top: 4px;
+          background: var(--paper);
+        }
+
+        /* The two cups of the order demo. */
+        .cup-icon {
+          vertical-align: top;
+        }
+
+        .cup-b {
+          margin-left: 120px;
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the five position values: in flow or not, measured from what.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "Position ရဲ့ တန်ဖိုး ငါးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-head-flow,
+        kind: text,
+        x: 490,
+        y: 222,
+        width: 150,
+        height: 36,
+        text: "flow ထဲမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-head-from,
+        kind: text,
+        x: 700,
+        y: 222,
+        width: 250,
+        height: 36,
+        text: "ဘာကနေ တိုင်းလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-static,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 120,
+        height: 36,
+        text: "static",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-static-flow,
+        kind: text,
+        x: 550,
+        y: 275,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-static-from,
+        kind: text,
+        x: 700,
+        y: 275,
+        width: 220,
+        height: 36,
+        text: "offset မရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-rel,
+        kind: text,
+        x: 300,
+        y: 325,
+        width: 130,
+        height: 36,
+        text: "relative",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-rel-flow,
+        kind: text,
+        x: 550,
+        y: 325,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-rel-from,
+        kind: text,
+        x: 700,
+        y: 325,
+        width: 280,
+        height: 36,
+        text: "ကိုယ့် မူလ နေရာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-abs,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 140,
+        height: 36,
+        text: "absolute",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-abs-flow,
+        kind: text,
+        x: 550,
+        y: 375,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-abs-from,
+        kind: text,
+        x: 700,
+        y: 375,
+        width: 300,
+        height: 36,
+        text: "positioned ancestor",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-fixed,
+        kind: text,
+        x: 300,
+        y: 425,
+        width: 100,
+        height: 36,
+        text: "fixed",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-fixed-flow,
+        kind: text,
+        x: 550,
+        y: 425,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-fixed-from,
+        kind: text,
+        x: 700,
+        y: 425,
+        width: 160,
+        height: 36,
+        text: "viewport",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-sticky,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 110,
+        height: 36,
+        text: "sticky",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-sticky-flow,
+        kind: text,
+        x: 550,
+        y: 475,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-sticky-from,
+        kind: text,
+        x: 700,
+        y: 475,
+        width: 340,
+        height: 36,
+        text: "offset ရောက်ရင် ကပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-out-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 525,
+        y: 362,
+        width: 90,
+        height: 112,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-out-note,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 560,
+        height: 36,
+        text: "flow ထဲက ထွက် → နောက်က box တွေ တက်လာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-offsets,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 520,
+        height: 36,
+        text: "top · right · bottom · left = inset",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — how the browser finds an absolute box's containing block.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Containing block ကို ရှာပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-badge,
+        kind: text,
+        x: 340,
+        y: 222,
+        width: 260,
+        height: 36,
+        text: "badge · absolute",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-walk,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 280,
+        y: 265,
+        width: 40,
+        height: 210,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-li,
+        kind: text,
+        x: 340,
+        y: 280,
+        width: 270,
+        height: 36,
+        text: "li (card) · static",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ul,
+        kind: text,
+        x: 340,
+        y: 330,
+        width: 400,
+        height: 36,
+        text: "ul · section · main · static",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-body,
+        kind: text,
+        x: 340,
+        y: 380,
+        width: 300,
+        height: 36,
+        text: "body · html · static",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-page,
+        kind: text,
+        x: 340,
+        y: 445,
+        width: 560,
+        height: 36,
+        text: "page ရဲ့ အစ · initial containing block",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-other,
+        kind: text,
+        x: 340,
+        y: 525,
+        width: 520,
+        height: 36,
+        text: "transform ပါတဲ့ ancestor မှာလည်း ရပ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-stop-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 322,
+        y: 268,
+        width: 310,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-stop-note,
+        kind: text,
+        x: 690,
+        y: 280,
+        width: 360,
+        height: 36,
+        text: "relative ပေးရင် ဒီမှာ ရပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — position changes the layout, transform only the painting.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Position နဲ့ transform",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-p-head,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 220,
+        height: 36,
+        text: "position",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: c-p1, kind: rectangle, x: 310, y: 275, width: 170, height: 44, strokeColor: "#1971c2" }
+    - { id: c-p3, kind: rectangle, x: 310, y: 330, width: 170, height: 44, strokeColor: "#1971c2" }
+    - {
+        id: c-p2,
+        kind: rectangle,
+        x: 500,
+        y: 300,
+        width: 150,
+        height: 44,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+      }
+    - {
+        id: c-p-note,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 300,
+        height: 36,
+        text: "layout ပြောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-t-head,
+        kind: text,
+        x: 720,
+        y: 222,
+        width: 220,
+        height: 36,
+        text: "transform",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: c-t1, kind: rectangle, x: 730, y: 275, width: 170, height: 44, strokeColor: "#2f9e44" }
+    - {
+        id: c-t2-ghost,
+        kind: rectangle,
+        x: 730,
+        y: 330,
+        width: 170,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-t2,
+        kind: rectangle,
+        x: 790,
+        y: 312,
+        width: 170,
+        height: 44,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - { id: c-t3, kind: rectangle, x: 730, y: 385, width: 170, height: 44, strokeColor: "#2f9e44" }
+    - {
+        id: c-t-note,
+        kind: text,
+        x: 720,
+        y: 445,
+        width: 330,
+        height: 36,
+        text: "ဆွဲပြပုံပဲ ပြောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-list,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 560,
+        height: 36,
+        text: "transform: rotate() scale() translate()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-origin-dot,
+        kind: ellipse,
+        x: 866,
+        y: 326,
+        width: 16,
+        height: 16,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: c-origin,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 420,
+        height: 36,
+        text: "transform-origin → အလယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-percent,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 480,
+        height: 36,
+        text: "translate % → ကိုယ့် အရွယ်အစား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — function order: each function moves or turns the "paper", the
+    # next one works on the paper where it now is.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Function တွေရဲ့ အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-a-code,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 470,
+        height: 36,
+        text: "translate(80px) rotate(45deg)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-a-start,
+        kind: rectangle,
+        x: 310,
+        y: 280,
+        width: 56,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 380,
+        y: 290,
+        width: 110,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-a-end,
+        kind: rectangle,
+        x: 505,
+        y: 280,
+        width: 56,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+      }
+    - {
+        id: d-a-note,
+        kind: text,
+        x: 610,
+        y: 290,
+        width: 400,
+        height: 36,
+        text: "ရွှေ့ပြီးမှ ဒီနေရာမှာ လှည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-code,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 470,
+        height: 36,
+        text: "rotate(45deg) translate(80px)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-start,
+        kind: rectangle,
+        x: 310,
+        y: 430,
+        width: 56,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-b-turn,
+        kind: text,
+        x: 385,
+        y: 440,
+        width: 90,
+        height: 36,
+        text: "45°",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-move,
+        kind: text,
+        x: 390,
+        y: 495,
+        width: 110,
+        height: 36,
+        text: "↘ 80px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-end,
+        kind: rectangle,
+        x: 520,
+        y: 540,
+        width: 56,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: d-b-note,
+        kind: text,
+        x: 610,
+        y: 470,
+        width: 440,
+        height: 36,
+        text: "လှည့်ပြီးမှ စောင်းတဲ့ axis အတိုင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-stamp,
+        kind: text,
+        x: 640,
+        y: 560,
+        width: 440,
+        height: 36,
+        text: "တံဆိပ် · translate နောက်ဆုံး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4114
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-position
+    chapter: "Position ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ block box တွေက တစ်ခုအောက် တစ်ခု စီပြီး၊ inline box တွေက စာကြောင်းထဲမှာ
+      ဝင်နေတဲ့ normal flow ကို ကြည့်ခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:two-ways]] ဒီ lesson မှာတော့ box တွေကို အဲဒီ အစဉ်ထဲကနေ
+      နည်း နှစ်မျိုးနဲ့ ရွှေ့ပါမယ်။ position က layout ကို ပြောင်းပြီး၊ နောက်မှ ကြည့်မယ့် transform ကတော့
+      box ကို ဆွဲပြပုံကိုပဲ ပြောင်းပါတယ်။ [[mark:draw-static]] position မှာ တန်ဖိုး ငါးမျိုး ရှိပြီး
+      default က static ပါ။ top၊ right၊ bottom၊ left ဆိုတဲ့ offset လေးခုက box ကို ဘက်တစ်ဘက်ကနေ ဘယ်လောက်
+      ခွာမလဲ ပြောပါတယ်။ static box က normal flow ထဲမှာ နေပြီး၊ offset ပေးလည်း မရွေ့ပါဘူး။
+      [[mark:draw-relative]] relative box ကလည်း flow ထဲမှာ ရှိနေပေမယ့်၊ offset တွေက သူ့ကို သူ့ မူလ
+      နေရာကနေ ရွှေ့ပေးပါတယ်။ [[mark:draw-absolute]] absolute box ကတော့ flow ထဲကနေ ထွက်သွားပါတယ်။ သူ့
+      offset တွေကို position ပေးထားတဲ့ ancestor တစ်ခုကနေ တိုင်းပြီး၊ ဘယ် ancestor လဲ ဆိုတာ ခဏနေရင်
+      ကြည့်ပါမယ်။ [[mark:draw-fixed]] fixed box ကလည်း flow ထဲကနေ ထွက်သွားပေမယ့်၊ သူ့ကိုတော့ page ကို
+      မြင်ရတဲ့ နေရာ ဖြစ်တဲ့ viewport ကနေ တိုင်းပါတယ်။ [[mark:draw-sticky]] sticky box ကတော့ flow ထဲမှာ
+      ရှိနေပြီး၊ scroll လုပ်လို့ သူ့ offset ကို ရောက်သွားရင် အဲဒီမှာ ကပ်နေပါတယ်။ [[mark:draw-out]] flow
+      ထဲကနေ ထွက်တယ် ဆိုတာ၊ တခြား box တွေက ဒီ box မရှိသလို နေရာယူကြတာပါ။ ဒါကြောင့် သူ့နောက်က box တွေက သူ့
+      နေရာထဲကို တက်လာပါတယ်။ [[mark:draw-offsets]] static ကလွဲရင် တန်ဖိုး အားလုံးမှာ offset တွေ
+      အလုပ်လုပ်ပါတယ်။ inset ဆိုတဲ့ shorthand က လေးခုလုံးကို တစ်ခါတည်း ပေးလို့၊ inset သုည ဆိုရင်
+      ဘက်လေးဘက်လုံး သုည ဖြစ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "web.dev Learn CSS — Spacing: positioning"
+        url: "https://web.dev/learn/css/spacing#positioning"
+      - title: "MDN — position"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position"
+      - title: "MDN — inset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/inset"
+      - title: "CSS Positioned Layout Module Level 3"
+        url: "https://www.w3.org/TR/css-position-3/"
+    actions:
+      - id: open-position-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-static
+        type: whiteboard.apply
+        at: { mark: draw-static }
+        upsertIds: [a-head-flow, a-head-from, a-static, a-static-flow, a-static-from]
+        drawMs: 2400
+      - id: draw-relative
+        type: whiteboard.apply
+        at: { mark: draw-relative }
+        upsertIds: [a-rel, a-rel-flow, a-rel-from]
+        drawMs: 1500
+      - id: draw-absolute
+        type: whiteboard.apply
+        at: { mark: draw-absolute }
+        upsertIds: [a-abs, a-abs-flow, a-abs-from]
+        drawMs: 1500
+      - id: draw-fixed
+        type: whiteboard.apply
+        at: { mark: draw-fixed }
+        upsertIds: [a-fixed, a-fixed-flow, a-fixed-from]
+        drawMs: 1500
+      - id: draw-sticky
+        type: whiteboard.apply
+        at: { mark: draw-sticky }
+        upsertIds: [a-sticky, a-sticky-flow, a-sticky-from]
+        drawMs: 1500
+      - id: draw-out
+        type: whiteboard.apply
+        at: { mark: draw-out }
+        upsertIds: [a-out-circle, a-out-note]
+        drawMs: 2000
+      - id: draw-offsets
+        type: whiteboard.apply
+        at: { mark: draw-offsets }
+        upsertIds: [a-offsets]
+        drawMs: 1600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-position-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဆိုင်ရဲ့ page ပါပဲ။ ဒီ lesson
+      အတွက် အပိုင်း တချို့ ထည့်ထားပါတယ်။ [[mark:select-price-badge]] သောက်စရာ menu ထဲက ဒီနေ့ အထူး လက်ဖက်ရည်
+      card ရဲ့ အဆုံးမှာ၊ ဈေးနှုန်းနဲ့ အသစ် ဆိုတဲ့ အစိမ်းရောင် badge က ဘေးချင်း ရှိနေပါတယ်။
+      [[mark:select-stamp]] ကြိုဆိုတဲ့ အပိုင်းမှာတော့ lesson 10 က ရွှေရောင် ဈေးလျှော့ တံဆိပ် ရှိပါတယ်။
+      [[mark:select-cups]] သောက်စရာတွေ အောက်က အဖြူရောင် box ထဲမှာ ခွက်ပုံ နှစ်ပုံ ရှိပြီး၊ transform တွေကို
+      နှိုင်းယှဉ်ပါမယ်။ [[mark:select-call]] page ရဲ့ အဆုံးဆုံးမှာတော့ ဖုန်းဆက်ရန် ခလုတ် တစ်ခု ရှိပါတယ်။
+      [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ ဆိုင်ရဲ့ အရောင်တွေနဲ့ card တွေကိုတော့ base ဖိုင်က
+      ပေးထားပါတယ်။ [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ ဘာကိုမှ position
+      မပေးရသေးလို့၊ box အားလုံး normal flow ထဲမှာ ရှိနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: flow layout"
+        url: "https://web.dev/learn/css/layout#flow_layout"
+      - title: "MDN — Block and inline layout in normal flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_and_inline_layout_in_normal_flow"
+    actions:
+      - id: close-position-board
+        type: whiteboard.apply
+        at: { mark: close-position-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-price-badge
+        type: editor.select
+        at: { mark: select-price-badge }
+        target:
+          {
+            file: index.html,
+            text: "<span class=\"price\" data-testid=\"price-laphet-yay\">1,500 ကျပ်</span>\n            <span class=\"badge\" data-testid=\"badge-laphet-yay\">အသစ်</span>",
+            occurrence: 1,
+          }
+      - id: select-stamp
+        type: editor.select
+        at: { mark: select-stamp }
+        target:
+          {
+            file: index.html,
+            text: '<span class="stamp" data-testid="stamp">ဈေးလျှော့</span>',
+            occurrence: 1,
+          }
+      - id: select-cups
+        type: editor.select
+        at: { mark: select-cups }
+        target:
+          {
+            file: index.html,
+            text: '<div class="stage cups-row" data-testid="cups-row">',
+            occurrence: 1,
+          }
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target:
+          {
+            file: index.html,
+            text: '<a class="call-btn" href="tel:+959123456789" data-testid="call-button">ဖုန်းဆက်ရန်</a>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-special
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-special }
+
+  - id: relative
+    chapter: "Relative နဲ့ absolute"
+    narration: >
+      [[mark:type-price]] relative ကနေ စကြည့်ရအောင်။ ဒီနေ့ အထူး card ရဲ့ ဈေးနှုန်းကို relative ပေးပြီး၊
+      အပေါ်ဘက် offset ကို 10 pixel ပေးပါမယ်။ [[mark:after-price]] အပေါ်ဘက် offset က ဈေးနှုန်းကို သူ့ မူလ
+      အပေါ် အစွန်းကနေ ခွာပေးလို့၊ နည်းနည်း အောက်ကို ဆင်းသွားပါပြီ။ ဒါပေမဲ့ ဘေးက badge က မရွေ့သလို၊ card
+      လည်း ပိုမမြင့်လာပါဘူး။ [[mark:select-price-top]] ဒီ offset က ဈေးနှုန်းကို ရွှေ့ပေးပေမယ့်၊ flow ထဲက
+      သူ့ နေရာ အဟောင်းကိုတော့ ချန်ထားပေးပါတယ်။ [[mark:select-price-relative]] ဒီ relative ကို offset
+      မပါဘဲ ပေးရင်တော့ box က လုံးဝ မရွေ့ပါဘူး။ relative ရဲ့ အဓိက အလုပ်က တခြား တစ်ခု ဖြစ်ပြီး၊ ခဏနေရင်
+      အဲဒါကို သုံးရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "MDN — position: relative"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#relative_positioning"
+    actions:
+      - id: type-price
+        type: editor.type
+        at: { mark: type-price }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".featured .price {\n  position: relative;\n  top: 10px;\n}\n"
+      - id: expect-price
+        type: expect.preview
+        at: { mark: after-price }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-price-top
+        type: editor.select
+        at: { mark: select-price-top }
+        target: { file: styles.css, text: "  top: 10px;", occurrence: 1 }
+      - id: select-price-relative
+        type: editor.select
+        at: { mark: select-price-relative }
+        target: { file: styles.css, text: "  position: relative;", occurrence: 1 }
+
+  - id: absolute
+    narration: >
+      [[mark:type-badge]] အခု badge ကို absolute ပေးပြီး၊ အပေါ်နဲ့ ညာဘက်ကနေ 8 pixel စီ ခွာပါမယ်။
+      ဘယ်ရောက်သွားမလဲ။ card ရဲ့ ထောင့်မှာလား၊ တခြား နေရာမှာလား။ အရင် ခန့်မှန်းကြည့်ပါ။
+      [[mark:type-badge-offsets]] ရိုက်နေတုန်း badge ကို သတိထား ကြည့်ပါ။ ကိုယ် ခန့်မှန်းထားတဲ့ နေရာကို
+      ရောက်သွားလား။ [[mark:after-badge]] badge က card ထဲကနေ ထွက်သွားပြီး၊ page တစ်ခုလုံးရဲ့ ညာဘက်
+      အပေါ်ထောင့်၊ header ပေါ်ကို ခုန်ရောက်သွားပါပြီ။ [[mark:select-badge-absolute]] ဒီ absolute က badge
+      ကို flow ထဲကနေ ထုတ်လိုက်လို့၊ card က သူ့အတွက် နေရာ မချန်တော့ပါဘူး။ offset တွေကိုလည်း card ကနေ
+      မဟုတ်ဘဲ page ကနေ တိုင်းသွားပါတယ်။ ဘာလို့ page ဖြစ်ရတာလဲ။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "MDN — position: absolute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#absolute_positioning"
+    actions:
+      # Two inserts, so the prediction question is asked while only the
+      # position is typed (the badge sits unchanged at its static position);
+      # the offsets that make it jump follow at the next mark. The open rule
+      # is the last thing in the file, so this stays insert-only.
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  top: 10px;\n}\n", occurrence: 1 }
+        text: "\n.badge {\n  position: absolute;\n"
+      - id: type-badge-offsets
+        type: editor.type
+        at: { mark: type-badge-offsets }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position: absolute;\n", occurrence: 1 }
+        text: "  top: 8px;\n  right: 8px;\n}\n"
+      - id: expect-badge-page
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-badge-absolute
+        type: editor.select
+        at: { mark: select-badge-absolute }
+        target: { file: styles.css, text: "  position: absolute;", occurrence: 1 }
+
+  - id: containing-block
+    narration: >
+      [[mark:open-cb-board]] absolute box ရဲ့ offset တွေကို တိုင်းတဲ့ box ကို containing block လို့ ခေါ်ပါတယ်။
+      အဲဒါကို ရှာဖို့ browser က ancestor တွေကို တစ်ဆင့်ချင်း တက်ရှာပါတယ်။ [[mark:draw-cb-chain]] badge ရဲ့
+      parent က card ပါ။ ပြီးရင် list၊ section၊ main၊ body နဲ့ html လာပါတယ်။ အဲဒီ အားလုံးက static ဖြစ်နေလို့
+      browser က ဆက်ရှာသွားပါတယ်။ [[mark:draw-cb-page]] position ပေးထားတဲ့ ancestor တစ်ခုမှ မရှိရင်တော့ initial
+      containing block ကို သုံးပါတယ်။ အဲဒါက viewport အရွယ်အစား ရှိပြီး၊ page ရဲ့ အပေါ်ဆုံးမှာ ရှိတဲ့ box ပါ။
+      ဒါကြောင့် badge က page ရဲ့ ထောင့်ကို ရောက်သွားတာပါ။ [[mark:draw-cb-other]] static မဟုတ်တဲ့ position ကို
+      တွေ့တာနဲ့ ရှာတာ ရပ်ပါတယ်။ ancestor မှာ transform ပါတာလိုမျိုး တခြား အချက် တချို့ကလည်း ရပ်စေပါတယ်။
+      [[mark:draw-cb-stop]] ဒါကြောင့် card ကိုယ်တိုင်ကို position ပေးထားရင်၊ ရှာတာက card မှာတင် ရပ်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "MDN — Layout and the containing block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Containing_block"
+      - title: "CSS Positioned Layout Module Level 3 — containing blocks"
+        url: "https://www.w3.org/TR/css-position-3/#def-cb"
+    actions:
+      - id: open-cb-board
+        type: whiteboard.apply
+        at: { mark: open-cb-board }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-badge]
+      - id: draw-cb-chain
+        type: whiteboard.apply
+        at: { mark: draw-cb-chain }
+        upsertIds: [b-walk, b-li, b-ul, b-body]
+        drawMs: 3200
+      - id: draw-cb-page
+        type: whiteboard.apply
+        at: { mark: draw-cb-page }
+        upsertIds: [b-page]
+        drawMs: 1600
+      - id: draw-cb-other
+        type: whiteboard.apply
+        at: { mark: draw-cb-other }
+        upsertIds: [b-other]
+        drawMs: 1600
+      - id: draw-cb-stop
+        type: whiteboard.apply
+        at: { mark: draw-cb-stop }
+        upsertIds: [b-stop-circle, b-stop-note]
+        drawMs: 1800
+
+  - id: card-relative
+    narration: >
+      [[mark:close-cb-board]] စမ်းကြည့်ရအောင်။ [[mark:type-card]] menu card အားလုံးကို offset လုံးဝ
+      မပါဘဲ relative ပေးပါမယ်။ ရိုက်နေတုန်း badge ကို သတိထား ကြည့်ပါ။ [[mark:after-card]] badge က သူ့
+      card ရဲ့ ထောင့်ထဲကို ခုန်ဝင်သွားပြီး၊ အပေါ်နဲ့ ညာဘက် အစွန်းကနေ 8 pixel စီ ခွာနေပါပြီ။ card
+      ကိုယ်တိုင်ကတော့ မရွေ့ပါဘူး။ [[mark:select-card-relative]] ဒီ relative ကို ကြည့်ပါ။ relative ကို
+      အများဆုံး ဒီလို သုံးကြပါတယ်။ box တစ်ခုကို သူ့ထဲက absolute box တွေရဲ့ containing block ဖြစ်အောင်
+      လုပ်တာပါ။ card တိုင်းကို အခု position ပေးထားပြီ ဆိုတာ မှတ်ထားပါ။ မကြာခင် အရေးပါလာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "MDN — Layout and the containing block: identifying the containing block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Containing_block#identifying_the_containing_block"
+    actions:
+      - id: close-cb-board
+        type: whiteboard.apply
+        at: { mark: close-cb-board }
+        open: false
+      - id: type-card
+        type: editor.type
+        at: { mark: type-card }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  right: 8px;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  position: relative;\n}\n"
+      - id: expect-badge-card
+        type: expect.preview
+        at: { mark: after-card }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-card-relative
+        type: editor.select
+        at: { mark: select-card-relative }
+        target: { file: styles.css, text: ".menu-card {\n  position: relative;", occurrence: 1 }
+
+  - id: fixed
+    chapter: "Fixed နဲ့ sticky"
+    narration: >
+      [[mark:scroll-bottom]] နောက်တစ်ခုက ဖုန်းဆက်ရန် ခလုတ်ပါ။ အခု သူက flow ထဲမှာ ရှိနေပြီး၊ page ရဲ့
+      အဆုံးဆုံး၊ footer ရဲ့ အောက်မှာ ရှိပါတယ်။ [[mark:type-fixed]] သူ့ကို fixed ပေးပြီး၊ အောက်နဲ့
+      ညာဘက်ကနေ 16 pixel စီ ခွာပါမယ်။ ဒီလို screen ပေါ်မှာ အမြဲ ရှိနေရမယ့် ခလုတ်မျိုးအတွက် fixed ကို
+      အများဆုံး သုံးကြပါတယ်။ ရိုက်နေတုန်း ခလုတ်ကို လိုက်ကြည့်ပါ။ [[mark:after-fixed]] ခလုတ်က preview ရဲ့
+      ညာဘက် အောက်ထောင့်ကို ရောက်သွားပါပြီ။ [[mark:scroll-top-fixed]] အပေါ်ဆုံးကို ပြန် scroll လုပ်ပါမယ်။
+      [[mark:after-scroll-top]] ခလုတ်က ထောင့်မှာပဲ ရှိနေဆဲပါ။ ဒီ fixed ကြောင့်ပါ။ fixed box ကို viewport
+      ကနေ တိုင်းလို့၊ page ကို scroll လုပ်လည်း သူ မရွေ့ပါဘူး။ [[mark:fixed-trap]] သတိထားစရာ တစ်ခု
+      ရှိပါတယ်။ ancestor တစ်ခုမှာ transform၊ filter ဒါမှမဟုတ် perspective ပါနေရင်၊ viewport အစား အဲဒီ
+      ancestor က သူ့ containing block ဖြစ်သွားပါတယ်။ အဲဒီအခါ ခလုတ်က အဲဒီ ancestor နဲ့အတူ ရွေ့သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "web.dev Learn CSS — Spacing: positioning"
+        url: "https://web.dev/learn/css/spacing#positioning"
+      - title: "MDN — position: fixed"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#fixed_positioning"
+    actions:
+      - id: scroll-bottom
+        type: preview.scroll
+        at: { mark: scroll-bottom }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-fixed
+        type: editor.type
+        at: { mark: type-fixed }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: ".menu-card {\n  position: relative;\n}\n", occurrence: 1 }
+        text: "\n.call-btn {\n  position: fixed;\n  bottom: 16px;\n  right: 16px;\n}\n"
+      - id: expect-call-fixed
+        type: expect.preview
+        at: { mark: after-fixed }
+        timeoutMs: 4000
+        target: { by: testId, value: call-button }
+        textContains: "ဖုန်းဆက်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-top-fixed
+        type: preview.scroll
+        at: { mark: scroll-top-fixed }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-fixed
+        type: editor.select
+        at: { mark: after-scroll-top }
+        target: { file: styles.css, text: "  position: fixed;", occurrence: 1 }
+
+  - id: sticky
+    narration: >
+      [[mark:type-sticky]] အခု menu ခေါင်းစဉ် နှစ်ခုကို sticky ပေးပါမယ်။ အပေါ်ဆုံးမှာ ကပ်အောင် အပေါ်ဘက်
+      offset ကို သုည ပေးပြီး၊ z-index လည်း ပေးပါမယ်။ sticky box က သူ့ offset ကို မရောက်မချင်း relative
+      box လိုပဲ နေပါတယ်။ [[mark:after-sticky]] အခုထိ ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:scroll-a-little]]
+      နည်းနည်း scroll လုပ်ကြည့်ရအောင်။ သောက်စရာ ခေါင်းစဉ်က အရင်လိုပဲ page နဲ့အတူ တက်သွားပါတယ်။
+      [[mark:scroll-stuck]] ထပ်ဆင်းလိုက်တော့ ခေါင်းစဉ်က အပေါ်ဆုံးကို ရောက်ပြီး၊ အဲဒီမှာ ကပ်နေပါပြီ။ card
+      တွေက ခေါင်းစဉ်ရဲ့ နောက်ကွယ်ကို ရောက်နေပါတယ်။ [[mark:select-z]] ဒီ z-index ကို ကြည့်ပါ။ z-index
+      ဆိုတာ box တွေ ထပ်နေရင် ဘယ်ဟာ အပေါ်က ပေါ်မလဲ ဆိုတဲ့ နံပါတ်ပါ။ position ပေးထားပြီး နောက်မှ လာတဲ့
+      card တွေက ဒါ မပါရင် ခေါင်းစဉ်ကို ဖုံးသွားပါမယ်။ lesson 23 မှာ ဆက်ကြည့်ပါမယ်။ [[mark:scroll-past]]
+      အခု သောက်စရာ အပိုင်း ကုန်တဲ့အထိ ဆင်းကြည့်ရအောင်။ သောက်စရာ ခေါင်းစဉ် ပျောက်သွားပါပြီ။ sticky box က
+      သူ့ parent screen ပေါ်မှာ ရှိနေသရွေ့ပဲ ကပ်လို့၊ သောက်စရာ အပိုင်း ထွက်သွားတော့ ခေါင်းစဉ်ပါ
+      လိုက်သွားပါတယ်။ [[mark:sticky-needs]] ဒီ အပေါ်ဘက် offset ကို ကြည့်ပါ။ sticky မှာ offset အနည်းဆုံး
+      တစ်ခု လိုပြီး၊ မပါရင် ဘယ်တော့မှ မကပ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Layout: positioning"
+        url: "https://web.dev/learn/css/layout#positioning"
+      - title: "MDN — position: sticky"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#sticky_positioning"
+      - title: "MDN — z-index"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/z-index"
+    actions:
+      - id: type-sticky
+        type: editor.type
+        at: { mark: type-sticky }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  right: 16px;\n}\n", occurrence: 1 }
+        text: "\n.menu-section h2 {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n}\n"
+      - id: expect-drinks-heading
+        type: expect.preview
+        at: { mark: after-sticky }
+        timeoutMs: 4000
+        target: { by: testId, value: drinks-heading }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-a-little
+        type: preview.scroll
+        at: { mark: scroll-a-little }
+        timeoutMs: 5000
+        top: 250
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: scroll-stuck
+        type: preview.scroll
+        at: { mark: scroll-stuck }
+        timeoutMs: 5000
+        top: 600
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-z
+        type: editor.select
+        at: { mark: select-z }
+        target: { file: styles.css, text: "  z-index: 1;", occurrence: 1 }
+      - id: scroll-past
+        type: preview.scroll
+        at: { mark: scroll-past }
+        timeoutMs: 5000
+        top: 1000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-sticky-top
+        type: editor.select
+        at: { mark: sticky-needs }
+        target: { file: styles.css, text: "  top: 0;", occurrence: 1 }
+
+  - id: out-of-flow-quiz
+    narration: >
+      ဆက်မသွားခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ အပေါ်ဘက် offset တစ်ခုတည်း ပေးလိုက်ရင် box က flow ထဲကနေ
+      ထွက်သွားသလား။ [[mark:quiz-answer]] မထွက်ပါဘူး။ relative ဒါမှမဟုတ် sticky box ကို offset ဘယ်လောက်
+      ပေးပေး၊ သူ့ နေရာကို ယူထားဆဲပါ။ position တန်ဖိုးတွေထဲမှာ flow ထဲကနေ ထုတ်တာက absolute နဲ့ fixed ပဲ
+      ဖြစ်ပြီး၊ ပြီးခဲ့တဲ့ lesson က float ကလည်း ထုတ်ပါတယ်။ [[mark:scroll-top-again]] page ရဲ့
+      အပေါ်ဆုံးကို ပြန်သွားရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: check your understanding"
+        url: "https://web.dev/learn/css/layout#check_your_understanding"
+      - title: "MDN — Introduction to CSS layout: positioning"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Introduction#positioning_techniques"
+    actions:
+      - id: scroll-top-again
+        type: preview.scroll
+        at: { mark: scroll-top-again }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: transform-board
+    chapter: "Transform ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:open-tf-board]] အခု ဒုတိယ နည်း၊ transform ကို ကြည့်ရအောင်။ [[mark:draw-tf-position]]
+      position နဲ့ဆိုရင် layout ပြောင်းနိုင်ပါတယ်။ box တစ်ခု absolute ဖြစ်သွားရင်၊ သူ့နောက်က box တွေက
+      သူ့ နေရာထဲကို တက်လာပါတယ်။ [[mark:draw-tf-transform]] transform မှာတော့ ဒီလို မဖြစ်ပါဘူး။ browser က
+      page ရဲ့ layout ကို အရင် တွက်ပြီးမှ၊ box ကို ရွှေ့ထား၊ လှည့်ထား၊ ချဲ့ချုံ့ထားတဲ့ ပုံနဲ့ ဆွဲပြတာပါ။
+      ဒါကြောင့် သူ့ နေရာက မူလအတိုင်း ကျန်ပြီး၊ ဘေးက box တွေလည်း မရွေ့ပါဘူး။ [[mark:draw-tf-list]]
+      transform ရဲ့ တန်ဖိုးက lesson 12 မှာ မြင်ခဲ့တဲ့ function မျိုးတွေကို space နဲ့ ခြားရေးထားတဲ့
+      စာရင်းပါ။ [[mark:draw-tf-origin]] လှည့်တာ၊ ချဲ့ချုံ့တာတွေက default အားဖြင့် box ရဲ့ အလယ်ကို
+      ဗဟိုထားပါတယ်။ အဲဒီ အမှတ်ကို transform origin လို့ ခေါ်ပါတယ်။ [[mark:draw-tf-percent]] lesson 10
+      မှာ မြင်ခဲ့သလို၊ translate ထဲက ရာခိုင်နှုန်းကို parent ကနေ မဟုတ်ဘဲ box ကိုယ်တိုင်ရဲ့ အရွယ်အစားကနေ
+      တွက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: transforms"
+        url: "https://web.dev/learn/css/functions#transforms"
+      - title: "MDN — transform"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform"
+      - title: "MDN — transform-origin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-origin"
+      - title: "CSS Transforms Module Level 2"
+        url: "https://drafts.csswg.org/css-transforms-2/"
+    actions:
+      - id: open-tf-board
+        type: whiteboard.apply
+        at: { mark: open-tf-board }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-tf-position
+        type: whiteboard.apply
+        at: { mark: draw-tf-position }
+        upsertIds: [c-p-head, c-p1, c-p2, c-p3, c-p-note]
+        drawMs: 2800
+      - id: draw-tf-transform
+        type: whiteboard.apply
+        at: { mark: draw-tf-transform }
+        upsertIds: [c-t-head, c-t1, c-t2-ghost, c-t2, c-t3, c-t-note]
+        drawMs: 3400
+      - id: draw-tf-list
+        type: whiteboard.apply
+        at: { mark: draw-tf-list }
+        upsertIds: [c-list]
+        drawMs: 1400
+      - id: draw-tf-origin
+        type: whiteboard.apply
+        at: { mark: draw-tf-origin }
+        upsertIds: [c-origin-dot, c-origin]
+        drawMs: 1400
+      - id: draw-tf-percent
+        type: whiteboard.apply
+        at: { mark: draw-tf-percent }
+        upsertIds: [c-percent]
+        drawMs: 1400
+
+  - id: stamp
+    narration: >
+      [[mark:close-tf-board]] ဈေးလျှော့ တံဆိပ်မှာ စမ်းကြည့်ရအောင်။ [[mark:type-rotate]] တံဆိပ်ကို rotate
+      function နဲ့ အနုတ် 12 ဒီဂရီ လှည့်တဲ့ transform ပေးပါမယ်။ [[mark:after-rotate]] တံဆိပ်က သူ့ အလယ်ကို
+      ဗဟိုထားပြီး စောင်းသွားပါပြီ။ ဒီဂရီက အပေါင်း ဆိုရင် နာရီလက်တံ လည်တဲ့ဘက် လှည့်ပြီး၊ အနုတ် ဆိုရင်
+      ပြောင်းပြန်ဘက် လှည့်ပါတယ်။ [[mark:type-scale]] အခု scale ပါ ထပ်ထည့်ထားတဲ့ ဒုတိယ declaration ကို
+      ရေးပါမယ်။ [[mark:after-scale]] တံဆိပ်က 20 ရာခိုင်နှုန်း ပိုကြီးလာပါပြီ။ ဒါပေမဲ့ သူ့ အပေါ်က
+      ခေါင်းစဉ်နဲ့ အောက်က စာကြောင်းက မရွေ့ပါဘူး။ layout ထဲမှာ သူ ယူထားတဲ့ နေရာက အရွယ်အစား
+      မပြောင်းလို့ပါ။ [[mark:type-translate]] တတိယ declaration မှာ translate ထပ်ထည့်ပြီး၊ ညာဘက်ကို 8
+      pixel၊ အပေါ်ကို 8 pixel ရွှေ့ပါမယ်။ [[mark:after-translate]] နည်းနည်း ရွေ့သွားပါပြီ။
+      [[mark:select-stamp-lines]] ဒီ transform သုံးခုကို ကြည့်ပါ။ တစ်ခုစီမှာ စာရင်း တစ်ခုလုံးကို
+      ပြန်ရေးထားပါတယ်။ နောက်က transform က အရင် တစ်ခုကို လုံးဝ အစားထိုးလို့၊ function အားလုံးကို
+      တစ်ခါတည်း ရေးရပါတယ်။ [[mark:fn-variants]] function တွေမှာ translate X၊ scale Y လို တစ်ဘက်တည်းအတွက်
+      ပုံစံတွေ ရှိပါတယ်။ scale X ကို အနုတ် ပေးရင်တော့ box က မှန်ထဲက ပုံလို ဘယ်ညာ ပြောင်းပြန် ဖြစ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: rotation"
+        url: "https://web.dev/learn/css/functions#rotation"
+      - title: "web.dev Learn CSS — Functions: scale"
+        url: "https://web.dev/learn/css/functions#scale"
+      - title: "web.dev Learn CSS — Functions: translate"
+        url: "https://web.dev/learn/css/functions#translate"
+      - title: "MDN — <transform-function>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function"
+    actions:
+      - id: close-tf-board
+        type: whiteboard.apply
+        at: { mark: close-tf-board }
+        open: false
+      - id: type-rotate
+        type: editor.type
+        at: { mark: type-rotate }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.stamp {\n  transform: rotate(-12deg);\n}\n"
+      - id: expect-stamp
+        type: expect.preview
+        at: { mark: after-rotate }
+        timeoutMs: 4000
+        target: { by: testId, value: stamp }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: a keystroke-typed list passes through invalid states
+      # ("rotate(-12deg) s") that drop the whole declaration for seconds.
+      - id: type-scale
+        type: editor.type
+        at: { mark: type-scale }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  transform: rotate(-12deg);\n", occurrence: 1 }
+        text: "  transform: rotate(-12deg) scale(1.2);\n"
+      - id: type-translate
+        type: editor.type
+        at: { mark: type-translate }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "  transform: rotate(-12deg) scale(1.2);\n", occurrence: 1 }
+        text: "  transform: rotate(-12deg) scale(1.2) translate(8px, -8px);\n"
+      - id: select-stamp-lines
+        type: editor.select
+        at: { mark: select-stamp-lines }
+        target:
+          {
+            file: styles.css,
+            text: "  transform: rotate(-12deg);\n  transform: rotate(-12deg) scale(1.2);\n  transform: rotate(-12deg) scale(1.2) translate(8px, -8px);",
+            occurrence: 1,
+          }
+
+  - id: skew
+    narration: >
+      [[mark:type-skew]] နောက်ထပ် function တစ်ခုက box ကို ရွဲ့စေတဲ့ skew ပါ။ မှာယူရန် ခလုတ်ကို အနုတ် 10 ဒီဂရီ
+      skew လုပ်ပါမယ်။ [[mark:after-skew]] ခလုတ်က ဖဲကြိုးလို ရွဲ့စောင်းသွားပြီး၊ သူ့ထဲက စာသားလည်း
+      လိုက်စောင်းသွားပါတယ်။ skew X နဲ့ skew Y ဆိုတဲ့ ပုံစံတွေလည်း ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: skewing"
+        url: "https://web.dev/learn/css/functions#skewing"
+      - title: "MDN — skew()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function/skew"
+    actions:
+      - id: type-skew
+        type: editor.type
+        at: { mark: type-skew }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "translate(8px, -8px);\n}\n", occurrence: 1 }
+        text: "\n.order-link {\n  transform: skew(-10deg);\n}\n"
+      - id: expect-order-link
+        type: expect.preview
+        at: { mark: after-skew }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: individual-properties
+    chapter: "Rotate၊ scale နဲ့ translate property တွေ"
+    narration: >
+      function တစ်ခုကို ပြင်ချင်တိုင်း စာရင်း တစ်ခုလုံးကို ပြန်ရေးရပါတယ်။ တစ်လုံး မှားရင်လည်း browser က
+      declaration တစ်ခုလုံးကို ကျော်လို့၊ function အားလုံး ပျောက်သွားပါတယ်။ ဒါကြောင့် CSS မှာ rotate၊
+      scale နဲ့ translate ဆိုတဲ့ သီးခြား property သုံးခုလည်း ရှိပါတယ်။ သူတို့ရဲ့ တန်ဖိုးတွေကို ကွင်းနဲ့
+      comma မသုံးဘဲ space နဲ့ ခြားရေးပါတယ်။ [[mark:type-logo]] header ထဲက ခွက်ပုံ logo မှာ
+      သုံးကြည့်ရအောင်။ တစ်ခုစီကို declaration တစ်ခုစီနဲ့ ရေးပြီး၊ ဘယ်ဘက်ကို စောင်းအောင်၊ ပိုကြီးအောင်၊
+      ညာဘက်ကို နည်းနည်း ရွေ့အောင် လုပ်ပါမယ်။ [[mark:after-logo]] logo စောင်းသွား၊ ကြီးလာ၊ ရွေ့သွားပါပြီ။
+      [[mark:type-logo-rotate]] အခု လှည့်ထားတဲ့ ဒီဂရီကိုပဲ ပြောင်းဖို့၊ အဆုံးမှာ rotate declaration အသစ်
+      ထည့်ပါမယ်။ [[mark:after-logo-rotate]] စောင်းတဲ့ဘက်ပဲ ပြောင်းသွားပြီး၊ အရွယ်အစားနဲ့ ရွှေ့ထားတာက
+      မူလအတိုင်း ရှိနေပါတယ်။ တစ်ခုချင်း ပြောင်းလို့ ရတဲ့အတွက်၊ lesson 38 က transition တွေမှာလည်း
+      အသုံးဝင်ပါတယ်။ [[mark:select-logo-props]] ဒီ property သုံးခုကို ကြည့်ပါ။ ဘယ်လို အစဉ်နဲ့ ရေးရေး၊
+      browser က translate၊ ပြီးရင် rotate၊ ပြီးရင် scale၊ နောက်ဆုံးမှ transform property ဆိုတဲ့
+      အစဉ်အတိုင်း အမြဲ လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: transforms"
+        url: "https://web.dev/learn/css/functions#transforms"
+      - title: "MDN — rotate"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/rotate"
+      - title: "MDN — scale"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scale"
+      - title: "MDN — translate"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/translate"
+      - title: "CSS Transforms Module Level 2 — individual transform properties"
+        url: "https://drafts.csswg.org/css-transforms-2/#individual-transforms"
+    actions:
+      - id: type-logo
+        type: editor.type
+        at: { mark: type-logo }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transform: skew(-10deg);\n}\n", occurrence: 1 }
+        text: "\n.logo {\n  rotate: -15deg;\n  scale: 1.3;\n  translate: 8px 0;\n}\n"
+      - id: expect-logo
+        type: expect.preview
+        at: { mark: after-logo }
+        timeoutMs: 4000
+        target: { by: testId, value: logo }
+        attribute: { name: src, value: "/cup.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-logo-rotate
+        type: editor.type
+        at: { mark: type-logo-rotate }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  translate: 8px 0;\n", occurrence: 1 }
+        text: "  rotate: 15deg;\n"
+      - id: select-logo-props
+        type: editor.select
+        at: { mark: select-logo-props }
+        target:
+          {
+            file: styles.css,
+            text: "  rotate: -15deg;\n  scale: 1.3;\n  translate: 8px 0;",
+            occurrence: 1,
+          }
+
+  - id: order-live
+    chapter: "Function တွေရဲ့ အစဉ်"
+    narration: >
+      [[mark:scroll-cups]] ခွက်ပုံ နှစ်ပုံကို ကြည့်ရအောင်။ နှစ်ပုံလုံးကို 80 pixel ရွှေ့တဲ့ translate နဲ့ 45
+      ဒီဂရီ လှည့်တဲ့ rotate ဆိုတဲ့ function နှစ်ခုတည်းကိုပဲ ပေးပါမယ်။ ဒါပေမဲ့ အစဉ်ကို ပြောင်းပြန် ရေးပါမယ်။
+      [[mark:type-cup-a]] ပထမ ခွက်က အရင် ရွှေ့ပြီးမှ လှည့်ပါတယ်။ [[mark:type-cup-b]] ဒုတိယ ခွက်ကတော့ အရင်
+      လှည့်ပြီးမှ ရွှေ့ပါတယ်။ [[mark:after-cups]] ခွက် နှစ်ခုက မတူတဲ့ နေရာတွေကို ရောက်သွားပါပြီ။ ပထမ ခွက်က
+      ညာဘက်ကို 80 pixel ရွေ့ပြီး စောင်းနေပါတယ်။ ဒုတိယ ခွက်ကတော့ ညာဘက် အောက်ကို ထောင့်ဖြတ် ဆင်းသွားပါတယ်။
+      ဒါကြောင့် function တွေရဲ့ အစဉ်က အရေးကြီးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: transforms"
+        url: "https://web.dev/learn/css/functions#transforms"
+      - title: "MDN — transform: the order of transform functions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform#transform_order"
+    actions:
+      - id: scroll-cups
+        type: preview.scroll
+        at: { mark: scroll-cups }
+        timeoutMs: 5000
+        top: 820
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-cup-a
+        type: editor.type
+        at: { mark: type-cup-a }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  rotate: 15deg;\n}\n", occurrence: 1 }
+        text: "\n.cup-a {\n  transform: translate(80px) rotate(45deg);\n}\n"
+      - id: type-cup-b
+        type: editor.type
+        at: { mark: type-cup-b }
+        cadence: line-by-line
+        target: { file: styles.css, after: "translate(80px) rotate(45deg);\n}\n", occurrence: 1 }
+        text: "\n.cup-b {\n  transform: rotate(45deg) translate(80px);\n}\n"
+      - id: expect-cups
+        type: expect.preview
+        at: { mark: after-cups }
+        timeoutMs: 4000
+        target: { by: testId, value: cup-b }
+        attribute: { name: src, value: "/cup.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: order-board
+    narration: >
+      [[mark:open-order-board]] ဒါကို ဒီလို စဉ်းစားကြည့်လို့ ရပါတယ်။ box ကို သူ့ကိုယ်ပိုင် X axis၊ Y
+      axis ပါတဲ့ စက္ကူ တစ်ရွက်ပေါ်မှာ ဆွဲထားတယ် ဆိုပါစို့။ function တစ်ခုစီက အဲဒီ စက္ကူကို ရွှေ့တာ၊
+      လှည့်တာ လုပ်ပြီး၊ နောက် function က စက္ကူ ရောက်နေတဲ့ နေရာ အသစ်ကနေ ဆက်လုပ်ပါတယ်။
+      [[mark:draw-order-a]] ပထမ ခွက်မှာ စက္ကူက ညာဘက်ကို 80 pixel ရွေ့ပြီးမှ အဲဒီ နေရာမှာပဲ လှည့်ပါတယ်။
+      ဒါကြောင့် ခွက်က ရောက်သွားတဲ့ နေရာမှာ လှည့်နေတာပါ။ [[mark:draw-order-b]] ဒုတိယ ခွက်မှာတော့ စက္ကူက
+      45 ဒီဂရီ အရင် လှည့်ပါတယ်။ အဲဒီအခါ သူ့ X axis က ညာဘက် အောက်ကို ညွှန်နေလို့၊ 80 pixel ရွေ့တာက အဲဒီ
+      စောင်းနေတဲ့ axis အတိုင်း သွားပါတယ်။ [[mark:draw-order-stamp]] တံဆိပ်လည်း ဒီလိုပါပဲ။ translate က
+      နောက်ဆုံးမှာ ရှိလို့၊ တံဆိပ်ရဲ့ စောင်းနေတဲ့ axis တွေအတိုင်း ရွေ့သွားတာပါ။ တည့်တည့် ရွှေ့ချင်ရင်
+      translate ကို အရှေ့ဆုံးမှာ ထားပါ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: transforms"
+        url: "https://web.dev/learn/css/functions#transforms"
+      - title: "CSS Transforms Module Level 1 — the transform rendering model"
+        url: "https://drafts.csswg.org/css-transforms-1/#transform-rendering"
+      - title: "MDN — transform: the order of transform functions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform#transform_order"
+    actions:
+      - id: open-order-board
+        type: whiteboard.apply
+        at: { mark: open-order-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-order-a
+        type: whiteboard.apply
+        at: { mark: draw-order-a }
+        upsertIds: [d-a-code, d-a-start, d-a-arrow, d-a-end, d-a-note]
+        drawMs: 3200
+      - id: draw-order-b
+        type: whiteboard.apply
+        at: { mark: draw-order-b }
+        upsertIds: [d-b-code, d-b-start, d-b-turn, d-b-move, d-b-end, d-b-note]
+        drawMs: 3600
+      - id: draw-order-stamp
+        type: whiteboard.apply
+        at: { mark: draw-order-stamp }
+        upsertIds: [d-stamp]
+        drawMs: 1400
+
+  - id: perspective
+    chapter: "3D နဲ့ perspective"
+    narration: >
+      [[mark:close-order-board]] transform တွေကို 3D မှာလည်း သုံးလို့ ရပါတယ်။ [[mark:scroll-special]]
+      ဒီနေ့ အထူး card ဆီ ပြန်သွားရအောင်။ [[mark:type-rotate-y]] card ကို rotate Y နဲ့ ဒေါင်လိုက် axis
+      ပတ်ပြီး 35 ဒီဂရီ လှည့်ပါမယ်။ ဒေါင်လိုက် axis ဆိုတာ card ရဲ့ အလယ်ကို အပေါ်ကနေ အောက် ဖြတ်သွားတဲ့
+      မျဉ်းပါ။ [[mark:after-rotate-y]] card က ကျဉ်းသွားသလိုပဲ မြင်ရပါတယ်။ အတိမ်အနက် မရှိရင် browser က
+      လှည့်ထားတဲ့ card ကို ပြားပြားပဲ ဆွဲလို့၊ 3D လှည့်တာက ဖိချုံ့ထားသလို ဖြစ်နေပါတယ်။
+      [[mark:type-origin]] transform origin ကိုလည်း ဘယ်ဘက် အစွန်းကို ရွှေ့ပါမယ်။ ဒါဆို card က ပတ္တာ
+      တပ်ထားတဲ့ တံခါးလို လှည့်ပါလိမ့်မယ်။ [[mark:after-origin]] အခု ဘယ်ဘက် အစွန်းက မူလ နေရာမှာပဲ
+      ရှိနေပြီး၊ card က ညာဘက်ကနေ ကျဉ်းလာပါတယ်။ [[mark:type-perspective]] အတိမ်အနက် ထည့်ဖို့ menu list
+      ကို 600 pixel ရှိတဲ့ perspective ပေးပါမယ်။ [[mark:after-perspective]] အခု ဝေးတဲ့ ညာဘက် အစွန်းက
+      ပိုသေးသွားပြီး၊ အထဲကို ပွင့်သွားတဲ့ တံခါးလို မြင်ရပါပြီ။ [[mark:select-perspective]] ဒီ
+      perspective ကို ကြည့်ပါ။ perspective ဆိုတာ ကြည့်တဲ့သူရဲ့ မျက်စိကနေ page အထိ အကွာအဝေးပါ။ မျက်စိနဲ့
+      နီးလေ အတိမ်အနက် ပိုသိသာလေ ဖြစ်ပြီး၊ parent မှာ ပေးထားလို့ child အားလုံးက မြင်ကွင်း တစ်ခုတည်းကို
+      မျှသုံးပါတယ်။ [[mark:perspective-fn]] perspective function လည်း ရှိပါတယ်။ element တစ်ခုရဲ့
+      ကိုယ်ပိုင် transform စာရင်းရဲ့ အရှေ့ဆုံးမှာ ထည့်ရပြီး၊ အဲဒီ element ကိုပဲ အတိမ်အနက် ပေးပါတယ်။
+      [[mark:three-d-names]] 3D အတွက် rotate X နဲ့ rotate Z၊ ကြိုက်တဲ့ axis ပတ်ပြီး လှည့်တဲ့ rotate 3d၊
+      ကြည့်တဲ့သူဆီ ရွှေ့တဲ့ translate Z၊ axis သုံးခုလုံးအတွက် translate 3d နဲ့ scale 3d တို့လည်း
+      ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: perspective"
+        url: "https://web.dev/learn/css/functions#perspective"
+      - title: "MDN — perspective"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/perspective"
+      - title: "MDN — perspective()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function/perspective"
+      - title: "MDN — rotateY()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function/rotateY"
+      - title: "MDN — transform-origin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transform-origin"
+    actions:
+      - id: close-order-board
+        type: whiteboard.apply
+        at: { mark: close-order-board }
+        open: false
+      - id: scroll-special
+        type: preview.scroll
+        at: { mark: scroll-special }
+        timeoutMs: 5000
+        top: 300
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-rotate-y
+        type: editor.type
+        at: { mark: type-rotate-y }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  transform: rotate(45deg) translate(80px);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.featured {\n  transform: rotateY(35deg);\n}\n"
+      - id: expect-special-turned
+        type: expect.preview
+        at: { mark: after-rotate-y }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-origin
+        type: editor.type
+        at: { mark: type-origin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transform: rotateY(35deg);\n", occurrence: 1 }
+        text: "  transform-origin: left;\n"
+      - id: type-perspective
+        type: editor.type
+        at: { mark: type-perspective }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transform-origin: left;\n}\n", occurrence: 1 }
+        text: "\n.menu {\n  perspective: 600px;\n}\n"
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: after-perspective }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-perspective
+        type: editor.select
+        at: { mark: select-perspective }
+        target: { file: styles.css, text: "  perspective: 600px;", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ position က layout ကို ပြောင်းပါတယ်။ relative က box ကို ရွှေ့ပေမယ့်
+      သူ့ နေရာကို ချန်ထားပါတယ်။ absolute နဲ့ fixed က box ကို flow ထဲကနေ ထုတ်ပြီး၊ absolute ကို အနီးဆုံး
+      position ပေးထားတဲ့ ancestor ကနေ၊ fixed ကို viewport ကနေ တိုင်းပါတယ်။ sticky က flow ထဲမှာ ရှိနေပြီး၊
+      parent screen ပေါ်မှာ ရှိနေသရွေ့ ကပ်နေပါတယ်။ transform ကတော့ ဆွဲပြပုံကိုပဲ ပြောင်းပါတယ်။ သူ့ function
+      တွေမှာ အစဉ် အရေးကြီးပြီး၊ perspective က အတိမ်အနက် ပေးပါတယ်။ [[mark:next-lesson]] အခုထိ box တွေက
+      တစ်ခုအောက် တစ်ခု စီနေဆဲပါ။ နောက် lesson မှာတော့ box တွေကို row တစ်ခုအတိုင်း တန်းစီပြီး၊ နေရာလွတ်ကို
+      ခွဲဝေပေးတဲ့ flexbox ကို စကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout"
+        url: "https://web.dev/learn/css/layout"
+      - title: "web.dev Learn CSS — Functions"
+        url: "https://web.dev/learn/css/functions"
+      - title: "web.dev Learn CSS — Flexbox (next lesson)"
+        url: "https://web.dev/learn/css/flexbox"
+    actions:
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".featured .price {\n  position: relative;\n  top: 10px;\n}\n\n.badge {\n  position: absolute;\n  top: 8px;\n  right: 8px;\n}\n\n.menu-card {\n  position: relative;\n}\n\n.call-btn {\n  position: fixed;\n  bottom: 16px;\n  right: 16px;\n}\n\n.menu-section h2 {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".stamp {\n  transform: rotate(-12deg);\n  transform: rotate(-12deg) scale(1.2);\n  transform: rotate(-12deg) scale(1.2) translate(8px, -8px);\n}\n\n.order-link {\n  transform: skew(-10deg);\n}\n\n.logo {\n  rotate: -15deg;\n  scale: 1.3;\n  translate: 8px 0;\n  rotate: 15deg;\n}\n"
+      - id: expect-final-css-3
+        type: expect.file
+        at: { afterAction: expect-final-css-2 }
+        path: styles.css
+        contains: ".cup-a {\n  transform: translate(80px) rotate(45deg);\n}\n\n.cup-b {\n  transform: rotate(45deg) translate(80px);\n}\n\n.featured {\n  transform: rotateY(35deg);\n  transform-origin: left;\n}\n\n.menu {\n  perspective: 600px;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
