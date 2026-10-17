@@ -1,0 +1,1766 @@
+# CSS course (Burmese), lesson 7 of 43: inheritance.
+#
+# Narration is Burmese, applied from voice-script.md next to this file
+# (DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning
+# tied to what is on screen. Everything the learner sees (title, chapters,
+# whiteboard labels, the tea-shop UI) is Burmese too.
+#
+# Shape: board (recall lessons 5-6, the page as a tree, values flow down only,
+# the html root) while the dev server installs → code tour (cards with an
+# order button and a details link, the coffee button's extra "plain" class,
+# empty styles.css) → body colour, size and font typed live: almost
+# everything follows, but the buttons keep the system font and the links stay
+# blue → the menu lists get a border the cards don't → board (text
+# properties inherit, box properties don't; how to check) → the cards
+# inherit the border on request → board (how the browser finds a value:
+# declaration → cascade, else inherit or initial; why buttons and links
+# didn't follow) → a green list colour loses to a plain paragraph rule (direct
+# beats inherited) → font: inherit and color: inherit fix the hook → display:
+# initial makes the descriptions inline → revert brings today's special's
+# description back to block → unset brings its colour back (inherit) and
+# removes its margins (initial) → all: unset strips the coffee button, three
+# lines restyle it → board (the five keywords, revert-layer, all) → recap,
+# hand-off to nesting (lesson 8).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every typed
+# state is plain CSS that hot-swaps with no reload; index.html is never
+# edited. Values typed keystroke by keystroke are keywords with no misleading
+# prefix (saddlebrown, tan, green, dimgray, inherit, initial, revert, unset).
+# No interaction: no preview.click, no hover or focus claims.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-07-inheritance
+  title: "CSS course 7: Inheritance"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS course 7
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks (lesson 7: each card ends with an order button and a details link) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                    <div class="actions">
+                      <button class="order-btn" type="button">မှာမယ်</button>
+                      <a href="#order">အသေးစိတ်</a>
+                    </div>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                    <div class="actions">
+                      <button class="order-btn plain" type="button" data-testid="plain-button">မှာမယ်</button>
+                      <a href="#order">အသေးစိတ်</a>
+                    </div>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                    <div class="actions">
+                      <button class="order-btn" type="button">မှာမယ်</button>
+                      <a href="#order">အသေးစိတ်</a>
+                    </div>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <div class="actions">
+                      <button class="order-btn" type="button">မှာမယ်</button>
+                      <a href="#order">အသေးစိတ်</a>
+                    </div>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: snacks -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: section A (palette), B2 (border-box reset) and the card
+      # furniture from C. No section B text styles: body has no colour, font,
+      # size or line height (the lesson types them on body) and links keep the
+      # browser's blue. Dropped from C because the lesson types them or relies
+      # on their absence: font: inherit on .order-btn, the card border, the
+      # description colour and margin. Section E pins the page background and
+      # the page padding (the layout half of section B).
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          Lesson 7 keeps the palette (A), the border-box reset (B2) and the
+          card furniture (C). Body gets no text colour, font, size or line
+          height, links keep the browser's colour, buttons keep the browser's
+          font, and cards have no border: the lesson types those itself.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-btn {
+          display: inline-block;
+          margin-top: 8px;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          text-decoration: none;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 7: the layout half of section B (page background and
+           padding), without any text colour or font. */
+        body {
+          margin: 0;
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A: the page as a tree, drawn like DevTools' Elements panel (each
+    # child indented under its parent). Blue = elements, orange = where the
+    # value is set, green = the direction values flow, red = the directions
+    # they never flow, violet = the root.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Inheritance · မိဘဆီက အမွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-html,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-html-label,
+        kind: text,
+        x: 330,
+        y: 227,
+        width: 80,
+        height: 36,
+        text: "html",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-body,
+        kind: rectangle,
+        x: 340,
+        y: 276,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-body-label,
+        kind: text,
+        x: 370,
+        y: 281,
+        width: 80,
+        height: 36,
+        text: "body",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-header,
+        kind: rectangle,
+        x: 380,
+        y: 330,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-header-label,
+        kind: text,
+        x: 400,
+        y: 335,
+        width: 100,
+        height: 36,
+        text: "header",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-main,
+        kind: rectangle,
+        x: 380,
+        y: 384,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-main-label,
+        kind: text,
+        x: 410,
+        y: 389,
+        width: 80,
+        height: 36,
+        text: "main",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-list,
+        kind: rectangle,
+        x: 420,
+        y: 438,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-list-label,
+        kind: text,
+        x: 460,
+        y: 443,
+        width: 60,
+        height: 36,
+        text: "list",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-card,
+        kind: rectangle,
+        x: 460,
+        y: 492,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-card-label,
+        kind: text,
+        x: 490,
+        y: 497,
+        width: 80,
+        height: 36,
+        text: "card",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-h3,
+        kind: rectangle,
+        x: 500,
+        y: 546,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-h3-label,
+        kind: text,
+        x: 545,
+        y: 551,
+        width: 50,
+        height: 36,
+        text: "h3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-p,
+        kind: rectangle,
+        x: 500,
+        y: 600,
+        width: 140,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-p-label,
+        kind: text,
+        x: 555,
+        y: 605,
+        width: 30,
+        height: 36,
+        text: "p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-body-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 326,
+        y: 268,
+        width: 168,
+        height: 62,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-body-note,
+        kind: text,
+        x: 560,
+        y: 281,
+        width: 240,
+        height: 36,
+        text: "အရောင် ပေးထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-flow-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 700,
+        y: 340,
+        width: 50,
+        height: 290,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-flow-label,
+        kind: text,
+        x: 780,
+        y: 420,
+        width: 240,
+        height: 36,
+        text: "အောက်ကိုပဲ စီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-root-note,
+        kind: text,
+        x: 480,
+        y: 227,
+        width: 300,
+        height: 36,
+        text: "root · parent မရှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-no-up,
+        kind: text,
+        x: 780,
+        y: 500,
+        width: 260,
+        height: 36,
+        text: "↑ အပေါ် မတက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-no-side,
+        kind: text,
+        x: 780,
+        y: 560,
+        width: 280,
+        height: 36,
+        text: "↔ ဘေးချင်း မကူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B: which properties inherit. Green = inherited (text), red = not
+    # inherited (box), violet = how to check.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Inherit ဖြစ်သလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-yes-head,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 260,
+        height: 36,
+        text: "inherit ဖြစ်တယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-yes-sub,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 220,
+        height: 36,
+        text: "စာနဲ့ ဆိုင်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-yes-box,
+        kind: rectangle,
+        x: 290,
+        y: 326,
+        width: 300,
+        height: 200,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-yes-list,
+        kind: text,
+        x: 315,
+        y: 340,
+        width: 200,
+        height: 170,
+        text: "color\nfont\nline-height\ntext-align",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-yes-check,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 236,
+        width: 44,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-no-head,
+        kind: text,
+        x: 700,
+        y: 232,
+        width: 280,
+        height: 36,
+        text: "inherit မဖြစ်ဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-sub,
+        kind: text,
+        x: 700,
+        y: 276,
+        width: 220,
+        height: 36,
+        text: "box နဲ့ ဆိုင်တာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-box,
+        kind: rectangle,
+        x: 690,
+        y: 326,
+        width: 300,
+        height: 240,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: b-no-list,
+        kind: text,
+        x: 715,
+        y: 340,
+        width: 200,
+        height: 210,
+        text: "border\npadding\nmargin\nbackground\nwidth",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-mdn,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 520,
+        height: 36,
+        text: "MDN · Inherited: yes / no",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C: how the browser finds one property's value on one element.
+    # Blue = the two questions, green = the "yes" answers, red = the "no"
+    # path, orange = the initial value, violet = the answer to the hook.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "တန်ဖိုး ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-q1,
+        kind: rectangle,
+        x: 290,
+        y: 218,
+        width: 390,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-q1-text,
+        kind: text,
+        x: 310,
+        y: 228,
+        width: 330,
+        height: 36,
+        text: "declaration ရှိလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-q1-yes,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 695,
+        y: 228,
+        width: 70,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-cascade,
+        kind: text,
+        x: 785,
+        y: 228,
+        width: 260,
+        height: 36,
+        text: "cascade က ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-q1-no,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 280,
+        width: 40,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-q1-no-label,
+        kind: text,
+        x: 520,
+        y: 282,
+        width: 90,
+        height: 36,
+        text: "မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-q2,
+        kind: rectangle,
+        x: 290,
+        y: 326,
+        width: 390,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-q2-text,
+        kind: text,
+        x: 310,
+        y: 336,
+        width: 330,
+        height: 36,
+        text: "inherit ဖြစ်လား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-q2-yes,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 695,
+        y: 336,
+        width: 70,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-parent,
+        kind: text,
+        x: 785,
+        y: 318,
+        width: 280,
+        height: 76,
+        text: "parent ရဲ့\ncomputed value",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-q2-no,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 388,
+        width: 40,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-q2-no-label,
+        kind: text,
+        x: 520,
+        y: 390,
+        width: 100,
+        height: 36,
+        text: "မဖြစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-initial,
+        kind: rectangle,
+        x: 290,
+        y: 434,
+        width: 390,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-initial-text,
+        kind: text,
+        x: 310,
+        y: 444,
+        width: 200,
+        height: 36,
+        text: "initial value",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-ua-text,
+        kind: text,
+        x: 300,
+        y: 524,
+        width: 170,
+        height: 36,
+        text: "button · a",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-ua-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 524,
+        width: 70,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-ua-rule,
+        kind: text,
+        x: 580,
+        y: 524,
+        width: 420,
+        height: 36,
+        text: "browser ရဲ့ declaration ရှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-summary,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 700,
+        height: 36,
+        text: "cascade က ရွေး · inheritance က ကွက်လပ် ဖြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board D: the five CSS-wide keywords and where each one takes its value
+    # from. Blue = the keywords, black = the source, violet = revert-layer
+    # (cascade layers, lesson 5), orange = the all shorthand.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Keyword ငါးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-k-inherit,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 200,
+        height: 36,
+        text: "inherit",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-inherit,
+        kind: text,
+        x: 560,
+        y: 228,
+        width: 300,
+        height: 36,
+        text: "parent ရဲ့ တန်ဖိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-k-initial,
+        kind: text,
+        x: 300,
+        y: 284,
+        width: 200,
+        height: 36,
+        text: "initial",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-initial,
+        kind: text,
+        x: 560,
+        y: 284,
+        width: 460,
+        height: 36,
+        text: "specification ရဲ့ initial value",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-k-unset,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 200,
+        height: 36,
+        text: "unset",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-unset,
+        kind: text,
+        x: 560,
+        y: 340,
+        width: 420,
+        height: 36,
+        text: "inherit ဒါမှမဟုတ် initial",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-k-revert,
+        kind: text,
+        x: 300,
+        y: 396,
+        width: 200,
+        height: 36,
+        text: "revert",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-revert,
+        kind: text,
+        x: 560,
+        y: 396,
+        width: 320,
+        height: 36,
+        text: "browser ရဲ့ style",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-k-layer,
+        kind: text,
+        x: 300,
+        y: 452,
+        width: 220,
+        height: 36,
+        text: "revert-layer",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-layer,
+        kind: text,
+        x: 560,
+        y: 452,
+        width: 380,
+        height: 36,
+        text: "ရှေ့က layer ရဲ့ တန်ဖိုး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-k-all,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 200,
+        height: 36,
+        text: "all",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-v-all,
+        kind: text,
+        x: 560,
+        y: 540,
+        width: 420,
+        height: 36,
+        text: "property အားလုံး တစ်ခါတည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4107
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-tree
+    chapter: "Inheritance ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson နှစ်ခုမှာ cascade နဲ့ specificity ကို ကြည့်ခဲ့ပါတယ်။ element တစ်ခုတည်းအတွက် rule
+      တွေ ပြိုင်နေရင် browser က ဘယ်တစ်ခုကို ရွေးလဲ ဆိုတာပါ။ [[mark:start-server]] ဒီလို
+      ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ dev server ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့်
+      ဖြစ်နေမှာပါ။ [[mark:the-question]] ဒါပေမဲ့ element တိုင်းမှာ ဘယ် rule ကမှ မပေးထားတဲ့ property တွေက
+      အများကြီး ရှိပါတယ်။ menu card ထဲက စာလုံးတွေကို ကိုယ် အရောင် တစ်ခါမှ မပေးခဲ့ပေမယ့် အရောင်
+      ရှိနေပါတယ်။ ဒါဆို အဲဒီ အရောင်က ဘယ်က လာတာလဲ။ [[mark:draw-tree]] ဒါက ဆိုင်ရဲ့ page
+      တစ်စိတ်တစ်ပိုင်းကို tree ပုံစံ ဆွဲထားတာပါ။ အပေါ်ဆုံးက html ဖြစ်ပြီး၊ သူ့ထဲမှာ body၊ body ထဲမှာ
+      header နဲ့ main ရှိပါတယ်။ main ထဲမှာ menu list၊ list ထဲမှာ menu card တစ်ခု၊ card ထဲမှာ
+      ခေါင်းစဉ်နဲ့ ဖော်ပြချက် စာပိုဒ် ရှိပါတယ်။ [[mark:draw-body]] body ကိုပဲ အရောင် တစ်ခု ပေးပြီး၊
+      တခြား ဘာကိုမှ မပေးဘူး ဆိုပါစို့။ [[mark:draw-flow]] အဲဒီအခါ body အောက်က element တိုင်းက အရောင်ကို
+      သူ့ parent ဆီကနေ ယူပါတယ်။ main က body ဆီက၊ card က list ဆီက၊ ခေါင်းစဉ်က card ဆီကနေ ယူတာပါ။ ဒီလို
+      parent ရဲ့ တန်ဖိုးကို child က အလိုလို ဆက်ယူတာကို inheritance လို့ ခေါ်ပါတယ်၊ မိဘဆီက အမွေ
+      ရသလိုပါပဲ။ [[mark:draw-root]] html က tree ရဲ့ root ပါ။ သူ့မှာ parent မရှိလို့ ဘယ်သူ့ဆီကမှ inherit
+      မဖြစ်ပါဘူး။ ပြီးတော့ html မှာ ပေးထားတဲ့ တန်ဖိုးက page ထဲက element တိုင်းဆီ ရောက်နိုင်ပါတယ်။
+      [[mark:draw-no-up]] inheritance က အောက်ကိုပဲ စီးပါတယ်။ ဒါကြောင့် body မှာ ပေးထားတဲ့ တန်ဖိုးက html
+      ဆီ ပြန်မတက်သလို၊ child က သူ့ parent ကို ဘယ်တော့မှ မပြောင်းနိုင်ပါဘူး။ header နဲ့ main လို sibling
+      တွေကြားမှာလည်း တန်ဖိုး ဘေးချင်း မကူးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: inheritance flow"
+        url: "https://web.dev/learn/css/inheritance#inheritance-flow"
+      - title: "MDN — Inheritance"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Inheritance"
+      - title: "CSS Cascading and Inheritance Level 5 — Inheritance"
+        url: "https://www.w3.org/TR/css-cascade-5/#inheriting"
+    actions:
+      - id: open-tree-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady
+      # sits on the preview mark in the next scene, well over 40 s of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-tree
+        type: whiteboard.apply
+        at: { mark: draw-tree }
+        upsertIds:
+          [
+            a-html,
+            a-html-label,
+            a-body,
+            a-body-label,
+            a-header,
+            a-header-label,
+            a-main,
+            a-main-label,
+            a-list,
+            a-list-label,
+            a-card,
+            a-card-label,
+            a-h3,
+            a-h3-label,
+            a-p,
+            a-p-label,
+          ]
+        drawMs: 4600
+      - id: draw-body
+        type: whiteboard.apply
+        at: { mark: draw-body }
+        upsertIds: [a-body-circle, a-body-note]
+        drawMs: 1600
+      - id: draw-flow
+        type: whiteboard.apply
+        at: { mark: draw-flow }
+        upsertIds: [a-flow-arrow, a-flow-label]
+        drawMs: 1800
+      - id: draw-root
+        type: whiteboard.apply
+        at: { mark: draw-root }
+        upsertIds: [a-root-note]
+        drawMs: 1200
+      - id: draw-no-up
+        type: whiteboard.apply
+        at: { mark: draw-no-up }
+        upsertIds: [a-no-up, a-no-side]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-tree-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက ဆိုင်ရဲ့ HTML ဖိုင်ပါ။
+      header၊ သောက်စရာ menu နဲ့ သူ့အောက်က စားစရာ menu ပါပါတယ်။ [[mark:select-actions]] သောက်စရာ card
+      တွေမှာ မှာမယ် ခလုတ်နဲ့ အသေးစိတ် ကြည့်ဖို့ link ပါလာပါတယ်။ [[mark:select-plain]] ကော်ဖီ card ရဲ့
+      ခလုတ်မှာတော့ plain ဆိုတဲ့ class တစ်ခု ပိုပါပါတယ်။ lesson အဆုံးပိုင်းမှာ သုံးပါမယ်။
+      [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ ဒီတစ်ခါ base ဖိုင်က page ကို စာလုံး အရောင်နဲ့ font
+      မပေးထားဘဲ၊ ဆိုင်ရဲ့ အရောင်တွေနဲ့ card ပုံစံလောက်ပဲ ပေးထားပါတယ်။ ဒါမှ တန်ဖိုးတွေ အောက်ကို
+      စီးသွားတာကို ကိုယ်တိုင် မြင်ရမှာပါ။ [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ ညာဘက်မှာ
+      preview ပွင့်လာပါပြီ။ menu ထဲက စာလုံးတွေက browser ရဲ့ default font နဲ့ အမည်းရောင် ဖြစ်နေပါတယ်။
+      အသေးစိတ် link တွေက အပြာရောင်၊ မှာမယ် ခလုတ်တွေကတော့ အညိုရောင် နောက်ခံပေါ်မှာ အဖြူရောင် စာလုံးနဲ့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance"
+        url: "https://web.dev/learn/css/inheritance"
+      - title: "MDN — <button>: the Button element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button"
+      - title: "MDN — <a>: the Anchor element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a"
+    actions:
+      - id: close-tree-board
+        type: whiteboard.apply
+        at: { mark: close-tree-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-actions
+        type: editor.select
+        at: { mark: select-actions }
+        target:
+          file: index.html
+          text: "<div class=\"actions\">\n              <button class=\"order-btn\" type=\"button\">မှာမယ်</button>\n              <a href=\"#order\">အသေးစိတ်</a>\n            </div>"
+          occurrence: 1
+      - id: select-plain
+        type: editor.select
+        at: { mark: select-plain }
+        target:
+          {
+            file: index.html,
+            text: '<button class="order-btn plain" type="button" data-testid="plain-button">မှာမယ်</button>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-first-card
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "အသေးစိတ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-first-card }
+
+  - id: body-hook
+    chapter: "ခလုတ်နဲ့ link က ဘာကြောင့် မလိုက်လဲ"
+    narration: >
+      [[mark:type-body]] စာလုံး အရောင်နဲ့ အရွယ်အစားကို body element တစ်ခုတည်းမှာပဲ ပေးကြည့်ရအောင်။
+      အရောင်ကို အညိုရောင်၊ font size ကို 18 pixel ပေးပါမယ်။ [[mark:type-font]] ပြီးတော့ ဆိုင်ရဲ့ မြန်မာ
+      font စာရင်းကို ထည့်ပါမယ်။ font family declaration တစ်ခုတည်း ဖြစ်ပေမယ့် ရှည်လို့ နှစ်ကြောင်း
+      ဖြစ်သွားတာပါ။ [[mark:after-body]] preview ကို ကြည့်ပါ။ menu ထဲက စာတွေ အညိုရောင် ဖြစ်သွားပြီး
+      ခေါင်းစဉ်တွေ ကြီးလာပါပြီ။ စာလုံးတွေကလည်း ဆိုင်ရဲ့ font နဲ့ ပေါ်လာပါပြီ။ [[mark:select-body]] ဒီ
+      body selector ကို ကြည့်ပါ။ body မှာ rule တစ်ခုတည်း ရေးခဲ့ပေမယ့်၊ element အများစု ပြောင်းသွားတာက
+      တစ်ခုစီက သူ့ parent ဆီကနေ inherit ဖြစ်လို့ပါ။ [[mark:header-note]] header ထဲက ဆိုင်နာမည်ကတော့
+      နို့နှစ်ရောင် အတိုင်းပါ။ base ဖိုင်က header ကို ကိုယ်ပိုင် အရောင် ပေးထားလို့၊ body ဆီက မဟုတ်ဘဲ
+      header ဆီက ယူတာပါ။ header ထဲက link တွေကိုတော့ base ဖိုင်က တိုက်ရိုက် အရောင် ပေးထားပါတယ်။
+      [[mark:odd-ones]] ဒါပေမဲ့ လိုက်မပြောင်းတဲ့ အရာ နှစ်ခု ရှိပါတယ်။ မှာမယ် ခလုတ်တွေက system font
+      သေးသေးလေးနဲ့ပဲ ကျန်နေပြီး၊ အသေးစိတ် link တွေကလည်း အပြာရောင် အတိုင်းပါ။ သူတို့လည်း body ထဲမှာပဲ
+      ရှိတာပါ။ ဒါဆို ဘာကြောင့် inherit မဖြစ်တာလဲ။ မကြာခင် ဖြေပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance"
+        url: "https://web.dev/learn/css/inheritance"
+      - title: "MDN — Inheritance"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Inheritance"
+      - title: "MDN — font-family"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-family"
+    actions:
+      - id: type-body
+        type: editor.type
+        at: { mark: type-body }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "body {\n  color: saddlebrown;\n  font-size: 18px;\n}\n"
+      - id: type-font
+        type: editor.type
+        at: { mark: type-font }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  font-size: 18px;\n", occurrence: 1 }
+        text: "  font-family: \"Noto Sans Myanmar\", \"Myanmar Sangam MN\", \"Myanmar MN\",\n    \"Myanmar Text\", \"Padauk\", system-ui, sans-serif;\n"
+      - id: expect-drinks-after-body
+        type: expect.preview
+        at: { mark: after-body }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-body
+        type: editor.select
+        at: { mark: select-body }
+        target: { file: styles.css, text: "body {", occurrence: 1 }
+
+  - id: box-props
+    chapter: "Inherit ဖြစ်တဲ့ property တွေ"
+    narration: >
+      [[mark:scroll-to-menu]] ဒီကစပြီး menu card တွေပေါ်မှာပဲ စမ်းမှာ ဖြစ်လို့၊ page ကို အဲဒီအထိ scroll
+      လုပ်ပြီး ဆင်းလိုက်ရအောင်။ [[mark:type-menu]] အခု box နဲ့ ဆိုင်တဲ့ property တွေကို စမ်းကြည့်ရအောင်။
+      menu list နှစ်ခုလုံးကို 2 pixel ထူတဲ့ အညိုဖျော့ရောင် border နဲ့ padding 8 pixel ပေးပါမယ်။
+      [[mark:after-menu]] list တစ်ခုစီမှာ အညိုဖျော့ရောင် ဘောင်နဲ့ အတွင်းမှာ နေရာလွတ် နည်းနည်း
+      ပေါ်လာပါပြီ။ ဒါပေမဲ့ ထဲက card တွေမှာတော့ ဘောင် မပေါ်ပါဘူး။ border နဲ့ padding က inherit
+      မဖြစ်လို့ပါ။ ဘယ်ဟာ inherit ဖြစ်လဲ ဆိုတာကို အကြမ်းဖျင်း မှတ်ထားလို့ ရပါတယ်။ [[mark:draw-yes]] စာနဲ့
+      ဆိုင်တဲ့ property တွေက inherit ဖြစ်ပါတယ်။ အရောင်၊ font နဲ့ ဆိုင်တဲ့ property တွေ၊ line height နဲ့
+      စာ ညှိပုံ စတာတွေပါ။ card ထဲက စာတွေကို font နဲ့ အရောင် တူစေချင်တာ များလို့၊ ဒီ တန်ဖိုးတွေ အလိုလို
+      ဆင်းသွားတော့ element တိုင်းမှာ ထပ်ရေးစရာ မလိုပါဘူး။ [[mark:draw-no]] box နဲ့ ဆိုင်တဲ့ border၊
+      padding၊ margin၊ နောက်ခံနဲ့ အကျယ် စတာတွေကတော့ inherit မဖြစ်ပါဘူး။ border သာ inherit ဖြစ်ခဲ့ရင်၊
+      list ထဲက ခေါင်းစဉ်၊ စာပိုဒ်၊ ခလုတ် အားလုံးမှာ ဘောင်တွေ ပေါ်နေမှာပါ။ [[mark:background-note]] child
+      က parent ရဲ့ နောက်ခံကို မျှသုံးနေသလို ထင်ရတတ်ပေမယ့်၊ တကယ်တော့ inherit ဖြစ်တာ မဟုတ်ပါဘူး။ child ရဲ့
+      ကိုယ်ပိုင် နောက်ခံက ကြည်နေလို့၊ နောက်က parent ရဲ့ အရောင်ကို ဖောက်ထွင်း မြင်နေရတာပါ။
+      [[mark:draw-mdn]] မသေချာရင် အဲဒီ property ကို MDN မှာ ရှာကြည့်ပါ။ formal definition ထဲမှာ
+      Inherited ဆိုတဲ့ အတန်း ပါပြီး၊ yes ဒါမှမဟုတ် no လို့ ပြထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: which properties are inherited by default"
+        url: "https://web.dev/learn/css/inheritance#which-properties-are-inherited-by-default"
+      - title: "CSS 2.2 — Full property table (Inherited? column)"
+        url: "https://www.w3.org/TR/CSS22/propidx.html"
+      - title: "MDN — background-color (initial value transparent, not inherited)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-color"
+      - title: "MDN — border (formal definition)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border"
+    actions:
+      # The header fills the top half of the preview; from here on every
+      # demo is on the drinks cards, so the page scrolls to the drinks
+      # heading (the header is 363 px tall once the body rule is in).
+      - id: scroll-to-menu
+        type: preview.scroll
+        at: { mark: scroll-to-menu }
+        top: 363
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-menu
+        type: editor.type
+        at: { mark: type-menu }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "system-ui, sans-serif;\n}\n", occurrence: 1 }
+        text: "\n.menu {\n  border: 2px solid tan;\n  padding: 8px;\n}\n"
+      - id: expect-coffee-after-menu
+        type: expect.preview
+        at: { mark: after-menu }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "နို့ဆီနဲ့ ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-lists
+        type: whiteboard.apply
+        at: { mark: draw-yes, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-yes
+        type: whiteboard.apply
+        at: { mark: draw-yes }
+        upsertIds: [b-yes-head, b-yes-check, b-yes-sub, b-yes-box, b-yes-list]
+        drawMs: 3000
+      - id: draw-no
+        type: whiteboard.apply
+        at: { mark: draw-no }
+        upsertIds: [b-no-head, b-no-sub, b-no-box, b-no-list]
+        drawMs: 3000
+      - id: draw-mdn
+        type: whiteboard.apply
+        at: { mark: draw-mdn }
+        upsertIds: [b-mdn]
+        drawMs: 1500
+
+  - id: border-inherit
+    narration: >
+      [[mark:close-lists]] ဒါဆို card တွေကလည်း list ရဲ့ border ကို ယူစေချင်ရင် ဘယ်လို လုပ်မလဲ။
+      [[mark:keywords-intro]] CSS မှာ property တိုင်းနဲ့ သုံးလို့ရပြီး၊ တန်ဖိုး ဘယ်က လာမလဲ ဆိုတာ
+      ဆုံးဖြတ်ပေးတဲ့ အထူး keyword ငါးခု ရှိပါတယ်။ ဒီ lesson မှာ ငါးခုလုံး တွေ့ရမှာ ဖြစ်ပြီး၊ ပထမဆုံးက
+      inherit ပါ။ [[mark:type-card-border]] menu card တွေရဲ့ border ကို inherit ဆိုတဲ့ keyword
+      ပေးကြည့်ရအောင်။ အထူ၊ မျဉ်းပုံစံ၊ အရောင်တွေကို ထပ်မရေးတော့ဘဲ၊ keyword တစ်လုံးတည်းနဲ့ parent ဆီက
+      ယူခိုင်းတာပါ။ [[mark:after-card-border]] အခု card တိုင်းမှာ list နဲ့ တူတဲ့ အညိုဖျော့ရောင် ဘောင်
+      ပေါ်လာပါပြီ။ inherit keyword က ပုံမှန် inherit မဖြစ်တဲ့ property မှာတောင် parent ရဲ့ တန်ဖိုးကို
+      ယူပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: explicitly inherit and control inheritance"
+        url: "https://web.dev/learn/css/inheritance#explicitly-inherit-and-control-inheritance"
+      - title: "MDN — inherit"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/inherit"
+      - title: "CSS Cascading and Inheritance Level 5 — CSS-wide keywords"
+        url: "https://www.w3.org/TR/css-cascade-5/#defaulting-keywords"
+    actions:
+      - id: close-lists
+        type: whiteboard.apply
+        at: { mark: close-lists }
+        open: false
+      - id: type-card-border
+        type: editor.type
+        at: { mark: type-card-border }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 8px;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  border: inherit;\n}\n"
+      - id: expect-card-after-border
+        type: expect.preview
+        at: { mark: after-card-border }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: value-board
+    chapter: "တန်ဖိုး ဘယ်က လာလဲ"
+    narration: >
+      [[mark:open-value]] ဒါဆို element တစ်ခုပေါ်က property တစ်ခုရဲ့ တန်ဖိုးကို browser က ဘယ်လို ရှာလဲ။
+      မေးခွန်း နှစ်ခုအထိ မေးပါတယ်။ [[mark:draw-q1]] ပထမ မေးခွန်းက၊ ဒီ element ပေါ်မှာ ဒီ property ကို
+      ပေးထားတဲ့ declaration ရှိလား ဆိုတာပါ။ ကိုယ့် CSS ကပဲ ဖြစ်ဖြစ်၊ browser ရဲ့ stylesheet ကပဲ ဖြစ်ဖြစ်
+      ရပါတယ်။ ရှိရင်တော့ cascade က နိုင်တဲ့ တစ်ခုကို ရွေးပါတယ်။ [[mark:draw-q2]] ဘာ declaration မှ
+      မရှိမှ ဒုတိယ မေးခွန်းကို မေးပါတယ်။ inherit ဖြစ်တဲ့ property ဆိုရင် element က parent ရဲ့ computed
+      value ကို ယူပါတယ်။ computed value ဆိုတာ ရေးထားတဲ့ တန်ဖိုးကို browser က တွက်ပြီးမှ ရတဲ့ တန်ဖိုးပါ။
+      ဥပမာ parent ရဲ့ font size ကို သူ့ parent ရဲ့ နှစ်ဆ ဖြစ်တဲ့ 2 em လို့ ရေးထားရင်၊ child ဆီ ရောက်တာက
+      2 em မဟုတ်ဘဲ pixel နဲ့ တွက်ပြီးသား ရလဒ်ပါ။ ဒါကြောင့် child က နှစ်ဆ ထပ် မကြီးသွားတာပါ။
+      [[mark:draw-initial]] inherit မဖြစ်ရင်တော့ initial value ကို ရပါတယ်။ initial value ဆိုတာ CSS ရဲ့
+      တရားဝင် စာတမ်း ဖြစ်တဲ့ specification က property တိုင်းအတွက် သတ်မှတ်ထားတဲ့ စံ တန်ဖိုးပါ။ card
+      တွေမှာ ဘောင် မရှိခဲ့တာလည်း border မျဉ်းပုံစံရဲ့ initial value က မျဉ်း မရှိတာ ဖြစ်လို့ပါ။
+      [[mark:draw-hook-answer]] အခု ခလုတ်နဲ့ link တွေ ဘာကြောင့် မလိုက်ခဲ့လဲ သိပါပြီ။ browser ရဲ့
+      stylesheet မှာ ခလုတ်ကို ကိုယ်ပိုင် font၊ link ကို ကိုယ်ပိုင် အပြာရောင် တိုက်ရိုက် ပေးထားတဲ့ rule
+      တွေ ရှိပါတယ်။ element ပေါ်က declaration က inheritance ကို အမြဲ နိုင်လို့၊ body ရဲ့ တန်ဖိုးတွေ
+      သူတို့ဆီ မရောက်ခဲ့တာပါ။ [[mark:draw-summary]] ဆိုတော့ cascade က declaration တွေထဲက တစ်ခုကို
+      ရွေးပြီး၊ inheritance ကတော့ declaration မရှိတဲ့ ကွက်လပ်တွေကိုပဲ ဖြည့်ပေးတာပါ။ DevTools ကလည်း
+      inherit ဖြစ်လာတဲ့ တန်ဖိုး ဘယ် element ဆီက လာလဲ ပြပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: how inheritance works"
+        url: "https://web.dev/learn/css/inheritance#how-inheritance-works"
+      - title: "MDN — Computed value"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/computed_value"
+      - title: "MDN — Initial value"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/initial_value"
+      - title: "MDN — Introduction to the CSS cascade"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Introduction"
+      - title: "CSS Cascading and Inheritance Level 5 — Value processing"
+        url: "https://www.w3.org/TR/css-cascade-5/#value-stages"
+    actions:
+      - id: open-value
+        type: whiteboard.apply
+        at: { mark: open-value }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-q1
+        type: whiteboard.apply
+        at: { mark: draw-q1 }
+        upsertIds: [c-q1, c-q1-text, c-q1-yes, c-cascade]
+        drawMs: 2400
+      - id: draw-q2
+        type: whiteboard.apply
+        at: { mark: draw-q2 }
+        upsertIds: [c-q1-no, c-q1-no-label, c-q2, c-q2-text, c-q2-yes, c-parent]
+        drawMs: 3000
+      - id: draw-initial
+        type: whiteboard.apply
+        at: { mark: draw-initial }
+        upsertIds: [c-q2-no, c-q2-no-label, c-initial, c-initial-text]
+        drawMs: 2200
+      - id: draw-hook-answer
+        type: whiteboard.apply
+        at: { mark: draw-hook-answer }
+        upsertIds: [c-ua-text, c-ua-arrow, c-ua-rule]
+        drawMs: 2400
+      - id: draw-summary
+        type: whiteboard.apply
+        at: { mark: draw-summary }
+        upsertIds: [c-summary]
+        drawMs: 2000
+
+  - id: direct-wins
+    narration: >
+      [[mark:close-value]] ကိုယ့် CSS နဲ့ လက်တွေ့ စမ်းကြည့်ရအောင်။ [[mark:type-menu-color]] menu rule
+      ထဲမှာ အစိမ်းရောင် စာလုံး အရောင် ထည့်ပါမယ်။ [[mark:after-menu-color]] card ခေါင်းစဉ်နဲ့
+      ဖော်ပြချက်တွေ အစိမ်းရောင် ဖြစ်သွားပါပြီ။ list ဆီကနေ card ကတစ်ဆင့် ဆင်းလာတာပါ။ ဈေးနှုန်းတွေကတော့
+      base ဖိုင်က ကိုယ်ပိုင် အရောင် ပေးထားလို့ အညိုရောင် အတိုင်း ကျန်နေပါတယ်။ [[mark:type-p-gray]] အခု
+      အရမ်း ပေါ့တဲ့ selector နဲ့ စာပိုဒ် အားလုံးကို မီးခိုးရောင် ပေးပါမယ်။ [[mark:after-p-gray]]
+      ဖော်ပြချက်တွေက စာပိုဒ်တွေ ဖြစ်လို့ မီးခိုးရောင် ဖြစ်သွားပါပြီ။ [[mark:select-menu-selector]] ဒီ
+      menu selector ကို ကြည့်ပါ။ class ဖြစ်လို့ သူ့ specificity က စာပိုဒ် selector ရိုးရိုးထက်
+      ပိုများပါတယ်။ [[mark:select-p-selector]] ဒါပေမဲ့ ဒီ စာပိုဒ် rule ကို ကြည့်ပါ။ specificity က
+      element တစ်ခုတည်းကို ရွေးထားတဲ့ declaration တွေကြားမှာပဲ နှိုင်းယှဉ်တာပါ။ အစိမ်းရောင်က inheritance
+      နဲ့ ရောက်လာတာ ဖြစ်ပြီး၊ အဲဒီလို တန်ဖိုးမှာ specificity လုံးဝ မရှိလို့၊ element ကို တိုက်ရိုက်
+      ရွေးတဲ့ rule တိုင်းက သူ့ကို နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — Specificity (directly targeted elements vs. inherited styles)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+      - title: "MDN — Handling conflicts"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Handling_conflicts"
+    actions:
+      - id: close-value
+        type: whiteboard.apply
+        at: { mark: close-value }
+        open: false
+      - id: type-menu-color
+        type: editor.type
+        at: { mark: type-menu-color }
+        cadence: natural
+        target: { file: styles.css, after: "  padding: 8px;\n", occurrence: 1 }
+        text: "  color: green;\n"
+      - id: type-p-gray
+        type: editor.type
+        at: { mark: type-p-gray }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: inherit;\n}\n", occurrence: 1 }
+        text: "\np {\n  color: dimgray;\n}\n"
+      - id: expect-coffee-after-gray
+        type: expect.preview
+        at: { mark: after-p-gray }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-menu-selector
+        type: editor.select
+        at: { mark: select-menu-selector }
+        target: { file: styles.css, text: ".menu {", occurrence: 1 }
+      - id: select-p-selector
+        type: editor.select
+        at: { mark: select-p-selector }
+        target: { file: styles.css, text: "p {\n  color: dimgray;\n}", occurrence: 1 }
+
+  - id: fix-hook
+    chapter: "ခလုတ်နဲ့ link ကို ပြင်ရအောင်"
+    narration: >
+      [[mark:type-button-font]] အခု inherit နဲ့ ခလုတ်တွေကို ပြင်လို့ ရပါပြီ။ origin အဆင့်မှာ ကိုယ့် CSS
+      က browser ရဲ့ stylesheet ကို နိုင်လို့၊ ခလုတ်တိုင်းရဲ့ font ကို parent ဆီကနေ ယူခိုင်းပါမယ်။
+      [[mark:after-button-font]] ခလုတ်ထဲက စာလုံးတွေ ကြီးလာပြီး၊ page ရဲ့ font နဲ့ ပေါ်လာပါပြီ။
+      [[mark:select-font-inherit]] ဒီ font declaration ကို ကြည့်ပါ။ font က font family၊ အရွယ်အစား၊
+      စာလုံး အထူနဲ့ line height ကို တစ်ခါတည်း ပေးတဲ့ shorthand property ဖြစ်လို့၊ အကုန်လုံးကို parent
+      ဆီက ယူလာပါတယ်။ form ထဲက ခလုတ်နဲ့ အကွက်တွေက ဒီလို မပေးရင် page ရဲ့ font ကို မသုံးလို့၊ CSS reset
+      အများစုမှာ ဒီ declaration ပါလေ့ရှိပါတယ်။ [[mark:type-link-color]] link တွေအတွက်တော့ အရောင်ကို
+      inherit ဖြစ်စေပါမယ်။ [[mark:after-link-color]] အသေးစိတ် link တွေက အပြာရောင် မဟုတ်တော့ဘဲ၊ card
+      စာတွေလို အစိမ်းရောင် ဖြစ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: the inherit keyword"
+        url: "https://web.dev/learn/css/inheritance#inherit"
+      - title: "MDN — font (shorthand)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font"
+      - title: "MDN — Styling web forms (font inheritance of form controls)"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Styling_web_forms"
+    actions:
+      - id: type-button-font
+        type: editor.type
+        at: { mark: type-button-font }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: dimgray;\n}\n", occurrence: 1 }
+        text: "\nbutton {\n  font: inherit;\n}\n"
+      - id: expect-plain-button
+        type: expect.preview
+        at: { mark: after-button-font }
+        timeoutMs: 4000
+        target: { by: testId, value: plain-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-font-inherit
+        type: editor.select
+        at: { mark: select-font-inherit }
+        target: { file: styles.css, text: "font: inherit;", occurrence: 1 }
+      - id: type-link-color
+        type: editor.type
+        at: { mark: type-link-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font: inherit;\n}\n", occurrence: 1 }
+        text: "\na {\n  color: inherit;\n}\n"
+      - id: expect-link-after-color
+        type: expect.preview
+        at: { mark: after-link-color }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "အသေးစိတ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: initial
+    chapter: "Initial၊ revert နဲ့ unset"
+    narration: >
+      [[mark:type-desc-initial]] ဒုတိယ keyword က initial ပါ။ သူက property ကို specification ထဲက initial
+      value ပြန်ဖြစ်အောင် လုပ်ပေးပါတယ်။ card ဖော်ပြချက်တွေရဲ့ display ကို initial ပေးကြည့်ရအောင်။
+      [[mark:after-desc-initial]] ဖော်ပြချက်တွေက ကိုယ်ပိုင် စာကြောင်း သီးသန့် မရှိတော့ဘဲ၊ ဈေးနှုန်းက
+      သူတို့ ဘေးကို တက်လာပါပြီ။ [[mark:initial-why]] စာပိုဒ်က block ဖြစ်လို့ initial ဆိုရင် block
+      ဖြစ်မယ် ထင်စရာ ရှိပါတယ်။ ဒါပေမဲ့ display ရဲ့ initial value က element တိုင်းအတွက် inline ပါ။
+      စာပိုဒ်တွေ block ဖြစ်တာက browser ရဲ့ stylesheet က ပေးထားလို့ပါ။ ဆိုတော့ initial ဆိုတာ element
+      အတွက် browser ရဲ့ default မဟုတ်ဘဲ၊ property အတွက် specification ထဲက default ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: the initial keyword"
+        url: "https://web.dev/learn/css/inheritance#initial"
+      - title: "MDN — initial"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/initial"
+      - title: "MDN — display (formal definition: initial value inline)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+    actions:
+      - id: type-desc-initial
+        type: editor.type
+        at: { mark: type-desc-initial }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: inherit;\n}\n", occurrence: 1 }
+        text: "\n.menu-card .desc {\n  display: initial;\n}\n"
+      - id: expect-price-after-initial
+        type: expect.preview
+        at: { mark: after-desc-initial }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: revert
+    narration: >
+      [[mark:type-revert]] တတိယ keyword revert က browser ရဲ့ style ကို ပြန်ယူပါတယ်။ featured class ပါတဲ့
+      လက်ဖက်ရည် card ရဲ့ ဖော်ပြချက်မှာ display ကို revert ပေးပါမယ်။ [[mark:after-revert]] လက်ဖက်ရည် card
+      ရဲ့ ဖော်ပြချက် တစ်ခုတည်းပဲ block ပြန်ဖြစ်ပြီး ကိုယ်ပိုင် စာကြောင်း ပြန်ရသွားပါပြီ။ revert က အဲဒီ
+      property အတွက် ကိုယ် ရေးထားတဲ့ declaration တွေကို ကျော်ပြီး၊ browser ရဲ့ stylesheet က ပေးတဲ့
+      တန်ဖိုးကို ပြန်ယူပါတယ်။ စာပိုဒ်အတွက်တော့ block ပါ။ [[mark:revert-note]] browser တစ်ခုစီမှာ
+      ကိုယ်ပိုင် default stylesheet ရှိလို့၊ revert ရဲ့ ရလဒ်က browser တစ်ခုနဲ့ တစ်ခု နည်းနည်း
+      ကွာနိုင်ပါတယ်။ အထူးသဖြင့် ခလုတ်နဲ့ form ထဲက အကွက်တွေမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: the revert keyword"
+        url: "https://web.dev/learn/css/inheritance#revert"
+      - title: "MDN — revert"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/revert"
+      - title: "CSS Cascading and Inheritance Level 5 — Rolling back cascade origins"
+        url: "https://www.w3.org/TR/css-cascade-5/#default"
+    actions:
+      - id: type-revert
+        type: editor.type
+        at: { mark: type-revert }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  display: initial;\n}\n", occurrence: 1 }
+        text: "\n.featured .desc {\n  display: revert;\n}\n"
+      - id: expect-featured-after-revert
+        type: expect.preview
+        at: { mark: after-revert }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: unset
+    narration: >
+      [[mark:type-unset-color]] လေးခုမြောက် keyword က unset ပါ။ သူက ခုနက board ပေါ်က ပထမ မေးခွန်းကို
+      ကျော်ပြီး၊ browser ရဲ့ declaration အပါအဝင် ဘာ declaration မှ မရှိသလို လုပ်ပါတယ်။ အရောင်လို inherit
+      ဖြစ်တဲ့ property အတွက်ဆိုရင် inherit နဲ့ အတူတူပါ။ [[mark:after-unset-color]] လက်ဖက်ရည် card ရဲ့
+      ဖော်ပြချက် အစိမ်းရောင် ပြန်ဖြစ်သွားပါပြီ။ မီးခိုးရောင် စာပိုဒ် rule ကို unset က မရှိသလို
+      လုပ်လိုက်လို့၊ card ဆီကနေ အရောင်ကို ယူသွားတာပါ။ [[mark:type-unset-margin]] margin က inherit
+      မဖြစ်လို့၊ margin အတွက် unset က initial နဲ့ အတူတူပါ။ [[mark:after-unset-margin]] အဲဒီ
+      ဖော်ပြချက်ရဲ့ အပေါ်နဲ့ အောက်က နေရာလွတ်တွေ ပျောက်သွားပါပြီ။ အဲဒီ margin တွေက browser ရဲ့ stylesheet
+      က လာတာ ဖြစ်ပြီး၊ unset က သူတို့ကို initial value ဖြစ်တဲ့ သုညနဲ့ အစားထိုးလိုက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: the unset keyword"
+        url: "https://web.dev/learn/css/inheritance#unset"
+      - title: "MDN — unset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/unset"
+      - title: "MDN — margin (initial value 0, not inherited)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin"
+    actions:
+      - id: type-unset-color
+        type: editor.type
+        at: { mark: type-unset-color }
+        cadence: natural
+        target: { file: styles.css, after: "  display: revert;\n", occurrence: 1 }
+        text: "  color: unset;\n"
+      - id: type-unset-margin
+        type: editor.type
+        at: { mark: type-unset-margin }
+        cadence: natural
+        target: { file: styles.css, after: "  color: unset;\n", occurrence: 1 }
+        text: "  margin: unset;\n"
+      - id: expect-featured-after-unset
+        type: expect.preview
+        at: { mark: after-unset-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: all-unset
+    chapter: "All နဲ့ အစကနေ ပြန်စရအောင်"
+    narration: >
+      [[mark:type-plain]] အခု plain class ပါတဲ့ ကော်ဖီ ခလုတ်ကို ပြင်ကြည့်ရအောင်။ all ဆိုတဲ့ property က
+      element ရဲ့ property အားလုံးကို keyword တစ်ခုတည်းနဲ့ တစ်ခါတည်း ပေးပါတယ်။ အားလုံးကို unset
+      လုပ်ကြည့်ပါမယ်။ [[mark:after-plain]] ကော်ဖီ ခလုတ်ရဲ့ အညိုရောင် နောက်ခံ၊ padding နဲ့ ဝိုင်းဝိုင်း
+      ပုံစံ အကုန် ပျောက်သွားပါပြီ။ display က inline ပြန်ဖြစ်သွားပြီး၊ အရောင်နဲ့ font ကို card ဆီကနေ
+      ယူနေပါပြီ။ စာသား ရိုးရိုးလိုပဲ မြင်ရပါတယ်။ [[mark:type-restyle]] ဒီလို ဘာမှ မရှိတဲ့ အခြေအနေကနေ
+      ကိုယ် လိုချင်တာကိုပဲ ပြန်ထည့်ပါမယ်။ padding နည်းနည်း၊ စာလုံးနဲ့ အရောင်တူတဲ့ border၊ ပြီးတော့
+      ထောင့်ဝိုင်းတွေပါ။ ဒါဆို ရှိသမျှ style က ကိုယ် ရေးထားတာချည်း ဖြစ်ပါမယ်။ [[mark:after-restyle]] အခု
+      browser ရဲ့ ခလုတ်ပုံစံ ဘာမှ မကျန်တော့တဲ့ အစိမ်းရောင် ဘောင်ခတ် ခလုတ် ဖြစ်သွားပါပြီ။
+      [[mark:focus-note]] သတိထားစရာ တစ်ခုက၊ all ကို unset လုပ်ရင် keyboard သုံးသူတွေကို ဘယ် element ပေါ်
+      ရောက်နေလဲ ပြတဲ့ focus ring လည်း ပျောက်သွားပါတယ်။ ဒါကြောင့် focus style ကို ပြန်ထည့်ပေးရပါမယ်။
+      lesson 28 မှာ ကြည့်ပါမယ်။ all က ကိုယ်တိုင် နာမည်ပေးထားတဲ့ custom property တွေနဲ့ စာ ရေးတဲ့
+      ဦးတည်ရာကိုတော့ မထိပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: the all property"
+        url: "https://web.dev/learn/css/inheritance#explicitly-inherit-and-control-inheritance"
+      - title: "MDN — all"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/all"
+      - title: "MDN — :focus-visible"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus-visible"
+    actions:
+      - id: type-plain
+        type: editor.type
+        at: { mark: type-plain }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin: unset;\n}\n", occurrence: 1 }
+        text: "\n.plain {\n  all: unset;\n}\n"
+      - id: expect-plain-after-unset
+        type: expect.preview
+        at: { mark: after-plain }
+        timeoutMs: 4000
+        target: { by: testId, value: plain-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-restyle
+        type: editor.type
+        at: { mark: type-restyle }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  all: unset;\n", occurrence: 1 }
+        text: "  padding: 0 12px;\n  border: 2px solid;\n  border-radius: 999px;\n"
+      - id: expect-coffee-after-restyle
+        type: expect.preview
+        at: { mark: after-restyle }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: keywords-recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-keywords]] keyword ငါးခုကို တစ်နေရာတည်းမှာ ကြည့်ရအောင်။ [[mark:draw-four]] inherit က
+      parent ရဲ့ တန်ဖိုးကို ယူပါတယ်။ initial က specification ထဲက initial value ကို ယူပါတယ်။ unset က
+      inherit ဖြစ်တဲ့ property ဆိုရင် inherit လုပ်ပြီး၊ မဟုတ်ရင် initial value ကို သုံးပါတယ်။ revert
+      ကတော့ browser ရဲ့ style ကို ပြန်ယူပါတယ်။ [[mark:draw-layer]] ငါးခုမြောက် revert-layer က lesson 5 က
+      cascade layer တွေနဲ့ ဆိုင်ပါတယ်။ သူက လက်ရှိ layer ကိုပဲ ကျော်ပြီး ရှေ့က layer တွေ ပေးထားတဲ့
+      တန်ဖိုးကို ယူပါတယ်၊ ဥပမာ ရှေ့ဆုံး layer ထဲက library ရဲ့ style မျိုးပါ။ အဲဒီ layer တွေမှာ ဒီ
+      property မပါရင်တော့ revert လိုပဲ ဖြစ်ပါတယ်။ [[mark:draw-all]] all ကတော့ ဒီ keyword တွေထဲက တစ်ခုကို
+      property အားလုံးပေါ် တစ်ခါတည်း သုံးပေးပါတယ်။ [[mark:quiz]] မပြီးခင် မေးခွန်း နှစ်ခု
+      စစ်ကြည့်ရအောင်။ font size၊ အရောင်၊ စာ ညှိပုံ၊ line height နဲ့ animation ထဲက ဘယ်ဟာတွေ inherit
+      ဖြစ်လဲ။ ခဏ စဉ်းစားကြည့်ပါ။ animation ကလွဲရင် အကုန် ဖြစ်ပါတယ်။ ဒုတိယ မေးခွန်းက၊ inherit
+      ဖြစ်နိုင်ရင် inherit လုပ်ပြီး မဖြစ်ရင် initial value ကို သုံးတဲ့ keyword က ဘာလဲ။ unset ပါ။
+      ပိုသိချင်ရင် MDN မှာ inheritance နဲ့ computed value ကို ရှာဖတ်ကြည့်ပါ။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ inheritance က စာနဲ့ ဆိုင်တဲ့ တန်ဖိုးတွေကို parent ကနေ child ဆီ အောက်ကိုပဲ
+      ပို့ပေးပါတယ်။ element ကို ရွေးထားတဲ့ declaration က browser က လာတာ ဖြစ်နေရင်တောင် inherit ဖြစ်လာတဲ့
+      တန်ဖိုးကို အမြဲ နိုင်ပါတယ်။ keyword ငါးခုကတော့ တန်ဖိုး ဘယ်က လာမလဲ ဆိုတာ ရွေးခွင့် ပေးပါတယ်။
+      [[mark:next-lesson]] အခု menu card နဲ့ ဆိုင်တဲ့ rule တွေက ပြန့်နေပြီး၊ class နာမည် တူတူကို
+      ထပ်ခါထပ်ခါ ရေးနေရပါတယ်။ နောက် lesson မှာတော့ rule ထဲမှာ rule တွေ ထည့်ရေးတဲ့ nesting ကို
+      ကြည့်သွားပါမယ်။ ဒါမှ ဆက်စပ်တဲ့ style တွေ တစ်နေရာတည်းမှာ စုနေပြီး ထပ်ရေးရတာ နည်းမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Inheritance: check your understanding"
+        url: "https://web.dev/learn/css/inheritance"
+      - title: "MDN — revert-layer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/revert-layer"
+      - title: "MDN — all"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/all"
+      - title: "MDN — Computed value"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/computed_value"
+      - title: "CSS Cascading and Inheritance Level 5 — CSS-wide keywords"
+        url: "https://www.w3.org/TR/css-cascade-5/#defaulting-keywords"
+    actions:
+      - id: open-keywords
+        type: whiteboard.apply
+        at: { mark: open-keywords }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-four
+        type: whiteboard.apply
+        at: { mark: draw-four }
+        upsertIds:
+          [
+            d-k-inherit,
+            d-v-inherit,
+            d-k-initial,
+            d-v-initial,
+            d-k-unset,
+            d-v-unset,
+            d-k-revert,
+            d-v-revert,
+          ]
+        drawMs: 5200
+      - id: draw-layer
+        type: whiteboard.apply
+        at: { mark: draw-layer }
+        upsertIds: [d-k-layer, d-v-layer]
+        drawMs: 1600
+      - id: draw-all
+        type: whiteboard.apply
+        at: { mark: draw-all }
+        upsertIds: [d-k-all, d-v-all]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: "body {\n  color: saddlebrown;\n  font-size: 18px;\n  font-family: \"Noto Sans Myanmar\", \"Myanmar Sangam MN\", \"Myanmar MN\",\n    \"Myanmar Text\", \"Padauk\", system-ui, sans-serif;\n}\n\n.menu {\n  border: 2px solid tan;\n  padding: 8px;\n  color: green;\n}\n\n.menu-card {\n  border: inherit;\n}\n\np {\n  color: dimgray;\n}\n\nbutton {\n  font: inherit;\n}\n\na {\n  color: inherit;\n}\n"
+      - id: expect-keyword-css
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".menu-card .desc {\n  display: initial;\n}\n\n.featured .desc {\n  display: revert;\n  color: unset;\n  margin: unset;\n}\n\n.plain {\n  all: unset;\n  padding: 0 12px;\n  border: 2px solid;\n  border-radius: 999px;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
