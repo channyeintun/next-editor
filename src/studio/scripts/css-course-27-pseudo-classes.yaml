@@ -1,0 +1,1969 @@
+# CSS course (Burmese), lesson 27 of 43: pseudo-classes.
+#
+# Narration is Burmese, generated from voice-script.md next to this file
+# (DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is already Burmese.
+#
+# Shape: board (recall lesson 26; a pseudo-class picks by state; "a class the
+# browser adds and removes"; the families) → code tour (phone required +
+# pattern, cups 1-10, disabled order button, progress with no value) → hover
+# on the menu cards + a click on the coffee card (replay shows the hover style
+# on the last clicked element) → board (active, link, visited and its colour-
+# only privacy rule) → board (LVHA, same specificity, last wins; target) →
+# phone invalid on page load → valid after typing a number → board (invalid vs
+# user-invalid timeline) → cups out of range at 12 → required star with
+# :has() + ::after → not colour alone → placeholder-shown on the empty name
+# field, gone after typing → the extra-milk row lights up when checked →
+# disabled button fades; enabled and fieldset → indeterminate progress → a
+# plain selector list with one unknown pseudo-class does nothing, the same
+# list inside :is() works (forgiving); :where → img:not([alt]) without a line
+# style draws nothing, then "solid" → zebra snacks, hiding palata breaks it,
+# "of :not([hidden])" fixes it → board (functional vs plain, names that don't
+# exist, more to look up) + recap, hand-off to focus (lesson 28).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Keystroke-typed values have no misleading prefix: named colours, 50% for
+# opacity (5 and 50 clamp to 1, so the button never flashes invisible),
+# lengths invalid until their unit lands. Two inserts land inside the last
+# rule of the file ("solid " and " of :not([hidden])"): while the second one
+# is half typed the zebra rule is invalid and the stripes vanish for a
+# moment; nothing follows that rule, so nothing else is affected.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# document 2017 tall; drinks 0-496, form at 512 (phone 658, button 830,
+# progress 919), gallery at 960 (logo 1235), snacks at 1324 (656 tall, max
+# scroll 1297). Phone border beige → crimson (invalid at load) → beige after
+# the number → seagreen; cups crimson at 12; only the phone label gets " *";
+# name field lemonchiffon until a name is typed; extra row lightgreen after
+# the click (milk-status "checked"); button opacity 0.5; progress dashed
+# outline; the plain list changes nothing, :is() turns names and prices
+# chocolate; the logo outline is none until "solid"; snacks stripes -W-W-,
+# then -H-W- after the click (two white cards in a row), then -HW-W.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-27-pseudo-classes
+  title: "CSS course 27: Pseudo-class တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 27
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit's drinks block, the kit's order form (its order
+      # button starts disabled; a progress bar with no value under it), the
+      # kit's gallery plus the shop logo as an image WITHOUT alt text, and the
+      # kit's snacks with a button that hides the palata card (kit.js
+      # data-toggle-attr). kit.js also reports the milk checkbox into the
+      # hidden milk-status line.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: order-form (the order button starts disabled; lesson block: the prep progress bar) -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ ကိုအောင်" data-testid="input-name" />
+                <label for="phone">ဖုန်း</label>
+                <input id="phone" name="phone" type="tel" required pattern="09[0-9]{7,9}" placeholder="09…" data-testid="input-phone" />
+                <label for="cups">ခွက်ရေ</label>
+                <input id="cups" name="cups" type="number" min="1" max="10" value="1" data-testid="input-cups" />
+                <label class="extra"><input type="checkbox" name="milk" data-report="#milk-status" data-testid="check-milk" /> နို့ဆီ အပို</label>
+                <p class="visually-hidden" id="milk-status" data-testid="milk-status"></p>
+                <button class="order-btn" type="button" disabled data-testid="order-button" data-say="မှာပြီးပါပြီ" data-target="#order-status">မှာမယ်</button>
+                <p class="order-status" id="order-status" data-testid="order-status" aria-live="polite"></p>
+                <label for="prep">ပြင်ဆင်နေသည်</label>
+                <progress id="prep" data-testid="prep"></progress>
+              </form>
+
+              <!-- kit block: gallery (plus the shop logo, an image without alt text) -->
+              <section class="gallery" id="gallery" data-testid="gallery">
+                <h2>ဆိုင်ပုံရိပ်</h2>
+                <figure class="photo">
+                  <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" data-testid="photo-teahouse" />
+                  <figcaption>ဆိုင်အတွင်း</figcaption>
+                </figure>
+                <figure class="photo">
+                  <img src="/cup.svg" width="48" height="48" data-testid="photo-cup" />
+                  <figcaption>ဆိုင်ရဲ့ logo</figcaption>
+                </figure>
+              </section>
+
+              <!-- kit block: snacks (lesson block: a button that hides the palata card when it sells out) -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <button type="button" data-toggle-attr="hidden" data-target="[data-testid=card-palata]" data-testid="toggle-palata">ပလာတာ ကုန်သွားပြီ</button>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <!-- kit block: kit-script (milk-status report and the sold-out toggle) -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E only spaces the
+      # sections and the sold-out button. No pseudo-class rule.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 27 keeps A, B, B2 and C; section E only spaces the sections and the
+          sold-out button. Every pseudo-class rule is typed during the lesson.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 27: space between the sections and under the sold-out button. No
+           pseudo-class rule lives here. */
+        .order-form,
+        .gallery,
+        .snacks {
+          margin-top: 16px;
+        }
+
+        .snacks > button {
+          margin: 0 0 8px;
+          font: inherit;
+        }
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — what a pseudo-class is. White = the definition, then one
+    # colour per family: orange = mouse, blue = links, green = form, violet =
+    # position (lesson 4), red = logic.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Pseudo-class ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-def,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 680,
+        height: 36,
+        text: ":checked → element ရဲ့ အခြေအနေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-class,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 700,
+        height: 36,
+        text: "browser က ထည့်ပေး ဖြုတ်ပေးတဲ့ class လို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-class-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 326,
+        width: 560,
+        height: 16,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-mouse,
+        kind: text,
+        x: 300,
+        y: 372,
+        width: 600,
+        height: 36,
+        text: "mouse → :hover  :active",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-link,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 680,
+        height: 36,
+        text: "link → :link  :visited  :target",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-form,
+        kind: text,
+        x: 300,
+        y: 472,
+        width: 720,
+        height: 36,
+        text: "form → :checked  :disabled  :invalid",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-position,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 760,
+        height: 36,
+        text: "နေရာ → :first-child  :nth-child · lesson 4",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-logic,
+        kind: text,
+        x: 300,
+        y: 588,
+        width: 680,
+        height: 36,
+        text: "ပေါင်းစပ် → :is()  :where()  :not()",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — active and the link states. Red = active (and what visited
+    # may not change), blue = link, violet = visited, green = what visited
+    # may change, white = why.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Active နဲ့ link အခြေအနေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-active,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 680,
+        height: 36,
+        text: ":active → နှိပ်ထားတုန်း ခဏလေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-link,
+        kind: text,
+        x: 300,
+        y: 316,
+        width: 680,
+        height: 36,
+        text: ":link → မဖွင့်ရသေးတဲ့ link",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-visited,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 680,
+        height: 36,
+        text: ":visited → ဖွင့်ပြီးသား link",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-allow,
+        kind: text,
+        x: 340,
+        y: 446,
+        width: 560,
+        height: 36,
+        text: "အရောင် property တွေ ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-deny,
+        kind: text,
+        x: 340,
+        y: 500,
+        width: 600,
+        height: 36,
+        text: "အရွယ်အစား · နောက်ခံပုံ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-why,
+        kind: text,
+        x: 340,
+        y: 570,
+        width: 700,
+        height: 36,
+        text: "ဘယ် site တွေ သွားခဲ့လဲ မသိစေဖို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C — LVHA and target. The four rules in their family colours, a
+    # green arrow + "the last rule wins", white = same specificity, blue =
+    # target (a link feature).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "LVHA အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-l,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 200,
+        height: 36,
+        text: "a:link",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-v,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 200,
+        height: 36,
+        text: "a:visited",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-h,
+        kind: text,
+        x: 300,
+        y: 344,
+        width: 200,
+        height: 36,
+        text: "a:hover",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-a,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 200,
+        height: 36,
+        text: "a:active",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-spec,
+        kind: text,
+        x: 620,
+        y: 250,
+        width: 440,
+        height: 36,
+        text: "specificity အတူတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 540,
+        y: 240,
+        width: 40,
+        height: 190,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-wins,
+        kind: text,
+        x: 620,
+        y: 384,
+        width: 440,
+        height: 36,
+        text: "နောက်ဆုံး rule နိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-target,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 640,
+        height: 36,
+        text: ":target → URL ရဲ့ #hours",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-target-el,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 700,
+        height: 36,
+        text: 'id="hours" ပါတဲ့ element ကို ရွေး',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board D — invalid vs user-invalid as a timeline. White = the three
+    # moments, green arrows between them, red = invalid (already at load),
+    # violet = user-invalid (waits), green = valid, orange = the replay limit.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Invalid နဲ့ user-invalid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-s1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 160,
+        height: 36,
+        text: "page ပွင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 246,
+        width: 50,
+        height: 24,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-s2,
+        kind: text,
+        x: 590,
+        y: 240,
+        width: 200,
+        height: 36,
+        text: "ရိုက်ပြီး ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 830,
+        y: 246,
+        width: 40,
+        height: 24,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-s3,
+        kind: text,
+        x: 910,
+        y: 240,
+        width: 160,
+        height: 36,
+        text: "ပြင်ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-invalid,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 200,
+        height: 36,
+        text: ":invalid ✓",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-user-no,
+        kind: text,
+        x: 300,
+        y: 364,
+        width: 240,
+        height: 36,
+        text: ":user-invalid ✗",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-user-yes,
+        kind: text,
+        x: 590,
+        y: 364,
+        width: 240,
+        height: 36,
+        text: ":user-invalid ✓",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-valid,
+        kind: text,
+        x: 910,
+        y: 310,
+        width: 160,
+        height: 36,
+        text: ":valid ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-user-valid,
+        kind: text,
+        x: 900,
+        y: 364,
+        width: 190,
+        height: 36,
+        text: ":user-valid ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-support,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 640,
+        height: 36,
+        text: "browser အဓိက အားလုံးမှာ ရပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-replay,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 720,
+        height: 36,
+        text: "ဒီ lesson ထဲမှာ မပြနိုင် · ကိုယ်တိုင် စမ်းပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board E — the closing quiz. Blue = functional, green = plain, red = names
+    # that don't exist, white/violet = more to look up.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Pseudo-class နှစ်မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-func,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 720,
+        height: 36,
+        text: ":is()  :not()  :nth-child() → ကွင်းနဲ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-plain,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 760,
+        height: 36,
+        text: ":hover  :checked  :target → ကွင်း မပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-fake,
+        kind: text,
+        x: 300,
+        y: 366,
+        width: 560,
+        height: 36,
+        text: ":fresh  :loading → မရှိ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-more-t,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 480,
+        height: 36,
+        text: "နောက်ထပ် ရှာကြည့်ရန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-more,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 760,
+        height: 36,
+        text: ":root  :any-link  :read-only  :open",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-more-2,
+        kind: text,
+        x: 300,
+        y: 554,
+        width: 660,
+        height: 36,
+        text: ":modal  :popover-open",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4127
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Pseudo-class ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ element ရဲ့ အစိတ်အပိုင်းတွေကို colon နှစ်ခုနဲ့ ရွေးခဲ့ပါတယ်။
+      ဒီ lesson ကတော့ colon တစ်ခုနဲ့ ရေးတဲ့ pseudo-class တွေ အကြောင်းပါ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-def]] pseudo-class ဆိုတာ element ကို သူ့ အခြေအနေနဲ့ ရွေးတဲ့
+      selector ပါ။ check လုပ်ထားတဲ့ checkbox၊ ဖြည့်ထားတာ မမှန်တဲ့ field၊ pointer တင်ထားတဲ့
+      card စတာမျိုးပါ။ [[mark:draw-class]] အခြေအနေ ပြောင်းတိုင်း browser က ကိုယ့်အစား
+      ထည့်ပေး ဖြုတ်ပေးတဲ့ class တစ်ခုလို စဉ်းစားလို့ ရပါတယ်။ [[mark:draw-families]]
+      အုပ်စုလိုက် ခွဲကြည့်ရင် mouse နဲ့ ဆိုင်တာ၊ link နဲ့ ဆိုင်တာ ရှိပြီး၊ အများဆုံးကတော့
+      form field နဲ့ ဆိုင်ပါတယ်။ [[mark:draw-position]] element ရဲ့ နေရာကို ကြည့်တဲ့
+      first-child၊ nth-child လို အုပ်စုကိုတော့ lesson 4 မှာ ကြည့်ခဲ့ပြီးပါပြီ။
+      [[mark:draw-logic]] နောက်ဆုံး အုပ်စုကတော့ တခြား selector တွေကို ပေါင်းစပ်ပေးပါတယ်။
+      ဒီ အစဉ်အတိုင်း ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes"
+        url: "https://web.dev/learn/css/pseudo-classes"
+      - title: "MDN — Pseudo-classes"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes"
+      - title: "Selectors Level 4 — pseudo-classes"
+        url: "https://www.w3.org/TR/selectors-4/#pseudo-classes"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-def
+        type: whiteboard.apply
+        at: { mark: draw-def }
+        upsertIds: [a-def]
+        drawMs: 1400
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [a-class, a-class-line]
+        drawMs: 1600
+      - id: draw-families
+        type: whiteboard.apply
+        at: { mark: draw-families }
+        upsertIds: [a-mouse, a-link, a-form]
+        drawMs: 2400
+      - id: draw-position
+        type: whiteboard.apply
+        at: { mark: draw-position }
+        upsertIds: [a-position]
+        drawMs: 1400
+      - id: draw-logic
+        type: whiteboard.apply
+        at: { mark: draw-logic }
+        upsertIds: [a-logic]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML
+      ဖိုင်ပါ။ သောက်စရာတွေရဲ့ အောက်မှာ အော်ဒါ form ရှိပါတယ်။ [[mark:select-phone]] ဖုန်း
+      field က required ဖြစ်လို့ မဖြစ်မနေ ဖြည့်ရပြီး၊ သူ့ pattern က 09 နဲ့ စတဲ့ နံပါတ်ကိုပဲ
+      လက်ခံပါတယ်။ [[mark:select-cups]] ခွက်ရေ field က 1 ကနေ 10 အထိ ဂဏန်းကို လက်ခံပါတယ်။
+      [[mark:select-button]] အော်ဒါ ခလုတ်က အစကတည်းက disabled ပါ။ [[mark:select-progress]]
+      သူ့အောက်မှာ value လုံးဝ မပါတဲ့ progress bar တစ်ခု ရှိပါတယ်။ အောက်ဘက်မှာတော့ gallery
+      နဲ့ စားစရာတွေ ရှိပါသေးတယ်။ [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ သောက်စရာ card တွေနဲ့ အောက်က form ကို
+      မြင်ရပါတယ်။
+    sources:
+      - title: "MDN — Client-side form validation (required, pattern, min and max)"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation"
+      - title: "MDN — <progress> (indeterminate without a value)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/progress"
+    actions:
+      - id: close-intro
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-phone
+        type: editor.select
+        at: { mark: select-phone }
+        target: { file: index.html, text: 'required pattern="09[0-9]{7,9}"', occurrence: 1 }
+      - id: select-cups
+        type: editor.select
+        at: { mark: select-cups }
+        target: { file: index.html, text: 'min="1" max="10"', occurrence: 1 }
+      - id: select-button
+        type: editor.select
+        at: { mark: select-button }
+        target: { file: index.html, text: 'type="button" disabled', occurrence: 1 }
+      - id: select-progress
+        type: editor.select
+        at: { mark: select-progress }
+        target:
+          {
+            file: index.html,
+            text: '<progress id="prep" data-testid="prep"></progress>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-coffee
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-phone-required
+        type: expect.preview
+        at: { afterAction: expect-coffee }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        attribute: { name: required, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-button-disabled
+        type: expect.preview
+        at: { afterAction: expect-phone-required }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        attribute: { name: disabled, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-button-disabled }
+
+  - id: hover
+    chapter: "Mouse နဲ့ link ရဲ့ အခြေအနေတွေ"
+    narration: >
+      [[mark:type-hover]] mouse နဲ့ ဆိုင်တာကနေ စကြည့်ရအောင်။ hover ဆိုတာ mouse pointer ကို
+      element ပေါ် တင်ထားတဲ့ အခြေအနေပါ။ menu card တစ်ခုပေါ်မှာ pointer ရှိနေရင် အဲဒီ card
+      ကို ခရင်မ်ရောင် ဖျော့ဖျော့ နောက်ခံ ပေးပါမယ်။ ဘယ် card ပေါ်မှာမှ pointer မရှိသေးလို့
+      အခု ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:click-coffee]] ကော်ဖီ card ကို နှိပ်ပြီး pointer
+      ထားကြည့်ရအောင်။ [[mark:after-hover]] pointer ရောက်နေတဲ့ ကော်ဖီ card ရဲ့ နောက်ခံ
+      ခရင်မ်ရောင် ပြောင်းသွားပါပြီ။ ဒီ အပြောင်းအလဲလေးက pointer ဘယ်ရောက်နေလဲ ဆိုတာ
+      သုံးသူကို ပြပေးပါတယ်။ [[mark:explain-touch]] ဒါပေမဲ့ touch screen မှာ hover
+      မရှိပါဘူး။ လက်ချောင်းက နှိပ်လို့ ရပေမယ့် card ပေါ်မှာ တင်ထားလို့ မရပါဘူး။ ဒါကြောင့်
+      hover လုပ်မှ ပေါ်တဲ့ နေရာမှာ အရေးကြီးတဲ့ အရာ မထားပါနဲ့။ hover effect
+      ကြီးကြီးတွေကိုတော့ lesson 25 က hover media query ထဲမှာ ရေးပြီး၊ မနှိပ်ဘဲ တင်ထားလို့
+      ရတဲ့ device တွေမှာပဲ ပေးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :hover"
+        url: "https://web.dev/learn/css/pseudo-classes#hover"
+      - title: "MDN — :hover"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:hover"
+      - title: "MDN — @media hover"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/hover"
+    actions:
+      - id: type-hover
+        type: editor.type
+        at: { mark: type-hover }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".menu-card:hover {\n  background: cornsilk;\n}\n"
+      # The bridge focuses (a no-op on an <li>) and clicks the card; in the
+      # replay the last clicked element shows its :hover style.
+      - id: click-coffee
+        type: preview.click
+        at: { mark: click-coffee }
+        timeoutMs: 5000
+        target: { by: testId, value: card-coffee }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-hover
+        type: expect.preview
+        at: { mark: after-hover }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: links-board
+    narration: >
+      [[mark:open-press]] mouse နဲ့ link မှာ နောက်ထပ် အခြေအနေ တချို့ ရှိပါသေးတယ်။
+      [[mark:draw-active]] active က element ကို နှိပ်ထားတုန်းမှာ ကိုက်ပါတယ်။ mouse ခလုတ်ကို ဖိချပြီး ပြန်မလွှတ်ခင်အထိပါ။ page ပေါ်က ခလုတ်ကို
+      နှိပ်လိုက်ရင် အထဲ ဝင်သွားသလို ပြဖို့ သုံးကြပါတယ်။ ဒါပေမဲ့ ခဏလေးပဲ ကြာပြီး preview
+      မှာလည်း ပြလို့ မရလို့၊ board ပေါ်မှာပဲ ကြည့်ပါမယ်။ [[mark:draw-link]] link
+      pseudo-class ကတော့ မဖွင့်ရသေးတဲ့ လိပ်စာကို ညွှန်နေတဲ့ link တွေနဲ့ ကိုက်ပါတယ်။
+      [[mark:draw-visited]] visited ကတော့ ဖွင့်ပြီးသား link တွေနဲ့ ကိုက်ပါတယ်။
+      [[mark:draw-allow]] ဖွင့်ပြီးသား link မှာ အရောင်ကိုပဲ ပြောင်းခွင့် ရှိပါတယ်။
+      [[mark:draw-deny]] အရွယ်အစား၊ နောက်ခံပုံ လို script က တိုင်းကြည့်လို့ ရတဲ့ အရာတွေကို
+      မပြောင်းရပါဘူး။ အရောင်ကိုတောင် script က ဖတ်ရင်၊ browser က မဖွင့်ရသေးတဲ့ link ရဲ့
+      အရောင်ကိုပဲ ပြန်ပြောပါတယ်။ [[mark:draw-why]] ဒီလို မကန့်သတ်ရင် ဘယ် website မဆို link
+      စာရင်း တစ်ခုကို စစ်ပြီး၊ ကိုယ် ဘယ် site တွေ သွားခဲ့လဲ သိသွားနိုင်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :active, :link and :visited"
+        url: "https://web.dev/learn/css/pseudo-classes#historic_states"
+      - title: "MDN — :active"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:active"
+      - title: "MDN — Privacy and the :visited selector"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors/Privacy_and_:visited"
+    actions:
+      - id: open-press
+        type: whiteboard.apply
+        at: { mark: open-press }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-active
+        type: whiteboard.apply
+        at: { mark: draw-active }
+        upsertIds: [b-active]
+        drawMs: 1400
+      - id: draw-link
+        type: whiteboard.apply
+        at: { mark: draw-link }
+        upsertIds: [b-link]
+        drawMs: 1200
+      - id: draw-visited
+        type: whiteboard.apply
+        at: { mark: draw-visited }
+        upsertIds: [b-visited]
+        drawMs: 1200
+      - id: draw-allow
+        type: whiteboard.apply
+        at: { mark: draw-allow }
+        upsertIds: [b-allow]
+        drawMs: 1200
+      - id: draw-deny
+        type: whiteboard.apply
+        at: { mark: draw-deny }
+        upsertIds: [b-deny]
+        drawMs: 1200
+      - id: draw-why
+        type: whiteboard.apply
+        at: { mark: draw-why }
+        upsertIds: [b-why]
+        drawMs: 1400
+
+  - id: lvha
+    narration: >
+      [[mark:open-lvha]] ဖွင့်ပြီးသား link ကို pointer တင်ပြီး နှိပ်နေရင် visited၊ hover၊
+      active သုံးခုလုံး ကိုက်ပါတယ်။ ဒါဆို ဘယ် rule က နိုင်မလဲ။ [[mark:draw-lvha]] ဒီ selector လေးခုမှာ element
+      တစ်ခုနဲ့ pseudo-class တစ်ခုစီ ပါလို့ specificity အတူတူပါ။ [[mark:draw-order]]
+      ဒါကြောင့် နောက်ဆုံးမှ ရေးထားတဲ့ rule က နိုင်ပါတယ်။ link၊ visited၊ hover၊ active
+      ဆိုတဲ့ အစဉ်နဲ့ ရေးကြတာ ဒါကြောင့်ပါ။ hover ကို visited နောက်မှာ ထားလို့
+      ဖွင့်ပြီးသား link မှာလည်း ပေါ်ပြီး၊ active ကို နောက်ဆုံးမှာ ထားလို့ နှိပ်နေတုန်း
+      ပေါ်ပါတယ်။ [[mark:draw-target]] link ကနေ လာတဲ့ နောက်ထပ် အခြေအနေ တစ်ခုက target ပါ။
+      link က page တစ်ခုတည်းထဲက အပိုင်း တစ်ခုဆီ ခုန်သွားတဲ့အခါ၊ URL ရဲ့ အဆုံးမှာ hash နဲ့
+      id တစ်ခု ပါလာပါတယ်။ [[mark:draw-target-el]] အဲဒီ id ပါတဲ့ element က target နဲ့
+      ကိုက်လို့၊ ခုန်ရောက်လာတဲ့ အပိုင်းကို ထင်ရှားအောင် style ပေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: order matters"
+        url: "https://web.dev/learn/css/pseudo-classes#order_matters"
+      - title: "MDN — :target"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:target"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity"
+    actions:
+      - id: open-lvha
+        type: whiteboard.apply
+        at: { mark: open-lvha }
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-lvha
+        type: whiteboard.apply
+        at: { mark: draw-lvha }
+        upsertIds: [c-l, c-v, c-h, c-a, c-spec]
+        drawMs: 2400
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [c-arrow, c-wins]
+        drawMs: 1600
+      - id: draw-target
+        type: whiteboard.apply
+        at: { mark: draw-target }
+        upsertIds: [c-target]
+        drawMs: 1400
+      - id: draw-target-el
+        type: whiteboard.apply
+        at: { mark: draw-target-el }
+        upsertIds: [c-target-el]
+        drawMs: 1400
+
+  - id: validity
+    chapter: "Form ရဲ့ အခြေအနေတွေ"
+    narration: >
+      [[mark:close-lvha]] ကဲ၊ အခြေအနေ အများဆုံး ရှိတဲ့ form တွေဘက် ပြောင်းရအောင်။
+      [[mark:scroll-form]] အော်ဒါ form ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-invalid]] invalid က
+      သူ့ စည်းမျဉ်းကို မလိုက်နာတဲ့ တန်ဖိုး ရှိနေတဲ့ field နဲ့ ကိုက်ပါတယ်။ invalid
+      ဖြစ်နေတုန်း ဖုန်း field ကို အနီရောင် border ပေးပါမယ်။ ဖုန်း field ကို လိုက်ကြည့်ပါ။
+      [[mark:after-invalid]] ဘယ်သူမှ ဘာမှ မရိုက်ရသေးဘဲ အနီရောင် ဖြစ်နေပါပြီ။ မဖြစ်မနေ
+      ဖြည့်ရမယ့် field က အလွတ် ဖြစ်နေရင် page ပွင့်ပွင့်ချင်းကတည်းက invalid ဖြစ်နေလို့ပါ။
+      ဒါကို ခဏနေရင် ပြန်ကြည့်ပါမယ်။ [[mark:input-phone]] ဖုန်းနံပါတ် ရိုက်ကြည့်ရအောင်။
+      [[mark:after-phone]] နံပါတ်က pattern နဲ့ ကိုက်လို့ field က valid ဖြစ်ပြီး အနီရောင်
+      ပျောက်သွားပါပြီ။ ပတ်လည်က မျဉ်းကတော့ keyboard focus ကို ပြတာ ဖြစ်ပြီး၊ နောက် lesson
+      မှာ ကြည့်ပါမယ်။ [[mark:type-valid]] အခု ဆန့်ကျင်ဘက် အခြေအနေ valid ကို ကြည့်ပါမယ်။
+      သူက စည်းမျဉ်း အားလုံးကို လိုက်နာတဲ့ တန်ဖိုး ရှိနေတဲ့ field နဲ့ ကိုက်ပါတယ်။ ဒီတစ်ခါ
+      အစိမ်းရောင် border ပေးပါမယ်။ ဖုန်း field ကို ထပ် ကြည့်ပါ။ [[mark:after-valid]] ဖုန်း
+      field အစိမ်း ဖြစ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: validation states"
+        url: "https://web.dev/learn/css/pseudo-classes#validation_states"
+      - title: "MDN — :invalid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:invalid"
+      - title: "MDN — :valid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:valid"
+    actions:
+      - id: close-lvha
+        type: whiteboard.apply
+        at: { mark: close-lvha }
+        open: false
+      - id: scroll-form
+        type: preview.scroll
+        at: { mark: scroll-form }
+        timeoutMs: 5000
+        top: 504
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-form
+        type: expect.preview
+        at: { afterAction: scroll-form }
+        timeoutMs: 4000
+        target: { by: testId, value: order-form }
+        textContains: "အော်ဒါမှာရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-invalid
+        type: editor.type
+        at: { mark: type-invalid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: cornsilk;\n}\n", occurrence: 1 }
+        text: "\n#phone:invalid {\n  border-color: crimson;\n}\n"
+      - id: input-phone
+        type: preview.input
+        at: { mark: input-phone }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        value: "09123456789"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-phone
+        type: expect.preview
+        at: { mark: after-phone }
+        timeoutMs: 4000
+        target: { by: testId, value: input-phone }
+        value: "09123456789"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-valid
+        type: editor.type
+        at: { mark: type-valid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-color: crimson;\n}\n", occurrence: 1 }
+        text: "\n#phone:valid {\n  border-color: seagreen;\n}\n"
+
+  - id: user-invalid
+    narration: >
+      [[mark:open-timeline]] page ပွင့်ကတည်းက အနီ ဖြစ်နေတာ ဘာ ပြဿနာ ရှိလဲ။
+      [[mark:draw-load]] page ပွင့်ပွင့်ချင်းမှာ invalid က အလွတ်ဖြစ်နေတဲ့ ဖုန်း field နဲ့
+      ကိုက်နေပြီးသားပါ။ ဒါကြောင့် သုံးသူက ဘာမှ မလုပ်ရသေးခင် form က အမှား ပြနေပါတယ်။
+      [[mark:draw-user]] user invalid ကတော့ စောင့်ပါတယ်။ သုံးသူက field ထဲမှာ ရိုက်ပြီး
+      ထွက်သွားမှ၊ ဒါမှမဟုတ် form ကို ပို့ဖို့ ကြိုးစားမှပဲ ကိုက်ပါတယ်။ [[mark:draw-fixed]]
+      တန်ဖိုး မှန်သွားတာနဲ့ field က valid ဖြစ်ပြီး၊ user valid နဲ့လည်း ကိုက်သွားပါတယ်။
+      [[mark:draw-support]] နှစ်ခုလုံးက browser အဓိက အားလုံးမှာ သုံးလို့ ရနေပါပြီ။ ဒါကြောင့် error
+      style တွေမှာ သူတို့ကို ဦးစားပေး သုံးပါ။ [[mark:draw-replay]] ဒီ lesson က field
+      တွေကို လက်နဲ့ မဟုတ်ဘဲ script နဲ့ ဖြည့်တာမို့ သူတို့ကို ပြလို့ မရပါဘူး။ ကိုယ့်
+      browser မှာ ကိုယ်တိုင် စမ်းကြည့်ပါ။
+    sources:
+      - title: "MDN — :user-invalid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:user-invalid"
+      - title: "MDN — :user-valid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:user-valid"
+      - title: "Selectors Level 4 — user-interaction pseudo-classes"
+        url: "https://www.w3.org/TR/selectors-4/#user-pseudos"
+      - title: "webstatus.dev — :user-valid and :user-invalid"
+        url: "https://webstatus.dev/features/user-pseudos"
+    actions:
+      - id: open-timeline
+        type: whiteboard.apply
+        at: { mark: open-timeline }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-load
+        type: whiteboard.apply
+        at: { mark: draw-load }
+        upsertIds: [d-s1, d-invalid, d-user-no]
+        drawMs: 2000
+      - id: draw-user
+        type: whiteboard.apply
+        at: { mark: draw-user }
+        upsertIds: [d-a1, d-s2, d-user-yes]
+        drawMs: 2000
+      - id: draw-fixed
+        type: whiteboard.apply
+        at: { mark: draw-fixed }
+        upsertIds: [d-a2, d-s3, d-valid, d-user-valid]
+        drawMs: 1800
+      - id: draw-support
+        type: whiteboard.apply
+        at: { mark: draw-support }
+        upsertIds: [d-support]
+        drawMs: 1400
+      - id: draw-replay
+        type: whiteboard.apply
+        at: { mark: draw-replay }
+        upsertIds: [d-replay]
+        drawMs: 1400
+
+  - id: range-required
+    narration: >
+      [[mark:close-timeline]] form ဆီ ပြန်လာပါပြီ။ [[mark:type-range]] ခွက်ရေ field က 1
+      ကနေ 10 အထိပဲ လက်ခံပါတယ်။ out of range က number field ရဲ့ တန်ဖိုးက အနည်းဆုံးနဲ့
+      အများဆုံး ကန့်သတ်ချက် အပြင် ရောက်နေရင် ကိုက်ပါတယ်။ သူ့ကိုလည်း အနီရောင် border
+      ပေးပြီး၊ ခွက်ရေ အများကြီး မှာကြည့်ပါမယ်။ [[mark:input-cups]] 12 ခွက် မှာကြည့်ရအောင်။
+      [[mark:after-cups]] ဒီ rule ကိုက်သွားလို့ ခွက်ရေ field အနီရောင် ဖြစ်သွားပါပြီ။ in
+      range ကတော့ ဆန့်ကျင်ဘက်ပါ၊ တန်ဖိုး ကန့်သတ်ချက်ထဲ ရှိနေတုန်း ကိုက်ပါတယ်။
+      [[mark:type-required]] အခု မဖြစ်မနေ ဖြည့်ရမယ့် field တွေကို အမှတ်အသား လုပ်ပါမယ်။ ဒီ
+      rule က lesson 4 က has ကို သုံးပြီး၊ နောက်မှာ required input ကပ်လျက် ပါတဲ့ label ကို
+      ရှာပါတယ်။ ပြီးတော့ ပြီးခဲ့တဲ့ lesson က after box နဲ့ အနီရောင် ကြယ်လေး ထည့်ပေးပါတယ်။
+      [[mark:after-required]] ဖုန်း label မှာပဲ ကြယ် ပေါ်လာပါတယ်။ required ဖြစ်တဲ့ field က
+      ဖုန်း တစ်ခုပဲ ရှိလို့ပါ။ ကျန်တဲ့ field တွေက optional နဲ့ ကိုက်ပါတယ်။
+      [[mark:explain-color]] သတိထားစရာ တစ်ခုက၊ မှန်လား မှားလား ဆိုတာကို အနီနဲ့ အစိမ်း
+      အရောင် သက်သက်နဲ့ ပြရုံ မလုံလောက်ပါဘူး။ တချို့က အဲဒီ အရောင် နှစ်ခုကို
+      ခွဲမမြင်နိုင်သလို၊ တချို့က အရောင်ကို လုံးဝ မမြင်ရပါဘူး။ ဒါကြောင့် error တိုင်းမှာ
+      စာသား ဒါမှမဟုတ် icon တစ်ခု တွဲပေးပါ။ ခုနက ကြယ်လေးလိုပဲ၊ အရောင် မခွဲနိုင်သူလည်း
+      ပုံသဏ္ဌာန်နဲ့ သိနိုင်အောင်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: validation states"
+        url: "https://web.dev/learn/css/pseudo-classes#validation_states"
+      - title: "MDN — :out-of-range"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:out-of-range"
+      - title: "MDN — :required"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:required"
+      - title: "WCAG 2.2 — Understanding Use of Color (1.4.1)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color"
+    actions:
+      - id: close-timeline
+        type: whiteboard.apply
+        at: { mark: close-timeline }
+        open: false
+      - id: type-range
+        type: editor.type
+        at: { mark: type-range }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-color: seagreen;\n}\n", occurrence: 1 }
+        text: "\n#cups:out-of-range {\n  border-color: crimson;\n}\n"
+      - id: input-cups
+        type: preview.input
+        at: { mark: input-cups }
+        timeoutMs: 5000
+        target: { by: testId, value: input-cups }
+        value: "12"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-range
+        type: editor.select
+        at: { mark: after-cups }
+        target: { file: styles.css, text: ":out-of-range", occurrence: 1 }
+      - id: expect-cups
+        type: expect.preview
+        at: { afterAction: select-range }
+        timeoutMs: 4000
+        target: { by: testId, value: input-cups }
+        value: "12"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-required
+        type: editor.type
+        at: { mark: type-required }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "#cups:out-of-range {\n  border-color: crimson;\n}\n",
+            occurrence: 1,
+          }
+        text: "\nlabel:has(+ input:required)::after {\n  content: \" *\";\n  color: crimson;\n}\n"
+
+  - id: placeholder-shown
+    narration: >
+      [[mark:type-placeholder-shown]] placeholder shown က placeholder ပါတဲ့ field အလွတ်မှာ ညွှန်ပေးတဲ့ စာ ပေါ်နေတုန်း ကိုက်ပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ
+      placeholder pseudo-element နဲ့ ညွှန်ပေးတဲ့ စာကို style ပေးခဲ့ပြီး၊ ဒီ pseudo-class က
+      field တစ်ခုလုံးကို style ပေးပါတယ်။ placeholder ပေါ်နေတဲ့ field တွေကို အဝါဖျော့ နောက်ခံ
+      ပေးပါမယ်။
+      [[mark:after-placeholder-shown]] နာမည် field ပဲ အဝါရောင် ဖြစ်သွားပါတယ်။ ဖုန်း field
+      မှာ နံပါတ် ရှိနေလို့ ညွှန်ပေးတဲ့ စာ မပေါ်တော့ပါဘူး။ [[mark:input-name]] နာမည်
+      ရိုက်ပါမယ်။ [[mark:after-name]] field မှာ တန်ဖိုး ရှိလာတာနဲ့ အဝါရောင်
+      ပျောက်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :placeholder-shown"
+        url: "https://web.dev/learn/css/pseudo-classes#placeholder-shown"
+      - title: "MDN — :placeholder-shown"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:placeholder-shown"
+    actions:
+      - id: type-placeholder-shown
+        type: editor.type
+        at: { mark: type-placeholder-shown }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  content: \" *\";\n  color: crimson;\n}\n", occurrence: 1 }
+        text: "\n.order-form input:placeholder-shown {\n  background: lemonchiffon;\n}\n"
+      - id: expect-name-empty
+        type: expect.preview
+        at: { mark: after-placeholder-shown }
+        timeoutMs: 4000
+        target: { by: testId, value: input-name }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: input-name
+        type: preview.input
+        at: { mark: input-name }
+        timeoutMs: 5000
+        target: { by: testId, value: input-name }
+        value: "မသီတာ"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-name
+        type: expect.preview
+        at: { mark: after-name }
+        timeoutMs: 4000
+        target: { by: testId, value: input-name }
+        value: "မသီတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: checked
+    narration: >
+      [[mark:type-checked]] နို့ဆီ အပို checkbox က သူ့ label ထဲမှာ ရှိပါတယ်။ has ကို
+      သုံးပြီး၊ ထဲက checkbox ကို check လုပ်လိုက်တာနဲ့ label တစ်ခုလုံးကို style ပေးလို့
+      ရပါတယ်။ အဲဒီ label ကို အစိမ်းရောင် နောက်ခံ ပေးပါမယ်။ [[mark:click-milk]] အကွက်ကို
+      check လုပ်ရအောင်။ [[mark:after-milk]] label တစ်ခုလုံး အစိမ်းရောင် ဖြစ်သွားပါပြီ။
+      checked က HTML attribute ကို မကြည့်ဘဲ checkbox ရဲ့ လက်ရှိ အခြေအနေကို လိုက်လို့၊
+      နှိပ်လိုက်တိုင်း ပြောင်းပါတယ်။ radio button နဲ့ dropdown list ထဲက option တွေမှာလည်း
+      ရွေးထားတဲ့ တစ်ခုက checked နဲ့ ကိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :checked and :indeterminate"
+        url: "https://web.dev/learn/css/pseudo-classes#checked_and_indeterminate"
+      - title: "MDN — :checked"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:checked"
+    actions:
+      - id: type-checked
+        type: editor.type
+        at: { mark: type-checked }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: lemonchiffon;\n}\n", occurrence: 1 }
+        text: "\n.extra:has(input:checked) {\n  background: lightgreen;\n}\n"
+      - id: click-milk
+        type: preview.click
+        at: { mark: click-milk }
+        timeoutMs: 5000
+        target: { by: testId, value: check-milk }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      # kit.js writes "checked" into the hidden status line on change (a
+      # clicked checkbox gets no checked attribute); it was empty before.
+      - id: expect-milk
+        type: expect.preview
+        at: { mark: after-milk }
+        timeoutMs: 4000
+        target: { by: testId, value: milk-status }
+        textContains: "checked"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: disabled
+    narration: >
+      [[mark:type-disabled]] အော်ဒါ ခလုတ်မှာ disabled attribute ပါလို့ အခု နှိပ်လို့
+      မရသေးပါဘူး။ disabled pseudo-class က အဲဒီ ခလုတ်နဲ့ ကိုက်ပါတယ်။ သူ့ကို တစ်ဝက်လောက်
+      ဖျော့အောင် လုပ်ပြီး၊ နှိပ်လို့ မရဘူး ဆိုတဲ့ cursor ပေးပါမယ်။ [[mark:after-disabled]]
+      ခလုတ် ဖျော့သွားပါပြီ။ cursor ကတော့ mouse ကို ခလုတ်ပေါ် တင်မှပဲ ပေါ်ပါတယ်။
+      [[mark:explain-enabled]] enabled က ဆန့်ကျင်ဘက်ပါ။ ဒါပေမဲ့ control တွေက default
+      အားဖြင့် enabled ဖြစ်ပြီးသားမို့ သုံးဖို့ သိပ်မလိုပါဘူး။ ပြီးတော့ fieldset
+      တစ်ခုလုံးကို disabled လုပ်ရင်၊ ထဲက control တိုင်းက ကိုယ်ပိုင် attribute မပါဘဲ
+      disabled နဲ့ ကိုက်ပါတယ်။ attribute selector က အဲဒါတွေကို မမိပေမယ့်၊ pseudo-class
+      ကတော့ မိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :disabled and :enabled"
+        url: "https://web.dev/learn/css/pseudo-classes#disabled_and_enabled"
+      - title: "MDN — :disabled"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:disabled"
+      - title: "HTML Standard — the :disabled pseudo-class (fieldset)"
+        url: "https://html.spec.whatwg.org/multipage/semantics-other.html#selector-disabled"
+    actions:
+      - id: type-disabled
+        type: editor.type
+        at: { mark: type-disabled }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: lightgreen;\n}\n", occurrence: 1 }
+        text: "\nbutton:disabled {\n  opacity: 50%;\n  cursor: not-allowed;\n}\n"
+      - id: expect-disabled
+        type: expect.preview
+        at: { mark: after-disabled }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: disabled, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: indeterminate
+    narration: >
+      [[mark:type-indeterminate]] ခလုတ်အောက်က progress bar မှာ value မပါပါဘူး။
+      မီးဖိုချောင်က အော်ဒါ ဘယ်လောက် ကြာမလဲ မသိသေးလို့ပါ။ ဒါကို indeterminate အခြေအနေ လို့
+      ခေါ်ပါတယ်။ သူ့ကို မျဉ်းပြတ်
+      outline ပေးပါမယ်။ [[mark:after-indeterminate]] မျဉ်းပြတ် outline ပေါ်လာလို့ selector
+      ကိုက်တာ သေချာပါပြီ။ [[mark:explain-indeterminate]] တခြား နှစ်ခုလည်း indeterminate
+      ဖြစ်နိုင်ပါတယ်။ တစ်ခုမှ မရွေးရသေးတဲ့ radio button အုပ်စုရယ်၊ item တချို့ကိုပဲ check
+      လုပ်ထားတဲ့ select all checkbox လိုမျိုးရယ်ပါ။ checkbox အတွက် HTML attribute
+      မရှိလို့၊ ဒီ အခြေအနေကို JavaScript ကနေပဲ ပေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :checked and :indeterminate"
+        url: "https://web.dev/learn/css/pseudo-classes#checked_and_indeterminate"
+      - title: "MDN — :indeterminate"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:indeterminate"
+      - title: "HTML Standard — the :indeterminate pseudo-class"
+        url: "https://html.spec.whatwg.org/multipage/semantics-other.html#selector-indeterminate"
+    actions:
+      - id: type-indeterminate
+        type: editor.type
+        at: { mark: type-indeterminate }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  cursor: not-allowed;\n}\n", occurrence: 1 }
+        text: "\nprogress:indeterminate {\n  outline: 2px dashed sienna;\n}\n"
+      - id: expect-progress
+        type: expect.preview
+        at: { mark: after-indeterminate }
+        timeoutMs: 4000
+        target: { by: testId, value: prep }
+        attribute: { name: id, value: "prep" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: is-forgiving
+    chapter: "Is၊ where နဲ့ not"
+    narration: >
+      [[mark:scroll-gallery]] နောက်ဆုံး အုပ်စုက selector တွေကို ပေါင်းစပ်ပေးပါတယ်။ gallery
+      နဲ့ စားစရာတွေဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-plain-list]] နာမည်နဲ့ ဈေးနှုန်းကို
+      အရောင် တူတူ ပေးချင်တယ် ဆိုပါစို့။ ပုံမှန်ဆိုရင် selector list နဲ့ ရေးပါတယ်။ ဒီ list
+      ထဲမှာ fresh ဆိုတဲ့ selector အပို တစ်ခု ပါပြီး၊ သူက တကယ် မရှိတဲ့ pseudo-class ပါ။
+      browser အဟောင်းတွေ မဖတ်နိုင်တဲ့ အသစ် တစ်ခုရဲ့ ကိုယ်စား တမင် ထည့်ထားတာပါ။
+      [[mark:after-plain-list]] ဘာမှ မပြောင်းပါဘူး။ list ထဲက selector တစ်ခုကို ဖတ်လို့
+      မရရင် browser က rule တစ်ခုလုံးကို ကျော်သွားလို့ပါ။ [[mark:type-is]] အခု အဲဒီ list
+      ကိုပဲ is ထဲ ထည့်ရေးပါမယ်။ menu card ကို တစ်ခါပဲ ရေးပြီး၊ selector သုံးခုကို
+      ကွင်းထဲမှာ ထည့်ပါတယ်။ ရိုက်နေတုန်း စားစရာ card တွေရဲ့ နာမည်နဲ့ ဈေးနှုန်းကို
+      လိုက်ကြည့်ပါ။ [[mark:after-is]] နာမည်နဲ့ ဈေးနှုန်း အညိုလိမ္မော်ရောင် ဖြစ်သွားပါပြီ။
+      is ထဲက list က forgiving ဖြစ်ပါတယ်။ ဆိုလိုတာက ဖတ်မရတဲ့ selector ကိုပဲ ကျော်ပြီး
+      ကျန်တာကို ဆက်သုံးပါတယ်။ [[mark:select-is]] ဒီ is အပိုင်းကို ကြည့်ပါ။ lesson 6
+      မှာလိုပဲ၊ သူ့ထဲက အလေးဆုံး selector ရဲ့ specificity ကို ယူပါတယ်။ where က is လိုပဲ
+      ရွေးပေမယ့် အမှတ်က အမြဲ သုည ဖြစ်လို့၊ နောက်က ဘယ် rule မဆို ပြန်ပြင်လို့ ရတဲ့ default
+      style တွေအတွက် သင့်တော်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :is()"
+        url: "https://web.dev/learn/css/pseudo-classes#is"
+      - title: "MDN — :is() (forgiving selector list)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:is"
+      - title: "MDN — :where()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:where"
+      - title: "Selectors Level 4 — forgiving selector lists"
+        url: "https://www.w3.org/TR/selectors-4/#forgiving-selector"
+    actions:
+      - id: scroll-gallery
+        type: preview.scroll
+        at: { mark: scroll-gallery }
+        timeoutMs: 5000
+        top: 952
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-gallery
+        type: expect.preview
+        at: { afterAction: scroll-gallery }
+        timeoutMs: 4000
+        target: { by: testId, value: gallery }
+        textContains: "ဆိုင်ပုံရိပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-plain-list
+        type: editor.type
+        at: { mark: type-plain-list }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  outline: 2px dashed sienna;\n}\n", occurrence: 1 }
+        text: "\n.menu-card .name,\n.menu-card .price,\n.menu-card :fresh {\n  color: chocolate;\n}\n"
+      - id: type-is
+        type: editor.type
+        at: { mark: type-is }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".menu-card :fresh {\n  color: chocolate;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.menu-card :is(.name, .price, :fresh) {\n  color: chocolate;\n}\n"
+      - id: expect-is
+        type: expect.preview
+        at: { mark: after-is }
+        timeoutMs: 4000
+        target: { by: testId, value: card-mohinga }
+        textContains: "2,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-is
+        type: editor.select
+        at: { mark: select-is }
+        target: { file: styles.css, text: ":is(.name, .price, :fresh)", occurrence: 1 }
+
+  - id: not-alt
+    narration: >
+      [[mark:open-index-img]] အခု not ကို ကြည့်ပါမယ်။ HTML ထဲက gallery ကို ကြည့်ရအောင်။
+      [[mark:select-img]] ဆိုင်ရဲ့ logo ပုံမှာ alt attribute မပါလို့ screen reader က
+      ဘာပုံလဲ ပြောပြလို့ မရပါဘူး။ [[mark:open-styles-not]] CSS ဆီ ပြန်လာပါပြီ။
+      [[mark:type-not]] not က သူ့ထဲက selector နဲ့ မကိုက်တဲ့ element တွေကို ရွေးပါတယ်။
+      ဒီမှာတော့ alt attribute မပါတဲ့ ပုံတွေပါ။ online မှာ တွေ့ရတဲ့ ဥပမာ တစ်ခုက outline ကို
+      အထူနဲ့ အရောင်ပဲ ပေးထားလို့၊ အဲဒီအတိုင်း အရင် ရေးကြည့်ပါမယ်။
+      [[mark:after-not-nostyle]] ဘာမှ မပေါ်လာပါဘူး။ မျဉ်း ပုံစံ မပေးထားတဲ့ outline ကို
+      browser က မဆွဲလို့ပါ။ [[mark:type-solid]] မျဉ်းဖြောင့် ထည့်ပေးရအောင်။
+      [[mark:after-solid]] အခု logo မှာ အနီရောင် outline ပေါ်လာပါပြီ။ page ရေးနေတုန်း ဒီလို
+      rule က alt text လိုသေးတဲ့ ပုံတိုင်းကို ထောက်ပြပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :not()"
+        url: "https://web.dev/learn/css/pseudo-classes#not"
+      - title: "MDN — :not()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:not"
+      - title: "MDN — outline (style is required to draw it)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/outline"
+    actions:
+      - id: open-index-img
+        type: workspace.openFile
+        at: { mark: open-index-img }
+        path: index.html
+      - id: select-img
+        type: editor.select
+        at: { mark: select-img }
+        target:
+          {
+            file: index.html,
+            text: '<img src="/cup.svg" width="48" height="48" data-testid="photo-cup" />',
+            occurrence: 1,
+          }
+      - id: open-styles-not
+        type: workspace.openFile
+        at: { mark: open-styles-not }
+        path: styles.css
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".menu-card :is(.name, .price, :fresh) {\n  color: chocolate;\n}\n",
+            occurrence: 1,
+          }
+        text: "\nimg:not([alt]) {\n  outline: 4px crimson;\n}\n"
+      - id: expect-logo
+        type: expect.preview
+        at: { mark: after-not-nostyle }
+        timeoutMs: 4000
+        target: { by: testId, value: photo-cup }
+        attribute: { name: src, value: "/cup.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-solid
+        type: editor.type
+        at: { mark: type-solid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline: 4px ", occurrence: 1 }
+        text: "solid "
+      - id: expect-photo-alt
+        type: expect.preview
+        at: { mark: after-solid }
+        timeoutMs: 4000
+        target: { by: testId, value: photo-teahouse }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: nth-of
+    chapter: "Nth-child ထဲက of"
+    narration: >
+      [[mark:scroll-snacks]] နောက်ဆုံးက စားစရာ list ပါ။ [[mark:type-zebra]] lesson 4 က
+      nth-child နဲ့ card တွေကို အရောင် တစ်လှည့်စီ ခြားလို့ ရပါတယ်။ စုံဂဏန်း နေရာက card
+      တိုင်းကို အညိုဖျော့ရောင် နောက်ခံ ပေးပါမယ်။ စုံဂဏန်းဆိုတာ တစ်ကနေ စရေတွက်ရင် ဒုတိယ၊
+      စတုတ္ထ စတာတွေပါ။ [[mark:after-zebra]] ဒုတိယနဲ့ စတုတ္ထ card တွေ အညိုဖျော့ရောင်
+      ဖြစ်သွားပါပြီ။ [[mark:click-sold-out]] ပလာတာ ကုန်သွားပြီ ဆိုပါစို့။ ဒီ ခလုတ်က သူ့
+      card မှာ hidden attribute ထည့်ပေးပါတယ်။ [[mark:after-hide]] ပလာတာ card
+      ပျောက်သွားပေမယ့် အရောင်တွေကို ကြည့်ပါ။ ပထမ card နှစ်ခု ဆက်တိုက် အဖြူ ဖြစ်နေပါတယ်။
+      nth-child က ဖျောက်ထားတဲ့ card ကိုလည်း ရေတွက်နေလို့ပါ။ [[mark:type-of]] ဒါကြောင့်
+      nth-child ထဲမှာ of နဲ့ selector တစ်ခု ထည့်ပါမယ်။ browser က အဲဒီ selector နဲ့
+      ကိုက်တဲ့ card တွေကိုပဲ အရင် စစ်ထုတ်ပြီးမှ ရေတွက်ပါတယ်။ ဒီမှာဆိုရင် မဖျောက်ထားတဲ့
+      card တွေပါ။ [[mark:after-of]] card တွေ အရောင် တစ်လှည့်စီ ပြန်ဖြစ်သွားပါပြီ။ မြင်ရတဲ့
+      card တွေထဲက ဒုတိယနဲ့ စတုတ္ထမှာ ပေါ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: :nth-child() and the of S syntax"
+        url: "https://web.dev/learn/css/pseudo-classes#nth-child_and_nth-of-type"
+      - title: "MDN — :nth-child() (of selector)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:nth-child#the_of_selector_syntax"
+      - title: "webstatus.dev — :nth-child() of S"
+        url: "https://webstatus.dev/features/nth-child-of"
+    actions:
+      - id: scroll-snacks
+        type: preview.scroll
+        at: { mark: scroll-snacks }
+        timeoutMs: 5000
+        top: 1316
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-snacks
+        type: expect.preview
+        at: { afterAction: scroll-snacks }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-snacks }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-zebra
+        type: editor.type
+        at: { mark: type-zebra }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline: 4px solid crimson;\n}\n", occurrence: 1 }
+        text: "\n.snacks .menu-card:nth-child(even) {\n  background: wheat;\n}\n"
+      - id: click-sold-out
+        type: preview.click
+        at: { mark: click-sold-out }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-palata }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-hidden
+        type: expect.preview
+        at: { mark: after-hide }
+        timeoutMs: 4000
+        target: { by: testId, value: card-palata }
+        attribute: { name: hidden, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-of
+        type: editor.type
+        at: { mark: type-of }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".snacks .menu-card:nth-child(even", occurrence: 1 }
+        text: " of :not([hidden])"
+      - id: expect-still-hidden
+        type: expect.preview
+        at: { mark: after-of }
+        timeoutMs: 4000
+        target: { by: testId, value: card-palata }
+        attribute: { name: hidden, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-recap]] pseudo-class တွေကို ရေးပုံ နှစ်မျိုး ခွဲလို့ ရပါတယ်။
+      [[mark:draw-func]] functional pseudo-class က ကွင်းထဲမှာ တစ်ခုခု လက်ခံပါတယ်။ selector
+      list ဒါမှမဟုတ် nth-child ထဲက ပုံသေနည်းလိုမျိုးပါ။ [[mark:draw-plain]] hover၊
+      checked၊ target လို ရိုးရိုး pseudo-class က ဘာမှ မလက်ခံပါဘူး။ [[mark:draw-fake]]
+      တချို့ နာမည်တွေက မှန်သလို ထင်ရပေမယ့် တကယ် မရှိပါဘူး။ fresh နဲ့ loading လိုမျိုးပါ။
+      [[mark:draw-more]] ကိုယ်တိုင် ရှာကြည့်စရာတွေလည်း ရှိပါသေးတယ်။ html element အတွက်
+      root၊ link အားလုံးအတွက် any link၊ ပြင်လို့ မရတဲ့ field အတွက် read only၊ ပွင့်နေတဲ့
+      details အတွက် open တို့ပါ။ modal နဲ့ popover open ကိုတော့ dialog နဲ့ popover lesson
+      မှာ တွေ့ရပါမယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ pseudo-class က element ကို
+      အခြေအနေနဲ့ ရွေးပါတယ်။ hover နဲ့ active က pointer ကို လိုက်ပြီး၊ link အခြေအနေကို LVHA
+      အစဉ်နဲ့ ရေးပါတယ်။ form pseudo-class တွေက field တစ်ခု valid လား၊ ကန့်သတ်ချက်ထဲလား၊
+      required လား၊ placeholder ပေါ်နေလား၊ check လုပ်ထားလား၊ disabled လား ဆိုတာနဲ့ ရွေးပါတယ်။ is၊ where
+      နဲ့ not က selector တွေကို ပေါင်းစပ်ပြီး၊ of က nth-child ရေတွက်မယ့် element ကို
+      စစ်ထုတ်ပါတယ်။ [[mark:next-lesson]] ချန်ထားခဲ့တဲ့ အုပ်စု တစ်ခုက focus ပါ။ နောက်
+      lesson မှာတော့ keyboard focus၊ field တွေ ပတ်လည်မှာ မြင်ခဲ့ရတဲ့ မျဉ်းနဲ့ cursor ကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: check your understanding"
+        url: "https://web.dev/learn/css/pseudo-classes#check_your_understanding"
+      - title: "MDN — Pseudo-classes (index)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes#alphabetical_index"
+      - title: "web.dev Learn CSS — Focus (next lesson)"
+        url: "https://web.dev/learn/css/focus"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: open-recap }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-func
+        type: whiteboard.apply
+        at: { mark: draw-func }
+        upsertIds: [e-func]
+        drawMs: 1400
+      - id: draw-plain
+        type: whiteboard.apply
+        at: { mark: draw-plain }
+        upsertIds: [e-plain]
+        drawMs: 1400
+      - id: draw-fake
+        type: whiteboard.apply
+        at: { mark: draw-fake }
+        upsertIds: [e-fake]
+        drawMs: 1200
+      - id: draw-more
+        type: whiteboard.apply
+        at: { mark: draw-more }
+        upsertIds: [e-more-t, e-more, e-more-2]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".menu-card:hover {\n  background: cornsilk;\n}\n\n#phone:invalid {\n  border-color: crimson;\n}\n\n#phone:valid {\n  border-color: seagreen;\n}\n\n#cups:out-of-range {\n  border-color: crimson;\n}\n\nlabel:has(+ input:required)::after {\n  content: \" *\";\n  color: crimson;\n}\n\n.order-form input:placeholder-shown {\n  background: lemonchiffon;\n}\n\n.extra:has(input:checked) {\n  background: lightgreen;\n}\n\nbutton:disabled {\n  opacity: 50%;\n  cursor: not-allowed;\n}\n\nprogress:indeterminate {\n  outline: 2px dashed sienna;\n}\n\n.menu-card .name,\n.menu-card .price,\n.menu-card :fresh {\n  color: chocolate;\n}\n\n.menu-card :is(.name, .price, :fresh) {\n  color: chocolate;\n}\n\nimg:not([alt]) {\n  outline: 4px solid crimson;\n}\n\n.snacks .menu-card:nth-child(even of :not([hidden])) {\n  background: wheat;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
