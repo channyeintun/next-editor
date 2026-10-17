@@ -641,14 +641,21 @@ app, update this table.
 
 ### 3.4 Numbers and symbols
 
-- **Percentages:** digits plus the Burmese word: "99.9 ရာခိုင်နှုန်း". Never `%`.
-  The shipped lessons write it this way.
+- **Numbers in narration are Burmese digits with no thousands separator**
+  (Chan, 2026-10-18, after the pronunciation probe): "၃၀၀၀", "၁၀၀၀၀",
+  "၉၉.၉", never "3,000" or "၃,၀၀၀". The decimal point stays. Small counts may
+  stay Burmese words ("သုံးခု"). Screen text (deck pages, board labels,
+  notes.md) keeps Latin digits. `~/Documents/sre-course/work/burmese-digits.py`
+  converts the spoken lines of a voice script or lesson YAML and leaves
+  markers alone.
+- **Percentages:** Burmese digits plus the Burmese word: "၉၉.၉ ရာခိုင်နှုန်း".
+  Never `%`.
 - **Nines:** "nine သုံးလုံး" (99.9), "nine ငါးလုံး" (99.999). Say the
   percentage too the first time.
 - **Units:** write "millisecond" and "second" in full. Never `ms` or `s`.
 - **Few numbers per scene.** Round them where the exact value doesn't matter.
   Keep exact numbers on the slide.
-- **24/7:** say it in Burmese: "တစ်နေ့ 24 နာရီ၊ ရက်တိုင်း".
+- **24/7:** say it in Burmese: "တစ်နေ့ ၂၄ နာရီ၊ ရက်တိုင်း".
 
 ### 3.5 Names
 
@@ -800,6 +807,12 @@ Status: **proposals only.** Nothing here has been added to
   - The candidates below follow those three patterns.
 
 ### 4.2 Candidates for `BURMESE_RESPELLINGS`
+
+**Decided by ear (Chan, 2026-10-18, pronunciation probe):** canary, rollout,
+rollback and Padauk keep their written form ("ရေးနေကျ", the probe's first
+take sounded more natural), so they get **no** entry; the proposals for them
+below are withdrawn. Terms Chan did not comment on stay as written too, until
+a real render sounds wrong.
 
 **Priority A: likely wrong. Test before the first SRE lesson is rendered.**
 
