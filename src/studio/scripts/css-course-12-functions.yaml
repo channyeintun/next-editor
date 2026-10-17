@@ -1,0 +1,2799 @@
+# CSS course (Burmese), lesson 12 of 43: CSS functions.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 11's var(); what a function is: name, brackets,
+# arguments → value; no space before the bracket) → board (functions already
+# met: colour functions, var(), :is()/:where()/:not() with their specificity,
+# minmax()/fit-content() for grid; today's math functions) → code tour
+# (hero paragraph, about story, the new order gauge with its half-way mark and
+# the steam line, drink-card headings; empty styles.css) → board (math is done
+# at layout time: 100% − 64px on a phone and on a wide screen) → calc() on the
+# hero paragraph → calc(100%-64px) without spaces is skipped; board of calc's
+# rules → min() caps the about section at 320px; board (min = upper limit,
+# max = lower limit) → clamp() on the bar, the track typed at 200 / 320 /
+# 400px shows the minimum, preferred and maximum; board (three cases, clamp =
+# max(min, min(pref, max)), fluid text with a rem part) → board (unit circle:
+# cos = x, sin = y, unitless = radians) → sin() on the steam line: 30deg →
+# 100px, unitless 30 → 0 (negative width clamped), 90deg → 200px → board
+# (asin/acos/atan ranges, atan2, hypot) → pow() type scale on h2 and h3 →
+# board (sqrt, exp, log, abs, sign, round/mod/rem, constants) → board (url()
+# resolves from the stylesheet, data: URIs; attr() in content) → board
+# (function families and their lessons; quiz) → recap, hand-off to layout
+# (lesson 13).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set( (url() is only explained, on the
+# board); no postcss config; no reload. Every rule that contains a bracket is
+# typed while it is the LAST rule in the file, so an unclosed bracket can only
+# swallow the end of its own rule. Every keystroke prefix was checked in
+# headless Chrome (probe/stages.ts): no prefix shows a state other than the
+# one before or the final one (half-typed math is invalid and ignored; the
+# only valid prefixes, calc(100% and min(100%, equal the current width). The
+# pow() values are written number-first, calc(pow(…) * 1rem), so no prefix is
+# a valid length.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-12-functions
+  title: "CSS course 12: CSS function တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 12
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit blocks hero, about (the story paragraph gets
+      # data-testid="story"), the lesson blocks track and steam (inside one
+      # "gauge" section, owned by this lesson), and drinks. No kit.js: nothing
+      # is clicked. Order: hero, about, gauge, drinks, so every demo except the
+      # h3 headings shares the first screen.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: about -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story" data-testid="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+              </section>
+
+              <!-- lesson blocks: track and steam -->
+              <section class="gauge" data-testid="gauge">
+                <h2>ဒီနေ့ အော်ဒါ</h2>
+                <div class="track" data-testid="track"><div class="bar" data-testid="bar"></div></div>
+                <p class="gauge-label">ရေနွေးငွေ့</p>
+                <div class="steam" data-testid="steam"></div>
+              </section>
+
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and C of the course kit (nothing in them
+      # sets a width or the heading sizes the lesson's demos type over, other
+      # than the h2/h3 sizes the pow() scale overrides on purpose). Section D
+      # is not needed. Section E pins the order gauge (24px track and bar, a
+      # red half-way mark) and the steam line; the lesson types their widths.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 12 keeps sections A, B, B2 and C, and pins the
+          order gauge (a track with a bar and a half-way mark) and the steam line in
+          section E; the lesson types their widths.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 12: the order gauge. The track and its bar are 24px tall; the thin
+           red mark shows half of the track. Their widths are typed. */
+        .track {
+          position: relative;
+          height: 24px;
+          background: var(--line);
+          border-radius: 999px;
+        }
+
+        .track::after {
+          content: "";
+          position: absolute;
+          top: -6px;
+          bottom: -6px;
+          left: 50%;
+          width: 2px;
+          margin-left: -1px;
+          background: var(--chili);
+        }
+
+        .bar {
+          height: 24px;
+          background: var(--tea);
+          border-radius: 999px;
+        }
+
+        .gauge-label {
+          margin: 16px 0 4px;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        /* Lesson 12: the steam line. Its width is typed. */
+        .steam {
+          height: 12px;
+          margin-bottom: 24px;
+          background: var(--tea-light);
+          border-radius: 999px;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — what a function is: name, brackets, arguments → a value.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "CSS function ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-fn,
+        kind: text,
+        x: 310,
+        y: 240,
+        width: 400,
+        height: 60,
+        text: "rgb(200 120 40)",
+        strokeColor: "#1e1e1e",
+        fontSize: 48,
+      }
+    - {
+        id: a-name-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 310,
+        y: 285,
+        width: 85,
+        height: 20,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-name-label,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 120,
+        height: 36,
+        text: "နာမည်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-args-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 400,
+        y: 285,
+        width: 300,
+        height: 20,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-args-label,
+        kind: text,
+        x: 470,
+        y: 320,
+        width: 230,
+        height: 36,
+        text: "argument တွေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-result,
+        kind: text,
+        x: 790,
+        y: 250,
+        width: 260,
+        height: 46,
+        text: "→ အရောင်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: a-space-bad,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 320,
+        height: 36,
+        text: "rgb (200 120 40)  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-space-note,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 440,
+        height: 36,
+        text: "နာမည်နဲ့ ကွင်းကြား space မထား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — functions already met in the course, and today's.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Course ထဲက function တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-color,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 540,
+        height: 36,
+        text: "rgb() · hsl() · oklch() · color-mix()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-color-l,
+        kind: text,
+        x: 920,
+        y: 240,
+        width: 130,
+        height: 36,
+        text: "lesson 9",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-var,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 100,
+        height: 36,
+        text: "var()",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-var-l,
+        kind: text,
+        x: 920,
+        y: 300,
+        width: 140,
+        height: 36,
+        text: "lesson 11",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-sel,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 380,
+        height: 36,
+        text: ":is() · :where() · :not()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-sel-l,
+        kind: text,
+        x: 920,
+        y: 360,
+        width: 140,
+        height: 36,
+        text: "lesson 6",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-sel-note,
+        kind: text,
+        x: 330,
+        y: 410,
+        width: 520,
+        height: 36,
+        text: "is → အလေးဆုံး argument · where → 0",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-grid,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 380,
+        height: 36,
+        text: "minmax() · fit-content()",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-grid-l,
+        kind: text,
+        x: 920,
+        y: 475,
+        width: 140,
+        height: 36,
+        text: "lesson 18",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-today-l,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 90,
+        height: 36,
+        text: "ဒီနေ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-today,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 760,
+        height: 36,
+        text: "calc() · min() · max() · clamp() · sin() · pow()",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — math is done when the page is laid out: 100% − 64px on a
+    # phone and on a wide screen (scale 0.625).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Browser က ဘယ်အချိန် တွက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-phone-outer,
+        kind: rectangle,
+        x: 310,
+        y: 240,
+        width: 230,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-phone-inner,
+        kind: rectangle,
+        x: 316,
+        y: 250,
+        width: 184,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-phone-gap,
+        kind: rectangle,
+        x: 500,
+        y: 250,
+        width: 40,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-phone-text,
+        kind: text,
+        x: 600,
+        y: 252,
+        width: 260,
+        height: 36,
+        text: "368 − 64 = 304",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-wide-outer,
+        kind: rectangle,
+        x: 310,
+        y: 340,
+        width: 500,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-wide-inner,
+        kind: rectangle,
+        x: 316,
+        y: 350,
+        width: 454,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-wide-gap,
+        kind: rectangle,
+        x: 770,
+        y: 350,
+        width: 40,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-wide-text,
+        kind: text,
+        x: 840,
+        y: 352,
+        width: 240,
+        height: 36,
+        text: "800 − 64 = 736",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-leg-pct,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 360,
+        height: 36,
+        text: "100% → ရေးတုန်း မသိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-leg-px,
+        kind: text,
+        x: 740,
+        y: 440,
+        width: 240,
+        height: 36,
+        text: "64px → ပုံသေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-render,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 560,
+        height: 36,
+        text: "နေရာချတဲ့အခါ browser က တွက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-recalc,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 480,
+        height: 36,
+        text: "parent ပြောင်းရင် ပြန်တွက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — calc()'s rules: valid examples green, the invalid one red,
+    # nesting blue, var() violet; the notes on the right.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "Calc ရဲ့ စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-r1-ok,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 280,
+        height: 36,
+        text: "100% - 64px  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r1-bad,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 280,
+        height: 36,
+        text: "100%-64px  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-r1-note,
+        kind: text,
+        x: 700,
+        y: 258,
+        width: 340,
+        height: 36,
+        text: "+ − ဘေးမှာ space လို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-r2,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 280,
+        height: 36,
+        text: "200px * 2  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r2-note,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 340,
+        height: 36,
+        text: "× → တစ်ဘက်က ဂဏန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-r3,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 280,
+        height: 36,
+        text: "100px / 2  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r3-note,
+        kind: text,
+        x: 700,
+        y: 410,
+        width: 340,
+        height: 36,
+        text: "÷ → ညာဘက်က ဂဏန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-r4,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 360,
+        height: 36,
+        text: "calc((100% - 64px) / 2)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-r4-note,
+        kind: text,
+        x: 700,
+        y: 470,
+        width: 300,
+        height: 36,
+        text: "ကွင်း ထပ်လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-r5,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 360,
+        height: 36,
+        text: "calc(var(--size) * 1px)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-r5-note,
+        kind: text,
+        x: 700,
+        y: 530,
+        width: 300,
+        height: 36,
+        text: "var() ထည့်လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board E — min() is an upper limit, max() a lower limit (left number =
+    # the parent's width, right number = the result).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 280,
+        height: 46,
+        text: "Min နဲ့ max",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-min-code,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 280,
+        height: 36,
+        text: "min(100%, 320px)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-min-a,
+        kind: text,
+        x: 320,
+        y: 300,
+        width: 180,
+        height: 36,
+        text: "400 → 320",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-min-b,
+        kind: text,
+        x: 320,
+        y: 350,
+        width: 180,
+        height: 36,
+        text: "200 → 200",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-min-note,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 280,
+        height: 36,
+        text: "320 ထက် မကြီး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-max-code,
+        kind: text,
+        x: 720,
+        y: 245,
+        width: 280,
+        height: 36,
+        text: "max(100%, 320px)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-max-a,
+        kind: text,
+        x: 740,
+        y: 300,
+        width: 180,
+        height: 36,
+        text: "400 → 400",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-max-b,
+        kind: text,
+        x: 740,
+        y: 350,
+        width: 180,
+        height: 36,
+        text: "200 → 320",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-max-note,
+        kind: text,
+        x: 720,
+        y: 415,
+        width: 280,
+        height: 36,
+        text: "320 ထက် မငယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-legend,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 520,
+        height: 36,
+        text: "ဘယ်ဘက် ဂဏန်း = parent ရဲ့ အကျယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-nocalc,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 480,
+        height: 36,
+        text: "min · max ထဲမှာ calc မလို",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board F — clamp(): the three cases the bar showed, its min/max form,
+    # and fluid text.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "clamp(120px, 50%, 180px)",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-low,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 500,
+        height: 36,
+        text: "track 200 → 50% = 100 → 120",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-low-note,
+        kind: text,
+        x: 880,
+        y: 245,
+        width: 180,
+        height: 36,
+        text: "အငယ်ဆုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-mid,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 500,
+        height: 36,
+        text: "track 320 → 50% = 160 → 160",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-mid-note,
+        kind: text,
+        x: 880,
+        y: 305,
+        width: 120,
+        height: 36,
+        text: "ကြားထဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-high,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 500,
+        height: 36,
+        text: "track 400 → 50% = 200 → 180",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-high-note,
+        kind: text,
+        x: 880,
+        y: 365,
+        width: 180,
+        height: 36,
+        text: "အကြီးဆုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-formula,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 520,
+        height: 36,
+        text: "= max(120px, min(50%, 180px))",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-font,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 640,
+        height: 36,
+        text: "font-size: clamp(1.25rem, 1rem + 2vw, 2rem)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-font-note,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 520,
+        height: 36,
+        text: "rem ပါမှ စာလုံး setting ကို လိုက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board G — the unit circle: a point at 30°, cos = how far right,
+    # sin = how far up (circle centre 450,360, radius 120).
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 260,
+        height: 46,
+        text: "Sin နဲ့ cos",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-circle,
+        kind: ellipse,
+        x: 330,
+        y: 240,
+        width: 240,
+        height: 240,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g-center,
+        kind: ellipse,
+        x: 444,
+        y: 354,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: g-point,
+        kind: ellipse,
+        x: 546,
+        y: 292,
+        width: 16,
+        height: 16,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: g-angle,
+        kind: text,
+        x: 470,
+        y: 318,
+        width: 60,
+        height: 36,
+        text: "30°",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-cos,
+        kind: rectangle,
+        x: 450,
+        y: 359,
+        width: 104,
+        height: 3,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: g-cos-label,
+        kind: text,
+        x: 475,
+        y: 372,
+        width: 60,
+        height: 36,
+        text: "cos",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-sin,
+        kind: rectangle,
+        x: 553,
+        y: 300,
+        width: 3,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: g-sin-label,
+        kind: text,
+        x: 588,
+        y: 310,
+        width: 50,
+        height: 36,
+        text: "sin",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-cos,
+        kind: text,
+        x: 680,
+        y: 240,
+        width: 340,
+        height: 36,
+        text: "cos → ညာဘက် အကွာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-sin,
+        kind: text,
+        x: 680,
+        y: 295,
+        width: 360,
+        height: 36,
+        text: "sin → အပေါ်ဘက် အကွာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-range,
+        kind: text,
+        x: 680,
+        y: 350,
+        width: 340,
+        height: 36,
+        text: "ရလဒ် → −1 … 1 ဂဏန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-deg,
+        kind: text,
+        x: 680,
+        y: 430,
+        width: 340,
+        height: 36,
+        text: "sin(30deg) = 0.5  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-rad,
+        kind: text,
+        x: 680,
+        y: 485,
+        width: 340,
+        height: 36,
+        text: "sin(30) → 30 radian",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-r-tan,
+        kind: text,
+        x: 680,
+        y: 560,
+        width: 280,
+        height: 36,
+        text: "tan = sin ÷ cos",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board H — the inverse functions return angles; atan2; hypot.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "ပြောင်းပြန် function တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-asin,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 320,
+        height: 36,
+        text: "asin(0.5) → 30deg",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-asin-note,
+        kind: text,
+        x: 720,
+        y: 245,
+        width: 260,
+        height: 36,
+        text: "ဂဏန်း → ထောင့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-range1,
+        kind: text,
+        x: 320,
+        y: 300,
+        width: 340,
+        height: 36,
+        text: "asin · atan: −90° … 90°",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-range2,
+        kind: text,
+        x: 720,
+        y: 300,
+        width: 260,
+        height: 36,
+        text: "acos: 0° … 180°",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-atan2,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 360,
+        height: 36,
+        text: "atan2(y, x) → ဦးတည်ရာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-atan2-range,
+        kind: text,
+        x: 720,
+        y: 385,
+        width: 240,
+        height: 36,
+        text: "−180° … 180°",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-hypot,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 380,
+        height: 36,
+        text: "hypot(30px, 40px) → 50px",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-hypot-note,
+        kind: text,
+        x: 740,
+        y: 470,
+        width: 280,
+        height: 36,
+        text: "ထောင့်ဖြတ် အရှည်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board I — the rest of the math functions, grouped by colour.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "ကျန်တဲ့ math function တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-sqrt,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 240,
+        height: 36,
+        text: "sqrt(25) → 5",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-sqrt-note,
+        kind: text,
+        x: 640,
+        y: 245,
+        width: 300,
+        height: 36,
+        text: "unit မပါတဲ့ ဂဏန်းပဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-exp,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 200,
+        height: 36,
+        text: "exp(1) → e",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-log,
+        kind: text,
+        x: 640,
+        y: 300,
+        width: 240,
+        height: 36,
+        text: "log(16, 2) → 4",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-abs,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 300,
+        height: 36,
+        text: "abs(-20px) → 20px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-sign,
+        kind: text,
+        x: 640,
+        y: 380,
+        width: 240,
+        height: 36,
+        text: "sign(-3) → -1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-new,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 380,
+        height: 36,
+        text: "အသစ် · support စစ်ပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-round,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 360,
+        height: 36,
+        text: "round() · mod() · rem()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-const,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 360,
+        height: 36,
+        text: "pi · e · infinity · NaN",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board J — url() resolves from the stylesheet; data: URIs; attr().
+    - {
+        id: j-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Url နဲ့ attr",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: j-css,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 240,
+        height: 36,
+        text: "css/styles.css",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-url,
+        kind: text,
+        x: 620,
+        y: 245,
+        width: 300,
+        height: 36,
+        text: "url(img/leaf.png)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-ok,
+        kind: text,
+        x: 330,
+        y: 300,
+        width: 480,
+        height: 36,
+        text: "browser ရှာတာ → css/img/leaf.png",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: j-bad,
+        kind: text,
+        x: 330,
+        y: 355,
+        width: 400,
+        height: 36,
+        text: "img/leaf.png ကို မရှာ  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: j-data,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 400,
+        height: 36,
+        text: "data: URI → ဖိုင် မလို",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: j-attr,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 280,
+        height: 36,
+        text: "attr(data-price)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: j-attr-res,
+        kind: text,
+        x: 640,
+        y: 510,
+        width: 140,
+        height: 36,
+        text: "→ 1500",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: j-attr-note,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 300,
+        height: 36,
+        text: "content ထဲမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board K — the function families and the lessons that teach them; the quiz.
+    - {
+        id: k-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Function မိသားစုတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: k-t,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 460,
+        height: 36,
+        text: "rotate() · scale() · translate()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: k-t-l,
+        kind: text,
+        x: 900,
+        y: 230,
+        width: 140,
+        height: 36,
+        text: "lesson 14",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: k-g,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 280,
+        height: 36,
+        text: "linear-gradient()",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-g-l,
+        kind: text,
+        x: 900,
+        y: 280,
+        width: 140,
+        height: 36,
+        text: "lesson 32",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-s,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 420,
+        height: 36,
+        text: "circle() · polygon() · rect()",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: k-s-l,
+        kind: text,
+        x: 900,
+        y: 330,
+        width: 140,
+        height: 36,
+        text: "lesson 35",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: k-f,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 300,
+        height: 36,
+        text: "blur() · grayscale()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: k-f-l,
+        kind: text,
+        x: 900,
+        y: 380,
+        width: 140,
+        height: 36,
+        text: "lesson 36",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: k-e,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 360,
+        height: 36,
+        text: "cubic-bezier() · steps()",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: k-e-l,
+        kind: text,
+        x: 870,
+        y: 430,
+        width: 180,
+        height: 36,
+        text: "lesson 38 · 39",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # The question is drawn first; the answer only when spoken.
+    - {
+        id: k-q,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 140,
+        height: 36,
+        text: "sin( ? )",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-opts,
+        kind: text,
+        x: 480,
+        y: 525,
+        width: 280,
+        height: 36,
+        text: "45 · 10deg · pi ·",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-opt-bad,
+        kind: text,
+        x: 800,
+        y: 525,
+        width: 70,
+        height: 36,
+        text: "5em",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-bad-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 780,
+        y: 510,
+        width: 110,
+        height: 66,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-ans,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 380,
+        height: 36,
+        text: "5em → length ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4112
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: function-anatomy
+    chapter: "CSS function ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ တန်ဖိုးတွေကို custom property ထဲမှာ သိမ်းပြီး၊ var function နဲ့
+      ပြန်ဖတ်ခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-fn]] var လို function တွေ CSS မှာ အများကြီး ရှိပြီး၊ ဒီနေ့ အဲဒါတွေကို
+      ကြည့်ပါမယ်။ [[mark:draw-name]] function တစ်ခုက သူ့ နာမည်နဲ့ စပါတယ်။ [[mark:draw-args]] နာမည်ရဲ့
+      နောက်မှာ ကွင်းကို တန်းကပ် ရေးပြီး၊ ကွင်းထဲမှာ function ကို ပေးတဲ့ တန်ဖိုးတွေ ထည့်ပါတယ်။ အဲဒီ
+      တန်ဖိုးတွေကို argument လို့ ခေါ်ပါတယ်။ [[mark:draw-result]] CSS function ဆိုတာ တန်ဖိုး တစ်ခုကို
+      တွက်ပြီး ပြန်ပေးတဲ့ အရာပါ။ ဒီမှာဆိုရင် RGB က ဂဏန်း သုံးလုံးကနေ အရောင် တစ်ခု တွက်ပြီး၊ property ရဲ့
+      တန်ဖိုးအဖြစ် ပြန်ပေးပါတယ်။ [[mark:draw-space]] ကွင်းက နာမည်နဲ့ ကပ်နေရပါမယ်။ ကြားမှာ space
+      ခြားလိုက်ရင် browser က function လို့ မသိတော့လို့၊ declaration တစ်ခုလုံးကို ကျော်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: what is a function?"
+        url: "https://web.dev/learn/css/functions#what_is_a_function"
+      - title: "MDN — CSS value functions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Functions"
+      - title: "CSS Values and Units Module Level 4 — functional notations"
+        url: "https://drafts.csswg.org/css-values-4/#functional-notations"
+    actions:
+      - id: open-anatomy-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady
+      # sits on the preview mark at the end of the code tour, well over 40 s
+      # of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-fn
+        type: whiteboard.apply
+        at: { mark: draw-fn }
+        upsertIds: [a-fn]
+        drawMs: 1200
+      - id: draw-name
+        type: whiteboard.apply
+        at: { mark: draw-name }
+        upsertIds: [a-name-line, a-name-label]
+        drawMs: 1000
+      - id: draw-args
+        type: whiteboard.apply
+        at: { mark: draw-args }
+        upsertIds: [a-args-line, a-args-label]
+        drawMs: 1400
+      - id: draw-result
+        type: whiteboard.apply
+        at: { mark: draw-result }
+        upsertIds: [a-result]
+        drawMs: 1000
+      - id: draw-space
+        type: whiteboard.apply
+        at: { mark: draw-space }
+        upsertIds: [a-space-bad, a-space-note]
+        drawMs: 2000
+
+  - id: functions-met
+    narration: >
+      [[mark:open-met]] function တော်တော်များများကို သုံးဖူးပြီးသားပါ။ [[mark:draw-met-color]] အရောင်
+      lesson မှာ RGB၊ HSL၊ OKLCH၊ color mix၊ ပြီးတော့ lab နဲ့ color function တို့က အရောင်တွေကို
+      ထုတ်ပေးခဲ့ပါတယ်။ [[mark:draw-met-var]] ပြီးခဲ့တဲ့ lesson က var ကတော့ custom property ကို
+      ဖတ်ပေးပါတယ်။ [[mark:draw-met-selectors]] pseudo-class တချို့ကလည်း argument ယူပါတယ်။ is က သူ့
+      စာရင်းထဲက selector တစ်ခုခုနဲ့ ကိုက်တဲ့ element ကို ရွေးပြီး၊ not ကတော့ သူ့ argument နဲ့ မကိုက်တဲ့
+      element ကို ရွေးပါတယ်။ နှစ်ခုလုံးက argument တွေထဲက အလေးဆုံး selector ရဲ့ specificity ကို ယူပြီး၊
+      where ကတော့ အမြဲ သုည ဖြစ်ပါတယ်။ [[mark:draw-met-grid]] grid lesson တွေမှာ column အရွယ်ကို ပေးတဲ့
+      minmax နဲ့ fit-content ကို တွေ့ရပါမယ်။ [[mark:draw-met-today]] ဒီနေ့ အသစ်တွေကတော့ length၊ ဂဏန်းနဲ့
+      ထောင့်တွေကို တွက်ပေးတဲ့ math function တွေပါ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: functional selectors"
+        url: "https://web.dev/learn/css/functions#functional_selectors"
+      - title: "web.dev Learn CSS — Functions: color functions"
+        url: "https://web.dev/learn/css/functions#color_functions"
+      - title: "web.dev Learn CSS — Functions: custom properties and var()"
+        url: "https://web.dev/learn/css/functions#custom_properties_and_var"
+      - title: "MDN — :is()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:is"
+      - title: "MDN — :not()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:not"
+      - title: "MDN — var()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/var"
+    actions:
+      - id: open-met
+        type: whiteboard.apply
+        at: { mark: open-met }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-met-color
+        type: whiteboard.apply
+        at: { mark: draw-met-color }
+        upsertIds: [b-color, b-color-l]
+        drawMs: 1800
+      - id: draw-met-var
+        type: whiteboard.apply
+        at: { mark: draw-met-var }
+        upsertIds: [b-var, b-var-l]
+        drawMs: 1000
+      - id: draw-met-selectors
+        type: whiteboard.apply
+        at: { mark: draw-met-selectors }
+        upsertIds: [b-sel, b-sel-l, b-sel-note]
+        drawMs: 3000
+      - id: draw-met-grid
+        type: whiteboard.apply
+        at: { mark: draw-met-grid }
+        upsertIds: [b-grid, b-grid-l]
+        drawMs: 1400
+      - id: draw-met-today
+        type: whiteboard.apply
+        at: { mark: draw-met-today }
+        upsertIds: [b-today-l, b-today]
+        drawMs: 2000
+
+  - id: code-tour
+    narration: >
+      [[mark:close-met]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒီနေ့လည်း လက်ဖက်ရည်ဆိုင်ပါ။
+      [[mark:select-hero-p]] အပေါ်ဆုံးက ကြိုဆိုတဲ့ အပိုင်းမှာ စာပိုဒ် အတို တစ်ခု ရှိပါတယ်။
+      [[mark:select-story]] အောက်က ဆိုင်အကြောင်း အပိုင်းမှာ စာပိုဒ် အရှည် တစ်ခု ရှိပါတယ်။
+      [[mark:select-gauge]] ပြီးတော့ ဒီနေ့ အော်ဒါ ဆိုတဲ့ အပိုင်း အသစ် ပါပါတယ်။ track တစ်ခုထဲမှာ bar တစ်ခု
+      ရှိပြီး၊ အောက်မှာ ရေနွေးငွေ့ မျဉ်း ပါးပါးလေး ရှိပါတယ်။ base ဖိုင်က track ရဲ့ အလယ်မှာ အနီရောင်
+      အမှတ်လေး ဆွဲထားလို့၊ တစ်ဝက်က ဘယ်နားလဲ မြင်ရပါမယ်။ [[mark:select-drinks]] နောက်ဆုံးက သောက်စရာ menu
+      ဖြစ်ပြီး၊ သောက်စရာ တစ်ခုစီရဲ့ နာမည်က ခေါင်းစဉ် အဆင့် 3 ပါ။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က
+      အလွတ်ပါ။ ဒီနေ့ ရေးမယ့် အရွယ်အစား အများစုက function တစ်ခုခုကနေ လာပါမယ်။ [[mark:preview-opens]] dev
+      server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ အခုတော့ bar နဲ့ ရေနွေးငွေ့ မျဉ်းက အကျယ် အပြည့်
+      ယူထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions"
+        url: "https://web.dev/learn/css/functions"
+      - title: "MDN — <div>: the Content Division element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/div"
+    actions:
+      - id: close-met
+        type: whiteboard.apply
+        at: { mark: close-met }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-hero-p
+        type: editor.select
+        at: { mark: select-hero-p }
+        target: { file: index.html, text: "<p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>", occurrence: 1 }
+      - id: select-story
+        type: editor.select
+        at: { mark: select-story }
+        target: { file: index.html, text: '<p class="story" data-testid="story">', occurrence: 1 }
+      - id: select-gauge
+        type: editor.select
+        at: { mark: select-gauge }
+        target:
+          {
+            file: index.html,
+            text: "<div class=\"track\" data-testid=\"track\"><div class=\"bar\" data-testid=\"bar\"></div></div>\n        <p class=\"gauge-label\">ရေနွေးငွေ့</p>\n        <div class=\"steam\" data-testid=\"steam\"></div>",
+            occurrence: 1,
+          }
+      - id: select-drinks
+        type: editor.select
+        at: { mark: select-drinks }
+        target: { file: index.html, text: '<h3 class="name">လက်ဖက်ရည်</h3>', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "ပူပူနွေးနွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-gauge
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: gauge }
+        textContains: "ဒီနေ့ အော်ဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-gauge }
+
+  - id: math-board
+    chapter: "Calc နဲ့ unit ရောပြီး တွက်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-math]] CSS မှာ ဘာလို့ တွက်ဖို့ လိုတာလဲ။ box တစ်ခုရဲ့ အကျယ်ကို parent ရဲ့ 100 ရာခိုင်နှုန်းထဲက 64 pixel နှုတ်ပြီး ပေးချင်တယ် ဆိုပါစို့။ [[mark:draw-phone]] ဖုန်းမှာ parent က 368
+      pixel ကျယ်ရင်၊ box က 304 ဖြစ်ရပါမယ်။ [[mark:draw-wide]] screen ကျယ်ကျယ်မှာ parent က 800 pixel
+      ဆိုရင်တော့၊ box က 736 ဖြစ်ရပါမယ်။ [[mark:draw-legend]] 64 pixel က ပုံသေ ဖြစ်ပေမယ့်၊
+      ရာခိုင်နှုန်းကတော့ pixel ဘယ်လောက် ဖြစ်မလဲ CSS ရေးနေတုန်း မသိရလို့၊ ကိုယ်တိုင် ကြိုတွက်ထားလို့
+      မရပါဘူး။ [[mark:draw-render]] ဒါကြောင့် browser က page ကို နေရာချတဲ့အခါမှ တွက်ပြီး၊ parent ရဲ့ အကျယ်
+      ပြောင်းတိုင်းလည်း ပြန်တွက်ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: mathematical expressions"
+        url: "https://web.dev/learn/css/functions#mathematical_expressions"
+      - title: "CSS Values and Units Module Level 4 — mathematical expressions"
+        url: "https://drafts.csswg.org/css-values-4/#math"
+    actions:
+      - id: open-math
+        type: whiteboard.apply
+        at: { mark: open-math }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-phone
+        type: whiteboard.apply
+        at: { mark: draw-phone }
+        upsertIds: [c-phone-outer, c-phone-inner, c-phone-gap, c-phone-text]
+        drawMs: 2400
+      - id: draw-wide
+        type: whiteboard.apply
+        at: { mark: draw-wide }
+        upsertIds: [c-wide-outer, c-wide-inner, c-wide-gap, c-wide-text]
+        drawMs: 2400
+      - id: draw-legend
+        type: whiteboard.apply
+        at: { mark: draw-legend }
+        upsertIds: [c-leg-pct, c-leg-px]
+        drawMs: 1800
+      - id: draw-render
+        type: whiteboard.apply
+        at: { mark: draw-render }
+        upsertIds: [c-render, c-recalc]
+        drawMs: 2000
+
+  - id: calc-live
+    narration: >
+      [[mark:close-math]] ကြိုဆိုတဲ့ စာပိုဒ်မှာ စမ်းကြည့်ရအောင်။ [[mark:type-hero-bg]] အရင်ဆုံး ဘယ်လောက်
+      ကျယ်လဲ မြင်ရအောင်၊ အညိုဖျော့ဖျော့ နောက်ခံ ပေးပါမယ်။ [[mark:after-hero-bg]] နောက်ခံက ကြိုဆိုတဲ့
+      အပိုင်းရဲ့ အကျယ် အပြည့် ရောက်နေပါတယ်။ [[mark:type-hero-width]] အခု အကျယ်ကို calc နဲ့ ပေးပါမယ်။ calc
+      က ကွင်းထဲက ပေါင်းနှုတ် မြှောက်စားကို တွက်ပေးပါတယ်။ ဒီမှာတော့ အကျယ် အပြည့်ထဲက 64 pixel နှုတ်ပါတယ်။
+      [[mark:after-hero-width]] အခု နောက်ခံက ညာဘက်မှာ 64 pixel တိုသွားပါပြီ။
+      [[mark:select-hero-calc]] ဒီ calc ကို ကြည့်ပါ။ ရာခိုင်နှုန်းနဲ့ pixel ကို ရောတွက်ထားလို့၊ screen
+      ဘယ်လောက် ကျယ်ကျယ် နေရာလွတ်က 64 pixel ပဲ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: calc()"
+        url: "https://web.dev/learn/css/functions#calc"
+      - title: "MDN — calc()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/calc"
+    actions:
+      - id: close-math
+        type: whiteboard.apply
+        at: { mark: close-math }
+        open: false
+      - id: type-hero-bg
+        type: editor.type
+        at: { mark: type-hero-bg }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".hero p {\n  background: wheat;\n}\n"
+      - id: expect-hero-bg
+        type: expect.preview
+        at: { mark: after-hero-bg }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မနက်စာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hero-width
+        type: editor.type
+        at: { mark: type-hero-width }
+        cadence: natural
+        target: { file: styles.css, after: "  background: wheat;\n", occurrence: 1 }
+        text: "  width: calc(100% - 64px);\n"
+      - id: expect-hero-width
+        type: expect.preview
+        at: { mark: after-hero-width }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-hero-calc
+        type: editor.select
+        at: { mark: select-hero-calc }
+        target: { file: styles.css, text: "calc(100% - 64px)", occurrence: 1 }
+
+  - id: calc-spaces
+    narration: >
+      [[mark:type-about-p]] ဆိုင်အကြောင်း စာပိုဒ်ကိုလည်း နောက်ခံနဲ့ အကျယ် အလားတူ ပေးပါမယ်။ ဒီတစ်ခါတော့
+      ဘာဖြစ်မလဲ သိအောင်၊ အနုတ် လက္ခဏာရဲ့ ဘေးမှာ space မခြားဘဲ တမင် ရေးကြည့်ပါမယ်။ [[mark:after-about-p]]
+      နောက်ခံ ပေါ်လာပေမယ့်၊ စာပိုဒ်က အကျယ် အပြည့် အတိုင်းပဲ ရှိနေပါတယ်။ [[mark:select-about-calc]] ဒီ calc
+      ကို ကြည့်ပါ။ space မပါတော့ browser က အနုတ် 64 pixel ကို အနုတ် ဂဏန်း တစ်ခုလို ဖတ်ပါတယ်။ တန်ဖိုး
+      နှစ်ခု ကပ်နေပြီး ကြားမှာ နှုတ်တဲ့ လက္ခဏာ မရှိတော့လို့၊ browser က ဒီ declaration ကို ကျော်သွားပါတယ်။
+      [[mark:open-rules]] calc ရဲ့ စည်းကမ်းတွေကို ကြည့်ရအောင်။ [[mark:draw-rule-space]] အပေါင်းနဲ့
+      အနုတ်ရဲ့ ဘေးနှစ်ဘက်မှာ space အမြဲ လိုပါတယ်။ [[mark:draw-rule-times]] မြှောက်တဲ့အခါ အနည်းဆုံး တစ်ဘက်က
+      unit မပါတဲ့ ဂဏန်း ဖြစ်ရပါမယ်။ [[mark:draw-rule-divide]] စားတဲ့အခါတော့ ညာဘက်က unit မပါတဲ့ ဂဏန်း
+      ဖြစ်ရပါမယ်။ [[mark:draw-rule-nest]] ကွင်း ထပ်ထည့်ပြီး အပိုင်းတွေကို စုလို့ ရသလို၊ calc ထဲမှာ calc
+      ထပ်ထည့်လို့လည်း ရပါတယ်။ [[mark:draw-rule-var]] calc ထဲမှာ var လည်း သုံးလို့ ရပါတယ်။ ပြီးခဲ့တဲ့
+      lesson မှာ ဂဏန်းကို 1 pixel နဲ့ မြှောက်ခဲ့တာ ဒီနည်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: calc()"
+        url: "https://web.dev/learn/css/functions#calc"
+      - title: "MDN — calc(): notes (whitespace around + and -)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/calc#notes"
+      - title: "CSS Values and Units Module Level 4 — syntax of math functions"
+        url: "https://drafts.csswg.org/css-values-4/#calc-syntax"
+    actions:
+      - id: type-about-p
+        type: editor.type
+        at: { mark: type-about-p }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: calc(100% - 64px);\n}\n", occurrence: 1 }
+        text: "\n.about p {\n  background: wheat;\n  width: calc(100%-64px);\n}\n"
+      - id: expect-story-bg
+        type: expect.preview
+        at: { mark: after-about-p }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-about-calc
+        type: editor.select
+        at: { mark: select-about-calc }
+        target: { file: styles.css, text: "calc(100%-64px)", occurrence: 1 }
+      - id: open-rules
+        type: whiteboard.apply
+        at: { mark: open-rules }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-rule-space
+        type: whiteboard.apply
+        at: { mark: draw-rule-space }
+        upsertIds: [d-r1-ok, d-r1-bad, d-r1-note]
+        drawMs: 2200
+      - id: draw-rule-times
+        type: whiteboard.apply
+        at: { mark: draw-rule-times }
+        upsertIds: [d-r2, d-r2-note]
+        drawMs: 1600
+      - id: draw-rule-divide
+        type: whiteboard.apply
+        at: { mark: draw-rule-divide }
+        upsertIds: [d-r3, d-r3-note]
+        drawMs: 1600
+      - id: draw-rule-nest
+        type: whiteboard.apply
+        at: { mark: draw-rule-nest }
+        upsertIds: [d-r4, d-r4-note]
+        drawMs: 1800
+      - id: draw-rule-var
+        type: whiteboard.apply
+        at: { mark: draw-rule-var }
+        upsertIds: [d-r5, d-r5-note]
+        drawMs: 1800
+
+  - id: min-max
+    chapter: "Min နဲ့ max"
+    narration: >
+      [[mark:close-rules]] နောက်တစ်ခုက min နဲ့ max ပါ။ နှစ်ခုလုံးက တန်ဖိုး စာရင်း တစ်ခုကို ယူပြီး၊ အဲဒီထဲက
+      တစ်ခုကို ရွေးပေးပါတယ်။ [[mark:type-about-min]] ဆိုင်အကြောင်း အပိုင်းရဲ့ အကျယ်ကို min function နဲ့
+      ပေးပါမယ်။ argument နှစ်ခုက အကျယ် အပြည့်နဲ့ 320 pixel ပါ။ min က အငယ်ဆုံး argument ကို ပြန်ပေးပါတယ်။
+      [[mark:after-about-min]] ဆိုင်အကြောင်း အပိုင်း ကျဉ်းသွားပါပြီ။ 320 pixel က အကျယ် အပြည့် 400 လောက်ထက်
+      ငယ်လို့ပါ။ [[mark:select-about-min]] ဒီ min function ကို ကြည့်ပါ။ 320 pixel ထက် ကျဉ်းတဲ့
+      ဖုန်းမှာဆိုရင် အကျယ် အပြည့်က ပိုငယ်လို့ သူက နိုင်ပြီး၊ အပိုင်းက screen အပြင်ကို မထွက်ပါဘူး။ [[mark:open-minmax]] max နဲ့
+      ယှဉ်ကြည့်ရအောင်။ [[mark:draw-min-col]] parent က 400 pixel ဆိုရင် min က 320 ပေးပြီး၊ 200 pixel ဆိုရင်
+      200 ပေးပါတယ်။ 320 ထက် ဘယ်တော့မှ မကြီးလို့၊ min က အထက် ကန့်သတ်ချက် ဖြစ်ပါတယ်။ [[mark:draw-max-col]] max ကတော့ အကြီးဆုံးကို ရွေးပါတယ်။
+      argument တူတူနဲ့ parent 400 ဆိုရင် 400၊ parent 200 ဆိုရင် 320 ရပါတယ်။ 320 ထက် ဘယ်တော့မှ မငယ်လို့၊
+      max က အောက် ကန့်သတ်ချက် ဖြစ်ပါတယ်။ [[mark:draw-nocalc]] min၊ max နဲ့ တခြား math function
+      တွေထဲမှာတော့ calc မလိုဘဲ၊ တွက်ချက်မှုကို တိုက်ရိုက် ရေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: min() and max()"
+        url: "https://web.dev/learn/css/functions#min_and_max"
+      - title: "MDN — min()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/min"
+      - title: "MDN — max()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/max"
+      - title: "web.dev — min(), max(), and clamp()"
+        url: "https://web.dev/articles/min-max-clamp"
+    actions:
+      - id: close-rules
+        type: whiteboard.apply
+        at: { mark: close-rules }
+        open: false
+      - id: type-about-min
+        type: editor.type
+        at: { mark: type-about-min }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: calc(100%-64px);\n}\n", occurrence: 1 }
+        text: "\n.about {\n  width: min(100%, 320px);\n}\n"
+      - id: expect-about-min
+        type: expect.preview
+        at: { mark: after-about-min }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-about-min
+        type: editor.select
+        at: { mark: select-about-min }
+        target: { file: styles.css, text: "min(100%, 320px)", occurrence: 1 }
+      - id: open-minmax
+        type: whiteboard.apply
+        at: { mark: open-minmax }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-min-col
+        type: whiteboard.apply
+        at: { mark: draw-min-col }
+        upsertIds: [e-legend, e-min-code, e-min-a, e-min-b, e-min-note]
+        drawMs: 3200
+      - id: draw-max-col
+        type: whiteboard.apply
+        at: { mark: draw-max-col }
+        upsertIds: [e-max-code, e-max-a, e-max-b, e-max-note]
+        drawMs: 3000
+      - id: draw-nocalc
+        type: whiteboard.apply
+        at: { mark: draw-nocalc }
+        upsertIds: [e-nocalc]
+        drawMs: 1400
+
+  - id: clamp-live
+    chapter: "Clamp နဲ့ ကန့်သတ်ချက် နှစ်ခု"
+    narration: >
+      [[mark:close-minmax]] ကန့်သတ်ချက် နှစ်ခုလုံးကို တစ်ပြိုင်နက် လိုချင်ရင် clamp ကို သုံးပါတယ်။
+      [[mark:type-bar]] clamp က အငယ်ဆုံး၊ ဦးစားပေး၊ အကြီးဆုံး ဆိုတဲ့ တန်ဖိုး သုံးခု ယူပါတယ်။ bar ကို
+      track ရဲ့ တစ်ဝက် ကျယ်စေချင်ပေမယ့်၊ 120 pixel ထက် မနည်းစေဘဲ 180 ထက်လည်း မများစေချင်ပါဘူး။
+      [[mark:after-bar]] အခု track က 400 pixel လောက် ကျယ်လို့၊ တစ်ဝက်ဆိုရင် 200 ပါ။ အဲဒါက အကြီးဆုံးထက် ကြီးနေလို့ bar က 180 မှာ ရပ်ပြီး၊ အလယ်က အနီရောင် အမှတ်ကို မရောက်ပါဘူး။ [[mark:type-track-200]] အခု
+      track ကို 200 pixel ပဲ ကျယ်အောင် ပေးကြည့်ရအောင်။ [[mark:after-track-200]] 200 ရဲ့ တစ်ဝက်က 100 ပဲ
+      ရှိလို့ အငယ်ဆုံးက နိုင်ပြီး၊ bar က အလယ် အမှတ်ကို လွန်ပြီး 120 အထိ ရောက်သွားပါတယ်။
+      [[mark:type-track-320]] နောက်တစ်ခါ 320 pixel ပါ။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။
+      [[mark:after-track-320]] 320 ရဲ့ တစ်ဝက်က 160 ဖြစ်ပြီး၊ ကန့်သတ်ချက် နှစ်ခုရဲ့ ကြားထဲမှာ ရှိပါတယ်။
+      ဒါကြောင့် bar က အလယ် အမှတ်မှာ အတိအကျ ဆုံးပါတယ်။ [[mark:type-track-400]] အခု 400 pixel ပါ။
+      [[mark:after-track-400]] တစ်ဝက်က 200 ဖြစ်လို့၊ bar က 180 မှာ ပြန်ရပ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: clamp()"
+        url: "https://web.dev/learn/css/functions#clamp"
+      - title: "MDN — clamp()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clamp"
+    actions:
+      - id: close-minmax
+        type: whiteboard.apply
+        at: { mark: close-minmax }
+        open: false
+      - id: type-bar
+        type: editor.type
+        at: { mark: type-bar }
+        cadence: natural
+        target: { file: styles.css, after: "  width: min(100%, 320px);\n}\n", occurrence: 1 }
+        text: "\n.bar {\n  width: clamp(120px, 50%, 180px);\n}\n"
+      - id: expect-bar
+        type: expect.preview
+        at: { mark: after-bar }
+        timeoutMs: 4000
+        target: { by: testId, value: bar }
+        attribute: { name: class, value: bar }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-track-200
+        type: editor.type
+        at: { mark: type-track-200 }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  width: clamp(120px, 50%, 180px);\n}\n", occurrence: 1 }
+        text: "\n.track {\n  width: 200px;\n}\n"
+      - id: expect-track-200
+        type: expect.preview
+        at: { mark: after-track-200 }
+        timeoutMs: 4000
+        target: { by: testId, value: track }
+        attribute: { name: class, value: track }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-track-320
+        type: editor.type
+        at: { mark: type-track-320 }
+        cadence: natural
+        target: { file: styles.css, after: "  width: 200px;\n", occurrence: 1 }
+        text: "  width: 320px;\n"
+      - id: type-track-400
+        type: editor.type
+        at: { mark: type-track-400 }
+        cadence: natural
+        target: { file: styles.css, after: "  width: 320px;\n", occurrence: 1 }
+        text: "  width: 400px;\n"
+      - id: expect-track-400
+        type: expect.preview
+        at: { mark: after-track-400 }
+        timeoutMs: 4000
+        target: { by: testId, value: gauge }
+        textContains: "ရေနွေးငွေ့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: clamp-board
+    narration: >
+      [[mark:open-clamp]] ခုနက အခြေအနေ သုံးမျိုးကို ယှဉ်ကြည့်ရအောင်။ [[mark:draw-clamp-low]] track ရဲ့
+      တစ်ဝက်က 120 ထက် နည်းရင်၊ အငယ်ဆုံး တန်ဖိုးက bar ကို 120 မှာ ထိန်းထားပါတယ်။ [[mark:draw-clamp-mid]]
+      ကန့်သတ်ချက် နှစ်ခုကြားမှာဆိုရင် bar က track ရဲ့ တစ်ဝက်ပါ။ [[mark:draw-clamp-high]] 180 ထက် များရင်
+      အကြီးဆုံးက ထိန်းပါတယ်။ [[mark:draw-clamp-formula]] ဆိုတော့ clamp က max ထဲမှာ min ကို ထည့်ရေးထားတာနဲ့
+      အတူတူပါ။ min က တန်ဖိုးကို အကြီးဆုံးထက် မကြီးအောင်၊ max က အငယ်ဆုံးထက် မငယ်အောင် ထိန်းပေးပါတယ်။
+      [[mark:draw-clamp-font]] clamp ကို အသုံးများတဲ့ နေရာက window နဲ့အတူ ကြီးလိုက် သေးလိုက် ဖြစ်တဲ့
+      စာလုံးပါ။ lesson 10 မှာ vw နဲ့ ပေးတဲ့ စာလုံးကို ကန့်သတ်ရမယ်လို့ ပြောခဲ့တာကို clamp က တစ်ခါတည်း
+      လုပ်ပေးပါတယ်။ ဖတ်တဲ့သူရဲ့ စာလုံး setting ကိုလည်း လိုက်အောင်၊ အလယ် တန်ဖိုးမှာ rem အပိုင်း ထည့်ထားပါ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: clamp()"
+        url: "https://web.dev/learn/css/functions#clamp"
+      - title: "MDN — clamp(): equivalent to max(MIN, min(VAL, MAX))"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clamp"
+      - title: "web.dev — min(), max(), and clamp(): fluid typography"
+        url: "https://web.dev/articles/min-max-clamp"
+    actions:
+      - id: open-clamp
+        type: whiteboard.apply
+        at: { mark: open-clamp }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-clamp-low
+        type: whiteboard.apply
+        at: { mark: draw-clamp-low }
+        upsertIds: [f-low, f-low-note]
+        drawMs: 2000
+      - id: draw-clamp-mid
+        type: whiteboard.apply
+        at: { mark: draw-clamp-mid }
+        upsertIds: [f-mid, f-mid-note]
+        drawMs: 2000
+      - id: draw-clamp-high
+        type: whiteboard.apply
+        at: { mark: draw-clamp-high }
+        upsertIds: [f-high, f-high-note]
+        drawMs: 1600
+      - id: draw-clamp-formula
+        type: whiteboard.apply
+        at: { mark: draw-clamp-formula }
+        upsertIds: [f-formula]
+        drawMs: 1600
+      - id: draw-clamp-font
+        type: whiteboard.apply
+        at: { mark: draw-clamp-font }
+        upsertIds: [f-font, f-font-note]
+        drawMs: 2600
+
+  - id: trig-board
+    chapter: "Trigonometric function တွေ"
+    narration: >
+      [[mark:open-trig]] CSS မှာ ကျောင်းက သင်ခဲ့တဲ့ trigonometric function တွေလည်း ပါပါတယ်။ စက်ဝိုင်း
+      ပတ်လည်မှာ item တွေ စီတာလို၊ layout က ထောင့် တစ်ခုပေါ် မူတည်တဲ့အခါ အသုံးဝင်ပါတယ်။
+      [[mark:draw-circle]] ဒီ စက်ဝိုင်းရဲ့ အချင်းဝက်က 1 ဖြစ်ပြီး၊ သူ့ပေါ်က အမှတ်က အလယ်ကနေ 30 ဒီဂရီ
+      လှည့်ထားတဲ့ နေရာမှာ ရှိပါတယ်။ [[mark:draw-cos]] အဲဒီ ထောင့်ရဲ့ cos က အမှတ်ဟာ အလယ်ကနေ ညာဘက်ကို
+      ဘယ်လောက် ကွာလဲ ပြောပါတယ်။ [[mark:draw-sin]] sin ကတော့ အမှတ်ဟာ အလယ်ထက် ဘယ်လောက် မြင့်လဲ ပြောပါတယ်။
+      [[mark:draw-range]] နှစ်ခုလုံးက အနုတ် 1 နဲ့ 1 ကြားက unit မပါတဲ့ ဂဏန်းကို ပေးလို့၊ length တစ်ခုနဲ့
+      မြှောက်မှ အရွယ်အစား ရပါတယ်။ [[mark:draw-units]] ထောင့်ကို ဒီဂရီ၊ turn လို ထောင့် unit ဘာနဲ့ပဲ ရေးရေး
+      ရပါတယ်။ unit မပါတဲ့ ဂဏန်းဆိုရင်တော့ ဒီဂရီ မဟုတ်ဘဲ radian လို့ ယူပါတယ်။ 1 radian က 57 ဒီဂရီ လောက် ရှိပါတယ်။ [[mark:draw-tan]] tan ကတော့
+      sin ကို cos နဲ့ စားထားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: trigonometric functions"
+        url: "https://web.dev/learn/css/functions#trigonometric_functions"
+      - title: "web.dev Learn CSS — Functions: sin(), cos() and tan()"
+        url: "https://web.dev/learn/css/functions#sin_cos_and_tan"
+      - title: "MDN — sin()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/sin"
+      - title: "web.dev — Trigonometric functions in CSS"
+        url: "https://web.dev/articles/css-trig-functions"
+    actions:
+      - id: open-trig
+        type: whiteboard.apply
+        at: { mark: open-trig }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-circle
+        type: whiteboard.apply
+        at: { mark: draw-circle }
+        upsertIds: [g-circle, g-center, g-point, g-angle]
+        drawMs: 2400
+      - id: draw-cos
+        type: whiteboard.apply
+        at: { mark: draw-cos }
+        upsertIds: [g-cos, g-cos-label, g-r-cos]
+        drawMs: 1800
+      - id: draw-sin
+        type: whiteboard.apply
+        at: { mark: draw-sin }
+        upsertIds: [g-sin, g-sin-label, g-r-sin]
+        drawMs: 1800
+      - id: draw-range
+        type: whiteboard.apply
+        at: { mark: draw-range }
+        upsertIds: [g-r-range]
+        drawMs: 1400
+      - id: draw-units
+        type: whiteboard.apply
+        at: { mark: draw-units }
+        upsertIds: [g-r-deg, g-r-rad]
+        drawMs: 2200
+      - id: draw-tan
+        type: whiteboard.apply
+        at: { mark: draw-tan }
+        upsertIds: [g-r-tan]
+        drawMs: 1200
+
+  - id: steam-live
+    narration: >
+      [[mark:close-trig]] ရေနွေးငွေ့ မျဉ်းမှာ sin သုံးကြည့်ရအောင်။ [[mark:type-steam]] အကျယ်ကို 30
+      ဒီဂရီရဲ့ sin နဲ့ 200 pixel ကို မြှောက်ပြီး ပေးပါမယ်။ 30 ဒီဂရီရဲ့ sin က တစ်ဝက် ဖြစ်လို့၊ 200 ရဲ့
+      တစ်ဝက် ဖြစ်တဲ့ 100 pixel ရသင့်ပါတယ်။ [[mark:after-steam]] ဒီ sin က တစ်ဝက် ပေးလို့၊ ရေနွေးငွေ့ မျဉ်းက 100 pixel အထိ တိုသွားပါပြီ။ [[mark:type-steam-rad]] အခု အဲဒီ declaration ကိုပဲ ဒီဂရီ unit မပါဘဲ ထပ်ရေးပါမယ်။
+      ရေနွေးငွေ့ မျဉ်းကို ကြည့်ထားပါ။ [[mark:after-steam-rad]] မျဉ်း ပျောက်သွားပါပြီ။ unit မပါတဲ့ 30 က 30
+      radian ဖြစ်ပြီး၊ သူ့ sin က အနုတ် 1 နီးပါး ရှိပါတယ်။ အကျယ်က အနုတ် မဖြစ်နိုင်လို့ browser က သုည
+      ဖြစ်အောင် လုပ်လိုက်ပါတယ်။ [[mark:type-steam-90]] နောက်ဆုံး 90 ဒီဂရီပါ။ 90 ဒီဂရီရဲ့ sin က 1 အတိအကျ
+      ဖြစ်လို့၊ ရလဒ်က 200 pixel အကုန် ရပါမယ်။ [[mark:after-steam-90]] မျဉ်းက 200 pixel ရှည်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Functions: sin(), cos() and tan()"
+        url: "https://web.dev/learn/css/functions#sin_cos_and_tan"
+      - title: "MDN — sin(): a number is interpreted as radians"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/sin"
+      - title: "CSS Values and Units Module Level 4 — range checking (results are clamped)"
+        url: "https://drafts.csswg.org/css-values-4/#calc-range"
+    actions:
+      - id: close-trig
+        type: whiteboard.apply
+        at: { mark: close-trig }
+        open: false
+      - id: type-steam
+        type: editor.type
+        at: { mark: type-steam }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: 400px;\n}\n", occurrence: 1 }
+        text: "\n.steam {\n  width: calc(sin(30deg) * 200px);\n}\n"
+      - id: expect-steam
+        type: expect.preview
+        at: { mark: after-steam }
+        timeoutMs: 4000
+        target: { by: testId, value: steam }
+        attribute: { name: class, value: steam }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-steam-deg
+        type: editor.select
+        at: { mark: after-steam }
+        target: { file: styles.css, text: "sin(30deg)", occurrence: 1 }
+      - id: type-steam-rad
+        type: editor.type
+        at: { mark: type-steam-rad }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: calc(sin(30deg) * 200px);\n", occurrence: 1 }
+        text: "  width: calc(sin(30) * 200px);\n"
+      - id: select-steam-rad
+        type: editor.select
+        at: { mark: after-steam-rad }
+        target: { file: styles.css, text: "sin(30)", occurrence: 1 }
+      - id: type-steam-90
+        type: editor.type
+        at: { mark: type-steam-90 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: calc(sin(30) * 200px);\n", occurrence: 1 }
+        text: "  width: calc(sin(90deg) * 200px);\n"
+      - id: expect-steam-90
+        type: expect.preview
+        at: { mark: after-steam-90 }
+        timeoutMs: 4000
+        target: { by: testId, value: gauge }
+        textContains: "ရေနွေးငွေ့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: inverse-board
+    narration: >
+      [[mark:open-inverse]] ပြောင်းပြန် trigonometric function တွေလည်း ရှိပါတယ်။ [[mark:draw-asin]] asin၊
+      acos နဲ့ atan က ဂဏန်း တစ်ခုကို ယူပြီး ထောင့် တစ်ခု ပြန်ပေးပါတယ်။ တစ်ဝက်ရဲ့ asin က 30 ဒီဂရီပါ။
+      [[mark:draw-ranges]] asin နဲ့ atan က အနုတ် 90 ကနေ 90 ဒီဂရီကြား ထောင့်ကို ပေးပြီး၊ acos ကတော့ 0 ကနေ
+      180 ကြားကို ပေးပါတယ်။ [[mark:draw-atan2]] atan2 ကတော့ တန်ဖိုး နှစ်ခု ယူပါတယ်။ ဒေါင်လိုက် အကွာကို
+      အရင် ပေးပြီးမှ ဘေးတိုက် အကွာကို ပေးရပါတယ်။ အမှတ် တစ်ခုကနေ နောက်တစ်ခုဆီ ဦးတည်ရာကို အနုတ် 180 ကနေ 180
+      ဒီဂရီကြား ပြန်ပေးလို့၊ မြှား တစ်ခုကို တစ်ခုခုဘက် လှည့်ထားချင်တဲ့အခါ သုံးပါတယ်။ [[mark:draw-hypot]]
+      hypot က ဘေးနှစ်ဘက်ကနေ ထောင့်ဖြတ် မျဉ်းရဲ့ အရှည်ကို တွက်ပေးပါတယ်။ 30 pixel နဲ့ 40 pixel ဆိုရင် 50
+      pixel ရပြီး၊ ရလဒ်မှာ unit ပါနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: asin(), acos() and atan()"
+        url: "https://web.dev/learn/css/functions#asin_acos_and_atan"
+      - title: "web.dev Learn CSS — Functions: atan2()"
+        url: "https://web.dev/learn/css/functions#atan2"
+      - title: "web.dev Learn CSS — Functions: hypot()"
+        url: "https://web.dev/learn/css/functions#hypot"
+      - title: "MDN — acos(): returns an angle between 0deg and 180deg"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/acos"
+      - title: "MDN — atan2()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/atan2"
+    actions:
+      - id: open-inverse
+        type: whiteboard.apply
+        at: { mark: open-inverse }
+        open: true
+        clear: true
+        upsertIds: [h-title]
+      - id: draw-asin
+        type: whiteboard.apply
+        at: { mark: draw-asin }
+        upsertIds: [h-asin, h-asin-note]
+        drawMs: 1800
+      - id: draw-ranges
+        type: whiteboard.apply
+        at: { mark: draw-ranges }
+        upsertIds: [h-range1, h-range2]
+        drawMs: 2000
+      - id: draw-atan2
+        type: whiteboard.apply
+        at: { mark: draw-atan2 }
+        upsertIds: [h-atan2, h-atan2-range]
+        drawMs: 2000
+      - id: draw-hypot
+        type: whiteboard.apply
+        at: { mark: draw-hypot }
+        upsertIds: [h-hypot, h-hypot-note]
+        drawMs: 2000
+
+  - id: pow-live
+    chapter: "Pow နဲ့ ကျန်တဲ့ math function တွေ"
+    narration: >
+      [[mark:close-inverse]] အခု ထပ်ကိန်းပါ။ [[mark:type-h2]] pow က ဂဏန်း တစ်ခုကို သူ့ကိုယ်သူ အကြိမ်ကြိမ်
+      မြှောက်ပေးပါတယ်။ အဆင့် 2 ခေါင်းစဉ်တွေကို 1.25 ရဲ့ 3 ထပ်ကို 1 rem နဲ့ မြှောက်ပြီး ပေးပါမယ်။ pow ရဲ့
+      argument နှစ်ခုလုံးက unit မပါတဲ့ ဂဏန်း ဖြစ်ရလို့၊ unit က 1 rem နဲ့ မြှောက်မှ ရပါတယ်။
+      [[mark:after-h2]] အဆင့် 2 ခေါင်းစဉ် အားလုံး 31 pixel လောက်အထိ ကြီးလာပါပြီ။ [[mark:scroll-drinks]]
+      အခု သောက်စရာ menu ထဲက အဆင့် 3 ခေါင်းစဉ်တွေကို ကြည့်ရအောင်။ [[mark:type-h3]] အချိုး တူတူနဲ့ တစ်ဆင့်
+      နိမ့်ပြီး၊ 1.25 ရဲ့ 2 ထပ် ပေးပါမယ်။ အဆင့် တစ်ခုစီက သူ့အောက်က အဆင့်ရဲ့ 1.25 ဆ ဖြစ်လို့၊ အရွယ်အစားတွေ
+      အချိုးကျ နေပါတယ်။ [[mark:after-h3]] သောက်စရာ နာမည်တွေ 25 pixel ဖြစ်လာပါပြီ။ [[mark:select-pow]] ဒီ calc ကို ကြည့်ပါ။ rem နဲ့ မြှောက်ထားလို့၊ ခေါင်းစဉ် အရွယ် အားလုံးက ဖတ်တဲ့သူရဲ့ စာလုံး အရွယ် setting
+      ကို လိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: pow() and exp()"
+        url: "https://web.dev/learn/css/functions#pow_and_exp"
+      - title: "MDN — pow()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/pow"
+    actions:
+      - id: close-inverse
+        type: whiteboard.apply
+        at: { mark: close-inverse }
+        open: false
+      - id: type-h2
+        type: editor.type
+        at: { mark: type-h2 }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  width: calc(sin(90deg) * 200px);\n}\n", occurrence: 1 }
+        text: "\nh2 {\n  font-size: calc(pow(1.25, 3) * 1rem);\n}\n"
+      - id: expect-h2
+        type: expect.preview
+        at: { mark: after-h2 }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: scroll-drinks }
+        timeoutMs: 5000
+        top: 380
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-h3
+        type: editor.type
+        at: { mark: type-h3 }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  font-size: calc(pow(1.25, 3) * 1rem);\n}\n", occurrence: 1 }
+        text: "\nh3 {\n  font-size: calc(pow(1.25, 2) * 1rem);\n}\n"
+      - id: expect-h3
+        type: expect.preview
+        at: { mark: after-h3 }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-pow
+        type: editor.select
+        at: { mark: select-pow }
+        target: { file: styles.css, text: "calc(pow(1.25, 2) * 1rem)", occurrence: 1 }
+
+  - id: more-math-board
+    narration: >
+      [[mark:open-more-math]] CSS မှာ math function နောက်ထပ် တချို့ ရှိပါသေးတယ်။
+      [[mark:draw-sqrt]] sqrt က နှစ်ထပ်ကိန်းရင်းကို ပေးပါတယ်။ 25 ရဲ့ sqrt က 5 ပါ။ pow လိုပဲ unit မပါတဲ့
+      ဂဏန်းကိုပဲ ယူပါတယ်။ [[mark:draw-exp-log]] exp က e ဆိုတဲ့ ဂဏန်းကို ထပ်ကိန်း တင်ပေးပြီး၊ log က အဲဒီရဲ့
+      ပြောင်းပြန်ပါ။ base 2 နဲ့ဆိုရင် 16 ရဲ့ log က 4 ပါ။ [[mark:draw-abs-sign]] abs က အနုတ် လက္ခဏာကို
+      ဖယ်ပြီး unit ကိုတော့ ထားပါတယ်။ sign ကတော့ တန်ဖိုးရဲ့ လက္ခဏာအလိုက် အနုတ် 1၊ သုည ဒါမှမဟုတ် 1 ကို
+      ပေးလို့၊ တွက်ချက်မှုရဲ့ ဦးတည်ရာကို ပြောင်းဖို့ သုံးပါတယ်။ [[mark:draw-new]] ဒီ နှစ်ခုက အသစ်
+      ဖြစ်လို့၊ browser support ကို အရင် စစ်ကြည့်ပါ။ [[mark:draw-round]] round က တန်ဖိုးကို ကိုယ်ပေးတဲ့
+      ဂဏန်းရဲ့ အနီးဆုံး ဆတိုးကိန်းဆီ ညှိပေးပြီး၊ mod နဲ့ rem က စားလို့ ကျန်တဲ့ အကြွင်းကို ပေးပါတယ်။ ဒီ rem
+      က unit မဟုတ်ဘဲ function ပါ။ [[mark:draw-constants]] math function တွေက pi၊ e၊ infinity နဲ့ ဂဏန်း
+      မဟုတ်ဘူး ဆိုတဲ့ NaN လို ပုံသေ တန်ဖိုးတွေကိုလည်း လက်ခံပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions: exponential functions"
+        url: "https://web.dev/learn/css/functions#exponential_functions"
+      - title: "web.dev Learn CSS — Functions: sqrt() and log()"
+        url: "https://web.dev/learn/css/functions#sqrt"
+      - title: "web.dev Learn CSS — Functions: sign-related functions"
+        url: "https://web.dev/learn/css/functions#sign_related_functions"
+      - title: "MDN — round()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/round"
+      - title: "MDN — <calc-keyword> (pi, e, infinity, NaN)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/calc-keyword"
+    actions:
+      - id: open-more-math
+        type: whiteboard.apply
+        at: { mark: open-more-math }
+        open: true
+        clear: true
+        upsertIds: [i-title]
+      - id: draw-sqrt
+        type: whiteboard.apply
+        at: { mark: draw-sqrt }
+        upsertIds: [i-sqrt, i-sqrt-note]
+        drawMs: 1600
+      - id: draw-exp-log
+        type: whiteboard.apply
+        at: { mark: draw-exp-log }
+        upsertIds: [i-exp, i-log]
+        drawMs: 1600
+      - id: draw-abs-sign
+        type: whiteboard.apply
+        at: { mark: draw-abs-sign }
+        upsertIds: [i-abs, i-sign]
+        drawMs: 2000
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [i-new]
+        drawMs: 1000
+      - id: draw-round
+        type: whiteboard.apply
+        at: { mark: draw-round }
+        upsertIds: [i-round]
+        drawMs: 1200
+      - id: draw-constants
+        type: whiteboard.apply
+        at: { mark: draw-constants }
+        upsertIds: [i-const]
+        drawMs: 1200
+
+  - id: url-attr
+    chapter: "Url နဲ့ attr"
+    narration: >
+      [[mark:open-url]] ဂဏန်း မဟုတ်တာကို ပြန်ပေးတဲ့ function နှစ်ခုလည်း ရှိပါသေးတယ်။ [[mark:draw-url]] url
+      က ပုံ၊ font လို ဖိုင် တစ်ခုကို ညွှန်ပါတယ်။ path က relative ဖြစ်ရင်၊ page ရှိတဲ့ နေရာကနေ မဟုတ်ဘဲ
+      stylesheet ရှိတဲ့ နေရာကနေ စရှာပါတယ်။ [[mark:draw-url-ok]] ဒါကြောင့် css folder ထဲက stylesheet က img
+      folder ထဲက ပုံကို တောင်းရင်၊ browser က css folder ရဲ့ အထဲမှာ ရှာပါတယ်။ ပုံက အပြင်က img folder ထဲမှာ ရှိနေရင် ရှာမတွေ့လို့၊ error မပြဘဲ ပုံ မပေါ်လာရုံပါပဲ။ [[mark:draw-url-data]] url
+      ထဲမှာ ဖိုင်ရဲ့ data ကိုယ်တိုင်ကိုလည်း data URI အနေနဲ့ ထည့်လို့ ရပြီး၊ အဲဒီအခါ ဖိုင် သီးသန့် မလိုတော့ပါဘူး။ [[mark:draw-attr]] attr ကတော့ element ရဲ့ HTML attribute ကို
+      ဖတ်ပါတယ်။ စာသား ထည့်ပေးတဲ့ content property ထဲမှာဆိုရင် browser အားလုံးမှာ ရပြီး၊ lesson 26 မှာ
+      သုံးပါမယ်။ တခြား property တွေမှာတော့ browser တိုင်းမှာ မရသေးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Functions: functions that return a value"
+        url: "https://web.dev/learn/css/functions#functions_that_return_a_value"
+      - title: "MDN — url()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/url_value"
+      - title: "MDN — attr()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/attr"
+    actions:
+      - id: open-url
+        type: whiteboard.apply
+        at: { mark: open-url }
+        clear: true
+        upsertIds: [j-title]
+      - id: draw-url
+        type: whiteboard.apply
+        at: { mark: draw-url }
+        upsertIds: [j-css, j-url]
+        drawMs: 1800
+      - id: draw-url-ok
+        type: whiteboard.apply
+        at: { mark: draw-url-ok }
+        upsertIds: [j-ok, j-bad]
+        drawMs: 2000
+      - id: draw-url-data
+        type: whiteboard.apply
+        at: { mark: draw-url-data }
+        upsertIds: [j-data]
+        drawMs: 1200
+      - id: draw-attr
+        type: whiteboard.apply
+        at: { mark: draw-attr }
+        upsertIds: [j-attr, j-attr-res, j-attr-note]
+        drawMs: 2000
+
+  - id: families-board
+    chapter: "Function မိသားစုတွေ"
+    narration: >
+      [[mark:open-families]] function တွေ အများကြီး ကျန်ပါသေးတယ်။ မိသားစု တစ်ခုစီကို သူ့ lesson နဲ့သူ
+      သင်ပါမယ်။ [[mark:draw-fam-transform]] rotate၊ scale၊ translate က element ကို လှည့်တာ၊ ချဲ့ချုံ့တာ၊ ရွှေ့တာ လုပ်ပြီး၊ lesson 14 မှာပါ။ [[mark:draw-fam-gradient]] linear gradient က အရောင် ကူးသွားတဲ့
+      နောက်ခံကို ဆွဲပြီး lesson 32 မှာပါ။ [[mark:draw-fam-shape]] circle၊ polygon နဲ့ rect က element ကို
+      ဖြတ်ယူမယ့် ပုံသဏ္ဌာန်တွေကို ပေးပြီး၊ lesson 35 မှာပါ။ [[mark:draw-fam-filter]] blur နဲ့
+      grayscale လို filter တွေက lesson 36 မှာပါ။ [[mark:draw-fam-easing]] animation ရဲ့ အမြန်နှုန်းကို
+      ထိန်းတဲ့ function တွေကတော့ lesson 38 နဲ့ 39 မှာပါ။ [[mark:draw-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။
+      45၊ 10 ဒီဂရီ၊ pi နဲ့ 5 em ထဲက ဘယ်ဟာတွေကို sin ထဲ ထည့်လို့ ရမလဲ။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] 5 em ကလွဲရင်
+      အကုန် ရပါတယ်။ 45 က radian ဖြစ်ပြီး pi က ဂဏန်းပါ။ 5 em ကတော့ ထောင့် မဟုတ်ဘဲ length ဖြစ်လို့ မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Functions: shapes"
+        url: "https://web.dev/learn/css/functions#shapes"
+      - title: "web.dev Learn CSS — Functions: transforms"
+        url: "https://web.dev/learn/css/functions#transforms"
+      - title: "web.dev Learn CSS — Functions: animation functions, gradients and filters"
+        url: "https://web.dev/learn/css/functions#animation_functions_gradients_and_filters"
+      - title: "MDN — <basic-shape> (includes rect())"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape"
+      - title: "web.dev Learn CSS — Functions: check your understanding"
+        url: "https://web.dev/learn/css/functions#check_your_understanding"
+    actions:
+      - id: open-families
+        type: whiteboard.apply
+        at: { mark: open-families }
+        clear: true
+        upsertIds: [k-title]
+      - id: draw-fam-transform
+        type: whiteboard.apply
+        at: { mark: draw-fam-transform }
+        upsertIds: [k-t, k-t-l]
+        drawMs: 1600
+      - id: draw-fam-gradient
+        type: whiteboard.apply
+        at: { mark: draw-fam-gradient }
+        upsertIds: [k-g, k-g-l]
+        drawMs: 1400
+      - id: draw-fam-shape
+        type: whiteboard.apply
+        at: { mark: draw-fam-shape }
+        upsertIds: [k-s, k-s-l]
+        drawMs: 1600
+      - id: draw-fam-filter
+        type: whiteboard.apply
+        at: { mark: draw-fam-filter }
+        upsertIds: [k-f, k-f-l]
+        drawMs: 1400
+      - id: draw-fam-easing
+        type: whiteboard.apply
+        at: { mark: draw-fam-easing }
+        upsertIds: [k-e, k-e-l]
+        drawMs: 1600
+      - id: draw-quiz
+        type: whiteboard.apply
+        at: { mark: draw-quiz }
+        upsertIds: [k-q, k-opts, k-opt-bad]
+        drawMs: 1600
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [k-bad-circle, k-ans]
+        drawMs: 1600
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ CSS function က ကွင်းထဲက argument တွေကို ယူပြီး တန်ဖိုး တစ်ခု
+      ပြန်ပေးပါတယ်။ calc က unit မတူတဲ့ တန်ဖိုးတွေကို ရောတွက်ပြီး၊ အပေါင်း အနုတ် ဘေးမှာ space လိုပါတယ်။ min
+      က အထက် ကန့်သတ်ချက်၊ max က အောက် ကန့်သတ်ချက်၊ clamp က နှစ်ခုလုံး ပေးပါတယ်။ trigonometric function နဲ့
+      pow က ထောင့်နဲ့ ဂဏန်းကနေ အရွယ်အစားကို တွက်ပေးပါတယ်။ [[mark:next-lesson]] ဒါနဲ့ course ရဲ့ တန်ဖိုးတွေ
+      အကြောင်း အပိုင်း ပြီးပါပြီ။ နောက် lesson မှာတော့ layout ကို စပြီး၊ CSS က box တွေကို page ပေါ်မှာ
+      နည်း အမျိုးမျိုးနဲ့ နေရာချပုံကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Functions"
+        url: "https://web.dev/learn/css/functions"
+      - title: "MDN — CSS value functions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Functions"
+      - title: "web.dev Learn CSS — Layout (next lesson)"
+        url: "https://web.dev/learn/css/layout"
+    actions:
+      - id: close-families
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".hero p {\n  background: wheat;\n  width: calc(100% - 64px);\n}\n\n.about p {\n  background: wheat;\n  width: calc(100%-64px);\n}\n\n.about {\n  width: min(100%, 320px);\n}\n\n.bar {\n  width: clamp(120px, 50%, 180px);\n}\n\n.track {\n  width: 200px;\n  width: 320px;\n  width: 400px;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".steam {\n  width: calc(sin(30deg) * 200px);\n  width: calc(sin(30) * 200px);\n  width: calc(sin(90deg) * 200px);\n}\n\nh2 {\n  font-size: calc(pow(1.25, 3) * 1rem);\n}\n\nh3 {\n  font-size: calc(pow(1.25, 2) * 1rem);\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
