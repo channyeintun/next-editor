@@ -1,0 +1,1216 @@
+# SRE from zero, lesson 2: what SRE is (Burmese concept lesson; nothing runs).
+#
+# Narration is Chan's approved voice script
+# docs/sre-course/voice-scripts/sre-02-what-sre-is.md, byte for byte: each
+# ⟪…⟫ marker became a [[mark:…]] at the same place. Extra marks sit only at
+# existing sentence ends: l02-*-b marks advance to a pacing page (lNN_pMMb, same
+# kit), l02-b1-alert/-git/-mdy, l02-b2-users and l02-b3-notice/-tools/-learn/
+# -build split a board step so each piece lands as the narration names it,
+# l02-ask times the recap question's pause, and l02-b1-afterfire / l02-b3-hub
+# only split a long dialog.
+#
+# The arc: a fee-config typo charges users ten times the fee for 20 minutes
+# (cover); Ma Su's inbox sorts what users felt into down, slow and wrong; how
+# reliable is enough; board B1 shrinks the incident three ways (how long, how
+# often, how wide); hand fix vs engineering fix; board B2, roads not walls;
+# board B3 walks the incident round the Padauk reliability loop; this week;
+# recap on notes.md.
+#
+# Board colours (course colour jobs): #1e1e1e ink paints white; blue = the
+# thing named (developers, users, stations); green = healthy or done;
+# red = failure; orange = the tools note; violet = flow and rollout order.
+# Board B3 re-shows lesson 1's loop in lesson 1's colours (violet ring and
+# arrows, blue stations, green people in the hub), compressed to the left so
+# the tools note fits beside သတိထားမိ. Station boxes are filled #ffffff, which
+# inverts to the canvas colour and hides the ring line behind their labels.
+#
+# Deck pages live in deck "Next Editor · SRE 1 · Why SRE"; the deckUrl is a
+# placeholder until Chan publishes the deck (the Director's unreachable-deck
+# warning is expected until then). Page text: sre-course/work/pages/sre-02-what-sre-is.json.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-02-what-sre-is.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-02-what-sre-is.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-02-what-sre-is
+  title: "SRE from zero 2: SRE ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SRE ဆိုတာ ဘာလဲ
+
+        - ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ — user ခံစားရတဲ့ ပြဿနာ သုံးမျိုး
+        - လုံလောက်တဲ့ reliability — 100% မဟုတ်၊ ဒီအသုံးအတွက် လိုသလောက်
+        - incident ရဲ့ impact — ဘယ်လောက်ကြာ · ဘယ်နှခါ · ဘယ်လောက်ကျယ်
+        - blast radius — မှားရင် ထိခိုက်မယ့် နယ်ပယ်
+        - reliability loop — သဘောတူ → သတိထားမိ → တုံ့ပြန် → သင်ယူ → တည်ဆောက်
+
+        မေးခွန်း: bug တစ်ခုက user 5% ကို 2 နာရီ ထိခိုက်ခဲ့တယ်။ နောက်တစ်ခါ ပိုတို၊ ပိုနည်း၊ ပိုသေးအောင် တစ်နည်းစီ ဘာလုပ်မလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SRE ဆိုတာ ဘာလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · lesson 2</p>
+              <h1>SRE ဆိုတာ ဘာလဲ</h1>
+              <p class="hook">ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ</p>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          line-height: 1.6;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0;
+          color: #80868b;
+        }
+
+        .hook {
+          margin: 0;
+          color: #0fb5a3;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l02-p01
+      contentType: google
+      name: "Cover: 20 minutes of 10× fees"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p01
+    - id: l02-p01b
+      contentType: google
+      name: "Cover: what do we fix first"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p01b
+    - id: l02-p02
+      contentType: google
+      name: "What Ma Su's inbox said"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p02
+    - id: l02-p02b
+      contentType: google
+      name: "Measure what users feel"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p02b
+    - id: l02-p03
+      contentType: google
+      name: "How reliable is enough?"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p03
+    - id: l02-p03b
+      contentType: google
+      name: "SRE: practice, engineer, team"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p03b
+    - id: l02-p04
+      contentType: google
+      name: "Hand fix vs engineering fix"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p04
+    - id: l02-p04b
+      contentType: google
+      name: "Automation pays twice"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p04b
+    - id: l02-p05
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l02_p05
+  whiteboardAssets:
+    # ---- Board B1 step 1: how long (P5 bars; 700 px = 20 minutes) --------
+    - {
+        id: l02-b1-long-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "ဘယ်လောက် ကြာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l02-b1-long-bar,
+        kind: rectangle,
+        x: 300,
+        y: 250,
+        width: 700,
+        height: 56,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-long-label,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 150,
+        height: 35,
+        text: "မိနစ် 20",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-short-bar,
+        kind: rectangle,
+        x: 300,
+        y: 420,
+        width: 105,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-short-label,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 400,
+        height: 35,
+        text: "3 မိနစ်: ဝန်ဆောင်ခ alert",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B1 step 2: how often (many failures, a change, few) -------
+    - {
+        id: l02-b1-often-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "ဘယ်နှခါ ဖြစ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l02-b1-dot-1,
+        kind: ellipse,
+        x: 300,
+        y: 262,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-2,
+        kind: ellipse,
+        x: 374,
+        y: 248,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-3,
+        kind: ellipse,
+        x: 450,
+        y: 272,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-4,
+        kind: ellipse,
+        x: 318,
+        y: 336,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-5,
+        kind: ellipse,
+        x: 400,
+        y: 320,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-6,
+        kind: ellipse,
+        x: 480,
+        y: 348,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-7,
+        kind: ellipse,
+        x: 350,
+        y: 404,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-dot-8,
+        kind: ellipse,
+        x: 436,
+        y: 410,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-often-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 320,
+        width: 110,
+        height: 44,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b1-few-1,
+        kind: ellipse,
+        x: 720,
+        y: 300,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-few-2,
+        kind: ellipse,
+        x: 796,
+        y: 352,
+        width: 36,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b1-often-label,
+        kind: text,
+        x: 520,
+        y: 470,
+        width: 400,
+        height: 35,
+        text: "config ကို Git ထဲ + check",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B1 step 3: how wide (Yangon first, Mandalay stays healthy) --
+    - {
+        id: l02-b1-wide-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 320,
+        height: 45,
+        text: "ဘယ်လောက် ကျယ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l02-b1-ygn-box,
+        kind: rectangle,
+        x: 300,
+        y: 260,
+        width: 260,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l02-b1-ygn-label,
+        kind: text,
+        x: 322,
+        y: 297,
+        width: 130,
+        height: 35,
+        text: "ရန်ကုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-first-label,
+        kind: text,
+        x: 300,
+        y: 392,
+        width: 210,
+        height: 35,
+        text: "ရန်ကုန် အရင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-wide-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 295,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b1-mdy-box,
+        kind: rectangle,
+        x: 710,
+        y: 260,
+        width: 260,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-mdy-label,
+        kind: text,
+        x: 732,
+        y: 297,
+        width: 130,
+        height: 35,
+        text: "မန္တလေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: roads, not walls (P6 lanes) ---------------------------
+    - {
+        id: l02-b2-dev1-box,
+        kind: rectangle,
+        x: 260,
+        y: 210,
+        width: 170,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l02-b2-dev1-label,
+        kind: text,
+        x: 276,
+        y: 228,
+        width: 145,
+        height: 35,
+        text: "developer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 445,
+        y: 225,
+        width: 70,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b2-wall,
+        kind: rectangle,
+        x: 530,
+        y: 190,
+        width: 34,
+        height: 110,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l02-b2-wall-label,
+        kind: text,
+        x: 580,
+        y: 228,
+        width: 180,
+        height: 35,
+        text: "SRE: မရဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-dev2-box,
+        kind: rectangle,
+        x: 260,
+        y: 430,
+        width: 170,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l02-b2-dev2-label,
+        kind: text,
+        x: 276,
+        y: 448,
+        width: 145,
+        height: 35,
+        text: "developer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 445,
+        y: 445,
+        width: 60,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b2-road-box,
+        kind: rectangle,
+        x: 515,
+        y: 410,
+        width: 260,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    # Two stacked one-line texts, not one "\n" label: the overflow rule counts a
+    # "\n" label as one line, and that box would run under the users arrow.
+    - {
+        id: l02-b2-road-label-1,
+        kind: text,
+        x: 530,
+        y: 430,
+        width: 235,
+        height: 35,
+        text: "ဘေးကင်းတဲ့ လမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-road-label-2,
+        kind: text,
+        x: 530,
+        y: 465,
+        width: 190,
+        height: 35,
+        text: "ရန်ကုန် အရင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-arrow3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 790,
+        y: 445,
+        width: 50,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b2-users-box,
+        kind: rectangle,
+        x: 855,
+        y: 430,
+        width: 170,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l02-b2-users-label,
+        kind: text,
+        x: 871,
+        y: 448,
+        width: 135,
+        height: 35,
+        text: "user တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # ---- Board B3: the Padauk reliability loop (P3 ring, clockwise) ------
+    - {
+        id: l02-b3-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 470,
+        height: 45,
+        text: "Padauk reliability loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l02-b3-ring,
+        kind: ellipse,
+        x: 322,
+        y: 250,
+        width: 330,
+        height: 360,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b3-arrow-top,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 575,
+        y: 280,
+        width: 65,
+        height: 35,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b3-arrow-side,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 627,
+        y: 440,
+        width: 35,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b3-agree-box,
+        kind: rectangle,
+        x: 407,
+        y: 222,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b3-agree-label,
+        kind: text,
+        x: 421,
+        y: 232,
+        width: 110,
+        height: 35,
+        text: "သဘောတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-notice-box,
+        kind: rectangle,
+        x: 564,
+        y: 346,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b3-notice-label,
+        kind: text,
+        x: 578,
+        y: 356,
+        width: 132,
+        height: 35,
+        text: "သတိထားမိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-respond-box,
+        kind: rectangle,
+        x: 504,
+        y: 548,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b3-respond-label,
+        kind: text,
+        x: 518,
+        y: 558,
+        width: 132,
+        height: 35,
+        text: "တုံ့ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-learn-box,
+        kind: rectangle,
+        x: 310,
+        y: 548,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b3-learn-label,
+        kind: text,
+        x: 324,
+        y: 558,
+        width: 100,
+        height: 35,
+        text: "သင်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-build-box,
+        kind: rectangle,
+        x: 250,
+        y: 346,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b3-build-label,
+        kind: text,
+        x: 264,
+        y: 356,
+        width: 132,
+        height: 35,
+        text: "တည်ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-doll-head,
+        kind: ellipse,
+        x: 465,
+        y: 395,
+        width: 44,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b3-doll-body,
+        kind: ellipse,
+        x: 450,
+        y: 432,
+        width: 74,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b3-doll-label,
+        kind: text,
+        x: 450,
+        y: 505,
+        width: 90,
+        height: 35,
+        text: "လူတွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-check-agree,
+        kind: freedraw,
+        stroke: check,
+        x: 357,
+        y: 228,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b3-check-notice,
+        kind: freedraw,
+        stroke: check,
+        x: 680,
+        y: 298,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    # The tools note is two stacked one-line texts: the overflow rule counts a
+    # "\n" label as one line, and a 35-character box would leave the canvas.
+    - {
+        id: l02-b3-tools-1,
+        kind: text,
+        x: 740,
+        y: 352,
+        width: 358,
+        height: 35,
+        text: "SLO · alert · dashboard",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-tools-2,
+        kind: text,
+        x: 740,
+        y: 388,
+        width: 175,
+        height: 35,
+        text: "log · trace",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b3-check-respond,
+        kind: freedraw,
+        stroke: check,
+        x: 674,
+        y: 554,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b3-check-learn,
+        kind: freedraw,
+        stroke: check,
+        x: 258,
+        y: 554,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b3-check-build,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 296,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio swaps in the Burmese voice (AthanLab or VoxCPM2) in the render
+  # console; scripts keep pinning a built-in profile.
+  voiceProfile: pocket-alba-v1
+  seed: 2602
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: မိနစ် 20 ကြာ ဝန်ဆောင်ခ 10 ဆ
+    narration: >
+      [[mark:l02-cover]] ပြီးခဲ့တဲ့ lesson မှာ Padauk က ဖြတ်လမ်း အကြွေး စာရင်း ရေးခဲ့ပြီး၊ မသီရိကလည်း
+      Top-up အလုပ်ဘေးမှာ reliability ကိုပါ ကြည့်ပေးဖို့ တာဝန်ယူခဲ့ပါတယ်။ ညတစ်ညမှာတော့ engineer
+      တစ်ယောက်က code မပြင်ဘဲ ဝန်ဆောင်ခ နှုန်းတွေကို ပြောင်းလို့ရတဲ့ config ကို ပြင်ရင်း သုည တစ်လုံး
+      ပိုရိုက်မိသွားပါတယ်။ အဲဒီ config က ဘယ်သူမှ မစစ်ဘဲ ရန်ကုန်ရော မန္တလေးပါ တစ်ခါတည်း ရောက်သွားတော့၊
+      မိနစ် 20 လုံးလုံး user တွေ ဝန်ဆောင်ခ 10 ဆ ပေးခဲ့ရပါတယ်။ [[mark:l02-cover-b]] လူအများစုက ဘယ်သူ
+      မှားတာလဲလို့ အရင် မေးကြပေမဲ့၊ ဒီ lesson မှာတော့ ဘာကို အရင်ဆုံး ပြင်မလဲ မေးပါမယ်။ အဲဒီ အဖြေကနေ
+      Site Reliability Engineering၊ အတိုကောက် SRE ဆိုတာ ဘာလဲ နားလည်လာပါလိမ့်မယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+    actions:
+      # -1750, not the skeleton's -1900: a pull-back past 1780 ms delays the first
+      # dialog beyond the 2000 ms opening handle the registry test pins.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-cover,
+          type: slide.show,
+          at: { mark: l02-cover, offsetMs: -1450 },
+          slideId: l02-p01,
+        }
+      - { id: show-cover-b, type: slide.show, at: { mark: l02-cover-b }, slideId: l02-p01b }
+
+  - id: inbox
+    chapter: user ခံစားရတဲ့ reliability
+    narration: >
+      [[mark:l02-inbox]] ပြဿနာကို ပထမဆုံး သိတာက engineer တွေ မဟုတ်ဘဲ customer support ကို ဦးဆောင်တဲ့
+      မစုပါ။ မစုက ဒီလ ရောက်လာတဲ့ complaint တွေကို သုံးစု ခွဲလိုက်ပါတယ်။ top-up မဝင်တာက ပျက်နေတာ၊
+      စက္ကန့် 40 စောင့်ရတာက နှေးနေတာ၊ ဝန်ဆောင်ခ 10 ဆ ပေးလိုက်ရတာကတော့ မှားနေတာပါ။ [[mark:l02-inbox-b]]
+      ဝန်ဆောင်ခ မှားနေတဲ့ အချိန်မှာတောင် server တွေကတော့ config အတိုင်း ကောင်းကောင်း
+      အလုပ်လုပ်နေခဲ့ပါတယ်။ ဒါကြောင့် reliability ကို server တွေဘက်ကနေ မတိုင်းဘဲ user တွေ ခံစားရတာနဲ့
+      တိုင်းရပါတယ်။ ဒီလို ညမျိုးမှာ feature အသစ်တွေကို ဘယ်သူမှ ဂရုမစိုက်ပါဘူး၊ ဒါကြောင့် reliability က
+      အရေးအကြီးဆုံး feature ဖြစ်နေတတ်ပါတယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+      - title: "Prodverbs"
+        url: "https://sre.google/prodverbs/"
+    actions:
+      - { id: show-inbox, type: slide.show, at: { mark: l02-inbox }, slideId: l02-p02 }
+      - { id: show-inbox-b, type: slide.show, at: { mark: l02-inbox-b }, slideId: l02-p02b }
+
+  - id: enough
+    narration: >
+      [[mark:l02-enough]] နောက်နေ့မှာ product manager မနှင်းက အရာအားလုံးကို 100 ရာခိုင်နှုန်း
+      စိတ်ချရအောင် လုပ်ရမှာလားလို့ မေးပါတယ်။ မသီရိကတော့ ကြော်ငြာပုံ တစ်မိနစ် ပျက်လည်း ရပေမဲ့ wallet
+      balance က တစ်မိနစ်တောင် မှားလို့ မရဘူး၊ ဒါကြောင့် ကြော်ငြာပုံကို နည်းနည်း ကာကွယ်ရုံနဲ့ ရပြီး
+      balance ကိုတော့ တကယ် အားစိုက်ရမယ်လို့ ဖြေပါတယ်။ ပစ်မှတ်က 100 ရာခိုင်နှုန်း မဟုတ်ဘဲ ဒီအသုံးအတွက်
+      လုံလောက်တဲ့ reliability ပါ။ [[mark:l02-enough-b]] SRE ဆိုတာ ဒီလို ချိန်ဆတဲ့ အလုပ်နယ်ပယ်ကိုရော၊
+      လုပ်တဲ့ engineer ကိုရော၊ အဖွဲ့ကိုရော ဆိုလိုနိုင်ပါတယ်။ feature deadline တွေကြားမှာ reliability က
+      နောက်ကျ ကျန်တတ်လို့ အလုပ် စီစဉ်တဲ့အခါ သူ့ဘက်က အမြဲ ပြောပေးမယ့်သူ လိုပါတယ်။ ဒါပေမဲ့ SRE က 100
+      ရာခိုင်နှုန်းကို မလိုက်ဘဲ ဘယ်လောက်ဆို လုံလောက်လဲ အဖွဲ့တိုင်း စဉ်းစားတတ်တဲ့ ယဉ်ကျေးမှုကို
+      သင်ပေးပါတယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+      - title: "Workbook: How SRE Relates to DevOps"
+        url: "https://sre.google/workbook/how-sre-relates/"
+    actions:
+      - { id: show-enough, type: slide.show, at: { mark: l02-enough }, slideId: l02-p03 }
+      - { id: show-enough-b, type: slide.show, at: { mark: l02-enough-b }, slideId: l02-p03b }
+
+  - id: shrink
+    chapter: incident ကို သေးအောင် လုပ်နည်း
+    narration: >
+      [[mark:l02-shrink-close]] ဝန်ဆောင်ခ typo လို user တွေကို ထိခိုက်နေလို့ ချက်ချင်း
+      ဝိုင်းဖြေရှင်းရတဲ့ ပြဿနာကို incident လို့ ခေါ်ပါတယ်။ [[mark:l02-b1-long]] incident ရဲ့ impact၊
+      ဆိုလိုတာက user တွေ ထိခိုက်ရတာဟာ ဘယ်လောက် ကြာလဲ၊ ဘယ်နှခါ ဖြစ်လဲ၊ ဘယ်လောက် ကျယ်လဲ ဆိုတဲ့ သုံးခုကို
+      မြှောက်ထားသလိုပါပဲ။ ဒါကြောင့် incident တွေကို ပိုတိုအောင်၊ ပိုနည်းအောင်၊ ပိုသေးအောင် လုပ်ရင်
+      impact လျော့သွားပါတယ်။ ပထမက ဘယ်လောက် ကြာလဲ ဆိုတာပါ။ မိနစ် 20 ထဲက အများစုက ဘယ်သူမှ မသိသေးတဲ့
+      အချိန်ပါ၊ သိပြီးတော့ rollback လုပ်တာက 3 မိနစ်ပဲ ကြာပါတယ်။ [[mark:l02-b1-alert]] ဒါကြောင့်
+      ဝန်ဆောင်ခ ပုံမှန် မဟုတ်တာနဲ့ တက်မယ့် ဝန်ဆောင်ခ alert တစ်ခု ထည့်လိုက်ပါတယ်၊ alert ဆိုတာ လူ
+      ဝင်ကြည့်ဖို့ လိုပြီလို့ system က အလိုအလျောက် သတိပေးတာပါ။ နောက်တစ်ခါဆို 3 မိနစ်လောက်နဲ့
+      ပြီးနိုင်ပါတယ်။ [[mark:l02-b1-often]] ဒုတိယက ဘယ်နှခါ ဖြစ်လဲ ဆိုတာပါ။ typo ကို ပြင်ရုံနဲ့
+      မလုံလောက်ပါဘူး၊ နောက်တစ်ယောက် ထပ်မှားနိုင်လို့ပါ။ [[mark:l02-b1-git]] ဒါကြောင့် config ကို Git
+      ထဲ သိမ်းပြီး ဝန်ဆောင်ခ နှုန်း ရုတ်တရက် အများကြီး ပြောင်းရင် ငြင်းမယ့် check တစ်ခု
+      ထည့်လိုက်ပါတယ်။ ဒါက incident တစ်ခုကို ပြင်တာ မဟုတ်ဘဲ ဒီလို အမှားမျိုး တစ်ခုလုံး ထပ်မဖြစ်အောင်
+      ပိတ်လိုက်တာပါ။ [[mark:l02-b1-afterfire]] ဒီလို ပြင်ဆင်မှုတွေကို incident ငြိမ်ပြီးမှ လုပ်ရပေမဲ့
+      ရေရှည် အကျိုး အများဆုံး ပေးတာ ဒီ အပိုင်းပါ။ ဒါကြောင့် ပြဿနာ တက်ရင် ချက်ချင်း တုံ့ပြန်ဖို့
+      on-call ကျနေရတာရဲ့ တန်ဖိုးက ပြေးပြင်ရတာ ကိုယ်တိုင် မဟုတ်ဘဲ system မှာ ဘာ ပြင်ဖို့ လိုလဲ
+      သိလာရတာပါ။ [[mark:l02-b1-wide]] တတိယက ဘယ်လောက် ကျယ်လဲ ဆိုတာပါ။ အခု config အသစ်ကို မြို့တိုင်း
+      တစ်ပြိုင်နက် မပို့တော့ဘဲ ရန်ကုန်မှာ အရင် ဖြန့်ပြီး အဆင်ပြေမှ မန္တလေးကို ဆက်ဖြန့်ပါတယ်။ တစ်ခုခု
+      မှားရင် ထိခိုက်မယ့် နယ်ပယ်ကို blast radius လို့ ခေါ်ပြီး၊ ပြဿနာ တစ်ခုတည်းကြောင့် အတူတူ
+      ပျက်နိုင်တဲ့ အုပ်စုကို failure domain လို့ ခေါ်ပါတယ်။ [[mark:l02-b1-mdy]] ရန်ကုန်ကို failure
+      domain တစ်ခုလို ခွဲထားလို့ blast radius က မန္တလေးအထိ မရောက်တော့ပါဘူး။ ပြဿနာ တက်ရင် ကြော်ငြာလို
+      အပို feature တွေကို ပိတ်ပြီး ငွေပေးချေတာကိုတော့ ဆက်ရနေအောင် ထားတာကလည်း blast radius ကို
+      ကျဉ်းစေပါတယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+      - title: "Prodverbs"
+        url: "https://sre.google/prodverbs/"
+    actions:
+      - { id: close-enough, type: slide.close, at: { mark: l02-shrink-close } }
+      - id: draw-long
+        type: whiteboard.apply
+        at: { mark: l02-b1-long }
+        open: true
+        clear: true
+        upsertIds: [l02-b1-long-title, l02-b1-long-bar, l02-b1-long-label]
+        drawMs: 1800
+      - id: draw-alert
+        type: whiteboard.apply
+        at: { mark: l02-b1-alert }
+        upsertIds: [l02-b1-short-bar, l02-b1-short-label]
+        drawMs: 1400
+      - id: draw-often
+        type: whiteboard.apply
+        at: { mark: l02-b1-often }
+        clear: true
+        upsertIds:
+          [
+            l02-b1-often-title,
+            l02-b1-dot-1,
+            l02-b1-dot-2,
+            l02-b1-dot-3,
+            l02-b1-dot-4,
+            l02-b1-dot-5,
+            l02-b1-dot-6,
+            l02-b1-dot-7,
+            l02-b1-dot-8,
+          ]
+        drawMs: 1800
+      - id: draw-git
+        type: whiteboard.apply
+        at: { mark: l02-b1-git }
+        upsertIds: [l02-b1-often-arrow, l02-b1-often-label, l02-b1-few-1, l02-b1-few-2]
+        drawMs: 2000
+      - id: draw-wide
+        type: whiteboard.apply
+        at: { mark: l02-b1-wide }
+        clear: true
+        upsertIds: [l02-b1-wide-title, l02-b1-ygn-box, l02-b1-ygn-label, l02-b1-first-label]
+        drawMs: 2000
+      - id: draw-mandalay
+        type: whiteboard.apply
+        at: { mark: l02-b1-mdy }
+        upsertIds: [l02-b1-wide-arrow, l02-b1-mdy-box, l02-b1-mdy-label]
+        drawMs: 1600
+
+  - id: engineering
+    chapter: SRE ဘယ်လို အလုပ်လုပ်လဲ
+    narration: >
+      [[mark:l02-eng-close]] incident ပြီးလို့ ပြန်ဆွေးနွေးတော့ တစ်ယောက်က နောက်ဆို
+      ပိုသတိထားကြရအောင်လို့ ပြောပါတယ်။ [[mark:l02-hand]] ဒါက ဘယ်ဘက်က လက်နဲ့ ပြင်တဲ့ နည်းပါ။ ပြဿနာ
+      ဖြစ်တိုင်း လူက ဝင်ပြင်ရလို့ အလုပ်များလာရင် လူ ထပ်လိုပြီး၊ ရလဒ်ကလည်း ဘယ်သူ နိုးနေလဲ ဆိုတာအပေါ်
+      မူတည်နေပါတယ်။ ညာဘက်က engineering နဲ့ ပြင်တဲ့ နည်းကတော့ ပြဿနာ ဘာကြောင့် ဖြစ်လဲ နားလည်ပြီး ခုနက
+      check လို system ကို တစ်ခါတည်း ပြောင်းလိုက်တာပါ။ [[mark:l02-hand-b]] လူ လက်နဲ့ လုပ်ရတာကို
+      software က အစား လုပ်ပေးတဲ့ automation ကနေ အကျိုး နှစ်မျိုး ရပါတယ်။ အချိန် သက်သာလို့
+      အလုပ်များလာလည်း လူ လိုက်တိုးစရာ မလိုသလို၊ ပင်ပန်းနေတဲ့ လူလို မမှားဘဲ အမြဲ တစ်ပုံစံတည်း
+      လုပ်ပေးပါတယ်။ ပြီးခဲ့တဲ့ lesson က တနင်္လာနေ့တိုင်း လက်နဲ့ တိုက်စစ်ရတာလို၊ ထပ်ခါထပ်ခါ လုပ်ရပြီး
+      ရေရှည် တန်ဖိုး မကျန်ခဲ့တဲ့ အလုပ်ကို toil လို့ ခေါ်ပါတယ်၊ နောက် lesson မှာ ဆက်ကြည့်ပါမယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+    actions:
+      - { id: close-board-b1, type: whiteboard.apply, at: { mark: l02-eng-close }, open: false }
+      - { id: show-hand, type: slide.show, at: { mark: l02-hand }, slideId: l02-p04 }
+      - { id: show-hand-b, type: slide.show, at: { mark: l02-hand-b }, slideId: l02-p04b }
+
+  - id: roads
+    narration: >
+      [[mark:l02-roads-close]] ဆွေးနွေးပွဲမှာ နောက်ထပ် အကြံ တစ်ခုကတော့ config ပြောင်းတိုင်း မသီရိဆီက
+      ခွင့်ပြုချက် အရင် ယူရမယ် ဆိုတာပါ။ [[mark:l02-b2-wall]] ဘေးကင်းသလို ထင်ရပေမဲ့ မသီရိက developer
+      အားလုံးရဲ့ ရှေ့မှာ မရဘူးလို့ တားတဲ့ နံရံ ဖြစ်သွားပြီး၊ သူ မအားတဲ့နေ့ဆို အားလုံး ရပ်စောင့်ရမှာပါ။
+      [[mark:l02-b2-road]] ဒါကြောင့် မသီရိက ခွင့်ပြုချက် ပေးမယ့်အစား ဘေးကင်းတဲ့ လမ်း တစ်ခု
+      ဖောက်ပေးပါတယ်၊ ခုနက ရန်ကုန်မှာ အရင် rollout လုပ်တဲ့ လမ်းပါ။ [[mark:l02-b2-users]] config အသစ်
+      မှန်သမျှ ဒီလမ်းကို အလိုအလျောက် ဖြတ်သွားလို့ ဘယ်သူ့ကိုမှ မစောင့်ဘဲ မြန်မြန်ရော ဘေးကင်းကင်းပါ user
+      တွေဆီ ရောက်ပါတယ်။ SRE က developer တွေကို တားတဲ့ဘက်က မဟုတ်ဘဲ သူတို့နဲ့ အတူ လုပ်တဲ့ဘက်ကပါ။ ဒီလို
+      လုပ်ဖို့ SRE အဖွဲ့ ရှိစရာ မလိုပါဘူး၊ Padauk မှာလည်း ဒီ ပြင်ဆင်မှု သုံးခုလုံးကို developer တွေ
+      ကိုယ်တိုင် လုပ်ခဲ့ကြတာပါ။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "Workbook: How SRE Relates to DevOps"
+        url: "https://sre.google/workbook/how-sre-relates/"
+    actions:
+      - { id: close-hand, type: slide.close, at: { mark: l02-roads-close } }
+      - id: draw-wall
+        type: whiteboard.apply
+        at: { mark: l02-b2-wall }
+        open: true
+        clear: true
+        upsertIds:
+          [l02-b2-dev1-box, l02-b2-dev1-label, l02-b2-arrow1, l02-b2-wall, l02-b2-wall-label]
+        drawMs: 2000
+      - id: draw-road
+        type: whiteboard.apply
+        at: { mark: l02-b2-road }
+        upsertIds:
+          [
+            l02-b2-dev2-box,
+            l02-b2-dev2-label,
+            l02-b2-arrow2,
+            l02-b2-road-box,
+            l02-b2-road-label-1,
+            l02-b2-road-label-2,
+          ]
+        drawMs: 2200
+      - id: draw-users
+        type: whiteboard.apply
+        at: { mark: l02-b2-users }
+        upsertIds: [l02-b2-arrow3, l02-b2-users-box, l02-b2-users-label]
+        drawMs: 1400
+
+  - id: loop
+    chapter: Padauk ရဲ့ reliability loop
+    narration: >
+      [[mark:l02-loop-close]] ဒါဆို ဒီ incident ကို Padauk ရဲ့ reliability loop ပေါ်မှာ
+      ပတ်ကြည့်ရအောင်။ [[mark:l02-b3-loop]] lesson 1 က ဒီ စက်ဝိုင်းကို incident တိုင်း ပတ်ရပါတယ်။
+      ဘယ်လောက် စိတ်ချရရင် လုံလောက်လဲ သဘောတူတယ်၊ user ထိခိုက်နေတာကို သတိထားမိတယ်၊ တုံ့ပြန်တယ်၊
+      သင်ယူတယ်၊ ပြီးတော့ သင်ခန်းစာကို system ထဲ ထည့်တည်ဆောက်တယ်။ [[mark:l02-b3-hub]] အဆင့်တိုင်းမှာ
+      လူနဲ့ နည်းပညာ အတူတူ ပါလို့ အလယ်မှာ လူတွေ ရှိပါတယ်။ ဂရုမစိုက်ရင် reliability က တဖြည်းဖြည်း
+      ပြန်ကျသွားတတ်လို့ ဒီ loop က ဘယ်တော့မှ မရပ်ပါဘူး။ နောက်ပိုင်းမှာ AI ကလည်း run ရမယ့် system
+      အနေနဲ့ရော၊ ကူညီမယ့် tool အနေနဲ့ရော loop ပေါ် ရောက်လာပါမယ်။ [[mark:l02-b3-agree]] သဘောတူတဲ့
+      အဆင့်မှာ Padauk က ဝန်ဆောင်ခ အမြဲ ပုံမှန် ဖြစ်ရမယ်လို့ စာနဲ့ ရေးပြီး သဘောတူပါတယ်။
+      [[mark:l02-b3-notice]] သတိထားမိတဲ့ အဆင့်မှာ ဒီတစ်ခါ မစုရဲ့ complaint တွေက alert အစား ဖြစ်ခဲ့ပေမဲ့
+      နောက်ဆို ဝန်ဆောင်ခ alert က user တွေ မတိုင်ခင် သတိပေးပါမယ်။ [[mark:l02-b3-tools]] ဘေးက SLO လို ပစ်မှတ်တွေ၊ alert၊ dashboard၊ log
+      နဲ့ trace တွေက production ထဲ ဘာဖြစ်နေလဲ မြင်ရအောင် ကူညီတဲ့ tool တွေပါ၊ Module 2 မှာ လေ့လာပါမယ်။
+      အရင်က production ကျန်းမာဖို့ဆိုတာ ပြဿနာ တက်မှ ပြေးပြင်တာ ဖြစ်ခဲ့ပေမဲ့ အခုတော့ အများစုက design
+      ကောင်းတာနဲ့ ကြိုပြင်ထားတာကနေ လာပါတယ်။ [[mark:l02-b3-respond]] တုံ့ပြန်တဲ့ အဆင့်မှာ 3 မိနစ်နဲ့
+      rollback လုပ်ခဲ့ပါတယ်။ [[mark:l02-b3-learn]] သင်ယူတဲ့ အဆင့်မှာတော့ ဘာဖြစ်ခဲ့လဲ စာနဲ့ ရေးပြီး
+      အဖွဲ့လိုက် သင်ယူပါတယ်၊ ဒါကို postmortem လို့ ခေါ်ပါတယ်။ သုည ပိုရိုက်မိခဲ့တဲ့ engineer ကိုယ်တိုင်လည်း postmortem ကို
+      ဝင်ရေးပါတယ်၊ ဘယ်သူ့ အပြစ်လဲ မရှာဘဲ system ထဲက အားနည်းချက်ကို ရှာတာမို့ သူ ကြောက်စရာ မလိုပါဘူး။
+      [[mark:l02-b3-build]] တည်ဆောက်တဲ့ အဆင့်မှာ config check နဲ့ ရန်ကုန်မှာ အရင် ဖြန့်တဲ့ လမ်းကို
+      system ထဲ အပြီး ထည့်လိုက်ပါတယ်။ ရေရှည် reliability က လူတစ်ယောက်ချင်း သတိရဖို့ကို အားကိုးလို့
+      မရဘဲ tool တွေနဲ့ အဖွဲ့အစည်းထဲ ထည့်ထားမှ ရတာပါ။ ဒါကို lesson 25 မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "Workbook: How SRE Relates to DevOps"
+        url: "https://sre.google/workbook/how-sre-relates/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+    actions:
+      - { id: close-board-b2, type: whiteboard.apply, at: { mark: l02-loop-close }, open: false }
+      # The L01 loop, re-shown as furniture: no drawMs.
+      - id: show-loop
+        type: whiteboard.apply
+        at: { mark: l02-b3-loop }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l02-b3-title,
+            l02-b3-ring,
+            l02-b3-arrow-top,
+            l02-b3-arrow-side,
+            l02-b3-agree-box,
+            l02-b3-agree-label,
+            l02-b3-notice-box,
+            l02-b3-notice-label,
+            l02-b3-respond-box,
+            l02-b3-respond-label,
+            l02-b3-learn-box,
+            l02-b3-learn-label,
+            l02-b3-build-box,
+            l02-b3-build-label,
+            l02-b3-doll-head,
+            l02-b3-doll-body,
+            l02-b3-doll-label,
+          ]
+      # Each station's check lands as the narration reaches that station.
+      - id: check-agree
+        type: whiteboard.apply
+        at: { mark: l02-b3-agree }
+        upsertIds: [l02-b3-check-agree]
+        drawMs: 800
+      - id: check-notice
+        type: whiteboard.apply
+        at: { mark: l02-b3-notice }
+        upsertIds: [l02-b3-check-notice]
+        drawMs: 800
+      - id: draw-tools
+        type: whiteboard.apply
+        at: { mark: l02-b3-tools }
+        upsertIds: [l02-b3-tools-1, l02-b3-tools-2]
+        drawMs: 1600
+      - id: check-respond
+        type: whiteboard.apply
+        at: { mark: l02-b3-respond }
+        upsertIds: [l02-b3-check-respond]
+        drawMs: 800
+      - id: check-learn
+        type: whiteboard.apply
+        at: { mark: l02-b3-learn }
+        upsertIds: [l02-b3-check-learn]
+        drawMs: 800
+      - id: check-build
+        type: whiteboard.apply
+        at: { mark: l02-b3-build }
+        upsertIds: [l02-b3-check-build]
+        drawMs: 800
+
+  - id: this-week
+    narration: >
+      [[mark:l02-week-close]] ဒီ lesson ကနေ ဒီအပတ်ထဲ ချက်ချင်း စမ်းလုပ်လို့ရတာ သုံးခု ရှိပါတယ်။
+      [[mark:l02-week]] ပထမ၊ ပြီးခဲ့တဲ့လ complaint တွေကို မစုလိုပဲ ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ
+      ဆိုပြီး ခွဲကြည့်ပါ။ ဒုတိယ၊ နောက်ဆုံး ပြင်ခဲ့တဲ့ ပြဿနာမှာ alert တက်တာကနေ ပြင်ပြီးတဲ့အထိ အချိန်
+      မှတ်ကြည့်ပါ။ တတိယ၊ loop ထဲက ကိုယ့်အဖွဲ့ အားအနည်းဆုံး အဆင့်ကို ရှာကြည့်ပါ။
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "Prodverbs"
+        url: "https://sre.google/prodverbs/"
+    actions:
+      - { id: close-board-b3, type: whiteboard.apply, at: { mark: l02-week-close }, open: false }
+      - { id: show-week, type: slide.show, at: { mark: l02-week }, slideId: l02-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:l02-recap-close]] [[mark:l02-notes]] အဓိက အချက်တွေကို ပြန်ကြည့်ရအောင်။
+      [[mark:l02-sel-felt]] reliability ကို user ခံစားရတဲ့ ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ ဆိုတဲ့
+      သုံးမျိုးနဲ့ ကြည့်ပါတယ်။ [[mark:l02-sel-enough]] 100 ရာခိုင်နှုန်းကို မလိုက်ဘဲ ဒီအသုံးအတွက်
+      လုံလောက်တဲ့ reliability ကို ရွေးပါတယ်။ [[mark:l02-sel-impact]] incident တွေကို ပိုတိုအောင်၊
+      ပိုနည်းအောင်၊ ပိုသေးအောင် လုပ်ရင် impact လျော့ပါတယ်။ [[mark:l02-sel-blast]] ပိုသေးအောင် ဆိုတာ
+      မှားရင် ထိခိုက်မယ့် နယ်ပယ်၊ blast radius ကို ကျဉ်းအောင် လုပ်တာပါ။ [[mark:l02-sel-loop]] incident
+      တိုင်းက reliability loop ကို တစ်ပတ် ပတ်ရပြီး အလယ်မှာ လူတွေ ရှိပါတယ်။ ကဲ၊ စဉ်းစားကြည့်ပါ။ bug
+      တစ်ခုက user 5 ရာခိုင်နှုန်းကို 2 နာရီကြာ ထိခိုက်ခဲ့ပါတယ်။ [[mark:l02-ask]] ဒီလို bug မျိုးကို နောက်တစ်ခါ
+      ပိုတိုအောင်၊ ပိုနည်းအောင်၊ ပိုသေးအောင် လုပ်ဖို့ နည်းလမ်း တစ်ခုစီ ပြောနိုင်မလား?
+      [[mark:l02-pause]] ဥပမာ user ဘက်က error များလာတာနဲ့ alert တက်အောင် လုပ်ရင် ပိုတိုပါမယ်။ အဲဒီ bug
+      မျိုးကို ဖမ်းမယ့် test တစ်ခု ထည့်ရင် ပိုနည်းပြီး၊ ပြောင်းလဲမှုကို user နည်းနည်းဆီ အရင် rollout
+      လုပ်ရင် ပိုသေးပါမယ်။ lesson 3 ကိုတော့ နေ့လယ်စာချိန်မှာ ဆိုင်တွေရဲ့ QR ငွေချေတာ 30 မိနစ်
+      ပျက်တာနဲ့ စပါမယ်။ တကယ့် ကုန်ကျစရိတ်က 30 မိနစ်စာပဲလား၊ အဲဒီထက် အများကြီး ပိုကြီးလား?
+    sources:
+      - title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading"
+        url: "https://sre.google/books/"
+      - title: "SRE book, 1st ed: Introduction"
+        url: "https://sre.google/sre-book/introduction/"
+      - title: "Workbook: How SRE Relates to DevOps"
+        url: "https://sre.google/workbook/how-sre-relates/"
+    actions:
+      - { id: close-week, type: slide.close, at: { mark: l02-recap-close } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: l02-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - id: select-felt
+        type: editor.select
+        at: { mark: l02-sel-felt }
+        target: { file: notes.md, text: "ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ", occurrence: 1 }
+      - id: select-enough
+        type: editor.select
+        at: { mark: l02-sel-enough }
+        target: { file: notes.md, text: "လုံလောက်တဲ့ reliability", occurrence: 1 }
+      - id: select-impact
+        type: editor.select
+        at: { mark: l02-sel-impact }
+        target: { file: notes.md, text: "incident ရဲ့ impact", occurrence: 1 }
+      - id: select-blast
+        type: editor.select
+        at: { mark: l02-sel-blast }
+        target: { file: notes.md, text: "blast radius", occurrence: 1 }
+      - id: select-loop
+        type: editor.select
+        at: { mark: l02-sel-loop }
+        target: { file: notes.md, text: "reliability loop", occurrence: 1 }
+      # The voice script's ⟪pause 3s⟫. An action at l02-pause would run under
+      # the answer, so the question-line select hangs off l02-ask (the start of
+      # the question sentence) and lands as that sentence ends; the scheduler
+      # holds the answer until the drag is done. The scheduler cannot pause after
+      # a dialog's end, so the silence depends on the voice's speed: about 2.8 s
+      # at 55 ms/char, 1.2 s at 70, none at 95 (where the drag runs under the
+      # question's last words). 7650 keeps 55 ms/char under the 2.5 s
+      # inserted-silence warning.
+      - id: select-question
+        type: editor.select
+        at: { mark: l02-ask, offsetMs: 7650 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: bug တစ်ခုက user 5% ကို 2 နာရီ ထိခိုက်ခဲ့တယ်။ နောက်တစ်ခါ ပိုတို၊ ပိုနည်း၊ ပိုသေးအောင် တစ်နည်းစီ ဘာလုပ်မလဲ?"
+          occurrence: 1
+
+checks:
+  # 500 (not 300): deck pages stall paint briefly at each show/close.
+  - { type: timing.p95Ms, max: 500 }
