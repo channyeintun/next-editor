@@ -1,0 +1,2400 @@
+# CSS course (Burmese), lesson 16 of 43: flexbox part 2, sizing flex items.
+#
+# Narration is Burmese (voice-script.md next to this file; DESIGN.md is the
+# span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 15; flex: initial = 0 1 auto decoded; free
+# space; the flex shorthand, 1 0 auto) → code tour (five demo rows; empty
+# styles.css) → the button row: display flex + gap (flex: initial live), then
+# flex: auto (unequal), then flex: 1 (equal) → board (free-space arithmetic,
+# auto vs 1; flex: 1 is not flex-grow: 1) → the box row: flex-grow 1 on the
+# first box, then 2 and 3 (extras 1:2:3, widths not) → board (six parts; auto
+# basis vs zero basis; three-value flex) → flex-basis: 0 (widths exactly
+# 1:2:3) → the header strip: display flex squashes the round logo and wraps
+# the order button, flex-shrink: 0 on the logo, flex: none on the button →
+# the long-word row: flex: 1 is not equal (min-width: auto), min-width: 0
+# (equal, word spills), overflow-wrap: anywhere (wraps inside) → the sidebar
+# layout: flex + wrap + gap, bases 180px / 260px with grow 1 / 3 (456 > 400
+# wraps) → board (narrow vs wide, no screen width written) → the drinks list
+# as a flex column, order: -1 on the last card → board (order changes only the
+# picture) → quiz (squashed item → flex-shrink) and recap, hand-off to
+# alignment (lesson 17).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every rule is appended at the END of styles.css (an unclosed "{" typed in
+# the middle would swallow the rules after it); only single declarations are
+# inserted inside an existing rule. Keystroke-typed values have no misleading
+# valid prefix: "flex: a…", "flex: n…", "gap: 8", "overflow-wrap: a…" and
+# "order: -" are invalid until complete; "flex: 1", "flex-grow: N",
+# "flex-basis: 0", "flex-shrink: 0" and "min-width: 0" are complete at their
+# first character. The multi-value bases (1 1 180px passes through "1" and
+# "1 1"), the layout rule and the flex column are line-by-line or block.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): buttons
+# 53/50/167 → flex auto 91/88/205 → flex 1 128 × 3 (long label on two lines);
+# boxes 40/32/34 → grow 1 318/32/34 → 1:2:3 extras 86/124/174 → basis 0
+# 64/128/192; header logo 48 → 28 (squashed) → 48, button 70 (wrapped) → 103;
+# long-word row 225/80/80 → min-width 0 128 × 3 (word spills, scrollWidth 225)
+# → overflow-wrap 128 × 3 contained; layout sidebar 369 / content 200 on two
+# lines → bases: both 400 on two lines; order: the last card moves to the top.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-16-flex-sizing
+  title: "CSS course 16: Flexbox အပိုင်း 2၊ item အရွယ်အစား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 16
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: five lesson blocks inside <main class="page"> (content box
+      # 400 px in the 432 px preview): size-buttons, grow-row, logo-row (a dark
+      # header strip: round logo box, a long link list, an order button),
+      # squeeze-row (one unbroken English token) and layout (sidebar = the
+      # opening hours, content = the kit drinks block, verbatim). The kit
+      # header block is left out (deviation, see DESIGN.md): the logo-row is
+      # this page's header strip. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- lesson block: size-buttons -->
+              <section class="lab" data-testid="size-lab">
+                <p class="lab-title">ခလုတ် သုံးခု</p>
+                <div class="size-row" data-testid="size-row">
+                  <button type="button">ဝယ်</button>
+                  <button type="button">မီနူး</button>
+                  <button type="button">ဆိုင်အကြောင်း သိရန်</button>
+                </div>
+              </section>
+
+              <!-- lesson block: grow-row -->
+              <section class="lab" data-testid="grow-lab">
+                <p class="lab-title">box သုံးခု</p>
+                <div class="grow-row" data-testid="grow-row">
+                  <div class="box">တစ်ပုံ</div>
+                  <div class="box">နှစ်ပုံ</div>
+                  <div class="box">သုံးပုံ</div>
+                </div>
+              </section>
+
+              <!-- lesson block: logo-row -->
+              <section class="lab" data-testid="logo-lab">
+                <p class="lab-title">ဆိုင်ရဲ့ ခေါင်းစီး</p>
+                <div class="logo-row" data-testid="logo-row">
+                  <div class="row-logo" data-testid="row-logo"><img src="/cup.svg" alt="" /></div>
+                  <nav class="row-nav" aria-label="ဆိုင်">
+                    <a href="#size-lab">မီနူး</a> · <a href="#grow-lab">ဖွင့်ချိန်</a> · <a href="#logo-lab">မှာယူရန်</a> ·
+                    <a href="#squeeze-lab">ဆိုင်အကြောင်း</a> · <a href="#layout">ဆိုင်ပုံရိပ်</a> · <a href="#main">ဆက်သွယ်ရန်</a>
+                  </nav>
+                  <button class="row-btn" type="button" data-testid="row-btn">အခု မှာမယ်</button>
+                </div>
+              </section>
+
+              <!-- lesson block: squeeze-row -->
+              <section class="lab" id="squeeze-lab" data-testid="squeeze-lab">
+                <p class="lab-title">စကားလုံး ရှည်</p>
+                <div class="squeeze-row" data-testid="squeeze-row">
+                  <div class="box" lang="en">PyinmanaExpressSpecialMilkTea</div>
+                  <div class="box">ဝယ်</div>
+                  <div class="box">မီနူး</div>
+                </div>
+              </section>
+
+              <!-- lesson block: layout (sidebar = the hours, content = the drinks list) -->
+              <div class="layout" id="layout" data-testid="layout">
+                <aside class="sidebar" data-testid="sidebar">
+                  <h2>ဖွင့်ချိန်</h2>
+                  <ul class="hours-list">
+                    <li>တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ</li>
+                    <li>စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ</li>
+                  </ul>
+                </aside>
+                <div class="content" data-testid="content">
+                  <!-- kit block: drinks -->
+                  <section class="menu-section drinks" id="drinks">
+                    <h2>သောက်စရာ</h2>
+                    <ul class="menu" data-testid="menu-drinks">
+                      <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                        <h3 class="name">လက်ဖက်ရည်</h3>
+                        <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                        <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                        <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                      </li>
+                      <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                        <h3 class="name">ကော်ဖီ</h3>
+                        <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                        <span class="price">1,800 ကျပ်</span>
+                      </li>
+                      <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                        <h3 class="name">သံပုရာရည်</h3>
+                        <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                        <span class="price">1,200 ကျပ်</span>
+                      </li>
+                      <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                        <h3 class="name">ဖာလူဒါ</h3>
+                        <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                        <span class="price">3,000 ကျပ်</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2, C and D of the course kit; section E gives
+      # the demo rows their look and contains no flex declaration.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 16 keeps A, B, B2, C and D; section E gives the five demo rows
+          their look (colours, padding, corners) and no flex declaration at all.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 16: the look of the demo rows. Every flex declaration is typed. */
+        .lab {
+          margin: 16px 0;
+        }
+
+        .lab-title {
+          margin: 0 0 4px;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .size-row button {
+          padding: 6px 12px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+        }
+
+        /* No side padding, so a zero basis gives widths in the exact grow ratio. */
+        .box {
+          padding: 6px 0;
+          background: var(--cream);
+          outline: 1px solid var(--tea-light);
+          text-align: center;
+        }
+
+        .logo-row {
+          padding: 12px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .logo-row a {
+          color: var(--cream);
+        }
+
+        .row-logo {
+          width: 48px;
+          height: 48px;
+          background: var(--cream);
+          border-radius: 50%;
+        }
+
+        .row-logo img {
+          display: block;
+          width: 100%;
+          height: 100%;
+        }
+
+        .row-btn {
+          padding: 4px 12px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--gold);
+          color: var(--tea-dark);
+          font: inherit;
+        }
+
+        .sidebar {
+          padding: 12px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .content {
+          outline: 1px dashed var(--muted);
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the three initial values of every flex item, and free space.
+    # Green = grow, orange = shrink, violet = basis, blue = the items.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Flex item တိုင်းရဲ့ default",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-code,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 300,
+        height: 40,
+        text: "flex: 0 1 auto",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: a-initial,
+        kind: text,
+        x: 640,
+        y: 224,
+        width: 260,
+        height: 36,
+        text: "= flex: initial",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-grow-v,
+        kind: text,
+        x: 330,
+        y: 278,
+        width: 40,
+        height: 46,
+        text: "0",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: a-grow-k,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 210,
+        height: 36,
+        text: "grow · မကြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-shrink-v,
+        kind: text,
+        x: 600,
+        y: 278,
+        width: 40,
+        height: 46,
+        text: "1",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: a-shrink-k,
+        kind: text,
+        x: 560,
+        y: 330,
+        width: 240,
+        height: 36,
+        text: "shrink · ကျုံ့နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-basis-v,
+        kind: text,
+        x: 860,
+        y: 278,
+        width: 80,
+        height: 46,
+        text: "auto",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: a-basis-k,
+        kind: text,
+        x: 840,
+        y: 330,
+        width: 230,
+        height: 36,
+        text: "basis · စ အရွယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-items-note,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 420,
+        height: 36,
+        text: "item တစ်ခုချင်းစီမှာ ပေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: a-bar, kind: rectangle, x: 300, y: 432, width: 760, height: 56, strokeColor: "#1e1e1e" }
+    - {
+        id: a-item1,
+        kind: rectangle,
+        x: 308,
+        y: 440,
+        width: 90,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-item2,
+        kind: rectangle,
+        x: 406,
+        y: 440,
+        width: 90,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-item3,
+        kind: rectangle,
+        x: 504,
+        y: 440,
+        width: 150,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-free,
+        kind: rectangle,
+        x: 662,
+        y: 440,
+        width: 390,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-free-label,
+        kind: text,
+        x: 760,
+        y: 442,
+        width: 180,
+        height: 36,
+        text: "နေရာလွတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule-grow,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 440,
+        height: 36,
+        text: "နေရာ ပိုရင် → grow",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule-shrink,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 480,
+        height: 36,
+        text: "နေရာ မလောက်ရင် → shrink",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-shorthand,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 620,
+        height: 36,
+        text: "flex: grow shrink basis → 1 0 auto",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board B — flex: auto vs flex: 1 as free-space arithmetic.
+    # Violet = content size, green = a share of the free space.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Flex auto နဲ့ flex 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-auto-k,
+        kind: text,
+        x: 300,
+        y: 242,
+        width: 170,
+        height: 36,
+        text: "flex: auto",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-a-c1,
+        kind: rectangle,
+        x: 490,
+        y: 235,
+        width: 60,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-a-e1,
+        kind: rectangle,
+        x: 550,
+        y: 235,
+        width: 45,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-a-c2,
+        kind: rectangle,
+        x: 600,
+        y: 235,
+        width: 60,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-a-e2,
+        kind: rectangle,
+        x: 660,
+        y: 235,
+        width: 45,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-a-c3,
+        kind: rectangle,
+        x: 710,
+        y: 235,
+        width: 305,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-a-e3,
+        kind: rectangle,
+        x: 1015,
+        y: 235,
+        width: 45,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-auto-note,
+        kind: text,
+        x: 490,
+        y: 300,
+        width: 460,
+        height: 36,
+        text: "content + နေရာလွတ် ညီတူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-one-k,
+        kind: text,
+        x: 300,
+        y: 402,
+        width: 170,
+        height: 36,
+        text: "flex: 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-o-1,
+        kind: rectangle,
+        x: 490,
+        y: 395,
+        width: 186,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-o-2,
+        kind: rectangle,
+        x: 682,
+        y: 395,
+        width: 186,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-o-3,
+        kind: rectangle,
+        x: 874,
+        y: 395,
+        width: 186,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-one-note,
+        kind: text,
+        x: 490,
+        y: 460,
+        width: 460,
+        height: 36,
+        text: "0 ကနေ စ → အကုန် နေရာလွတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-exp,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 600,
+        height: 36,
+        text: "auto = 1 1 auto   ·   1 = 1 1 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-not-same,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 420,
+        height: 36,
+        text: "flex: 1  ≠  flex-grow: 1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — grow values are shares of the free space (six parts); from an
+    # auto basis only the extra is 1:2:3, from a zero basis the widths are.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Grow တန်ဖိုးက နေရာလွတ်ရဲ့ အပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-p1,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-p2,
+        kind: rectangle,
+        x: 420,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-p3,
+        kind: rectangle,
+        x: 540,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-p4,
+        kind: rectangle,
+        x: 660,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-p5,
+        kind: rectangle,
+        x: 780,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-p6,
+        kind: rectangle,
+        x: 900,
+        y: 225,
+        width: 120,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 350,
+        y: 232,
+        width: 30,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 470,
+        y: 232,
+        width: 30,
+        height: 36,
+        text: "2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        x: 830,
+        y: 232,
+        width: 30,
+        height: 36,
+        text: "3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-sum,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 360,
+        height: 36,
+        text: "1 + 2 + 3 = 6 ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-auto-k,
+        kind: text,
+        x: 300,
+        y: 362,
+        width: 190,
+        height: 36,
+        text: "basis auto",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-a-c1,
+        kind: rectangle,
+        x: 520,
+        y: 355,
+        width: 56,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-a-e1,
+        kind: rectangle,
+        x: 576,
+        y: 355,
+        width: 64,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-a-c2,
+        kind: rectangle,
+        x: 645,
+        y: 355,
+        width: 45,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-a-e2,
+        kind: rectangle,
+        x: 690,
+        y: 355,
+        width: 129,
+        height: 50,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-a-c3,
+        kind: rectangle,
+        x: 824,
+        y: 355,
+        width: 48,
+        height: 50,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-a-e3,
+        kind: rectangle,
+        x: 872,
+        y: 355,
+        width: 196,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-auto-note,
+        kind: text,
+        x: 520,
+        y: 415,
+        width: 360,
+        height: 36,
+        text: "အကျယ်က 1 : 2 : 3 မဟုတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-zero-k,
+        kind: text,
+        x: 300,
+        y: 482,
+        width: 190,
+        height: 36,
+        text: "basis 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-z-1,
+        kind: rectangle,
+        x: 520,
+        y: 475,
+        width: 90,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-z-2,
+        kind: rectangle,
+        x: 615,
+        y: 475,
+        width: 179,
+        height: 50,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-z-3,
+        kind: rectangle,
+        x: 799,
+        y: 475,
+        width: 269,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-zero-note,
+        kind: text,
+        x: 520,
+        y: 535,
+        width: 360,
+        height: 36,
+        text: "အကျယ်က 1 : 2 : 3  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-three,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 620,
+        height: 36,
+        text: "flex: 1 1 auto · 2 1 auto · 3 1 auto",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — the sidebar pattern: narrow (wraps) vs wide (side by side).
+    # Orange = sidebar, blue = content.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Sidebar layout",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-n-frame,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 200,
+        height: 290,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-n-side,
+        kind: rectangle,
+        x: 315,
+        y: 240,
+        width: 170,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-n-side-l,
+        kind: text,
+        x: 340,
+        y: 257,
+        width: 120,
+        height: 36,
+        text: "sidebar",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-n-cont,
+        kind: rectangle,
+        x: 315,
+        y: 325,
+        width: 170,
+        height: 175,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-n-cont-l,
+        kind: text,
+        x: 340,
+        y: 395,
+        width: 120,
+        height: 36,
+        text: "content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-n-label,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 240,
+        height: 36,
+        text: "ကျဉ်းရင် wrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-n-sum,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 340,
+        height: 36,
+        text: "180 + 16 + 260 > 400",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-w-frame,
+        kind: rectangle,
+        x: 620,
+        y: 225,
+        width: 460,
+        height: 200,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-w-side,
+        kind: rectangle,
+        x: 635,
+        y: 240,
+        width: 120,
+        height: 170,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-w-side-l,
+        kind: text,
+        x: 645,
+        y: 307,
+        width: 100,
+        height: 36,
+        text: "sidebar",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-w-cont,
+        kind: rectangle,
+        x: 770,
+        y: 240,
+        width: 295,
+        height: 170,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-w-cont-l,
+        kind: text,
+        x: 860,
+        y: 307,
+        width: 120,
+        height: 36,
+        text: "content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-w-label,
+        kind: text,
+        x: 620,
+        y: 440,
+        width: 360,
+        height: 36,
+        text: "ကျယ်ရင် ဘေးချင်းကပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-w-ratio,
+        kind: text,
+        x: 620,
+        y: 490,
+        width: 360,
+        height: 36,
+        text: "နေရာလွတ် 1 : 3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-no-width,
+        kind: text,
+        x: 620,
+        y: 540,
+        width: 440,
+        height: 36,
+        text: "screen အကျယ် ရေးစရာ မလို  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board E — order changes only what you see; keyboard and screen readers
+    # follow the HTML. Blue = on screen, violet = HTML order, red = the rule.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Order က မြင်ရတာကိုပဲ ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-vis-k,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 280,
+        height: 36,
+        text: "screen ပေါ်မှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-v1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 200,
+        height: 36,
+        text: "ဖာလူဒါ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-v1-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 285,
+        y: 275,
+        width: 150,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-v2,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 200,
+        height: 36,
+        text: "လက်ဖက်ရည်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-v3,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 200,
+        height: 36,
+        text: "ကော်ဖီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-v4,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 200,
+        height: 36,
+        text: "သံပုရာရည်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-dom-k,
+        kind: text,
+        x: 640,
+        y: 230,
+        width: 400,
+        height: 36,
+        text: "keyboard · screen reader",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-dom-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 640,
+        y: 285,
+        width: 34,
+        height: 180,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-d1,
+        kind: text,
+        x: 700,
+        y: 285,
+        width: 240,
+        height: 36,
+        text: "1  လက်ဖက်ရည်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-d2,
+        kind: text,
+        x: 700,
+        y: 335,
+        width: 240,
+        height: 36,
+        text: "2  ကော်ဖီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-d3,
+        kind: text,
+        x: 700,
+        y: 385,
+        width: 240,
+        height: 36,
+        text: "3  သံပုရာရည်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-d4,
+        kind: text,
+        x: 700,
+        y: 435,
+        width: 240,
+        height: 36,
+        text: "4  ဖာလူဒါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-fix,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 36,
+        text: "အစဉ် အရေးကြီးရင် HTML ကို ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz and the defaults.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 40,
+        text: "item တစ်ခု ကျုံ့ပြီး ပုံပျက်နေရင် → ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 300,
+        height: 40,
+        text: "flex-shrink: 0",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: f-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 640,
+        y: 302,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-a-none,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 360,
+        height: 36,
+        text: "ဒါမှမဟုတ် flex: none",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-defaults,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 640,
+        height: 36,
+        text: "default · row · wrap မလုပ် · 0 1 auto",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4116
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: flex-defaults
+    chapter: "Flex item တိုင်းရဲ့ default တန်ဖိုး"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ flex container လုပ်တာ၊ main axis နဲ့ cross axis၊ item တွေကို wrap
+      လုပ်ခွင့် ပေးတာတွေကို ကြည့်ခဲ့ပါတယ်။ ဒါပေမဲ့ item တိုင်းက သူ့ content လောက်ပဲ ကျယ်နေတုန်းပါ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-code]] ဒီ lesson မှာတော့ flex item တွေက row ထဲက နေရာကို ဘယ်လို ခွဲယူကြလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ flex item တိုင်းမှာ ဒါကို ထိန်းတဲ့ တန်ဖိုး သုံးခု ရှိပါတယ်။ အဲဒီ သုံးခုရဲ့ default
+      ကို board ပေါ်မှာ တစ်တွဲတည်း ရေးထားပါတယ်။ [[mark:draw-grow]] ပထမ တန်ဖိုးက grow ပါ။ သူက 0
+      ဖြစ်လို့၊ row ထဲမှာ နေရာ ပိုနေရင်တောင် item က မကြီးလာပါဘူး။ [[mark:draw-shrink]] ဒုတိယက shrink
+      ပါ။ သူက 1 ဖြစ်လို့၊ row က ကျဉ်းနေရင် item က ကျုံ့ခွင့် ရှိပါတယ်။ [[mark:draw-basis]] တတိယက basis
+      ပါ။ basis ဆိုတာ item က မကြီး မကျုံ့ခင် စစချင်း ရှိတဲ့ အရွယ်အစားပါ။ auto ဆိုတာ item မှာ
+      ကိုယ်ပိုင် အကျယ် ပေးထားရင် အဲဒါကို ယူပြီး၊ မပေးထားရင် content ရဲ့ အရွယ်အစားကို ယူတာပါ။
+      [[mark:draw-items-note]] ဒီ သုံးခုကို container မှာ မဟုတ်ဘဲ item တစ်ခုချင်းစီမှာ ပေးရတာမို့၊
+      item တိုင်း ကိုယ်ပိုင် တန်ဖိုး ရနိုင်ပါတယ်။ [[mark:draw-free]] သုံးခု ဘယ်လို တွဲလုပ်လဲ ဆိုတော့၊
+      browser က item တိုင်းကို သူ့ basis အတိုင်း နေရာ အရင် ပေးပါတယ်။ အဲဒီနောက် container ထဲမှာ
+      ကျန်နေတဲ့ နေရာကို နေရာလွတ်လို့ ခေါ်ပါတယ်။ [[mark:draw-rules]] နေရာ ပိုနေရင် အဲဒီ နေရာလွတ်ကို ဘယ်
+      item တွေ ယူမလဲ ဆိုတာ grow က ဆုံးဖြတ်ပါတယ်။ item တွေ မဆံ့တော့ရင်တော့ ဘယ် item တွေက အရွယ်အစား
+      လျှော့ပေးမလဲ ဆိုတာ shrink က ဆုံးဖြတ်ပါတယ်။ [[mark:draw-shorthand]] flex ဆိုတဲ့ shorthand နဲ့ ဒီ
+      သုံးခုကို grow၊ shrink၊ basis အစဉ်အတိုင်း တစ်နေရာတည်းမှာ ရေးလို့ ရပါတယ်။ ဥပမာ board ပေါ်ကလို
+      grow 1၊ shrink 0၊ basis auto ဆိုရင်၊ နေရာလွတ်ထဲက တစ်ပုံ ယူမယ်၊ ဘယ်တော့မှ မကျုံ့ဘူး၊ content ရဲ့
+      အရွယ်အစားကနေ စမယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:draw-initial]] board ပေါ်က default သုံးခုကိုတော့
+      flex initial လို့လည်း ရေးလို့ ရပါတယ်။ lesson 7 မှာ တွေ့ခဲ့သလို၊ initial keyword က initial value
+      တွေကို ပြန်ပေးလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "web.dev Learn CSS — Layout: flexbox (the flex shorthand)"
+        url: "https://web.dev/learn/css/layout#flexbox"
+      - title: "MDN — flex"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex"
+      - title: "CSS Flexible Box Layout Module Level 1 — flexibility"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flexibility"
+    actions:
+      - id: open-defaults-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [a-code]
+        drawMs: 1200
+      - id: draw-grow
+        type: whiteboard.apply
+        at: { mark: draw-grow }
+        upsertIds: [a-grow-v, a-grow-k]
+        drawMs: 1400
+      - id: draw-shrink
+        type: whiteboard.apply
+        at: { mark: draw-shrink }
+        upsertIds: [a-shrink-v, a-shrink-k]
+        drawMs: 1400
+      - id: draw-basis
+        type: whiteboard.apply
+        at: { mark: draw-basis }
+        upsertIds: [a-basis-v, a-basis-k]
+        drawMs: 1400
+      - id: draw-items-note
+        type: whiteboard.apply
+        at: { mark: draw-items-note }
+        upsertIds: [a-items-note]
+        drawMs: 1200
+      - id: draw-free
+        type: whiteboard.apply
+        at: { mark: draw-free }
+        upsertIds: [a-bar, a-item1, a-item2, a-item3, a-free, a-free-label]
+        drawMs: 3000
+      - id: draw-rules
+        type: whiteboard.apply
+        at: { mark: draw-rules }
+        upsertIds: [a-rule-grow, a-rule-shrink]
+        drawMs: 2400
+      - id: draw-shorthand
+        type: whiteboard.apply
+        at: { mark: draw-shorthand }
+        upsertIds: [a-shorthand]
+        drawMs: 1800
+      - id: draw-initial
+        type: whiteboard.apply
+        at: { mark: draw-initial }
+        upsertIds: [a-initial]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-defaults]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။ စမ်းစရာ
+      row သေးသေးလေး ငါးခု ပါပါတယ်။ [[mark:select-size-row]] ပထမ row မှာ ခလုတ် သုံးခု ရှိပြီး၊ သူတို့
+      စာသားတွေက အရှည် အတို အများကြီး ကွာပါတယ်။ [[mark:select-grow-row]] ဒုတိယ row မှာ တစ်ပုံ၊ နှစ်ပုံ၊
+      သုံးပုံ လို့ ရေးထားတဲ့ ရိုးရိုး box သုံးခု ရှိပါတယ်။ [[mark:select-logo-row]] တတိယက ဆိုင်ရဲ့
+      ခေါင်းစီးပါ။ နောက်ခံ အညိုရင့်ထဲမှာ logo အဝိုင်းလေး၊ link အများကြီးနဲ့ မှာယူဖို့ ခလုတ် တစ်ခု
+      ပါပါတယ်။ [[mark:select-squeeze-row]] စတုတ္ထ row ရဲ့ box တစ်ခုမှာ space ရော hyphen ပါ မပါတဲ့
+      အင်္ဂလိပ် စကားလုံး ရှည်ကြီး ရှိပါတယ်။ [[mark:select-layout]] နောက်ဆုံးကတော့ အပိုင်း နှစ်ပိုင်း
+      ပါတဲ့ layout ပါ။ ဆိုင်ဖွင့်ချိန်တွေ ပါတဲ့ sidebar တစ်ပိုင်းနဲ့၊ သောက်စရာ menu ပါတဲ့ content
+      တစ်ပိုင်းပါ။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ base ဖိုင်က row တွေကို အရောင်နဲ့
+      ထောင့်ဝိုင်းလောက်ပဲ ပေးထားလို့၊ ဘယ် row မှ flex container မဖြစ်သေးပါဘူး။ [[mark:preview-opens]]
+      dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ ဒုတိယ row နဲ့ စတုတ္ထ row က box တွေကတော့ flow
+      layout အတိုင်း အပေါ်အောက် ဆင့်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+    actions:
+      - id: close-defaults-board
+        type: whiteboard.apply
+        at: { mark: close-defaults }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-size-row
+        type: editor.select
+        at: { mark: select-size-row }
+        target:
+          { file: index.html, text: '<div class="size-row" data-testid="size-row">', occurrence: 1 }
+      - id: select-grow-row
+        type: editor.select
+        at: { mark: select-grow-row }
+        target:
+          { file: index.html, text: '<div class="grow-row" data-testid="grow-row">', occurrence: 1 }
+      - id: select-logo-row
+        type: editor.select
+        at: { mark: select-logo-row }
+        target:
+          { file: index.html, text: '<div class="logo-row" data-testid="logo-row">', occurrence: 1 }
+      - id: select-squeeze-row
+        type: editor.select
+        at: { mark: select-squeeze-row }
+        target:
+          {
+            file: index.html,
+            text: '<div class="box" lang="en">PyinmanaExpressSpecialMilkTea</div>',
+            occurrence: 1,
+          }
+      - id: select-layout
+        type: editor.select
+        at: { mark: select-layout }
+        target:
+          {
+            file: index.html,
+            text: "<div class=\"layout\" id=\"layout\" data-testid=\"layout\">\n        <aside class=\"sidebar\" data-testid=\"sidebar\">",
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-size-row
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: size-row }
+        textContains: "ဆိုင်အကြောင်း သိရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-grow-row
+        type: expect.preview
+        at: { afterAction: expect-size-row }
+        timeoutMs: 5000
+        target: { by: testId, value: grow-row }
+        textContains: "သုံးပုံ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-grow-row }
+
+  - id: flex-auto
+    chapter: "Flex auto နဲ့ flex 1"
+    narration: >
+      [[mark:type-size-row]] ခလုတ်တွေကနေ စကြည့်ရအောင်။ ပြီးခဲ့တဲ့ lesson မှာ လုပ်ခဲ့သလိုပဲ၊ သူတို့ရဲ့
+      row ကို flex container လုပ်ပြီး၊ ခလုတ်တွေကြားမှာ gap နည်းနည်း ထည့်ပါမယ်။ [[mark:after-size-row]]
+      ခလုတ်တွေ သိပ် မရွေ့ပါဘူး။ ဒါက default တွေကြောင့်ပါ။ grow က 0 ဖြစ်လို့ ခလုတ်တစ်ခုစီက သူ့
+      စာသားလောက်ပဲ ကျယ်ပြီး၊ နေရာလွတ်က row ရဲ့ အဆုံးမှာပဲ ကျန်နေပါတယ်။ [[mark:type-flex-auto]] ဒီ
+      တန်ဖိုးတွေကို item မှာ ပေးရတာမို့၊ ခလုတ်တွေ ကိုယ်တိုင်အတွက် rule တစ်ခု ရေးပါမယ်။ ခလုတ်တိုင်းရဲ့
+      flex ကို auto ဆိုတဲ့ keyword ပေးပါမယ်။ [[mark:after-flex-auto]] ခလုတ်တွေက row ကို ပြည့်အောင်
+      ကြီးလာပေမယ့်၊ အကျယ်တော့ မတူကြပါဘူး။ [[mark:select-flex-auto]] ဒီ flex auto ကို ကြည့်ပါ။ သူက grow
+      1၊ shrink 1၊ basis auto ပါ။ ခလုတ်တစ်ခုစီက သူ့ စာသားရဲ့ အကျယ်ကနေ စပြီး၊ နေရာလွတ်ကို အဲဒီ အပေါ်မှာ
+      ညီတူ ခွဲပြီး ထပ်ပေါင်းပေးတာပါ။ ဒါကြောင့် စာသား ရှည်တဲ့ ခလုတ်က အကျယ်ဆုံး ဖြစ်နေတုန်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "MDN — flex: auto"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex#auto"
+      - title: "MDN — Controlling ratios of flex items along the main axis"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Controlling_ratios_of_flex_items_along_the_main_axis"
+    actions:
+      - id: type-size-row
+        type: editor.type
+        at: { mark: type-size-row }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".size-row {\n  display: flex;\n  gap: 8px;\n}\n"
+      - id: expect-size-flex
+        type: expect.preview
+        at: { mark: after-size-row }
+        timeoutMs: 4000
+        target: { by: testId, value: size-row }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-flex-auto
+        type: editor.type
+        at: { mark: type-flex-auto }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 8px;\n}\n", occurrence: 1 }
+        text: "\n.size-row button {\n  flex: auto;\n}\n"
+      - id: select-flex-auto
+        type: editor.select
+        at: { mark: select-flex-auto }
+        target: { file: styles.css, text: "flex: auto;", occurrence: 1 }
+
+  - id: flex-one
+    narration: >
+      [[mark:type-flex-1]] သူ့ အောက်မှာ flex ကို ဂဏန်း 1 နဲ့ ထပ်ပေးပါမယ်။ lesson 5 မှာ မြင်ခဲ့သလို
+      နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။ [[mark:after-flex-1]] အခု ခလုတ် သုံးခုလုံး အကျယ်
+      တူသွားပါပြီ။ စာသား ရှည်တဲ့ ခလုတ်မှာ နေရာ နည်းသွားလို့၊ သူ့ စာသားက ခလုတ်ထဲမှာပဲ နောက်တစ်ကြောင်း
+      ဆင်းသွားပါတယ်။ [[mark:select-flex-1]] ဒီ flex 1 ကို ကြည့်ပါ။ ဂဏန်း တစ်ခုတည်း ပေးရင် အဲဒီ ဂဏန်းက
+      grow ဖြစ်ပြီး၊ shrink က 1၊ basis က 0 ဖြစ်သွားပါတယ်။ ခလုတ်တိုင်း သုညကနေ စတာမို့ row တစ်ခုလုံးက
+      နေရာလွတ် ဖြစ်ပြီး၊ grow တူတဲ့အတွက် အပုံ တူတူ ရကြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "MDN — flex (single number value)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex#values"
+    actions:
+      - id: type-flex-1
+        type: editor.type
+        at: { mark: type-flex-1 }
+        cadence: natural
+        target: { file: styles.css, after: "  flex: auto;\n", occurrence: 1 }
+        text: "  flex: 1;\n"
+      - id: expect-flex-1
+        type: expect.preview
+        at: { mark: after-flex-1 }
+        timeoutMs: 4000
+        target: { by: testId, value: size-row }
+        textContains: "ဝယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flex-1
+        type: editor.select
+        at: { mark: select-flex-1 }
+        target: { file: styles.css, text: "flex: 1;", occurrence: 1 }
+
+  - id: free-space-board
+    narration: >
+      [[mark:open-auto-board]] နှစ်ခုကို board မှာ ယှဉ်ကြည့်ရအောင်။ [[mark:draw-auto-row]] flex auto
+      မှာ ခလုတ်တစ်ခုစီက ခရမ်းရောင်နဲ့ ပြထားတဲ့ content အကျယ်ကို အရင် ရပါတယ်။ ကျန်တဲ့ နေရာကိုမှ
+      အစိမ်းရောင် အပိုင်းတွေအဖြစ် ညီတူ ခွဲပေးတာပါ။ ဒါကြောင့် content အရှည် အတို ကွာတာက အကျယ်မှာ
+      ကျန်နေပါတယ်။ [[mark:draw-one-row]] flex 1 မှာတော့ ခလုတ်တိုင်း သုညကနေ စပါတယ်။ ခရမ်းရောင် အပိုင်း
+      မရှိလို့ row တစ်ခုလုံး အစိမ်းရောင် ဖြစ်ပြီး၊ အပုံ ညီညီ သုံးပုံ ခွဲပါတယ်။
+      [[mark:draw-expansions]] ဒါက flex auto နဲ့ flex 1 ကို grow၊ shrink၊ basis အဖြစ် ဖြန့်ရေးထားတာပါ။
+      [[mark:draw-not-same]] ဒါကြောင့် flex 1 က grow တစ်ခုတည်းကို 1 ပေးတာနဲ့ မတူပါဘူး။ shorthand က
+      basis ကိုပါ သုည ပေးလိုက်လို့ အကျယ်တွေ ညီသွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "MDN — flex: constituent properties and keyword values"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex"
+      - title: "CSS Flexible Box Layout Module Level 1 — the flex shorthand"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-property"
+    actions:
+      - id: open-auto-board
+        type: whiteboard.apply
+        at: { mark: open-auto-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-auto-row
+        type: whiteboard.apply
+        at: { mark: draw-auto-row }
+        upsertIds: [b-auto-k, b-a-c1, b-a-c2, b-a-c3, b-a-e1, b-a-e2, b-a-e3, b-auto-note]
+        drawMs: 4000
+      - id: draw-one-row
+        type: whiteboard.apply
+        at: { mark: draw-one-row }
+        upsertIds: [b-one-k, b-o-1, b-o-2, b-o-3, b-one-note]
+        drawMs: 3000
+      - id: draw-expansions
+        type: whiteboard.apply
+        at: { mark: draw-expansions }
+        upsertIds: [b-exp]
+        drawMs: 1500
+      - id: draw-not-same
+        type: whiteboard.apply
+        at: { mark: draw-not-same }
+        upsertIds: [b-not-same]
+        drawMs: 1500
+
+  - id: grow
+    chapter: "Grow နဲ့ basis"
+    narration: >
+      [[mark:close-auto-board]] box တွေကို ကြည့်ရအောင်။ [[mark:type-grow-row]] သူတို့ရဲ့ row ကိုလည်း
+      gap နည်းနည်းနဲ့ flex container လုပ်ပါမယ်။ box တိုင်းက grow 0 နဲ့ စပါတယ်။ [[mark:after-grow-row]]
+      box တွေ တစ်တန်းတည်း စီသွားပြီး၊ တစ်ခုစီက သူ့ စာသားလောက်ပဲ ကျယ်ပါတယ်။ [[mark:type-grow-1]] lesson
+      4 မှာ တွေ့ခဲ့တဲ့ nth-child နဲ့ ပထမ box တစ်ခုတည်းကို ရွေးပြီး၊ သူ့ကို grow 1 ပေးကြည့်ရအောင်။
+      [[mark:after-grow-1]] ပထမ box က နေရာလွတ် အကုန်လုံးကို ယူသွားပါပြီ။ ကျန်တဲ့ နှစ်ခုက grow 0
+      ဖြစ်နေတုန်းမို့ ဘာမှ မယူပါဘူး။ ဒီ တန်ဖိုးတွေကို item မှာ ပေးရတဲ့ အကျိုးက ဒါပါပဲ။ item
+      တစ်ခုချင်းစီကို မတူအောင် ထားလို့ ရပါတယ်။ [[mark:type-grow-23]] အခု ဒုတိယ box ကို grow 2 ပေးပြီး၊
+      တတိယ box ကိုတော့ grow 3 ပေးပါမယ်။ [[mark:after-grow-23]] box သုံးခုလုံး နေရာလွတ်ကို
+      ခွဲယူကြပါပြီ။ တန်ဖိုး များလေ နေရာ ပိုရလေပါ။ ဒါပေမဲ့ သေချာ ကြည့်ပါ၊ တတိယ box က ပထမ box ရဲ့ သုံးဆ
+      မကျယ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: allowing items to grow at different rates"
+        url: "https://web.dev/learn/css/flexbox#allowing_items_to_grow_at_different_rates"
+      - title: "web.dev Learn CSS — Layout: flexbox (controlling single items)"
+        url: "https://web.dev/learn/css/layout#flexbox"
+      - title: "MDN — flex-grow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-grow"
+    actions:
+      - id: close-auto-board
+        type: whiteboard.apply
+        at: { mark: close-auto-board }
+        open: false
+      - id: type-grow-row
+        type: editor.type
+        at: { mark: type-grow-row }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex: 1;\n}\n", occurrence: 1 }
+        text: "\n.grow-row {\n  display: flex;\n  gap: 8px;\n}\n"
+      - id: expect-grow-flex
+        type: expect.preview
+        at: { mark: after-grow-row }
+        timeoutMs: 4000
+        target: { by: testId, value: grow-row }
+        textContains: "တစ်ပုံ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-grow-1
+        type: editor.type
+        at: { mark: type-grow-1 }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".grow-row {\n  display: flex;\n  gap: 8px;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.grow-row .box:nth-child(1) {\n  flex-grow: 1;\n}\n"
+      - id: type-grow-23
+        type: editor.type
+        at: { mark: type-grow-23 }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  flex-grow: 1;\n}\n", occurrence: 1 }
+        text: "\n.grow-row .box:nth-child(2) {\n  flex-grow: 2;\n}\n\n.grow-row .box:nth-child(3) {\n  flex-grow: 3;\n}\n"
+      - id: expect-grow-23
+        type: expect.preview
+        at: { mark: after-grow-23 }
+        timeoutMs: 4000
+        target: { by: testId, value: grow-row }
+        textContains: "နှစ်ပုံ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: six-parts-board
+    narration: >
+      [[mark:open-parts-board]] ဘာလို့လဲ။ [[mark:draw-parts]] grow တန်ဖိုးတွေက နေရာလွတ်ရဲ့ အပုံတွေပါ။
+      1၊ 2၊ 3 ကို ပေါင်းတော့ 6 ရလို့၊ နေရာလွတ်ကို အပုံ ညီညီ ခြောက်ပုံ ပိုင်းပါတယ်။ ပထမ box က တစ်ပုံ၊
+      ဒုတိယက နှစ်ပုံ၊ တတိယက သုံးပုံ ရပါတယ်။ [[mark:draw-auto-basis]] ဒါပေမဲ့ ကိုယ့် box တွေရဲ့ basis က
+      auto ဖြစ်နေတုန်းပါ။ box တစ်ခုစီက ခရမ်းရောင် content အကျယ်ကို အရင် ရပြီး၊ အပုံတွေကို အဲဒီ
+      အပေါ်မှာမှ ထပ်ပေါင်းပါတယ်။ ဒါကြောင့် တစ်ပုံ နှစ်ပုံ သုံးပုံ အချိုးက အပို နေရာမှာပဲ ရှိပြီး၊
+      အကျယ် တစ်ခုလုံးမှာ မရှိပါဘူး။ [[mark:draw-zero-basis]] box တိုင်း သုညကနေ စမယ်ဆိုရင်တော့ နေရာ
+      အကုန်လုံးက နေရာလွတ် ဖြစ်သွားလို့၊ အကျယ်တွေ ကိုယ်တိုင်က တစ်ပုံ နှစ်ပုံ သုံးပုံ အချိုး
+      ဖြစ်လာပါမယ်။ [[mark:draw-three-values]] နှစ်မျိုးလုံး အသုံးဝင်ပါတယ်။ content ကနေ စချင်ပေမယ့်
+      ကြီးတဲ့ နှုန်း မတူစေချင်ရင်၊ flex မှာ ဂဏန်း တစ်ခုတည်း ရေးလို့ မရပါဘူး။ basis က 0 ဖြစ်သွားလို့ပါ။
+      board ပေါ်ကလို တန်ဖိုး သုံးခုလုံး ရေးပေးရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: allowing items to grow at different rates"
+        url: "https://web.dev/learn/css/flexbox#allowing_items_to_grow_at_different_rates"
+      - title: "MDN — Controlling ratios of flex items along the main axis"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Controlling_ratios_of_flex_items_along_the_main_axis"
+      - title: "CSS Flexible Box Layout Module Level 1 — resolving flexible lengths"
+        url: "https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths"
+    actions:
+      - id: open-parts-board
+        type: whiteboard.apply
+        at: { mark: open-parts-board }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-parts
+        type: whiteboard.apply
+        at: { mark: draw-parts }
+        upsertIds: [c-p1, c-l1, c-p2, c-p3, c-l2, c-p4, c-p5, c-p6, c-l3, c-sum]
+        drawMs: 4000
+      - id: draw-auto-basis
+        type: whiteboard.apply
+        at: { mark: draw-auto-basis }
+        upsertIds: [c-auto-k, c-a-c1, c-a-e1, c-a-c2, c-a-e2, c-a-c3, c-a-e3, c-auto-note]
+        drawMs: 4000
+      - id: draw-zero-basis
+        type: whiteboard.apply
+        at: { mark: draw-zero-basis }
+        upsertIds: [c-zero-k, c-z-1, c-z-2, c-z-3, c-zero-note]
+        drawMs: 3000
+      - id: draw-three-values
+        type: whiteboard.apply
+        at: { mark: draw-three-values }
+        upsertIds: [c-three]
+        drawMs: 1800
+
+  - id: basis
+    narration: >
+      [[mark:close-parts-board]] ဒါဆို box တွေ စတဲ့ အရွယ်ကို ပြောင်းကြည့်ရအောင်။ [[mark:type-basis]]
+      box သုံးခုလုံးကို ရွေးပြီး basis 0 ပေးပါမယ်။ ဒါဆို ဘယ် box မှ သူ့ content ကနေ မစတော့ပါဘူး။
+      [[mark:after-basis]] အခု အကျယ်တွေက တစ်ပုံ၊ နှစ်ပုံ၊ သုံးပုံ အတိအကျ ဖြစ်သွားပါပြီ။ တတိယ box က ပထမ
+      box ရဲ့ သုံးဆ ကျယ်ပါတယ်။ [[mark:select-basis]] ဒီ basis declaration ကို ကြည့်ပါ။ basis ဆိုတာ
+      နေရာလွတ်ကို မခွဲခင် main axis ပေါ်မှာ item စတဲ့ အရွယ်အစားပါ။ auto၊ သုည၊ ဒါမှမဟုတ် 120 pixel လို
+      အရှည် တစ်ခု ပေးလို့ ရပါတယ်။ row ထဲမှာ auto မဟုတ်တဲ့ basis က item မှာ ပေးထားတဲ့ အကျယ်ကို
+      နိုင်ပါတယ်။ ခုနက ခလုတ်တွေမှာ flex 1 လုပ်ခဲ့တာလည်း ဒါပါပဲ။ basis ကို သုည ပေးလိုက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items (flex-basis)"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "MDN — flex-basis"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-basis"
+      - title: "CSS Flexible Box Layout Module Level 1 — flex-basis"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-basis-property"
+    actions:
+      - id: close-parts-board
+        type: whiteboard.apply
+        at: { mark: close-parts-board }
+        open: false
+      - id: type-basis
+        type: editor.type
+        at: { mark: type-basis }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex-grow: 3;\n}\n", occurrence: 1 }
+        text: "\n.grow-row .box {\n  flex-basis: 0;\n}\n"
+      - id: expect-basis
+        type: expect.preview
+        at: { mark: after-basis }
+        timeoutMs: 4000
+        target: { by: testId, value: grow-row }
+        textContains: "သုံးပုံ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-basis
+        type: editor.select
+        at: { mark: select-basis }
+        target: { file: styles.css, text: "flex-basis: 0;", occurrence: 1 }
+
+  - id: shrink
+    chapter: "Shrink နဲ့ flex none"
+    narration: >
+      [[mark:scroll-logo]] အခု ပြောင်းပြန်ကို ကြည့်ရအောင်။ နေရာ မလောက်တဲ့ row ပါ။
+      [[mark:type-logo-row]] ခေါင်းစီးကိုလည်း ခုနက gap အတိုင်း flex container လုပ်ပါမယ်။ သူ့ child
+      သုံးခုက flex item တွေ ဖြစ်သွားပြီး၊ တစ်တန်းတည်းမှာ နေရာ ခွဲယူရပါမယ်။ [[mark:after-logo-row]]
+      logo၊ link တွေနဲ့ ခလုတ်က တစ်တန်းတည်း ရောက်သွားပေမယ့် မဆံ့ပါဘူး။ logo ကို ကြည့်ပါ၊ အဝိုင်းက
+      ဘေးကနေ ညှပ်ခံရပြီး ဒေါင်လိုက် ဘဲဥပုံ ဖြစ်သွားပါပြီ။ မှာယူဖို့ ခလုတ်လည်း ကျဉ်းသွားလို့၊ သူ့
+      စာသားက တစ်ကြောင်းတည်း မဆံ့တော့ဘဲ စာကြောင်း ခွဲပြီး ဆင်းသွားပါတယ်။ [[mark:explain-shrink]] ဒါက
+      shrink ရဲ့ default 1 ကြောင့်ပါ။ item တွေ မဆံ့ရင် item တိုင်းက သူ့ အရွယ်အစား တချို့ကို
+      လျှော့ပေးရပြီး၊ ကြီးတဲ့ item က ပိုများများ လျှော့ပေးရပါတယ်။ [[mark:type-logo-shrink]] logo က ပုံ
+      မပျက်သင့်လို့၊ သူ့ shrink ကို 0 ပေးပါမယ်။ 0 ဆိုတာ ဒီ item က သူ့ အရွယ်အစားကို ဘယ်တော့မှ
+      မလျှော့ပေးဘူး ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:after-logo-shrink]] logo က ပြန်ဝိုင်းသွားပြီး၊ အဲဒီအစား
+      link တွေက ကျဉ်းသွားပါတယ်။ [[mark:type-btn-none]] ခလုတ်အတွက်တော့ keyword တစ်ခု သုံးပါမယ်။ flex
+      ကို none ပေးတာပါ။ [[mark:after-btn-none]] ခလုတ်က သူ့ အကျယ် ပြန်ရပြီး တစ်ကြောင်းတည်း
+      ဖြစ်သွားပါပြီ။ [[mark:select-flex-none]] ဒီ flex none ကို ကြည့်ပါ။ သူက grow 0၊ shrink 0၊ basis
+      auto ပါ။ item က သူ့ content အရွယ်အစားကို ထိန်းထားပြီး၊ ဘယ်တော့မှ မကြီး မကျုံ့ပါဘူး။ flex row ထဲက
+      logo၊ icon နဲ့ ခလုတ်တွေအတွက် သင့်တော်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items (flex-shrink, flex: none)"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+      - title: "MDN — flex-shrink"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-shrink"
+      - title: "MDN — flex: none"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex#none"
+    actions:
+      - id: scroll-logo
+        type: preview.scroll
+        at: { mark: scroll-logo }
+        timeoutMs: 5000
+        top: 200
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-logo-row
+        type: editor.type
+        at: { mark: type-logo-row }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex-basis: 0;\n}\n", occurrence: 1 }
+        text: "\n.logo-row {\n  display: flex;\n  gap: 8px;\n}\n"
+      - id: expect-logo-row
+        type: expect.preview
+        at: { mark: after-logo-row }
+        timeoutMs: 4000
+        target: { by: testId, value: row-btn }
+        textContains: "အခု မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-logo-shrink
+        type: editor.type
+        at: { mark: type-logo-shrink }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".logo-row {\n  display: flex;\n  gap: 8px;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.row-logo {\n  flex-shrink: 0;\n}\n"
+      - id: type-btn-none
+        type: editor.type
+        at: { mark: type-btn-none }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex-shrink: 0;\n}\n", occurrence: 1 }
+        text: "\n.row-btn {\n  flex: none;\n}\n"
+      - id: expect-btn-none
+        type: expect.preview
+        at: { mark: after-btn-none }
+        timeoutMs: 4000
+        target: { by: testId, value: logo-row }
+        textContains: "ဆက်သွယ်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flex-none
+        type: editor.select
+        at: { mark: select-flex-none }
+        target: { file: styles.css, text: "flex: none;", occurrence: 1 }
+
+  - id: min-width-auto
+    chapter: "Item က ဘာလို့ မကျုံ့တာလဲ"
+    narration: >
+      [[mark:scroll-squeeze]] ကျုံ့တဲ့အခါ မကြာခဏ တွေ့ရမယ့် ကန့်သတ်ချက် တစ်ခု ရှိပါတယ်။
+      [[mark:type-squeeze]] စကားလုံး ရှည်ကြီး ပါတဲ့ row ကို flex container လုပ်ပြီး၊ box တိုင်းကို
+      flex 1 ပေးပါမယ်။ ဒါဆို box သုံးခုလုံး အကျယ် တူရမှာပါ။ [[mark:after-squeeze]] ဒါပေမဲ့ မတူပါဘူး။
+      စကားလုံး ရှည်ကြီး ပါတဲ့ box က ကျယ်နေပြီး၊ ကျန်တဲ့ နှစ်ခုကို ကျဉ်းအောင် ညှပ်ထားပါတယ်။
+      [[mark:explain-min-auto]] lesson 15 မှာ flex item တွေက အရှည်ဆုံး စကားလုံးလောက်အထိပဲ ကျုံ့တာ
+      မြင်ခဲ့ပါတယ်။ အဲဒီ ကန့်သတ်ချက်က min width ဆိုတဲ့ အနည်းဆုံး အကျယ်ကနေ လာတာပါ။ flex item တွေမှာ သူ့
+      default က auto ဖြစ်ပြီး၊ auto က item ကို သူ့ထဲက အရှည်ဆုံး စကားလုံးထက် မကျဉ်းစေပါဘူး။ ဒီ
+      စကားလုံးမှာ ချိုးစရာ နေရာ မရှိလို့ box က မကျုံ့နိုင်တာပါ။ [[mark:type-min-width]] min width ကို
+      0 ပေးကြည့်ရအောင်။ [[mark:after-min-width]] အခု box သုံးခုလုံး ညီသွားပေမယ့်၊ စကားလုံးက သူ့ box
+      ထက် ရှည်နေလို့ ကျန်တဲ့ အပိုင်းက ဘေးက box အောက်မှာ ပျောက်နေပါတယ်။ [[mark:type-overflow-wrap]]
+      နောက်ဆုံး၊ စကားလုံး ရှည်တွေ မဆံ့ရင် ဘယ်နေရာမှာ မဆို ချိုးခွင့် ပေးပါမယ်။
+      [[mark:after-overflow-wrap]] အခု စကားလုံးက သူ့ box ထဲမှာပဲ စာကြောင်း ခွဲပြီး ဆင်းသွားပါပြီ။ flex
+      item ထဲက link ရှည်တွေ၊ ပစ္စည်း နာမည် ရှည်တွေမှာလည်း ဒီ နည်းကိုပဲ သုံးရပါတယ်။
+    sources:
+      - title: "MDN — min-width: auto (automatic minimum size of flex items)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/min-width"
+      - title: "CSS Flexible Box Layout Module Level 1 — automatic minimum size of flex items"
+        url: "https://www.w3.org/TR/css-flexbox-1/#min-size-auto"
+      - title: "MDN — overflow-wrap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-wrap"
+      - title: "web.dev Learn CSS — Flexbox: wrapping flex items"
+        url: "https://web.dev/learn/css/flexbox#wrapping_flex_items"
+    actions:
+      - id: scroll-squeeze
+        type: preview.scroll
+        at: { mark: scroll-squeeze }
+        timeoutMs: 5000
+        top: 360
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-squeeze
+        type: editor.type
+        at: { mark: type-squeeze }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  flex: none;\n}\n", occurrence: 1 }
+        text: "\n.squeeze-row {\n  display: flex;\n  gap: 8px;\n}\n\n.squeeze-row .box {\n  flex: 1;\n}\n"
+      - id: expect-squeeze
+        type: expect.preview
+        at: { mark: after-squeeze }
+        timeoutMs: 4000
+        target: { by: testId, value: squeeze-row }
+        textContains: "PyinmanaExpressSpecialMilkTea"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-min-width
+        type: editor.type
+        at: { mark: type-min-width }
+        cadence: natural
+        target: { file: styles.css, after: ".squeeze-row .box {\n  flex: 1;\n", occurrence: 1 }
+        text: "  min-width: 0;\n"
+      - id: type-overflow-wrap
+        type: editor.type
+        at: { mark: type-overflow-wrap }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  min-width: 0;\n", occurrence: 1 }
+        text: "  overflow-wrap: anywhere;\n"
+      - id: expect-overflow-wrap
+        type: expect.preview
+        at: { mark: after-overflow-wrap }
+        timeoutMs: 4000
+        target: { by: testId, value: squeeze-row }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: sidebar
+    chapter: "Sidebar layout လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-layout]] ဒါတွေ အကုန်ကို တကယ့် layout တစ်ခုမှာ သုံးကြည့်ရအောင်။ lesson 15 ရဲ့ အစမှာ
+      ပြောခဲ့တဲ့ sidebar layout ပါ။ [[mark:type-layout]] layout ကို wrap လုပ်ခွင့် ရှိတဲ့ flex
+      container လုပ်ပြီး၊ အပိုင်း နှစ်ပိုင်းကြားမှာ gap ထည့်ပါမယ်။ [[mark:after-layout]] အပိုင်း
+      နှစ်ပိုင်းက တစ်တန်းစီ ခွဲသွားပြီး၊ တစ်ပိုင်းစီက သူ့ content လောက်ပဲ ကျယ်ပါတယ်။
+      [[mark:type-bases]] အခု sidebar ကို 180 pixel ကနေ၊ content ကို 260 pixel ကနေ စခိုင်းပါမယ်။
+      နေရာလွတ် ရှိရင်တော့ content က sidebar ထက် သုံးဆ ယူပါမယ်။ [[mark:after-bases]] အပိုင်း
+      နှစ်ပိုင်းလုံး အကျယ် အပြည့် ဖြစ်သွားပါပြီ။ sidebar က အပေါ်မှာ၊ content က အောက်မှာ ရှိပါတယ်။
+      [[mark:select-bases]] ဒီ rule နှစ်ခုကို ကြည့်ပါ။ basis နှစ်ခုနဲ့ gap ကို ပေါင်းရင် 456 pixel
+      ရပေမယ့်၊ ဒီ page က 400 pixel လောက်ပဲ ကျယ်ပါတယ်။ တစ်တန်းတည်း မဆံ့လို့ content က နောက်တစ်တန်းကို
+      ဆင်းသွားပြီး၊ အပိုင်းတစ်ခုစီက သူ့ တန်းကို ပြည့်အောင် ကြီးလာတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox (the sidebar pattern)"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "MDN — flex-wrap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-wrap"
+      - title: "MDN — flex-basis"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-basis"
+    actions:
+      - id: scroll-layout
+        type: preview.scroll
+        at: { mark: scroll-layout }
+        timeoutMs: 5000
+        top: 470
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-layout
+        type: editor.type
+        at: { mark: type-layout }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  overflow-wrap: anywhere;\n}\n", occurrence: 1 }
+        text: "\n.layout {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 16px;\n}\n"
+      - id: expect-layout
+        type: expect.preview
+        at: { mark: after-layout }
+        timeoutMs: 4000
+        target: { by: testId, value: sidebar }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bases
+        type: editor.type
+        at: { mark: type-bases }
+        # block: both bases land together. Typed line by line, the sidebar's
+        # basis alone (180 + 16 + content's ~200 auto) fits the 400 px row and
+        # the parts jump side by side for ~3 s before content's basis restacks them.
+        cadence: block
+        target: { file: styles.css, after: "  gap: 16px;\n}\n", occurrence: 1 }
+        text: "\n.sidebar {\n  flex: 1 1 180px;\n}\n\n.content {\n  flex: 3 1 260px;\n}\n"
+      - id: expect-bases
+        type: expect.preview
+        at: { mark: after-bases }
+        timeoutMs: 4000
+        target: { by: testId, value: content }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-bases
+        type: editor.select
+        at: { mark: select-bases }
+        target:
+          {
+            file: styles.css,
+            text: ".sidebar {\n  flex: 1 1 180px;\n}\n\n.content {\n  flex: 3 1 260px;\n}",
+            occurrence: 1,
+          }
+
+  - id: sidebar-board
+    narration: >
+      [[mark:open-sidebar-board]] screen ပိုကျယ်ရင်တော့ ဒီ CSS ကပဲ တခြား ပုံစံ ထွက်လာပါတယ်။
+      [[mark:draw-narrow]] ကိုယ့် preview လို ကျဉ်းတဲ့ နေရာမှာ basis နှစ်ခု ဘေးချင်း မဆံ့လို့
+      အပိုင်းတွေ အပေါ်အောက် ဆင့်ပါတယ်။ [[mark:draw-wide]] row က 456 pixel ထက် ကျယ်လာတာနဲ့ basis
+      နှစ်ခုလုံး တစ်တန်းတည်း ဆံ့သွားလို့၊ sidebar က content ရဲ့ ဘေးမှာ ကပ်နေပါမယ်။ အဲဒီအခါ နေရာလွတ်ကို
+      တစ်ပုံနဲ့ သုံးပုံ ခွဲလို့၊ content က သုံးဆ ပိုမြန်မြန် ကြီးပါတယ်။ [[mark:draw-no-width]] screen
+      အကျယ်ကို ဘယ်မှာမှ မရေးခဲ့ပါဘူး။ basis နှစ်ခု ဆံ့ရင် ဘေးချင်းကပ်ပြီး၊ မဆံ့ရင် wrap လုပ်တာကို
+      layout က သူ့ဘာသာ ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox (flexible limits instead of fixed sizes)"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "MDN — Typical use cases of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Typical_use_cases_of_flexbox"
+    actions:
+      - id: open-sidebar-board
+        type: whiteboard.apply
+        at: { mark: open-sidebar-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-narrow
+        type: whiteboard.apply
+        at: { mark: draw-narrow }
+        upsertIds: [d-n-frame, d-n-side, d-n-side-l, d-n-cont, d-n-cont-l, d-n-label, d-n-sum]
+        drawMs: 3500
+      - id: draw-wide
+        type: whiteboard.apply
+        at: { mark: draw-wide }
+        upsertIds: [d-w-frame, d-w-side, d-w-side-l, d-w-cont, d-w-cont-l, d-w-label, d-w-ratio]
+        drawMs: 4000
+      - id: draw-no-width
+        type: whiteboard.apply
+        at: { mark: draw-no-width }
+        upsertIds: [d-no-width]
+        drawMs: 1600
+
+  - id: order
+    chapter: "Order နဲ့ ဖတ်တဲ့ အစဉ်"
+    narration: >
+      [[mark:close-sidebar-board]] flex item မှာ ပေးတဲ့ property နောက်ထပ် တစ်ခုက order ပါ။ သူက HTML
+      ကို မပြောင်းဘဲ item တစ်ခုကို တခြား နေရာမှာ ပြပေးပါတယ်။ [[mark:scroll-drinks]] ဥပမာ နွေရာသီမှာ
+      ဆိုင်က list ရဲ့ နောက်ဆုံးမှာ ရှိတဲ့ ဖာလူဒါကို အပေါ်ဆုံးမှာ ပြချင်တယ် ဆိုပါစို့။
+      [[mark:type-menu-flex]] order က flex item ဒါမှမဟုတ် grid item မှာပဲ အလုပ်လုပ်လို့၊ သောက်စရာ list
+      ကို flex container အရင် လုပ်ပါမယ်။ card တွေ အပေါ်အောက် ဆင့်နေအောင် direction ကို column
+      ပေးပါမယ်။ [[mark:after-menu-flex]] ဘာမှ မရွေ့သေးပါဘူး။ [[mark:type-order]] အခု lesson 4 မှာ
+      တွေ့ခဲ့တဲ့ last-child နဲ့ နောက်ဆုံး card ကို ရွေးပါမယ်။ ပြီးတော့ သူ့ကို order အနုတ် 1 ပေးပါမယ်။
+      order မှာ အနုတ် ဂဏန်းလည်း ပေးလို့ ရပါတယ်။ [[mark:after-order]] ဖာလူဒါက list ရဲ့ အပေါ်ဆုံးကို
+      ခုန်တက်သွားပါပြီ။ [[mark:select-order]] ဒီ order declaration ကို ကြည့်ပါ။ item တိုင်းရဲ့ order က
+      default အားဖြင့် 0 ပါ။ တန်ဖိုး ငယ်တာ အရင် လာပြီး၊ တန်ဖိုး တူတဲ့ item တွေက HTML အစဉ်အတိုင်း
+      ရှိပါတယ်။ အနုတ် 1 က 0 ထက် ငယ်လို့ ဒီ card က ရှေ့ဆုံး ရောက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: reordering flex items"
+        url: "https://web.dev/learn/css/flexbox#reordering_flex_items"
+      - title: "MDN — order"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/order"
+      - title: "MDN — Ordering flex items"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Ordering_flex_items"
+    actions:
+      - id: close-sidebar-board
+        type: whiteboard.apply
+        at: { mark: close-sidebar-board }
+        open: false
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: scroll-drinks }
+        timeoutMs: 5000
+        top: 600
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # block: typed keystroke by keystroke, "display: flex" alone would make
+      # the four cards a squeezed row for a few seconds before the column lands.
+      - id: type-menu-flex
+        type: editor.type
+        at: { mark: type-menu-flex }
+        cadence: block
+        target: { file: styles.css, after: "  flex: 3 1 260px;\n}\n", occurrence: 1 }
+        text: "\n.content .menu {\n  display: flex;\n  flex-direction: column;\n}\n"
+      - id: type-order
+        type: editor.type
+        at: { mark: type-order }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex-direction: column;\n}\n", occurrence: 1 }
+        text: "\n.content .menu-card:last-child {\n  order: -1;\n}\n"
+      - id: expect-order
+        type: expect.preview
+        at: { mark: after-order }
+        timeoutMs: 4000
+        target: { by: testId, value: card-falooda }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-order
+        type: editor.select
+        at: { mark: select-order }
+        target: { file: styles.css, text: "order: -1;", occurrence: 1 }
+
+  - id: order-board
+    narration: >
+      [[mark:open-order-board]] ဒါပေမဲ့ order က မြင်ရတာကိုပဲ ပြောင်းပါတယ်။ lesson 15 မှာ direction ကို
+      reverse လုပ်ခဲ့တာနဲ့ အတူတူပါ။ [[mark:draw-visual]] screen ပေါ်မှာတော့ ဖာလူဒါက ပထမဆုံး
+      ပေါ်နေပါပြီ။ [[mark:draw-dom]] ဒါပေမဲ့ screen reader က card တွေကို HTML အစဉ်အတိုင်းပဲ ဖတ်ပြီး၊
+      Tab key ကလည်း link တွေ၊ ခလုတ်တွေကို HTML အစဉ်အတိုင်းပဲ သွားပါတယ်။ ဒါကြောင့် Tab key နှိပ်တိုင်း
+      ရွေးထားတဲ့ element က screen ပေါ်က အစဉ်နဲ့ မကိုက်ဘဲ ဟိုခုန် ဒီခုန် ဖြစ်နိုင်ပါတယ်။
+      [[mark:draw-fix]] ဒါကြောင့် order ကို ဖတ်တဲ့ အစဉ် အရေးမကြီးတဲ့ နေရာမှာပဲ သုံးပါ။ တစ်ခုခုကို တကယ်
+      ရှေ့ဆုံးမှာ ထားရမယ်ဆိုရင် HTML ထဲမှာပဲ ရွှေ့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: reversing the flow of items and accessibility"
+        url: "https://web.dev/learn/css/flexbox#reversing_the_flow_of_items_and_accessibility"
+      - title: "CSS Display Module Level 3 — reordering and accessibility"
+        url: "https://www.w3.org/TR/css-display-3/#order-accessibility"
+      - title: "MDN — Ordering flex items: the order property and accessibility"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Ordering_flex_items"
+    actions:
+      - id: open-order-board
+        type: whiteboard.apply
+        at: { mark: open-order-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-visual
+        type: whiteboard.apply
+        at: { mark: draw-visual }
+        upsertIds: [e-vis-k, e-v1, e-v2, e-v3, e-v4, e-v1-circle]
+        drawMs: 2600
+      - id: draw-dom
+        type: whiteboard.apply
+        at: { mark: draw-dom }
+        upsertIds: [e-dom-k, e-dom-arrow, e-d1, e-d2, e-d3, e-d4]
+        drawMs: 3200
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [e-fix]
+        drawMs: 1600
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ flex row ထဲက item တစ်ခု ညှပ်ခံရပြီး
+      ပုံပျက်နေရင်၊ ဘယ် property က တားပေးမလဲ။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေက shrink ပါ။
+      သူ့ default က 1 ဖြစ်လို့ item တွေက ကျုံ့ကြပါတယ်။ သူ့ကို 0 ပေးတာ ဖြစ်ဖြစ်၊ flex none သုံးတာ
+      ဖြစ်ဖြစ် ရပါတယ်။ grow က နေရာ ပိုမှသာ အရေးပါပြီး၊ basis ကတော့ စမှတ် သက်သက်ပါ။
+      [[mark:draw-defaults]] တခြား default တွေကိုလည်း မှတ်ထားပါ။ flex container က row ဖြစ်ပြီး၊ ကိုယ်
+      မပြောမချင်း wrap မလုပ်ပါဘူး။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ flex item တိုင်းက grow 0၊
+      shrink 1၊ basis auto နဲ့ စပါတယ်။ basis က စတဲ့ အရွယ်အစား ဖြစ်ပြီး၊ နေရာ ပိုရင် grow က နေရာလွတ်ကို
+      ခွဲပေးပါတယ်။ နေရာ မလောက်ရင်တော့ shrink က အရွယ်အစားကို လျှော့ပြီး၊ item တစ်ခု မကျုံ့ရင် min width
+      ကို စစ်ကြည့်ပါ။ order ကတော့ မြင်ရတာကိုပဲ ပြောင်းပြီး ဖတ်တဲ့ အစဉ်ကို မပြောင်းပါဘူး။
+      [[mark:next-lesson]] item တွေရဲ့ အရွယ်အစား အဆင်ပြေသွားပေမယ့်၊ align မလုပ်ရသေးပါဘူး။ နောက် lesson
+      မှာတော့ item တွေကို axis နှစ်ခုအတိုင်း align လုပ်ပြီး အလယ်တည့်တည့် ထားတာကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: check your understanding"
+        url: "https://web.dev/learn/css/flexbox#check_your_understanding"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+      - title: "web.dev Learn CSS — Flexbox: alignment overview (next lesson)"
+        url: "https://web.dev/learn/css/flexbox#flexbox_alignment_overview"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a, f-a-check, f-a-none]
+        drawMs: 2000
+      - id: draw-defaults
+        type: whiteboard.apply
+        at: { mark: draw-defaults }
+        upsertIds: [f-defaults]
+        drawMs: 1600
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".size-row {\n  display: flex;\n  gap: 8px;\n}\n\n.size-row button {\n  flex: auto;\n  flex: 1;\n}\n\n.grow-row {\n  display: flex;\n  gap: 8px;\n}\n\n.grow-row .box:nth-child(1) {\n  flex-grow: 1;\n}\n\n.grow-row .box:nth-child(2) {\n  flex-grow: 2;\n}\n\n.grow-row .box:nth-child(3) {\n  flex-grow: 3;\n}\n\n.grow-row .box {\n  flex-basis: 0;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".logo-row {\n  display: flex;\n  gap: 8px;\n}\n\n.row-logo {\n  flex-shrink: 0;\n}\n\n.row-btn {\n  flex: none;\n}\n\n.squeeze-row {\n  display: flex;\n  gap: 8px;\n}\n\n.squeeze-row .box {\n  flex: 1;\n  min-width: 0;\n  overflow-wrap: anywhere;\n}\n"
+      - id: expect-final-css-3
+        type: expect.file
+        at: { afterAction: expect-final-css-2 }
+        path: styles.css
+        contains: ".layout {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 16px;\n}\n\n.sidebar {\n  flex: 1 1 180px;\n}\n\n.content {\n  flex: 3 1 260px;\n}\n\n.content .menu {\n  display: flex;\n  flex-direction: column;\n}\n\n.content .menu-card:last-child {\n  order: -1;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
