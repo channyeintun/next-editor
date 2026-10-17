@@ -1,0 +1,2154 @@
+# CSS course (Burmese), lesson 35 of 43: paths, shapes, clipping and masking.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end or right after a ၊ pause.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 34; clip path cuts a box along a shape; four
+# shape functions; three places they are used; masks later) → code tour
+# (hero, three photo stand-ins in dashed outlines, today's special with a
+# gold square and a price label, the teapot floated beside a long story, a
+# coaster on a green table, a leaf dot beside a dashed track) → circle(50%),
+# then a smaller circle moved with at → ellipse with two radii at the top edge
+# (a bowl) → inset crop (the neighbour and the outline stay put), then round →
+# board (polygon points) → an arrow price tag and a slanted hero (line by line)
+# → a self-crossing star, then evenodd → board (trig, path, shape, reference
+# boxes, SVG clipPath) → the teapot clipped round (text still wraps the
+# square), then shape outside, then shape margin → a mask fades the story →
+# board (clip vs mask, alpha vs luminance, SVG mask type) → a two-layer mask on
+# the coaster, then mask composite exclude (a hole) → offset path on the leaf
+# dot, offset distance 0 / 25 / 50 / 75 percent → quiz + recap, hand-off to
+# filters (lesson 36).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# An unclosed "(" swallows the rest of the stylesheet, so every keystroke edit
+# that contains "(" lands in the LAST rule of the file at that moment; the
+# polygon rules and the coaster's two-layer mask are line-by-line (every
+# revealed line has balanced parentheses); evenodd is one block insert. Until
+# a typed declaration is complete it is invalid and the previous declaration
+# in the same rule keeps painting.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# hero 16–156, round photo 160 × 160 at y 172, bowl 200 × 110, banner 280 × 100
+# at y 348 beside a 104 × 100 neighbour, today's special card 502–611 (gold
+# square 48 × 48, price label 121 × 33 at y 566), about 623–1035 (teapot
+# 180 × 180 floated at y 661), coaster table and orbit 1046–1226, document
+# 1276 tall: scroll 0 shows the hero to the card, scroll to the end (556)
+# shows the about section, the coaster and the orbit. Typing changes no box
+# size (clipping, masks, shape outside and offset path never move a box).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-35-shapes-clipping
+  title: "CSS course 35: Path၊ shape၊ clipping နဲ့ masking"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 35
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit hero (fixed height and a darker background in
+      # base.css), the lesson block shape-photos (the kit's teahouse picture,
+      # a soup bowl and a banner beside a neighbour box, each in a dashed .demo
+      # outline), the kit drinks block cut to today's special (a gold .star
+      # square and a .price-tag price), the kit about block with a floated
+      # .teapot and a longer story, and the lesson blocks coaster (on a green
+      # table) and orbit (a dashed track and a leaf dot). images.css is linked
+      # before styles.css. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/images.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero (a fixed height and a darker background in base.css) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+              </section>
+
+              <!-- lesson block: shape-photos (dashed .demo outlines show each box) -->
+              <section class="shape-photos" data-testid="shape-photos">
+                <div class="photo-row">
+                  <div class="shot demo">
+                    <img class="round-photo" src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="160" height="160" data-testid="round-photo" />
+                  </div>
+                  <div class="shot demo">
+                    <div class="bowl" role="img" aria-label="မုန့်ဟင်းခါး ပန်းကန်" data-testid="bowl"></div>
+                  </div>
+                </div>
+                <div class="banner-row">
+                  <div class="shot demo">
+                    <div class="crop-banner" role="img" aria-label="ဆိုင်ရှေ့ ရှုခင်း" data-testid="crop-banner"></div>
+                  </div>
+                  <p class="neighbour" data-testid="neighbour">ဘေးက box</p>
+                </div>
+              </section>
+
+              <!-- kit block: drinks (today's special only; its price is a .price-tag, plus a .star badge) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <span class="star" aria-hidden="true" data-testid="star"></span>
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price price-tag" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: about (a longer story with a floated .teapot before it) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <div class="teapot" role="img" aria-label="ကရား" data-testid="teapot"></div>
+                <p class="story" data-testid="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။ ဖျော်နည်းကို ဆိုင်စဖွင့်ကတည်းက မပြောင်းဘဲ ထိန်းထားပါတယ်။ စနေ၊ တနင်္ဂနွေ မနက်တွေမှာ မိသားစုတွေ၊ မိတ်ဆွေတွေနဲ့ ဆိုင်ထဲမှာ စည်ကားပါတယ်။ လက်ဖက်သုပ်နဲ့ မုန့်ဟင်းခါးကလည်း ဆိုင်ရဲ့ နာမည်ကြီး စားစရာတွေပါ။ ဈေးနှုန်းကိုလည်း လူတိုင်း လာစားနိုင်အောင် သက်သက်သာသာ ထားပါတယ်။</p>
+              </section>
+
+              <!-- lesson blocks: coaster (on a green table) and orbit (a dashed track and a leaf dot) -->
+              <div class="extras">
+                <div class="table" data-testid="table">
+                  <div class="coaster" role="img" aria-label="ခွက်ခံ" data-testid="coaster"></div>
+                </div>
+                <div class="orbit" data-testid="orbit">
+                  <span class="leaf-dot" aria-hidden="true" data-testid="leaf-dot"></span>
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2, C and D. Section E pins the photo
+      # stand-ins and their rows, the darker fixed-height hero, the star square,
+      # the price label, the floated 180 px teapot, the coaster and its table,
+      # and the orbit's dashed track with the absolutely positioned leaf dot.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 35 keeps A, B, B2, C and D (.demo draws the dashed box edges).
+          Section E pins the photo stand-ins and their rows, a darker fixed-height
+          hero, the price tag and the star badge, the floated teapot, the coaster on
+          its table and the orbit with its dashed track. No clip path, mask, shape
+          outside or offset path on anything: the lesson types them.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 35: the photo stand-ins (a round photo, a soup bowl, a banner and its
+           neighbour), a darker fixed-height hero, the price tag, the star badge, the
+           floated teapot, the coaster on a green table and the orbit's dashed track.
+           Their clip paths, masks, shapes and motion paths are typed in the lesson. */
+        .hero {
+          height: 140px;
+          background: linear-gradient(135deg, var(--tea), var(--tea-dark));
+          color: var(--cream);
+        }
+
+        .photo-row,
+        .banner-row,
+        .extras {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin: 0 0 16px;
+        }
+
+        .shot {
+          flex: none;
+        }
+
+        .round-photo {
+          display: block;
+          width: 160px;
+          height: 160px;
+          object-fit: cover;
+        }
+
+        .bowl {
+          width: 200px;
+          height: 110px;
+          background: linear-gradient(var(--gold), var(--chili));
+        }
+
+        .crop-banner {
+          width: 280px;
+          height: 100px;
+          background-image: var(--photo);
+          background-size: cover;
+        }
+
+        .neighbour {
+          display: grid;
+          place-items: center;
+          width: 104px;
+          height: 100px;
+          margin: 0;
+          background: #fff;
+          border: 1px solid var(--line);
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .star {
+          float: right;
+          width: 48px;
+          height: 48px;
+          background: var(--gold);
+        }
+
+        .price-tag {
+          display: inline-block;
+          padding: 2px 32px 2px 12px;
+          background: var(--tea);
+          color: #fff;
+        }
+
+        .teapot {
+          float: left;
+          width: 180px;
+          height: 180px;
+          background: radial-gradient(circle at 35% 35%, var(--tea-light), var(--tea));
+        }
+
+        .story {
+          margin: 0;
+        }
+
+        .table {
+          display: grid;
+          place-items: center;
+          width: 180px;
+          height: 180px;
+          background: var(--leaf);
+          border-radius: var(--radius);
+        }
+
+        .coaster {
+          width: 140px;
+          height: 140px;
+          border-radius: 50%;
+          background: repeating-linear-gradient(45deg, var(--tea-light) 0 8px, var(--cream) 8px 16px);
+        }
+
+        .orbit {
+          position: relative;
+          width: 200px;
+          height: 200px;
+        }
+
+        .orbit::before {
+          content: "";
+          position: absolute;
+          inset: 20px;
+          border: 2px dashed var(--tea-light);
+          border-radius: 50%;
+        }
+
+        .leaf-dot {
+          position: absolute;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: var(--leaf);
+        }
+      # images.css: the kit's data: URI images in custom properties (the
+      # banner reads --photo), so no typed file ever contains url(.
+      images.css: |
+        /*
+          images.css: pinned, never typed, linked only by lessons that need background
+          or mask images (33 backgrounds, 37 blend modes, optionally 35 masks).
+          Images are data: URIs inside custom properties, so a lesson's styles.css can
+          write background-image: var(--leaf-tile) and never contains url( itself:
+          url( in a typed file makes Vite run postcss on every keystroke, which shows
+          its error overlay on half-typed states (PLATFORM.md section 2). url() to a
+          project file does replay (fixed in 0a728aef); data: URIs simply keep the
+          images self-contained.
+        */
+        :root {
+          --leaf-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 19C5 10 11 5 19 5c0 8-5 14-14 14z' fill='%232f6b3a' fill-opacity='0.35'/%3E%3Cpath d='M6 18L17 7' stroke='%232f6b3a' stroke-opacity='0.5' stroke-width='1'/%3E%3C/svg%3E");
+          --cup-badge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M15 9c-2-2 2-4 0-6M21 9c-2-2 2-4 0-6' fill='none' stroke='%23c9a27e' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M7 13h22v6a11 11 0 0 1-22 0z' fill='%238b5a2b'/%3E%3Cpath d='M29 15h3a4 4 0 0 1 0 8h-4' fill='none' stroke='%238b5a2b' stroke-width='2.5'/%3E%3Cellipse cx='18' cy='35' rx='14' ry='3' fill='%233b2314'/%3E%3C/svg%3E");
+          --photo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='200' viewBox='0 0 320 200'%3E%3Crect width='320' height='200' fill='%239fd3e6'/%3E%3Ccircle cx='260' cy='44' r='22' fill='%23fff4c2'/%3E%3Cpath d='M0 120 Q80 70 160 110 T320 100 V200 H0z' fill='%232f6b3a'/%3E%3Cpath d='M0 150 Q90 115 190 145 T320 140 V200 H0z' fill='%234f8a3c'/%3E%3Cg fill='%231f4a28'%3E%3Ccircle cx='40' cy='160' r='6'/%3E%3Ccircle cx='70' cy='170' r='6'/%3E%3Ccircle cx='100' cy='158' r='6'/%3E%3Ccircle cx='130' cy='172' r='6'/%3E%3Ccircle cx='220' cy='166' r='6'/%3E%3Ccircle cx='250' cy='176' r='6'/%3E%3Ccircle cx='280' cy='162' r='6'/%3E%3C/g%3E%3Crect x='140' y='128' width='40' height='30' fill='%23c9a27e'/%3E%3Cpath d='M134 130 L160 112 L186 130z' fill='%238b5a2b'/%3E%3C/svg%3E");
+        }
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — shapes cut out of boxes. Black = the box (it stays), blue =
+    # clip path (the shape painted), violet = the shape functions, blue /
+    # green / orange = the three places a shape is used, red = masks (later).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "လေးထောင့် မဟုတ်တဲ့ ပုံသဏ္ဌာန်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-box,
+        kind: rectangle,
+        x: 300,
+        y: 290,
+        width: 240,
+        height: 150,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-cut,
+        kind: ellipse,
+        x: 300,
+        y: 290,
+        width: 240,
+        height: 150,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-box-l,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 300,
+        height: 36,
+        text: "box · မပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-cut-l,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 300,
+        height: 36,
+        text: "အထဲကပဲ ဆွဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-funcs,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 700,
+        height: 36,
+        text: "circle() · ellipse() · inset() · polygon()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 565,
+        y: 345,
+        width: 90,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-use1,
+        kind: text,
+        x: 680,
+        y: 290,
+        width: 400,
+        height: 36,
+        text: "clip path → ဖြတ်ယူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-use2,
+        kind: text,
+        x: 680,
+        y: 345,
+        width: 400,
+        height: 36,
+        text: "shape outside → စာ ပတ်စီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-use3,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 400,
+        height: 36,
+        text: "offset path → သွားမယ့် လမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-mask,
+        kind: text,
+        x: 680,
+        y: 490,
+        width: 400,
+        height: 36,
+        text: "mask → မှိန်သွားအောင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — polygon coordinates. Black = the box, blue = the corners and
+    # axes, orange = the price tag's five points in order, green = the comma
+    # rule, violet = the closing rule.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Polygon ရဲ့ အမှတ်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-box,
+        kind: rectangle,
+        x: 330,
+        y: 260,
+        width: 360,
+        height: 180,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-c1,
+        kind: text,
+        x: 290,
+        y: 215,
+        width: 80,
+        height: 36,
+        text: "0 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: text,
+        x: 620,
+        y: 215,
+        width: 120,
+        height: 36,
+        text: "100% 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c3,
+        kind: text,
+        x: 600,
+        y: 450,
+        width: 170,
+        height: 36,
+        text: "100% 100%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c4,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 120,
+        height: 36,
+        text: "0 100%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-x,
+        kind: text,
+        x: 790,
+        y: 260,
+        width: 280,
+        height: 36,
+        text: "x → ညာဘက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-y,
+        kind: text,
+        x: 790,
+        y: 310,
+        width: 280,
+        height: 36,
+        text: "y → အောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-p1,
+        kind: ellipse,
+        x: 320,
+        y: 250,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-p2,
+        kind: ellipse,
+        x: 626,
+        y: 250,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-p3,
+        kind: ellipse,
+        x: 680,
+        y: 340,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-p4,
+        kind: ellipse,
+        x: 626,
+        y: 430,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-p5,
+        kind: ellipse,
+        x: 320,
+        y: 430,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-n1,
+        kind: text,
+        x: 350,
+        y: 275,
+        width: 30,
+        height: 36,
+        text: "1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-n2,
+        kind: text,
+        x: 600,
+        y: 275,
+        width: 30,
+        height: 36,
+        text: "2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-n3,
+        kind: text,
+        x: 640,
+        y: 332,
+        width: 30,
+        height: 36,
+        text: "3",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-n4,
+        kind: text,
+        x: 600,
+        y: 390,
+        width: 30,
+        height: 36,
+        text: "4",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-n5,
+        kind: text,
+        x: 350,
+        y: 390,
+        width: 30,
+        height: 36,
+        text: "5",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-comma,
+        kind: text,
+        x: 790,
+        y: 380,
+        width: 300,
+        height: 36,
+        text: "comma → အမှတ်ကြား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-close,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 600,
+        height: 36,
+        text: "နောက်ဆုံး အမှတ် → ပထမ အမှတ်ကို ပြန်ဆက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — beyond polygon. Violet = trig, orange = path(), green =
+    # shape(), black / blue / green rectangles = border, padding and content
+    # boxes, red = an SVG clipPath.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "ပိုရှုပ်တဲ့ ပုံသဏ္ဌာန်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-trig,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 700,
+        height: 36,
+        text: "cos() · sin() → အမှတ်တွေကို တွက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-path,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 700,
+        height: 36,
+        text: "path() → SVG path · pixel ပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-shape,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 700,
+        height: 36,
+        text: "shape() → % · rem · box နဲ့ လိုက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-border,
+        kind: rectangle,
+        x: 300,
+        y: 405,
+        width: 250,
+        height: 190,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-padding,
+        kind: rectangle,
+        x: 322,
+        y: 427,
+        width: 206,
+        height: 146,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-content,
+        kind: rectangle,
+        x: 350,
+        y: 455,
+        width: 150,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: c-border-l,
+        kind: text,
+        x: 600,
+        y: 415,
+        width: 420,
+        height: 36,
+        text: "border box · default",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-content-l,
+        kind: text,
+        x: 600,
+        y: 470,
+        width: 420,
+        height: 36,
+        text: "content box",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-svg,
+        kind: text,
+        x: 600,
+        y: 550,
+        width: 460,
+        height: 36,
+        text: "url(#id) → SVG clipPath",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — clip path vs mask, alpha vs luminance. Blue = clip path,
+    # green = mask and "shown", red = "hidden", violet = alpha, orange =
+    # luminance.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Clip path နဲ့ mask",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-clip,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 180,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-clip-l,
+        kind: text,
+        x: 300,
+        y: 325,
+        width: 280,
+        height: 36,
+        text: "clip path · ပြ / ဖျောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-mask,
+        kind: rectangle,
+        x: 660,
+        y: 225,
+        width: 180,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: d-mask-l,
+        kind: text,
+        x: 660,
+        y: 325,
+        width: 400,
+        height: 36,
+        text: "mask · တဖြည်းဖြည်း မှိန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-alpha,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 300,
+        height: 36,
+        text: "alpha · default",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-a1,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 320,
+        height: 36,
+        text: "အမည်း၊ အဖြူ → မြင်ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-a2,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 320,
+        height: 36,
+        text: "transparent → မမြင်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-lum,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 300,
+        height: 36,
+        text: "luminance",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-l1,
+        kind: text,
+        x: 680,
+        y: 450,
+        width: 320,
+        height: 36,
+        text: "အဖြူ → မြင်ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-l2,
+        kind: text,
+        x: 680,
+        y: 500,
+        width: 320,
+        height: 36,
+        text: "အမည်း → မမြင်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-svg,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 640,
+        height: 36,
+        text: "SVG mask → luminance · mask type",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — the closing quiz. Blue = questions, green = answers.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-q1,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 720,
+        height: 40,
+        text: "Clip path က box ကို သေးစေလား?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a1,
+        kind: text,
+        x: 300,
+        y: 272,
+        width: 720,
+        height: 36,
+        text: "မသေး · ဆွဲတာပဲ ပြောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-q2,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 720,
+        height: 40,
+        text: "path() မှာ % သုံးလို့ ရလား?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a2,
+        kind: text,
+        x: 300,
+        y: 392,
+        width: 720,
+        height: 36,
+        text: "မရ · pixel ပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-q3,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 720,
+        height: 40,
+        text: "Mask အဖြစ် ဘာ သုံးလို့ ရလဲ?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a3,
+        kind: text,
+        x: 300,
+        y: 512,
+        width: 720,
+        height: 36,
+        text: "ပုံ · gradient · SVG mask",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4135
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: shapes-intro
+    chapter: "Shape function တွေ ဘယ်မှာ သုံးလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ထောင့်ဝိုင်းဟာ လေးထောင့် မဟုတ်တဲ့ ပုံ ရဖို့ အရိုးရှင်းဆုံး နည်း
+      ဖြစ်တယ်လို့ ပြောခဲ့ပါတယ်။ ဒီ lesson မှာတော့ box တွေကို ကြိုက်တဲ့ ပုံသဏ္ဌာန် ဖြတ်ကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-box]] page ပေါ်က element တိုင်းက အခုထိ လေးထောင့် box တွေပါပဲ။ clip path ဆိုတာ
+      element ကို ပုံသဏ္ဌာန် တစ်ခုအတိုင်း ဖြတ်ပြီး၊ အဲဒီ ပုံသဏ္ဌာန်ထဲက အပိုင်းကိုပဲ မြင်ရအောင်
+      လုပ်တာပါ။ [[mark:draw-functions]] ပုံသဏ္ဌာန်ကိုတော့ shape function နဲ့ ဖော်ပြပါတယ်။ ဒီနေ့
+      ရိုက်မယ့် လေးခုက circle၊ ellipse၊ inset နဲ့ polygon ပါ။ [[mark:draw-uses]] ဒီ shape function
+      တွေကို နေရာ သုံးခုမှာ သုံးပါတယ်။ clip path က box ကို ဖြတ်ယူပါတယ်။ shape outside က စာကို
+      ပုံသဏ္ဌာန် ပတ်လည်မှာ စီးစေပြီး၊ offset path ကတော့ ပုံသဏ္ဌာန်ကို element ရွေ့မယ့် လမ်း
+      ဖြစ်စေပါတယ်။ [[mark:draw-mask]] နောက်ပိုင်းမှာ box ကို မှိန်သွားအောင်ပါ လုပ်နိုင်တဲ့ mask ကိုလည်း တွေ့ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Paths, shapes, clipping, and masking"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#paths_and_shapes"
+      - title: "MDN — <basic-shape>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape"
+      - title: "MDN — clip-path"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clip-path"
+      - title: "CSS Shapes Module Level 1 — basic shapes"
+        url: "https://drafts.csswg.org/css-shapes-1/#basic-shape-functions"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-box
+        type: whiteboard.apply
+        at: { mark: draw-box }
+        upsertIds: [a-box, a-cut, a-box-l, a-cut-l]
+        drawMs: 2800
+      - id: draw-functions
+        type: whiteboard.apply
+        at: { mark: draw-functions }
+        upsertIds: [a-funcs]
+        drawMs: 1800
+      - id: draw-uses
+        type: whiteboard.apply
+        at: { mark: draw-uses }
+        upsertIds: [a-arrow, a-use1, a-use2, a-use3]
+        drawMs: 3200
+      - id: draw-mask
+        type: whiteboard.apply
+        at: { mark: draw-mask }
+        upsertIds: [a-mask]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-hero]] အပေါ်ဆုံးက အမြင့် ပုံသေ ရှိတဲ့ ကြိုဆိုတဲ့ အပိုင်းပါ။ [[mark:select-photos]]
+      သူ့အောက်မှာ ပုံ သုံးခု ရှိပါတယ်။ ဆိုင်ရဲ့ ပုံ၊ မုန့်ဟင်းခါး ပန်းကန်နဲ့ ဘေးမှာ box
+      တစ်ခု ကပ်ထားတဲ့ banner ပါ။ box တွေ ဘယ်မှာ ရှိလဲ ဆိုတာ မျဉ်းပြတ် ဘောင်တွေက ပြပါတယ်။
+      [[mark:select-card]] ဒီနေ့ အထူး card မှာ ရွှေရောင် စတုရန်း ပါပြီး၊ ဈေးနှုန်းက တံဆိပ်
+      သေးသေးလေးပါ။ [[mark:select-about]] ဆိုင်အကြောင်း အပိုင်းမှာတော့ ကရား ပုံက စာ အရှည်ကြီးရဲ့
+      ဘယ်ဘက်မှာ float လုပ်ထားပါတယ်။ [[mark:select-extras]] အောက်ဆုံးမှာ အစိမ်းရောင် စားပွဲပေါ်က
+      ခွက်ခံနဲ့၊ မျဉ်းပြတ် စက်ဝိုင်း ဘေးက အစက် အစိမ်းလေး ရှိပါတယ်။ [[mark:open-styles]] CSS ဖိုင်ကတော့
+      အလွတ်ပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ အခုတော့ page ပေါ်က အရာအားလုံး
+      လေးထောင့်တွေပဲ ဖြစ်ပါသေးတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Paths, shapes, clipping, and masking"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking"
+      - title: "MDN — clip-path (initial value none)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clip-path"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-hero
+        type: editor.select
+        at: { mark: select-hero }
+        target:
+          { file: index.html, text: '<section class="hero" data-testid="hero">', occurrence: 1 }
+      - id: select-photos
+        type: editor.select
+        at: { mark: select-photos }
+        target:
+          {
+            file: index.html,
+            text: '<section class="shape-photos" data-testid="shape-photos">',
+            occurrence: 1,
+          }
+      - id: select-card
+        type: editor.select
+        at: { mark: select-card }
+        target:
+          {
+            file: index.html,
+            text: '<span class="star" aria-hidden="true" data-testid="star"></span>',
+            occurrence: 1,
+          }
+      - id: select-about
+        type: editor.select
+        at: { mark: select-about }
+        target:
+          {
+            file: index.html,
+            text: '<div class="teapot" role="img" aria-label="ကရား" data-testid="teapot"></div>',
+            occurrence: 1,
+          }
+      - id: select-extras
+        type: editor.select
+        at: { mark: select-extras }
+        target: { file: index.html, text: '<div class="extras">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-story
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်းက လမ်းထောင့်လေးမှာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-story }
+
+  - id: circle
+    chapter: "Circle နဲ့ ellipse"
+    narration: >
+      [[mark:type-circle]] ဆိုင်ရဲ့ ပုံကနေ စကြည့်ရအောင်။ rule အသစ် တစ်ခုနဲ့ သူ့ကို 50 ရာခိုင်နှုန်း
+      ရှိတဲ့ circle ကို clip path အဖြစ် ပေးပါမယ်။ ရိုက်နေတုန်း ပုံကို လိုက်ကြည့်ပါ။
+      [[mark:after-circle]] စတုရန်း ပုံက ဝိုင်းသွားပါပြီ။ [[mark:explain-radius]] ဒီ 50
+      ရာခိုင်နှုန်းကို ကြည့်ပါ။ ဒါက circle ရဲ့ အချင်းဝက် ဖြစ်ပြီး၊ box ကို အခြေခံ တွက်တာပါ။
+      စတုရန်းမှာဆိုရင် ဘေးတိုင်းရဲ့ အလယ်ထိ ရောက်ပါတယ်။ အချင်းဝက် မပေးရင်တော့ circle က အနီးဆုံး ဘေးကို
+      ထိတဲ့အထိ ကြီးလာပါတယ်။ [[mark:explain-hard]] အစွန်းက ပြတ်ပြတ်သားသားပါ။ pixel တစ်ခုချင်းကို ပုံသဏ္ဌာန်ထဲမှာ ရှိရင် ဆွဲပြီး၊ အပြင်မှာ ရှိရင် ဖျောက်လိုက်လို့ပါ။ [[mark:type-at]] အောက်မှာ 30
+      ရာခိုင်နှုန်း ရှိတဲ့ ပိုသေးတဲ့ circle ရေးပါမယ်။ at ဆိုတဲ့ စကားလုံး နောက်မှာ အလယ်ရဲ့ ညာဘက်၊
+      နည်းနည်း အပေါ်က အလယ်မှတ် အသစ် ပေးပါမယ်။ [[mark:after-at]] circle က ပိုသေးသွားပြီး ညာဘက် အပေါ်ကို
+      ရွေ့သွားပါပြီ။ [[mark:explain-at]] at နောက်က နေရာကို lesson 33 က background position လိုပဲ
+      ရေးပါတယ်။ မပေးရင်တော့ circle ရဲ့ အလယ်က box ရဲ့ အလယ်ပါ။ element တစ်ခုမှာ clip path တစ်ခုပဲ
+      ရှိနိုင်လို့၊ နောက်က declaration က ပထမကို အစားထိုးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — circle() and ellipse()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#circle_and_ellipse"
+      - title: "web.dev Learn CSS — Clipping"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#clipping"
+      - title: "MDN — circle() (radius, closest-side default, at <position>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/circle"
+      - title: "CSS Shapes Module Level 1 — circle()"
+        url: "https://drafts.csswg.org/css-shapes-1/#funcdef-basic-shape-circle"
+    actions:
+      - id: type-circle
+        type: editor.type
+        at: { mark: type-circle }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".round-photo {\n  clip-path: circle(50%);\n}\n"
+      - id: expect-circle
+        type: expect.preview
+        at: { mark: after-circle }
+        timeoutMs: 4000
+        target: { by: testId, value: round-photo }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-radius
+        type: editor.select
+        at: { mark: explain-radius }
+        target: { file: styles.css, text: "50%", occurrence: 1 }
+      - id: type-at
+        type: editor.type
+        at: { mark: type-at }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  clip-path: circle(50%);\n", occurrence: 1 }
+        text: "  clip-path: circle(30% at 65% 35%);\n"
+      - id: expect-at
+        type: expect.preview
+        at: { mark: after-at }
+        timeoutMs: 4000
+        target: { by: testId, value: round-photo }
+        attribute: { name: width, value: "160" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-at
+        type: editor.select
+        at: { mark: explain-at }
+        target: { file: styles.css, text: "at 65% 35%", occurrence: 1 }
+
+  - id: ellipse
+    narration: >
+      [[mark:type-bowl]] ellipse မှာတော့ ဘေးတိုက် အချင်းဝက်နဲ့ အပေါ်အောက် အချင်းဝက် နှစ်ခု လိုပါတယ်။
+      ပန်းကန်အတွက် ဘေးတိုက်ကို အကျယ်ရဲ့ တစ်ဝက်၊ အပေါ်အောက်ကို အမြင့် အပြည့် ပေးပြီး၊ အလယ်မှတ်ကို
+      အပေါ်ဘက် အစွန်းအထိ တင်ပါမယ်။ [[mark:after-bowl]] ellipse ရဲ့ အောက်တစ်ဝက်ပဲ box ထဲမှာ ကျန်လို့၊ box က ပန်းကန်လို အောက်ခြေ ဝိုင်းဝိုင်း ဖြစ်သွားပါပြီ။ [[mark:explain-ellipse]] ဒီ ရာခိုင်နှုန်း
+      နှစ်ခုကို ကြည့်ပါ။ ပထမ တစ်ခုကို အကျယ်ကနေ၊ ဒုတိယကို အမြင့်ကနေ တွက်လို့၊ box အရွယ် ပြောင်းရင်
+      ပန်းကန်ပုံလည်း လိုက်ပြောင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — circle() and ellipse()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#circle_and_ellipse"
+      - title: "MDN — ellipse() (two radii, at <position>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/ellipse"
+    actions:
+      - id: type-bowl
+        type: editor.type
+        at: { mark: type-bowl }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  clip-path: circle(30% at 65% 35%);\n}\n", occurrence: 1 }
+        text: "\n.bowl {\n  clip-path: ellipse(50% 100% at top);\n}\n"
+      - id: expect-bowl
+        type: expect.preview
+        at: { mark: after-bowl }
+        timeoutMs: 4000
+        target: { by: testId, value: bowl }
+        attribute: { name: aria-label, value: "မုန့်ဟင်းခါး ပန်းကန်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-radii
+        type: editor.select
+        at: { mark: explain-ellipse }
+        target: { file: styles.css, text: "50% 100%", occurrence: 1 }
+
+  - id: inset
+    chapter: "Inset နဲ့ ဖြတ်ယူရအောင်"
+    narration: >
+      [[mark:type-inset]] inset က box ကို ဖြတ်ယူတဲ့ အရိုးရှင်းဆုံး နည်းပါ။ သူ့ တန်ဖိုးတွေက
+      ဘေးတိုင်းကနေ အထဲကို ဝင်လာမယ့် အကွာအဝေးတွေ ဖြစ်ပြီး၊ margin နဲ့ အစဉ် တူပါတယ်။ banner အတွက်
+      အပေါ်အောက်ကို 10 pixel၊ ဘယ်ညာကို 20 pixel ပေးပါမယ်။ [[mark:after-inset]] banner ကို ဘေး
+      လေးဘက်လုံးက ဖြတ်လိုက်ပါပြီ။ [[mark:explain-box]] ဒါပေမဲ့ မျဉ်းပြတ် ဘောင်နဲ့ ဘေးက box ကို
+      ကြည့်ပါ၊ ဘာမှ မရွေ့ပါဘူး။ clip path က မြင်ရတဲ့ အပိုင်းကိုပဲ ပြောင်းပါတယ်။ element ရဲ့
+      အရွယ်အစားနဲ့ layout ထဲက နေရာက မပြောင်းပါဘူး။ mask မှာလည်း ဒီအတိုင်းပါပဲ။ [[mark:type-round]]
+      inset က ထောင့်တွေကိုလည်း ဝိုင်းပေးနိုင်ပါတယ်။ အောက်မှာ အတူတူ ဖြတ်ပြီး၊ round ဆိုတဲ့ စကားလုံးနဲ့
+      16 pixel အချင်းဝက် ထည့်ပါမယ်။ [[mark:after-round]] ဖြတ်ထားတဲ့ ထောင့်တွေ ဝိုင်းသွားပါပြီ။
+      [[mark:explain-round]] round နောက်က တန်ဖိုးတွေက ပြီးခဲ့တဲ့ lesson က border radius နဲ့ အတူတူ
+      အလုပ်လုပ်ပါတယ်။ [[mark:explain-rect]] လေးထောင့် ဖြတ်ယူတဲ့ function အသစ် နှစ်ခုလည်း ရှိပါတယ်။ rect မှာ တန်ဖိုး လေးခုလုံးကို inset လို သူ့ဘေးကနေ မတိုင်းဘဲ၊ အပေါ် အစွန်း ဒါမှမဟုတ် ဘယ် အစွန်းကနေပဲ တိုင်းပါတယ်။ x y w h မှာတော့ စမယ့် အမှတ် ပေးပြီး၊ အကျယ်နဲ့ အမြင့်ကို ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — rect() and inset()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#rect_and_inset"
+      - title: "MDN — inset() (round keyword)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/inset"
+      - title: "MDN — rect()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/rect"
+      - title: "MDN — xywh()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/xywh"
+      - title: "CSS Masking Module Level 1 — clipping paths do not affect layout"
+        url: "https://drafts.csswg.org/css-masking-1/#clipping-paths"
+    actions:
+      - id: type-inset
+        type: editor.type
+        at: { mark: type-inset }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  clip-path: ellipse(50% 100% at top);\n}\n", occurrence: 1 }
+        text: "\n.crop-banner {\n  clip-path: inset(10px 20px);\n}\n"
+      - id: expect-inset
+        type: expect.preview
+        at: { mark: after-inset }
+        timeoutMs: 4000
+        target: { by: testId, value: neighbour }
+        textContains: "ဘေးက box"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-round
+        type: editor.type
+        at: { mark: type-round }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  clip-path: inset(10px 20px);\n", occurrence: 1 }
+        text: "  clip-path: inset(10px 20px round 16px);\n"
+      - id: expect-round
+        type: expect.preview
+        at: { mark: after-round }
+        timeoutMs: 4000
+        target: { by: testId, value: crop-banner }
+        attribute: { name: aria-label, value: "ဆိုင်ရှေ့ ရှုခင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-round
+        type: editor.select
+        at: { mark: explain-round }
+        target: { file: styles.css, text: "round 16px", occurrence: 1 }
+
+  - id: polygon-points
+    chapter: "Polygon နဲ့ ကြိုက်တဲ့ ပုံ"
+    narration: >
+      [[mark:open-grid]] ဘေးတွေ ဖြောင့်တဲ့ ဘယ် ပုံသဏ္ဌာန်အတွက်မဆို polygon ရှိပါတယ်။ သူက အမှတ်တွေရဲ့
+      စာရင်းကို ယူပြီး၊ အမှတ်တိုင်းမှာ x နဲ့ y ပါပါတယ်။ [[mark:draw-corners]] သုည သုည က box ရဲ့ ဘယ်ဘက်
+      အပေါ်ထောင့်ပါ။ x က ညာဘက်ကို၊ y က အောက်ကို တိုးသွားပြီး၊ 100 ရာခိုင်နှုန်း 100 ရာခိုင်နှုန်း က
+      ညာဘက် အောက်ထောင့်ပါ။ [[mark:draw-points]] ဈေးနှုန်း တံဆိပ်အတွက် ဘယ်ဘက် အပေါ်ထောင့်က စပြီး၊
+      အပေါ်အစွန်းအတိုင်း 85 ရာခိုင်နှုန်းထိ သွားပါမယ်။ ပြီးရင် ညာဘက် အစွန်း အလယ်မှာ အချွန် ထွက်အောင်
+      သွားပြီး၊ အောက်ဘက် 85 ရာခိုင်နှုန်းကို ပြန်ဝင်ပါမယ်။ နောက်ဆုံးက ဘယ်ဘက် အောက်ထောင့်ပါ။
+      [[mark:draw-rules]] အမှတ်တွေကြားမှာ comma ခြားပြီး၊ x နဲ့ y ကြားမှာတော့ နေရာလွတ်ပဲ ခြားပါတယ်။
+      ပထမ အမှတ်ကို ပြန်ရေးစရာ မလိုပါဘူး။ browser က နောက်ဆုံး အမှတ်ကို ပထမ အမှတ်နဲ့ ပြန်ဆက်ပေးလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — polygon()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#polygon"
+      - title: "MDN — polygon()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/polygon"
+      - title: "CSS Shapes Module Level 1 — polygon()"
+        url: "https://drafts.csswg.org/css-shapes-1/#funcdef-basic-shape-polygon"
+    actions:
+      - id: open-grid
+        type: whiteboard.apply
+        at: { mark: open-grid }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-box]
+      - id: draw-corners
+        type: whiteboard.apply
+        at: { mark: draw-corners }
+        upsertIds: [b-c1, b-x, b-y, b-c3, b-c2, b-c4]
+        drawMs: 3200
+      - id: draw-points
+        type: whiteboard.apply
+        at: { mark: draw-points }
+        upsertIds: [b-p1, b-n1, b-p2, b-n2, b-p3, b-n3, b-p4, b-n4, b-p5, b-n5]
+        drawMs: 5000
+      - id: draw-rules
+        type: whiteboard.apply
+        at: { mark: draw-rules }
+        upsertIds: [b-comma, b-close]
+        drawMs: 2400
+
+  - id: polygon-code
+    narration: >
+      [[mark:close-grid]] editor ကို ပြန်သွားရအောင်။ [[mark:type-tag]] ခုနက အမှတ် ငါးခုကို ဈေးနှုန်း
+      တံဆိပ်အတွက် rule အသစ်ထဲ ထည့်ပါမယ်။ ဒီနေ့ အထူး အောက်က ဈေးနှုန်းကို ကြည့်ထားပါ။ [[mark:after-tag]]
+      တံဆိပ်ရဲ့ အဆုံးက မြှားလို ချွန်သွားပါပြီ။ [[mark:type-hero]] ကြိုဆိုတဲ့ အပိုင်းရဲ့
+      အောက်ခြေကိုလည်း ဒီနည်းနဲ့ပဲ အမှတ် လေးခုနဲ့ စောင်းအောင် လုပ်ပါမယ်။ ညာဘက် အောက်ထောင့်ကို အမြင့်ရဲ့
+      85 ရာခိုင်နှုန်းဆီ တင်လိုက်တာပါ။ [[mark:after-hero]] page ရဲ့ အပေါ်ဆုံးမှာ ကြိုဆိုတဲ့ အပိုင်းရဲ့
+      အောက်ခြေက ဘယ်ဘက်ထက် ညာဘက်မှာ ပိုမြင့်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — polygon()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#polygon"
+      - title: "MDN — polygon() (percentages of the reference box)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/polygon"
+    actions:
+      - id: close-grid
+        type: whiteboard.apply
+        at: { mark: close-grid }
+        open: false
+      # line-by-line: every revealed line has balanced parentheses.
+      - id: type-tag
+        type: editor.type
+        at: { mark: type-tag }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  clip-path: inset(10px 20px round 16px);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.price-tag {\n  clip-path: polygon(0 0, 85% 0, 100% 50%, 85% 100%, 0 100%);\n}\n"
+      - id: expect-tag
+        type: expect.preview
+        at: { mark: after-tag }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hero
+        type: editor.type
+        at: { mark: type-hero }
+        cadence: line-by-line
+        target: { file: styles.css, after: "85% 100%, 0 100%);\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);\n}\n"
+      - id: expect-hero-slant
+        type: expect.preview
+        at: { mark: after-hero }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "ပူပူနွေးနွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: fill-rule
+    narration: >
+      [[mark:type-star]] polygon ရဲ့ မျဉ်းတွေက အချင်းချင်း ဖြတ်သွားလို့လည်း ရပါတယ်။ ရွှေရောင်
+      စတုရန်းအတွက် အမှတ်တစ်ခုကနေ တစ်ခုကို ခုန်ကူးတဲ့ မျဉ်း တစ်ကြောင်းတည်းနဲ့ ငါးချွန် ကြယ် ဆွဲပါမယ်။
+      [[mark:after-star]] စတုရန်းက ကြယ် ဖြစ်သွားပါပြီ။ [[mark:explain-nonzero]] ဒီ အမှတ်တွေကို
+      ကြည့်ပါ။ မျဉ်းတွေ အလယ်မှာ ဖြတ်နေပေမယ့် အလယ်ကို ဖြည့်ထားပါတယ်။ ဒါက default fill rule ဖြစ်တဲ့ nonzero ကြောင့်ပါ။ သူက မျဉ်းတွေ ပတ်တဲ့ ဘက်ကို ကြည့်ပြီး၊ ဒီ ကြယ်လို တစ်ဘက်တည်း ပတ်ဆွဲထားရင် အလယ်ကိုလည်း အထဲလို့ပဲ တွက်ပါတယ်။ [[mark:type-evenodd]] အမှတ်တွေရဲ့ ရှေ့မှာ evenodd ဆိုတဲ့ စကားလုံး ထည့်ကြည့်ရအောင်။
+      [[mark:after-evenodd]] အခု ကြယ်ရဲ့ အလယ်က ဟောင်းလောင်း ဖြစ်သွားပါပြီ။ [[mark:explain-evenodd]] ဒီ
+      evenodd ကို ကြည့်ပါ။ သူက နေရာ တစ်ခုကနေ ပုံရဲ့ အပြင်ကို ထွက်တဲ့အခါ မျဉ်း ဘယ်နှကြောင်း ဖြတ်ရလဲ
+      ရေတွက်ပါတယ်။ မကိန်း ဆိုရင် အထဲ၊ စုံကိန်း ဆိုရင် အပြင်ပါ။ အလယ်ကနေ ထွက်ရင် မျဉ်း နှစ်ကြောင်း
+      ဖြတ်ရလို့ ဟောင်းလောင်း ကျန်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — polygon() (fill rule)"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#polygon"
+      - title: "MDN — polygon() (fill-rule nonzero, evenodd)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/polygon#syntax"
+      - title: "MDN — fill-rule (nonzero and evenodd)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Attribute/fill-rule"
+    actions:
+      - id: type-star
+        type: editor.type
+        at: { mark: type-star }
+        cadence: line-by-line
+        target: { file: styles.css, after: "100% 85%, 0 100%);\n}\n", occurrence: 1 }
+        text: "\n.star {\n  clip-path: polygon(50% 0, 79% 90%, 2% 35%, 98% 35%, 21% 90%);\n}\n"
+      - id: expect-star
+        type: expect.preview
+        at: { mark: after-star }
+        timeoutMs: 4000
+        target: { by: testId, value: star }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-star
+        type: editor.select
+        at: { mark: explain-nonzero }
+        target:
+          { file: styles.css, text: "50% 0, 79% 90%, 2% 35%, 98% 35%, 21% 90%", occurrence: 1 }
+      # One block insert into the star's polygon: "evenodd, " has no
+      # parentheses, and the star rule is complete before and after it.
+      - id: type-evenodd
+        type: editor.type
+        at: { mark: type-evenodd }
+        cadence: block
+        target: { file: styles.css, after: ".star {\n  clip-path: polygon(", occurrence: 1 }
+        text: "evenodd, "
+      - id: expect-evenodd
+        type: expect.preview
+        at: { mark: after-evenodd }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-evenodd
+        type: editor.select
+        at: { mark: explain-evenodd }
+        target: { file: styles.css, text: "evenodd", occurrence: 1 }
+
+  - id: complex-shapes
+    chapter: "Path နဲ့ shape()"
+    narration: >
+      [[mark:open-complex]] polygon က ဘေးဖြောင့်တဲ့ ပုံ အများစုကို လုပ်ပေးနိုင်ပါတယ်။
+      [[mark:draw-trig]] အချွန်တွေ အညီအမျှ ရှိတဲ့ ကြယ်လို ပုံသဏ္ဌာန်မျိုးအတွက်တော့၊ lesson 12 မှာ
+      တွေ့ခဲ့တဲ့ cos နဲ့ sin ကို သုံးပြီး အမှတ်တစ်ခုချင်းကို တွက်လို့ ရပါတယ်။ [[mark:draw-path]]
+      အကွေးတွေအတွက်တော့ path ရှိပါတယ်။ သူက SVG ပုံတွေမှာ သုံးတဲ့ path data ကို ယူလို့၊ design tool ကနေ
+      copy ကူးလာလို့ ရပါတယ်။ ဒါပေမဲ့ သူ့ထဲက ဂဏန်းတိုင်းက pixel ဖြစ်လို့၊ box ကြီးလာ သေးလာလည်း
+      ပုံသဏ္ဌာန်က လိုက်မပြောင်းပါဘူး။ [[mark:draw-shape]] ပိုသစ်တဲ့ shape ဆိုတဲ့ function က အဲဒါကို ဖြေရှင်းပေးပါတယ်။ သူက path ကို CSS စကားလုံးတွေ၊ ရာခိုင်နှုန်းနဲ့ rem လို CSS unit တွေနဲ့ ရေးလို့
+      box ကို လိုက်နိုင်ပါတယ်။ ဒါပေမဲ့ အသစ် ဖြစ်လို့ browser အဓိက အားလုံးမှာ မကြာသေးခင်ကမှ ရလာတာပါ။
+      [[mark:draw-boxes]] ပုံသဏ္ဌာန်ထဲက ရာခိုင်နှုန်းတွေကို default အားဖြင့် border box ကို အခြေခံ
+      တွက်ပါတယ်။ ပုံသဏ္ဌာန်ရဲ့ နောက်မှာ content box လို တခြား box တစ်ခုကို ရေးရင်၊ content နေရာကို
+      အခြေခံ တွက်ပါတယ်။ [[mark:draw-svg]] clip path က url နဲ့ id ပေးပြီး SVG clip path element
+      တစ်ခုကိုလည်း ညွှန်လို့ ရပါတယ်။ အဲဒီ SVG ထဲမှာ စာသား အပါအဝင် ဘာပုံမဆို ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Complex shapes: path() and shape()"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#complex_shapes"
+      - title: "web.dev Learn CSS — A clipping path's reference box"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#a_clipping_paths_reference_box"
+      - title: "web.dev Learn CSS — Clipping with graphics"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#clipping_with_graphics"
+      - title: "MDN — path() (SVG path data, pixels)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/path"
+      - title: "MDN — shape()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/basic-shape/shape"
+      - title: "MDN — clip-path (geometry boxes, url())"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clip-path#syntax"
+      - title: "MDN — SVG <clipPath>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/SVG/Element/clipPath"
+      - title: "CSS Shapes Module Level 2 — shape()"
+        url: "https://drafts.csswg.org/css-shapes-2/#shape-function"
+    actions:
+      - id: open-complex
+        type: whiteboard.apply
+        at: { mark: open-complex }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-trig
+        type: whiteboard.apply
+        at: { mark: draw-trig }
+        upsertIds: [c-trig]
+        drawMs: 1600
+      - id: draw-path
+        type: whiteboard.apply
+        at: { mark: draw-path }
+        upsertIds: [c-path]
+        drawMs: 1600
+      - id: draw-shape
+        type: whiteboard.apply
+        at: { mark: draw-shape }
+        upsertIds: [c-shape]
+        drawMs: 1600
+      - id: draw-boxes
+        type: whiteboard.apply
+        at: { mark: draw-boxes }
+        upsertIds: [c-border, c-border-l, c-padding, c-content, c-content-l]
+        drawMs: 3200
+      - id: draw-svg
+        type: whiteboard.apply
+        at: { mark: draw-svg }
+        upsertIds: [c-svg]
+        drawMs: 1600
+
+  - id: shape-outside
+    chapter: "စာကို ပုံသဏ္ဌာန်အတိုင်း စီးစေရအောင်"
+    narration: >
+      [[mark:close-complex]] အခု ဆိုင်အကြောင်း အပိုင်းပါ။ [[mark:type-teapot]] ကရားကိုလည်း ဓာတ်ပုံမှာ
+      ပေးခဲ့တဲ့ circle အတိုင်း ဝိုင်းအောင် လုပ်ကြည့်ရအောင်။ ရိုက်နေတုန်း ကရား ဘေးက စာကြောင်းတွေကို
+      သေချာ လိုက်ကြည့်ထားပါ။ [[mark:after-teapot]] ကရားက ဝိုင်းသွားပေမယ့်၊ စာကြောင်းတွေက စတုရန်း
+      အစွန်း အဟောင်းမှာပဲ ရပ်နေလို့ ထောင့်တွေမှာ နေရာလွတ် ကျန်နေပါတယ်။ [[mark:explain-float]] clip
+      path က box ကို မပြောင်းလို့ပါ။ lesson 13 မှာ တွေ့ခဲ့တဲ့ float က စာကို box ပတ်လည်မှာ စီးစေပြီး၊
+      အဲဒီ box က စတုရန်းပဲ ရှိပါသေးတယ်။ [[mark:type-shape]] shape outside က စာကို ဘယ် ပုံသဏ္ဌာန်
+      ပတ်လည်မှာ စီးရမလဲ ပြောပေးပြီး၊ float တွေမှာပဲ အလုပ်လုပ်ပါတယ်။ အောက်မှာ circle အတူတူကို shape
+      outside အဖြစ် ပေးပါမယ်။ [[mark:after-shape]] ကရား ဘေးက စာကြောင်းတွေကို ကြည့်ပါ။ အခု အကွေးအတိုင်း
+      ဝင်လိုက် ထွက်လိုက် ဖြစ်သွားပါပြီ။ [[mark:explain-shape]] ဒီ shape outside ကို ကြည့်ပါ။ သူက ဘာမှ
+      မဖြတ်ဘဲ စာ စီးပုံကိုပဲ ပြောင်းလို့၊ မြင်ရတဲ့ ပုံအတွက် clip path ကို ဆက်ထားရပါတယ်။
+      [[mark:type-margin]] စာက အကွေးနဲ့ ကပ်နေလို့၊ shape margin နဲ့ ပုံသဏ္ဌာန် ပတ်လည်မှာ 10 pixel
+      နေရာလွတ် ထည့်ပါမယ်။ [[mark:after-margin]] အခု ကရားနဲ့ စာကြားမှာ နေရာလွတ် နည်းနည်း ရှိသွားပါပြီ။
+      [[mark:explain-threshold]] shape outside က ပုံကိုလည်း ယူနိုင်ပါတယ်။ အဲဒီအခါ pixel ရဲ့ alpha
+      ဘယ်လောက် ရှိမှ ပုံသဏ္ဌာန်ထဲ ထည့်တွက်မလဲ ဆိုတာ shape image threshold က သတ်မှတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flowing text around floated elements"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#flowing_text_around_floated_elements"
+      - title: "MDN — shape-outside (floats only)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/shape-outside"
+      - title: "MDN — shape-margin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/shape-margin"
+      - title: "MDN — shape-image-threshold"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/shape-image-threshold"
+      - title: "CSS Shapes Module Level 1 — shape-outside"
+        url: "https://drafts.csswg.org/css-shapes-1/#shape-outside-property"
+    actions:
+      - id: close-complex
+        type: whiteboard.apply
+        at: { mark: close-complex }
+        open: false
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: close-complex, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-teapot
+        type: editor.type
+        at: { mark: type-teapot }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "21% 90%);\n}\n", occurrence: 1 }
+        text: "\n.teapot {\n  clip-path: circle(50%);\n}\n"
+      - id: expect-teapot
+        type: expect.preview
+        at: { mark: after-teapot }
+        timeoutMs: 4000
+        target: { by: testId, value: teapot }
+        attribute: { name: aria-label, value: "ကရား" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-shape
+        type: editor.type
+        at: { mark: type-shape }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".teapot {\n  clip-path: circle(50%);\n", occurrence: 1 }
+        text: "  shape-outside: circle(50%);\n"
+      - id: expect-shape
+        type: expect.preview
+        at: { mark: after-shape }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-shape
+        type: editor.select
+        at: { mark: explain-shape }
+        target: { file: styles.css, text: "shape-outside: circle(50%);", occurrence: 1 }
+      - id: type-margin
+        type: editor.type
+        at: { mark: type-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  shape-outside: circle(50%);\n", occurrence: 1 }
+        text: "  shape-margin: 10px;\n"
+      - id: expect-margin
+        type: expect.preview
+        at: { mark: after-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: mask-fade
+    chapter: "Mask ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:type-fade]] စာ ရှည်လို့ နောက်ဆုံး စာကြောင်းတွေကို mask နဲ့ မှိန်အောင် လုပ်ရအောင်။ mask
+      ကတော့ ပုံ ဒါမှမဟုတ် gradient တစ်ခုကို သုံးပြီး၊ element ရဲ့ ဘယ်အပိုင်း ဘယ်လောက် မြင်ရမလဲ ဆိုတာ
+      ဆုံးဖြတ်ပါတယ်။ ဒီမှာ ပုံအစား lesson 32 က gradient ကို သုံးပြီး၊ အမည်းကနေ လုံးဝ ဖောက်ထွင်း မြင်ရတဲ့ transparent ကို ကူးပါမယ်။
+      [[mark:after-fade]] စာရဲ့ အဆုံးပိုင်း မှိန်ပျောက်သွားပါပြီ။ [[mark:explain-mask]] ဒီ gradient
+      ကို ကြည့်ပါ။ mask ရဲ့ အရောင် ပြည့်နေတဲ့ နေရာမှာ စာကို အပြည့် မြင်ရပြီး၊ ဖောက်ထွင်း မြင်ရတဲ့ နေရာမှာတော့ စာ ပျောက်သွားပါတယ်။ ကြားထဲမှာတော့ စာကို မှိန်မှိန်လေး မြင်ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Masking"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#masking"
+      - title: "MDN — mask-image"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-image"
+      - title: "CSS Masking Module Level 1 — mask-image"
+        url: "https://drafts.csswg.org/css-masking-1/#the-mask-image"
+    actions:
+      - id: type-fade
+        type: editor.type
+        at: { mark: type-fade }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  shape-margin: 10px;\n}\n", occurrence: 1 }
+        text: "\n.story {\n  mask-image: linear-gradient(black 60%, transparent);\n}\n"
+      - id: expect-fade
+        type: expect.preview
+        at: { mark: after-fade }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "သက်သက်သာသာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-gradient
+        type: editor.select
+        at: { mark: explain-mask }
+        target: { file: styles.css, text: "linear-gradient(black 60%, transparent)", occurrence: 1 }
+
+  - id: mask-modes
+    narration: >
+      [[mark:open-masks]] ဘာလို့ အမည်းရောင် သုံးတာလဲ။ [[mark:draw-clip-mask]] clip path က ပြတာ
+      ဖျောက်တာပဲ လုပ်လို့ အစွန်း ပြတ်ပါတယ်။ mask ကတော့ ပုံကို ဖတ်လို့၊ pixel ကို တစ်စိတ်တစ်ပိုင်း
+      ပြနိုင်ပါတယ်။ [[mark:draw-alpha]] default အားဖြင့် ပုံ ဒါမှမဟုတ် gradient mask က alpha mode နဲ့
+      အလုပ်လုပ်ပါတယ်။ အရောင်ကို မကြည့်ဘဲ ဘယ်လောက် ဖောက်ထွင်း မြင်ရလဲ ဆိုတာကိုပဲ ကြည့်လို့၊ အမည်းရော အဖြူပါ element ကို ပြပြီး၊ ဖောက်ထွင်း မြင်ရတဲ့ အပိုင်းကပဲ ဖျောက်ပါတယ်။ ဒါကြောင့် ခုနက gradient မှာ အမည်းအစား ဘယ်အရောင် သုံးသုံး အတူတူပါပဲ။ [[mark:draw-luminance]] luminance mode
+      မှာတော့ အလင်းအမှောင်ကို ကြည့်ပါတယ်။ အဖြူက element ကို ပြပြီး၊ အမည်းက ဖျောက်ပါတယ်။ mask mode
+      property က ဒီ နှစ်မျိုးကြား ပြောင်းပေးပါတယ်။ [[mark:draw-svg-mask]] SVG mask element ကိုလည်း
+      mask အဖြစ် သုံးနိုင်ပါတယ်။ သူက default မှာ luminance ကို သုံးပြီး၊ mask type property နဲ့ alpha
+      ပြောင်းလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Alpha versus luminance masking"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#alpha_versus_luminance_masking"
+      - title: "MDN — mask-mode (match-source, alpha, luminance)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-mode"
+      - title: "MDN — mask-type (luminance by default on SVG <mask>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-type"
+    actions:
+      - id: open-masks
+        type: whiteboard.apply
+        at: { mark: open-masks }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-clip-mask
+        type: whiteboard.apply
+        at: { mark: draw-clip-mask }
+        upsertIds: [d-clip, d-clip-l, d-mask, d-mask-l]
+        drawMs: 2800
+      - id: draw-alpha
+        type: whiteboard.apply
+        at: { mark: draw-alpha }
+        upsertIds: [d-alpha, d-a1, d-a2]
+        drawMs: 2400
+      - id: draw-luminance
+        type: whiteboard.apply
+        at: { mark: draw-luminance }
+        upsertIds: [d-lum, d-l1, d-l2]
+        drawMs: 2400
+      - id: draw-svg-mask
+        type: whiteboard.apply
+        at: { mark: draw-svg-mask }
+        upsertIds: [d-svg]
+        drawMs: 1600
+
+  - id: mask-composite
+    chapter: "Mask အလွှာတွေ ပေါင်းရအောင်"
+    narration: >
+      [[mark:close-masks]] page ဆီ ပြန်သွားရအောင်။ [[mark:type-coaster]] mask မှာ အလွှာ အများကြီး
+      ရှိနိုင်ပြီး၊ comma နဲ့ ခြားရေးပါတယ်။ ခွက်ခံအတွက် mask shorthand ကို အလွှာ နှစ်ခု ပေးပါမယ်။
+      ခွက်ခံ တစ်ခုလုံးကို ဖုံးတဲ့ အမည်းရောင် gradient နဲ့၊ အလယ်က အမည်းရောင် စက်ဝိုင်း သေးသေးပါ။
+      [[mark:after-coaster]] ဘာမှ မပြောင်းပါဘူး။ default အားဖြင့် mask အလွှာတွေကို ပေါင်းလိုက်တာ
+      ဖြစ်ပြီး၊ ပထမ အလွှာကပဲ အကုန် ဖုံးထားပြီးသား ဖြစ်လို့ပါ။ [[mark:type-exclude]] mask composite က
+      အလွှာတွေကို ဘယ်လို ပေါင်းမလဲ ဆုံးဖြတ်ပါတယ်။ exclude က အလွှာ တစ်ခုတည်း ဖုံးထားတဲ့ နေရာတွေကိုပဲ
+      ချန်ထားပါတယ်။ [[mark:after-exclude]] အလွှာ နှစ်ခုလုံး ဖုံးထားတဲ့ အလယ်က ပေါက်သွားပြီး၊
+      အပေါက်ထဲကနေ အစိမ်းရောင် စားပွဲကို မြင်ရပါပြီ။ [[mark:explain-composite]] ပထမ အလွှာထဲက ဒုတိယကို
+      နုတ်ပစ်တဲ့ subtract နဲ့လည်း အပေါက် အတူတူ ရပါတယ်။ intersect ကတော့ ထပ်နေတဲ့ နေရာကိုပဲ
+      ချန်ထားပါတယ်။ [[mark:explain-shorthand]] ဒီ mask shorthand ကို ကြည့်ပါ။ အလွှာ တစ်ခုစီမှာ mask
+      size၊ mask position နဲ့ mask repeat လည်း ရှိပြီး၊ lesson 33 က background property တွေလိုပဲ
+      အလုပ်လုပ်ပါတယ်။ default မှာ mask ပုံက ဘယ်ဘက် အပေါ်ထောင့်က စပြီး ထပ်ခါ စီလို့၊ ပုံ သေးရင်
+      အကွက်လိုက် ဖြစ်ပါတယ်။ [[mark:explain-reset]] ဒီ mask composite ကို ကြည့်ပါ။ shorthand က မရေးတဲ့
+      တန်ဖိုးကို default ပြန်ထားလို့၊ သူ့နောက်မှာ ရေးရပါတယ်။ [[mark:explain-lists]] mask property
+      တိုင်းက background တွေလိုပဲ comma စာရင်းကို ယူပြီး၊ အလွှာတွေနဲ့ အစဉ်လိုက် တွဲပါတယ်။ mask clip
+      နဲ့ mask origin ကတော့ mask က ဘယ် box ကို ဖုံးမလဲ၊ ဘယ်ကနေ စမလဲ ဆိုတာ ရွေးပြီး၊ နှစ်ခုလုံးရဲ့
+      default က border box ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Additional masking properties"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#additional_masking_properties"
+      - title: "web.dev Learn CSS — The mask shorthand"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#the_mask_shorthand"
+      - title: "MDN — mask-composite (add, subtract, intersect, exclude)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-composite"
+      - title: "MDN — mask (shorthand; omitted values reset)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask"
+      - title: "MDN — mask-repeat (initial repeat)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-repeat"
+      - title: "MDN — mask-origin (initial border-box)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-origin"
+      - title: "MDN — mask-clip (initial border-box)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mask-clip"
+      - title: "CSS Masking Module Level 1 — layering mask images"
+        url: "https://drafts.csswg.org/css-masking-1/#the-mask-composite"
+    actions:
+      - id: close-masks
+        type: whiteboard.apply
+        at: { mark: close-masks }
+        open: false
+      # line-by-line: the comma-ended first layer keeps the list invalid until
+      # the second layer lands, and every revealed line is balanced.
+      - id: type-coaster
+        type: editor.type
+        at: { mark: type-coaster }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  mask-image: linear-gradient(black 60%, transparent);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.coaster {\n  mask:\n    linear-gradient(black 0 0),\n    radial-gradient(circle 30px, black 98%, transparent);\n}\n"
+      - id: expect-coaster
+        type: expect.preview
+        at: { mark: after-coaster }
+        timeoutMs: 4000
+        target: { by: testId, value: coaster }
+        attribute: { name: aria-label, value: "ခွက်ခံ" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-exclude
+        type: editor.type
+        at: { mark: type-exclude }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "    radial-gradient(circle 30px, black 98%, transparent);\n",
+            occurrence: 1,
+          }
+        text: "  mask-composite: exclude;\n"
+      - id: expect-exclude
+        type: expect.preview
+        at: { mark: after-exclude }
+        timeoutMs: 4000
+        target: { by: testId, value: table }
+        attribute: { name: class, value: "table" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-shorthand
+        type: editor.select
+        at: { mark: explain-shorthand }
+        target:
+          {
+            file: styles.css,
+            text: "  mask:\n    linear-gradient(black 0 0),\n    radial-gradient(circle 30px, black 98%, transparent);\n",
+            occurrence: 1,
+          }
+      - id: select-composite
+        type: editor.select
+        at: { mark: explain-reset }
+        target: { file: styles.css, text: "mask-composite: exclude;", occurrence: 1 }
+
+  - id: offset-path
+    chapter: "Offset path နဲ့ သွားမယ့် လမ်း"
+    narration: >
+      [[mark:type-path]] ပုံသဏ္ဌာန် သုံးတဲ့ နောက်ဆုံး နေရာက offset path ပါ။ rule အသစ်နဲ့ အစက်လေးကို 80
+      pixel ရှိတဲ့ circle ကို လမ်း အဖြစ် ပေးပါမယ်။ [[mark:after-path]] အစက်လေးက မျဉ်းပြတ်
+      စက်ဝိုင်းပေါ် ခုန်တက်သွားပါပြီ။ circle ရဲ့ အလယ်က အစက်ကို ထည့်ထားတဲ့ box ရဲ့ အလယ်ပါ။
+      [[mark:type-d0]] offset distance က element ဟာ လမ်းပေါ်မှာ ဘယ်လောက် ရောက်နေလဲ ပြောပြီး၊ သုည
+      ရာခိုင်နှုန်းက လမ်းရဲ့ အစပါ။ [[mark:type-d25]] နောက်တစ်ကြောင်းက 25 ရာခိုင်နှုန်း၊ လေးပုံ
+      တစ်ပုံပါ။ အစက်ကို ကြည့်ပါ။ [[mark:after-d25]] အစက်က လေးပုံ တစ်ပုံ ရွေ့သွားပါပြီ။
+      [[mark:type-d50]] 50 ရာခိုင်နှုန်းက တစ်ဝက် ဖြစ်လို့၊ စက်ဝိုင်းရဲ့ တစ်ဖက်ခြမ်းကို ရောက်ပါတယ်။
+      [[mark:type-d75]] 75 ရာခိုင်နှုန်းကတော့ လမ်းရဲ့ လေးပုံ သုံးပုံအထိ ပတ်သွားတာ ဖြစ်ပါတယ်။
+      [[mark:after-d75]] အစက်လေးက တစ်ဆင့်ချင်း လမ်းကို ပတ်သွားပါပြီ။ [[mark:explain-animate]] offset
+      distance ကို သုညကနေ 100 ရာခိုင်နှုန်းအထိ animate လုပ်ရင် အစက်က တစ်ပတ်လုံး ပတ်သွားပါတယ်။ animation ကို lesson 38 နဲ့ 39 မှာ ကြည့်ပါမယ်။
+      [[mark:explain-ray]] offset path က ray ကိုလည်း ယူပါတယ်။ ray က အမှတ် တစ်ခုကနေ ကိုယ်ပေးတဲ့ ဒီဂရီ ဘက်ကို ထွက်သွားတဲ့ မျဉ်းဖြောင့်ပါ။ [[mark:explain-morph]] clip path ကိုလည်း animate လုပ်လို့ ရပေမယ့်၊
+      function တူတဲ့ ပုံသဏ္ဌာန်တွေကြားမှာပဲ ရပြီး၊ polygon ဆိုရင် အမှတ် အရေအတွက် တူရပါမယ်။ မတူရင်
+      ပုံသဏ္ဌာန်က ဖြည်းဖြည်း မပြောင်းဘဲ ခုန်ပြောင်းသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animating with offset-path"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#animating_with_offset-path"
+      - title: "web.dev Learn CSS — Animating clip-path"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#animating_clip-path"
+      - title: "MDN — offset-path"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/offset-path"
+      - title: "MDN — offset-distance"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/offset-distance"
+      - title: "MDN — ray()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/ray"
+      - title: "CSS Motion Path Module Level 1"
+        url: "https://drafts.csswg.org/motion-1/#offset-path-property"
+    actions:
+      - id: type-path
+        type: editor.type
+        at: { mark: type-path }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  mask-composite: exclude;\n}\n", occurrence: 1 }
+        text: "\n.leaf-dot {\n  offset-path: circle(80px);\n}\n"
+      - id: expect-path
+        type: expect.preview
+        at: { mark: after-path }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-dot }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-d0
+        type: editor.type
+        at: { mark: type-d0 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  offset-path: circle(80px);\n", occurrence: 1 }
+        text: "  offset-distance: 0%;\n"
+      - id: type-d25
+        type: editor.type
+        at: { mark: type-d25 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  offset-distance: 0%;\n", occurrence: 1 }
+        text: "  offset-distance: 25%;\n"
+      - id: expect-d25
+        type: expect.preview
+        at: { mark: after-d25 }
+        timeoutMs: 4000
+        target: { by: testId, value: orbit }
+        attribute: { name: class, value: "orbit" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-d50
+        type: editor.type
+        at: { mark: type-d50 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  offset-distance: 25%;\n", occurrence: 1 }
+        text: "  offset-distance: 50%;\n"
+      - id: type-d75
+        type: editor.type
+        at: { mark: type-d75 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  offset-distance: 50%;\n", occurrence: 1 }
+        text: "  offset-distance: 75%;\n"
+      - id: expect-d75
+        type: expect.preview
+        at: { mark: after-d75 }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-dot }
+        attribute: { name: class, value: "leaf-dot" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း သုံးခု မေးကြည့်ရအောင်။ clip path က box ကို သေးသွားစေသလား။
+      [[mark:quiz-1]] မသေးပါဘူး။ မြင်ရတဲ့ အပိုင်းကိုပဲ ပြောင်းပြီး၊ box နဲ့ layout က အတူတူပဲ
+      ကျန်ပါတယ်။ [[mark:ask-quiz-2]] path က ရာခိုင်နှုန်း ယူလို့ ရလား။ [[mark:quiz-2]] မရပါဘူး၊ pixel
+      ပဲ ရပါတယ်။ ပုံသဏ္ဌာန်က box ကို လိုက်စေချင်ရင် polygon ဒါမှမဟုတ် shape ဆိုတဲ့ function ကို သုံးပါ။
+      [[mark:ask-quiz-3]] mask အဖြစ် ဘာ သုံးနိုင်လဲ။ [[mark:quiz-3]] ပုံ၊ gradient ဒါမှမဟုတ် SVG mask
+      element ပါ။ circle လို shape function ကိုတော့ mask အဖြစ် သုံးလို့ မရပါဘူး။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ shape function က box ထဲမှာ ပုံသဏ္ဌာန် တစ်ခုကို ဖော်ပြပါတယ်။ clip path က အဲဒီ
+      အထဲကိုပဲ ဆွဲပြီး၊ shape outside က စာကို သူ့ ပတ်လည်မှာ စီးစေပါတယ်။ offset path ကတော့ သူ့ကို လမ်း
+      ဖြစ်စေပါတယ်။ mask က ပုံကို သုံးလို့ မှိန်အောင်ပါ လုပ်နိုင်ပါတယ်။ [[mark:next-lesson]] clip path နဲ့ mask က box ရဲ့ ဘယ် pixel တွေကို မြင်ရမလဲ ဆုံးဖြတ်တာပါ။ နောက် lesson မှာတော့ ဝါးအောင်၊
+      လင်းအောင် လုပ်တဲ့ filter တွေနဲ့ pixel တွေကိုယ်တိုင်ကို ပြောင်းကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Paths, shapes, clipping, and masking: check your understanding"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking#check_your_understanding"
+      - title: "web.dev Learn CSS — Filters (next lesson)"
+        url: "https://web.dev/learn/css/filters"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-q1]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [e-a1]
+        drawMs: 1400
+      - id: draw-ask-quiz-2
+        type: whiteboard.apply
+        at: { mark: ask-quiz-2 }
+        upsertIds: [e-q2]
+        drawMs: 1200
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [e-a2]
+        drawMs: 1200
+      - id: draw-ask-quiz-3
+        type: whiteboard.apply
+        at: { mark: ask-quiz-3 }
+        upsertIds: [e-q3]
+        drawMs: 1200
+      - id: draw-quiz-3
+        type: whiteboard.apply
+        at: { mark: quiz-3 }
+        upsertIds: [e-a3]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".round-photo {\n  clip-path: circle(50%);\n  clip-path: circle(30% at 65% 35%);\n}\n\n.bowl {\n  clip-path: ellipse(50% 100% at top);\n}\n\n.crop-banner {\n  clip-path: inset(10px 20px);\n  clip-path: inset(10px 20px round 16px);\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".price-tag {\n  clip-path: polygon(0 0, 85% 0, 100% 50%, 85% 100%, 0 100%);\n}\n\n.hero {\n  clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);\n}\n\n.star {\n  clip-path: polygon(evenodd, 50% 0, 79% 90%, 2% 35%, 98% 35%, 21% 90%);\n}\n\n.teapot {\n  clip-path: circle(50%);\n  shape-outside: circle(50%);\n  shape-margin: 10px;\n}\n\n.story {\n  mask-image: linear-gradient(black 60%, transparent);\n}\n\n.coaster {\n  mask:\n    linear-gradient(black 0 0),\n    radial-gradient(circle 30px, black 98%, transparent);\n  mask-composite: exclude;\n}\n\n.leaf-dot {\n  offset-path: circle(80px);\n  offset-distance: 0%;\n  offset-distance: 25%;\n  offset-distance: 50%;\n  offset-distance: 75%;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
