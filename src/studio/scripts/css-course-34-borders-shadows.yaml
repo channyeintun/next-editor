@@ -1,0 +1,2174 @@
+# CSS course (Burmese), lesson 34 of 43: borders and shadows.
+#
+# Narration is Burmese (voice-script.md next to this file; DESIGN.md is the
+# span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 33; the border is the box's frame; style, width,
+# colour; one of them is the switch) → code tour (shop name, three drink cards
+# with no border, five style squares, the owner photo stand-in and a green
+# badge, the order form) → cards: border-width alone shows nothing,
+# border-style: solid switches it on, color: sienna recolours the frame
+# (currentColor) → squares: dotted, then dashed / double / groove / ridge
+# (browsers draw them differently) → cards: the border shorthand, then one
+# side → border-radius on the cards, a 9999px pill on the order button, a 50%
+# circle on the owner photo → board (corner order clockwise from the top left,
+# two values, per-corner and logical longhands) → the green badge: elliptical
+# corners with the slash → today's special: a 10px border, then a gradient
+# border-image (square corners) → board (9 slices, repeat, width, outset,
+# fill) → board (box / text / drop shadow; the values of a box shadow) →
+# cards: hard shadow right, left, blur, a see-through colour, a spread ring →
+# two layered shadows (first on top, overflow clips) → inset on the text
+# field → text-shadow on the shop name, then three stepped shadows (no spread
+# or inset, inherited, shows through see-through text) → quiz + recap,
+# hand-off to clip-path (lesson 35).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# A keystroke-typed function has an unclosed "(" until its ")", and an
+# unclosed function swallows the rest of the stylesheet. So every keystroke
+# edit that contains "(" lands in the LAST rule of the file (the featured
+# border image, the second .menu-card rule with the shadows, the input's
+# inset shadow); edits into earlier rules contain no parentheses; the two
+# multi-line shadow lists are line-by-line (every revealed line is balanced).
+# Until a new declaration is complete it is invalid and the previous one in
+# the same rule keeps painting.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# header 0–113 (shop name 32px), cards at y 151 / 267 / 382 (400 × 103 with
+# no border), badge row 502 (five 70 × 70 squares in one row), owner photo
+# 96 × 96 at y 588 with the 64 × 64 leaf badge, form 700–862, document 886
+# tall; with every border typed: cards 151 / 287 / 410, badges 538, owner
+# 624, form 736, document 922 (screenshots in probe/).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-34-borders-shadows
+  title: "CSS course 34: Border နဲ့ shadow"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 34
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and nav left out), the kit drinks
+      # block (its first three cards; the first is today's special), the lesson
+      # blocks badge-row (five 70 px squares named after border styles), avatar
+      # (the owner's photo stand-in) and leaf-badge, and the kit order form
+      # (the name field and the order button). No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and nav left out) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks (the first three cards) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: badge-row (five 70 px squares, one per border style) -->
+              <ul class="badge-row" data-testid="badge-row" lang="en">
+                <li class="style-badge">dotted</li>
+                <li class="style-badge">dashed</li>
+                <li class="style-badge">double</li>
+                <li class="style-badge">groove</li>
+                <li class="style-badge">ridge</li>
+              </ul>
+
+              <!-- lesson blocks: avatar (the owner's photo stand-in) and leaf-badge -->
+              <div class="owner-row" data-testid="owner-row">
+                <div class="owner" role="img" aria-label="ဆိုင်ရှင်ရဲ့ ဓာတ်ပုံ" data-testid="owner"></div>
+                <span class="leaf-badge" aria-hidden="true" data-testid="leaf-badge"></span>
+                <p class="owner-name">ဆိုင်ရှင်</p>
+              </div>
+
+              <!-- kit block: order-form (the name field and the order button) -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ ကိုအောင်" data-testid="input-name" />
+                <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
+              </form>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C minus the cards' border and
+      # radius and the order button's radius (section D dropped). Section E:
+      # a 32 px shop name, the badge row and squares, the owner photo stand-in
+      # (a square with a gradient), the square leaf badge.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 34 keeps A, B, B2 and C, minus the menu cards' border and corner
+          radius and the order button's radius (the lesson types them); section D
+          dropped. Section E pins a bigger shop name, the badge row, the owner photo
+          stand-in and the leaf badge. No border, box shadow or text shadow on
+          anything the lesson styles.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 34: a bigger shop name (for the text shadow), a row of five style
+           badges, the owner photo stand-in (a square with a gradient) and a square
+           leaf badge. Their borders, corners and shadows are typed in the lesson. */
+        .shop-name {
+          font-size: 32px;
+        }
+
+        .badge-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin: 16px 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .style-badge {
+          display: grid;
+          place-items: center;
+          width: 70px;
+          height: 70px;
+          background: #fff;
+          color: var(--muted);
+          font-size: 13px;
+        }
+
+        .owner-row {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          margin: 16px 0;
+        }
+
+        .owner {
+          width: 96px;
+          height: 96px;
+          background-image: linear-gradient(135deg, var(--tea-light), var(--tea));
+        }
+
+        .leaf-badge {
+          display: block;
+          width: 64px;
+          height: 64px;
+          background: var(--leaf);
+        }
+
+        .owner-name {
+          margin: 0;
+          color: var(--muted);
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the border is the box's frame. Black outline = margin, orange =
+    # border, blue = padding, green = content, black = where it sits, red =
+    # the switch (style), violet = the other two settings.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Border ဆိုတာ box ရဲ့ ဘောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-margin,
+        kind: rectangle,
+        x: 280,
+        y: 215,
+        width: 340,
+        height: 240,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-border,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 300,
+        height: 200,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-padding,
+        kind: rectangle,
+        x: 324,
+        y: 259,
+        width: 252,
+        height: 152,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-content,
+        kind: rectangle,
+        x: 370,
+        y: 305,
+        width: 160,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: a-content-l,
+        kind: text,
+        x: 398,
+        y: 317,
+        width: 110,
+        height: 36,
+        text: "content",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-l-border,
+        kind: text,
+        x: 660,
+        y: 240,
+        width: 360,
+        height: 36,
+        text: "border · ဘောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-l-padding,
+        kind: text,
+        x: 660,
+        y: 290,
+        width: 400,
+        height: 36,
+        text: "padding · အတွင်းဘက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-l-margin,
+        kind: text,
+        x: 660,
+        y: 340,
+        width: 400,
+        height: 36,
+        text: "margin · အပြင်ဘက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l-paint,
+        kind: text,
+        x: 660,
+        y: 390,
+        width: 420,
+        height: 36,
+        text: "နောက်ခံရဲ့ အပေါ်မှာ ဆွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-style,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "style · မျဉ်းပုံစံ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-width,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 260,
+        height: 36,
+        text: "width · အထူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-color,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 280,
+        height: 36,
+        text: "color · အရောင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-switch,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 468,
+        width: 340,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-switch-l,
+        kind: text,
+        x: 660,
+        y: 480,
+        width: 380,
+        height: 36,
+        text: "← ဖွင့်ပေးတဲ့ switch",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — the order of the four corners. Black = the box, blue = the
+    # corner numbers, violet = clockwise from the top left, orange = two
+    # values, red = the margin trap, green = per-corner longhands.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ထောင့် လေးခုရဲ့ အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-box,
+        kind: rectangle,
+        x: 340,
+        y: 260,
+        width: 280,
+        height: 160,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-1,
+        kind: text,
+        x: 306,
+        y: 222,
+        width: 30,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-2,
+        kind: text,
+        x: 630,
+        y: 222,
+        width: 30,
+        height: 36,
+        text: "2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-3,
+        kind: text,
+        x: 630,
+        y: 426,
+        width: 30,
+        height: 36,
+        text: "3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-4,
+        kind: text,
+        x: 306,
+        y: 426,
+        width: 30,
+        height: 36,
+        text: "4",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 380,
+        y: 222,
+        width: 200,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-cw,
+        kind: text,
+        x: 700,
+        y: 250,
+        width: 360,
+        height: 36,
+        text: "ဘယ်ဘက် အပေါ်က စ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-cw2,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 360,
+        height: 36,
+        text: "နာရီလက်တံ အတိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-trap,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 360,
+        height: 36,
+        text: "ဘေး မဟုတ် · ထောင့်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-two,
+        kind: text,
+        x: 700,
+        y: 410,
+        width: 360,
+        height: 36,
+        text: "2 ခု → 1+3 · 2+4",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-long,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 560,
+        height: 36,
+        text: "border-top-left-radius",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-logical,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 620,
+        height: 36,
+        text: "border-start-start-radius · lesson 21",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — border image's nine slices. Orange = corners, blue = edges,
+    # violet = the middle, black = the slice, green = repeat keywords, red =
+    # the two other settings.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Border image · 9 ပိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-tl,
+        kind: rectangle,
+        x: 320,
+        y: 235,
+        width: 70,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-t,
+        kind: rectangle,
+        x: 390,
+        y: 235,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-tr,
+        kind: rectangle,
+        x: 540,
+        y: 235,
+        width: 70,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-l,
+        kind: rectangle,
+        x: 320,
+        y: 305,
+        width: 70,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-m,
+        kind: rectangle,
+        x: 390,
+        y: 305,
+        width: 150,
+        height: 100,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: c-r,
+        kind: rectangle,
+        x: 540,
+        y: 305,
+        width: 70,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-bl,
+        kind: rectangle,
+        x: 320,
+        y: 405,
+        width: 70,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-b,
+        kind: rectangle,
+        x: 390,
+        y: 405,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-br,
+        kind: rectangle,
+        x: 540,
+        y: 405,
+        width: 70,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-slice-l,
+        kind: text,
+        x: 680,
+        y: 240,
+        width: 400,
+        height: 36,
+        text: "slice · ဖြတ်မယ့် အကွာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-corner-l,
+        kind: text,
+        x: 680,
+        y: 295,
+        width: 400,
+        height: 36,
+        text: "ထောင့် → box ရဲ့ ထောင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-edge-l,
+        kind: text,
+        x: 680,
+        y: 350,
+        width: 400,
+        height: 36,
+        text: "ဘေး → ဘေးတစ်လျှောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-middle-l,
+        kind: text,
+        x: 680,
+        y: 405,
+        width: 400,
+        height: 36,
+        text: "အလယ် → fill မှ ပြ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-repeat,
+        kind: text,
+        x: 320,
+        y: 510,
+        width: 620,
+        height: 36,
+        text: "stretch · repeat · round · space",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-width,
+        kind: text,
+        x: 320,
+        y: 570,
+        width: 620,
+        height: 36,
+        text: "width → အထူ · outset → အပြင်ထွက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — three kinds of shadow, and the values of a box shadow. Blue =
+    # box shadow, green = text shadow, orange = drop shadow, violet = the
+    # values; each shape has a grey offset copy (its shadow), drawn first so
+    # it sits underneath.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "အရိပ် သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-box-sh,
+        kind: rectangle,
+        x: 322,
+        y: 252,
+        width: 170,
+        height: 100,
+        strokeColor: "#868e96",
+        backgroundColor: "#adb5bd",
+      }
+    - {
+        id: d-box,
+        kind: rectangle,
+        x: 310,
+        y: 240,
+        width: 170,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-letter-sh,
+        kind: text,
+        x: 588,
+        y: 244,
+        width: 90,
+        height: 100,
+        text: "က",
+        strokeColor: "#868e96",
+        fontSize: 80,
+      }
+    - {
+        id: d-letter,
+        kind: text,
+        x: 580,
+        y: 236,
+        width: 90,
+        height: 100,
+        text: "က",
+        strokeColor: "#2f9e44",
+        fontSize: 80,
+      }
+    - {
+        id: d-shape-sh,
+        kind: ellipse,
+        x: 812,
+        y: 252,
+        width: 150,
+        height: 100,
+        strokeColor: "#868e96",
+        backgroundColor: "#adb5bd",
+      }
+    - {
+        id: d-shape,
+        kind: ellipse,
+        x: 800,
+        y: 240,
+        width: 150,
+        height: 100,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-box-l,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 190,
+        height: 36,
+        text: "box shadow",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-box-f,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 190,
+        height: 36,
+        text: "→ box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-letter-l,
+        kind: text,
+        x: 540,
+        y: 370,
+        width: 190,
+        height: 36,
+        text: "text shadow",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-letter-f,
+        kind: text,
+        x: 540,
+        y: 415,
+        width: 190,
+        height: 36,
+        text: "→ စာလုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-shape-l,
+        kind: text,
+        x: 790,
+        y: 370,
+        width: 220,
+        height: 36,
+        text: "drop shadow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-shape-f,
+        kind: text,
+        x: 790,
+        y: 415,
+        width: 220,
+        height: 36,
+        text: "→ ပုံသဏ္ဌာန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-values,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 700,
+        height: 36,
+        text: "box shadow → x · y · blur · spread · အရောင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — the closing quiz. Blue = questions, green = answers.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 700,
+        height: 40,
+        text: "style ပဲ ပေးရင် အထူနဲ့ အရောင်?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 700,
+        height: 36,
+        text: "medium (3px) · currentColor",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-q2,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 700,
+        height: 40,
+        text: "box shadow မှာပဲ ရှိတာ?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a2,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 700,
+        height: 36,
+        text: "inset · spread",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4134
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: borders-intro
+    chapter: "Border ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ box ရဲ့ content နောက်က နောက်ခံ အရောင်နဲ့ ပုံတွေကို
+      ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ box ရဲ့ အစွန်းကို ကြည့်ပြီး၊ border ကို အရင်၊
+      အရိပ်တွေကို နောက်မှ ကြည့်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-box]] lesson 2 မှာ ကြည့်ခဲ့တဲ့ box
+      model ကို ပြန်စဉ်းစားကြည့်ပါ။ border ဆိုတာ box ကို ပတ်ထားတဲ့ ဘောင်ပါ။
+      [[mark:draw-layers]] သူက padding ရဲ့ အပြင်ဘက်၊ margin ရဲ့ အတွင်းဘက်မှာ ရှိပါတယ်။ box
+      sizing က border box ဖြစ်လို့၊ border ထူလာရင် ပေးထားတဲ့ အကျယ်ထက် မကြီးဘဲ content နေရာ
+      ကျဉ်းသွားပါတယ်။ ပြီးတော့ border ကို နောက်ခံ အပေါ်မှာ ဆွဲပါတယ်။
+      [[mark:draw-settings]] border မှာ setting သုံးခု ရှိပါတယ်။ မျဉ်းပုံစံ ဖြစ်တဲ့ style၊
+      အထူ ဖြစ်တဲ့ width နဲ့ အရောင် ဖြစ်တဲ့ color ပါ။ [[mark:circle-style]] ဒီ သုံးခုထဲမှာ
+      border ပေါ်မပေါ် ဆိုတာကို style က ဆုံးဖြတ်ပါတယ်။ ဘာကြောင့်လဲ ဆိုတာ editor ထဲမှာ
+      ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Borders"
+        url: "https://web.dev/learn/css/borders"
+      - title: "web.dev Learn CSS — Box model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — border"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border"
+      - title: "CSS Backgrounds and Borders Module Level 3 — borders"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#borders"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-box
+        type: whiteboard.apply
+        at: { mark: draw-box }
+        upsertIds: [a-border, a-padding, a-content, a-content-l, a-l-border]
+        drawMs: 2400
+      - id: draw-layers
+        type: whiteboard.apply
+        at: { mark: draw-layers }
+        upsertIds: [a-margin, a-l-padding, a-l-margin, a-l-paint]
+        drawMs: 2400
+      - id: draw-settings
+        type: whiteboard.apply
+        at: { mark: draw-settings }
+        upsertIds: [a-style, a-width, a-color]
+        drawMs: 2400
+      - id: circle-style
+        type: whiteboard.apply
+        at: { mark: circle-style }
+        upsertIds: [a-switch, a-switch-l]
+        drawMs: 1600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML
+      ဖိုင်ပါ။ [[mark:select-header]] header ထဲမှာ ဆိုင်ရဲ့ နာမည် ရှိပါတယ်။
+      [[mark:select-menu]] ပြီးတော့ သောက်စရာ card သုံးခု ရှိပါတယ်။ ပထမ card က ဒီနေ့ အထူး
+      ဖြစ်လို့၊ featured class ပါပါတယ်။ [[mark:select-badges]] border style တစ်မျိုးစီရဲ့
+      နာမည် တပ်ထားတဲ့ လေးထောင့် သေးသေး ငါးခု ရှိပါတယ်။ [[mark:select-owner]] ဆိုင်ရှင်
+      ဓာတ်ပုံအစား ထားတဲ့ စတုရန်းနဲ့ အစိမ်းရောင် badge လည်း ရှိပါတယ်။ [[mark:select-form]]
+      နောက်ဆုံးက field တစ်ခုနဲ့ မှာမယ့် ခလုတ် ပါတဲ့ အော်ဒါ form ပါ။ [[mark:open-styles]]
+      CSS ဖိုင်ကတော့ အလွတ်ပါ။ base CSS ဖိုင်ကလည်း card တွေကို border နဲ့ ထောင့်ဝိုင်း
+      မပေးထားပါဘူး။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ card တွေက နို့နှစ်ရောင်
+      page ပေါ်က ဘောင် မပါတဲ့ အဖြူ box တွေပါ။
+    sources:
+      - title: "web.dev Learn CSS — Borders"
+        url: "https://web.dev/learn/css/borders"
+      - title: "MDN — border-style (initial value none)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-style"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-header
+        type: editor.select
+        at: { mark: select-header }
+        target:
+          {
+            file: index.html,
+            text: '<h1 class="shop-name" data-testid="shop-name">',
+            occurrence: 1,
+          }
+      - id: select-menu
+        type: editor.select
+        at: { mark: select-menu }
+        target: { file: index.html, text: '<li class="menu-card featured"', occurrence: 1 }
+      - id: select-badges
+        type: editor.select
+        at: { mark: select-badges }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="badge-row" data-testid="badge-row" lang="en">',
+            occurrence: 1,
+          }
+      - id: select-owner
+        type: editor.select
+        at: { mark: select-owner }
+        target:
+          {
+            file: index.html,
+            text: '<div class="owner-row" data-testid="owner-row">',
+            occurrence: 1,
+          }
+      - id: select-form
+        type: editor.select
+        at: { mark: select-form }
+        target:
+          {
+            file: index.html,
+            text: '<form class="order-form" id="order" data-testid="order-form">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-menu
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-drinks }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-menu }
+
+  - id: border-style
+    chapter: "Border ကို ပေါ်အောင် လုပ်ရအောင်"
+    narration: >
+      [[mark:type-width]] သောက်စရာ card တွေရဲ့ border ကို 4 pixel ထူအောင် ပေးကြည့်ရအောင်။
+      ရိုက်နေတုန်း card တွေကို လိုက်ကြည့်ပါ။ [[mark:after-width]] ဘာမှ မပေါ်လာပါဘူး။
+      [[mark:explain-none]] ဒီ အထူကို ကြည့်ပါ။ border style ရဲ့ default က none ပါ။ none
+      ဖြစ်နေသရွေ့ အထူကို ဘယ်လောက် ရေးရေး သုည ဖြစ်သွားပါတယ်။ [[mark:type-style]] ဒါကြောင့်
+      အောက်မှာ style ကို မျဉ်းဖြောင့် ထပ်ပေးပါမယ်။ [[mark:after-style]] အခု card တိုင်းမှာ
+      4 pixel ထူတဲ့ အရောင်ရင့် ဘောင် ပေါ်လာပါပြီ။ ဆိုတော့ border ကို ဖွင့်ပေးတဲ့ switch က
+      style ပါ။ [[mark:select-width]] ဒီ 4 pixel ကို ကြည့်ပါ။ အထူကို pixel၊ rem လို unit
+      နဲ့ ပေးသလို၊ thin၊ medium၊ thick ဆိုတဲ့ keyword တွေနဲ့လည်း ပေးလို့ ရပါတယ်။ default က
+      3 pixel ရှိတဲ့ medium ပါ။ ရာခိုင်နှုန်းနဲ့တော့ ပေးလို့ မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Borders: style"
+        url: "https://web.dev/learn/css/borders#style"
+      - title: "MDN — border-style (none computes the width to 0)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-style"
+      - title: "MDN — border-width (thin, medium, thick; no percentages)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-width"
+      - title: "CSS Backgrounds and Borders Module Level 3 — border-width"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#border-width"
+    actions:
+      - id: type-width
+        type: editor.type
+        at: { mark: type-width }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".menu-card {\n  border-width: 4px;\n}\n"
+      - id: expect-width
+        type: expect.preview
+        at: { mark: after-width }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-none
+        type: editor.select
+        at: { mark: explain-none }
+        target: { file: styles.css, text: "border-width: 4px;", occurrence: 1 }
+      - id: type-style
+        type: editor.type
+        at: { mark: type-style }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-width: 4px;\n", occurrence: 1 }
+        text: "  border-style: solid;\n"
+      - id: expect-style
+        type: expect.preview
+        at: { mark: after-style }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-width
+        type: editor.select
+        at: { mark: select-width }
+        target: { file: styles.css, text: "4px", occurrence: 1 }
+
+  - id: border-color
+    narration: >
+      [[mark:type-color]] border ကို အရောင် မပေးရသေးပါဘူး။ အဲဒီအစား card ရဲ့ စာလုံး
+      အရောင်ကို အညိုနီရောင် ပေးကြည့်ရအောင်။ နာမည်တွေတင် မကဘဲ ဘောင်တွေကိုပါ လိုက်ကြည့်ပါ။
+      [[mark:after-color]] နာမည်တွေရော ဘောင်တွေပါ အညိုနီရောင် ဖြစ်သွားပါပြီ။
+      [[mark:explain-current]] ဒီ စာလုံး အရောင်ကို ကြည့်ပါ။ border ကို အရောင် မပေးရင်၊
+      lesson 9 မှာ တွေ့ခဲ့တဲ့ currentColor ဆိုတဲ့ စာလုံး အရောင်ကို သုံးပါတယ်။
+      ဖော်ပြချက်နဲ့ ဈေးနှုန်းကတော့ ကိုယ်ပိုင် အရောင် ရှိလို့ မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Borders: color"
+        url: "https://web.dev/learn/css/borders#color"
+      - title: "MDN — border-color (initial value currentcolor)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-color"
+      - title: "MDN — currentcolor keyword"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value#currentcolor_keyword"
+    actions:
+      - id: type-color
+        type: editor.type
+        at: { mark: type-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-style: solid;\n", occurrence: 1 }
+        text: "  color: sienna;\n"
+      - id: expect-color
+        type: expect.preview
+        at: { mark: after-color }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-color
+        type: editor.select
+        at: { mark: explain-current }
+        target: { file: styles.css, text: "color: sienna;", occurrence: 1 }
+
+  - id: style-gallery
+    chapter: "Border style တွေ"
+    narration: >
+      [[mark:scroll-badges]] လေးထောင့်လေးတွေဆီ သွားရအောင်။ [[mark:type-dotted]]
+      လေးထောင့်တွေအတွက် rule အသစ်မှာ border တစ်ခုလုံးကို တစ်ကြောင်းတည်း ရေးပါမယ်။ 6 pixel
+      ထူတဲ့ အညိုနီရောင် အစက် ဘောင်ပါ။ [[mark:after-dotted]] လေးထောင့် ငါးခုလုံးမှာ အစက်
+      ဘောင် ပေါ်လာပါပြီ။ [[mark:type-styles]] ပြီးတော့ rule လေးခုနဲ့ ဒုတိယကနေ နောက်ဆုံး
+      လေးထောင့်အထိ style တစ်မျိုးစီ ပေးပါမယ်။ လေးထောင့်တွေကို lesson 4 မှာ တွေ့ခဲ့တဲ့
+      nth-child နဲ့ ရွေးထားပါတယ်။ [[mark:after-styles]] ဒုတိယက မျဉ်းပြတ် တိုတိုတွေပါ။
+      တတိယက ကြားမှာ နေရာလွတ် ခြားထားတဲ့ မျဉ်း နှစ်ကြောင်းမို့၊ အထူ အနည်းဆုံး 3 pixel
+      လိုပါတယ်။ [[mark:explain-3d]] ဒီ groove က ထွင်းထားသလို၊ ridge က မို့နေသလို
+      ပေါ်ပါတယ်။ browser က ဘောင်ရဲ့ တချို့ကို ပိုလင်းအောင်၊ တချို့ကို ပိုရင့်အောင်
+      ဆွဲလို့ပါ။ inset နဲ့ outset ကတော့ box တစ်ခုလုံးကို နစ်နေသလို၊ ကြွနေသလို ပြပါတယ်။
+      [[mark:explain-browsers]] အရောင် အလင်း အမှောင်နဲ့ အစက်၊ မျဉ်းပြတ် အရွယ်ကိုတော့
+      browser တစ်ခုချင်း ကိုယ့်ဘာသာ ဆုံးဖြတ်ပါတယ်။ ဒီ preview ကိုလည်း ကိုယ့် browser ကပဲ
+      ဆွဲပြတာမို့ နည်းနည်း ကွဲနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: style"
+        url: "https://web.dev/learn/css/borders#style"
+      - title: "MDN — border-style (dotted, dashed, double, groove, ridge, inset, outset)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-style"
+      - title: "CSS Backgrounds and Borders Module Level 3 — border-style"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#border-style"
+    actions:
+      - id: scroll-badges
+        type: preview.scroll
+        at: { mark: scroll-badges }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-dotted
+        type: editor.type
+        at: { mark: type-dotted }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: sienna;\n}\n", occurrence: 1 }
+        text: "\n.style-badge {\n  border: 6px dotted sienna;\n}\n"
+      - id: expect-dotted
+        type: expect.preview
+        at: { mark: after-dotted }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-row }
+        textContains: "dotted"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-styles
+        type: editor.type
+        at: { mark: type-styles }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  border: 6px dotted sienna;\n}\n", occurrence: 1 }
+        text: "\n.style-badge:nth-child(2) { border-style: dashed; }\n.style-badge:nth-child(3) { border-style: double; }\n.style-badge:nth-child(4) { border-style: groove; }\n.style-badge:nth-child(5) { border-style: ridge; }\n"
+      - id: expect-styles
+        type: expect.preview
+        at: { mark: after-styles }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-row }
+        textContains: "ridge"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-3d
+        type: editor.select
+        at: { mark: explain-3d }
+        target: { file: styles.css, text: "border-style: groove;", occurrence: 1 }
+
+  - id: shorthand
+    chapter: "Shorthand နဲ့ ဘက်တစ်ဘက်ချင်း"
+    narration: >
+      [[mark:scroll-top]] card တွေဆီ ပြန်သွားရအောင်။ [[mark:type-shorthand]] border
+      shorthand က အထူ၊ style နဲ့ အရောင်ကို တစ်ခါတည်း ပေးပါတယ်။ 2 pixel ထူတဲ့
+      အညိုဖျော့ရောင် မျဉ်းဖြောင့် ဘောင် ပေးပါမယ်။ သူ့ကို နောက်မှ ရေးထားလို့ အပေါ်က border
+      declaration တွေကို နိုင်ပါတယ်။ [[mark:after-shorthand]] card တွေမှာ အညိုဖျော့ရောင်
+      ဘောင် ပါးပါး ဖြစ်သွားပါပြီ။ [[mark:explain-reset]] တန်ဖိုး သုံးခုကို ကြိုက်တဲ့
+      အစဉ်နဲ့ ရေးလို့ ရပြီး၊ မရေးတဲ့ တန်ဖိုးက default ပြန်ဖြစ်သွားပါတယ်။ shorthand က
+      နောက်မှ တွေ့မယ့် border image ကိုလည်း default ပြန်ထားပါတယ်။ [[mark:type-bottom]] ဘက်
+      တစ်ဘက်တည်း ပြောင်းချင်ရင်၊ ဘက်တိုင်းမှာ ကိုယ်ပိုင် shorthand ရှိပါတယ်။ အောက်ဘက်ကို
+      လက်ဖက်ရွက်လို အစိမ်းရောင်နဲ့ 6 pixel ထူအောင် ပေးပါမယ်။ [[mark:after-bottom]]
+      အောက်ဘက် ဘောင်ပဲ ပြောင်းသွားပါတယ်။ [[mark:explain-longhands]] ဒီ border bottom
+      အပြင်၊ border top style လို setting တစ်ခုတည်းကို ပြောင်းတဲ့ longhand တွေလည်း
+      ရှိပါတယ်။ lesson 21 က border block end လို logical property တွေကတော့ စာ ရေးတဲ့
+      ဦးတည်ရာကို လိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: shorthand"
+        url: "https://web.dev/learn/css/borders#shorthand"
+      - title: "MDN — border (omitted values reset; also resets border-image)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border"
+      - title: "MDN — border-bottom"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-bottom"
+      - title: "MDN — border-block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-block"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-shorthand
+        type: editor.type
+        at: { mark: type-shorthand }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: sienna;\n", occurrence: 1 }
+        text: "  border: 2px solid tan;\n"
+      - id: expect-shorthand
+        type: expect.preview
+        at: { mark: after-shorthand }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bottom
+        type: editor.type
+        at: { mark: type-bottom }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: 2px solid tan;\n", occurrence: 1 }
+        text: "  border-bottom: 6px solid seagreen;\n"
+      - id: expect-bottom
+        type: expect.preview
+        at: { mark: after-bottom }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-bottom
+        type: editor.select
+        at: { mark: explain-longhands }
+        target: { file: styles.css, text: "border-bottom", occurrence: 1 }
+
+  - id: radius
+    chapter: "ထောင့်တွေကို ဝိုင်းရအောင်"
+    narration: >
+      [[mark:type-radius]] ထောင့်ချွန်တွေက ကြည့်ရတာ မာနေပါတယ်။ border radius နဲ့ card
+      ထောင့်တွေကို 16 pixel ဝိုင်းပေးပါမယ်။ [[mark:after-radius]] ထောင့် လေးခုလုံး
+      ဝိုင်းသွားပါပြီ။ ဘောင်ရော အဖြူရောင် နောက်ခံပါ အကွေးအတိုင်း လိုက်သွားတာကို သတိထား
+      ကြည့်ပါ။ [[mark:scroll-bottom]] border radius က border မရှိလည်း အလုပ်လုပ်ပါတယ်။
+      [[mark:type-pill]] မှာမယ့် ခလုတ်မှာ border မရှိပါဘူး။ rule အသစ်နဲ့ သူ့ကို 9999 pixel
+      ဆိုတဲ့ radius အကြီးကြီး ပေးကြည့်ရအောင်။ [[mark:after-pill]] ခလုတ်က ဆေးတောင့်ပုံ
+      ဖြစ်သွားပါပြီ။ radius က box ထဲ မဆံ့ရင် browser က radius အားလုံးကို အချိုးတူ
+      လျှော့ပေးလို့၊ ဘယ်ညာ အစွန်း နှစ်ဘက်က စက်ဝိုင်း တစ်ခြမ်းစီ ဖြစ်သွားပါတယ်။
+      [[mark:type-circle]] ဆိုင်ရှင်ရဲ့ ဓာတ်ပုံအတွက်တော့ သူ့ အရွယ်အစားရဲ့ တစ်ဝက် ဖြစ်တဲ့
+      50 ရာခိုင်နှုန်းကို သုံးပါမယ်။ [[mark:after-circle]] စတုရန်းက စက်ဝိုင်း
+      ဖြစ်သွားပါပြီ။ အကျယ်နဲ့ အမြင့် မတူတဲ့ box ဆိုရင်တော့ ဘဲဥပုံ ဖြစ်ပါမယ်။
+      ရာခိုင်နှုန်းကို အလျားလိုက်မှာ အကျယ်ကနေ၊ ဒေါင်လိုက်မှာ အမြင့်ကနေ တွက်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border radius"
+        url: "https://web.dev/learn/css/borders#border_radius"
+      - title: "MDN — border-radius"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-radius"
+      - title: "CSS Backgrounds and Borders Module Level 3 — corner overlap (radii are scaled down)"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#corner-overlap"
+    actions:
+      - id: type-radius
+        type: editor.type
+        at: { mark: type-radius }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-bottom: 6px solid seagreen;\n", occurrence: 1 }
+        text: "  border-radius: 16px;\n"
+      - id: expect-radius
+        type: expect.preview
+        at: { mark: after-radius }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "1,200 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-bottom
+        type: preview.scroll
+        at: { mark: scroll-bottom }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-pill
+        type: editor.type
+        at: { mark: type-pill }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".style-badge:nth-child(5) { border-style: ridge; }\n",
+            occurrence: 1,
+          }
+        text: "\n.order-btn {\n  border-radius: 9999px;\n}\n"
+      - id: expect-pill
+        type: expect.preview
+        at: { mark: after-pill }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-circle
+        type: editor.type
+        at: { mark: type-circle }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-radius: 9999px;\n}\n", occurrence: 1 }
+        text: "\n.owner {\n  border-radius: 50%;\n}\n"
+      - id: expect-circle
+        type: expect.preview
+        at: { mark: after-circle }
+        timeoutMs: 4000
+        target: { by: testId, value: owner }
+        attribute: { name: aria-label, value: "ဆိုင်ရှင်ရဲ့ ဓာတ်ပုံ" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: corner-order
+    narration: >
+      [[mark:open-corners]] တန်ဖိုး တစ်ခုပဲ ပေးရင် ထောင့် လေးခုလုံးကို တူတူ ဝိုင်းပြီး၊
+      တန်ဖိုး လေးခုအထိ ပေးလို့ ရပါတယ်။ [[mark:draw-order]] ဘယ်အပေါ်ထောင့်ကနေ စပြီး
+      နာရီလက်တံ အတိုင်း သွားပါတယ်။ ဘယ်အပေါ်၊ ညာအပေါ်၊ ညာအောက်၊ ပြီးမှ ဘယ်အောက်ထောင့်ပါ။
+      [[mark:draw-trap]] margin ရဲ့ အပေါ်၊ ညာ၊ အောက်၊ ဘယ် ဆိုတဲ့ ဘေး လေးဘက်နဲ့ မရောပါနဲ့။
+      ဒီမှာ ပေးနေတာက ဘေးတွေ မဟုတ်ဘဲ ထောင့်တွေပါ။ [[mark:draw-two]] တန်ဖိုး နှစ်ခု ပေးရင်၊
+      ပထမ တန်ဖိုးက ဘယ်အပေါ်နဲ့ ညာအောက်ထောင့်အတွက်၊ ဒုတိယက ကျန်တဲ့ ထောင့် နှစ်ခုအတွက်
+      ဖြစ်ပါတယ်။ [[mark:draw-longhands]] ထောင့်တိုင်းမှာ border top left radius လို
+      ကိုယ်ပိုင် longhand လည်း ရှိပါတယ်။ [[mark:draw-logical]] lesson 21 က border start
+      start radius လို logical နာမည်တွေကတော့ စာ ရေးတဲ့ ဦးတည်ရာကို လိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border radius (shorthand order)"
+        url: "https://web.dev/learn/css/borders#border_radius"
+      - title: "MDN — border-radius (1 to 4 values, from the top-left corner)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-radius"
+      - title: "MDN — border-start-start-radius"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-start-start-radius"
+    actions:
+      - id: open-corners
+        type: whiteboard.apply
+        at: { mark: open-corners }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-box]
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [b-1, b-arrow, b-2, b-3, b-4, b-cw, b-cw2]
+        drawMs: 3600
+      - id: draw-trap
+        type: whiteboard.apply
+        at: { mark: draw-trap }
+        upsertIds: [b-trap]
+        drawMs: 1200
+      - id: draw-two
+        type: whiteboard.apply
+        at: { mark: draw-two }
+        upsertIds: [b-two]
+        drawMs: 1400
+      - id: draw-longhands
+        type: whiteboard.apply
+        at: { mark: draw-longhands }
+        upsertIds: [b-long]
+        drawMs: 1400
+      - id: draw-logical
+        type: whiteboard.apply
+        at: { mark: draw-logical }
+        upsertIds: [b-logical]
+        drawMs: 1600
+
+  - id: elliptical
+    narration: >
+      [[mark:close-corners]] အခုထိ ထောင့်တိုင်းက စက်ဝိုင်းရဲ့ လေးပုံ တစ်ပုံ ဖြစ်ခဲ့ပါတယ်။
+      [[mark:type-leaf]] ထောင့်ကို ဘဲဥပုံရဲ့ လေးပုံ တစ်ပုံလည်း လုပ်လို့ ရပါတယ်။
+      အလျားလိုက်နဲ့ ဒေါင်လိုက် radius ကို မတူအောင် ပေးရတာပါ။ အစိမ်းရောင် badge မှာ
+      အလျားလိုက် တန်ဖိုး လေးခု၊ မျဉ်းစောင်း တစ်ခု၊ ပြီးမှ ဒေါင်လိုက် တန်ဖိုး လေးခု
+      ရေးပါမယ်။ [[mark:after-leaf]] စတုရန်းက လက်ဖက်ရွက်လို မညီမညာ ကွေးနေတဲ့ ပုံလေး
+      ဖြစ်သွားပါပြီ။ [[mark:select-slash]] ဒီ တန်ဖိုး ရှစ်ခုကို ကြည့်ပါ။ မျဉ်းစောင်း ရှေ့က
+      အလျားလိုက်၊ နောက်က ဒေါင်လိုက် radius တွေ ဖြစ်ပြီး၊ နှစ်စုလုံး နာရီလက်တံ အစဉ်ပါ။
+      [[mark:explain-longhand-ellipse]] ထောင့် တစ်ခုတည်းရဲ့ longhand မှာတော့ radius
+      နှစ်ခုကို မျဉ်းစောင်း မပါဘဲ space နဲ့ပဲ ခြားရေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border radius (elliptical corners)"
+        url: "https://web.dev/learn/css/borders#border_radius"
+      - title: "MDN — border-radius (the slash separates horizontal and vertical radii)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-radius#syntax"
+      - title: "MDN — border-top-left-radius (two values, no slash)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-top-left-radius"
+    actions:
+      - id: close-corners
+        type: whiteboard.apply
+        at: { mark: close-corners }
+        open: false
+      - id: type-leaf
+        type: editor.type
+        at: { mark: type-leaf }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-radius: 50%;\n}\n", occurrence: 1 }
+        text: "\n.leaf-badge {\n  border-radius: 60% 40% 60% 40% / 40% 60% 40% 60%;\n}\n"
+      - id: expect-leaf
+        type: expect.preview
+        at: { mark: after-leaf }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-badge }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-slash
+        type: editor.select
+        at: { mark: select-slash }
+        target: { file: styles.css, text: "60% 40% 60% 40% / 40% 60% 40% 60%", occurrence: 1 }
+
+  - id: border-image
+    chapter: "Border image"
+    narration: >
+      [[mark:scroll-special]] ဒီနေ့ အထူး card ဆီ ပြန်တက်ရအောင်။ သူ့ကို ပိုထူးခြားတဲ့ ဘောင်
+      ပေးချင်ပါတယ်။ [[mark:type-featured]] featured card အတွက် rule အသစ်မှာ၊ အရောင် မပါဘဲ
+      10 pixel ထူတဲ့ မျဉ်းဖြောင့် border ပေးပါမယ်။ ပထမ card ကို လိုက်ကြည့်ပါ။
+      [[mark:after-featured]] အညိုနီရောင် ဘောင် ထူထူ ပေါ်လာပါပြီ။ ဒီတစ်ခါလည်း စာလုံး
+      အရောင်ကို ယူသုံးတာပါ။ [[mark:type-bimage]] border image ကတော့ မျဉ်းအစား ပုံ
+      တစ်ပုံနဲ့ ဘောင်ကို ဆွဲပေးပါတယ်။ lesson 32 က gradient ကလည်း ပုံ ဖြစ်လို့၊ အစိမ်းကနေ
+      ရွှေရောင် ကူးတဲ့ gradient ပေးပါမယ်။ ပြီးမှ ဂဏန်း 1 ကို ထည့်ပါမယ်။
+      [[mark:after-bimage]] ဘောင်က gradient ဖြစ်သွားပါပြီ။ [[mark:explain-order]] ဒီ
+      border နဲ့ border image ကို ကြည့်ပါ။ shorthand က border image ကို default
+      ပြန်ထားလို့၊ border image ကို နောက်မှ တမင် ရေးထားတာပါ။ [[mark:explain-width]] ပုံကို
+      border ရဲ့ အထူအတိုင်း ဆွဲပါတယ်။ style က none ဖြစ်ရင် အထူ သုည ဖြစ်သွားလို့၊
+      မျဉ်းဖြောင့် style ကို ထားခဲ့ရတာပါ။ [[mark:explain-square]] ထောင့်တွေကို ကြည့်ပါ။
+      border radius က border image ကို မဝိုင်းပေးလို့၊ ဒီ ဘောင်က ထောင့်ချွန် ဖြစ်နေပါတယ်။
+      [[mark:select-source]] ဒီ gradient ကို ကြည့်ပါ။ သူ့နေရာမှာ url နဲ့ ပေးတဲ့ ပုံ
+      ဖိုင်ကိုလည်း သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border images"
+        url: "https://web.dev/learn/css/borders#border_images"
+      - title: "MDN — border-image"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image"
+      - title: "MDN — border-image-source (an image or a gradient)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image-source"
+      - title: "CSS Backgrounds and Borders Module Level 3 — border images (not clipped by border-radius)"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#border-images"
+    actions:
+      - id: scroll-special
+        type: preview.scroll
+        at: { mark: scroll-special }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-featured
+        type: editor.type
+        at: { mark: type-featured }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  border-radius: 60% 40% 60% 40% / 40% 60% 40% 60%;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.featured {\n  border: 10px solid;\n}\n"
+      - id: expect-featured
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bimage
+        type: editor.type
+        at: { mark: type-bimage }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: 10px solid;\n", occurrence: 1 }
+        text: "  border-image: linear-gradient(135deg, #2f6b3a, #c9a227) 1;\n"
+      - id: expect-bimage
+        type: expect.preview
+        at: { mark: after-bimage }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-order
+        type: editor.select
+        at: { mark: explain-order }
+        target: { file: styles.css, text: "  border: 10px solid;\n  border-image", occurrence: 1 }
+      - id: select-source
+        type: editor.select
+        at: { mark: select-source }
+        target:
+          { file: styles.css, text: "linear-gradient(135deg, #2f6b3a, #c9a227)", occurrence: 1 }
+
+  - id: nine-slices
+    narration: >
+      [[mark:open-slice]] ဒါဆို 1 က ဘာအတွက်လဲ။ [[mark:draw-grid]] browser က ဖြတ်မျဉ်း
+      လေးကြောင်းနဲ့ ပုံကို ကိုးပိုင်း ပိုင်းပါတယ်။ အဲဒီ ဂဏန်းက slice ဖြစ်ပြီး၊ ပုံရဲ့
+      အစွန်းကနေ pixel ဘယ်နှခု အထဲဝင်ပြီး ဖြတ်မလဲ ဆိုတာပါ။ [[mark:draw-corners]] ထောင့်
+      အပိုင်း လေးခုက box ရဲ့ ထောင့် လေးခုမှာ ရောက်သွားပါတယ်။ [[mark:draw-edges]] ဘေး
+      အပိုင်း လေးခုကတော့ ထောင့်တွေကြားက ဘေးတွေကို ဖြည့်ပါတယ်။ [[mark:draw-middle]] အလယ်
+      အပိုင်းကိုတော့ default မှာ မဆွဲပါဘူး။ fill keyword ထည့်မှပဲ box ရဲ့ အထဲမှာ
+      ဆွဲပေးပါတယ်။ [[mark:explain-one]] slice က 1 ဖြစ်တော့ ထောင့် အပိုင်းတွေက ပုံရဲ့ 1
+      pixel ပဲ ရှိပြီး၊ border အထူအထိ ဆွဲဆန့်ပါတယ်။ ဘေးတွေကလည်း gradient အစွန်းက အစင်း
+      ပါးပါးလေးတွေကို ဘေးတစ်လျှောက် ဆွဲဆန့်ထားတာပါ။ [[mark:draw-repeat]] border image
+      repeat က ဘေး အပိုင်းတွေကို ဘယ်လို ဖြည့်မလဲ ဆုံးဖြတ်ပါတယ်။ default ဖြစ်တဲ့ stretch က
+      ဆွဲဆန့်ပါတယ်။ repeat က ထပ်ခါ စီလို့ အစွန်းက အကွက်တွေ ပြတ်နိုင်ပါတယ်။ round က အကွက်
+      အပြည့်တွေ ဆံ့အောင် အရွယ် ညှိပြီး၊ space က အကွက်တွေကြားမှာ နေရာလွတ် ထည့်ပါတယ်။
+      [[mark:draw-width]] border image width က ပုံကို ဘယ်လောက် ထူထူ ဆွဲမလဲ ဆိုတာ ဖြစ်ပြီး၊
+      border image outset ကတော့ ဘာမှ မရွှေ့ဘဲ ပုံကို box အပြင်ထိ ထုတ်ဆွဲပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border-image-slice"
+        url: "https://web.dev/learn/css/borders#border-image-slice"
+      - title: "web.dev Learn CSS — Borders: border-image-repeat"
+        url: "https://web.dev/learn/css/borders#border-image-repeat"
+      - title: "MDN — border-image-slice (nine regions; fill keeps the middle)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image-slice"
+      - title: "MDN — border-image-repeat"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image-repeat"
+      - title: "MDN — border-image-width"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image-width"
+      - title: "MDN — border-image-outset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-image-outset"
+    actions:
+      - id: open-slice
+        type: whiteboard.apply
+        at: { mark: open-slice }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-grid
+        type: whiteboard.apply
+        at: { mark: draw-grid }
+        upsertIds: [c-tl, c-t, c-tr, c-l, c-m, c-r, c-bl, c-b, c-br, c-slice-l]
+        drawMs: 3200
+      - id: draw-corners
+        type: whiteboard.apply
+        at: { mark: draw-corners }
+        upsertIds: [c-corner-l]
+        drawMs: 1200
+      - id: draw-edges
+        type: whiteboard.apply
+        at: { mark: draw-edges }
+        upsertIds: [c-edge-l]
+        drawMs: 1200
+      - id: draw-middle
+        type: whiteboard.apply
+        at: { mark: draw-middle }
+        upsertIds: [c-middle-l]
+        drawMs: 1200
+      - id: draw-repeat
+        type: whiteboard.apply
+        at: { mark: draw-repeat }
+        upsertIds: [c-repeat]
+        drawMs: 1600
+      - id: draw-width
+        type: whiteboard.apply
+        at: { mark: draw-width }
+        upsertIds: [c-width]
+        drawMs: 1600
+
+  - id: shadow-kinds
+    chapter: "အရိပ် သုံးမျိုး"
+    narration: >
+      [[mark:open-shadows]] အခု အရိပ်တွေ ကြည့်ရအောင်။ CSS မှာ အရိပ် သုံးမျိုး ရှိပြီး၊
+      အရိပ်က ဘာကို လိုက်ရမလဲ ဆိုတာနဲ့ ရွေးရပါတယ်။ [[mark:draw-box-shadow]] box shadow က
+      box ရဲ့ နောက်မှာ အရိပ် ထည့်ပါတယ်။ [[mark:draw-text-shadow]] text shadow ကတော့
+      စာလုံးတွေ နောက်မှာ အရိပ် ထည့်ပါတယ်။ [[mark:draw-drop-shadow]] drop shadow ကတော့
+      lesson 36 မှာ တွေ့ရမယ့် filter တစ်ခုပါ။ box ကို မဟုတ်ဘဲ ပုံထဲက ပုံသဏ္ဌာန်ကို
+      လိုက်ပါတယ်။ နောက်ခံ ဖောက်ထွင်း မြင်ရတဲ့ ခွက် ပုံဆိုရင်၊ ခွက်ရဲ့ ပုံအတိုင်း အရိပ်
+      ကျပါတယ်။ [[mark:draw-values]] box shadow မှာ ဘယ်လောက် ရွှေ့မလဲ ဆိုတဲ့ x နဲ့ y offset
+      ပါပြီး၊ blur နဲ့ spread ကို မပေးလည်း ရပါတယ်။ နောက်ဆုံးက အရောင်ပါ။ တစ်ခုချင်း
+      စမ်းကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Shadows"
+        url: "https://web.dev/learn/css/shadows"
+      - title: "MDN — box-shadow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow"
+      - title: "MDN — drop-shadow()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/drop-shadow"
+    actions:
+      - id: open-shadows
+        type: whiteboard.apply
+        at: { mark: open-shadows }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-box-shadow
+        type: whiteboard.apply
+        at: { mark: draw-box-shadow }
+        upsertIds: [d-box-sh, d-box, d-box-l, d-box-f]
+        drawMs: 1600
+      - id: draw-text-shadow
+        type: whiteboard.apply
+        at: { mark: draw-text-shadow }
+        upsertIds: [d-letter-sh, d-letter, d-letter-l, d-letter-f]
+        drawMs: 1400
+      - id: draw-drop-shadow
+        type: whiteboard.apply
+        at: { mark: draw-drop-shadow }
+        upsertIds: [d-shape-sh, d-shape, d-shape-l, d-shape-f]
+        drawMs: 1600
+      - id: draw-values
+        type: whiteboard.apply
+        at: { mark: draw-values }
+        upsertIds: [d-values]
+        drawMs: 1800
+
+  - id: box-shadow
+    chapter: "Box shadow"
+    narration: >
+      [[mark:close-shadows]] card တွေဆီ ပြန်သွားရအောင်။ [[mark:type-hard]] ဖိုင် အဆုံးမှာ
+      card တွေအတွက် ဒုတိယ rule ထည့်ပါမယ်။ ညာနဲ့ အောက်ကို 8 pixel စီ ရွှေ့ထားပြီး blur
+      မပါတဲ့ အမည်းရောင် အရိပ်ပါ။ card တွေကို လိုက်ကြည့်ပါ။ [[mark:after-hard]] card
+      တိုင်းရဲ့ ညာဘက်နဲ့ အောက်မှာ အစွန်း ပြတ်ပြတ် အမည်းရောင် အရိပ် ပေါ်လာပါပြီ။ x က
+      အပေါင်း ဆိုရင် အရိပ်က ညာကို ရွေ့ပြီး၊ y က အပေါင်း ဆိုရင် အောက်ကို ရွေ့ပါတယ်။
+      [[mark:explain-no-layout]] တခြား ဘာမှ မရွေ့ပါဘူး။ lesson 2 မှာ ပြောခဲ့သလို အရိပ်က
+      နေရာ မယူလို့ပါ။ [[mark:type-left]] အောက်မှာ x ကို အနုတ် 8 ပေးပြီး၊ y ကို ဒီအတိုင်း
+      ထားပါမယ်။ အရိပ် ဘယ်လို ပြောင်းမလဲ လိုက်ကြည့်ပါ။ [[mark:after-left]] အရိပ်က ဘယ်ဘက်ကို
+      ရွေ့သွားပါပြီ။ [[mark:type-blur]] ပြီးတော့ x ကို သုည၊ y ကို 8 ထားပြီး၊ 20 pixel
+      ရှိတဲ့ blur ထည့်ပါမယ်။ [[mark:after-blur]] အရိပ် အစွန်းတွေ ဝါးသွားပါပြီ။ blur များလေ
+      အရိပ်က ပိုကျယ်ပြီး ပိုဖျော့လေ ဖြစ်ပါတယ်။ blur ကိုတော့ အနုတ် ပေးလို့ မရပါဘူး။
+      [[mark:type-alpha]] အမည်းရောင် သက်သက်က ရင့်လွန်းလို့၊ lesson 9 မှာ တွေ့ခဲ့တဲ့ rgb
+      နဲ့ alpha ကို သုံးပြီး၊ 20 ရာခိုင်နှုန်းပဲ မြင်ရတဲ့ အမည်းရောင် ပေးကြည့်ရအောင်။
+      [[mark:after-alpha]] အခု card တွေက page ပေါ်မှာ နည်းနည်းလေး ကြွနေပါပြီ။ ဖောက်ထွင်း
+      မြင်ရတဲ့ အရိပ်က ပိုသဘာဝ ကျပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Shadows: box shadow"
+        url: "https://web.dev/learn/css/shadows#box_shadow"
+      - title: "MDN — box-shadow (offsets, blur radius; no effect on layout)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow"
+      - title: "CSS Backgrounds and Borders Module Level 3 — box-shadow"
+        url: "https://www.w3.org/TR/css-backgrounds-3/#box-shadow"
+    actions:
+      - id: close-shadows
+        type: whiteboard.apply
+        at: { mark: close-shadows }
+        open: false
+      - id: type-hard
+        type: editor.type
+        at: { mark: type-hard }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "#c9a227) 1;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  box-shadow: 8px 8px 0 black;\n}\n"
+      - id: expect-hard
+        type: expect.preview
+        at: { mark: after-hard }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-left
+        type: editor.type
+        at: { mark: type-left }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  box-shadow: 8px 8px 0 black;\n", occurrence: 1 }
+        text: "  box-shadow: -8px 8px 0 black;\n"
+      - id: expect-left
+        type: expect.preview
+        at: { mark: after-left }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-blur
+        type: editor.type
+        at: { mark: type-blur }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  box-shadow: -8px 8px 0 black;\n", occurrence: 1 }
+        text: "  box-shadow: 0 8px 20px black;\n"
+      - id: expect-blur
+        type: expect.preview
+        at: { mark: after-blur }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-alpha
+        type: editor.type
+        at: { mark: type-alpha }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  box-shadow: 0 8px 20px black;\n", occurrence: 1 }
+        text: "  box-shadow: 0 8px 20px rgb(0 0 0 / 20%);\n"
+      - id: expect-alpha
+        type: expect.preview
+        at: { mark: after-alpha }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: spread
+    narration: >
+      [[mark:type-ring]] blur ရဲ့ နောက်က ဂဏန်းက spread ဖြစ်ပြီး၊ blur မလုပ်ခင် အရိပ်ကို
+      ချဲ့ပေးပါတယ်။ offset မပါ၊ blur မပါဘဲ spread ကို 4 pixel နဲ့ အစိမ်းရောင် ပေးရင်၊
+      ကွင်း တစ်ခု ရပါတယ်။ [[mark:after-ring]] card တိုင်းရဲ့ border အပြင်ဘက်မှာ 4 pixel
+      ထူတဲ့ အစိမ်းရောင် ကွင်း ပေါ်လာပြီး၊ ကွင်းက ထောင့်ဝိုင်းတွေကိုပါ လိုက်ပါတယ်။
+      [[mark:explain-spread]] ဒီ spread ကို အနုတ် ပေးရင်တော့ အရိပ်က ကျုံ့သွားပါတယ်။
+      [[mark:explain-color]] အရောင်ကို မရေးရင် border လိုပဲ currentColor ကို သုံးပါတယ်။
+      ဒါပေမဲ့ အမြဲ ရေးထားတာက ပိုရှင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Shadows: box shadow (spread, color)"
+        url: "https://web.dev/learn/css/shadows#box_shadow"
+      - title: "MDN — box-shadow (spread radius; color defaults to currentcolor)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow#values"
+    actions:
+      - id: type-ring
+        type: editor.type
+        at: { mark: type-ring }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  box-shadow: 0 8px 20px rgb(0 0 0 / 20%);\n", occurrence: 1 }
+        text: "  box-shadow: 0 0 0 4px seagreen;\n"
+      - id: expect-ring
+        type: expect.preview
+        at: { mark: after-ring }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-spread
+        type: editor.select
+        at: { mark: explain-spread }
+        target: { file: styles.css, text: "4px seagreen", occurrence: 1 }
+
+  - id: layered
+    chapter: "အရိပ် အလွှာ ထပ်ရအောင်"
+    narration: >
+      [[mark:type-layered]] သဘာဝကျတဲ့ အရိပ်တွေက များသောအားဖြင့် နှစ်ထပ်ပါ။ card နဲ့
+      ကပ်နေတဲ့ သေးပြီး ပြတ်တဲ့ အရိပ်နဲ့၊ ပိုဝေးတဲ့ ကြီးပြီး ပျော့တဲ့ အရိပ်ကို comma နဲ့
+      ခြားရေးပါတယ်။ [[mark:after-layered]] အခု card တွေက စားပွဲပေါ် တင်ထားတဲ့ စက္ကူလို
+      ဖြစ်သွားပါပြီ။ [[mark:select-first]] စာရင်းထဲက ပထမ အရိပ်ကို ကြည့်ပါ။ lesson 32 က
+      gradient အလွှာတွေလိုပဲ ပထမ အရိပ်ကို အပေါ်ဆုံးမှာ ဆွဲပြီး၊ ဘယ်နှခု ရေးရေး ကန့်သတ်ချက်
+      မရှိပါဘူး။ [[mark:explain-radius]] အရိပ် နှစ်ခုလုံးက ထောင့်ဝိုင်းကို လိုက်ပါတယ်။
+      [[mark:explain-overflow]] overflow hidden ပေးထားတဲ့ parent ကတော့ child တွေရဲ့
+      အရိပ်ကို သူ့ အစွန်းမှာ ဖြတ်ပစ်ပါတယ်။ [[mark:scroll-form]] အခု အော်ဒါ form ထဲက field
+      ကို ကြည့်ရအောင်။ [[mark:type-inset]] field အတွက် rule အသစ် ရေးပြီး၊ တန်ဖိုးတွေရဲ့
+      ရှေ့မှာ inset keyword ကို ထည့်ပါမယ်။ inset က အရိပ်ကို box ရဲ့ အတွင်းဘက်မှာ ဆွဲလို့၊
+      box ကို page ထဲ ဖိနှိပ်ထားသလို ဖြစ်စေပါတယ်။ field ကို လိုက်ကြည့်ပါ။
+      [[mark:after-inset]] field ရဲ့ အတွင်းဘက် အပေါ်အစွန်း တစ်လျှောက် အရိပ် ဖျော့ဖျော့
+      ပေါ်လာလို့၊ အထဲကို နစ်ဝင်နေသလို ဖြစ်သွားပါပြီ။ inset အရိပ်ကို နောက်ခံရဲ့ အပေါ်၊
+      စာသားရဲ့ အောက်မှာ ဆွဲပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Shadows: multiple shadows"
+        url: "https://web.dev/learn/css/shadows#multiple_shadows"
+      - title: "web.dev Learn CSS — Shadows: properties affecting box-shadow (border-radius, overflow)"
+        url: "https://web.dev/learn/css/shadows#properties_affecting_box-shadow"
+      - title: "MDN — box-shadow (inset; the first shadow is on top)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow"
+    actions:
+      # line-by-line: every revealed line has balanced parentheses, and the
+      # list stays invalid (the ring keeps painting) until its last line lands.
+      - id: type-layered
+        type: editor.type
+        at: { mark: type-layered }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  box-shadow: 0 0 0 4px seagreen;\n", occurrence: 1 }
+        text: "  box-shadow:\n    0 1px 2px rgb(0 0 0 / 15%),\n    0 8px 24px rgb(0 0 0 / 12%);\n"
+      - id: expect-layered
+        type: expect.preview
+        at: { mark: after-layered }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "1,200 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-first
+        type: editor.select
+        at: { mark: select-first }
+        target: { file: styles.css, text: "0 1px 2px rgb(0 0 0 / 15%),", occurrence: 1 }
+      - id: scroll-form
+        type: preview.scroll
+        at: { mark: scroll-form }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-inset
+        type: editor.type
+        at: { mark: type-inset }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    0 8px 24px rgb(0 0 0 / 12%);\n}\n", occurrence: 1 }
+        text: "\n.order-form input {\n  box-shadow: inset 0 2px 4px rgb(0 0 0 / 20%);\n}\n"
+      - id: expect-inset
+        type: expect.preview
+        at: { mark: after-inset }
+        timeoutMs: 4000
+        target: { by: testId, value: input-name }
+        attribute: { name: placeholder, value: "ဥပမာ ကိုအောင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: text-shadow
+    chapter: "Text shadow"
+    narration: >
+      [[mark:scroll-header]] အပေါ်ဆုံးက ဆိုင် နာမည်ဆီ ပြန်တက်ရအောင်။ [[mark:type-tshadow]]
+      text shadow မှာလည်း x၊ y၊ မပေးလည်း ရတဲ့ blur နဲ့ အရောင် ရှိပါတယ်။ ညာနဲ့ အောက်ကို 2
+      pixel စီ၊ blur မပါဘဲ အညိုဖျော့ရောင် အရိပ် ပေးကြည့်ရအောင်။ [[mark:after-tshadow]]
+      နာမည်ရဲ့ နောက်မှာ အညိုဖျော့ရောင် အရိပ် ကပ်လျက် ပေါ်လာပါပြီ။ အရိပ်က box ကို မဟုတ်ဘဲ
+      စာလုံးတိုင်းရဲ့ ပုံသဏ္ဌာန်ကို လိုက်ပါတယ်။ [[mark:type-stepped]] text shadow
+      တွေကိုလည်း comma နဲ့ စာရင်းလုပ်လို့ ရပါတယ်။ 1 pixel စီ ပိုဝေးပြီး ပိုရင့်တဲ့ အရိပ်
+      သုံးခုနဲ့ လှေကားထစ် အစွန်း လုပ်ပါမယ်။ [[mark:after-stepped]] အခု နာမည်က ကြွနေတဲ့
+      ဆိုင်းဘုတ်လို ဖြစ်သွားပါပြီ။ [[mark:explain-no-spread]] ဒီ text shadow ကို ကြည့်ပါ။
+      spread နဲ့ inset က box shadow မှာပဲ ရှိပြီး၊ သူ့မှာ မရှိပါဘူး။
+      [[mark:explain-inherit]] box shadow နဲ့ မတူတာက text shadow က inherit ဖြစ်တာပါ။
+      header မှာ ပေးခဲ့ရင် နာမည် အောက်က အင်္ဂလိပ် စာကြောင်းလည်း အရိပ် ရမှာပါ။
+      [[mark:explain-transparent]] စာလုံးကို ဖောက်ထွင်း မြင်ရအောင် လုပ်ရင်တော့၊ စာလုံး
+      အောက်က အရိပ်ကို ဖြတ်မထားလို့ စာလုံးထဲကနေ အရိပ်ကို ဖောက်မြင်ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Shadows: text shadow"
+        url: "https://web.dev/learn/css/shadows#text_shadow"
+      - title: "web.dev Learn CSS — Typography: text shadow"
+        url: "https://web.dev/learn/css/typography#text-shadow"
+      - title: "MDN — text-shadow (no spread, inherited)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-shadow"
+      - title: "CSS Text Decoration Module Level 3 — text-shadow"
+        url: "https://www.w3.org/TR/css-text-decor-3/#text-shadow-property"
+    actions:
+      - id: scroll-header
+        type: preview.scroll
+        at: { mark: scroll-header }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-tshadow
+        type: editor.type
+        at: { mark: type-tshadow }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  box-shadow: inset 0 2px 4px rgb(0 0 0 / 20%);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.shop-name {\n  text-shadow: 2px 2px 0 tan;\n}\n"
+      - id: expect-tshadow
+        type: expect.preview
+        at: { mark: after-tshadow }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-stepped
+        type: editor.type
+        at: { mark: type-stepped }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  text-shadow: 2px 2px 0 tan;\n", occurrence: 1 }
+        text: "  text-shadow:\n    1px 1px 0 #c9a27e,\n    2px 2px 0 #a8845f,\n    3px 3px 0 #7a5a3b;\n"
+      - id: expect-stepped
+        type: expect.preview
+        at: { mark: after-stepped }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "Yangon · since 1998"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-tshadow
+        type: editor.select
+        at: { mark: explain-no-spread }
+        target: { file: styles.css, text: "1px 1px 0 #c9a27e,", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း နှစ်ခု မေးကြည့်ရအောင်။ border ကို style ပဲ
+      ပေးထားရင် အထူနဲ့ အရောင်က ဘာ ဖြစ်မလဲ။ [[mark:quiz-1]] default ဖြစ်တဲ့ 3 pixel ရှိတဲ့
+      medium နဲ့ currentColor ပါ။ ဒါကြောင့် ဥပမာ မျဉ်းဖြောင့်နဲ့ ပန်းရောင် ရင့်ရင့်ပဲ
+      ရေးရင်လည်း border အပြည့် ရပါတယ်။ [[mark:ask-quiz-2]] box shadow မှာပဲ ရှိတဲ့ တန်ဖိုး
+      နှစ်ခုက ဘာလဲ။ [[mark:quiz-2]] inset နဲ့ spread ပါ။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ border ကို style က ဖွင့်ပေးပြီး၊ အရောင် မပေးရင် စာလုံး အရောင်ကို
+      လိုက်ပါတယ်။ border radius က ထောင့်ဝိုင်း ပေးပြီး၊ border image က ပုံကို ကိုးပိုင်း
+      ပိုင်းပြီး ဘောင် ဆွဲပါတယ်။ box shadow က box ကို၊ text shadow က စာလုံးကို လိုက်ပြီး၊
+      အရိပ်တွေက နေရာ မယူပါဘူး။ အရိပ် စာရင်းမှာတော့ ပထမ အရိပ်က အပေါ်ဆုံးပါ။
+      [[mark:next-lesson]] ထောင့်ဝိုင်းက လေးထောင့် မဟုတ်တဲ့ ပုံ ရဖို့ အရိုးရှင်းဆုံး
+      နည်းပါ။ နောက် lesson မှာတော့ clip path နဲ့ box ကို ကြိုက်တဲ့ ပုံသဏ္ဌာန် ဖြတ်တာ
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: check your understanding"
+        url: "https://web.dev/learn/css/borders#check_your_understanding"
+      - title: "web.dev Learn CSS — Shadows: check your understanding"
+        url: "https://web.dev/learn/css/shadows#check_your_understanding"
+      - title: "web.dev Learn CSS — Paths, shapes, clipping and masking (next lesson)"
+        url: "https://web.dev/learn/css/paths-shapes-clipping-masking"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-q1]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [e-a1]
+        drawMs: 1400
+      - id: draw-ask-quiz-2
+        type: whiteboard.apply
+        at: { mark: ask-quiz-2 }
+        upsertIds: [e-q2]
+        drawMs: 1400
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [e-a2]
+        drawMs: 1200
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".menu-card {\n  border-width: 4px;\n  border-style: solid;\n  color: sienna;\n  border: 2px solid tan;\n  border-bottom: 6px solid seagreen;\n  border-radius: 16px;\n}\n\n.style-badge {\n  border: 6px dotted sienna;\n}\n\n.style-badge:nth-child(2) { border-style: dashed; }\n.style-badge:nth-child(3) { border-style: double; }\n.style-badge:nth-child(4) { border-style: groove; }\n.style-badge:nth-child(5) { border-style: ridge; }\n\n.order-btn {\n  border-radius: 9999px;\n}\n\n.owner {\n  border-radius: 50%;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".leaf-badge {\n  border-radius: 60% 40% 60% 40% / 40% 60% 40% 60%;\n}\n\n.featured {\n  border: 10px solid;\n  border-image: linear-gradient(135deg, #2f6b3a, #c9a227) 1;\n}\n\n.menu-card {\n  box-shadow: 8px 8px 0 black;\n  box-shadow: -8px 8px 0 black;\n  box-shadow: 0 8px 20px black;\n  box-shadow: 0 8px 20px rgb(0 0 0 / 20%);\n  box-shadow: 0 0 0 4px seagreen;\n  box-shadow:\n    0 1px 2px rgb(0 0 0 / 15%),\n    0 8px 24px rgb(0 0 0 / 12%);\n}\n\n.order-form input {\n  box-shadow: inset 0 2px 4px rgb(0 0 0 / 20%);\n}\n\n.shop-name {\n  text-shadow: 2px 2px 0 tan;\n  text-shadow:\n    1px 1px 0 #c9a27e,\n    2px 2px 0 #a8845f,\n    3px 3px 0 #7a5a3b;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
