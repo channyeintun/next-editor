@@ -1,0 +1,2348 @@
+# CSS course (Burmese), lesson 25 of 43: media queries and container queries.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text
+# with marks inline; DESIGN.md is the span-by-span brief). Every [[mark:…]]
+# sits where its action begins, at a sentence end or after a ၊ pause.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board A (recall lesson 24; media query = viewport/device, container
+# query = the box a component sits in; the preview is always narrow) → board B
+# (pointer / any-pointer / hover for a phone, a laptop and a touch laptop; the
+# viewer's device decides) → code tour (tiny plus card, special slot, two snack
+# slots, empty styles.css, preview) → plus button 24 → 44 px (WCAG 2.2 AA/AAA),
+# touch-action: manipulation → board C (touch-action values, Pointer Events,
+# never disable zoom) → board D (two steps; descendants only; three
+# container-type values) → containers (no change) → the first @container rule:
+# the special card turns horizontal, the snack cards stay stacked → .special
+# width 60% (stacks) → 100% (horizontal again) → board E (range, colon,
+# and/or/not, chained ranges, size-only features) → .snack-slots
+# container-type: size collapses the dashed box (cards spill over the footer)
+# → board F (width from outside, height not from children; containing block,
+# stacking context; shrink-to-fit trap) → inline-size fixes it → the container
+# shorthand names the special slot → @container special shows the badge on the
+# special card only → board G (cqi math, the six units, fallback) → clamp with
+# 5cqi on the names (20 px wide, 16 px floor narrow) → @container nested in
+# .menu-card (sienna border on the wide card) → board H (style, name-only,
+# scroll-state queries, DevTools badge) → quiz board + recap, Part 3 closes,
+# hand-off to pseudo-elements (lesson 26).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every rule that contains a parenthesis is typed at the END of the file, so a
+# half-typed "(" can never swallow the rules after it. Keyword values have no
+# misleading valid prefix ("inline" alone is invalid for container-type,
+# "sien…" for sienna), unitless partial numbers are invalid, and
+# "grid-template-columns: auto" passes through a single full-width column (the
+# card looks stacked, as before). The container shorthand line is line-by-line:
+# typed by keystroke, "container: s…special" would be a valid name with type
+# normal and the special card would flicker to stacked.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# plus button 13×14 → 24×24 → 44×44. Special slot 400 wide, snack slots 184
+# wide each. First query: special card grid (picture left), snack cards block.
+# width 60% → special slot 240, card block; 100% → 400, grid. size on the
+# snack area: its box 400×20 (padding + border only), the cards hang out and
+# the footer moves up under them (y 618 → 395); inline-size: back to 242 tall.
+# Named query (> 150px, so the 184 px snack slots pass the width test and
+# fail only on the name): badge inline on the special card only. clamp(16px, 5cqi, 24px):
+# special name 20px, snack names 16px. Nested rule: special card border sienna.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-25-media-container-queries
+  title: "CSS course 25: Media query နဲ့ container query"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 25
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the tiny-plus block (a plus button far too small to tap),
+      # the special-slots block (one full-width .special slot and a
+      # .snack-slots grid of two .slot wrappers, the same .menu-card in each:
+      # a cup picture, then an .info column with name, description, price,
+      # order button and a hidden "ယနေ့အထူး" badge), and the kit footer. No
+      # kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- lesson block: tiny-plus (a plus button far too small to tap) -->
+              <div class="tiny-plus" data-testid="tiny-plus">
+                <span>လက်ဖက်ရည် တစ်ခွက် ထပ်ယူမယ်</span>
+                <button class="plus" type="button" aria-label="တစ်ခွက် ထပ်ထည့်" data-testid="plus-button">+</button>
+              </div>
+
+              <!-- lesson block: special-slots (one wide slot, two narrow slots, the same card in each) -->
+              <section class="menu-section" aria-labelledby="special-title">
+                <h2 id="special-title">သောက်စရာ</h2>
+                <div class="special" data-testid="special-slot">
+                  <article class="menu-card" data-testid="card-laphet-yay">
+                    <img src="/cup.svg" alt="" width="64" height="64" />
+                    <div class="info">
+                      <h3 class="name">လက်ဖက်ရည်</h3>
+                      <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                      <span class="price">1,500 ကျပ်</span>
+                      <button class="order-btn" type="button">မှာမယ်</button>
+                      <span class="badge" data-testid="badge-laphet-yay">ယနေ့အထူး</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="menu-section" aria-labelledby="snacks-title">
+                <h2 id="snacks-title">စားစရာ</h2>
+                <div class="snack-slots" data-testid="snack-slots">
+                  <div class="slot">
+                    <article class="menu-card" data-testid="card-palata">
+                      <img src="/cup.svg" alt="" width="64" height="64" />
+                      <div class="info">
+                        <h3 class="name">ပလာတာ</h3>
+                        <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                        <span class="price">1,200 ကျပ်</span>
+                        <button class="order-btn" type="button">မှာမယ်</button>
+                        <span class="badge" data-testid="badge-palata">ယနေ့အထူး</span>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="slot">
+                    <article class="menu-card" data-testid="card-e-kya-kwe">
+                      <img src="/cup.svg" alt="" width="64" height="64" />
+                      <div class="info">
+                        <h3 class="name">အီကြာကွေး</h3>
+                        <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                        <span class="price">600 ကျပ်</span>
+                        <button class="order-btn" type="button">မှာမယ်</button>
+                        <span class="badge" data-testid="badge-e-kya-kwe">ယနေ့အထူး</span>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </section>
+            </main>
+
+            <!-- kit block: footer -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789">09 123 456 789</a> · <a href="https://facebook.com/">Facebook</a></p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E hides the badge, sets
+      # card margins to 0, lays out the two snack slots (dashed box, padding)
+      # and draws the tiny plus button. No container, width, min-size, touch or
+      # font-size rule: the lesson types every one of them.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 25 keeps A, B, B2 and C; section E hides the cards' badge until a
+          named container query shows it, lays out the two snack slots, and draws the
+          tiny plus button. No container, width, min-size or touch rule lives here:
+          the lesson types every one of them.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 25: the badge stays hidden until a named container query shows it. */
+        .badge {
+          display: none;
+        }
+
+        .menu-section {
+          margin-top: 16px;
+        }
+
+        /* No outer margin on the cards: the slots space them. */
+        .menu-card {
+          margin: 0;
+        }
+
+        .menu-card img {
+          display: block;
+        }
+
+        /* Two snack slots side by side; the slots become containers in the lesson. */
+        .snack-slots {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          padding: 8px;
+          border: 2px dashed var(--tea-light);
+          border-radius: var(--radius);
+        }
+
+        /* The tiny plus button: far too small to tap. */
+        .tiny-plus {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-top: 16px;
+          padding: 8px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .plus {
+          padding: 0 2px;
+          border: 1px solid var(--tea);
+          border-radius: 4px;
+          background: #fff;
+          color: var(--tea);
+          font: inherit;
+          font-size: 12px;
+          line-height: 1;
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — what each query asks about. Blue = the viewport (media query),
+    # orange = the preview's narrow width, green = containers (container
+    # query), orange fill = the same card in two slots, violet = which to use.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Media query နဲ့ container query",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-viewport,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 170,
+        height: 270,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-viewport-l,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 200,
+        height: 36,
+        text: "media query",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-viewport-l2,
+        kind: text,
+        x: 300,
+        y: 574,
+        width: 280,
+        height: 36,
+        text: "→ viewport · စက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-narrow,
+        kind: text,
+        x: 318,
+        y: 356,
+        width: 140,
+        height: 36,
+        text: "~432px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-wide-box,
+        kind: rectangle,
+        x: 560,
+        y: 250,
+        width: 320,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-wide-card,
+        kind: rectangle,
+        x: 575,
+        y: 265,
+        width: 290,
+        height: 80,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-wide-img,
+        kind: rectangle,
+        x: 588,
+        y: 277,
+        width: 56,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-narrow-box,
+        kind: rectangle,
+        x: 930,
+        y: 240,
+        width: 140,
+        height: 260,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-narrow-card,
+        kind: rectangle,
+        x: 945,
+        y: 255,
+        width: 110,
+        height: 220,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-narrow-img,
+        kind: rectangle,
+        x: 972,
+        y: 270,
+        width: 56,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-cq-l,
+        kind: text,
+        x: 560,
+        y: 400,
+        width: 240,
+        height: 36,
+        text: "container query",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-cq-l2,
+        kind: text,
+        x: 560,
+        y: 444,
+        width: 300,
+        height: 36,
+        text: "→ ထည့်ထားတဲ့ box",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-role-page,
+        kind: text,
+        x: 640,
+        y: 540,
+        width: 420,
+        height: 36,
+        text: "page layout → media query",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-role-comp,
+        kind: text,
+        x: 640,
+        y: 586,
+        width: 460,
+        height: 36,
+        text: "component → container query",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — pointer, any-pointer and hover for three devices. Blue =
+    # pointer, violet = any-pointer, orange = hover, white = the devices,
+    # blue again = the code shape, red = who decides.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Pointer နဲ့ hover",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-h-pointer,
+        kind: text,
+        x: 540,
+        y: 230,
+        width: 130,
+        height: 36,
+        text: "pointer",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-any,
+        kind: text,
+        x: 710,
+        y: 230,
+        width: 200,
+        height: 36,
+        text: "any-pointer",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-hover,
+        kind: text,
+        x: 960,
+        y: 230,
+        width: 110,
+        height: 36,
+        text: "hover",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-phone,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 180,
+        height: 36,
+        text: "ဖုန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-laptop,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 180,
+        height: 36,
+        text: "laptop",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-touch,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 190,
+        height: 36,
+        text: "touch laptop",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-phone-p,
+        kind: text,
+        x: 540,
+        y: 290,
+        width: 130,
+        height: 36,
+        text: "coarse",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-laptop-p,
+        kind: text,
+        x: 540,
+        y: 350,
+        width: 130,
+        height: 36,
+        text: "fine",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-touch-p,
+        kind: text,
+        x: 540,
+        y: 410,
+        width: 130,
+        height: 36,
+        text: "fine",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-phone-a,
+        kind: text,
+        x: 710,
+        y: 290,
+        width: 200,
+        height: 36,
+        text: "coarse",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-laptop-a,
+        kind: text,
+        x: 710,
+        y: 350,
+        width: 200,
+        height: 36,
+        text: "fine",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-touch-a,
+        kind: text,
+        x: 710,
+        y: 410,
+        width: 200,
+        height: 36,
+        text: "fine · coarse",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-phone-h,
+        kind: text,
+        x: 960,
+        y: 290,
+        width: 110,
+        height: 36,
+        text: "none",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-laptop-h,
+        kind: text,
+        x: 960,
+        y: 350,
+        width: 110,
+        height: 36,
+        text: "hover",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-touch-h,
+        kind: text,
+        x: 960,
+        y: 410,
+        width: 110,
+        height: 36,
+        text: "hover",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-code,
+        kind: text,
+        x: 300,
+        y: 494,
+        width: 560,
+        height: 36,
+        text: "@media (pointer: coarse) { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-viewer,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 560,
+        height: 36,
+        text: "ကြည့်တဲ့သူရဲ့ စက်က ဆုံးဖြတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — touch gestures. Blue = the values, green = manipulation,
+    # violet = your own JavaScript, red = the zoom warning.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Touch နဲ့ zoom",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-prop,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 240,
+        height: 36,
+        text: "touch-action:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-values,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 640,
+        height: 36,
+        text: "auto · none · pan-x · pan-y · pinch-zoom",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-manip,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 680,
+        height: 36,
+        text: "manipulation → double-tap zoom ✗",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-js,
+        kind: text,
+        x: 300,
+        y: 396,
+        width: 620,
+        height: 36,
+        text: "ပိတ်ထားတဲ့ gesture → Pointer Events (JS)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-zoom,
+        kind: text,
+        x: 300,
+        y: 476,
+        width: 560,
+        height: 36,
+        text: "page zoom ကို မပိတ်ပါနဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-zoom-code,
+        kind: text,
+        x: 300,
+        y: 526,
+        width: 600,
+        height: 36,
+        text: "user-scalable=no ✗ · touch-action: none ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — the two steps. Green = the container and step 1, orange = the
+    # card inside and step 2, red = never the container itself, blue = the
+    # three container-type values.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "အဆင့် နှစ်ဆင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-container,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 340,
+        height: 220,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-card,
+        kind: rectangle,
+        x: 336,
+        y: 300,
+        width: 268,
+        height: 124,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-step1,
+        kind: text,
+        x: 690,
+        y: 250,
+        width: 360,
+        height: 36,
+        text: "1 · container-type",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-step1b,
+        kind: text,
+        x: 690,
+        y: 292,
+        width: 360,
+        height: 36,
+        text: "→ ancestor ပေါ်မှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-step2,
+        kind: text,
+        x: 690,
+        y: 360,
+        width: 360,
+        height: 36,
+        text: "2 · @container (…)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-step2b,
+        kind: text,
+        x: 690,
+        y: 402,
+        width: 360,
+        height: 36,
+        text: "→ အထဲက element",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-not-self,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 520,
+        height: 36,
+        text: "container ကိုယ်တိုင် ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-types,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 560,
+        height: 36,
+        text: "normal · inline-size · size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board E — writing the condition. Blue = range syntax, violet = the old
+    # colon syntax, orange = combining, green = a range with two ends, red =
+    # the features only a size container can answer.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Condition ရေးနည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-range,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 340,
+        height: 36,
+        text: "(inline-size > 300px)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-ops,
+        kind: text,
+        x: 700,
+        y: 230,
+        width: 260,
+        height: 36,
+        text: "<  >  <=  >=  =",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-colon,
+        kind: text,
+        x: 300,
+        y: 296,
+        width: 620,
+        height: 36,
+        text: "(min-width: 300px) = (width >= 300px)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-logic,
+        kind: text,
+        x: 300,
+        y: 362,
+        width: 700,
+        height: 36,
+        text: "(width < 200px) or (width > 600px) · not (…)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-chain,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 420,
+        height: 36,
+        text: "(300px < width < 600px)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-size-only,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 740,
+        height: 36,
+        text: "height · block-size · aspect-ratio · orientation",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-size-note,
+        kind: text,
+        x: 300,
+        y: 546,
+        width: 360,
+        height: 36,
+        text: "→ size container လို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — why a size container collapses. Green = the collapsed
+    # container and what still comes from outside, orange = the cards hanging
+    # out, red = what no longer comes from the children, violet = the
+    # containing-block side effect, blue = the rule of thumb.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Size containment",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-strip,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 360,
+        height: 26,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-card1,
+        kind: rectangle,
+        x: 316,
+        y: 254,
+        width: 156,
+        height: 170,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-card2,
+        kind: rectangle,
+        x: 488,
+        y: 254,
+        width: 156,
+        height: 170,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-width,
+        kind: text,
+        x: 710,
+        y: 240,
+        width: 360,
+        height: 36,
+        text: "အကျယ် ← parent ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-height,
+        kind: text,
+        x: 710,
+        y: 300,
+        width: 360,
+        height: 36,
+        text: "အမြင့် ← child ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-zero,
+        kind: text,
+        x: 710,
+        y: 346,
+        width: 300,
+        height: 36,
+        text: "→ 0 + padding",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 700,
+        height: 36,
+        text: "size → အမြင့် ရှိမှ · ကျန်တာ inline-size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-cb,
+        kind: text,
+        x: 300,
+        y: 526,
+        width: 600,
+        height: 36,
+        text: "absolute · fixed → container ထဲမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-stack,
+        kind: text,
+        x: 300,
+        y: 572,
+        width: 460,
+        height: 36,
+        text: "stacking context အသစ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board G — container query units. Blue = the definition, green = the
+    # wide slot's maths, orange = the narrow slot's (clamped), violet = the
+    # six units, red = the fallback.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Container query unit",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-def,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 640,
+        height: 36,
+        text: "1cqi = container ရဲ့ inline-size × 1%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-wide,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 460,
+        height: 36,
+        text: "400px → 5cqi = 20px",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-narrow,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 460,
+        height: 36,
+        text: "184px → 5cqi ≈ 9px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-list,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 620,
+        height: 36,
+        text: "cqw · cqh · cqi · cqb · cqmin · cqmax",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-fallback,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 620,
+        height: 36,
+        text: "container မရှိရင် → svw · svh",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board H — newer container queries. Blue = style, green = name-only,
+    # orange = scroll-state, violet = DevTools.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "နောက်ထပ် query တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-style,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 620,
+        height: 36,
+        text: "style(--theme: dark) · 2026",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-name,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 620,
+        height: 36,
+        text: "@container special { … } · 2026",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-scroll,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 620,
+        height: 36,
+        text: "scroll-state(stuck: top) · Chrome",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: h-devtools,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 620,
+        height: 36,
+        text: "DevTools → container badge",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board I — the closing quiz.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 40,
+        text: "container-type: inline-size;",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: i-q2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 560,
+        height: 40,
+        text: "@container (aspect-ratio > 1)",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: i-a,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 260,
+        height: 46,
+        text: "မကိုက်ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: i-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 600,
+        y: 376,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: i-rule,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 560,
+        height: 36,
+        text: "aspect-ratio → size container လို",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4125
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: queries-intro
+    chapter: "Media query နဲ့ container query"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ box ထဲ မဆံ့တဲ့ content အကြောင်း ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      ရတဲ့ နေရာနဲ့ ကိုက်အောင် layout ပြောင်းတဲ့ component တွေကို ကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-viewport]] media query က page ကို မြင်ရတဲ့ viewport အကြောင်း၊ ဒါမှမဟုတ်
+      ကြည့်နေတဲ့ စက် အကြောင်းကို မေးပါတယ်။ [[mark:draw-narrow]] ကိုယ့် preview ကတော့ အမြဲ
+      ဖုန်း screen လောက်ပဲ ကျယ်ပါတယ်။ ဒါကြောင့် lesson 5 က screen ကျယ်မှ အလုပ်လုပ်တဲ့ media
+      query က ဒီမှာ တစ်ခါမှ မကိုက်ခဲ့တာပါ။ [[mark:draw-containers]] container query ကတော့
+      viewport ကို မကြည့်ဘဲ၊ component ကို ထည့်ထားတဲ့ container ရဲ့ အကျယ်ကို ကြည့်ပြီး ပုံစံ
+      ပြောင်းပါတယ်။ [[mark:draw-cards]] ဒါကြောင့် screen တစ်ခုတည်းပေါ်မှာပဲ menu card
+      တစ်မျိုးတည်းက ကျယ်တဲ့ နေရာမှာ ဘေးတိုက်၊ ကျဉ်းတဲ့ နေရာမှာ အပေါ်အောက် ဖြစ်နိုင်ပါတယ်။
+      [[mark:draw-roles]] page တစ်ခုလုံးရဲ့ layout အတွက် media query ကို ဆက်သုံးပြီး၊
+      ပြန်သုံးတဲ့ component တွေအတွက်တော့ container query ကို သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries"
+        url: "https://web.dev/learn/css/container-queries"
+      - title: "MDN — Using media queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_media_queries/Using_media_queries"
+      - title: "MDN — CSS container queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-viewport
+        type: whiteboard.apply
+        at: { mark: draw-viewport }
+        upsertIds: [a-viewport, a-viewport-l, a-viewport-l2]
+        drawMs: 2000
+      - id: draw-narrow
+        type: whiteboard.apply
+        at: { mark: draw-narrow }
+        upsertIds: [a-narrow]
+        drawMs: 900
+      - id: draw-containers
+        type: whiteboard.apply
+        at: { mark: draw-containers }
+        upsertIds: [a-wide-box, a-narrow-box, a-cq-l, a-cq-l2]
+        drawMs: 2200
+      - id: draw-cards
+        type: whiteboard.apply
+        at: { mark: draw-cards }
+        upsertIds: [a-wide-card, a-wide-img, a-narrow-card, a-narrow-img]
+        drawMs: 2000
+      - id: draw-roles
+        type: whiteboard.apply
+        at: { mark: draw-roles }
+        upsertIds: [a-role-page, a-role-comp]
+        drawMs: 1800
+
+  - id: media-features
+    narration: >
+      [[mark:open-features]] media query က အကျယ် အပြင် တခြား အရာတွေကိုလည်း မေးနိုင်ပါတယ်။
+      [[mark:draw-pointer]] pointer က အဓိက input ဘယ်လောက် တိကျလဲ ဆိုတာ မေးပါတယ်။ mouse၊
+      trackpad ဒါမှမဟုတ် stylus ဆိုရင် fine၊ လက်ချောင်းဆိုရင် coarse ဖြစ်ပြီး၊ TV remote လို
+      pointer လုံးဝ မရှိရင်တော့ none ပါ။ touchscreen ပါတဲ့ laptop ကတောင် အဓိက input က
+      trackpad ဖြစ်နေသေးလို့ fine ပါပဲ။ [[mark:draw-any-pointer]] any pointer ကတော့
+      ချိတ်ထားတဲ့ input အားလုံးကို မေးလို့၊ touch laptop မှာ fine ရော coarse ရော မှန်ပါတယ်။
+      [[mark:draw-hover]] hover နဲ့ any hover ကလည်း ဒီလိုပါပဲ။ input က element ပေါ်မှာ
+      မနှိပ်ဘဲ တင်ထားလို့ ရလား ဆိုတာ မေးပါတယ်။ [[mark:draw-code]] ရေးတဲ့အခါ အကျယ်ကို မေးတဲ့
+      query လိုပဲ၊ feature နဲ့ သူ့ တန်ဖိုးကို ကွင်းထဲမှာ ရေးပါတယ်။ [[mark:draw-viewer]]
+      သတိထားရမှာက၊ ဒီ query တွေကို ကြည့်နေတဲ့သူရဲ့ စက်ကပဲ ဖြေတာပါ။ preview က ဖုန်းမှာ
+      တစ်မျိုး၊ laptop မှာ တစ်မျိုး ဖြစ်နိုင်လို့၊ board ပေါ်မှာပဲ ရှင်းပြပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Cursors and pointers: responding to a user's pointer inputs"
+        url: "https://web.dev/learn/css/cursors-and-pointers#responding_to_a_users_pointer_inputs"
+      - title: "MDN — @media pointer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer"
+      - title: "MDN — @media any-pointer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/any-pointer"
+      - title: "MDN — @media hover"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/hover"
+      - title: "Media Queries Level 4 — interaction media features"
+        url: "https://www.w3.org/TR/mediaqueries-4/#mf-interaction"
+    actions:
+      - id: open-features
+        type: whiteboard.apply
+        at: { mark: open-features }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-pointer
+        type: whiteboard.apply
+        at: { mark: draw-pointer }
+        upsertIds: [b-h-pointer, b-phone, b-laptop, b-touch, b-phone-p, b-laptop-p, b-touch-p]
+        drawMs: 3200
+      - id: draw-any-pointer
+        type: whiteboard.apply
+        at: { mark: draw-any-pointer }
+        upsertIds: [b-h-any, b-phone-a, b-laptop-a, b-touch-a]
+        drawMs: 2000
+      - id: draw-hover
+        type: whiteboard.apply
+        at: { mark: draw-hover }
+        upsertIds: [b-h-hover, b-phone-h, b-laptop-h, b-touch-h]
+        drawMs: 1800
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [b-code]
+        drawMs: 1400
+      - id: draw-viewer
+        type: whiteboard.apply
+        at: { mark: draw-viewer }
+        upsertIds: [b-viewer]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-features]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-plus]] အပေါ်ဆုံးမှာ လက်ဖက်ရည် တစ်ခွက် ထပ်ယူဖို့ plus ခလုတ် ပါတဲ့ card
+      သေးသေးလေး ရှိပါတယ်။ [[mark:select-special]] သူ့အောက်မှာ ယနေ့အထူး သောက်စရာအတွက် အထူး
+      နေရာ ရှိပြီး၊ အထဲက menu card မှာ ပုံ အရင်၊ စာသား နောက်က လာပါတယ်။ [[mark:select-slots]]
+      ပြီးတော့ စားစရာ အပိုင်းမှာ ဘေးချင်းကပ် နေရာ နှစ်ခု ရှိပြီး၊ ပုံစံ တူ card တစ်ခုစီ
+      ထည့်ထားပါတယ်။ card တိုင်းမှာ ဖျောက်ထားတဲ့ ယနေ့အထူး badge လည်း ပါပါတယ်။
+      [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview
+      ပွင့်လာပါပြီ။ card သုံးခုလုံးမှာ ပုံက အပေါ်၊ စာသားက အောက်မှာ ဆင့်နေပြီး၊ plus
+      ခလုတ်ကတော့ သေးလွန်းနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: one component in many contexts"
+        url: "https://web.dev/learn/css/container-queries"
+    actions:
+      - id: close-features
+        type: whiteboard.apply
+        at: { mark: close-features }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-plus
+        type: editor.select
+        at: { mark: select-plus }
+        target:
+          {
+            file: index.html,
+            text: '<button class="plus" type="button" aria-label="တစ်ခွက် ထပ်ထည့်" data-testid="plus-button">+</button>',
+            occurrence: 1,
+          }
+      - id: select-special
+        type: editor.select
+        at: { mark: select-special }
+        target:
+          {
+            file: index.html,
+            text: '<div class="special" data-testid="special-slot">',
+            occurrence: 1,
+          }
+      - id: select-slots
+        type: editor.select
+        at: { mark: select-slots }
+        target:
+          {
+            file: index.html,
+            text: '<div class="snack-slots" data-testid="snack-slots">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-plus
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: plus-button }
+        attribute: { name: aria-label, value: "တစ်ခွက် ထပ်ထည့်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-special
+        type: expect.preview
+        at: { afterAction: expect-plus }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-snacks
+        type: expect.preview
+        at: { afterAction: expect-special }
+        timeoutMs: 5000
+        target: { by: testId, value: snack-slots }
+        textContains: "အီကြာကွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-snacks }
+
+  - id: target-size
+    chapter: "နှိပ်ရ လွယ်တဲ့ ခလုတ်"
+    narration: >
+      plus ခလုတ်ကနေ စကြည့်ရအောင်။ mouse က ခလုတ် သေးသေးလေးကိုလည်း နှိပ်နိုင်ပေမယ့်၊
+      လက်ချောင်းထိပ်က အဲဒီလောက် မတိကျပါဘူး။ လက်တုန်တဲ့သူတွေလည်း ခလုတ် သေးရင် လွဲတတ်ပါတယ်။
+      [[mark:type-plus24]] ဒါကြောင့် ခလုတ်ကို အနည်းဆုံး အကျယ်နဲ့ အနည်းဆုံး အမြင့် ပေးပါမယ်။
+      content များရင် ခလုတ်က ကြီးလာနိုင်ပေမယ့်၊ ဒီ အရွယ်ထက်တော့ ဘယ်တော့မှ မသေးတော့ပါဘူး။
+      [[mark:after-plus24]] အခု ခလုတ်က အကျယ်ရော အမြင့်ပါ 24 pixel ဖြစ်သွားပါပြီ။ ဒါက
+      လူတိုင်း သုံးနိုင်ဖို့ ရေးထားတဲ့ accessibility လမ်းညွှန်ချက် WCAG 2.2 ရဲ့ AA အဆင့်က
+      အငယ်ဆုံး အရွယ်ပါ။ ခလုတ် ပတ်လည်မှာ နေရာလွတ် လုံလောက်ရင်တော့ ဒီထက် သေးလို့ ရပါတယ်။
+      [[mark:type-plus44]] AAA အဆင့်ကတော့ 44 pixel ကို တောင်းပြီး၊ Apple ကလည်း touchscreen
+      အတွက် ဒီ အရွယ်ကို အကြံပြုပါတယ်။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။
+      [[mark:after-plus44]] ခလုတ် ထပ်ကြီးလာလို့ လက်ချောင်းနဲ့ နှိပ်ရင်လည်း မလွဲတော့ပါဘူး။
+      ဒါကို coarse pointer media query ထဲမှာပဲ ထားလို့ ရပေမယ့်၊ ခလုတ် ကြီးတာက လူတိုင်းကို
+      ကူညီပါတယ်။ [[mark:type-touch]] နောက်ထပ် တစ်ကြောင်းက touchscreen မှာပဲ အလုပ်လုပ်တဲ့
+      touch action manipulation ပါ။ [[mark:explain-touch]] ဒီ touch action ကို ကြည့်ပါ။
+      element ပေါ်မှာ browser က ဘယ် gesture တွေကို handle လုပ်ခွင့် ရှိလဲ ဆိုတာ ပြောပါတယ်။
+      manipulation က scroll နဲ့ pinch zoom ကို ဆက်ခွင့်ပြုပြီး၊ နှစ်ချက် ဆက်နှိပ်ရင် zoom
+      ဖြစ်တာကိုပဲ ပိတ်ပါတယ်။ ဒါကြောင့် browser က ဒုတိယ အချက် နှိပ်မလားလို့ မစောင့်တော့ဘဲ၊
+      မြန်မြန် နှစ်ချက် နှိပ်ရင် နှစ်ခွက် ရပါတယ်။ touchscreen လိုလို့ preview မှာတော့ ဘာမှ
+      မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Cursors and pointers"
+        url: "https://web.dev/learn/css/cursors-and-pointers"
+      - title: "W3C — Understanding SC 2.5.8: Target Size (Minimum), WCAG 2.2"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum"
+      - title: "W3C — Understanding SC 2.5.5: Target Size (Enhanced)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced"
+      - title: "Apple Human Interface Guidelines — Accessibility (44 × 44 pt hit targets)"
+        url: "https://developer.apple.com/design/human-interface-guidelines/accessibility"
+      - title: "MDN — touch-action (manipulation)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/touch-action"
+    actions:
+      - id: type-plus24
+        type: editor.type
+        at: { mark: type-plus24 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".plus {\n  min-width: 24px;\n  min-height: 24px;\n}\n"
+      - id: expect-plus24
+        type: expect.preview
+        at: { mark: after-plus24 }
+        timeoutMs: 4000
+        target: { by: testId, value: plus-button }
+        textContains: "+"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-plus44
+        type: editor.type
+        at: { mark: type-plus44 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  min-height: 24px;\n", occurrence: 1 }
+        text: "  min-width: 44px;\n  min-height: 44px;\n"
+      - id: expect-plus44
+        type: expect.preview
+        at: { mark: after-plus44 }
+        timeoutMs: 4000
+        target: { by: testId, value: tiny-plus }
+        textContains: "လက်ဖက်ရည် တစ်ခွက် ထပ်ယူမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-touch
+        type: editor.type
+        at: { mark: type-touch }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  min-height: 44px;\n", occurrence: 1 }
+        text: "  touch-action: manipulation;\n"
+      - id: select-touch
+        type: editor.select
+        at: { mark: explain-touch }
+        target: { file: styles.css, text: "touch-action: manipulation;", occurrence: 1 }
+
+  - id: touch-board
+    narration: >
+      [[mark:open-touch]] touch action မှာ တခြား တန်ဖိုးတွေလည်း ရှိပါတယ်။
+      [[mark:draw-touch-values]] none က element ပေါ်က gesture အားလုံးကို ပိတ်ပါတယ်။ pan x က
+      ဘယ်ညာ၊ pan y က အပေါ်အောက် scroll လုပ်တာကိုပဲ ခွင့်ပြုပြီး၊ pinch zoom က zoom ကို
+      ခွင့်ပြုပါတယ်။ [[mark:draw-touch-js]] မြေပုံ ဒါမှမဟုတ် ပုံဆွဲတဲ့ နေရာမျိုးမှာ gesture
+      တွေကို ပိတ်ပြီး၊ JavaScript ထဲမှာ pointer events နဲ့ ကိုယ်တိုင် handle လုပ်ပါတယ်။
+      [[mark:draw-zoom]] ဒါပေမဲ့ page တစ်ခုလုံးရဲ့ zoom ကို touch action none နဲ့ဖြစ်ဖြစ်၊
+      viewport meta tag နဲ့ဖြစ်ဖြစ် မပိတ်ပါနဲ့။ အမြင်အာရုံ အားနည်းတဲ့သူတွေက zoom ချဲ့ပြီး
+      ဖတ်ကြလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Cursors and pointers: disabling specific touchscreen gestures"
+        url: "https://web.dev/learn/css/cursors-and-pointers#disabling_specific_touchscreen_gestures"
+      - title: "MDN — touch-action"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/touch-action"
+      - title: "MDN — Pointer events"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events"
+      - title: "W3C — Understanding SC 1.4.4: Resize Text"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/resize-text"
+    actions:
+      - id: open-touch
+        type: whiteboard.apply
+        at: { mark: open-touch }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-prop, c-manip]
+      - id: draw-touch-values
+        type: whiteboard.apply
+        at: { mark: draw-touch-values }
+        upsertIds: [c-values]
+        drawMs: 2000
+      - id: draw-touch-js
+        type: whiteboard.apply
+        at: { mark: draw-touch-js }
+        upsertIds: [c-js]
+        drawMs: 1600
+      - id: draw-zoom
+        type: whiteboard.apply
+        at: { mark: draw-zoom }
+        upsertIds: [c-zoom, c-zoom-code]
+        drawMs: 2000
+
+  - id: two-steps
+    chapter: "Container query ရဲ့ အဆင့် နှစ်ဆင့်"
+    narration: >
+      [[mark:open-steps]] အခု container query ပါ။ သူ့မှာ အဆင့် နှစ်ဆင့် ရှိပါတယ်။
+      [[mark:draw-step1]] ပထမ အဆင့်မှာ ancestor တစ်ခုကို container type နဲ့ container အဖြစ်
+      သတ်မှတ်ပါတယ်။ [[mark:draw-step2]] ဒုတိယ အဆင့်မှာ condition ပါတဲ့ container rule
+      တစ်ခုက၊ ဒီ card လို အဲဒီ container ထဲက element တွေကို style ပေးပါတယ်။
+      [[mark:draw-not-self]] container ကိုယ်တိုင်ကိုတော့ ဘယ်တော့မှ style မပေးပါဘူး။ box က
+      သူ့ အရွယ်အစားကို မေးပြီး အရွယ်အစား ပြန်ပြောင်းရင်၊ အဖြေက မှန်လိုက် မှားလိုက်
+      ဖြစ်နေနိုင်လို့ပါ။ [[mark:draw-types]] container type မှာ တန်ဖိုး သုံးခု ရှိပါတယ်။
+      default ဖြစ်တဲ့ normal ဆိုရင် အရွယ်အစားကို မေးလို့ မရပါဘူး။ inline size က စာရေးတဲ့
+      ဦးတည်ရာအတိုင်း အကျယ်ကိုပဲ မေးခွင့် ပေးပြီး၊ size ကတော့ အကျယ်ရော အမြင့်ရော မေးခွင့်
+      ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: setting up a container query"
+        url: "https://web.dev/learn/css/container-queries#setting_up_a_container_query"
+      - title: "web.dev Learn CSS — Container queries: defining a container"
+        url: "https://web.dev/learn/css/container-queries#defining_a_container"
+      - title: "MDN — container-type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/container-type"
+    actions:
+      - id: open-steps
+        type: whiteboard.apply
+        at: { mark: open-steps }
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-step1
+        type: whiteboard.apply
+        at: { mark: draw-step1 }
+        upsertIds: [d-container, d-step1, d-step1b]
+        drawMs: 2000
+      - id: draw-step2
+        type: whiteboard.apply
+        at: { mark: draw-step2 }
+        upsertIds: [d-card, d-step2, d-step2b]
+        drawMs: 2000
+      - id: draw-not-self
+        type: whiteboard.apply
+        at: { mark: draw-not-self }
+        upsertIds: [d-not-self]
+        drawMs: 1400
+      - id: draw-types
+        type: whiteboard.apply
+        at: { mark: draw-types }
+        upsertIds: [d-types]
+        drawMs: 1400
+
+  - id: first-query
+    narration: >
+      [[mark:close-steps]] ပထမ အဆင့်ကို editor ထဲမှာ ရေးပါမယ်။ [[mark:type-containers]] အထူး
+      နေရာနဲ့ စားစရာ နေရာ နှစ်ခုကို container လုပ်ပါမယ်။ အဲဒီအခါ သူတို့ကို inline size
+      အကြောင်း မေးရင် ဖြေနိုင်ပါပြီ။ [[mark:after-containers]] card တွေမှာ ဘာမှ
+      မပြောင်းသေးပါဘူး။ container ဖြစ်ရုံနဲ့ မပြောင်းဘဲ၊ rule တစ်ခုက မေးမှ ပြောင်းတာပါ။
+      [[mark:type-query]] ဒုတိယ အဆင့်က မေးခွန်း မေးတာပါ။ container rule တစ်ခု ရေးပြီး၊ သူ့
+      condition က container ရဲ့ အကျယ် 300 pixel ထက် ကျယ်လား ဆိုတာ မေးပါတယ်။
+      [[mark:type-query-body]] ကျယ်တယ်ဆိုရင် menu card က lesson 18 မှာလို grid
+      ဖြစ်သွားပါမယ်။ ပထမ column က ပုံ အကျယ်လောက်ပဲ ရှိပြီး၊ စာသားက ကျန်တဲ့ နေရာကို ယူပါမယ်။
+      column နှစ်ခုကြားမှာ gap လည်း ထည့်ပါမယ်။ preview ကို ကြည့်ထားပါ။ [[mark:after-query]]
+      အထူး နေရာက card မှာ ပုံက ဘယ်ဘက်၊ စာသားက ညာဘက် ရောက်သွားပါပြီ။ စားစရာ card တွေကတော့
+      အပေါ်အောက် ဆင့်နေတုန်းပါ။ [[mark:select-condition]] ဒီ condition ကို ကြည့်ပါ။ lesson 5
+      မှာ တွေ့ခဲ့တဲ့ range syntax ပါ။ အထူး နေရာက 400 pixel ကျယ်လို့ အဲဒီမှာ မှန်ပြီး၊ 184
+      pixel ပဲ ရှိတဲ့ စားစရာ နေရာတွေမှာတော့ မှားပါတယ်။ card တစ်မျိုး၊ rule တစ်ခုနဲ့ layout
+      နှစ်မျိုး ရသွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: container query conditions"
+        url: "https://web.dev/learn/css/container-queries#container_query_conditions"
+      - title: "MDN — @container"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@container"
+      - title: "MDN — grid-template-columns"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-columns"
+    actions:
+      - id: close-steps
+        type: whiteboard.apply
+        at: { mark: close-steps }
+        open: false
+      - id: type-containers
+        type: editor.type
+        at: { mark: type-containers }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  touch-action: manipulation;\n}\n", occurrence: 1 }
+        text: "\n.special,\n.slot {\n  container-type: inline-size;\n}\n"
+      - id: expect-containers
+        type: expect.preview
+        at: { mark: after-containers }
+        timeoutMs: 4000
+        target: { by: testId, value: special-slot }
+        textContains: "ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-query
+        type: editor.type
+        at: { mark: type-query }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  container-type: inline-size;\n}\n", occurrence: 1 }
+        text: "\n@container (inline-size > 300px) {\n  .menu-card {\n"
+      # The declarations the narration summarises; typed at the end of the file,
+      # so the open blocks above are harmless while they land.
+      - id: type-query-body
+        type: editor.type
+        at: { mark: type-query-body }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "@container (inline-size > 300px) {\n  .menu-card {\n",
+            occurrence: 1,
+          }
+        text: "    display: grid;\n    grid-template-columns: auto 1fr;\n    gap: 12px;\n  }\n}\n"
+      - id: expect-query
+        type: expect.preview
+        at: { mark: after-query }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-condition
+        type: editor.select
+        at: { mark: select-condition }
+        target: { file: styles.css, text: "(inline-size > 300px)", occurrence: 1 }
+
+  - id: resize-container
+    narration: >
+      [[mark:type-w60]] အခု အထူး နေရာရဲ့ အကျယ်ကိုပဲ 60 ရာခိုင်နှုန်း ပြောင်းကြည့်ရအောင်။
+      အထူး card ကို ကြည့်ထားပါ။ [[mark:after-w60]] 240 pixel မှာ condition မမှန်တော့လို့၊
+      card က အပေါ်အောက် ပြန်ဆင့်သွားပါပြီ။ [[mark:type-w100]] အကျယ် အပြည့်ကို
+      ပြန်ပေးလိုက်ရအောင်။ [[mark:after-w100]] ဘေးတိုက် ပြန်ဖြစ်သွားပါပြီ။ window အရွယ်
+      မပြောင်းဘဲ container ပဲ ပြောင်းလို့၊ card က container ကို လိုက်သွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Container queries"
+        url: "https://web.dev/learn/css/container-queries"
+      - title: "MDN — Container size and style queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_size_and_style_queries"
+    actions:
+      - id: type-w60
+        type: editor.type
+        at: { mark: type-w60 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    gap: 12px;\n  }\n}\n", occurrence: 1 }
+        text: "\n.special {\n  width: 60%;\n}\n"
+      - id: expect-w60
+        type: expect.preview
+        at: { mark: after-w60 }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-w100
+        type: editor.type
+        at: { mark: type-w100 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: 60%;\n", occurrence: 1 }
+        text: "  width: 100%;\n"
+      - id: expect-w100
+        type: expect.preview
+        at: { mark: after-w100 }
+        timeoutMs: 4000
+        target: { by: testId, value: special-slot }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: conditions-board
+    narration: >
+      [[mark:open-conditions]] condition ရေးနည်း တခြား ပုံစံတွေလည်း ရှိပါတယ်။
+      [[mark:draw-range]] range syntax မှာ ငယ်တာ၊ ကြီးတာ၊ ညီရင်လည်း ရတဲ့ ပုံစံ နှစ်ခုနဲ့
+      ညီတာ ဆိုတဲ့ သင်္ကေတ ငါးခုကို သုံးပါတယ်။ [[mark:draw-colon]] min နဲ့ max ပါတဲ့ colon
+      ပုံစံ အဟောင်းကလည်း အလုပ်လုပ်ပါသေးတယ်။ min width 300 pixel ဆိုတာ အကျယ် အနည်းဆုံး 300
+      pixel ပါ။ [[mark:draw-logic]] condition တစ်ခုစီကို ကွင်းထဲမှာ ရေးပြီး၊ and၊ or၊ not
+      နဲ့ တွဲလို့ ရပါတယ်။ [[mark:draw-chain]] range မှာ အစွန်း နှစ်ဘက် ပါလို့လည်း ရပါတယ်။
+      အကျယ် 300 နဲ့ 600 pixel ကြား ဆိုတာမျိုးပါ။ [[mark:draw-size-only]] size feature တွေမှာ
+      အကျယ်၊ အမြင့်၊ inline size၊ block size၊ aspect ratio နဲ့ orientation ပါပါတယ်။ ဒီ
+      အနီရောင် စာကြောင်းပေါ်က လေးခုကတော့ container type size ကို လိုပါတယ်။ inline size
+      container က သူတို့ကို မဖြေနိုင်လို့၊ အဲဒီ query တွေက ဘယ်တော့မှ မကိုက်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: container query conditions"
+        url: "https://web.dev/learn/css/container-queries#container_query_conditions"
+      - title: "MDN — @container (descriptors and logical keywords)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@container#descriptors"
+      - title: "CSS Conditional Rules Level 5 — container queries"
+        url: "https://drafts.csswg.org/css-conditional-5/#container-queries"
+    actions:
+      - id: open-conditions
+        type: whiteboard.apply
+        at: { mark: open-conditions }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-range
+        type: whiteboard.apply
+        at: { mark: draw-range }
+        upsertIds: [e-range, e-ops]
+        drawMs: 1800
+      - id: draw-colon
+        type: whiteboard.apply
+        at: { mark: draw-colon }
+        upsertIds: [e-colon]
+        drawMs: 1600
+      - id: draw-logic
+        type: whiteboard.apply
+        at: { mark: draw-logic }
+        upsertIds: [e-logic]
+        drawMs: 1000
+      - id: draw-chain
+        type: whiteboard.apply
+        at: { mark: draw-chain }
+        upsertIds: [e-chain]
+        drawMs: 1400
+      - id: draw-size-only
+        type: whiteboard.apply
+        at: { mark: draw-size-only }
+        upsertIds: [e-size-only, e-size-note]
+        drawMs: 2200
+
+  - id: size-trap
+    chapter: "Container type size ကို သတိထားရအောင်"
+    narration: >
+      [[mark:close-conditions]] ဒါဆို size ကို ဘာလို့ အမြဲ မသုံးကြတာလဲ။ စားစရာ အပိုင်းမှာ
+      စမ်းကြည့်ရအောင်။ [[mark:type-size]] မျဉ်းပြတ် ဘောင် ပါတဲ့ စားစရာ box ကို size
+      container ဖြစ်အောင် လုပ်ပါမယ်။ ဒါဆို သူ့ အမြင့် အကြောင်းကိုပါ ဖြေနိုင်မှာပါ။ preview
+      မှာ ကြည့်ထားပါ။ [[mark:after-size]] မျဉ်းပြတ် box က အစင်း ပါးပါးလေး ဖြစ်သွားပါပြီ။
+      card တွေက box အပြင် လျှံထွက်ပြီး footer ပေါ်မှာ ထပ်နေပါတယ်။ [[mark:open-size-board]]
+      ဘာကြောင့်လဲ ကြည့်ရအောင်။ [[mark:draw-size-width]] size container က သူ့ အကျယ်ကို parent
+      ဆီကနေ ယူနေတုန်းပါပဲ။ [[mark:draw-size-height]] ဒါပေမဲ့ သူ့ အမြင့်က child တွေပေါ်
+      မမူတည်ရတော့ပါဘူး။ အဲဒီလို ဖြစ်မှပဲ အမြင့် အကြောင်း မေးရင် ဖြေနိုင်တာပါ။ အမြင့်
+      မပေးထားလို့ browser က သူ့ကို အလွတ် box လို တွက်ပြီး၊ သုည အမြင့်မှာ padding နဲ့ border
+      ပဲ ပေါင်းပါတယ်။ [[mark:draw-size-rule]] ဒါကြောင့် ပုံသေ အမြင့်၊ grid row လိုမျိုး
+      အမြင့်က အပြင်ကနေ လာမှပဲ size ကို သုံးပါ။ ကျန်တဲ့ နေရာတိုင်းမှာ inline size ပါ။
+      [[mark:draw-size-cb]] inline size အပါအဝင် container တိုင်းမှာ ဘေးထွက်ဆိုးကျိုး နှစ်ခု
+      ရှိပါသေးတယ်။ ပထမက absolute နဲ့ fixed child တွေရဲ့ containing block ဖြစ်သွားတာပါ။
+      ဒါကြောင့် container ထဲမှာ fixed ခလုတ် ထားရင်၊ window မှာ ကပ်မနေတော့ပါဘူး။
+      [[mark:draw-size-stack]] ဒုတိယက lesson 23 မှာ တွေ့ခဲ့တဲ့ stacking context အသစ် တစ်ခု
+      ဖြစ်သွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: defining a container"
+        url: "https://web.dev/learn/css/container-queries#defining_a_container"
+      - title: "MDN — Using CSS containment (size containment)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Using_CSS_containment"
+      - title: "CSS Containment Module Level 2 — size containment"
+        url: "https://drafts.csswg.org/css-contain-2/#containment-size"
+      - title: "MDN — container-type (formal definition and side effects)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/container-type"
+    actions:
+      - id: close-conditions
+        type: whiteboard.apply
+        at: { mark: close-conditions }
+        open: false
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: 100%;\n}\n", occurrence: 1 }
+        text: "\n.snack-slots {\n  container-type: size;\n}\n"
+      - id: expect-size
+        type: expect.preview
+        at: { mark: after-size }
+        timeoutMs: 4000
+        target: { by: testId, value: footer }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-size-board
+        type: whiteboard.apply
+        at: { mark: open-size-board }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-size-width
+        type: whiteboard.apply
+        at: { mark: draw-size-width }
+        upsertIds: [f-strip, f-width]
+        drawMs: 1600
+      - id: draw-size-height
+        type: whiteboard.apply
+        at: { mark: draw-size-height }
+        upsertIds: [f-card1, f-card2, f-height, f-zero]
+        drawMs: 2600
+      - id: draw-size-rule
+        type: whiteboard.apply
+        at: { mark: draw-size-rule }
+        upsertIds: [f-rule]
+        drawMs: 1800
+      - id: draw-size-cb
+        type: whiteboard.apply
+        at: { mark: draw-size-cb }
+        upsertIds: [f-cb]
+        drawMs: 1600
+      - id: draw-size-stack
+        type: whiteboard.apply
+        at: { mark: draw-size-stack }
+        upsertIds: [f-stack]
+        drawMs: 1200
+
+  - id: size-fix
+    narration: >
+      [[mark:close-size-board]] စားစရာ box ကို ပြင်ရအောင်။ [[mark:type-fix]] အောက်မှာ
+      container type ကို inline size နဲ့ ထပ်ရေးပါမယ်။ နောက်မှ ရေးတဲ့အတွက် သူ နိုင်ပါတယ်။
+      [[mark:after-fix]] မျဉ်းပြတ် box ထဲမှာ card တွေ ပြန်ဆံ့သွားပါပြီ။ inline size က
+      အကျယ်ကိုပဲ child တွေပေါ် မမူတည်အောင် တားတာ ဖြစ်ပြီး၊ ဒီ box ရဲ့ အကျယ်က page ဆီကနေ
+      လာလို့ပါ။ [[mark:explain-shrink]] ဒီ selector ရွေးထားတဲ့ နေရာတွေကို ကြည့်ပါ။ ပုံမှန်
+      block box တွေပါ။ inline-block လို အကျယ်ကို content ကနေ ယူတဲ့ box ဆိုရင် အပြင်က ရတဲ့
+      အကျယ် မရှိလို့၊ inline size က သူ့ကို သုည အထိ ကျုံ့စေပါတယ်။ ဒါကြောင့် container ကို
+      block box တွေမှာ ထားပါ။
+    sources:
+      - title: "MDN — container-type: inline-size"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/container-type#inline-size"
+      - title: "CSS Containment Module Level 2 — inline-size containment"
+        url: "https://drafts.csswg.org/css-contain-2/#containment-inline-size"
+    actions:
+      - id: close-size-board
+        type: whiteboard.apply
+        at: { mark: close-size-board }
+        open: false
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  container-type: size;\n", occurrence: 1 }
+        text: "  container-type: inline-size;\n"
+      - id: expect-fix
+        type: expect.preview
+        at: { mark: after-fix }
+        timeoutMs: 4000
+        target: { by: testId, value: card-palata }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-fix
+        type: editor.select
+        at: { mark: explain-shrink }
+        target: { file: styles.css, text: ".special,\n.slot {", occurrence: 1 }
+
+  - id: named
+    chapter: "Container ကို နာမည် ပေးရအောင်"
+    narration: >
+      card တစ်ခုစီက အနီးဆုံး container ကို မေးပါတယ်။ တခါတလေတော့ container တစ်ခုကို ရွေးပြီး
+      မေးချင်ပါတယ်။ [[mark:type-named]] ဒါကြောင့် container shorthand နဲ့ အထူး နေရာကို
+      special ဆိုတဲ့ နာမည် ပေးကြည့်ရအောင်။ [[mark:select-named]] ဒီ shorthand ကို ကြည့်ပါ။
+      နာမည် အရင် လာပြီး၊ slash ပြီးမှ container type လာပါတယ်။ နာမည်က quote မပါတဲ့ စကားလုံး
+      သက်သက်ပါ။ [[mark:type-badge]] အခု special လို့ နာမည်ပေးထားတဲ့ container ကိုပဲ၊ သူ 150
+      pixel ထက် ကျယ်လား ဆိုတာ မေးတဲ့ container rule တစ်ခု ရေးပါမယ်။ [[mark:type-badge-body]]
+      ကျယ်တယ်ဆိုရင် badge ကို ပြပါမယ်။ card တွေကို ကြည့်ထားပါ။ [[mark:after-badge]] ယနေ့အထူး
+      badge က အထူး card မှာပဲ ပေါ်လာပါပြီ။ [[mark:select-name-query]] ဒီ special ဆိုတဲ့
+      နာမည်ကို ကြည့်ပါ။ စားစရာ နေရာတွေက 184 pixel နဲ့ 150 ထက် ကျယ်ပေမယ့်၊ သူတို့ရဲ့ ancestor
+      တွေထဲမှာ special ဆိုတဲ့ container မရှိလို့ ဒီ rule က မကိုက်ပါဘူး။ နာမည်ပေးထားတဲ့
+      container ကလည်း ancestor ဖြစ်ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: naming containers"
+        url: "https://web.dev/learn/css/container-queries#naming_containers"
+      - title: "web.dev Learn CSS — Container queries: use shorthand with the container property"
+        url: "https://web.dev/learn/css/container-queries#use_shorthand_with_the_container_property"
+      - title: "MDN — container (shorthand)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/container"
+      - title: "MDN — container-name"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/container-name"
+    actions:
+      # line-by-line: typed by keystroke, "container: special" alone would be a
+      # valid name with type normal for a moment and the card would flicker.
+      - id: type-named
+        type: editor.type
+        at: { mark: type-named }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  width: 100%;\n", occurrence: 1 }
+        text: "  container: special / inline-size;\n"
+      - id: select-named
+        type: editor.select
+        at: { mark: select-named }
+        target: { file: styles.css, text: "special / inline-size", occurrence: 1 }
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  container-type: size;\n  container-type: inline-size;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n@container special (inline-size > 150px) {\n"
+      - id: type-badge-body
+        type: editor.type
+        at: { mark: type-badge-body }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "@container special (inline-size > 150px) {\n", occurrence: 1 }
+        text: "  .badge {\n    display: inline;\n  }\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-name-query
+        type: editor.select
+        at: { mark: select-name-query }
+        target: { file: styles.css, text: "@container special", occurrence: 1 }
+
+  - id: cq-units
+    chapter: "Container query unit တွေ"
+    narration: >
+      [[mark:open-units]] lesson 10 မှာ ပြောခဲ့တဲ့ container unit တွေကို အခု ကြည့်ရအောင်။
+      [[mark:draw-cqi]] cqi က container ရဲ့ inline size ကို အခြေခံပြီး၊ 1 cqi က အဲဒီ
+      အကျယ်ရဲ့ 1 ရာခိုင်နှုန်းပါ။ [[mark:draw-cqi-wide]] အထူး နေရာက 400 pixel ဖြစ်လို့၊ 5
+      cqi က 20 pixel ပါ။ [[mark:draw-cqi-narrow]] စားစရာ နေရာ တစ်ခုက 184 pixel ပဲ ရှိလို့၊ 5
+      cqi က 9 pixel လောက်ပဲ ရပါတယ်။ နာမည်အတွက်ဆိုရင် သေးလွန်းပါတယ်။ [[mark:draw-unit-list]]
+      ပြီးတော့ အကျယ်နဲ့ အမြင့်အတွက် cqw နဲ့ cqh၊ block size အတွက် cqb၊ inline နဲ့ block ထဲက
+      ငယ်တာနဲ့ ကြီးတာအတွက် cqmin နဲ့ cqmax လည်း ရှိပါတယ်။ အမြင့်ကို တိုင်းတဲ့ unit တွေကတော့
+      size container လိုပါတယ်။ [[mark:draw-unit-fallback]] ဖြေနိုင်တဲ့ container မရှိရင်တော့
+      lesson 10 က small viewport unit တွေကို အစားသုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: container query units"
+        url: "https://web.dev/learn/css/container-queries#container_query_units"
+      - title: "MDN — Container query length units"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length#container_query_length_units"
+      - title: "web.dev Learn CSS — Sizing units"
+        url: "https://web.dev/learn/css/sizing"
+    actions:
+      - id: open-units
+        type: whiteboard.apply
+        at: { mark: open-units }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-cqi
+        type: whiteboard.apply
+        at: { mark: draw-cqi }
+        upsertIds: [g-def]
+        drawMs: 1600
+      - id: draw-cqi-wide
+        type: whiteboard.apply
+        at: { mark: draw-cqi-wide }
+        upsertIds: [g-wide]
+        drawMs: 1400
+      - id: draw-cqi-narrow
+        type: whiteboard.apply
+        at: { mark: draw-cqi-narrow }
+        upsertIds: [g-narrow]
+        drawMs: 1400
+      - id: draw-unit-list
+        type: whiteboard.apply
+        at: { mark: draw-unit-list }
+        upsertIds: [g-list]
+        drawMs: 1800
+      - id: draw-unit-fallback
+        type: whiteboard.apply
+        at: { mark: draw-unit-fallback }
+        upsertIds: [g-fallback]
+        drawMs: 1400
+
+  - id: cq-live
+    narration: >
+      [[mark:close-units]] card နာမည်တွေမှာ cqi ကို သုံးကြည့်ရအောင်။ [[mark:type-cq]] cqi
+      ကို lesson 12 က clamp ထဲမှာ ထည့်ထားလို့၊ စာလုံး အရွယ်က container ကို
+      လိုက်ပြောင်းပေမယ့် 16 pixel ထက် မငယ်ဘဲ 24 ထက်လည်း မကြီးပါဘူး။ နာမည်တွေကို ကြည့်ထားပါ။
+      [[mark:after-cq]] အထူး card ရဲ့ နာမည်က 20 pixel အထိ ကြီးလာပြီး၊ စားစရာ နာမည်တွေကတော့
+      clamp ရဲ့ အငယ်ဆုံး 16 pixel မှာ ရပ်နေပါတယ်။ [[mark:select-cqi]] ဒီ cqi ကို ကြည့်ပါ။
+      rule တစ်ခုတည်းနဲ့ နာမည်တိုင်းက သူ့ container နဲ့ ကိုက်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: container query units"
+        url: "https://web.dev/learn/css/container-queries#container_query_units"
+      - title: "MDN — clamp()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clamp"
+    actions:
+      - id: close-units
+        type: whiteboard.apply
+        at: { mark: close-units }
+        open: false
+      - id: type-cq
+        type: editor.type
+        at: { mark: type-cq }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    display: inline;\n  }\n}\n", occurrence: 1 }
+        text: "\n.menu-card .name {\n  font-size: clamp(16px, 5cqi, 24px);\n}\n"
+      - id: expect-cq
+        type: expect.preview
+        at: { mark: after-cq }
+        timeoutMs: 4000
+        target: { by: testId, value: card-e-kya-kwe }
+        textContains: "အီကြာကွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-cqi
+        type: editor.select
+        at: { mark: select-cqi }
+        target: { file: styles.css, text: "5cqi", occurrence: 1 }
+
+  - id: nesting
+    chapter: "Container query ကို nest လုပ်ရအောင်"
+    narration: >
+      [[mark:type-nest]] container rule ကို တခြား rule တစ်ခုထဲမှာလည်း nest လုပ်လို့ ရပါတယ်။
+      lesson 8 မှာ rule ထဲမှာ media query ရေးခဲ့သလိုပါပဲ။ menu card rule ထဲမှာ container
+      ကျယ်ရင် card ကို အညိုနီရောင် border ပေးပါမယ်။ အထူး card ရဲ့ border ကို ကြည့်ထားပါ။
+      [[mark:after-nest]] အထူး card ရဲ့ border ပဲ အရောင် ပြောင်းသွားပါပြီ။
+      [[mark:select-nest]] ဒီ nest လုပ်ထားတဲ့ container rule ကို ကြည့်ပါ။ သီးသန့် ရေးတာနဲ့
+      အတူတူ အလုပ်လုပ်ပေမယ့်၊ card နဲ့ ဆိုင်တဲ့ style တွေကို တစ်နေရာတည်းမှာ စုထားနိုင်ပါတယ်။
+      container rule ကို layer၊ media၊ supports rule တွေထဲ၊ ဒါမှမဟုတ် တခြား container rule
+      ထဲမှာလည်း ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: nesting container queries"
+        url: "https://web.dev/learn/css/container-queries#nesting_container_queries"
+      - title: "MDN — CSS nesting (nesting at-rules)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_nesting/Using_CSS_nesting#nested_declarations_rule"
+    actions:
+      - id: type-nest
+        type: editor.type
+        at: { mark: type-nest }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  font-size: clamp(16px, 5cqi, 24px);\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  @container (inline-size > 300px) {\n    border-color: sienna;\n  }\n}\n"
+      - id: expect-nest
+        type: expect.preview
+        at: { mark: after-nest }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-nest
+        type: editor.select
+        at: { mark: select-nest }
+        target:
+          {
+            file: styles.css,
+            text: "  @container (inline-size > 300px) {\n    border-color: sienna;\n  }",
+            occurrence: 1,
+          }
+
+  - id: more-queries
+    narration: >
+      [[mark:open-more]] container ကို အရွယ်အစား အကြောင်းပဲ မေးလို့ ရတာ မဟုတ်ပါဘူး။
+      [[mark:draw-style]] style query က theme က dark လား ဆိုတာမျိုး၊ container ပေါ်က custom
+      property ရဲ့ တန်ဖိုးကို မေးပါတယ်။ 2026 ခုနှစ်ကစပြီး browser အဓိက အားလုံးမှာ ရပါပြီ။
+      [[mark:draw-name-only]] condition မပါဘဲ နာမည် တစ်ခုတည်း ပါတဲ့ query က အဲဒီ နာမည်
+      ရှိတဲ့ container တိုင်းရဲ့ အထဲမှာ ကိုက်ပါတယ်။ ဒါလည်း 2026 ခုနှစ်ကမှ အားလုံးမှာ ရတာပါ။
+      [[mark:draw-scroll-state]] scroll state query ကတော့ ဥပမာ sticky header တစ်ခု
+      ကပ်နေပြီလား ဆိုတာမျိုး မေးပါတယ်။ အခုလောလောဆယ် Chrome နဲ့ Chrome ကို အခြေခံတဲ့ browser
+      တွေမှာပဲ ရပါသေးတယ်။ [[mark:draw-devtools]] Chrome DevTools ရဲ့ Elements panel က
+      container တိုင်းမှာ container badge ပြလို့၊ query မကိုက်ရင် အကြောင်းရင်း ရှာဖို့
+      အထောက်အကူ ဖြစ်ပါတယ်။
+    sources:
+      - title: "MDN — Container size and style queries (style queries)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_size_and_style_queries#container_style_queries"
+      - title: "webstatus.dev — Container style queries"
+        url: "https://webstatus.dev/features/container-style-queries"
+      - title: "webstatus.dev — Container name-only queries"
+        url: "https://webstatus.dev/features/container-name-queries"
+      - title: "MDN — Using container scroll-state queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_conditional_rules/Container_scroll-state_queries"
+      - title: "Chrome DevTools — Inspect CSS container queries"
+        url: "https://developer.chrome.com/docs/devtools/css/container-queries"
+    actions:
+      - id: open-more
+        type: whiteboard.apply
+        at: { mark: open-more }
+        open: true
+        clear: true
+        upsertIds: [h-title]
+      - id: draw-style
+        type: whiteboard.apply
+        at: { mark: draw-style }
+        upsertIds: [h-style]
+        drawMs: 1400
+      - id: draw-name-only
+        type: whiteboard.apply
+        at: { mark: draw-name-only }
+        upsertIds: [h-name]
+        drawMs: 1400
+      - id: draw-scroll-state
+        type: whiteboard.apply
+        at: { mark: draw-scroll-state }
+        upsertIds: [h-scroll]
+        drawMs: 1400
+      - id: draw-devtools
+        type: whiteboard.apply
+        at: { mark: draw-devtools }
+        upsertIds: [h-devtools]
+        drawMs: 1400
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ inline size container တစ်ခုကို သူ့
+      aspect ratio အကြောင်း မေးရင်၊ query က ကိုက်ပါ့မလား။ [[mark:quiz-answer]] မကိုက်ပါဘူး။
+      aspect ratio က အမြင့်ကို လိုပြီး၊ အမြင့် အကြောင်းကို size container ပဲ ဖြေနိုင်လို့ပါ။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ media query က viewport နဲ့ pointer လို စက်
+      အကြောင်းကို မေးပါတယ်။ container query ကတော့ component ကို ထည့်ထားတဲ့ box ကို မေးပြီး၊
+      container type အရင် ပေးပြီးမှ container rule နဲ့ မေးရပါတယ်။ inline size ကို
+      ဦးစားပေးပါ။ လိုရင် container ကို နာမည်ပေးပြီး၊ container ကို လိုက်တဲ့ အရွယ်တွေအတွက်
+      container query unit ကို သုံးပါ။ ခလုတ်တွေကိုလည်း အနည်းဆုံး 24 pixel၊ ဖြစ်နိုင်ရင် 44
+      pixel ပေးပါ။ [[mark:part-end]] ဒါနဲ့ course ရဲ့ layout အကြောင်း အပိုင်း ပြီးပါပြီ။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ အပိုင်း အသစ် တစ်ခု စပြီး၊ HTML အပို မထည့်ဘဲ
+      ပထမ စာလုံးလို element ရဲ့ အစိတ်အပိုင်းတွေကို style ပေးတဲ့ pseudo-element တွေကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Container queries: check your understanding"
+        url: "https://web.dev/learn/css/container-queries#check_your_understanding"
+      - title: "web.dev Learn CSS — Pseudo-elements (next lesson)"
+        url: "https://web.dev/learn/css/pseudo-elements"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        clear: true
+        upsertIds: [i-title, i-q, i-q2]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [i-a, i-a-check, i-rule]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".plus {\n  min-width: 24px;\n  min-height: 24px;\n  min-width: 44px;\n  min-height: 44px;\n  touch-action: manipulation;\n}\n\n.special,\n.slot {\n  container-type: inline-size;\n}\n\n@container (inline-size > 300px) {\n  .menu-card {\n    display: grid;\n    grid-template-columns: auto 1fr;\n    gap: 12px;\n  }\n}\n\n.special {\n  width: 60%;\n  width: 100%;\n  container: special / inline-size;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".snack-slots {\n  container-type: size;\n  container-type: inline-size;\n}\n\n@container special (inline-size > 150px) {\n  .badge {\n    display: inline;\n  }\n}\n\n.menu-card .name {\n  font-size: clamp(16px, 5cqi, 24px);\n}\n\n.menu-card {\n  @container (inline-size > 300px) {\n    border-color: sienna;\n  }\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
