@@ -1,0 +1,2364 @@
+# CSS course (Burmese), lesson 24 of 43: overflow.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text with
+# ⟪mark⟫ anchors; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 23; a window and the scene behind it: overflow
+# goes on the parent; planned vs accidental overflow) → code tour (reviews
+# region, five-card menu list, empty styles.css) → reviews gets a 160px height,
+# a border and padding: the quotes spill over the menu (visible, the default)
+# → hidden (cut at the padding edge; a script still scrolls it to the middle)
+# → scroll → auto (the position survives) → clip (the box shows its top again;
+# a script cannot scroll it; no BFC, sticky-safe, overflow-clip-margin) →
+# board (five values: cuts? scrolls?) → overflow-y: visible (spills again next
+# to clip) → overflow-x: hidden (the spill vanishes; a script scrolls it to the
+# end) → board (x/y, visible-becomes-auto, x-then-y shorthand vs padding,
+# logical names) → overflow: hidden auto (no change; honest CSS) → a11y tour
+# (tabindex, role, aria-labelledby) + attribute-selector outline → board
+# (scrollbars in the box model, gutter/color/width, root scroller) → board
+# (scroll-behavior smooth inside reduced motion; scroll chaining and
+# overscroll-behavior) → board (scroll snap: container and children) → strip
+# rule + card rule (line-by-line) → a script scrolls the strip part of the
+# way: it settles on the second card 24px in (pause-and-try invitation) →
+# scroll padding read on the line → the cards get scroll-margin-inline-start
+# and the same scroll settles 48px in (margin adds to padding) → the strip is
+# a scroll container without the region attributes: no outline, and a real
+# carousel needs them too → board (container side vs child side,
+# sticky-header offsets, snap-stop, mandatory warning) → quiz + recap,
+# hand-off to media and container queries (lesson 25).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every overflow keyword is invalid until its last letter ("h", "hid", "cli",
+# "vis"…), so a half-typed declaration is dropped and the previous one holds.
+# "overflow: hidden auto" passes through "overflow: hidden" (x and y hidden:
+# still a scroll container, same look). The strip and card rules are
+# line-by-line: the narration summarises them.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# reviews 400 × 251 at start; with the box rule 400 × 160, content 265 tall in
+# a 156 client box (the last quote at y 252, over the menu heading at 192 and
+# the first card at 230); hidden: scroll range 127, scrollTo(64) moves the last
+# quote up 64; scroll/auto keep 64; clip: back to 0, scrollTo is a no-op;
+# overflow-y visible next to clip: clip/visible, spills again; overflow-x
+# hidden: computes hidden/auto (Chrome restores 64; no scroll event, so the
+# script's scroll to the end follows at once); strip rule: cards squeezed
+# 133/82/91/88/116, scrollWidth 558; card rule: cards 320 wide every 332;
+# scrollTo(left 240) snaps to 308 = 332 − 24 (one scroll event at 308); with
+# the cards' scroll-margin-inline-start 24px the snap positions are 284 =
+# 332 − 24 − 24 and scrollTo(left 240) settles at 284: card 2 starts 48px in
+# (verify-lesson --only-scene=snap-live screenshot).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-24-overflow
+  title: "CSS course 24: Overflow"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 24
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit's reviews block (a <div> scroll region: tabindex,
+      # role, aria-labelledby — on a <div> the explicit role is needed, on a
+      # named <section> it would be redundant; the last quote carries data-testid
+      # last-review), a menu section whose list is the menu-strip block (the
+      # four kit drinks + mohinga), and the kit footer. No kit.js: nothing is
+      # clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- lesson block: reviews (a scroll region; its heading names it) -->
+              <div class="reviews" tabindex="0" role="region" aria-labelledby="reviews-title" data-testid="reviews">
+                <h2 id="reviews-title">ဧည့်သည်တွေ ပြောတာ</h2>
+                <p>လက်ဖက်ရည် အရမ်းကောင်းတယ်။</p>
+                <p>ပလာတာ ပူပူလေး ကြိုက်တယ်။</p>
+                <p>ဝန်ထမ်းတွေ ဖော်ရွေတယ်။</p>
+                <p>မုန့်ဟင်းခါး အရသာ ပြည့်တယ်။</p>
+                <p>မနက်စောစော ဖွင့်တာ အဆင်ပြေတယ်။</p>
+                <p data-testid="last-review">နောက်လည်း လာဦးမယ်။</p>
+              </div>
+
+              <!-- lesson block: menu-strip (five cards; one horizontal row once styled) -->
+              <section class="menu-section" id="drinks">
+                <h2>မီနူး</h2>
+                <ul class="menu menu-strip" data-testid="menu-strip">
+                  <li class="menu-card" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price">1,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <!-- kit block: footer -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789">09 123 456 789</a> · <a href="https://facebook.com/">Facebook</a></p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E gives the reviews box
+      # a white background, a top margin and tidy quote spacing, and spaces
+      # the menu section. No height, border, padding, overflow or scroll
+      # declaration for the reviews or the strip.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 24 keeps A, B, B2 and C; section E gives the reviews box a white
+          background and tidy quote spacing, and spaces the menu section. Every
+          height, border, padding, overflow and scroll declaration is typed.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 24: the reviews box's look. Its height, border, padding and every
+           overflow declaration are typed during the lesson. */
+        .reviews {
+          margin-top: 16px;
+          background: #fff;
+        }
+
+        .reviews p {
+          margin: 0 0 8px;
+        }
+
+        .menu-section {
+          margin-top: 16px;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the window and the scene behind it. Blue = the parent (the
+    # window), orange = the content (the scene), green = the rule, violet =
+    # planned overflow, red = accidental overflow.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Overflow ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-window,
+        kind: rectangle,
+        x: 270,
+        y: 300,
+        width: 280,
+        height: 190,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-window-l,
+        kind: text,
+        x: 610,
+        y: 300,
+        width: 400,
+        height: 36,
+        text: "parent · ပြတင်းပေါက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-scene,
+        kind: rectangle,
+        x: 310,
+        y: 230,
+        width: 200,
+        height: 390,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-scene-l,
+        kind: text,
+        x: 610,
+        y: 360,
+        width: 400,
+        height: 36,
+        text: "content · နောက်က မြင်ကွင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule,
+        kind: text,
+        x: 610,
+        y: 430,
+        width: 400,
+        height: 36,
+        text: "overflow → parent မှာ ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-planned,
+        kind: text,
+        x: 610,
+        y: 510,
+        width: 440,
+        height: 36,
+        text: "တမင် · မြေပုံ၊ card တန်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-accident,
+        kind: text,
+        x: 610,
+        y: 570,
+        width: 440,
+        height: 36,
+        text: "မတော်တဆ · စကားလုံး ရှည်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — the five values. Blue = keywords, green ✓, red ✗, orange =
+    # the hidden caveat and the scrollbar notes.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "တန်ဖိုး ငါးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-h-cut,
+        kind: text,
+        x: 480,
+        y: 230,
+        width: 120,
+        height: 36,
+        text: "ဖြတ်လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-scroll,
+        kind: text,
+        x: 640,
+        y: 230,
+        width: 180,
+        height: 36,
+        text: "scroll ရလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-visible,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 120,
+        height: 36,
+        text: "visible",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-visible-cut,
+        kind: text,
+        x: 510,
+        y: 290,
+        width: 30,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-visible-scroll,
+        kind: text,
+        x: 690,
+        y: 290,
+        width: 30,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-hidden,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 120,
+        height: 36,
+        text: "hidden",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-hidden-cut,
+        kind: text,
+        x: 510,
+        y: 350,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-hidden-scroll,
+        kind: text,
+        x: 690,
+        y: 350,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-hidden-note,
+        kind: text,
+        x: 770,
+        y: 350,
+        width: 300,
+        height: 36,
+        text: "script နဲ့ ရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-clip,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 120,
+        height: 36,
+        text: "clip",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-clip-cut,
+        kind: text,
+        x: 510,
+        y: 410,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-clip-scroll,
+        kind: text,
+        x: 690,
+        y: 410,
+        width: 30,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-scroll,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 120,
+        height: 36,
+        text: "scroll",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-scroll-cut,
+        kind: text,
+        x: 510,
+        y: 470,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-scroll-scroll,
+        kind: text,
+        x: 690,
+        y: 470,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-scroll-note,
+        kind: text,
+        x: 770,
+        y: 470,
+        width: 300,
+        height: 36,
+        text: "scrollbar အမြဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 120,
+        height: 36,
+        text: "auto",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto-cut,
+        kind: text,
+        x: 510,
+        y: 530,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto-scroll,
+        kind: text,
+        x: 690,
+        y: 530,
+        width: 30,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-auto-note,
+        kind: text,
+        x: 770,
+        y: 530,
+        width: 300,
+        height: 36,
+        text: "လိုမှ scrollbar",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board C — two axes, the visible-becomes-auto rule and the shorthand.
+    # Blue = x, green = y, red = the trap, orange = clip's version, violet =
+    # the shorthand, white = padding's opposite order, blue again = logical.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Axis နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-x-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 232,
+        width: 220,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-x-l,
+        kind: text,
+        x: 560,
+        y: 228,
+        width: 320,
+        height: 36,
+        text: "x · ဘယ်ညာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-y-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 300,
+        y: 278,
+        width: 30,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-y-l,
+        kind: text,
+        x: 360,
+        y: 308,
+        width: 320,
+        height: 36,
+        text: "y · အပေါ်အောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-trap-1,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 640,
+        height: 36,
+        text: "hidden · scroll · auto + visible → auto",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-trap-2,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 640,
+        height: 36,
+        text: "hidden · scroll · auto + clip → hidden",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-short,
+        kind: text,
+        x: 300,
+        y: 506,
+        width: 380,
+        height: 36,
+        text: "overflow: hidden auto;",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-short-xy,
+        kind: text,
+        x: 740,
+        y: 506,
+        width: 260,
+        height: 36,
+        text: "x ပြီးမှ y",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-padding,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 700,
+        height: 36,
+        text: "padding: 8px 16px; → အပေါ်အောက် အရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-logical,
+        kind: text,
+        x: 300,
+        y: 604,
+        width: 600,
+        height: 36,
+        text: "overflow-inline · overflow-block",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board D — scrollbars. White = the border, orange = a classic scrollbar,
+    # blue = the content, then one colour per property; red = root scroller.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Scrollbar",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-box,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 260,
+        height: 190,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-content,
+        kind: rectangle,
+        x: 326,
+        y: 256,
+        width: 190,
+        height: 138,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-bar,
+        kind: rectangle,
+        x: 530,
+        y: 232,
+        width: 28,
+        height: 186,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-bar-l,
+        kind: text,
+        x: 610,
+        y: 240,
+        width: 460,
+        height: 36,
+        text: "border နဲ့ padding ကြား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-overlay-l,
+        kind: text,
+        x: 610,
+        y: 300,
+        width: 460,
+        height: 36,
+        text: "overlay · content ပေါ် ထပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-gutter,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 460,
+        height: 36,
+        text: "scrollbar-gutter: stable",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-color,
+        kind: text,
+        x: 300,
+        y: 496,
+        width: 520,
+        height: 36,
+        text: "scrollbar-color: thumb track",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-width,
+        kind: text,
+        x: 300,
+        y: 542,
+        width: 600,
+        height: 36,
+        text: "scrollbar-width: auto · thin · none",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-root,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 640,
+        height: 36,
+        text: "root scroller · page တစ်ခုလုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board E — how scrolling feels. Blue = the smooth-scroll code, green =
+    # what it changes, orange = what it does not, white = the page, red =
+    # scroll chaining, green again = contain stops it.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Scroll လုပ်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-code-1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 760,
+        height: 36,
+        text: "@media (prefers-reduced-motion: no-preference) {",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-code-2,
+        kind: text,
+        x: 300,
+        y: 262,
+        width: 600,
+        height: 36,
+        text: "  html { scroll-behavior: smooth; }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-code-3,
+        kind: text,
+        x: 300,
+        y: 302,
+        width: 40,
+        height: 36,
+        text: "}",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-smooth-yes,
+        kind: text,
+        x: 380,
+        y: 302,
+        width: 340,
+        height: 36,
+        text: "link · script ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-smooth-no,
+        kind: text,
+        x: 760,
+        y: 302,
+        width: 300,
+        height: 36,
+        text: "wheel · လက် ✗",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-page,
+        kind: rectangle,
+        x: 300,
+        y: 380,
+        width: 280,
+        height: 260,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-inner,
+        kind: rectangle,
+        x: 330,
+        y: 410,
+        width: 150,
+        height: 120,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-inner-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 390,
+        y: 425,
+        width: 30,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-chain,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 510,
+        y: 410,
+        width: 40,
+        height: 210,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-chain-l,
+        kind: text,
+        x: 620,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "scroll chaining",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-contain,
+        kind: text,
+        x: 620,
+        y: 500,
+        width: 460,
+        height: 36,
+        text: "overscroll-behavior: contain",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 490,
+        y: 490,
+        width: 80,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board F — scroll snap. Blue = the scroll container (its scrollport),
+    # green = the children, orange = the snap line, violet = strictness.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Scroll snap",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-port,
+        kind: rectangle,
+        x: 350,
+        y: 232,
+        width: 320,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-c1,
+        kind: rectangle,
+        x: 372,
+        y: 250,
+        width: 250,
+        height: 114,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-c2,
+        kind: rectangle,
+        x: 640,
+        y: 250,
+        width: 250,
+        height: 114,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-c3,
+        kind: rectangle,
+        x: 908,
+        y: 250,
+        width: 160,
+        height: 114,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-line,
+        kind: rectangle,
+        x: 368,
+        y: 222,
+        width: 4,
+        height: 170,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: f-type,
+        kind: text,
+        x: 300,
+        y: 412,
+        width: 680,
+        height: 36,
+        text: "container · scroll-snap-type: x mandatory",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-strict,
+        kind: text,
+        x: 300,
+        y: 462,
+        width: 680,
+        height: 36,
+        text: "mandatory → အမြဲ · proximity → နီးမှ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-align,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 700,
+        height: 36,
+        text: "child · scroll-snap-align: start",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-align-2,
+        kind: text,
+        x: 300,
+        y: 576,
+        width: 560,
+        height: 36,
+        text: "start · center · end",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board G — which side each snap property goes on. Blue = container,
+    # green = child, orange = sticky-header offsets, red = the warning.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Container ဘက် · child ဘက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-cont-h,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 200,
+        height: 36,
+        text: "container",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-cont-1,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 300,
+        height: 36,
+        text: "scroll-snap-type",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-cont-2,
+        kind: text,
+        x: 300,
+        y: 324,
+        width: 300,
+        height: 36,
+        text: "scroll-padding",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-child-h,
+        kind: text,
+        x: 680,
+        y: 236,
+        width: 200,
+        height: 36,
+        text: "child",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-child-1,
+        kind: text,
+        x: 680,
+        y: 282,
+        width: 320,
+        height: 36,
+        text: "scroll-snap-align",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-child-2,
+        kind: text,
+        x: 680,
+        y: 324,
+        width: 320,
+        height: 36,
+        text: "scroll-margin",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-child-3,
+        kind: text,
+        x: 680,
+        y: 366,
+        width: 400,
+        height: 36,
+        text: "scroll-snap-stop: always",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-sticky-1,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 700,
+        height: 36,
+        text: "sticky header → html: scroll-padding-top",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-sticky-2,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 36,
+        text: "ဒါမှမဟုတ် h2: scroll-margin-top",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-warn,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 700,
+        height: 36,
+        text: "mandatory + ကြီးတဲ့ child → တချို့ မမြင်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board H — the closing quiz.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 460,
+        height: 40,
+        text: "overflow: hidden scroll;",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: h-q2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 520,
+        height: 40,
+        text: "hidden က ဘယ် axis လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: h-a,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 300,
+        height: 46,
+        text: "x · ဘယ်ညာ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: h-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 620,
+        y: 376,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: h-rule,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 520,
+        height: 36,
+        text: "တန်ဖိုး နှစ်ခု → x ပြီးမှ y",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4124
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: overflow-intro
+    chapter: "Overflow ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ box တွေ ထပ်နေရင် ဘယ်ဟာ ရှေ့မှာ ပေါ်မလဲ ဆိုတာ ကြည့်ခဲ့ပါတယ်။ ဒီ lesson
+      မှာတော့ content က သူ့ box ထက် ကြီးနေရင် ဘာဖြစ်မလဲ ဆိုတာ ကြည့်ပါမယ်။ [[mark:start-server]]
+      ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-window]] box
+      တစ်ခုကို အရွယ်အစား ပုံသေ ရှိတဲ့ ပြတင်းပေါက်လို့ စဉ်းစားကြည့်ပါ။ [[mark:draw-scene]] သူ့ထဲက
+      content ကတော့ ပြတင်းပေါက် နောက်က မြင်ကွင်းပါ။ အဲဒီ မြင်ကွင်းက ပြတင်းပေါက်ထက်
+      ကြီးနေနိုင်ပါတယ်။ box ထဲ မဆံ့ဘဲ လျှံထွက်နေတဲ့ အပိုင်းကို lesson 2 မှာ overflow လို့
+      ခေါ်ခဲ့ပါတယ်။ [[mark:draw-rule]] ဒါကြောင့် overflow property တွေကို ကြီးလွန်းတဲ့ child မှာ
+      မဟုတ်ဘဲ၊ ပြတင်းပေါက် ဖြစ်တဲ့ parent မှာ ပေးရပါတယ်။ [[mark:draw-planned]] တခါတလေ overflow ကို
+      တမင် လုပ်ထားတာပါ။ ဘောင်ထဲမှာ ရွှေ့ကြည့်ရတဲ့ မြေပုံ၊ လက်နဲ့ ပွတ်ဆွဲရတဲ့ card တန်း စတာမျိုးပါ။
+      [[mark:draw-accident]] တခါတလေကတော့ မတော်တဆပါ။ စကားလုံး ရှည်ရှည် တစ်လုံး card အပြင်
+      ထိုးထွက်သွားတာမျိုးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: using overflow properties"
+        url: "https://web.dev/learn/css/overflow#using_overflow_properties"
+      - title: "MDN — overflow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow"
+      - title: "CSS Overflow Module Level 3 — overflow concepts"
+        url: "https://drafts.csswg.org/css-overflow-3/#overflow-concepts"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-window
+        type: whiteboard.apply
+        at: { mark: draw-window }
+        upsertIds: [a-window, a-window-l]
+        drawMs: 1800
+      - id: draw-scene
+        type: whiteboard.apply
+        at: { mark: draw-scene }
+        upsertIds: [a-scene, a-scene-l]
+        drawMs: 2200
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [a-rule]
+        drawMs: 1400
+      - id: draw-planned
+        type: whiteboard.apply
+        at: { mark: draw-planned }
+        upsertIds: [a-planned]
+        drawMs: 1400
+      - id: draw-accident
+        type: whiteboard.apply
+        at: { mark: draw-accident }
+        upsertIds: [a-accident]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML
+      ဖိုင်ပါ။ [[mark:select-reviews]] ပထမက ဧည့်သည် မှတ်ချက် ခြောက်ခု ပါတဲ့ box ပါ။
+      [[mark:select-strip]] အောက်မှာ card ငါးခု ပါတဲ့ menu list ပါ။ [[mark:open-styles]] CSS
+      ဖိုင်က အလွတ်ပါ။ ဒါကြောင့် မှတ်ချက် box က ပုံသေ အမြင့် မရှိဘဲ ခြောက်ခုလုံး ဆံ့အောင်
+      ကြီးနေပါတယ်။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ မှတ်ချက်တွေက အဖြူရောင် box ထဲမှာ
+      ရှိပြီး၊ menu card တွေက သူ့အောက်မှာ တစ်ခုအောက် တစ်ခု စီထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow"
+        url: "https://web.dev/learn/css/overflow"
+      - title: "MDN — height (auto: the content decides)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/height"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-reviews
+        type: editor.select
+        at: { mark: select-reviews }
+        target:
+          {
+            file: index.html,
+            text: '<div class="reviews" tabindex="0" role="region" aria-labelledby="reviews-title" data-testid="reviews">',
+            occurrence: 1,
+          }
+      - id: select-strip
+        type: editor.select
+        at: { mark: select-strip }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="menu menu-strip" data-testid="menu-strip">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-reviews
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        textContains: "ဧည့်သည်တွေ ပြောတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-strip
+        type: expect.preview
+        at: { afterAction: expect-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-strip }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-strip }
+
+  - id: visible
+    chapter: "Overflow ရဲ့ တန်ဖိုးတွေ"
+    narration: >
+      [[mark:type-box]] မှတ်ချက် box ကို ပုံသေ အမြင့် 160 pixel ပေးပြီး၊ box ဘယ်မှာ ဆုံးလဲ
+      မြင်ရအောင် အညိုဖျော့ဖျော့ border နဲ့ padding နည်းနည်း ထည့်ပါမယ်။ ရိုက်နေတုန်း ဘေးက preview
+      ကို လိုက်ကြည့်ပါ။ [[mark:after-box]] box က 160 pixel ပဲ မြင့်တော့ မှတ်ချက်တွေ မဆံ့တော့ပါဘူး။
+      ဒါကြောင့် box ရဲ့ အောက်ခြေကနေ လျှံထွက်ပြီး menu ပေါ်ကို ထပ်နေပါတယ်။ [[mark:explain-visible]]
+      ဒါက overflow ရဲ့ default ဖြစ်တဲ့ visible ပါ။ CSS က content ကို သူ့ဘာသာ ဘယ်တော့မှ
+      မဖျောက်ပါဘူး။ page ရှုပ်သွားတာထက် content ပျောက်သွားတာက ပိုဆိုးလို့ပါ။
+      [[mark:explain-overlap]] menu ကလည်း အောက်ကို ဆင်းမသွားပါဘူး။ layout က box ရဲ့ ကိုယ်ပိုင်
+      အမြင့်ကိုပဲ တွက်နေတုန်းမို့၊ လျှံထွက်နေတဲ့ စာတွေကို အောက်က menu ရဲ့ အပေါ်မှာ ထပ်ဆွဲထားရုံပါ။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: values"
+        url: "https://web.dev/learn/css/overflow#values"
+      - title: "MDN — overflow (visible, the initial value)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow#visible"
+      - title: "Smashing Magazine — Overflow and data loss in CSS"
+        url: "https://www.smashingmagazine.com/2019/09/overflow-data-loss-css/"
+    actions:
+      - id: type-box
+        type: editor.type
+        at: { mark: type-box }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".reviews {\n  height: 160px;\n  border: 2px solid tan;\n  padding: 12px;\n}\n"
+      - id: expect-box
+        type: expect.preview
+        at: { mark: after-box }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: hidden-scroll-auto
+    narration: >
+      [[mark:type-hidden]] အခု overflow ကို hidden ပေးပြီး၊ box ရဲ့ အောက်ခြေကို ကြည့်ထားပါ။
+      [[mark:after-hidden]] မဆံ့တဲ့ မှတ်ချက်တွေကို ဖြတ်ပစ်လိုက်ပါပြီ။ စာက padding ထဲကိုပါ
+      ဝင်နေပြီး၊ border ရဲ့ အတွင်းဘက်ကျမှ ပြတ်ပါတယ်။ [[mark:scroll-hidden]] scrollbar မရှိပေမယ့်
+      script နဲ့ scroll လုပ်လို့ ရပါသေးတယ်။ script နဲ့ အလယ်ထိ scroll လုပ်လိုက်တော့ မှတ်ချက်တွေ
+      အပေါ် တက်သွားပါတယ်။ [[mark:select-hidden]] ဒီ hidden box က scroll container ဖြစ်နေတုန်းပါ။
+      scroll container ဆိုတာ သူ့ထဲက content ကို scroll လုပ်လို့ ရတဲ့ box ပါ။ အထဲက link ကို focus
+      ရောက်တာ၊ page ထဲ စာ ရှာတာကလည်း scroll လုပ်စေနိုင်ပြီး၊ screen reader ကလည်း ဖြတ်ထားတဲ့ စာကို
+      ဖတ်ပါတယ်။ [[mark:type-scroll]] နောက်တစ်ခုက scroll ပါ။ သူက box ကို အမြဲ scroll လုပ်လို့
+      ရအောင် လုပ်ပြီး၊ ဘေးတိုက် scroll လုပ်စရာ မရှိရင်တောင် ဘက် နှစ်ဘက်လုံးမှာ scrollbar နေရာ
+      ယူထားပါတယ်။ [[mark:after-scroll]] ဒီလို ကြိုယူထားလို့၊ နောက်မှ layout မခုန်ပါဘူး။ အမြဲ
+      ပေါ်နေတဲ့ classic scrollbar သုံးတဲ့ စက်မှာဆိုရင် အခု scrollbar တွေကို မြင်ရမှာပါ။ Mac
+      အများစုနဲ့ ဖုန်းတွေမှာတော့ scroll မလုပ်မချင်း မပေါ်ပါဘူး။ [[mark:type-auto]] ပြီးတော့
+      အများဆုံး သုံးရမယ့် တန်ဖိုး ဖြစ်တဲ့ auto ပါ။ [[mark:after-auto]] auto က content တကယ် လျှံတဲ့
+      ဘက်မှာပဲ scrollbar ပြပါတယ်။ ဒီ box က အပေါ်အောက်မှာပဲ လျှံလို့၊ scrollbar ကလည်း
+      အပေါ်အောက်အတွက်ပဲ ရပါတယ်။ သုံးခုလုံးမှာ box က scroll container ဖြစ်နေလို့၊ scroll လုပ်ထားတဲ့
+      နေရာ မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: values (hidden, scroll, auto)"
+        url: "https://web.dev/learn/css/overflow#values"
+      - title: "MDN — overflow (hidden, scroll, auto)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow#values"
+      - title: "CSS Overflow Module Level 3 — scroll containers"
+        url: "https://drafts.csswg.org/css-overflow-3/#scroll-container"
+      - title: "MDN — Scroll container"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Scroll_container"
+    actions:
+      - id: type-hidden
+        type: editor.type
+        at: { mark: type-hidden }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 12px;\n", occurrence: 1 }
+        text: "  overflow: hidden;\n"
+      - id: expect-hidden
+        type: expect.preview
+        at: { mark: after-hidden }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # hidden is still a scroll container: scrollTo moves the content
+      # (scrollTop 64 of 127). One scroll event, recorded for the replay.
+      - id: scroll-hidden
+        type: preview.scroll
+        at: { mark: scroll-hidden }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 64
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-hidden
+        type: editor.select
+        at: { mark: select-hidden }
+        target: { file: styles.css, text: "overflow: hidden;", occurrence: 1 }
+      - id: type-scroll
+        type: editor.type
+        at: { mark: type-scroll }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: hidden;\n", occurrence: 1 }
+        text: "  overflow: scroll;\n"
+      - id: expect-scroll
+        type: expect.preview
+        at: { mark: after-scroll }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "မနက်စောစော ဖွင့်တာ အဆင်ပြေတယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-auto
+        type: editor.type
+        at: { mark: type-auto }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: scroll;\n", occurrence: 1 }
+        text: "  overflow: auto;\n"
+      - id: expect-auto
+        type: expect.preview
+        at: { mark: after-auto }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "ပလာတာ ပူပူလေး ကြိုက်တယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: clip
+    narration: >
+      [[mark:type-clip]] ငါးခုမြောက် တန်ဖိုးက clip ပါ။ ရိုက်နေတုန်း မှတ်ချက်တွေကို သတိထား ကြည့်ပါ။
+      [[mark:after-clip]] hidden လိုပဲ ဖြတ်ပါတယ်။ ဒါပေမဲ့ မှတ်ချက်တွေက အပေါ်ဆုံးကို
+      ပြန်ရောက်သွားပါပြီ။ [[mark:scroll-clip]] script နဲ့ အလယ်ထိ ထပ်ပြီး scroll လုပ်ကြည့်ရအောင်။
+      ဒီတစ်ခါ ဘာမှ မရွေ့ပါဘူး။ [[mark:select-clip]] ဒီ clip ကို ကြည့်ပါ။ clip box က scroll
+      container မဟုတ်လို့၊ script နဲ့တောင် scroll လုပ်လို့ မရပါဘူး။ [[mark:explain-bfc]]
+      ကွာခြားချက် နှစ်ခု ကျန်ပါသေးတယ်။ hidden၊ scroll နဲ့ auto က lesson 13 က flow-root လိုပဲ၊ box
+      ထဲမှာ block formatting context လို့ ခေါ်တဲ့ flow layout အသစ် တစ်ခု စပါတယ်။ ဒါကြောင့် float
+      တွေကို အမြင့်ထဲ ထည့်တွက်ပြီး၊ child ရဲ့ margin တွေလည်း box ရဲ့ margin နဲ့ collapse
+      မဖြစ်တော့ပါဘူး။ clip ကတော့ ဒီလို မလုပ်ပါဘူး။ [[mark:explain-sticky]] ပြီးတော့ lesson 14 က
+      sticky ခေါင်းစဉ်တွေကို hidden box ထဲ ထည့်လိုက်ရင်၊ သူတို့က page မှာ မကပ်တော့ဘဲ၊ scroll
+      မလုပ်တဲ့ အဲဒီ box ထဲမှာပဲ ကပ်ပါတယ်။ clip မှာတော့ ဒီပြဿနာ မရှိလို့၊ ဖြတ်ဖို့ပဲ လိုရင် clip
+      ကို သုံးပါ။ [[mark:explain-clip-margin]] clip က အထဲက အရိပ် တစ်ခုကို ဖြတ်မိရင်၊ overflow clip
+      margin နဲ့ box အပြင်ဘက်ကို နည်းနည်း ဆွဲခွင့် ပေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: values (clip)"
+        url: "https://web.dev/learn/css/overflow#values"
+      - title: "MDN — overflow (clip)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow#clip"
+      - title: "MDN — Block formatting context"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_formatting_context"
+      - title: "MDN — position: sticky (sticks to its nearest scrolling ancestor)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#sticky"
+      - title: "MDN — overflow-clip-margin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-clip-margin"
+    actions:
+      - id: type-clip
+        type: editor.type
+        at: { mark: type-clip }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: auto;\n", occurrence: 1 }
+        text: "  overflow: clip;\n"
+      - id: expect-clip
+        type: expect.preview
+        at: { mark: after-clip }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "လက်ဖက်ရည် အရမ်းကောင်းတယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # clip is not a scroll container: scrollTo is a no-op (no scroll event).
+      - id: scroll-clip
+        type: preview.scroll
+        at: { mark: scroll-clip }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 64
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-clip
+        type: editor.select
+        at: { mark: select-clip }
+        target: { file: styles.css, text: "overflow: clip;", occurrence: 1 }
+
+  - id: values-board
+    narration: >
+      [[mark:open-values]] တန်ဖိုး ငါးမျိုးကို ယှဉ်ကြည့်ရအောင်။ box က content ကို ဖြတ်သလား၊ scroll
+      လုပ်လို့ ရသလား ဆိုတဲ့ မေးခွန်း နှစ်ခုပါ။ [[mark:draw-visible-row]] visible က ဘာမှ မဖြတ်သလို
+      scroll လည်း မရပါဘူး။ [[mark:draw-hidden-clip-rows]] hidden နဲ့ clip နှစ်ခုလုံးက ဖြတ်ပါတယ်။
+      hidden ကို script နဲ့ scroll လုပ်လို့ ရပေမယ့်၊ clip ကိုတော့ လုံးဝ မရပါဘူး။
+      [[mark:draw-scroll-auto-rows]] scroll နဲ့ auto ကတော့ ဖြတ်လည်း ဖြတ်၊ scroll လည်း ရပါတယ်။
+      scroll က scrollbar နေရာကို အမြဲ ယူထားပြီး၊ auto ကတော့ လိုမှပဲ ယူပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: values"
+        url: "https://web.dev/learn/css/overflow#values"
+      - title: "MDN — overflow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow"
+    actions:
+      - id: open-values
+        type: whiteboard.apply
+        at: { mark: open-values }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-h-cut, b-h-scroll]
+      - id: draw-visible-row
+        type: whiteboard.apply
+        at: { mark: draw-visible-row }
+        upsertIds: [b-visible, b-visible-cut, b-visible-scroll]
+        drawMs: 1200
+      - id: draw-hidden-clip-rows
+        type: whiteboard.apply
+        at: { mark: draw-hidden-clip-rows }
+        upsertIds:
+          [
+            b-hidden,
+            b-hidden-cut,
+            b-hidden-scroll,
+            b-hidden-note,
+            b-clip,
+            b-clip-cut,
+            b-clip-scroll,
+          ]
+        drawMs: 2800
+      - id: draw-scroll-auto-rows
+        type: whiteboard.apply
+        at: { mark: draw-scroll-auto-rows }
+        upsertIds:
+          [
+            b-scroll,
+            b-scroll-cut,
+            b-scroll-scroll,
+            b-scroll-note,
+            b-auto,
+            b-auto-cut,
+            b-auto-scroll,
+            b-auto-note,
+          ]
+        drawMs: 3000
+
+  - id: axes-live
+    chapter: "Axis နှစ်ခုနဲ့ shorthand"
+    narration: >
+      [[mark:close-values]] overflow က အမှန်တော့ property နှစ်ခုပါ။ ဘယ်ညာအတွက် overflow x နဲ့
+      အပေါ်အောက်အတွက် overflow y ပါ။ [[mark:type-y-visible]] အပေါ်အောက် တစ်ဘက်တည်းကိုပဲ visible
+      ပေးပြီး၊ ဘယ်ညာကိုတော့ clip အတိုင်း ထားကြည့်ရအောင်။ [[mark:after-y-visible]] မှတ်ချက်တွေ
+      အောက်ခြေကနေ ပြန်လျှံထွက်လာပါပြီ။ [[mark:type-x-hidden]] အခု ဘယ်ညာ တစ်ဘက်တည်းကိုပဲ hidden
+      ပေးပါမယ်။ box ရဲ့ အောက်ခြေကို ကြည့်ထားပါ။ [[mark:after-x-hidden]] အပေါ်အောက်မှာ visible လို့
+      ရေးထားတုန်း ဖြစ်ပေမယ့်၊ လျှံထွက်နေတာ ပျောက်သွားပါပြီ။ [[mark:scroll-trap]] script နဲ့
+      အဆုံးထိ scroll လုပ်လို့လည်း ရနေပါတယ်။ ဆိုလိုတာက အပေါ်အောက်က visible မဟုတ်တော့ပါဘူး။
+      ဘာကြောင့်လဲ။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: scrolling on the vertical and horizontal axis"
+        url: "https://web.dev/learn/css/overflow#scrolling_on_the_vertical_and_horizontal_axis"
+      - title: "MDN — overflow-x"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-x"
+      - title: "MDN — overflow-y"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-y"
+    actions:
+      - id: close-values
+        type: whiteboard.apply
+        at: { mark: close-values }
+        open: false
+      - id: type-y-visible
+        type: editor.type
+        at: { mark: type-y-visible }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: clip;\n", occurrence: 1 }
+        text: "  overflow-y: visible;\n"
+      - id: expect-y-visible
+        type: expect.preview
+        at: { mark: after-y-visible }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-x-hidden
+        type: editor.type
+        at: { mark: type-x-hidden }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow-y: visible;\n", occurrence: 1 }
+        text: "  overflow-x: hidden;\n"
+      - id: expect-x-hidden
+        type: expect.preview
+        at: { mark: after-x-hidden }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "ဝန်ထမ်းတွေ ဖော်ရွေတယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Chrome restores the old offset without a scroll event; this recorded
+      # scroll to the end (clamped to 127) makes the replay deterministic.
+      - id: scroll-trap
+        type: preview.scroll
+        at: { mark: scroll-trap }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 400
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: axes-board
+    narration: >
+      [[mark:open-axes]] စည်းမျဉ်းကို ကြည့်ရအောင်။ [[mark:draw-axes]] x က ဘယ်ညာ၊ y က အပေါ်အောက်ပါ။
+      [[mark:draw-trap]] axis တစ်ခုက hidden၊ scroll ဒါမှမဟုတ် auto ဖြစ်ရင်၊ ကျန်တဲ့ axis မှာ
+      ပေးထားတဲ့ visible က auto ဖြစ်သွားပါတယ်။ box က တစ်ဘက်မှာ scroll လုပ်ရင်း နောက်တစ်ဘက်မှာ
+      လျှံထွက်လို့ မရလို့ပါ။ [[mark:draw-trap-clip]] ဒီ အကြောင်းကြောင့်ပဲ၊ ကျန်တဲ့ axis မှာ clip
+      ပေးထားရင်လည်း hidden ဖြစ်သွားပါတယ်။ [[mark:draw-shorthand]] overflow shorthand က axis
+      နှစ်ခုလုံးကို ပေးပါတယ်။ တန်ဖိုး တစ်ခုဆိုရင် နှစ်ခုလုံးအတွက်ပါ။ နှစ်ခုဆိုရင် ပထမက x၊ ဒုတိယက y
+      ပါ။ [[mark:draw-padding]] ဒါက padding နဲ့ ပြောင်းပြန်ပါ။ padding မှာ တန်ဖိုး နှစ်ခု ပေးရင်
+      အပေါ်အောက်က အရင် လာပါတယ်။ [[mark:draw-logical]] lesson 21 က logical property တွေလိုပဲ၊
+      overflow inline နဲ့ overflow block က စာ ရေးတဲ့ ဦးတည်ရာကို လိုက်ပါတယ်။ 2025 ခုနှစ်ကစပြီး
+      browser အဓိက အားလုံးမှာ သုံးလို့ ရပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: the overflow shorthand"
+        url: "https://web.dev/learn/css/overflow#the_overflow_shorthand"
+      - title: "CSS Overflow Module Level 3 — overflow-x / overflow-y (visible computes to auto)"
+        url: "https://drafts.csswg.org/css-overflow-3/#overflow-properties"
+      - title: "web.dev Learn CSS — Overflow: logical properties for scroll direction"
+        url: "https://web.dev/learn/css/overflow#logical_properties_for_scroll_direction"
+      - title: "MDN — overflow-inline"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-inline"
+      - title: "MDN — overflow-block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-block"
+    actions:
+      - id: open-axes
+        type: whiteboard.apply
+        at: { mark: open-axes }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-axes
+        type: whiteboard.apply
+        at: { mark: draw-axes }
+        upsertIds: [c-x-arrow, c-x-l, c-y-arrow, c-y-l]
+        drawMs: 2400
+      - id: draw-trap
+        type: whiteboard.apply
+        at: { mark: draw-trap }
+        upsertIds: [c-trap-1]
+        drawMs: 1800
+      - id: draw-trap-clip
+        type: whiteboard.apply
+        at: { mark: draw-trap-clip }
+        upsertIds: [c-trap-2]
+        drawMs: 1600
+      - id: draw-shorthand
+        type: whiteboard.apply
+        at: { mark: draw-shorthand }
+        upsertIds: [c-short, c-short-xy]
+        drawMs: 1800
+      - id: draw-padding
+        type: whiteboard.apply
+        at: { mark: draw-padding }
+        upsertIds: [c-padding]
+        drawMs: 1600
+      - id: draw-logical
+        type: whiteboard.apply
+        at: { mark: draw-logical }
+        upsertIds: [c-logical]
+        drawMs: 1600
+
+  - id: shorthand-live
+    narration: >
+      [[mark:close-axes]] editor ထဲ ပြန်သွားရအောင်။ [[mark:select-y-visible]] ဒီ visible ကို
+      ကြည့်ပါ။ ဘယ်ညာ hidden ဖြစ်ကတည်းက browser က auto ပြောင်းလိုက်လို့ အလုပ် မလုပ်တော့ပါဘူး။
+      [[mark:type-shorthand]] တကယ် ဖြစ်နေတာကို shorthand နဲ့ ရေးကြည့်ရအောင်။ x အတွက် hidden၊
+      ပြီးမှ y အတွက် auto ပါ။ [[mark:after-shorthand]] preview မှာ ဘာမှ မပြောင်းပါဘူး။
+      [[mark:select-shorthand]] ဒီ shorthand ရဲ့ ရလဒ်က အတူတူပဲ ဖြစ်ပေမယ့်၊ အခု CSS မှာ ရေးထားတာနဲ့
+      browser လုပ်နေတာ ကိုက်သွားပါပြီ။
+    sources:
+      - title: "MDN — overflow (two-value syntax: x then y)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow#syntax"
+      - title: "web.dev Learn CSS — Overflow: the overflow shorthand"
+        url: "https://web.dev/learn/css/overflow#the_overflow_shorthand"
+    actions:
+      - id: close-axes
+        type: whiteboard.apply
+        at: { mark: close-axes }
+        open: false
+      - id: select-y-visible
+        type: editor.select
+        at: { mark: select-y-visible }
+        target: { file: styles.css, text: "overflow-y: visible;", occurrence: 1 }
+      - id: type-shorthand
+        type: editor.type
+        at: { mark: type-shorthand }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow-x: hidden;\n", occurrence: 1 }
+        text: "  overflow: hidden auto;\n"
+      - id: expect-shorthand
+        type: expect.preview
+        at: { mark: after-shorthand }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-shorthand
+        type: editor.select
+        at: { mark: select-shorthand }
+        target: { file: styles.css, text: "overflow: hidden auto;", occurrence: 1 }
+
+  - id: accessible-scroller
+    chapter: "Scroll container ကို လူတိုင်း သုံးနိုင်အောင်"
+    narration: >
+      box တစ်ခု scroll container ဖြစ်လာရင်၊ သူ့ကို လူတိုင်း scroll လုပ်နိုင်ရဲ့လား ဆိုတာကိုပါ
+      စဉ်းစားရပါတယ်။ [[mark:open-index-a11y]] HTML ဖိုင်ကို ပြန်ကြည့်ရအောင်။
+      [[mark:select-tabindex]] ဒီ tabindex ကို ကြည့်ပါ။ keyboard သုံးသူက arrow key နဲ့ scroll
+      လုပ်ဖို့ focus က ဒီ box ကို အရင် ရောက်ရပါတယ်။ အထဲမှာ focus ရနိုင်တဲ့ element မရှိလို့၊
+      tabindex က box ကိုယ်တိုင်ကို focus ရစေပါတယ်။ Chrome နဲ့ Firefox က အခု ဒါကို သူ့ဘာသာ
+      လုပ်ပေမယ့်၊ Safari က မလုပ်သေးပါဘူး။ [[mark:select-role]] role က ဒီ box ဟာ region ဖြစ်တယ်လို့
+      screen reader ကို ပြောပြီး၊ aria labelledby က အဲဒီ region ကို သူ့ ခေါင်းစဉ်နဲ့
+      နာမည်ပေးပါတယ်။ [[mark:open-styles-a11y]] ဒါတွေ ပါမပါကို CSS နဲ့ စစ်လို့ ရပါတယ်။
+      [[mark:type-a11y]] attribute selector မှာ attribute နာမည်ကိုပဲ ရေးရင်၊ တန်ဖိုး ဘာပဲ ဖြစ်ဖြစ်
+      အဲဒီ attribute ရှိတဲ့ element နဲ့ ကိုက်ပါတယ်။ role မှာတော့ region ဆိုတဲ့ တန်ဖိုးကိုပါ
+      စစ်ထားပါတယ်။ သုံးခုကို ကြားမှာ ဘာမှ မခြားဘဲ ကပ်ရေးထားလို့၊ element တစ်ခုတည်းမှာ သုံးခုလုံး
+      ပါမှ ကိုက်ပါတယ်။ [[mark:after-a11y]] မှတ်ချက် box မှာ သုံးခုလုံး ပါလို့ အစိမ်းရောင်
+      မျဉ်းပြတ် outline ပေါ်လာပါပြီ။ တစ်ခုခု လိုနေတဲ့ box ဆိုရင်တော့ outline မရပါဘူး။ တချို့
+      developer တွေက overflow ကိုပါ ဒီလို rule ထဲမှာ ရေးကြပါတယ်။ ဒါဆို attribute မပြည့်တဲ့ box က
+      scroll မလုပ်တော့လို့၊ ရေးနေတုန်းမှာပဲ သိနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: scrolling and accessibility"
+        url: "https://web.dev/learn/css/overflow#scrolling_and_accessibility"
+      - title: "Adrian Roselli — Using CSS to enforce accessibility"
+        url: "https://adrianroselli.com/2021/06/using-css-to-enforce-accessibility.html"
+      - title: "MDN — ARIA region role"
+        url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/region_role"
+      - title: "MDN — Attribute selectors ([attr])"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors"
+      - title: "Chrome for Developers — Keyboard-focusable scrollers (Chrome 130)"
+        url: "https://developer.chrome.com/blog/keyboard-focusable-scrollers"
+    actions:
+      - id: open-index-a11y
+        type: workspace.openFile
+        at: { mark: open-index-a11y }
+        path: index.html
+      - id: select-tabindex
+        type: editor.select
+        at: { mark: select-tabindex }
+        target: { file: index.html, text: 'tabindex="0"', occurrence: 1 }
+      - id: select-role
+        type: editor.select
+        at: { mark: select-role }
+        target:
+          { file: index.html, text: 'role="region" aria-labelledby="reviews-title"', occurrence: 1 }
+      - id: open-styles-a11y
+        type: workspace.openFile
+        at: { mark: open-styles-a11y }
+        path: styles.css
+      - id: type-a11y
+        type: editor.type
+        at: { mark: type-a11y }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: hidden auto;\n}\n", occurrence: 1 }
+        text: "\n[role=\"region\"][aria-labelledby][tabindex] {\n  outline: 2px dashed seagreen;\n}\n"
+      - id: expect-a11y
+        type: expect.preview
+        at: { mark: after-a11y }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        attribute: { name: role, value: region }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: scrollbars
+    chapter: "Scrollbar နဲ့ scroll လုပ်ပုံ"
+    narration: >
+      [[mark:open-scrollbars]] အခု scrollbar ကိုယ်တိုင်ကို ကြည့်ရအောင်။ [[mark:draw-bar-layers]]
+      lesson 2 မှာ ပြောခဲ့သလို၊ classic scrollbar က border နဲ့ padding ကြားမှာ ဝင်နေလို့ content
+      အတွက် နေရာကို ကျဉ်းသွားစေပါတယ်။ [[mark:draw-overlay]] Mac အများစုနဲ့ ဖုန်းတွေမှာ သုံးတဲ့
+      overlay scrollbar ကတော့ content ပေါ် ထပ်ပေါ်ပြီး နေရာ မယူပါဘူး။ [[mark:draw-gutter]]
+      ဒါကြောင့် box တစ်ခုက စက်တစ်ခုမှာ တခြား စက်ထက် နည်းနည်း ကျဉ်းနေနိုင်ပါတယ်။ scrollbar gutter
+      ကို stable ပေးထားရင် အဲဒီ နေရာကို အမြဲ ချန်ထားလို့၊ scrollbar ပေါ်လာတဲ့အခါ content
+      မခုန်ပါဘူး။ [[mark:draw-color]] scrollbar color က အရောင် နှစ်ခု ယူပါတယ်။ ပထမက ဆွဲရတဲ့ thumb၊
+      ဒုတိယက thumb ရွေ့တဲ့ track ပါ။ inherit ဖြစ်လို့ root မှာ တစ်ခါ ရေးရုံနဲ့ scroll container
+      အားလုံး လိုက်ပါတယ်။ [[mark:draw-width]] scrollbar width ကတော့ auto၊ thin နဲ့ none ပဲ ယူပြီး၊
+      pixel တန်ဖိုး မယူပါဘူး။ none က scrollbar ကို ဖျောက်ပေမယ့် box ကို scroll လုပ်လို့
+      ရနေတုန်းပါ။ [[mark:draw-root]] နောက်ဆုံးက page တစ်ခုလုံးကို scroll လုပ်တဲ့ root scroller ပါ။
+      အများအားဖြင့် html element ပါ။ ဖုန်းမှာ address bar ပျောက်တာလို feature တွေကို သူပဲ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: scrollbar positioning within the box model"
+        url: "https://web.dev/learn/css/overflow#scrollbar_positioning_within_the_box_model"
+      - title: "MDN — scrollbar-gutter"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-gutter"
+      - title: "MDN — scrollbar-color"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-color"
+      - title: "MDN — scrollbar-width"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-width"
+      - title: "web.dev Learn CSS — Overflow: root-scroller versus implicit-scroller"
+        url: "https://web.dev/learn/css/overflow#root-scroller_versus_implicit-scroller"
+      - title: "Chromium explainer — Non-document root scroller"
+        url: "https://github.com/bokand/NonDocumentRootScroller"
+    actions:
+      - id: open-scrollbars
+        type: whiteboard.apply
+        at: { mark: open-scrollbars }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-bar-layers
+        type: whiteboard.apply
+        at: { mark: draw-bar-layers }
+        upsertIds: [d-box, d-content, d-bar, d-bar-l]
+        drawMs: 2600
+      - id: draw-overlay
+        type: whiteboard.apply
+        at: { mark: draw-overlay }
+        upsertIds: [d-overlay-l]
+        drawMs: 1400
+      - id: draw-gutter
+        type: whiteboard.apply
+        at: { mark: draw-gutter }
+        upsertIds: [d-gutter]
+        drawMs: 1400
+      - id: draw-color
+        type: whiteboard.apply
+        at: { mark: draw-color }
+        upsertIds: [d-color]
+        drawMs: 1400
+      - id: draw-width
+        type: whiteboard.apply
+        at: { mark: draw-width }
+        upsertIds: [d-width]
+        drawMs: 1400
+      - id: draw-root
+        type: whiteboard.apply
+        at: { mark: draw-root }
+        upsertIds: [d-root]
+        drawMs: 1400
+
+  - id: scroll-feel
+    narration: >
+      [[mark:open-feel]] scroll လုပ်ပုံကို ပြောင်းပေးတဲ့ property နှစ်ခု ရှိပါတယ်။
+      [[mark:draw-smooth]] scroll behavior ကို smooth ပေးရင် ခုန်သွားတဲ့ scroll တွေကို animation
+      နဲ့ ရွှေ့ပေးပါတယ်။ page ထဲက အပိုင်းဆီ သွားတဲ့ link ကို နှိပ်တာ၊ script နဲ့ element ဆီ scroll
+      လုပ်တာမျိုးပါ။ wheel ဒါမှမဟုတ် လက်နဲ့ scroll လုပ်တာကတော့ မပြောင်းပါဘူး။
+      [[mark:draw-smooth-notes]] ဒါကို reduced motion ကို စစ်တဲ့ media query ထဲမှာ ထည့်ပါ။ reduced
+      motion ဆိုတာ လှုပ်ရှားမှု နည်းနည်းပဲ လိုချင်တယ်လို့ user က setting ဖွင့်ထားတာပါ။
+      မဖွင့်ထားတဲ့ သူတွေပဲ animation ကို မြင်ရပါမယ်။ [[mark:draw-chain]] scroll container တစ်ခု
+      အဆုံးရောက်ပြီး ဆက် scroll နေရင်၊ နောက်က page က scroll စလုပ်ပါတယ်။ အဲဒါကို scroll chaining
+      လို့ ခေါ်ပြီး၊ pop-up ထဲမှာ ဖြစ်ရင် အနှောင့်အယှက် ဖြစ်ပါတယ်။ [[mark:draw-contain]]
+      overscroll behavior ကို contain ပေးရင် scroll chaining က ဒီ box မှာ ရပ်ပါတယ်။ none ကတော့ box
+      ရဲ့ အဆုံးမှာ ပြန်ကန်တာ၊ အလင်းပေါ်တာကိုပါ ပိတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: scroll-behavior"
+        url: "https://web.dev/learn/css/overflow#scroll-behavior"
+      - title: "MDN — scroll-behavior"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-behavior"
+      - title: "MDN — prefers-reduced-motion"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+      - title: "web.dev Learn CSS — Overflow: overscroll-behavior"
+        url: "https://web.dev/learn/css/overflow#overscroll-behavior"
+      - title: "MDN — overscroll-behavior"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior"
+    actions:
+      - id: open-feel
+        type: whiteboard.apply
+        at: { mark: open-feel }
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-smooth
+        type: whiteboard.apply
+        at: { mark: draw-smooth }
+        upsertIds: [e-code-2, e-smooth-yes, e-smooth-no]
+        drawMs: 2600
+      - id: draw-smooth-notes
+        type: whiteboard.apply
+        at: { mark: draw-smooth-notes }
+        upsertIds: [e-code-1, e-code-3]
+        drawMs: 1800
+      - id: draw-chain
+        type: whiteboard.apply
+        at: { mark: draw-chain }
+        upsertIds: [e-page, e-inner, e-inner-arrow, e-chain, e-chain-l]
+        drawMs: 3000
+      - id: draw-contain
+        type: whiteboard.apply
+        at: { mark: draw-contain }
+        upsertIds: [e-contain, e-strike]
+        drawMs: 1800
+
+  - id: snap-board
+    chapter: "Card တွေကို scroll snap လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-snap]] ပုံမှန်ဆိုရင် scroll က ဘယ်နေရာမှာမဆို၊ card တစ်ဝက်မှာတောင် ရပ်နိုင်ပါတယ်။
+      scroll snap ကတော့ လွှတ်လိုက်ရင် ကိုယ် ရွေးထားတဲ့ နေရာတွေမှာပဲ ရပ်ပေးပါတယ်။
+      [[mark:draw-snap-port]] scroll snap ကို container ဘက်နဲ့ child ဘက်၊ နှစ်နေရာမှာ ရေးရပါတယ်။
+      [[mark:draw-snap-type]] container က snap လုပ်မလား၊ ဘယ် ဦးတည်ရာမှာလဲ၊ ဘယ်လောက် တင်းတင်းလဲ
+      ဆိုတာ ပြောပါတယ်။ [[mark:draw-snap-strict]] mandatory ဆိုရင် snap နေရာ တစ်ခုခုမှာ အမြဲ
+      ရပ်ပါတယ်။ default ဖြစ်တဲ့ proximity ကတော့ snap နေရာ တစ်ခုနဲ့ နီးနီးမှာ ရပ်မှပဲ snap
+      လုပ်ပါတယ်။ [[mark:draw-snap-align]] child တစ်ခုစီကတော့ ဘယ်မှာ snap လုပ်မလဲ ပြောပါတယ်။ သူ့
+      start၊ center ဒါမှမဟုတ် end က container ရဲ့ အဲဒီ ဘက်နဲ့ တန်းညီသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: scroll snapping"
+        url: "https://web.dev/learn/css/overflow#scroll_snapping"
+      - title: "MDN — Basic concepts of scroll snap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_scroll_snap/Basic_concepts"
+      - title: "MDN — scroll-snap-type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-snap-type"
+      - title: "MDN — scroll-snap-align"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-snap-align"
+    actions:
+      - id: open-snap
+        type: whiteboard.apply
+        at: { mark: open-snap }
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-snap-port
+        type: whiteboard.apply
+        at: { mark: draw-snap-port }
+        upsertIds: [f-port, f-c1, f-c2, f-c3]
+        drawMs: 2000
+      - id: draw-snap-type
+        type: whiteboard.apply
+        at: { mark: draw-snap-type }
+        upsertIds: [f-type]
+        drawMs: 1600
+      - id: draw-snap-strict
+        type: whiteboard.apply
+        at: { mark: draw-snap-strict }
+        upsertIds: [f-strict]
+        drawMs: 1600
+      - id: draw-snap-align
+        type: whiteboard.apply
+        at: { mark: draw-snap-align }
+        upsertIds: [f-line, f-align, f-align-2]
+        drawMs: 2000
+
+  - id: snap-live
+    narration: >
+      [[mark:close-snap]] menu မှာ စမ်းကြည့်ရအောင်။ [[mark:type-strip]] menu list ကို gap ပါတဲ့
+      flex row ဖြစ်စေပြီး ဘေးတိုက် scroll လုပ်လို့ ရအောင် လုပ်ပါမယ်။ x တစ်လျှောက် mandatory နဲ့
+      snap လုပ်ပြီး၊ snap လုပ်ရင် အစွန်း နှစ်ဘက်မှာ 24 pixel စီ ချန်ထားပါမယ်။ [[mark:after-strip]]
+      flex item တွေက ကျုံ့နိုင်လို့ card တွေ row တစ်ခုတည်းထဲ ဝင်သွားပါတယ်။ ဒါတောင် row ထဲ မဆံ့လို့
+      နောက်ဆုံး card တွေက ညာဘက် အစွန်းကနေ လျှံထွက်နေပါပြီ။ [[mark:type-cards]] အခု card တွေပါ။
+      မကြီး မကျုံ့ဘဲ row ရဲ့ 80 ရာခိုင်နှုန်းစီ ယူပြီး၊ card တစ်ခုစီက သူ့ start မှာ snap
+      လုပ်ပါမယ်။ [[mark:after-cards]] card တစ်ခုက row ရဲ့ အများစုကို ယူထားပြီး၊ နောက် card ကို
+      ညာဘက် အစွန်းမှာ နည်းနည်း မြင်ရပါတယ်။ [[mark:scroll-strip]] script နဲ့ card တန်းကို
+      တစ်စိတ်တစ်ပိုင်း scroll လုပ်ပါမယ်။ card နှစ်ခုကြားမှာ လက် လွှတ်လိုက်သလိုပါ။
+      [[mark:after-snap]] ဒုတိယ card မှာ ရပ်သွားပါပြီ။ ဘယ်ဘက် အစွန်းကနေ 24 pixel ခွာပြီး ရပ်တာပါ။
+      ရွေ့သွားပုံကိုတော့ ဒီမှာ မမြင်ရပါဘူး။ lesson ကို pause လုပ်ပြီး project ကို run ကြည့်ပါ၊
+      ပြီးရင် card တန်းကို ကိုယ်တိုင် scroll လုပ်ကြည့်ပါ။ [[mark:select-snap-padding]] ဒီ scroll
+      padding ကို ကြည့်ပါ။ သူက မြင်ရတဲ့ padding ကို မထည့်ပါဘူး။ snap လုပ်ပြီး ရပ်မယ့် မျဉ်းကိုပဲ
+      ရွှေ့ပေးတာပါ။ [[mark:type-margin]] child ဘက်ကလည်း card မှာ scroll margin ထည့်ကြည့်ရအောင်။
+      [[mark:scroll-strip-again]] script နဲ့ ခုနက နေရာကို ထပ် scroll လုပ်ပါမယ်။
+      [[mark:after-margin]] အခု ဒုတိယ card က 48 pixel ခွာပြီး ရပ်ပါတယ်။ card ရဲ့ scroll margin က
+      container ရဲ့ scroll padding နဲ့ ပေါင်းသွားလို့ပါ။ [[mark:select-strip-overflow]] ဒီ
+      overflow ကြောင့် card တန်းကလည်း scroll container ဖြစ်ပေမယ့်၊ attribute တွေ မပါလို့ outline
+      မရပါဘူး။ တကယ့် site မှာဆိုရင် မှတ်ချက် box လိုပဲ keyboard နဲ့ ရောက်နိုင်အောင် လုပ်ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: setting up the scroll container"
+        url: "https://web.dev/learn/css/overflow#setting_up_the_scroll_container"
+      - title: "web.dev Learn CSS — Overflow: controlling the snappable elements"
+        url: "https://web.dev/learn/css/overflow#controlling_the_snappable_elements"
+      - title: "MDN — scroll-padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-padding"
+      - title: "MDN — flex (none-growing, non-shrinking basis)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex"
+    actions:
+      - id: close-snap
+        type: whiteboard.apply
+        at: { mark: close-snap }
+        open: false
+      - id: type-strip
+        type: editor.type
+        at: { mark: type-strip }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  outline: 2px dashed seagreen;\n}\n", occurrence: 1 }
+        text: "\n.menu-strip {\n  display: flex;\n  gap: 12px;\n  overflow-x: auto;\n  scroll-snap-type: x mandatory;\n  scroll-padding-inline: 24px;\n}\n"
+      - id: expect-strip-row
+        type: expect.preview
+        at: { mark: after-strip }
+        timeoutMs: 4000
+        target: { by: testId, value: card-falooda }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-cards
+        type: editor.type
+        at: { mark: type-cards }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  scroll-padding-inline: 24px;\n}\n", occurrence: 1 }
+        text: "\n.menu-strip .menu-card {\n  flex: 0 0 80%;\n  scroll-snap-align: start;\n}\n"
+      - id: expect-cards
+        type: expect.preview
+        at: { mark: after-cards }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # left 240 is past halfway to the second card's snap position (308 =
+      # 332 − 24): the browser settles there; rrweb records the settled 308.
+      - id: scroll-strip
+        type: preview.scroll
+        at: { mark: scroll-strip }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-strip }
+        top: 0
+        left: 240
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-snap
+        type: expect.preview
+        at: { mark: after-snap }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-snap-padding
+        type: editor.select
+        at: { mark: select-snap-padding }
+        target: { file: styles.css, text: "scroll-padding-inline: 24px;", occurrence: 1 }
+      - id: type-margin
+        type: editor.type
+        at: { mark: type-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  scroll-snap-align: start;\n", occurrence: 1 }
+        text: "  scroll-margin-inline-start: 24px;\n"
+      # Snap positions become 332 − 24 − 24 = 284. Chrome may re-snap when the
+      # style lands; this recorded scroll makes the settled 284 deterministic.
+      - id: scroll-strip-again
+        type: preview.scroll
+        at: { mark: scroll-strip-again }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-strip }
+        top: 0
+        left: 240
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-margin
+        type: expect.preview
+        at: { mark: after-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "1,800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-strip-overflow
+        type: editor.select
+        at: { mark: select-strip-overflow }
+        target: { file: styles.css, text: "overflow-x: auto;", occurrence: 1 }
+
+  - id: snap-sides
+    narration: >
+      [[mark:open-sides]] snap property တွေကို ဘက်အလိုက် ခွဲကြည့်ရအောင်။
+      [[mark:draw-container-side]] container မှာ scroll snap type နဲ့ scroll padding ကို
+      ပေးရပါတယ်။ [[mark:draw-child-side]] child မှာတော့ scroll snap align နဲ့ scroll margin ကို
+      ပေးရပါတယ်။ [[mark:draw-snap-stop]] child မှာ ပေးတဲ့ scroll snap stop ကို always ထားရင်၊
+      မြန်မြန် ပွတ်ဆွဲလည်း အဲဒီ child ကို ကျော်မသွားပါဘူး။ [[mark:draw-sticky-tip]] sticky header
+      အောက်က ခေါင်းစဉ်ကို link နဲ့ သွားတဲ့အခါ၊ page မှာ scroll padding top ဒါမှမဟုတ် ခေါင်းစဉ်မှာ
+      scroll margin top ပေးထားရင်၊ ခေါင်းစဉ်က header နောက်မှာ မပုန်းတော့ပါဘူး။
+      [[mark:draw-mandatory-warn]] mandatory ကိုတော့ screen သေးတွေမှာ စမ်းကြည့်ပါ။ container ထက်
+      ကြီးတဲ့ child ရှိရင် တချို့ အပိုင်းကို ရောက်ဖို့ ခက်နိုင်ပါတယ်။
+    sources:
+      - title: "MDN — scroll-margin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-margin"
+      - title: "MDN — scroll-padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-padding"
+      - title: "MDN — scroll-snap-stop"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-snap-stop"
+      - title: "CSS Scroll Snap Module Level 1 — snapping with mandatory can hide content"
+        url: "https://drafts.csswg.org/css-scroll-snap-1/#valdef-scroll-snap-type-mandatory"
+    actions:
+      - id: open-sides
+        type: whiteboard.apply
+        at: { mark: open-sides }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-container-side
+        type: whiteboard.apply
+        at: { mark: draw-container-side }
+        upsertIds: [g-cont-h, g-cont-1, g-cont-2]
+        drawMs: 1800
+      - id: draw-child-side
+        type: whiteboard.apply
+        at: { mark: draw-child-side }
+        upsertIds: [g-child-h, g-child-1, g-child-2]
+        drawMs: 1800
+      - id: draw-snap-stop
+        type: whiteboard.apply
+        at: { mark: draw-snap-stop }
+        upsertIds: [g-child-3]
+        drawMs: 1400
+      - id: draw-sticky-tip
+        type: whiteboard.apply
+        at: { mark: draw-sticky-tip }
+        upsertIds: [g-sticky-1, g-sticky-2]
+        drawMs: 2200
+      - id: draw-mandatory-warn
+        type: whiteboard.apply
+        at: { mark: draw-mandatory-warn }
+        upsertIds: [g-warn]
+        drawMs: 1600
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ overflow မှာ hidden ပြီးမှ scroll
+      လို့ ရေးရင်၊ ဘယ် axis က hidden ဖြစ်မလဲ။ [[mark:quiz-answer]] အဖြေက ဘယ်ညာ axis ပါ။ တန်ဖိုး
+      နှစ်ခု ပေးရင် x က အရင် လာလို့ပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ overflow ကို parent မှာ
+      ပေးရပါတယ်။ visible က အကုန် ပြပြီး၊ ကျန်တဲ့ တန်ဖိုးတွေက ဖြတ်ပါတယ်။ scroll ကို လုံးဝ ပိတ်တာက
+      clip ပဲ ဖြစ်ပါတယ်။ scroll လုပ်တဲ့ axis ဘေးက visible က auto ဖြစ်သွားပါတယ်။ scroll container
+      ကို keyboard နဲ့ ရောက်နိုင်အောင် လုပ်ပြီး၊ scroll snap အတွက် type ကို container မှာ၊ align
+      ကို child တစ်ခုစီမှာ ပေးပါ။ [[mark:next-lesson]] နောက် lesson မှာတော့ ရတဲ့ နေရာနဲ့
+      ကိုက်အောင် layout ပြောင်းတဲ့ component တွေကို media query နဲ့ container query နဲ့
+      ကြည့်သွားပါမယ်။ စာကြောင်း ရှည်ကို အစက် သုံးစက်နဲ့ ဖြတ်ပြတာကိုတော့ lesson 31 မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: check your understanding"
+        url: "https://web.dev/learn/css/overflow#check_your_understanding"
+      - title: "web.dev Learn CSS — Overflow"
+        url: "https://web.dev/learn/css/overflow"
+      - title: "web.dev Learn CSS — Container queries (next lesson)"
+        url: "https://web.dev/learn/css/container-queries"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [h-title, h-q, h-q2]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [h-a, h-a-check, h-rule]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".reviews {\n  height: 160px;\n  border: 2px solid tan;\n  padding: 12px;\n  overflow: hidden;\n  overflow: scroll;\n  overflow: auto;\n  overflow: clip;\n  overflow-y: visible;\n  overflow-x: hidden;\n  overflow: hidden auto;\n}\n\n[role=\"region\"][aria-labelledby][tabindex] {\n  outline: 2px dashed seagreen;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".menu-strip {\n  display: flex;\n  gap: 12px;\n  overflow-x: auto;\n  scroll-snap-type: x mandatory;\n  scroll-padding-inline: 24px;\n}\n\n.menu-strip .menu-card {\n  flex: 0 0 80%;\n  scroll-snap-align: start;\n  scroll-margin-inline-start: 24px;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
