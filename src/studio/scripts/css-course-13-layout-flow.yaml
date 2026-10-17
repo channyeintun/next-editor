@@ -1,0 +1,1891 @@
+# CSS course (Burmese), lesson 13 of 43: layout methods and normal flow.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text
+# with marks; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits
+# where its action begins, at a sentence end; each span carries one piece of
+# meaning. Everything the learner sees (title, chapters, whiteboard labels,
+# UI strings) is Burmese.
+#
+# Shape: board (recall lesson 12; layout history: tables, CSS separates the
+# look, CSS Zen Garden, flexbox and grid; choosing a method) → board (flow
+# layout: block direction, inline direction, writing mode, display's
+# starting value) → code tour (index.html: prices + badge, the special tag in
+# a paragraph, the nav list, the cup in the about box, the short copy, the
+# townships; empty styles.css) → .price width/height/background (no size
+# change: inline), display block (own line, sized), inline-block (back in the
+# line, sized) → .tag padding, margin + gold (overlaps the lines, pushes nothing),
+# inline-block (lines open up) → board (display's outer and inner jobs, the
+# two-value syntax, quiz: scrolling is overflow's job) → .nav ul flex + gap
+# (the links in a row; only the direct children change) → board (flexbox one
+# direction, grid two) → .about-img float left (the story wraps the cup) →
+# the short copy collapses and the cup pushes the next heading aside; clear
+# on that heading, then flow-root on the about boxes → multicol on the
+# townships: count 2 + gap, a rule, column width (no change: the count is a
+# maximum), count auto (three columns) → board (multicol flows one stream;
+# grid and flex cells are separate boxes) → recap, hand-off to position
+# (lesson 14).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Mid-typing prefixes: every keystroke-typed value has no misleading valid
+# prefix ("width: 12", "padding: 1", "column-width: 6r" are invalid and
+# ignored; "display: flow" equals block, which the short box already is).
+# Two lines land whole (line-by-line): the price's "display: inline-block"
+# (a keystroke "display: inline" would flash the price back to inline, then
+# "inline-" would fall back to block) and the column rule ("1px solid" is a
+# valid currentColor rule before "tan" lands).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-13-layout-flow
+  title: "CSS course 13: Layout နည်းလမ်းတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 13
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit blocks header (the nav list gets data-testid
+      # nav-list), drinks (price and badge are spans) and about (the cup image
+      # before the story, a bordered box, plus a short copy with one sentence),
+      # the lesson blocks tag-in-text (a paragraph with an inline special tag)
+      # and townships (eight Yangon townships under a delivery heading). Order:
+      # header, drinks, today, about, short about, delivery. No kit.js:
+      # nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul data-testid="nav-list">
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: tag-in-text -->
+              <section class="today" data-testid="today">
+                <h2>ဒီနေ့ မနက်စာ</h2>
+                <p class="today-note" data-testid="today-note">လက်ဖက်ရည် တစ်ခွက်နဲ့ ပလာတာ တစ်ချပ်ကို တွဲမှာရင် <span class="tag" data-testid="tag">ယနေ့အထူး</span> ဈေးနဲ့ ရပါတယ်။ ဆိုင်ထဲမှာ ထိုင်သောက်လို့ ရသလို အိမ်ကို ယူသွားလို့လည်း ရပါတယ်။ မုန့်ဟင်းခါးကတော့ မနက်စောစောမှာပဲ ကုန်တတ်ပါတယ်။</p>
+              </section>
+
+              <!-- kit block: about (lesson 13: cup image, bordered box, short copy) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <img class="about-img" src="/cup.svg" width="96" height="96" alt="" />
+                <p class="story" data-testid="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+              </section>
+
+              <section class="about short" data-testid="about-short">
+                <img class="about-img" src="/cup.svg" width="96" height="96" alt="" />
+                <p data-testid="short-text">နေ့တိုင်း မနက်စောစော ဖွင့်ပါတယ်။</p>
+              </section>
+
+              <!-- lesson block: townships -->
+              <section class="delivery" data-testid="delivery">
+                <h2 data-testid="delivery-title">ပို့ပေးတဲ့ မြို့နယ်တွေ</h2>
+                <ul class="townships" data-testid="townships">
+                  <li>ဗဟန်း</li>
+                  <li>ကမာရွတ်</li>
+                  <li>စမ်းချောင်း</li>
+                  <li>လှိုင်</li>
+                  <li>ရန်ကင်း</li>
+                  <li>သင်္ဃန်းကျွန်း</li>
+                  <li>ဒဂုံ</li>
+                  <li>လမ်းမတော်</li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and C of the course kit. Section E pins the
+      # about boxes (white, bordered, paragraphs without margin, so the short
+      # copy is one line tall and its floated cup clearly hangs out) and the
+      # townships list's indent (20px on each item, not on the list, so a
+      # bullet never hangs in the column gap; three 6rem columns fit at 432 px).
+      # Nothing in base sets display, float, clear or columns on the demo
+      # elements.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 13 keeps sections A, B, B2 and C, and pins the
+          about boxes and the townships list in section E (no display, float, clear
+          or column rule here: the lesson types those).
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 13: the about boxes are bordered white boxes, so a float that
+           hangs out of one is easy to see. */
+        .about {
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .about p {
+          margin: 0;
+        }
+
+        /* Lesson 13: the townships list keeps its bullets; the indent sits on
+           the items, so in columns each bullet stays inside its own column. */
+        .townships {
+          margin: 0;
+          padding-left: 0;
+        }
+
+        .townships li {
+          margin-left: 20px;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — layout history in one line each, and choosing a method.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 46,
+        text: "CSS layout ရဲ့ သမိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-y1,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 110,
+        height: 36,
+        text: "1990s",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-t1,
+        kind: text,
+        x: 460,
+        y: 245,
+        width: 420,
+        height: 36,
+        text: "HTML table နဲ့ layout ဆွဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-y2,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 110,
+        height: 36,
+        text: "1996",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-t2,
+        kind: text,
+        x: 460,
+        y: 305,
+        width: 460,
+        height: 36,
+        text: "CSS · style ကို HTML ကနေ ခွဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-y3,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 110,
+        height: 36,
+        text: "2003",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-t3,
+        kind: text,
+        x: 460,
+        y: 365,
+        width: 520,
+        height: 36,
+        text: "Zen Garden · HTML တစ်ခု၊ CSS အများကြီး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-y4,
+        kind: text,
+        x: 300,
+        y: 425,
+        width: 110,
+        height: 36,
+        text: "ယနေ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-t4,
+        kind: text,
+        x: 460,
+        y: 425,
+        width: 260,
+        height: 36,
+        text: "flexbox · grid",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 455,
+        y: 248,
+        width: 400,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-choose,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 560,
+        height: 36,
+        text: "ပြဿနာ မတူရင် နည်းလမ်း မတူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-map,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 620,
+        height: 36,
+        text: "ဒီ lesson · flow layout၊ display၊ float၊ multicol",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B — flow layout: blocks stack in the block direction, inline
+    # boxes run in the inline direction.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 300,
+        height: 46,
+        text: "Flow layout",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-blk1,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 240,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-blk1-l,
+        kind: text,
+        x: 316,
+        y: 239,
+        width: 60,
+        height: 36,
+        text: "h2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-blk2,
+        kind: rectangle,
+        x: 300,
+        y: 295,
+        width: 240,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-blk2-l,
+        kind: text,
+        x: 316,
+        y: 299,
+        width: 60,
+        height: 36,
+        text: "p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-blk3,
+        kind: rectangle,
+        x: 300,
+        y: 355,
+        width: 240,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-blk3-l,
+        kind: text,
+        x: 316,
+        y: 359,
+        width: 60,
+        height: 36,
+        text: "ul",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-blk-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 565,
+        y: 235,
+        width: 40,
+        height: 165,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-blk-label,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 300,
+        height: 36,
+        text: "block direction ↓",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-line,
+        kind: rectangle,
+        x: 680,
+        y: 235,
+        width: 380,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - { id: b-w1, kind: rectangle, x: 695, y: 255, width: 80, height: 40, strokeColor: "#f08c00" }
+    - { id: b-w2, kind: rectangle, x: 790, y: 255, width: 120, height: 40, strokeColor: "#f08c00" }
+    - { id: b-w3, kind: rectangle, x: 925, y: 255, width: 115, height: 40, strokeColor: "#f08c00" }
+    - { id: b-w4, kind: rectangle, x: 695, y: 320, width: 140, height: 40, strokeColor: "#f08c00" }
+    - { id: b-w5, kind: rectangle, x: 850, y: 320, width: 90, height: 40, strokeColor: "#f08c00" }
+    - {
+        id: b-inl-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 690,
+        y: 400,
+        width: 300,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-inl-label,
+        kind: text,
+        x: 680,
+        y: 445,
+        width: 300,
+        height: 36,
+        text: "inline direction →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-wm,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 620,
+        height: 36,
+        text: "writing mode ပြောင်းရင် ဦးတည်ရာလည်း ပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-initial,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 560,
+        height: 36,
+        text: "ဘာမှ မပေးရင် display → inline",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C — display's two jobs, the two-value syntax, and the quiz.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 480,
+        height: 46,
+        text: "Display ရဲ့ အလုပ် နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-sib1,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 220,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-box, kind: rectangle, x: 300, y: 290, width: 220, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: c-sib2,
+        kind: rectangle,
+        x: 300,
+        y: 375,
+        width: 220,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-outer-label,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 330,
+        height: 36,
+        text: "outer · sibling တွေနဲ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-parent,
+        kind: rectangle,
+        x: 680,
+        y: 235,
+        width: 360,
+        height: 180,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-child1,
+        kind: rectangle,
+        x: 700,
+        y: 300,
+        width: 96,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-child2,
+        kind: rectangle,
+        x: 812,
+        y: 300,
+        width: 96,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-child3,
+        kind: rectangle,
+        x: 924,
+        y: 300,
+        width: 96,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-inner-label,
+        kind: text,
+        x: 680,
+        y: 435,
+        width: 360,
+        height: 36,
+        text: "inner · child တွေကို စီပုံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-two,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 560,
+        height: 36,
+        text: "display: block flex → outer + inner",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-quiz-q,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 400,
+        height: 36,
+        text: "scroll ကို ဘာက ဆုံးဖြတ်လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-quiz-a,
+        kind: text,
+        x: 770,
+        y: 575,
+        width: 160,
+        height: 36,
+        text: "overflow",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-quiz-check,
+        kind: freedraw,
+        stroke: check,
+        x: 950,
+        y: 565,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board D — flexbox (one direction, content sizes) vs grid (two
+    # directions, the container's tracks).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 360,
+        height: 46,
+        text: "Flexbox နဲ့ grid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-flex-box,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 330,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - { id: d-f1, kind: rectangle, x: 312, y: 252, width: 60, height: 56, strokeColor: "#2f9e44" }
+    - { id: d-f2, kind: rectangle, x: 384, y: 252, width: 120, height: 56, strokeColor: "#2f9e44" }
+    - { id: d-f3, kind: rectangle, x: 516, y: 252, width: 80, height: 56, strokeColor: "#2f9e44" }
+    - {
+        id: d-flex-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 310,
+        y: 335,
+        width: 300,
+        height: 30,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-flex-label,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 330,
+        height: 36,
+        text: "flexbox · တစ်ဘက်တည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-flex-note,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 340,
+        height: 36,
+        text: "content က အရွယ် ဆုံးဖြတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-grid,
+        kind: rectangle,
+        x: 720,
+        y: 220,
+        width: 320,
+        height: 180,
+        strokeColor: "#1971c2",
+      }
+    - { id: d-g1, kind: rectangle, x: 732, y: 232, width: 92, height: 72, strokeColor: "#1971c2" }
+    - { id: d-g2, kind: rectangle, x: 836, y: 232, width: 92, height: 72, strokeColor: "#1971c2" }
+    - { id: d-g3, kind: rectangle, x: 940, y: 232, width: 92, height: 72, strokeColor: "#1971c2" }
+    - { id: d-g4, kind: rectangle, x: 732, y: 316, width: 92, height: 72, strokeColor: "#1971c2" }
+    - { id: d-g5, kind: rectangle, x: 836, y: 316, width: 92, height: 72, strokeColor: "#1971c2" }
+    - { id: d-g6, kind: rectangle, x: 940, y: 316, width: 92, height: 72, strokeColor: "#1971c2" }
+    - {
+        id: d-grid-label,
+        kind: text,
+        x: 720,
+        y: 420,
+        width: 320,
+        height: 36,
+        text: "grid · row နဲ့ column",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-grid-note,
+        kind: text,
+        x: 720,
+        y: 475,
+        width: 320,
+        height: 36,
+        text: "container က track ဆွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-next,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 300,
+        height: 36,
+        text: "lesson 15 – 20",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — multicol flows one stream of content; grid and flex cells
+    # are separate boxes.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 380,
+        height: 46,
+        text: "Multicol နဲ့ grid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-mc-box,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 400,
+        height: 220,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-mc-c1,
+        kind: text,
+        x: 316,
+        y: 250,
+        width: 130,
+        height: 130,
+        text: "ဗဟန်း\nကမာရွတ်\nစမ်းချောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-mc-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 490,
+        y: 255,
+        width: 30,
+        height: 150,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-mc-c2,
+        kind: text,
+        x: 530,
+        y: 250,
+        width: 120,
+        height: 130,
+        text: "လှိုင်\nရန်ကင်း\n…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-mc-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 665,
+        y: 255,
+        width: 30,
+        height: 150,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-mc-label,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 330,
+        height: 36,
+        text: "နောက် column ကို ဆက်စီး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: e-g1, kind: rectangle, x: 740, y: 235, width: 140, height: 100, strokeColor: "#1971c2" }
+    - { id: e-g2, kind: rectangle, x: 900, y: 235, width: 140, height: 100, strokeColor: "#1971c2" }
+    - { id: e-g3, kind: rectangle, x: 740, y: 355, width: 140, height: 100, strokeColor: "#1971c2" }
+    - {
+        id: e-grid-label,
+        kind: text,
+        x: 740,
+        y: 480,
+        width: 300,
+        height: 36,
+        text: "grid · flex → box သီးသန့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-grid-note,
+        kind: text,
+        x: 740,
+        y: 530,
+        width: 200,
+        height: 36,
+        text: "စာ မစီး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 620,
+        height: 36,
+        text: "စာ အရှည် တစ်ခုကို column ခွဲ → multicol",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4113
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: layout-history
+    chapter: "Layout နည်းလမ်းတွေ ဘာကြောင့် များလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ calc၊ clamp လို အရွယ်အစား တွက်ပေးတဲ့ function တွေနဲ့ တန်ဖိုးတွေ အကြောင်း
+      course အပိုင်းကို ပြီးခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ
+      dev server ကို စနေပါပြီ။ [[mark:draw-title]] ဒီ lesson ကနေ စပြီး course ရဲ့ အပိုင်း အသစ်
+      ဖြစ်တဲ့ layout ကို လေ့လာပါမယ်။ layout ဆိုတာ page ပေါ်မှာ box တွေကို ဘယ်နေရာ ချမလဲ၊ ဘေးချင်း
+      ဘယ်လို နေရာယူမလဲ ဆိုတာပါ။ [[mark:draw-tables]] 1990 ပြည့်လွန်နှစ်တွေမှာ CSS နဲ့ layout
+      မဆွဲနိုင်သေးခင်က၊ page တွေရဲ့ layout ကို HTML table တွေနဲ့ ဆောက်ခဲ့ကြပါတယ်။ ဒါကြောင့်
+      အကြောင်းအရာနဲ့ ပုံစံက HTML ထဲမှာ အတူတူ ရောနေခဲ့ပါတယ်။ [[mark:draw-css]] browser တွေ CSS ကို
+      နားလည်လာတော့ ပုံစံကို stylesheet ထဲ ခွဲရေးလာကြပြီး၊ HTML ကို မထိဘဲ website တစ်ခုလုံးရဲ့ design
+      ကို ပြောင်းလို့ ရလာပါတယ်။ [[mark:draw-zen]] 2003 ခုနှစ်မှာ CSS Zen Garden ဆိုတဲ့ website က
+      ဒါကို သက်သေပြခဲ့ပါတယ်။ HTML တစ်ခုတည်းကို stylesheet မျိုးစုံနဲ့ လုံးဝ မတူအောင် ပြထားတာပါ။
+      [[mark:draw-today]] အခုတော့ CSS မှာ layout အတွက် သီးသန့် လုပ်ထားတဲ့ flexbox နဲ့ grid ရှိလို့၊
+      layout ဆွဲဖို့ table ကို မသုံးကြတော့ပါဘူး။ [[mark:draw-choose]] အကောင်းဆုံး နည်းလမ်း တစ်ခုတည်း
+      ဆိုတာ မရှိပါဘူး။ နည်းလမ်း တစ်ခုစီမှာ သူ့ အားသာချက်နဲ့သူ ရှိပြီး၊ တကယ့် page တွေမှာ
+      ရောသုံးကြပါတယ်။ [[mark:draw-map]] ဒီ lesson မှာ layout ကို ခြုံကြည့်ပါမယ်။ box တွေ default
+      အတိုင်း ဘယ်လို စီလဲ၊ display က ဘာ ဆုံးဖြတ်လဲ၊ float၊ multicol လို အခုထိ အသုံးဝင်နေတဲ့ နည်းလမ်း
+      အဟောင်းတွေ ဘာလဲ ဆိုတာပါ။ flexbox နဲ့ grid ကိုတော့ နောက်မှ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout"
+        url: "https://web.dev/learn/css/layout"
+      - title: "web.dev Learn CSS — Layout: a brief history"
+        url: "https://web.dev/learn/css/layout#layout_a_brief_history"
+      - title: "MDN — Introduction to CSS layout"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Introduction"
+      - title: "CSS Zen Garden"
+        url: "https://csszengarden.com/"
+      - title: "W3C — CSS level 1 Recommendation (1996)"
+        url: "https://www.w3.org/TR/CSS1/"
+    actions:
+      - id: open-history-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady
+      # sits on the preview mark in the code tour, well over 40 s of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-tables
+        type: whiteboard.apply
+        at: { mark: draw-tables }
+        upsertIds: [a-y1, a-t1]
+        drawMs: 1800
+      - id: draw-css
+        type: whiteboard.apply
+        at: { mark: draw-css }
+        upsertIds: [a-y2, a-t2]
+        drawMs: 1800
+      - id: draw-zen
+        type: whiteboard.apply
+        at: { mark: draw-zen }
+        upsertIds: [a-y3, a-t3]
+        drawMs: 2000
+      - id: draw-today
+        type: whiteboard.apply
+        at: { mark: draw-today }
+        upsertIds: [a-y4, a-t4, a-strike]
+        drawMs: 2000
+      - id: draw-choose
+        type: whiteboard.apply
+        at: { mark: draw-choose }
+        upsertIds: [a-choose]
+        drawMs: 1500
+      - id: draw-map
+        type: whiteboard.apply
+        at: { mark: draw-map }
+        upsertIds: [a-map]
+        drawMs: 1800
+
+  - id: normal-flow
+    chapter: "Flow layout ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:open-flow]] layout စနစ် တစ်ခုခု မသုံးရသေးခင်ကတည်းက၊ browser က box တိုင်းကို နေရာ
+      ချပေးထားပြီးသားပါ။ [[mark:draw-blocks]] ခေါင်းစဉ်၊ စာပိုဒ်လို block box တွေက တစ်ခုစီ စာကြောင်း
+      အသစ်ကနေ စပြီး၊ တစ်ခုအောက် တစ်ခု စီသွားပါတယ်။ အဲဒီ စီသွားတဲ့ ဦးတည်ရာကို block direction လို့
+      ခေါ်ပါတယ်။ မြန်မာစာနဲ့ အင်္ဂလိပ်စာမှာ အပေါ်ကနေ အောက်ပါ။ [[mark:draw-inline]] link၊ span လို
+      inline box တွေကတော့ စကားလုံးတွေလိုပဲ စာကြောင်းထဲမှာ ဝင်နေပါတယ်။ သူတို့ စီသွားတဲ့ ဦးတည်ရာကို
+      inline direction လို့ ခေါ်ပြီး၊ မြန်မာစာနဲ့ အင်္ဂလိပ်စာမှာ ဘယ်ကနေ ညာပါ။ နေရာ မလောက်တော့ရင်
+      နောက်တစ်ကြောင်းကို ဆင်းသွားပါတယ်။ [[mark:draw-flow-name]] box တွေကို default အတိုင်း
+      နေရာချတာကို flow layout ဒါမှမဟုတ် normal flow လို့ ခေါ်ပါတယ်။ [[mark:draw-writing-mode]]
+      ဦးတည်ရာ နှစ်ခုလုံးက ဘာသာစကား တစ်ခုရဲ့ စာရေးပုံ ဖြစ်တဲ့ writing mode ကို လိုက်ပါတယ်။ တခြား
+      ပုံစံနဲ့ ရေးတဲ့ ဘာသာစကားမှာ ဦးတည်ရာတွေ လှည့်သွားတာကို lesson 21 မှာ ကြည့်ပါမယ်။
+      [[mark:draw-initial]] lesson 1 မှာ ပြောခဲ့သလို၊ ခေါင်းစဉ်နဲ့ စာပိုဒ်တွေ block ဖြစ်နေတာက
+      browser ရဲ့ default style ကြောင့်ပါ။ default style က ဘာမှ မပေးထားတဲ့ span လို element ကတော့
+      inline ဖြစ်ပါတယ်။ ဘာကြောင့်လဲဆိုတော့ display ရဲ့ initial value က inline ဖြစ်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Layout: flow layout"
+        url: "https://web.dev/learn/css/layout#flow_layout"
+      - title: "MDN — Block and inline layout in normal flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_and_inline_layout_in_normal_flow"
+      - title: "MDN — display (initial value: inline)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "CSS 2.1 — Normal flow"
+        url: "https://www.w3.org/TR/CSS2/visuren.html#normal-flow"
+    actions:
+      - id: open-flow-board
+        type: whiteboard.apply
+        at: { mark: open-flow }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-blocks
+        type: whiteboard.apply
+        at: { mark: draw-blocks }
+        upsertIds: [b-blk1, b-blk1-l, b-blk2, b-blk2-l, b-blk3, b-blk3-l, b-blk-arrow, b-blk-label]
+        drawMs: 3600
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds: [b-line, b-w1, b-w2, b-w3, b-w4, b-w5, b-inl-arrow, b-inl-label]
+        drawMs: 3600
+      - id: draw-writing-mode
+        type: whiteboard.apply
+        at: { mark: draw-writing-mode }
+        upsertIds: [b-wm]
+        drawMs: 1800
+      - id: draw-initial
+        type: whiteboard.apply
+        at: { mark: draw-initial }
+        upsertIds: [b-initial]
+        drawMs: 1500
+
+  - id: code-tour
+    narration: >
+      [[mark:close-flow]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒီတစ်ခါလည်း လက်ဖက်ရည်ဆိုင်
+      page ပါပဲ။ အပေါ်ဆုံးမှာ ဆိုင်နာမည် ရှိပါတယ်။ [[mark:select-nav]] header ထဲက menu link
+      သုံးခုကို list တစ်ခုထဲမှာ ထည့်ထားပါတယ်။ [[mark:select-prices]] ပထမ သောက်စရာ card ထဲမှာ
+      ဈေးနှုန်းနဲ့ အသစ် ဆိုတဲ့ badge က span နှစ်ခု ဖြစ်ပြီး၊ တစ်ကြောင်းတည်းမှာ ဘေးချင်း ရှိနေပါတယ်။
+      [[mark:select-tag]] menu အောက်က စာပိုဒ် တစ်ခုရဲ့ အလယ်မှာ ယနေ့အထူး ဆိုတဲ့ တံဆိပ်လေး ပါပါတယ်။
+      သူလည်း span ပါပဲ။ [[mark:select-about-img]] ဆိုင်အကြောင်း box ထဲမှာတော့ စာရဲ့ ရှေ့မှာ ခွက်ပုံ
+      တစ်ပုံ ထည့်ထားပါတယ်။ [[mark:select-short]] သူ့အောက်မှာ ခွက်ပုံ တစ်ပုံနဲ့ စာကြောင်း
+      တစ်ကြောင်းပဲ ပါတဲ့ box အတို တစ်ခု ထပ်ရှိပါတယ်။ [[mark:select-townships]] အောက်ဆုံးမှာတော့
+      ဆိုင်က ပို့ပေးတဲ့ မြို့နယ် ရှစ်ခုရဲ့ list ရှိပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က
+      အလွတ်ပါ။ ဆိုင်ရဲ့ အရောင်တွေနဲ့ ဘောင်ပါတဲ့ အဖြူရောင် box တွေကိုတော့ base ဖိုင်က ပေးထားပါတယ်။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Layout"
+        url: "https://web.dev/learn/css/layout"
+      - title: "MDN — <span>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/span"
+    actions:
+      - id: close-flow-board
+        type: whiteboard.apply
+        at: { mark: close-flow }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-nav
+        type: editor.select
+        at: { mark: select-nav }
+        target: { file: index.html, text: '<ul data-testid="nav-list">', occurrence: 1 }
+      - id: select-prices
+        type: editor.select
+        at: { mark: select-prices }
+        target:
+          {
+            file: index.html,
+            text: "<span class=\"price\" data-testid=\"price-laphet-yay\">1,500 ကျပ်</span>\n            <span class=\"badge\" data-testid=\"badge-laphet-yay\">အသစ်</span>",
+            occurrence: 1,
+          }
+      - id: select-tag
+        type: editor.select
+        at: { mark: select-tag }
+        target:
+          {
+            file: index.html,
+            text: '<span class="tag" data-testid="tag">ယနေ့အထူး</span>',
+            occurrence: 1,
+          }
+      - id: select-about-img
+        type: editor.select
+        at: { mark: select-about-img }
+        target:
+          {
+            file: index.html,
+            text: '<img class="about-img" src="/cup.svg" width="96" height="96" alt="" />',
+            occurrence: 1,
+          }
+      - id: select-short
+        type: editor.select
+        at: { mark: select-short }
+        target:
+          {
+            file: index.html,
+            text: "<section class=\"about short\" data-testid=\"about-short\">\n        <img class=\"about-img\" src=\"/cup.svg\" width=\"96\" height=\"96\" alt=\"\" />",
+            occurrence: 1,
+          }
+      - id: select-townships
+        type: editor.select
+        at: { mark: select-townships }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="townships" data-testid="townships">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-price-start
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-price-start }
+
+  - id: price-display
+    chapter: "Block၊ inline နဲ့ inline-block"
+    narration: >
+      [[mark:type-price]] ဈေးနှုန်းတွေကနေ စကြည့်ရအောင်။ ဈေးနှုန်း တစ်ခုစီကို အကျယ်နဲ့ အမြင့်
+      ပေးပြီး၊ box ကို မြင်ရအောင် အညိုဖျော့ဖျော့ နောက်ခံလည်း ပေးပါမယ်။ ရိုက်နေတုန်း ပထမ card ထဲက
+      ဈေးနှုန်းကို လိုက်ကြည့်ပါ။ [[mark:after-price]] နောက်ခံ ပေါ်လာပေမယ့်၊ box က စာသား ရှိသလောက်ပဲ
+      ကြီးပါတယ်။ အကျယ်နဲ့ အမြင့် ပေးထားတာက ဘာမှ မထူးပါဘူး။ ဘာကြောင့်လဲဆိုတော့၊ span က inline
+      ဖြစ်ပြီး၊ inline box က အရွယ်အစားကို content ကနေ ယူလို့ပါ။ [[mark:type-block]] အခု ဈေးနှုန်းရဲ့
+      display ကို block ပြောင်းပြီး၊ badge ဘယ်ရောက်သွားလဲ ကြည့်ပါ။ [[mark:after-block]] ဈေးနှုန်းက
+      သူ့ဘာသာ စာကြောင်း တစ်ကြောင်း ယူသွားပြီး၊ badge က အောက်တစ်ကြောင်းကို ဆင်းသွားပါပြီ။ block box က
+      ကိုယ်ပေးတဲ့ အရွယ်အစားကို လက်ခံလို့၊ အကျယ်နဲ့ အမြင့် အလုပ်လုပ်ပါပြီ။ အကျယ် မပေးထားရင်တော့ card
+      ရဲ့ အကျယ် အပြည့်ကို ယူသွားမှာပါ။ [[mark:type-inline-block]] နောက်ဆုံးအနေနဲ့ lesson 2 မှာ
+      ဈေးလျှော့ တံဆိပ်ကို ပေးခဲ့တဲ့ inline-block ကို ပြောင်းပါမယ်။ [[mark:after-inline-block]]
+      ဈေးနှုန်းက badge နဲ့ တစ်ကြောင်းတည်း ပြန်ရောက်လာပြီး၊ အကျယ်နဲ့ အမြင့်ကလည်း ဆက်
+      အလုပ်လုပ်နေပါတယ်။ အပြင်ဘက်ကနေ ကြည့်ရင် inline လို နေပြီး၊ အထဲမှာတော့ block လို အလုပ်လုပ်တာပါ။
+      [[mark:select-inline-block]] ဒီ inline-block declaration ကို ကြည့်ပါ။ block declaration ရဲ့
+      နောက်မှာ ရေးထားလို့ သူက နိုင်ပါတယ်။ ပုံတွေကတော့ inline ဖြစ်ပေမယ့် ခြွင်းချက်ပါ။ သူတို့ရဲ့
+      အကျယ်နဲ့ အမြင့်က အမြဲ အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: understanding the display property"
+        url: "https://web.dev/learn/css/layout#understanding_the_display_property"
+      - title: "web.dev Learn CSS — Layout: inline block"
+        url: "https://web.dev/learn/css/layout#inline_block"
+      - title: "web.dev Learn CSS — Box model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "MDN — Replaced elements"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Replaced_element"
+    actions:
+      # fast-explainer keystrokes: no prefix of "120px", "40px" or "wheat" is
+      # a valid value, and width/height never apply to the inline span.
+      - id: type-price
+        type: editor.type
+        at: { mark: type-price, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".price {\n  width: 120px;\n  height: 40px;\n  background: wheat;\n}\n"
+      - id: expect-price-inline
+        type: expect.preview
+        at: { mark: after-price }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # "display: b" … "bloc" are invalid; only "block" applies.
+      - id: type-block
+        type: editor.type
+        at: { mark: type-block, offsetMs: 300 }
+        cadence: natural
+        target: { file: styles.css, after: "  background: wheat;\n", occurrence: 1 }
+        text: "  display: block;\n"
+      - id: expect-price-block
+        type: expect.preview
+        at: { mark: after-block }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: a keystroke "display: inline" would flash the price
+      # back to inline, and "inline-" would fall back to block.
+      - id: type-inline-block
+        type: editor.type
+        at: { mark: type-inline-block, offsetMs: 300 }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  display: block;\n", occurrence: 1 }
+        text: "  display: inline-block;\n"
+      - id: expect-price-inline-block
+        type: expect.preview
+        at: { mark: after-inline-block }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-inline-block
+        type: editor.select
+        at: { mark: select-inline-block }
+        target: { file: styles.css, text: "  display: inline-block;", occurrence: 1 }
+
+  - id: tag-padding
+    narration: >
+      [[mark:scroll-today]] inline box တွေမှာ နောက်ထပ် ကန့်သတ်ချက် တစ်ခု ရှိပြီး၊ ယနေ့အထူး တံဆိပ်က
+      အဲဒါကို ပြပါတယ်။ [[mark:type-tag]] တံဆိပ်ရဲ့ ဘက်လေးဘက်လုံးမှာ padding နဲ့ margin ထည့်ပြီး၊
+      မြင်ရအောင် ရွှေရောင် နောက်ခံ ပေးပါမယ်။ ရိုက်နေတုန်း သူ့ အပေါ်နဲ့ အောက်က စာကြောင်းတွေ
+      ရွေ့မရွေ့ကို သတိထား ကြည့်ပါ။ [[mark:after-tag]] ရွှေရောင် နောက်ခံက အပေါ်စာကြောင်းနဲ့
+      အောက်စာကြောင်းပေါ်ကို ထပ်ဖုံးသွားပေမယ့်၊ အဲဒီ စာကြောင်းတွေက မရွေ့ပါဘူး။ inline box ရဲ့
+      အပေါ်အောက် padding ကို browser က ဆွဲပြပေမယ့်၊ တခြား စာကြောင်းတွေကိုတော့ မတွန်းပါဘူး။ margin
+      ကလည်း ဘယ်ညာမှာပဲ စာကို တွန်းပြီး၊ အပေါ်အောက်မှာ ဘာမှ မလုပ်ပါဘူး။ [[mark:select-tag-padding]]
+      ဒီ padding declaration ကို ကြည့်ပါ။ ဘယ်ညာ padding ကတော့ မတူပါဘူး။ တံဆိပ် ဘေးက စာတွေကို တကယ်
+      တွန်းဖယ်ထားပါတယ်။ [[mark:type-tag-ib]] အခု တံဆိပ်ကိုလည်း inline-block ပြောင်းပါမယ်။
+      [[mark:after-tag-ib]] စာကြောင်းတွေ ခွာသွားပြီး တံဆိပ်အတွက် နေရာ ပေးလိုက်ပါပြီ။ တံဆိပ်က
+      စကားလုံး တစ်လုံးလို ရှိနေဆဲ ဖြစ်ပေမယ့်၊ padding နဲ့ margin အားလုံးက တကယ့် နေရာကို ယူသွားပါပြီ။
+      ဒါကြောင့် စာထဲက တံဆိပ်တွေ၊ ခလုတ်တွေကို inline-block လုပ်လေ့ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Box model (inline vertical padding)"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "web.dev Learn CSS — Layout: inline block"
+        url: "https://web.dev/learn/css/layout#inline_block"
+      - title: "MDN — Block and inline layout in normal flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_and_inline_layout_in_normal_flow"
+      - title: "MDN — The box model: inline boxes"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Box_model"
+    actions:
+      - id: scroll-today
+        type: preview.scroll
+        at: { mark: scroll-today }
+        timeoutMs: 5000
+        top: 780
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # "padding: 1", "margin: 1", "12", "12p" and "gol" are invalid; nothing
+      # flickers. The 12px margin shows live that an inline box's vertical
+      # margin is ignored (the lines do not move) until inline-block.
+      - id: type-tag
+        type: editor.type
+        at: { mark: type-tag, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  display: inline-block;\n}\n", occurrence: 1 }
+        text: "\n.tag {\n  padding: 12px;\n  margin: 12px;\n  background: gold;\n}\n"
+      - id: expect-tag
+        type: expect.preview
+        at: { mark: after-tag }
+        timeoutMs: 4000
+        target: { by: testId, value: tag }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-tag-padding
+        type: editor.select
+        at: { mark: select-tag-padding }
+        target: { file: styles.css, text: "  padding: 12px;", occurrence: 1 }
+      # natural keystrokes: "display: inline" is what the span already is,
+      # and "inline-" is invalid, so only "inline-block" changes anything.
+      - id: type-tag-ib
+        type: editor.type
+        at: { mark: type-tag-ib, offsetMs: 300 }
+        cadence: natural
+        target: { file: styles.css, after: "  background: gold;\n", occurrence: 1 }
+        text: "  display: inline-block;\n"
+      - id: expect-tag-ib
+        type: expect.preview
+        at: { mark: after-tag-ib }
+        timeoutMs: 4000
+        target: { by: testId, value: today-note }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: display-jobs
+    chapter: "Display ရဲ့ အလုပ် နှစ်ခု"
+    narration: >
+      [[mark:open-display]] ဒါဆို display က တကယ်တမ်း ဘာကို ဆုံးဖြတ်တာလဲ။ အလုပ် နှစ်ခု ရှိပါတယ်။
+      [[mark:draw-outer]] ပထမက outer type ပါ။ box က သူ့ sibling တွေကြားမှာ ဘယ်လို နေရာယူမလဲ ဆိုတာပါ။
+      စကားလုံး တစ်လုံးလို စာကြောင်းထဲမှာ ဝင်နေမလား၊ သူ့ဘာသာ တစ်ကြောင်းလုံး ယူမလား။ အဲဒါက inline နဲ့
+      block ပါ။ [[mark:draw-inner]] ဒုတိယက inner type ပါ။ box က သူ့ child တွေကို ဘယ်လို စီမလဲ
+      ဆိုတာပါ။ အခုထိ box တိုင်းက child တွေကို flow layout နဲ့ စီခဲ့ပြီး၊ flex၊ grid လို တန်ဖိုးတွေက
+      ဒီ inner အလုပ်ကို ပြောင်းပေးပါတယ်။ [[mark:draw-two-value]] ခေတ်သစ် CSS မှာ ဒီ နှစ်ခုကို
+      keyword နှစ်လုံးနဲ့ ခွဲရေးလို့ ရပြီး၊ ရှေ့က outer၊ နောက်က inner ပါ။ code အများစုကတော့
+      တစ်လုံးတည်းပဲ သုံးနေကြဆဲပါ။ [[mark:draw-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ content က box ထဲ
+      မဆံ့တဲ့အခါ scroll လုပ်လို့ ရမရ ဆိုတာကို display က ဆုံးဖြတ်သလား။ [[mark:quiz-answer]]
+      မဆုံးဖြတ်ပါဘူး။ scroll က overflow ရဲ့ အလုပ် ဖြစ်ပြီး၊ သူ့အတွက် lesson သီးသန့် ရှိပါတယ်။
+      display က outer နဲ့ inner ကိုပဲ ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: understanding the display property"
+        url: "https://web.dev/learn/css/layout#understanding_the_display_property"
+      - title: "MDN — display: outer and inner display types, multi-keyword syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "CSS Display Module Level 3"
+        url: "https://www.w3.org/TR/css-display-3/"
+      - title: "MDN — overflow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow"
+    actions:
+      - id: open-display-board
+        type: whiteboard.apply
+        at: { mark: open-display }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-outer
+        type: whiteboard.apply
+        at: { mark: draw-outer }
+        upsertIds: [c-sib1, c-box, c-sib2, c-outer-label]
+        drawMs: 3000
+      - id: draw-inner
+        type: whiteboard.apply
+        at: { mark: draw-inner }
+        upsertIds: [c-parent, c-child1, c-child2, c-child3, c-inner-label]
+        drawMs: 3000
+      - id: draw-two-value
+        type: whiteboard.apply
+        at: { mark: draw-two-value }
+        upsertIds: [c-two]
+        drawMs: 1800
+      - id: draw-quiz
+        type: whiteboard.apply
+        at: { mark: draw-quiz }
+        upsertIds: [c-quiz-q]
+        drawMs: 1500
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [c-quiz-a, c-quiz-check]
+        drawMs: 1400
+
+  - id: nav-flex
+    narration: >
+      [[mark:close-display]] တကယ့် box မှာ inner type ကို ပြောင်းကြည့်ရအောင်။ [[mark:scroll-top]]
+      အပေါ်ဆုံး header ထဲက menu link သုံးခုက တစ်ခုအောက် တစ်ခု ရှိနေပါတယ်။ link တစ်ခုစီက list item
+      ထဲမှာ ရှိပြီး၊ list item တွေက block လို နေရာယူလို့ပါ။ [[mark:type-flex]] list ကို flexbox နဲ့
+      စီခိုင်းပါမယ်။ ဒီလို စီခိုင်းလိုက်တဲ့ parent ကို flex container လို့ ခေါ်ပါတယ်။ link တွေ
+      မကပ်အောင် gap လည်း ထည့်ပါမယ်။ gap က item တွေ ကြားထဲမှာပဲ ထည့်တဲ့ နေရာလွတ်ပါ။
+      [[mark:after-flex]] link တွေ row တစ်ခုတည်းမှာ ဘေးချင်း စီသွားပါပြီ။ list ကိုယ်တိုင်ကတော့
+      header ထဲမှာ block အဖြစ် ရှိနေဆဲပါ။ child တွေကို စီပုံပဲ ပြောင်းသွားတာပါ။ [[mark:select-flex]]
+      ဒီ display declaration ကို ကြည့်ပါ။ list ရဲ့ တိုက်ရိုက် child တွေ ဖြစ်တဲ့ list item တွေပဲ flex
+      item ဖြစ်သွားပြီး၊ သူတို့ထဲက link တွေကတော့ ရိုးရိုး inline link တွေအတိုင်း ရှိနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: flexbox"
+        url: "https://web.dev/learn/css/layout#flexbox"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+      - title: "MDN — gap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
+    actions:
+      - id: close-display-board
+        type: whiteboard.apply
+        at: { mark: close-display }
+        open: false
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # "display: fle" and "gap: 16" are invalid; only the full values apply.
+      - id: type-flex
+        type: editor.type
+        at: { mark: type-flex, offsetMs: 300 }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background: gold;\n  display: inline-block;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.nav ul {\n  display: flex;\n  gap: 16px;\n}\n"
+      - id: expect-nav
+        type: expect.preview
+        at: { mark: after-flex }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-list }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flex
+        type: editor.select
+        at: { mark: select-flex }
+        target: { file: styles.css, text: "  display: flex;", occurrence: 1 }
+
+  - id: flex-vs-grid
+    narration: >
+      [[mark:open-flex-grid]] flexbox ရော grid ပါ box တစ်ခုရဲ့ child တွေကို စီပေးပြီး၊
+      လုပ်နိုင်တာတွေလည်း အများကြီး တူပါတယ်။ အဓိက ကွာခြားချက်ကို ကြည့်ရအောင်။ [[mark:draw-flex]]
+      flexbox က တစ်ခါမှာ ဦးတည်ရာ တစ်ခု၊ row ဒါမှမဟုတ် column တစ်ခုအတိုင်းပဲ စီပါတယ်။ item တစ်ခုစီ
+      ယူမယ့် နေရာကို သူ့ content က ဆုံးဖြတ်ပါတယ်။ [[mark:draw-grid]] grid ကတော့ row နဲ့ column
+      နှစ်ဘက်လုံးကို တစ်ပြိုင်နက် စီပါတယ်။ container က track လို့ ခေါ်တဲ့ row၊ column တွေကို အရင်
+      ဆွဲထားပြီး၊ item တွေကို အဲဒီထဲ ချထားပါတယ်။ [[mark:draw-fg-next]] ဒါကြောင့် ရွေးတဲ့အခါ ဦးတည်ရာ
+      တစ်ခုတည်းလား၊ row နဲ့ column နှစ်ခုလုံးလား ဆိုတာကို ကြည့်ပါ။ flexbox နဲ့ grid ကို lesson 15
+      ကနေ 20 အထိ အသေးစိတ် လေ့လာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: flexbox and grid"
+        url: "https://web.dev/learn/css/layout#flexbox_and_grid"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+      - title: "MDN — Basic concepts of grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Basic_concepts_of_grid_layout"
+    actions:
+      - id: open-flex-grid-board
+        type: whiteboard.apply
+        at: { mark: open-flex-grid }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-flex
+        type: whiteboard.apply
+        at: { mark: draw-flex }
+        upsertIds: [d-flex-box, d-f1, d-f2, d-f3, d-flex-arrow, d-flex-label, d-flex-note]
+        drawMs: 3400
+      - id: draw-grid
+        type: whiteboard.apply
+        at: { mark: draw-grid }
+        upsertIds: [d-grid, d-g1, d-g2, d-g3, d-g4, d-g5, d-g6, d-grid-label, d-grid-note]
+        drawMs: 3600
+      - id: draw-fg-next
+        type: whiteboard.apply
+        at: { mark: draw-fg-next }
+        upsertIds: [d-next]
+        drawMs: 1200
+
+  - id: float-cup
+    chapter: "ပုံကို float နဲ့ ဘေးကပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-flex-grid]] flow layout ဆီ ပြန်သွားရအောင်။ နောက်ထပ် tool တစ်ခုက float ပါ။
+      [[mark:scroll-about]] ဆိုင်အကြောင်း box ကို ကြည့်ပါ။ ခွက်ပုံ နောက်က စာပိုဒ်က block ဖြစ်လို့
+      စာကြောင်း အသစ်ကနေ စတဲ့အတွက်၊ ခွက်ပုံက သူ့ဘာသာ တစ်ကြောင်း ယူထားပါတယ်။ [[mark:type-float]]
+      ခွက်ပုံကို ဘယ်ဘက်ကို float လုပ်ပြီး၊ စာနဲ့ မထိအောင် သူ့ ညာဘက်မှာ margin နည်းနည်း ပေးပါမယ်။
+      ရိုက်နေတုန်း ခွက်ပုံရဲ့ အောက်က ဆိုင်အကြောင်း စာကို သတိထား ကြည့်ပါ။ [[mark:after-float]]
+      ခွက်ပုံက ဘယ်ဘက်မှာပဲ ရှိနေပေမယ့်၊ သူ့အောက်က စာက ညာဘက်ကို တက်လာပြီး ပတ်လည်မှာ စီးသွားပါပြီ၊
+      သတင်းစာထဲက ဓာတ်ပုံလိုပါပဲ။ float က box ကို ဘက် တစ်ဘက်ကို ဆွဲကပ်ပေးပြီး၊ နောက်က စာကြောင်းတွေက
+      သူ့ကို ရှောင်ပြီး စီသွားတာပါ။ [[mark:select-float]] ဒီ float declaration ကို ကြည့်ပါ။ ဘယ်ဘက်
+      အပြင် ညာဘက်လည်း ပေးလို့ ရသလို၊ စာ ရေးတဲ့ ဦးတည်ရာကို လိုက်တဲ့ logical တန်ဖိုးလည်း ပေးလို့
+      ရပါတယ်။ အရင်က page ရဲ့ column တွေကို float နဲ့ ဆောက်ခဲ့ကြပေမယ့်၊ အခုတော့ ပုံ ပတ်လည်မှာ စာ
+      စီးစေဖို့ပဲ သုံးပြီး၊ column တွေအတွက် flexbox နဲ့ grid ကို သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: floats"
+        url: "https://web.dev/learn/css/layout#floats"
+      - title: "MDN — float"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/float"
+      - title: "CSS 2.1 — Floats"
+        url: "https://www.w3.org/TR/CSS2/visuren.html#floats"
+    actions:
+      - id: close-flex-grid-board
+        type: whiteboard.apply
+        at: { mark: close-flex-grid }
+        open: false
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: scroll-about }
+        timeoutMs: 5000
+        top: 924
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # "float: lef" and "margin-right: 16" are invalid; only the full values
+      # apply.
+      - id: type-float
+        type: editor.type
+        at: { mark: type-float, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 16px;\n}\n", occurrence: 1 }
+        text: "\n.about-img {\n  float: left;\n  margin-right: 16px;\n}\n"
+      - id: expect-story
+        type: expect.preview
+        at: { mark: after-float }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-float
+        type: editor.select
+        at: { mark: select-float }
+        target: { file: styles.css, text: "  float: left;", occurrence: 1 }
+
+  - id: float-side-effects
+    narration: >
+      [[mark:look-short]] float မှာ side effect တချို့ ရှိပါတယ်။ အောက်က box အတိုကို ကြည့်ပါ။ class
+      တူလို့ သူ့ ခွက်ပုံလည်း float ဖြစ်သွားပါတယ်။ ဘောင်က စာကြောင်း တစ်ကြောင်းကိုပဲ ပတ်ထားပြီး၊
+      ခွက်ပုံက ဘောင်ရဲ့ အောက်ကို ထွက်နေပါတယ်။ float က flow ထဲက ထွက်သွားလို့ parent ရဲ့ အမြင့်ထဲမှာ
+      မပါဘဲ၊ box က စာသားလောက်ပဲ ကျုံ့သွားတာပါ။ [[mark:look-heading]] ခွက်ပုံက နောက် အပိုင်းထဲကိုပါ
+      ဝင်နေလို့၊ မြို့နယ် ခေါင်းစဉ်က သူ့ ညာဘက်ကို ရွေ့နေပါတယ်။ [[mark:type-clear]] ပြင်နည်း တစ်ခုက
+      float နောက်က element မှာ ရေးရပါတယ်။ အဲဒီ ခေါင်းစဉ်ကို clear ပေးပြီး float တွေကို
+      ရှောင်ခိုင်းပါမယ်။ [[mark:after-clear]] ခေါင်းစဉ်က ခွက်ပုံရဲ့ အောက်ကို ဆင်းသွားပါပြီ။ clear က
+      element တစ်ခုကို သူ့ရှေ့က float တွေရဲ့ အောက်ကနေ စခိုင်းပါတယ်။ ဒါပေမဲ့ box အတိုရဲ့ ဘောင်ကတော့
+      ခွက်ပုံကို မပတ်မိသေးပါဘူး။ [[mark:type-flow-root]] တကယ့် ပြင်နည်းကတော့ ခွက်ပုံကို ထည့်ထားတဲ့
+      parent box ကိုယ်တိုင်မှာပါ။ ဆိုင်အကြောင်း box တွေရဲ့ display ကို flow-root ပေးပါမယ်။ ဒါဆို စာ
+      တိုတို ရှည်ရှည် ဘယ် box မဆို ခွက်ပုံကို ပတ်မိပါမယ်။ [[mark:after-flow-root]] အခု box အတိုရဲ့
+      ဘောင်က ကြီးလာပြီး ခွက်ပုံ တစ်ခုလုံးကို ပတ်မိသွားပါပြီ။ flow-root က box ထဲမှာ flow layout အသစ်
+      တစ်ခု စခိုင်းလို့၊ သူ့ထဲက float တွေကို အမြင့်ထဲ အမြဲ ထည့်တွက်ပါတယ်။ [[mark:flow-root-history]]
+      အရင်က ဒီအတွက် HTML အပို ထည့်တာ၊ clearfix ဆိုတဲ့ rule ရေးတာတွေ လုပ်ခဲ့ကြပါတယ်။ flow-root က
+      အဲဒါတွေကို အစားထိုးပေးပြီး၊ အခု clear မပါလည်း ခေါင်းစဉ်က box ရဲ့ အောက်မှာ ရှိနေမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Layout: floats (clear, flow-root)"
+        url: "https://web.dev/learn/css/layout#floats"
+      - title: "MDN — clear"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/clear"
+      - title: "MDN — Block formatting context"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_formatting_context"
+      - title: "Rachel Andrew — The end of the clearfix hack?"
+        url: "https://rachelandrew.co.uk/archives/2017/01/24/the-end-of-the-clearfix-hack/"
+    actions:
+      - id: expect-short
+        type: expect.preview
+        at: { mark: look-short }
+        timeoutMs: 4000
+        target: { by: testId, value: short-text }
+        textContains: "ဖွင့်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # "clear: bot" is invalid; only "both" applies.
+      - id: type-clear
+        type: editor.type
+        at: { mark: type-clear, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-right: 16px;\n}\n", occurrence: 1 }
+        text: "\n.delivery h2 {\n  clear: both;\n}\n"
+      - id: expect-heading-clear
+        type: expect.preview
+        at: { mark: after-clear }
+        timeoutMs: 4000
+        target: { by: testId, value: delivery-title }
+        textContains: "မြို့နယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # "display: flow" is a valid value that equals block, which both about
+      # boxes already are; "flow-" is invalid; only "flow-root" changes them.
+      # It goes on the component class: the long box holds its cup at 432 px
+      # only because its story is taller than the cup.
+      - id: type-flow-root
+        type: editor.type
+        at: { mark: type-flow-root, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  clear: both;\n}\n", occurrence: 1 }
+        text: "\n.about {\n  display: flow-root;\n}\n"
+      - id: expect-short-root
+        type: expect.preview
+        at: { mark: after-flow-root }
+        timeoutMs: 4000
+        target: { by: testId, value: about-short }
+        textContains: "ဖွင့်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: multicol
+    chapter: "Column တွေနဲ့ စာ စီကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-towns]] ဒီ lesson ရဲ့ နောက်ဆုံး tool က multicol လို့ အတိုခေါ်တဲ့ multicolumn
+      layout ပါ။ list ဒါမှမဟုတ် စာ အရှည်ကို သတင်းစာလို column တွေ ခွဲစီလို့၊ scroll နည်းနည်းပဲ
+      လုပ်ရပြီး ကျယ်တဲ့ နေရာကိုလည်း အသုံးချနိုင်ပါတယ်။ [[mark:type-cols]] မြို့နယ် list ကို column
+      နှစ်ခု ခွဲပြီး ကြားမှာ gap ပေးပါမယ်။ multicol မှာ gap ကို မပေးထားရင် font size နဲ့ ညီတဲ့ 1 em
+      ဖြစ်ပြီး၊ ဒီမှာတော့ နည်းနည်း ပိုကျယ်အောင် ပေးပါမယ်။ [[mark:after-cols]] မြို့နယ် ရှစ်ခုက
+      column နှစ်ခုထဲ စီးဝင်သွားပါပြီ။ ပထမ column ပြည့်သွားတော့ ကျန်တာတွေက ဒုတိယ column ရဲ့ အပေါ်ကနေ
+      ဆက်သွားပါတယ်။ [[mark:type-rule]] column rule က gap တိုင်းမှာ မျဉ်း တစ်ကြောင်း ဆွဲပေးလို့၊
+      column တွေကို ပိုခွဲမြင်ရပါတယ်။ [[mark:type-col-width]] အခု column width လည်း ပေးပါမယ်။ column
+      တစ်ခု အနည်းဆုံး ရှိစေချင်တဲ့ အကျယ်ပါ။ 6 rem ဆိုတော့ default အားဖြင့် 96 pixel ပါ။
+      [[mark:after-col-width]] ဘာမှ မပြောင်းပါဘူး။ column count ကိုပါ တွဲပေးထားရင် count က အများဆုံး
+      အရေအတွက် ဖြစ်သွားလို့၊ နှစ်ခုပဲ ရနေဆဲပါ။ [[mark:type-col-auto]] ဒါကြောင့် အောက်ဆုံးမှာ count
+      ကို auto ပေးပါမယ်။ နောက်မှ ရေးတဲ့ declaration က နိုင်လို့၊ column အရေအတွက်ကို column width ကပဲ
+      ဆုံးဖြတ်ပါလိမ့်မယ်။ [[mark:after-col-auto]] အခု column သုံးခု ဖြစ်သွားပါပြီ။ browser က
+      အနည်းဆုံး အဲဒီ အကျယ် ရှိတဲ့ column တွေကို ဆံ့သလောက် လုပ်ပြီး၊ နေရာ ပြည့်အောင် ချဲ့ပေးပါတယ်။
+      screen ပိုကျယ်ရင် media query မလိုဘဲ column ပိုများလာမှာပါ။ [[mark:multicol-extras]] နောက်ထပ်
+      property နှစ်ခု ရှိပါတယ်။ column span က ခေါင်းစဉ် တစ်ခုကို column အားလုံး ဖြတ်ပြီး
+      ပြခိုင်းလို့ ရပြီး၊ break inside က item တစ်ခု column နှစ်ခုကြား ပြတ်မသွားအောင် တားပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout: multicolumn layout"
+        url: "https://web.dev/learn/css/layout#multicolumn_layout"
+      - title: "MDN — CSS multi-column layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_multicol_layout"
+      - title: "MDN — column-width"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/column-width"
+      - title: "MDN — column-count"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/column-count"
+      - title: "CSS Multi-column Layout Module Level 1"
+        url: "https://www.w3.org/TR/css-multicol-1/"
+    actions:
+      - id: scroll-towns
+        type: preview.scroll
+        at: { mark: scroll-towns }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # "column-gap: 24" is invalid; the count 2 lands whole at its digit.
+      - id: type-cols
+        type: editor.type
+        at: { mark: type-cols, offsetMs: 300 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  display: flow-root;\n}\n", occurrence: 1 }
+        text: "\n.townships {\n  column-count: 2;\n  column-gap: 24px;\n}\n"
+      - id: expect-cols
+        type: expect.preview
+        at: { mark: after-cols }
+        timeoutMs: 4000
+        target: { by: testId, value: townships }
+        textContains: "လမ်းမတော်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: "1px solid" is already a valid (currentColor) rule
+      # before "tan" lands.
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule, offsetMs: 300 }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  column-gap: 24px;\n", occurrence: 1 }
+        text: "  column-rule: 1px solid tan;\n"
+      # natural keystrokes: "6", "6r", "6re" are invalid; "6rem" changes
+      # nothing while the count is 2 (the count is the maximum).
+      - id: type-col-width
+        type: editor.type
+        at: { mark: type-col-width, offsetMs: 300 }
+        cadence: natural
+        target: { file: styles.css, after: "  column-rule: 1px solid tan;\n", occurrence: 1 }
+        text: "  column-width: 6rem;\n"
+      - id: expect-col-width
+        type: expect.preview
+        at: { mark: after-col-width }
+        timeoutMs: 4000
+        target: { by: testId, value: townships }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # "a", "au", "aut" are invalid (the count stays 2); "auto" → 3 columns.
+      - id: type-col-auto
+        type: editor.type
+        at: { mark: type-col-auto, offsetMs: 300 }
+        cadence: natural
+        target: { file: styles.css, after: "  column-width: 6rem;\n", occurrence: 1 }
+        text: "  column-count: auto;\n"
+      - id: expect-col-auto
+        type: expect.preview
+        at: { mark: after-col-auto }
+        timeoutMs: 4000
+        target: { by: testId, value: townships }
+        textContains: "သင်္ဃန်းကျွန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: multicol-vs-grid
+    narration: >
+      [[mark:open-mc-board]] ဒီမှာ ဘာလို့ grid မသုံးဘဲ multicol သုံးတာလဲ။ [[mark:draw-mc]] multicol
+      မှာ content က တစ်ဆက်တည်း စီးနေတာပါ။ ပထမ column ပြည့်သွားရင် နောက် column ရဲ့ အပေါ်ကနေ
+      ဆက်စီးပါတယ်။ [[mark:draw-mc-grid]] grid နဲ့ flexbox ကလည်း column တွေ လုပ်လို့ ရပေမယ့်၊ column
+      တစ်ခုစီက box သီးသန့် ဖြစ်လို့ စာက box တစ်ခုကနေ နောက်တစ်ခုကို ဘယ်တော့မှ စီးမသွားပါဘူး။
+      [[mark:draw-mc-rule]] ဒါကြောင့် content အရှည် တစ်ခုကို column တွေ ဖြတ်ပြီး စီးစေချင်ရင်
+      multicol က သင့်တော်ဆုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Layout: multicolumn layout"
+        url: "https://web.dev/learn/css/layout#multicolumn_layout"
+      - title: "MDN — Basic concepts of multi-column layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_multicol_layout/Basic_concepts"
+    actions:
+      - id: open-mc-board
+        type: whiteboard.apply
+        at: { mark: open-mc-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-mc
+        type: whiteboard.apply
+        at: { mark: draw-mc }
+        upsertIds: [e-mc-box, e-mc-c1, e-mc-a1, e-mc-c2, e-mc-a2, e-mc-label]
+        drawMs: 3200
+      - id: draw-mc-grid
+        type: whiteboard.apply
+        at: { mark: draw-mc-grid }
+        upsertIds: [e-g1, e-g2, e-g3, e-grid-label, e-grid-note]
+        drawMs: 3000
+      - id: draw-mc-rule
+        type: whiteboard.apply
+        at: { mark: draw-mc-rule }
+        upsertIds: [e-rule]
+        drawMs: 1500
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ box တွေက default အတိုင်း flow layout နဲ့ နေရာယူလို့၊ block
+      တွေက တစ်ခုအောက် တစ်ခု စီပြီး inline box တွေက စာကြောင်းအတိုင်း စီပါတယ်။ display က box တစ်ခု
+      sibling တွေကြား ဘယ်လို နေမလဲ၊ child တွေကို ဘယ်လို စီမလဲ ဆိုတာ ဆုံးဖြတ်ပေမယ့်၊ scroll ကိုတော့
+      မဆုံးဖြတ်ပါဘူး။ inline-block နဲ့ multicol က flow ထဲမှာပဲ အလုပ်လုပ်ပြီး၊ float ကတော့ box ကို
+      flow ထဲက ထုတ်ပေမယ့် စာတွေက သူ့ကို ရှောင်စီးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့
+      box တစ်ခုကို flow ထဲကနေ ထုတ်ပြီး တခြားနေရာမှာ ချထားနိုင်တဲ့ position နဲ့၊ layout ကို
+      မပြောင်းဘဲ box ကို ရွှေ့ပေးတဲ့ transform ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Layout"
+        url: "https://web.dev/learn/css/layout"
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "web.dev Learn CSS — Layout: positioning (next lesson)"
+        url: "https://web.dev/learn/css/layout#positioning"
+    actions:
+      - id: close-mc-board
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".price {\n  width: 120px;\n  height: 40px;\n  background: wheat;\n  display: block;\n  display: inline-block;\n}\n\n.tag {\n  padding: 12px;\n  margin: 12px;\n  background: gold;\n  display: inline-block;\n}\n\n.nav ul {\n  display: flex;\n  gap: 16px;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".about-img {\n  float: left;\n  margin-right: 16px;\n}\n\n.delivery h2 {\n  clear: both;\n}\n\n.about {\n  display: flow-root;\n}\n\n.townships {\n  column-count: 2;\n  column-gap: 24px;\n  column-rule: 1px solid tan;\n  column-width: 6rem;\n  column-count: auto;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
