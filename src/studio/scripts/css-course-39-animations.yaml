@@ -1,0 +1,2931 @@
+# CSS course (Burmese), lesson 39 of 43: animations and keyframes.
+#
+# Narration is Burmese (voice-script.md next to this file; DESIGN.md is the
+# span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI
+# strings) is Burmese already.
+#
+# Shape: board (recall lesson 38; a keyframe is a state on a timeline; a
+# transition has two states, an animation many, starts by itself, repeats) →
+# code tour (the dot, the steaming cup, six easing chips + their pause
+# button, the typing dots, the order button + banner; three ready-made keyframes pinned
+# at the top of styles.css) → pulse keyframes alone do nothing; the name;
+# the missing 0%/100% → duration alone (still nothing: no name), then the
+# name (one pulse: an animation starts when its name is set; probe/durtest),
+# iteration count infinite → steam: from/to and 50%, the shorthand →
+# negative delays stagger the three lines → board: easing curves, the
+# overshoot, easing per segment → chips: slide + alternate, five keywords,
+# cubic-bezier overshoot; easing inside a keyframe, linear() → typing dots
+# with steps(4); board: jump positions → banner: fade-in with a 1s delay
+# blinks; fill-mode backwards fixes it (hide + show restarts it); board: fill
+# mode zones → pause the chips with play-state → boards: the shorthand and
+# several animations; performance, individual transforms, the cascade →
+# reduced-motion block (honest about the viewer's device) + the opt-in
+# pattern → sentences (restart, events, composition, scroll-driven), quiz,
+# recap, hand-off to anchor positioning (lesson 40).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every keystroke edit that contains "(" (cubic-bezier, steps) is the LAST
+# rule of the file while it is typed, so an unclosed "(" swallows nothing
+# (at the end of the file the parser closes it). The reduced-motion media
+# query is one block insert. Every other edit is appended at the end of the
+# file or inside an existing rule, and contains no "(".
+#
+# Replay (PLATFORM.md §3): @keyframes animations replay on the viewer's
+# clock at 1x and restart after a seek, so every demo either loops (dot,
+# steam, chips, dots) or is started by a recorded click (the banner); class
+# toggles from kit.js (is-shown, is-paused) replay. prefers-reduced-motion is
+# evaluated on the viewer's device, and the narration says so.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# card 54–159 (dot at 142,73), steam cup 171–241, chips 253–439 (110 px
+# each, slide 200 px), pause button ~453–476, preparing line ~500, order
+# button ~533–572, banner ~585–628 when shown (verify-shots-fix final
+# screenshot); the document is 720 tall (no scrolling).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-39-animations
+  title: "CSS course 39: Animation နဲ့ keyframe"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 39
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit drinks block trimmed to today's special (a .dot
+      # next to its name), the lesson blocks steam (a cup drawn with two boxes
+      # and three .steam lines), easing-strip (six chips named after easings,
+      # and a pause button under them that toggles is-paused on the strip), dots (the
+      # "order is being prepared" line with a .typing span of four dots) and
+      # banner (the order button toggles is-shown on the banner), and kit.js.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: drinks (today's special only, with a pulsing .dot) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည် <span class="dot" aria-hidden="true" data-testid="dot"></span></h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: steam (a cup with three .steam lines) -->
+              <div class="steam-cup" role="img" aria-label="ရေနွေးငွေ့ တက်နေတဲ့ ခွက်" data-testid="steam-cup">
+                <div class="steams"><span class="steam"></span><span class="steam"></span><span class="steam"></span></div>
+                <div class="mug"></div>
+              </div>
+
+              <!-- lesson block: easing-strip (five easing keywords, then cubic-bezier; the pause button toggles is-paused on the strip) -->
+              <div class="easing-strip" lang="en" data-testid="easing-strip">
+                <span>linear</span>
+                <span>ease</span>
+                <span>ease-in</span>
+                <span>ease-out</span>
+                <span>ease-in-out</span>
+                <span>cubic-bezier</span>
+              </div>
+              <button class="pause-btn" type="button" data-toggle-class="is-paused" data-target=".easing-strip" data-testid="pause-chips">ခဏရပ်</button>
+
+              <!-- lesson block: dots (the order is being prepared) -->
+              <p class="preparing" data-testid="preparing">အော်ဒါ ပြင်ဆင်နေပါတယ်<span class="typing" aria-hidden="true">....</span></p>
+
+              <!-- lesson block: banner (the order button toggles is-shown on the banner) -->
+              <button class="order-btn" type="button" data-toggle-class="is-shown" data-target=".banner" data-testid="show-banner">မှာမယ်</button>
+              <p class="banner" role="status" data-testid="banner">အော်ဒါ တင်ပြီးပါပြီ</p>
+            </main>
+
+            <!-- kit block: kit-script -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (D dropped). Section E pins the
+      # lesson blocks' look: the dot, the pause button, the cup and steam
+      # lines, the chips, the monospace typing dots, and the banner
+      # (display: none until .is-shown). Nothing in base.css animates.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 39 keeps A, B, B2 and C (section D dropped). Section E pins the
+          lesson's blocks: the pulsing dot, the steaming cup, the easing chips and
+          their pause button, the typing dots and the order banner. Nothing here animates:
+          every animation is typed in styles.css.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 39: the page has no header, so the page gets a little top room. */
+        .page {
+          padding-top: 16px;
+        }
+
+        /* The small green dot next to today's special (it pulses in the lesson). */
+        .dot {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          margin-inline-start: 6px;
+          border-radius: 50%;
+          background: var(--leaf);
+          vertical-align: middle;
+        }
+
+        /* The pause button under the chips. */
+        .pause-btn {
+          margin: 0 0 12px;
+          padding: 0 10px;
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          background: var(--cream);
+          color: var(--ink);
+          font: inherit;
+          font-size: 13px;
+        }
+
+        /* A cup drawn with two boxes, three thin steam lines above it. */
+        .steam-cup {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          width: 80px;
+          margin: 4px 0 12px;
+        }
+
+        .steams {
+          display: flex;
+          align-items: flex-end;
+          gap: 10px;
+          height: 34px;
+        }
+
+        .steam {
+          display: block;
+          width: 4px;
+          height: 22px;
+          border-radius: 2px;
+          background: var(--tea-light);
+        }
+
+        .mug {
+          width: 60px;
+          height: 36px;
+          border-radius: 0 0 24px 24px;
+          background: var(--tea);
+        }
+
+        /* Six chips in a column; each slides to the right in the lesson. */
+        .easing-strip {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          margin: 0 0 12px;
+        }
+
+        .easing-strip span {
+          display: block;
+          width: 110px;
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-family: system-ui, sans-serif;
+          font-size: 13px;
+          line-height: 26px;
+          text-align: center;
+        }
+
+        .easing-strip span:last-child {
+          background: var(--chili);
+        }
+
+        .preparing {
+          margin: 0;
+        }
+
+        /* The typing dots: a monospace font, so 1ch is exactly one dot. */
+        .typing {
+          display: inline-block;
+          overflow: hidden;
+          white-space: nowrap;
+          vertical-align: bottom;
+          font-family: ui-monospace, Menlo, Consolas, monospace;
+        }
+
+        /* The order banner: hidden until the order button adds is-shown. */
+        .banner {
+          display: none;
+          margin: 12px 0 0;
+          padding: 8px 16px;
+          border-radius: var(--radius);
+          background: var(--leaf);
+          color: #fff;
+        }
+
+        .banner.is-shown {
+          display: block;
+        }
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      # styles.css starts with three complete keyframes the lesson uses but
+      # does not type (slide, dots, fade-in); everything else is typed below.
+      styles.css: |
+        /* Ready-made keyframes for later in this lesson */
+        @keyframes slide {
+          to { translate: 200px 0; }
+        }
+
+        @keyframes dots {
+          from { inline-size: 0; }
+          to { inline-size: 4ch; }
+        }
+
+        @keyframes fade-in {
+          from { opacity: 0; }
+        }
+
+  whiteboardAssets:
+    # Board A — a keyframe is a state on a timeline. Black = the timeline,
+    # orange = the keyframe positions and percentages, green = the states the
+    # dot is in, blue = what the browser fills in, red = transition, violet =
+    # animation.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Keyframe · timeline ပေါ်က အဆင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-line, kind: rectangle, x: 320, y: 330, width: 600, height: 2, strokeColor: "#1e1e1e" }
+    - {
+        id: a-k0,
+        kind: ellipse,
+        x: 310,
+        y: 321,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-k50,
+        kind: ellipse,
+        x: 610,
+        y: 321,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-k100,
+        kind: ellipse,
+        x: 910,
+        y: 321,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-l0,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 60,
+        height: 36,
+        text: "0%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-l50,
+        kind: text,
+        x: 596,
+        y: 352,
+        width: 70,
+        height: 36,
+        text: "50%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-l100,
+        kind: text,
+        x: 884,
+        y: 352,
+        width: 80,
+        height: 36,
+        text: "100%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-s0,
+        kind: ellipse,
+        x: 300,
+        y: 240,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: a-s50,
+        kind: ellipse,
+        x: 590,
+        y: 226,
+        width: 68,
+        height: 68,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-s100,
+        kind: ellipse,
+        x: 900,
+        y: 240,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: a-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 370,
+        y: 242,
+        width: 190,
+        height: 36,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 690,
+        y: 242,
+        width: 190,
+        height: 36,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-fill-l,
+        kind: text,
+        x: 380,
+        y: 400,
+        width: 600,
+        height: 36,
+        text: "ကြားက frame တွေ → browser က ဖြည့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-trans,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 700,
+        height: 36,
+        text: "transition → state 2 ခု · ပြောင်းမှ စ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-anim,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 740,
+        height: 36,
+        text: "animation → အဆင့် များများ · သူ့ဘာသာ ထပ်ပြ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — easing as a curve. Black = the frame and linear, orange =
+    # ease-in, blue = ease-out, violet = ease / ease-in-out (named only), red
+    # = the cubic-bezier overshoot, green = easing per segment. The dots are
+    # the real curves sampled at equal times (probe: cubic-bezier maths).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Easing · အမြန်နှုန်း ပြောင်းပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-frame,
+        kind: rectangle,
+        x: 330,
+        y: 280,
+        width: 300,
+        height: 240,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-progress,
+        kind: text,
+        x: 262,
+        y: 222,
+        width: 260,
+        height: 36,
+        text: "↑ ရောက်ပြီးသလောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-time,
+        kind: text,
+        x: 470,
+        y: 540,
+        width: 170,
+        height: 36,
+        text: "အချိန် →",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-lin-0,
+        kind: ellipse,
+        x: 324,
+        y: 514,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-1,
+        kind: ellipse,
+        x: 362,
+        y: 484,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-2,
+        kind: ellipse,
+        x: 399,
+        y: 454,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-3,
+        kind: ellipse,
+        x: 436,
+        y: 424,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-4,
+        kind: ellipse,
+        x: 474,
+        y: 394,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-5,
+        kind: ellipse,
+        x: 512,
+        y: 364,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-6,
+        kind: ellipse,
+        x: 549,
+        y: 334,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-7,
+        kind: ellipse,
+        x: 586,
+        y: 304,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-lin-8,
+        kind: ellipse,
+        x: 624,
+        y: 274,
+        width: 12,
+        height: 12,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: b-in-1,
+        kind: ellipse,
+        x: 362,
+        y: 508,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-2,
+        kind: ellipse,
+        x: 399,
+        y: 492,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-3,
+        kind: ellipse,
+        x: 436,
+        y: 468,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-4,
+        kind: ellipse,
+        x: 474,
+        y: 438,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-5,
+        kind: ellipse,
+        x: 512,
+        y: 404,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-6,
+        kind: ellipse,
+        x: 549,
+        y: 365,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-in-7,
+        kind: ellipse,
+        x: 586,
+        y: 322,
+        width: 12,
+        height: 12,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: b-out-1,
+        kind: ellipse,
+        x: 362,
+        y: 466,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-2,
+        kind: ellipse,
+        x: 399,
+        y: 423,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-3,
+        kind: ellipse,
+        x: 436,
+        y: 384,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-4,
+        kind: ellipse,
+        x: 474,
+        y: 350,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-5,
+        kind: ellipse,
+        x: 512,
+        y: 320,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-6,
+        kind: ellipse,
+        x: 549,
+        y: 296,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-out-7,
+        kind: ellipse,
+        x: 586,
+        y: 280,
+        width: 12,
+        height: 12,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: b-over-1,
+        kind: ellipse,
+        x: 349,
+        y: 533,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-2,
+        kind: ellipse,
+        x: 374,
+        y: 528,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-3,
+        kind: ellipse,
+        x: 399,
+        y: 507,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-4,
+        kind: ellipse,
+        x: 424,
+        y: 475,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-5,
+        kind: ellipse,
+        x: 449,
+        y: 436,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-6,
+        kind: ellipse,
+        x: 474,
+        y: 394,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-7,
+        kind: ellipse,
+        x: 499,
+        y: 352,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-8,
+        kind: ellipse,
+        x: 524,
+        y: 313,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-9,
+        kind: ellipse,
+        x: 549,
+        y: 281,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-10,
+        kind: ellipse,
+        x: 574,
+        y: 260,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-over-11,
+        kind: ellipse,
+        x: 599,
+        y: 255,
+        width: 12,
+        height: 12,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-l-linear,
+        kind: text,
+        x: 680,
+        y: 270,
+        width: 380,
+        height: 36,
+        text: "linear · တစ်သမတ်တည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-in,
+        kind: text,
+        x: 680,
+        y: 320,
+        width: 380,
+        height: 36,
+        text: "ease-in · အစ နှေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-out,
+        kind: text,
+        x: 680,
+        y: 370,
+        width: 380,
+        height: 36,
+        text: "ease-out · အဆုံး နှေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-ease,
+        kind: text,
+        x: 680,
+        y: 420,
+        width: 380,
+        height: 36,
+        text: "ease · ease-in-out",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-ease2,
+        kind: text,
+        x: 680,
+        y: 460,
+        width: 380,
+        height: 36,
+        text: "→ အစနဲ့ အဆုံး နှေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-bezier,
+        kind: text,
+        x: 680,
+        y: 520,
+        width: 380,
+        height: 36,
+        text: "cubic-bezier → ကိုယ်ပိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-over,
+        kind: text,
+        x: 680,
+        y: 560,
+        width: 380,
+        height: 36,
+        text: "1 ကျော် → ကျော်ပြီး ပြန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-segment,
+        kind: text,
+        x: 300,
+        y: 610,
+        width: 760,
+        height: 36,
+        text: "easing → keyframe ကြား အပိုင်း တစ်ခုစီမှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — steps(4): where the jump happens. Blue = end (the default),
+    # orange = start, green / violet = the two jump keywords. Each box is one
+    # quarter of a run; the bullets are the typing dots on screen.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Steps · ခုန်ပြီး ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-end-l,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 420,
+        height: 36,
+        text: "steps(4) = steps(4, end)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-end-0,
+        kind: rectangle,
+        x: 300,
+        y: 280,
+        width: 100,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-end-1,
+        kind: rectangle,
+        x: 410,
+        y: 280,
+        width: 100,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-end-2,
+        kind: rectangle,
+        x: 520,
+        y: 280,
+        width: 100,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-end-3,
+        kind: rectangle,
+        x: 630,
+        y: 280,
+        width: 100,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-end-t1,
+        kind: text,
+        x: 448,
+        y: 288,
+        width: 40,
+        height: 40,
+        text: "•",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: c-end-t2,
+        kind: text,
+        x: 550,
+        y: 288,
+        width: 60,
+        height: 40,
+        text: "••",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: c-end-t3,
+        kind: text,
+        x: 652,
+        y: 288,
+        width: 70,
+        height: 40,
+        text: "•••",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: c-end-n,
+        kind: text,
+        x: 780,
+        y: 290,
+        width: 260,
+        height: 36,
+        text: "0 → 3 စက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-start-l,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 300,
+        height: 36,
+        text: "steps(4, start)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-start-0,
+        kind: rectangle,
+        x: 300,
+        y: 414,
+        width: 100,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-start-1,
+        kind: rectangle,
+        x: 410,
+        y: 414,
+        width: 100,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-start-2,
+        kind: rectangle,
+        x: 520,
+        y: 414,
+        width: 100,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-start-3,
+        kind: rectangle,
+        x: 630,
+        y: 414,
+        width: 100,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-start-t0,
+        kind: text,
+        x: 338,
+        y: 422,
+        width: 40,
+        height: 40,
+        text: "•",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: c-start-t1,
+        kind: text,
+        x: 440,
+        y: 422,
+        width: 60,
+        height: 40,
+        text: "••",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: c-start-t2,
+        kind: text,
+        x: 542,
+        y: 422,
+        width: 70,
+        height: 40,
+        text: "•••",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: c-start-t3,
+        kind: text,
+        x: 644,
+        y: 422,
+        width: 80,
+        height: 40,
+        text: "••••",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: c-start-n,
+        kind: text,
+        x: 780,
+        y: 424,
+        width: 260,
+        height: 36,
+        text: "1 → 4 စက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-none,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 700,
+        height: 36,
+        text: "jump-none → အစ ရော အဆုံး ရော ပြ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-both,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 700,
+        height: 36,
+        text: "jump-both → နှစ်ဖက်စလုံးမှာ ခုန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — fill mode: what shows outside the run. Orange = before (the
+    # delay), green = the run, blue = after; one row per keyword.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Fill mode · run ရဲ့ အပြင်ဘက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-before,
+        kind: rectangle,
+        x: 300,
+        y: 236,
+        width: 220,
+        height: 64,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-active,
+        kind: rectangle,
+        x: 520,
+        y: 236,
+        width: 240,
+        height: 64,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: d-after,
+        kind: rectangle,
+        x: 760,
+        y: 236,
+        width: 220,
+        height: 64,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-before-l,
+        kind: text,
+        x: 316,
+        y: 250,
+        width: 190,
+        height: 36,
+        text: "delay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-active-l,
+        kind: text,
+        x: 536,
+        y: 250,
+        width: 210,
+        height: 36,
+        text: "run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-after-l,
+        kind: text,
+        x: 776,
+        y: 250,
+        width: 190,
+        height: 36,
+        text: "ပြီးနောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-none,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 700,
+        height: 36,
+        text: "none → run အတွင်းမှာပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-backwards,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "backwards → delay မှာ ပထမ keyframe",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-forwards,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 700,
+        height: 36,
+        text: "forwards → ပြီးနောက် နောက်ဆုံး keyframe",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-both,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 700,
+        height: 36,
+        text: "both → နှစ်ခုလုံး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — the shorthand. Black = the name, orange = the first time
+    # (duration), blue = the second time (delay), violet = a keyword, green =
+    # a comma-separated list.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Animation shorthand",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-name,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 140,
+        height: 40,
+        text: "fade-in",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: e-dur,
+        kind: text,
+        x: 470,
+        y: 240,
+        width: 110,
+        height: 40,
+        text: "600ms",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: e-delay,
+        kind: text,
+        x: 610,
+        y: 240,
+        width: 50,
+        height: 40,
+        text: "1s",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-fill,
+        kind: text,
+        x: 690,
+        y: 240,
+        width: 180,
+        height: 40,
+        text: "backwards",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: e-dur-l,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 600,
+        height: 36,
+        text: "ပထမ အချိန် → ကြာချိန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-delay-l,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 600,
+        height: 36,
+        text: "ဒုတိယ အချိန် → delay",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-order,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 700,
+        height: 36,
+        text: "ကျန်တာ အစဉ် ကြိုက်သလို · မရေးရင် default",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-multi,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 36,
+        text: "pulse 1s infinite, fade-in 400ms",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-multi-l,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 700,
+        height: 36,
+        text: "comma → animation တစ်ခုထက် ပို",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — what to animate, and where animations sit in the cascade.
+    # Green = cheap (transform, opacity), red = layout every frame, orange =
+    # the transform trap, violet = the cascade.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "ဘာကို animate လုပ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-fast,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 700,
+        height: 36,
+        text: "transform · opacity → မြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-slow,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 760,
+        height: 36,
+        text: "width · height · top · margin → layout",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-ind,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 700,
+        height: 36,
+        text: "translate · scale · rotate",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-trap,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 700,
+        height: 36,
+        text: "transform → စာရင်း တစ်ခုလုံး အစားထိုး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-cascade,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 36,
+        text: "animation > ပုံမှန် declaration",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-important,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 700,
+        height: 36,
+        text: "!important > animation",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-ignored,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 700,
+        height: 36,
+        text: "keyframe ထဲက !important → မသက်ရောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board G — the closing question and the rule of thumb. Blue = question,
+    # green = answer, orange = transition, violet = animation.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 700,
+        height: 40,
+        text: "keyframe အနည်းဆုံး ဘယ်နှခု?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: g-a,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 700,
+        height: 36,
+        text: "1 ခု · ကျန်တာ element ရဲ့ style",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-trans,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "transition → state ပြောင်းမှ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-anim,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 700,
+        height: 36,
+        text: "animation → အဆင့် များများ · သူ့ဘာသာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4139
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: keyframes-intro
+    chapter: "Keyframe ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ transition နဲ့ state ပြောင်းတာကို ချောမွေ့အောင် လုပ်ခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ keyframe animation နဲ့ အရာတွေကို သူ့ဘာသာ လှုပ်ရှားစေပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-timeline]] animation က timeline ပေါ်မှာ run ပါတယ်။ keyframe ဆိုတာ အဲဒီ အချိန်
+      တစ်နေရာမှာ element ဘယ်လို ပုံစံ ရှိရမလဲ မှတ်ထားတဲ့ အဆင့်ဖြစ်ပြီး၊ ရာခိုင်နှုန်းနဲ့
+      ရေးပါတယ်။ [[mark:draw-states]] ဥပမာ ဒီ အစက်လေးက အစမှာ သေးပါတယ်။ တစ်ဝက်မှာ ကြီးပြီး
+      ဖျော့သွားပြီး၊ အဆုံးမှာ ပြန်သေးသွားပါတယ်။ [[mark:draw-fill]] ကိုယ်က အဲဒီ အချိန်
+      နည်းနည်းကိုပဲ ရေးရပြီး၊ ကြားထဲက frame တွေ အားလုံးကို browser က ဖြည့်ပေးပါတယ်။
+      [[mark:draw-compare]] ဒါက transition နဲ့ ကွာတဲ့ နေရာပါ။ transition မှာ state နှစ်ခုပဲ
+      ရှိပြီး၊ class အသစ်လို တစ်ခုခု ပြောင်းမှ စပါတယ်။ animation ကတော့ state ပြောင်းဖို့
+      မစောင့်ဘဲ၊ keyframe ကြိုက်သလောက်နဲ့ သူ့ဘာသာ ပြပြီး၊ ထပ်ခါထပ်ခါလည်း ပြလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: what is a keyframe"
+        url: "https://web.dev/learn/css/animations#keyframe"
+      - title: "web.dev Learn CSS — Transitions"
+        url: "https://web.dev/learn/css/transitions"
+      - title: "MDN — Using CSS animations"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animations/Using_CSS_animations"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the code tour, over 40 s later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-timeline
+        type: whiteboard.apply
+        at: { mark: draw-timeline }
+        upsertIds: [a-line, a-k0, a-k50, a-k100, a-l0, a-l50, a-l100]
+        drawMs: 2800
+      - id: draw-states
+        type: whiteboard.apply
+        at: { mark: draw-states }
+        upsertIds: [a-s0, a-s50, a-s100]
+        drawMs: 1800
+      - id: draw-fill
+        type: whiteboard.apply
+        at: { mark: draw-fill }
+        upsertIds: [a-arrow1, a-arrow2, a-fill-l]
+        drawMs: 2200
+      - id: draw-compare
+        type: whiteboard.apply
+        at: { mark: draw-compare }
+        upsertIds: [a-trans, a-anim]
+        drawMs: 2400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-dot]] ဒီနေ့ အထူး card ရဲ့ နာမည်ဘေးမှာ အစိမ်းရောင် အစက်လေး ရှိပါတယ်။
+      [[mark:select-steam]] card အောက်က ခွက်မှာ ရေနွေးငွေ့ မျဉ်း သုံးကြောင်း ရှိပါတယ်။
+      [[mark:select-strip]] ပြီးတော့ စမ်းမယ့် easing နာမည်တွေ ပါတဲ့ chip ခြောက်ခု ရှိပါတယ်။
+      [[mark:select-pause]] သူတို့ အောက်မှာ chip တွေအတွက် ခဏရပ် ခလုတ် ရှိပါတယ်။
+      [[mark:select-dots]] အော်ဒါ ပြင်ဆင်နေပါတယ် ဆိုတဲ့ စာကြောင်းက အစက် လေးစက်နဲ့ ဆုံးပါတယ်။
+      [[mark:select-banner]] မှာမယ် ခလုတ်က အော်ဒါ တင်ပြီးကြောင်း banner ကို ပြလိုက် ဖျောက်လိုက်
+      လုပ်ပါတယ်။ [[mark:open-styles]] ဒီတစ်ခါ CSS ဖိုင်က အလွတ် မဟုတ်ပါဘူး။
+      [[mark:select-pinned]] အပေါ်ဆုံးမှာ အသင့်ရေးထားတဲ့ keyframes rule သုံးခု ရှိပါတယ်။
+      သုံးတဲ့အခါမှ တစ်ခုချင်း ကြည့်ပြီး၊ ကျန်တာကို သူတို့ အောက်မှာ ရိုက်ပါမယ်။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ ဘာမှ မလှုပ်သေးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Animations"
+        url: "https://web.dev/learn/css/animations"
+      - title: "MDN — @keyframes"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@keyframes"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-dot
+        type: editor.select
+        at: { mark: select-dot }
+        target:
+          {
+            file: index.html,
+            text: '<span class="dot" aria-hidden="true" data-testid="dot"></span>',
+            occurrence: 1,
+          }
+      - id: select-pause
+        type: editor.select
+        at: { mark: select-pause }
+        target:
+          {
+            file: index.html,
+            text: '<button class="pause-btn" type="button" data-toggle-class="is-paused" data-target=".easing-strip" data-testid="pause-chips">',
+            occurrence: 1,
+          }
+      - id: select-steam
+        type: editor.select
+        at: { mark: select-steam }
+        target:
+          {
+            file: index.html,
+            text: '<span class="steam"></span><span class="steam"></span><span class="steam"></span>',
+            occurrence: 1,
+          }
+      - id: select-strip
+        type: editor.select
+        at: { mark: select-strip }
+        target:
+          {
+            file: index.html,
+            text: '<div class="easing-strip" lang="en" data-testid="easing-strip">',
+            occurrence: 1,
+          }
+      - id: select-dots
+        type: editor.select
+        at: { mark: select-dots }
+        target:
+          {
+            file: index.html,
+            text: '<span class="typing" aria-hidden="true">....</span>',
+            occurrence: 1,
+          }
+      - id: select-banner
+        type: editor.select
+        at: { mark: select-banner }
+        target:
+          {
+            file: index.html,
+            text: '<p class="banner" role="status" data-testid="banner">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: select-pinned
+        type: editor.select
+        at: { mark: select-pinned }
+        target:
+          {
+            file: styles.css,
+            text: "@keyframes slide {\n  to { translate: 200px 0; }\n}\n\n@keyframes dots {\n  from { inline-size: 0; }\n  to { inline-size: 4ch; }\n}\n\n@keyframes fade-in {\n  from { opacity: 0; }\n}",
+            occurrence: 1,
+          }
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-special
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-strip
+        type: expect.preview
+        at: { afterAction: expect-special }
+        timeoutMs: 5000
+        target: { by: testId, value: easing-strip }
+        textContains: "cubic-bezier"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-banner-hidden
+        type: expect.preview
+        at: { afterAction: expect-strip }
+        timeoutMs: 5000
+        target: { by: testId, value: banner }
+        attribute: { name: class, value: "banner" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-banner-hidden }
+
+  - id: pulse-keyframes
+    chapter: "ပထမ animation ကို ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:type-pulse]] အစက်လေးကို ကြီးလိုက် သေးလိုက် ဖြစ်အောင် လုပ်ကြည့်ရအောင်။ ပထမဆုံး pulse
+      ဆိုတဲ့ keyframes rule ရေးပါမယ်။ သူ့ထဲမှာ 50 ရာခိုင်နှုန်းမှာ keyframe တစ်ခုပဲ ရှိပြီး၊
+      အစက်က နည်းနည်း ပိုကြီးပြီး ဖျော့သွားပါမယ်။ [[mark:after-pulse]] အစက်လေးက ဘာမှ
+      မပြောင်းသေးပါဘူး။ keyframes rule က timeline တစ်ခုကို ရေးထားရုံပဲ ဖြစ်ပြီး၊ element တစ်ခုက
+      နာမည်နဲ့ ခေါ်မှပဲ ပြပါတယ်။ [[mark:select-name]] ဒီ နာမည်ကို ကြည့်ပါ။ ကိုယ်ကြိုက်တဲ့
+      စကားလုံး ပေးလို့ ရပြီး၊ စာလုံး အကြီး အသေး ခွဲပါတယ်။ ဒါကြောင့် P အကြီးနဲ့ ရေးရင် တခြား
+      animation တစ်ခု ဖြစ်သွားပါတယ်။ none လို CSS က သုံးပြီးသား စကားလုံးတွေကိုတော့ နာမည် ပေးလို့
+      မရပါဘူး။ [[mark:select-fifty]] အခု keyframe ကို ကြည့်ပါ။ အစနဲ့ အဆုံး keyframe မရှိလို့၊
+      browser က အဲဒီ နှစ်နေရာမှာ အစက်ရဲ့ ကိုယ်ပိုင် style ကို သုံးပါတယ်။ ဒါကြောင့် ပုံမှန်
+      အရွယ်ကနေ ကြီးပြီး ပြန်သေးလာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: @keyframes"
+        url: "https://web.dev/learn/css/animations#keyframes-css"
+      - title: "MDN — @keyframes (missing 0%/100% keyframes)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@keyframes"
+      - title: "MDN — <custom-ident> (case-sensitive, reserved words)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/custom-ident"
+      - title: "CSS Animations Level 1 — keyframes"
+        url: "https://www.w3.org/TR/css-animations-1/#keyframes"
+    actions:
+      - id: type-pulse
+        type: editor.type
+        at: { mark: type-pulse }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  from { opacity: 0; }\n}\n", occurrence: 1 }
+        text: "\n@keyframes pulse {\n  50% {\n    scale: 1.4;\n    opacity: 0.4;\n  }\n}\n"
+      - id: expect-pulse
+        type: expect.preview
+        at: { mark: after-pulse }
+        timeoutMs: 4000
+        target: { by: testId, value: dot }
+        attribute: { name: class, value: "dot" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target: { file: styles.css, text: "pulse", occurrence: 1 }
+      - id: select-fifty
+        type: editor.select
+        at: { mark: select-fifty }
+        target: { file: styles.css, text: "50% {", occurrence: 1 }
+
+  - id: pulse-run
+    narration: >
+      [[mark:type-duration]] အခု အစက်လေးအတွက် rule တစ်ခု ရေးပါမယ်။ ပထမ declaration က animation
+      တစ်ခါ run ဖို့ ကြာချိန်ကို 1 စက္ကန့် ပေးပါတယ်။ [[mark:after-duration]] ဘာမှ မဖြစ်သေးပါဘူး။
+      အစက်က timeline ကို နာမည်နဲ့ မခေါ်ရသေးလို့၊ ကြာချိန် တစ်ခုတည်းနဲ့ ပြစရာ မရှိပါဘူး။
+      ကြာချိန်ရဲ့ default က 0 စက္ကန့် ဖြစ်လို့၊ သူ့ကို မပေးရင် run က စတာနဲ့ ပြီးသွားပါမယ်။
+      [[mark:type-name]] အခု အစက်ကနေ pulse ဆိုတဲ့ နာမည်နဲ့ timeline ကို ခေါ်ပါမယ်။ အစက်ကို
+      ကြည့်ပါ။ [[mark:after-name]] ကြည့်ပါ၊ တစ်ခါ ကြီးပြီး ရပ်သွားပါပြီ။ default အားဖြင့်
+      animation က တစ်ကြိမ်ပဲ run ပါတယ်။ [[mark:type-count]] ထပ်ခါထပ်ခါ ပြစေဖို့ ဘယ်နှကြိမ် ပြမလဲ
+      ဆိုတဲ့ iteration count ကို infinite ပေးပါမယ်။ [[mark:after-count]] အခု အစက်လေးက
+      အာရုံစိုက်မိအောင် အဆုံးမရှိ ကြီးလိုက် သေးလိုက် ဖြစ်နေပါပြီ။ အကြိမ်ကို တစ်ဝက်လို
+      အပိုင်းကိန်းနဲ့တောင် ပေးလို့ ရပါတယ်။ [[mark:select-longhands]] ဒီ declaration သုံးခုက
+      setting တစ်ခုစီကို property တစ်ခုစီနဲ့ ပေးတဲ့ longhand တွေပါ။ အဓိက ရှစ်ခု ရှိပြီး၊
+      နောက်မှာ shorthand တစ်ခုထဲ စုထည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-duration"
+        url: "https://web.dev/learn/css/animations#animation-duration"
+      - title: "web.dev Learn CSS — Animations: animation-iteration-count"
+        url: "https://web.dev/learn/css/animations#animation-iteration-count"
+      - title: "MDN — animation-name"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-name"
+      - title: "MDN — animation-duration (initial 0s)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-duration"
+      - title: "MDN — animation-iteration-count (infinite, fractions)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-iteration-count"
+    actions:
+      # Duration first, then the name: an animation starts when its name is
+      # set, and a later change to another longhand applies "as if from the
+      # start" (probe/durtest: name first + duration later shows NO pulse).
+      # Typing the name last makes the single 1 s pulse visible.
+      - id: type-duration
+        type: editor.type
+        at: { mark: type-duration }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    opacity: 0.4;\n  }\n}\n", occurrence: 1 }
+        text: "\n.dot {\n  animation-duration: 1s;\n}\n"
+      - id: expect-duration
+        type: expect.preview
+        at: { mark: after-duration }
+        timeoutMs: 4000
+        target: { by: testId, value: dot }
+        attribute: { name: class, value: "dot" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  animation-duration: 1s;\n", occurrence: 1 }
+        text: "  animation-name: pulse;\n"
+      - id: type-count
+        type: editor.type
+        at: { mark: type-count }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  animation-name: pulse;\n", occurrence: 1 }
+        text: "  animation-iteration-count: infinite;\n"
+      - id: expect-count
+        type: expect.preview
+        at: { mark: after-count }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-longhands
+        type: editor.select
+        at: { mark: select-longhands }
+        target:
+          {
+            file: styles.css,
+            text: "  animation-duration: 1s;\n  animation-name: pulse;\n  animation-iteration-count: infinite;\n",
+            occurrence: 1,
+          }
+
+  - id: steam
+    chapter: "From၊ to နဲ့ delay"
+    narration: >
+      [[mark:type-steam-keys]] ရေနွေးငွေ့ အလှည့်ပါ။ ဒီ keyframes rule က အောက်နားမှာ မမြင်ရဘဲ
+      စပါတယ်။ တစ်ဝက်မှာ အထင်ရှားဆုံး ဖြစ်ပြီး၊ အဆုံးမှာ ပိုမြင့်တဲ့ နေရာမှာ ပြန်ပျောက်ပါတယ်။
+      [[mark:select-from]] from နဲ့ to ကို ကြည့်ပါ။ သူတို့က 0 နဲ့ 100 ရာခိုင်နှုန်း ဖြစ်ပြီး၊
+      ဒီနေရာမှာ စကားလုံးနဲ့ ရေးလို့ ရတာ ဒီ နှစ်ခုပဲ ရှိပါတယ်။ ကျန်တာ အားလုံး ရာခိုင်နှုန်းပါ။
+      နေရာ အများကြီးကို comma ခြားပြီး တစ်ခါတည်း ရေးလို့ ရပြီး၊ ဖိုင်ထဲက အစဉ်ကလည်း
+      အရေးမကြီးပါဘူး။ [[mark:type-steam-rule]] ရေနွေးငွေ့ မျဉ်းတွေအတွက်တော့ animation shorthand
+      ကို သုံးပါမယ်။ နာမည်၊ 2 စက္ကန့်နဲ့ infinite ကို စာကြောင်း တစ်ကြောင်းတည်းမှာ ရေးပါမယ်။
+      [[mark:after-steam]] ရေနွေးငွေ့က တက်ပြီး ပျောက်ပါတယ်။ ဒါပေမဲ့ မျဉ်း သုံးကြောင်းက စက်လို
+      တစ်ပြိုင်တည်း လှုပ်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: @keyframes (from, to, percentages)"
+        url: "https://web.dev/learn/css/animations#keyframes-css"
+      - title: "MDN — @keyframes (keyframe selectors)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@keyframes"
+      - title: "MDN — animation (shorthand)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation"
+    actions:
+      - id: type-steam-keys
+        type: editor.type
+        at: { mark: type-steam-keys }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "  animation-iteration-count: infinite;\n}\n", occurrence: 1 }
+        text: "\n@keyframes steam {\n  from { translate: 0 6px; opacity: 0; }\n  50% { opacity: 0.8; }\n  to { translate: 0 -12px; opacity: 0; }\n}\n"
+      - id: select-from
+        type: editor.select
+        at: { mark: select-from }
+        target:
+          {
+            file: styles.css,
+            text: "from { translate: 0 6px; opacity: 0; }\n  50% { opacity: 0.8; }\n  to { translate: 0 -12px; opacity: 0; }",
+            occurrence: 1,
+          }
+      - id: type-steam-rule
+        type: editor.type
+        at: { mark: type-steam-rule }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  to { translate: 0 -12px; opacity: 0; }\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.steam {\n  animation: steam 2s infinite;\n}\n"
+      - id: expect-steam
+        type: expect.preview
+        at: { mark: after-steam }
+        timeoutMs: 4000
+        target: { by: testId, value: steam-cup }
+        attribute: { name: aria-label, value: "ရေနွေးငွေ့ တက်နေတဲ့ ခွက်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: stagger
+    narration: >
+      [[mark:type-delay-2]] delay က ပထမ run မစခင် စောင့်ပေးပါတယ်။ အနုတ် delay ကတော့ မစောင့်ဘဲ
+      ချက်ချင်း စပြီး၊ အဲဒီ အချိန် ကျော်ပြီးသား နေရာကနေ စပါတယ်။ ဒုတိယ မျဉ်းက 600 millisecond
+      ကျော်ပြီးသား နေရာကနေ စပါမယ်။ [[mark:type-delay-3]] တတိယ မျဉ်းကတော့ 1200 millisecond
+      ကျော်ပြီးသားကနေ စပါတယ်။ [[mark:after-delays]] အခု မျဉ်း သုံးကြောင်းက တကယ့် ရေနွေးငွေ့လို
+      တစ်ကြောင်းပြီး တစ်ကြောင်း တက်လာပါပြီ။ banner မှာ အပေါင်း delay ကို နောက်မှ သုံးပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-delay"
+        url: "https://web.dev/learn/css/animations#animation-delay"
+      - title: "MDN — animation-delay (negative values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-delay"
+    actions:
+      - id: type-delay-2
+        type: editor.type
+        at: { mark: type-delay-2 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  animation: steam 2s infinite;\n}\n", occurrence: 1 }
+        text: "\n.steam:nth-child(2) { animation-delay: -600ms; }\n"
+      - id: type-delay-3
+        type: editor.type
+        at: { mark: type-delay-3 }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".steam:nth-child(2) { animation-delay: -600ms; }\n",
+            occurrence: 1,
+          }
+        text: ".steam:nth-child(3) { animation-delay: -1200ms; }\n"
+      - id: expect-delays
+        type: expect.preview
+        at: { mark: after-delays }
+        timeoutMs: 4000
+        target: { by: testId, value: steam-cup }
+        attribute: { name: role, value: "img" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: easing-board
+    chapter: "Easing နဲ့ direction"
+    narration: >
+      [[mark:open-easing]] chip တွေ မစခင် easing ကို ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-frame]]
+      အချိန်က ညာဘက်ကို သွားပြီး၊ ရောက်ပြီးသလောက် အကွာအဝေးက အပေါ်ကို တက်ပါတယ်။
+      [[mark:draw-linear]] linear က မျဉ်းဖြောင့် ဖြစ်ပြီး၊ အစကနေ အဆုံးထိ အမြန်နှုန်း တူပါတယ်။
+      [[mark:draw-in-out]] ease in က နှေးနှေး စပြီး မြန်မြန် ဆုံးပါတယ်။ ease out က မြန်မြန်
+      စပြီး အဆုံးမှာ နှေးသွားပါတယ်။ ease နဲ့ ease in out ကတော့ အစနဲ့ အဆုံးမှာ နှေးပြီး၊ default
+      က ease ပါ။ [[mark:draw-bezier]] keyword တစ်ခုစီက အသင့်လုပ်ထားတဲ့ cubic bezier မျဉ်းကွေးပါ။
+      cubic bezier function နဲ့ဆိုရင် control point နှစ်ခုကို ကိုယ်တိုင် ပေးလို့ ရပါတယ်။
+      [[mark:draw-overshoot]] control point တွေရဲ့ အချိန် တန်ဖိုးက 0 နဲ့ 1 ကြားမှာ ရှိရပေမယ့်၊
+      ရောက်ပြီးသလောက် တန်ဖိုးကတော့ အဲဒီလို မလိုပါဘူး။ 1 ကျော်ရင်တော့ ရောက်ရမယ့် နေရာကို
+      ကျော်ပြီးမှ ပြန်လာပါတယ်။ [[mark:draw-segment]] နောက်တစ်ချက်က၊ easing ဟာ animation
+      တစ်ခုလုံးမှာ တစ်ခါတည်း မဟုတ်ဘဲ၊ keyframe နှစ်ခုကြားက အပိုင်း တစ်ခုစီမှာ သက်ရောက်ပါတယ်။
+      ဒါကြောင့် pulse မှာ ကြီးလာချိန်နဲ့ ပြန်သေးချိန်မှာ easing တစ်ခါစီ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-timing-function"
+        url: "https://web.dev/learn/css/animations#animation-timing-function"
+      - title: "MDN — <easing-function> (keyword curves, cubic-bezier)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function"
+      - title: "CSS Easing Functions Level 1 — cubic Bézier easing functions"
+        url: "https://www.w3.org/TR/css-easing-1/#cubic-bezier-easing-functions"
+      - title: "MDN — animation-timing-function (applies per keyframe interval)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-timing-function"
+    actions:
+      - id: open-easing
+        type: whiteboard.apply
+        at: { mark: open-easing }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-frame
+        type: whiteboard.apply
+        at: { mark: draw-frame }
+        upsertIds: [b-frame, b-progress, b-time]
+        drawMs: 1800
+      - id: draw-linear
+        type: whiteboard.apply
+        at: { mark: draw-linear }
+        upsertIds:
+          [
+            b-lin-0,
+            b-lin-1,
+            b-lin-2,
+            b-lin-3,
+            b-lin-4,
+            b-lin-5,
+            b-lin-6,
+            b-lin-7,
+            b-lin-8,
+            b-l-linear,
+          ]
+        drawMs: 1800
+      - id: draw-in-out
+        type: whiteboard.apply
+        at: { mark: draw-in-out }
+        upsertIds:
+          [
+            b-in-1,
+            b-in-2,
+            b-in-3,
+            b-in-4,
+            b-in-5,
+            b-in-6,
+            b-in-7,
+            b-l-in,
+            b-out-1,
+            b-out-2,
+            b-out-3,
+            b-out-4,
+            b-out-5,
+            b-out-6,
+            b-out-7,
+            b-l-out,
+            b-l-ease,
+            b-l-ease2,
+          ]
+        drawMs: 4000
+      - id: draw-bezier
+        type: whiteboard.apply
+        at: { mark: draw-bezier }
+        upsertIds: [b-l-bezier]
+        drawMs: 1200
+      - id: draw-overshoot
+        type: whiteboard.apply
+        at: { mark: draw-overshoot }
+        upsertIds:
+          [
+            b-over-1,
+            b-over-2,
+            b-over-3,
+            b-over-4,
+            b-over-5,
+            b-over-6,
+            b-over-7,
+            b-over-8,
+            b-over-9,
+            b-over-10,
+            b-over-11,
+            b-l-over,
+          ]
+        drawMs: 2600
+      - id: draw-segment
+        type: whiteboard.apply
+        at: { mark: draw-segment }
+        upsertIds: [b-segment]
+        drawMs: 1600
+
+  - id: easing-chips
+    narration: >
+      [[mark:close-easing]] editor ထဲ ပြန်ရအောင်။ [[mark:select-slide]] ပထမ အသင့်ရေးထားတဲ့ slide
+      keyframes ကို ကြည့်ပါ။ သူ့မှာ to keyframe တစ်ခုပဲ ရှိလို့၊ chip တစ်ခုစီက သူ့ နေရာကနေ
+      ညာဘက်ကို 200 pixel ရွေ့သွားပါမယ်။ [[mark:type-strip]] chip ခြောက်ခုလုံးကို slide animation
+      ပေးပါမယ်။ တစ်ခါ run ရင် 2 စက္ကန့် ကြာပြီး အဆုံးမရှိ ပြန်ပြပါမယ်။ အဆုံးမှာ setting
+      နောက်တစ်ခု ပါပြီး၊ အဲဒါကို ခဏနေရင် ကြည့်ပါမယ်။ [[mark:after-strip]] chip တွေက ညာဘက်ကို
+      သွားပြီး ပြန်လာပါတယ်။ [[mark:select-alternate]] ဒါက direction setting ကြောင့်ပါ။ alternate
+      က ရှေ့ကို တစ်ခါ၊ နောက်ပြန် တစ်ခါ ပြပါတယ်။ reverse ဆိုရင်တော့ အမြဲ နောက်ပြန် ပြပြီး၊
+      နောက်ပြန် run တဲ့အခါ easing ကလည်း ပြောင်းပြန် ဖြစ်ပါတယ်။ [[mark:type-keywords]] အခု ရှေ့က
+      chip ငါးခုကို သူ့ label မှာ ရေးထားတဲ့ easing keyword အတိုင်း timing function တစ်ခုစီ
+      ပေးပါမယ်။ animation နဲ့ ကြာချိန်ကတော့ အားလုံး တူတူပါပဲ။ [[mark:after-keywords]]
+      အကွာအဝေးရော အချိန်ရော တူပေမယ့်၊ လမ်းတစ်လျှောက် အမြန်နှုန်းက မတူပါဘူး။ linear chip က
+      တစ်သမတ်တည်း ရွေ့ပြီး၊ ease in chip ကတော့ နှေးနှေးလေး စပါတယ်။ [[mark:type-bezier]]
+      နောက်ဆုံး chip ကိုတော့ cubic bezier function ပေးပါမယ်။ [[mark:select-bezier-args]] ပထမနဲ့
+      တတိယ ဂဏန်းက အချိန် ဖြစ်လို့ 0 နဲ့ 1 ကြားမှာပဲ ရှိရပါတယ်။ ဒုတိယနဲ့ စတုတ္ထ ဂဏန်းကတော့
+      ရောက်ပြီးသလောက် တန်ဖိုး ဖြစ်ပြီး၊ ဒီမှာ 0 အောက်ကို ရောက်သလို 1 ကိုလည်း ကျော်ပါတယ်။
+      [[mark:after-bezier]] ကြည့်ပါ၊ အနီရောင် chip က မစခင် နောက်ကို နည်းနည်း ဆုတ်ပြီး၊ မရပ်ခင်
+      အဆုံးကို ကျော်သွားပါတယ်။ [[mark:explain-keyframe-easing]] easing ကို keyframe ထဲမှာလည်း
+      ပေးလို့ ရပြီး၊ အဲဒီ keyframe ကနေ စတဲ့ အပိုင်းမှာ သုံးပါတယ်။ ပြီးတော့ linear keyword နဲ့
+      နာမည်တူပေမယ့်၊ point အများကြီး ပေးလို့ ရတဲ့ linear function အသစ်နဲ့၊ မျဉ်းကွေး
+      တစ်ခုတည်းနဲ့ မရတဲ့ ခုန်ပြီး ပြန်ကန်တာ၊ spring လို ယိမ်းတာမျိုးကို ဆွဲလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-direction"
+        url: "https://web.dev/learn/css/animations#animation-direction"
+      - title: "MDN — animation-direction (reverse, alternate)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-direction"
+      - title: "MDN — cubic-bezier() (overshoot)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function/cubic-bezier"
+      - title: "MDN — animation-timing-function inside a keyframe"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-timing-function"
+      - title: "MDN — linear() easing function"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function/linear"
+    actions:
+      - id: close-easing
+        type: whiteboard.apply
+        at: { mark: close-easing }
+        open: false
+      - id: select-slide
+        type: editor.select
+        at: { mark: select-slide }
+        target:
+          {
+            file: styles.css,
+            text: "@keyframes slide {\n  to { translate: 200px 0; }\n}",
+            occurrence: 1,
+          }
+      - id: type-strip
+        type: editor.type
+        at: { mark: type-strip }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".steam:nth-child(3) { animation-delay: -1200ms; }\n",
+            occurrence: 1,
+          }
+        text: "\n.easing-strip span {\n  animation: slide 2s infinite alternate;\n}\n"
+      - id: expect-strip-typed
+        type: expect.preview
+        at: { mark: after-strip }
+        timeoutMs: 4000
+        target: { by: testId, value: easing-strip }
+        textContains: "ease-in-out"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-alternate
+        type: editor.select
+        at: { mark: select-alternate }
+        target: { file: styles.css, text: "alternate", occurrence: 1 }
+      - id: type-keywords
+        type: editor.type
+        at: { mark: type-keywords }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  animation: slide 2s infinite alternate;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.easing-strip span:nth-child(1) { animation-timing-function: linear; }\n.easing-strip span:nth-child(2) { animation-timing-function: ease; }\n.easing-strip span:nth-child(3) { animation-timing-function: ease-in; }\n.easing-strip span:nth-child(4) { animation-timing-function: ease-out; }\n.easing-strip span:nth-child(5) { animation-timing-function: ease-in-out; }\n"
+      - id: expect-keywords
+        type: expect.preview
+        at: { mark: after-keywords }
+        timeoutMs: 4000
+        target: { by: testId, value: easing-strip }
+        textContains: "linear"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # The LAST rule of the file while it is typed; line by line, so the
+      # cubic-bezier line lands whole (with its ")") before the narration
+      # explains its four numbers.
+      - id: type-bezier
+        type: editor.type
+        at: { mark: type-bezier }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".easing-strip span:nth-child(5) { animation-timing-function: ease-in-out; }\n",
+            occurrence: 1,
+          }
+        text: ".easing-strip span:nth-child(6) {\n  animation-timing-function: cubic-bezier(0.3, -0.5, 0.7, 1.5);\n}\n"
+      - id: select-bezier-args
+        type: editor.select
+        at: { mark: select-bezier-args }
+        target: { file: styles.css, text: "0.3, -0.5, 0.7, 1.5", occurrence: 1 }
+      - id: expect-bezier
+        type: expect.preview
+        at: { mark: after-bezier }
+        timeoutMs: 4000
+        target: { by: testId, value: easing-strip }
+        textContains: "cubic-bezier"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: steps
+    chapter: "Steps နဲ့ ခုန်ပြီး ပြောင်းတာ"
+    narration: >
+      [[mark:select-dots-keys]] ဒုတိယ အသင့်ရေးထားတဲ့ dots rule က အကျယ်ကို 0 ကနေ စာလုံး
+      လေးလုံးစာအထိ ကျယ်စေပါတယ်။ [[mark:type-typing]] အော်ဒါ ပြင်ဆင်နေပါတယ် နောက်က အစက်တွေကို ဒီ
+      animation ပေးပါမယ်။ 1 စက္ကန့်စီ အဆုံးမရှိ ပြပြီး၊ steps နဲ့ လေးဆင့် ခွဲပါမယ်။
+      [[mark:after-typing]] တဖြည်းဖြည်း ကြီးမလာဘဲ အကျယ်က ခုန်ပြီး ပြောင်းပါတယ်။ အစက် မရှိ၊
+      တစ်စက်၊ နှစ်စက်၊ သုံးစက်၊ ပြီးရင် ပြန်စပါတယ်။ steps က run ကို အညီအမျှ ပိုင်းပြီး ချက်ချင်း
+      ခုန်စေလို့၊ စာရိုက်နေတဲ့ အစက်၊ နာရီ လက်တံ၊ sprite ပုံတွေအတွက် သင့်ပါတယ်။
+      [[mark:open-steps]] ဒါပေမဲ့ လေးစက်ကို ဘာလို့ မမြင်ရတာလဲ။ [[mark:draw-end]] default
+      အားဖြင့် ခုန်တာက အဆင့် တစ်ခုစီရဲ့ အဆုံးမှာ ဖြစ်ပါတယ်။ ဒါကြောင့် run က ပထမ တန်ဖိုးနဲ့
+      စပါတယ်။ နောက်ဆုံး တန်ဖိုးကတော့ run ရဲ့ အဆုံးဆုံးမှာမှ ရောက်လာလို့၊ မမြင်ရခင်ပဲ နောက် run က
+      ပြန်စသွားပါတယ်။ [[mark:draw-start]] steps ရဲ့ ဒုတိယ တန်ဖိုးကို start ပေးရင်တော့ အဆင့်
+      တစ်ခုစီရဲ့ အစမှာ ခုန်လို့၊ အစက် တစ်စက်ကနေ လေးစက်အထိ ပြပြီး အစက် မရှိတာကို မပြပါဘူး။
+      [[mark:draw-jump-keywords]] jump none က ပထမနဲ့ နောက်ဆုံး တန်ဖိုး နှစ်ခုလုံး ပြပြီး၊ jump
+      both က အစနဲ့ အဆုံးမှာ ခုန်တာ တစ်ခုစီ ထပ်ထည့်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: steps"
+        url: "https://web.dev/learn/css/animations#steps"
+      - title: "MDN — steps() (jump-start, jump-end, jump-none, jump-both)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function/steps"
+      - title: "CSS Easing Functions Level 1 — step easing functions"
+        url: "https://www.w3.org/TR/css-easing-1/#step-easing-functions"
+    actions:
+      - id: select-dots-keys
+        type: editor.select
+        at: { mark: select-dots-keys }
+        target:
+          {
+            file: styles.css,
+            text: "@keyframes dots {\n  from { inline-size: 0; }\n  to { inline-size: 4ch; }\n}",
+            occurrence: 1,
+          }
+      # The LAST rule of the file while it is typed (steps has a "(").
+      - id: type-typing
+        type: editor.type
+        at: { mark: type-typing }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  animation-timing-function: cubic-bezier(0.3, -0.5, 0.7, 1.5);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.typing {\n  animation: dots 1s steps(4) infinite;\n}\n"
+      - id: expect-typing
+        type: expect.preview
+        at: { mark: after-typing }
+        timeoutMs: 4000
+        target: { by: testId, value: preparing }
+        textContains: "အော်ဒါ ပြင်ဆင်နေပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-steps
+        type: whiteboard.apply
+        at: { mark: open-steps }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-end
+        type: whiteboard.apply
+        at: { mark: draw-end }
+        upsertIds:
+          [c-end-l, c-end-0, c-end-1, c-end-t1, c-end-2, c-end-t2, c-end-3, c-end-t3, c-end-n]
+        drawMs: 3200
+      - id: draw-start
+        type: whiteboard.apply
+        at: { mark: draw-start }
+        upsertIds:
+          [
+            c-start-l,
+            c-start-0,
+            c-start-t0,
+            c-start-1,
+            c-start-t1,
+            c-start-2,
+            c-start-t2,
+            c-start-3,
+            c-start-t3,
+            c-start-n,
+          ]
+        drawMs: 3200
+      - id: draw-jump-keywords
+        type: whiteboard.apply
+        at: { mark: draw-jump-keywords }
+        upsertIds: [c-none, c-both]
+        drawMs: 2000
+
+  - id: fill-mode
+    chapter: "Fill mode နဲ့ play state"
+    narration: >
+      [[mark:close-steps]] banner အလှည့်ပါ။ [[mark:select-fade]] နောက်ဆုံး အသင့်ရေးထားတဲ့ fade
+      in rule မှာ from keyframe တစ်ခုပဲ ပါပါတယ်။ လုံးဝ မမြင်ရတာကနေ စပြီး၊ banner ရဲ့ ကိုယ်ပိုင်
+      style မှာ ဆုံးပါတယ်။ [[mark:type-banner]] banner ကို ပြတဲ့အခါ 1 စက္ကန့် စောင့်ပြီးမှ 600
+      millisecond အတွင်း ဖြည်းဖြည်း ပေါ်လာပါမယ်။ မှာမယ် ခလုတ်ကို နှိပ်မှာမို့ banner ကို သေချာ
+      ကြည့်ထားပါ။ [[mark:click-show]] 1 စက္ကန့်လောက် အပြည့် ပေါ်နေပြီး၊ ရုတ်တရက်
+      ပျောက်သွားပြီးမှ ဖြည်းဖြည်း ပြန်ပေါ်လာပါတယ်။ [[mark:after-show]] delay အတွင်းမှာ keyframe
+      တွေ မသက်ရောက်သေးလို့၊ banner က သူ့ ပုံမှန် style နဲ့ ပေါ်နေတာပါ။ [[mark:type-fill]] ဒါကို
+      fill mode က ပြင်ပေးပါတယ်။ backwards က delay အတွင်းမှာ ပထမ keyframe ကို သုံးပေးလို့၊ banner
+      က မမြင်ရဘဲ စပါတယ်။ [[mark:click-hide]] ဒီ ခလုတ်ကပဲ banner ကို ဖျောက်ပေးပြီး၊ နောက်တစ်ခါ
+      နှိပ်ရင် ပြန်ပြပါတယ်။ [[mark:click-show-again]] အခု delay တစ်လျှောက် မမြင်ရဘဲ နေပြီး၊
+      ပြီးမှ သပ်သပ်ရပ်ရပ် ဖြည်းဖြည်း ပေါ်လာပါတယ်။ [[mark:after-fill]] display none နဲ့
+      ဖျောက်လိုက်တော့ animation အဟောင်း ရပ်သွားပါတယ်။ ပြန်ပြတော့ animation အသစ် တစ်ခု အစကနေ
+      စတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-fill-mode"
+        url: "https://web.dev/learn/css/animations#animation-fill-mode"
+      - title: "MDN — animation-fill-mode (none, forwards, backwards, both)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-fill-mode"
+      - title: "MDN — animation (first time = duration, second = delay)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation"
+      - title: "CSS Animations Level 1 — display: none ends a running animation"
+        url: "https://www.w3.org/TR/css-animations-1/#animations"
+    actions:
+      - id: close-steps
+        type: whiteboard.apply
+        at: { mark: close-steps }
+        open: false
+      - id: select-fade
+        type: editor.select
+        at: { mark: select-fade }
+        target:
+          {
+            file: styles.css,
+            text: "@keyframes fade-in {\n  from { opacity: 0; }\n}",
+            occurrence: 1,
+          }
+      - id: type-banner
+        type: editor.type
+        at: { mark: type-banner }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  animation: dots 1s steps(4) infinite;\n}\n", occurrence: 1 }
+        text: "\n.banner.is-shown {\n  animation: fade-in 600ms 1s;\n}\n"
+      - id: click-show
+        type: preview.click
+        at: { mark: click-show }
+        target: { by: testId, value: show-banner }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-shown
+        type: expect.preview
+        at: { mark: after-show }
+        timeoutMs: 4000
+        target: { by: testId, value: banner }
+        attribute: { name: class, value: "banner is-shown" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-fill
+        type: editor.type
+        at: { mark: type-fill }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  animation: fade-in 600ms 1s;\n", occurrence: 1 }
+        text: "  animation-fill-mode: backwards;\n"
+      - id: click-hide
+        type: preview.click
+        at: { mark: click-hide, offsetMs: 300 }
+        target: { by: testId, value: show-banner }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-hidden
+        type: expect.preview
+        at: { afterAction: click-hide }
+        timeoutMs: 4000
+        target: { by: testId, value: banner }
+        attribute: { name: class, value: "banner" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-show-again
+        type: preview.click
+        at: { mark: click-show-again }
+        target: { by: testId, value: show-banner }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-shown-again
+        type: expect.preview
+        at: { mark: after-fill }
+        timeoutMs: 4000
+        target: { by: testId, value: banner }
+        attribute: { name: class, value: "banner is-shown" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: fill-board
+    narration: >
+      [[mark:open-fill]] fill mode က ပြောတဲ့ အပိုင်း သုံးပိုင်းကို ကြည့်ရအောင်။
+      [[mark:draw-zones]] run မစခင်က delay၊ run ကိုယ်တိုင်နဲ့ run ပြီးသွားတဲ့ နောက်က အချိန်ပါ။
+      [[mark:draw-none]] default ဖြစ်တဲ့ none မှာ keyframe တွေက run အတွင်းမှာပဲ သက်ရောက်ပါတယ်။
+      [[mark:draw-backwards]] backwards က delay အတွင်းမှာပါ ပထမ keyframe ကို သုံးပါတယ်။
+      [[mark:draw-forwards]] forwards က run ပြီးရင် နောက်ဆုံး keyframe ကို ဆက်ထားပါတယ်။ ကိုယ့်
+      fade in က banner ရဲ့ ကိုယ်ပိုင် style မှာ ဆုံးလို့ ဒီမှာ ဘာမှ မပြောင်းပါဘူး။ animation က
+      ပုံစံ အသစ်မှာ ဆုံးရင်တော့၊ မူလ ပုံစံကို ပြန်ခုန်တာကို တားပေးပါတယ်။ [[mark:draw-both]] both
+      က နှစ်ခုလုံး လုပ်ပေးလို့၊ ပေါ်လာတဲ့ animation အများစုအတွက် စိတ်ချရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-fill-mode"
+        url: "https://web.dev/learn/css/animations#animation-fill-mode"
+      - title: "MDN — animation-fill-mode"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-fill-mode"
+      - title: "CSS Animations Level 1 — animation-fill-mode"
+        url: "https://www.w3.org/TR/css-animations-1/#animation-fill-mode"
+    actions:
+      - id: open-fill
+        type: whiteboard.apply
+        at: { mark: open-fill }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-zones
+        type: whiteboard.apply
+        at: { mark: draw-zones }
+        upsertIds: [d-before, d-before-l, d-active, d-active-l, d-after, d-after-l]
+        drawMs: 2400
+      - id: draw-none
+        type: whiteboard.apply
+        at: { mark: draw-none }
+        upsertIds: [d-none]
+        drawMs: 1200
+      - id: draw-backwards
+        type: whiteboard.apply
+        at: { mark: draw-backwards }
+        upsertIds: [d-backwards]
+        drawMs: 1200
+      - id: draw-forwards
+        type: whiteboard.apply
+        at: { mark: draw-forwards }
+        upsertIds: [d-forwards]
+        drawMs: 1200
+      - id: draw-both
+        type: whiteboard.apply
+        at: { mark: draw-both }
+        upsertIds: [d-both]
+        drawMs: 1000
+
+  - id: play-state
+    narration: >
+      [[mark:close-fill]] နောက်ထပ် တစ်ခုက ခဏရပ်တာပါ။ [[mark:type-paused]] ဒီ rule က chip တွေ
+      ပါတဲ့ box မှာ paused class ရှိတဲ့အခါ၊ chip တွေရဲ့ play state ကို paused ပေးပါတယ်။ အဲဒီ
+      class ကိုတော့ ခဏရပ် ခလုတ်က ထည့်လိုက် ဖြုတ်လိုက် လုပ်ပါတယ်။ [[mark:click-pause]] ခဏရပ်ကို
+      နှိပ်ရအောင်။ [[mark:after-pause]] chip တွေက ရှိတဲ့ နေရာမှာပဲ ရပ်သွားပါပြီ။
+      [[mark:click-resume]] ထပ်နှိပ်လိုက်တော့ အစကနေ မဟုတ်ဘဲ၊ ရပ်ခဲ့တဲ့ နေရာကနေ ဆက်သွားပါတယ်။
+      [[mark:after-resume]] ရပ်ထားတဲ့ animation က သူ့ အချိန်ကို မှတ်ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: animation-play-state"
+        url: "https://web.dev/learn/css/animations#animation-play-state"
+      - title: "MDN — animation-play-state"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-play-state"
+    actions:
+      - id: close-fill
+        type: whiteboard.apply
+        at: { mark: close-fill }
+        open: false
+      - id: type-paused
+        type: editor.type
+        at: { mark: type-paused }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  animation-fill-mode: backwards;\n}\n", occurrence: 1 }
+        text: "\n.easing-strip.is-paused span {\n  animation-play-state: paused;\n}\n"
+      - id: click-pause
+        type: preview.click
+        at: { mark: click-pause }
+        target: { by: testId, value: pause-chips }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-paused
+        type: expect.preview
+        at: { mark: after-pause }
+        timeoutMs: 4000
+        target: { by: testId, value: easing-strip }
+        attribute: { name: class, value: "easing-strip is-paused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-resume
+        type: preview.click
+        at: { mark: click-resume }
+        target: { by: testId, value: pause-chips }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-resumed
+        type: expect.preview
+        at: { mark: after-resume }
+        timeoutMs: 4000
+        target: { by: testId, value: easing-strip }
+        attribute: { name: class, value: "easing-strip" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: shorthand-board
+    chapter: "Shorthand နဲ့ performance"
+    narration: >
+      [[mark:open-shorthand]] shorthand ကို ပြန်စုကြည့်ရအောင်။ [[mark:draw-short]] နာမည်၊
+      အချိန်တွေ၊ easing၊ အကြိမ်၊ direction၊ fill mode နဲ့ play state ကို တစ်ကြောင်းတည်းမှာ၊
+      အများအားဖြင့် ကြိုက်သလို အစဉ်နဲ့ ရေးလို့ ရပါတယ်။ [[mark:draw-times]] သတိထားရမယ့်
+      စည်းမျဉ်းက အချိန်တွေပါ။ ပထမ အချိန်က အမြဲ ကြာချိန် ဖြစ်ပြီး၊ ဒုတိယ အချိန်က အမြဲ delay ပါ။
+      မရေးတဲ့ setting တွေကိုတော့ default ပြန်ထားလို့၊ banner မှာ fill mode ကို shorthand ရဲ့
+      နောက်မှာ ရေးခဲ့တာပါ။ [[mark:draw-multi]] comma ခြားရင် element တစ်ခုက animation
+      အများကြီးကို တစ်ပြိုင်နက် run နိုင်ပြီး၊ တစ်ခုစီမှာ setting ကိုယ်စီ ရှိပါတယ်။ property
+      တစ်ခုတည်းကို နှစ်ခုက ပြောင်းရင်တော့ စာရင်းထဲက နောက်က တစ်ခု နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: shorthand"
+        url: "https://web.dev/learn/css/animations#shorthand"
+      - title: "MDN — animation (shorthand; several animations)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation"
+      - title: "CSS Animations Level 1 — the animation shorthand"
+        url: "https://www.w3.org/TR/css-animations-1/#animation"
+    actions:
+      - id: open-shorthand
+        type: whiteboard.apply
+        at: { mark: open-shorthand }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-short
+        type: whiteboard.apply
+        at: { mark: draw-short }
+        upsertIds: [e-name, e-dur, e-delay, e-fill]
+        drawMs: 2000
+      - id: draw-times
+        type: whiteboard.apply
+        at: { mark: draw-times }
+        upsertIds: [e-dur-l, e-delay-l, e-order]
+        drawMs: 2400
+      - id: draw-multi
+        type: whiteboard.apply
+        at: { mark: draw-multi }
+        upsertIds: [e-multi, e-multi-l]
+        drawMs: 2000
+
+  - id: performance-board
+    narration: >
+      [[mark:open-perf]] ဘယ် property တွေကို animate လုပ်သင့်လဲ။ [[mark:draw-fast]] lesson 38
+      မှာ မြင်ခဲ့သလို၊ transform နဲ့ opacity က layout နဲ့ paint ကို ပြန်မလုပ်ရလို့ သက်သာပါတယ်။
+      [[mark:draw-slow]] width၊ height၊ top နဲ့ margin ကတော့ frame တိုင်း layout ပြန်တွက်ရပါတယ်။
+      စာရိုက်နေတဲ့ အစက်တွေက အကျယ်ကို ပြောင်းပေမယ့် တစ်စက္ကန့်မှာ လေးခါပဲမို့ ပြဿနာ မရှိပါဘူး။
+      [[mark:draw-individual]] lesson 14 မှာ တွေ့ခဲ့သလို၊ translate၊ scale နဲ့ rotate ဆိုတဲ့
+      သီးခြား property တွေကို ပိုသုံးပါ။ transform ကို ပေးတဲ့ keyframe က transform စာရင်း
+      တစ်ခုလုံးကို အစားထိုးလို့၊ အလယ်ပို့ဖို့ transform ထဲမှာ ရေးထားတဲ့ translate function ကို
+      ဖျက်ပစ်နိုင်ပါတယ်။ [[mark:draw-cascade]] lesson 5 မှာ မြင်ခဲ့သလို၊ run နေတဲ့ animation က
+      style attribute အပါအဝင် ပုံမှန် CSS အားလုံးကို နိုင်ပေမယ့်၊ important declaration ကိုတော့
+      ရှုံးပါတယ်။ keyframe ထဲက important ကတော့ အလုပ် မလုပ်ပါဘူး။
+    sources:
+      - title: "web.dev — How to create high-performance CSS animations"
+        url: "https://web.dev/articles/animations-guide"
+      - title: "MDN — scale (individual transform property)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/scale"
+      - title: "MDN — @keyframes (!important in a keyframe is ignored)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@keyframes"
+      - title: "CSS Cascading and Inheritance Level 5 — cascade sorting order (animations)"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-sort"
+    actions:
+      - id: open-perf
+        type: whiteboard.apply
+        at: { mark: open-perf }
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-fast
+        type: whiteboard.apply
+        at: { mark: draw-fast }
+        upsertIds: [f-fast]
+        drawMs: 1400
+      - id: draw-slow
+        type: whiteboard.apply
+        at: { mark: draw-slow }
+        upsertIds: [f-slow]
+        drawMs: 1400
+      - id: draw-individual
+        type: whiteboard.apply
+        at: { mark: draw-individual }
+        upsertIds: [f-ind, f-trap]
+        drawMs: 2000
+      - id: draw-cascade
+        type: whiteboard.apply
+        at: { mark: draw-cascade }
+        upsertIds: [f-cascade, f-important, f-ignored]
+        drawMs: 2400
+
+  - id: reduced-motion
+    chapter: "Reduced motion"
+    narration: >
+      [[mark:close-perf]] လှုပ်တဲ့ အရာတွေက တချို့လူကို ခေါင်းမူး ပျို့အန်စေနိုင်ပါတယ်။
+      [[mark:insert-reduce]] user က လှုပ်ရှားမှု နည်းနည်းပဲ လိုချင်တယ်လို့ setting ဖွင့်ထားရင်၊
+      ဒီ reduced motion media query က ကိုက်ပြီး ရေနွေးငွေ့၊ အစက်နဲ့ chip တွေကို ပိတ်ပါတယ်။
+      [[mark:after-reduce]] lesson ကို record လုပ်တဲ့ စက်က လှုပ်ရှားမှု လျှော့ဖို့
+      မတောင်းထားလို့၊ preview မှာ ဘာမှ မပြောင်းပါဘူး။ ဒီ query ကို ကြည့်နေသူ တစ်ယောက်ချင်းစီရဲ့
+      စက်မှာ စစ်လို့၊ ကိုယ့် စက်မှာ ဒီ setting ဖွင့်ထားရင်တော့ အဲဒါတွေ အခုပဲ ရပ်သွားပါပြီ။
+      [[mark:select-reduce]] ဒီ selector တွေမှာ စာရိုက်နေတဲ့ အစက်တွေနဲ့ banner ရဲ့ fade in
+      တိုတို မပါပါဘူး။ reduced motion ဆိုတာ လှုပ်တာ နည်းဖို့နဲ့ ရုတ်တရက် မလှုပ်ဖို့ပါ။ အကုန်
+      ပိတ်ဖို့ မဟုတ်ပါဘူး။ [[mark:explain-opt-in]] lesson 38 က ပိုနူးညံ့တဲ့ နည်းကလည်း ဒီမှာ
+      အတူတူပါပဲ။ animation ကို no preference query ထဲမှာပဲ ထည့်ရင်၊ လျှော့ဖို့ မတောင်းထားတဲ့
+      သူတွေပဲ မြင်ရပြီး၊ ဒီ query ကို မသိတဲ့ browser ကလည်း animation မပြပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Animations: considerations (prefers-reduced-motion)"
+        url: "https://web.dev/learn/css/animations#tips"
+      - title: "MDN — prefers-reduced-motion"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+      - title: "web.dev — prefers-reduced-motion"
+        url: "https://web.dev/articles/prefers-reduced-motion"
+      - title: "Media Queries Level 5 — prefers-reduced-motion"
+        url: "https://www.w3.org/TR/mediaqueries-5/#prefers-reduced-motion"
+    actions:
+      - id: close-perf
+        type: whiteboard.apply
+        at: { mark: close-perf }
+        open: false
+      # One block insert: the media query's "(" never appears half-typed.
+      - id: insert-reduce
+        type: editor.type
+        at: { mark: insert-reduce }
+        cadence: block
+        target: { file: styles.css, after: "  animation-play-state: paused;\n}\n", occurrence: 1 }
+        text: "\n@media (prefers-reduced-motion: reduce) {\n  .steam,\n  .dot,\n  .easing-strip span {\n    animation: none;\n  }\n}\n"
+      - id: expect-reduce
+        type: expect.preview
+        at: { mark: after-reduce }
+        timeoutMs: 4000
+        target: { by: testId, value: steam-cup }
+        attribute: { name: role, value: "img" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-reduce
+        type: editor.select
+        at: { mark: select-reduce }
+        target:
+          { file: styles.css, text: "  .steam,\n  .dot,\n  .easing-strip span {\n", occurrence: 1 }
+
+  - id: more-facts
+    chapter: "နောက်ထပ် သိထားစရာ"
+    narration: >
+      banner ကို ပြန်ပြတော့ animation ပြန်စတာ မြင်ခဲ့ပါတယ်။ animation name ကို ပြောင်းရင်လည်း
+      အစကနေ ပြန်စပါတယ်။ ဒါကြောင့် နာမည် ရိုက်ပြီးတာနဲ့ အစက်က တစ်ခါ ကြီးလာခဲ့တာပါ။ ကျန်တဲ့
+      setting တွေကို ပြောင်းရင်တော့ ပြန်မစပါဘူး။ [[mark:explain-events]] JavaScript ကနေ
+      animation စတာ၊ ထပ်ပြတိုင်းနဲ့ ပြီးတာကို event အနေနဲ့ listen လုပ်လို့ ရပါတယ်။
+      [[mark:explain-newer]] animation composition ဆိုတာ animation က element ရဲ့ ကိုယ်ပိုင်
+      တန်ဖိုးကို အစားထိုးမလား၊ သူ့အပေါ် ပေါင်းထည့်မလား ဆုံးဖြတ်ပေးတာပါ။ ပြီးတော့ အချိန်အစား
+      scroll နေရာကို လိုက်တဲ့ scroll driven animation တွေကတော့ Baseline မဖြစ်သေးပါဘူး။
+    sources:
+      - title: "CSS Animations Level 1 — when an animation starts again"
+        url: "https://www.w3.org/TR/css-animations-1/#animations"
+      - title: "MDN — animationstart, animationiteration, animationend events"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/animationend_event"
+      - title: "MDN — animation-composition"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/animation-composition"
+      - title: "MDN — CSS scroll-driven animations"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_scroll-driven_animations"
+    actions: []
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ animation တစ်ခုမှာ keyframe အနည်းဆုံး
+      ဘယ်နှခု လိုလဲ။ [[mark:quiz-answer]] တစ်ခုပါ။ မရှိတဲ့ အစနဲ့ အဆုံးကို element ရဲ့ style ကနေ
+      ယူပါတယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ keyframes rule က timeline တစ်ခုကို
+      နာမည်ပေးထားပြီး၊ element က အဲဒီ နာမည်နဲ့ ကြာချိန်ကို ပေးမှ ပြပါတယ်။ [[mark:draw-rule]]
+      state ပြောင်းတဲ့အခါ transition ကို သုံးပြီး၊ အဆင့် များများ ပါတဲ့ လှုပ်ရှားမှု ဒါမှမဟုတ်
+      သူ့ဘာသာ စပြီး ထပ်ပြတဲ့ လှုပ်ရှားမှုအတွက် animation ကို သုံးပါ။ [[mark:next-lesson]] နောက်
+      lesson မှာတော့ အချိန်ကနေ နေရာဘက် ကူးပြီး၊ element တစ်ခုကို နောက်တစ်ခုရဲ့ ဘေးမှာ CSS
+      သက်သက်နဲ့ နေရာချပေးတဲ့ anchor positioning ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Animations: check your understanding"
+        url: "https://web.dev/learn/css/animations#check_your_understanding"
+      - title: "web.dev Learn CSS — Transitions"
+        url: "https://web.dev/learn/css/transitions"
+      - title: "web.dev Learn CSS — Anchor positioning (next lesson)"
+        url: "https://web.dev/learn/css/anchor-positioning"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [g-title, g-q]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [g-a]
+        drawMs: 1400
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [g-trans, g-anim]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: "@keyframes pulse {\n  50% {\n    scale: 1.4;\n    opacity: 0.4;\n  }\n}\n\n.dot {\n  animation-duration: 1s;\n  animation-name: pulse;\n  animation-iteration-count: infinite;\n}\n\n@keyframes steam {\n  from { translate: 0 6px; opacity: 0; }\n  50% { opacity: 0.8; }\n  to { translate: 0 -12px; opacity: 0; }\n}\n\n.steam {\n  animation: steam 2s infinite;\n}\n\n.steam:nth-child(2) { animation-delay: -600ms; }\n.steam:nth-child(3) { animation-delay: -1200ms; }\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".easing-strip span {\n  animation: slide 2s infinite alternate;\n}\n\n.easing-strip span:nth-child(1) { animation-timing-function: linear; }\n.easing-strip span:nth-child(2) { animation-timing-function: ease; }\n.easing-strip span:nth-child(3) { animation-timing-function: ease-in; }\n.easing-strip span:nth-child(4) { animation-timing-function: ease-out; }\n.easing-strip span:nth-child(5) { animation-timing-function: ease-in-out; }\n.easing-strip span:nth-child(6) {\n  animation-timing-function: cubic-bezier(0.3, -0.5, 0.7, 1.5);\n}\n\n.typing {\n  animation: dots 1s steps(4) infinite;\n}\n\n.banner.is-shown {\n  animation: fade-in 600ms 1s;\n  animation-fill-mode: backwards;\n}\n\n.easing-strip.is-paused span {\n  animation-play-state: paused;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .steam,\n  .dot,\n  .easing-strip span {\n    animation: none;\n  }\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
