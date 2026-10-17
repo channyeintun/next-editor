@@ -1,0 +1,2098 @@
+# CSS course (Burmese), lesson 40 of 43: anchor positioning.
+#
+# Narration is Burmese (voice-script.md next to this file holds the same text
+# with its marks; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 39; JavaScript used to measure and re-measure on
+# every scroll and resize, now one CSS link between an anchor and a positioned
+# element) → code tour (nav links + an empty bar, today's special with its name
+# in a span, three photo cards with "new" badges, an order button against the
+# right edge with its info box, and the tag + sale bubble at the very end of
+# the page) → anchor-name on the name, an absolutely positioned tag with
+# position-anchor, position-area: top → top right, bottom span-right, right
+# (later declarations win) → board (the 3x3 grid, the cell becomes the
+# containing block, spans, single keyword, logical and self- keywords) →
+# photo badges pile onto the last photo (last name wins; laid-out-first rule)
+# → anchor-scope on each card → the sale bubble with anchor() insets, then
+# anchor(center) → board (side keywords per axis, inside/outside, start/end,
+# percentages, fallback value, calc, insets only, anchor-center) → nav bar:
+# anchor() insets + anchor-size(width), then a later rule names the third link
+# (last wins, the bar jumps and resizes) → board (overflow, the try list) →
+# the info box covers the button (no room on the right), position-try-fallbacks:
+# flip-inline moves it left → board (@position-try, position-try-order and the
+# shorthand, scrolling follows the default anchor, position-visibility) →
+# recap (support shown on the finished page, @supports, renamed properties,
+# one quiz question, the recap), hand-off to popovers and dialogs (lesson 41).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload; no
+# HTML edit, no click, no kit.js. A keystroke-typed function or nth-child( has
+# an unclosed "(" until its ")", and an unclosed "(" swallows the rest of the
+# stylesheet, so every keystroke edit that contains "(" lands in the LAST rule
+# of the file (the bubble's insets, the nth-child rules, anchor-size). Edits
+# into earlier rules (the tag's position-area values, the info box's fallback)
+# contain no parentheses. Until a new declaration is complete it is invalid and
+# the previous one in the same rule keeps applying.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# document 720 tall; nav links at y 60 (first 26 px wide, third 56 px); the
+# special's name 33,165 99 × 38; photos 16 / 155 / 293, 342, 123 × 72; order
+# row 443–563 with the button at its right edge; the tag and bubble start at
+# the bottom (y 616). Tag: top 43,137 · top right 136,137 · bottom span-right
+# 37,207 · right 136,172. Badges: all at 359,318 (photo 3), then 81 / 220 /
+# 359. Bubble: 33,141 then 82,141. Bar: 16,89 0 wide → 26 wide → 143,89 56
+# wide. Info box: 236,469 (over the button) → 157,469 (left of it).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-40-anchor-positioning
+  title: "CSS course 40: Anchor positioning"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 40
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and tagline left out; its nav is the
+      # lesson's nav-underline block: three links and an empty .bar span), the
+      # kit drinks block (today's special only, its name wrapped in a
+      # .special-name span), the lesson blocks cards-with-photos (three cards,
+      # each with a photo and an "အသစ်" .new badge) and edge-info (an order
+      # button against the right edge and its .info box), and the
+      # special-tag block at the very end of <body>: the tag and the sale
+      # bubble. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and tagline left out; its nav is the nav-underline block) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <!-- lesson block: nav-underline (three links and the bar that will underline one) -->
+              <nav class="tabs" aria-label="ဆိုင်" data-testid="tabs">
+                <a class="nav-link" href="#drinks" data-testid="nav-drinks">မီနူး</a>
+                <a class="nav-link" href="#snacks" data-testid="nav-snacks">စားစရာ</a>
+                <a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a>
+                <span class="bar" aria-hidden="true" data-testid="bar"></span>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks (today's special only; its name is a .special-name span) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name"><span class="special-name" data-testid="special-name">လက်ဖက်ရည်</span></h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: cards-with-photos (three cards, each with a photo and a new badge) -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="photo-cards" data-testid="photo-cards">
+                  <li class="photo-card" data-testid="photo-card-mohinga">
+                    <img src="/teahouse.svg" alt="" width="320" height="200" />
+                    <p>မုန့်ဟင်းခါး</p>
+                    <span class="new" data-testid="new-mohinga">အသစ်</span>
+                  </li>
+                  <li class="photo-card" data-testid="photo-card-palata">
+                    <img src="/teahouse.svg" alt="" width="320" height="200" />
+                    <p>ပလာတာ</p>
+                    <span class="new" data-testid="new-palata">အသစ်</span>
+                  </li>
+                  <li class="photo-card" data-testid="photo-card-laphet-thoke">
+                    <img src="/teahouse.svg" alt="" width="320" height="200" />
+                    <p>လက်ဖက်သုပ်</p>
+                    <span class="new" data-testid="new-laphet-thoke">အသစ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: edge-info (an order button against the right edge, and its info box) -->
+              <section class="edge-info" id="order" data-testid="edge-info">
+                <button class="order-btn edge-btn" type="button" data-testid="edge-button">မှာမယ်</button>
+                <p class="info" data-testid="info">မိနစ် ၂၀ အတွင်း ပူပူ ရောက်ပါမယ်</p>
+              </section>
+            </main>
+
+            <!-- lesson block: special-tag (at the end of the page on purpose: far from the card it labels) -->
+            <span class="tag" data-testid="tag">ယနေ့အထူး</span>
+            <span class="bubble" data-testid="bubble">ဈေးလျှော့</span>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (section D dropped). Section E:
+      # the nav links in a row, room above the special's name and the photos,
+      # the look of the tag, bubble, badges, bar and info box (never where they
+      # sit), and two positioned rows (the photo list and the order row) so the
+      # labels inside them never depend on the preview's height.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 40 keeps A, B, B2 and C (section D dropped). Section E pins the look
+          of the tag, the bubble, the photo badges, the underline bar and the info
+          box; their positions are typed in the lesson. Nothing here is anchored.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+
+        /* == E. lesson rules == */
+        /* Lesson 40: the nav links in one row, room above the drink cards and the
+           photos for the labels that will sit above an anchor, the look of the tag,
+           the bubble, the photo badges, the underline bar and the info box (where
+           they sit is typed in the lesson), and two positioned rows (the photo list
+           and the order row) so their labels never depend on the preview's height. */
+        .tabs {
+          display: flex;
+          gap: 24px;
+          margin-top: 4px;
+        }
+
+        .nav-link {
+          text-decoration: none;
+        }
+
+        .bar {
+          height: 3px;
+          background: var(--gold);
+        }
+
+        .drinks .menu {
+          margin-top: 24px;
+        }
+
+        .tag,
+        .bubble,
+        .new {
+          padding: 0 8px;
+          border-radius: 999px;
+          font-size: 13px;
+          white-space: nowrap;
+        }
+
+        .tag,
+        .new {
+          margin: 4px;
+        }
+
+        .tag {
+          background: var(--gold);
+          color: var(--tea-dark);
+        }
+
+        .bubble {
+          background: var(--chili);
+          color: #fff;
+        }
+
+        .new {
+          background: var(--leaf);
+          color: #fff;
+        }
+
+        .photo-cards {
+          position: relative;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          margin: 0;
+          padding: 28px 0 0;
+          list-style: none;
+        }
+
+        .photo-card img {
+          display: block;
+          width: 100%;
+          height: 72px;
+          object-fit: cover;
+          border-radius: 8px;
+        }
+
+        .photo-card p {
+          margin: 4px 0 0;
+          font-size: 14px;
+        }
+
+        .edge-info {
+          position: relative;
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          min-height: 120px;
+        }
+
+        .edge-btn {
+          margin: 0;
+        }
+
+        .info {
+          margin: 0;
+          padding: 8px 12px;
+          background: var(--cream);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          font-size: 14px;
+        }
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the old way and the new way. Orange = the JavaScript steps,
+    # red = the cost (again on every scroll and resize), green = the
+    # positioned element, blue = the anchor, violet = the CSS link.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Anchor positioning ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-old-h,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 330,
+        height: 36,
+        text: "အရင်က · JavaScript",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-1,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 330,
+        height: 36,
+        text: "① ခလုတ်ကို တိုင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-2,
+        kind: text,
+        x: 290,
+        y: 350,
+        width: 330,
+        height: 36,
+        text: "② label ကို ရွှေ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 330,
+        height: 36,
+        text: "scroll တိုင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-4,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 330,
+        height: 36,
+        text: "resize တိုင်း ထပ်လုပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-new-h,
+        kind: text,
+        x: 760,
+        y: 240,
+        width: 260,
+        height: 36,
+        text: "အခု · CSS",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-tag,
+        kind: rectangle,
+        x: 790,
+        y: 300,
+        width: 130,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: a-tag-l,
+        kind: text,
+        x: 818,
+        y: 307,
+        width: 80,
+        height: 36,
+        text: "label",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 835,
+        y: 356,
+        width: 40,
+        height: 48,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-anchor,
+        kind: rectangle,
+        x: 760,
+        y: 410,
+        width: 190,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-anchor-l,
+        kind: text,
+        x: 800,
+        y: 422,
+        width: 110,
+        height: 36,
+        text: "anchor",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-link,
+        kind: text,
+        x: 760,
+        y: 500,
+        width: 320,
+        height: 36,
+        text: "CSS နဲ့ ချိတ်ထား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-free,
+        kind: text,
+        x: 760,
+        y: 550,
+        width: 320,
+        height: 36,
+        text: "HTML ထဲ ဘယ်မှာမဆို",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the position-area grid. Black = the containing block and the
+    # grid lines, blue = the anchor (the middle cell), orange = the chosen cell
+    # (the new containing block), green = spans, violet = one-keyword rules,
+    # red = logical and self- keywords.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Position area ရဲ့ grid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: b-cb, kind: rectangle, x: 260, y: 230, width: 400, height: 260, strokeColor: "#1e1e1e" }
+    - { id: b-row, kind: rectangle, x: 260, y: 320, width: 400, height: 80, strokeColor: "#1e1e1e" }
+    - {
+        id: b-col,
+        kind: rectangle,
+        x: 380,
+        y: 230,
+        width: 160,
+        height: 260,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-anchor,
+        kind: rectangle,
+        x: 380,
+        y: 320,
+        width: 160,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: b-anchor-l,
+        kind: text,
+        x: 405,
+        y: 342,
+        width: 110,
+        height: 36,
+        text: "anchor",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-cb-l,
+        kind: text,
+        x: 260,
+        y: 500,
+        width: 400,
+        height: 36,
+        text: "containing block",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-top,
+        kind: text,
+        x: 435,
+        y: 257,
+        width: 60,
+        height: 36,
+        text: "top",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bottom,
+        kind: text,
+        x: 410,
+        y: 427,
+        width: 100,
+        height: 36,
+        text: "bottom",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-left,
+        kind: text,
+        x: 285,
+        y: 342,
+        width: 60,
+        height: 36,
+        text: "left",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-right,
+        kind: text,
+        x: 562,
+        y: 342,
+        width: 75,
+        height: 36,
+        text: "right",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-pick,
+        kind: rectangle,
+        x: 540,
+        y: 230,
+        width: 120,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-pick-l,
+        kind: text,
+        x: 700,
+        y: 240,
+        width: 380,
+        height: 36,
+        text: "← containing block အသစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-span,
+        kind: rectangle,
+        x: 384,
+        y: 404,
+        width: 272,
+        height: 82,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-span-l,
+        kind: text,
+        x: 700,
+        y: 420,
+        width: 380,
+        height: 36,
+        text: "← bottom span-right",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-spanall,
+        kind: text,
+        x: 700,
+        y: 470,
+        width: 380,
+        height: 36,
+        text: "span-all → တစ်တန်းလုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-single,
+        kind: text,
+        x: 260,
+        y: 560,
+        width: 420,
+        height: 36,
+        text: "top = top span-all",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-single-2,
+        kind: text,
+        x: 260,
+        y: 610,
+        width: 420,
+        height: 36,
+        text: "start = start start",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-logical,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 380,
+        height: 36,
+        text: "block-start · inline-end",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-self,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 380,
+        height: 36,
+        text: "self- → သူ့ writing mode",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — the anchor's sides for anchor(). Blue = the anchor and its
+    # middle, orange = the vertical sides (for top / bottom insets), violet =
+    # the horizontal sides (for left / right insets), green = valid, red =
+    # invalid or not allowed, black = the other side keywords and helpers.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Anchor ရဲ့ အနားတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-anchor,
+        kind: rectangle,
+        x: 390,
+        y: 300,
+        width: 230,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-center,
+        kind: text,
+        x: 420,
+        y: 337,
+        width: 170,
+        height: 36,
+        text: "center · 50%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-top,
+        kind: text,
+        x: 478,
+        y: 255,
+        width: 60,
+        height: 36,
+        text: "top",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-bottom,
+        kind: text,
+        x: 455,
+        y: 420,
+        width: 100,
+        height: 36,
+        text: "bottom",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-left,
+        kind: text,
+        x: 300,
+        y: 337,
+        width: 60,
+        height: 36,
+        text: "left",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-right,
+        kind: text,
+        x: 636,
+        y: 337,
+        width: 75,
+        height: 36,
+        text: "right",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-ok,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 380,
+        height: 36,
+        text: "bottom: anchor(top) ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-bad,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 380,
+        height: 36,
+        text: "left: anchor(top) ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-inout,
+        kind: text,
+        x: 770,
+        y: 240,
+        width: 300,
+        height: 36,
+        text: "inside · outside",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-startend,
+        kind: text,
+        x: 770,
+        y: 290,
+        width: 300,
+        height: 36,
+        text: "start · end",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fallback,
+        kind: text,
+        x: 770,
+        y: 360,
+        width: 320,
+        height: 36,
+        text: "anchor(top, 20px)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-calc,
+        kind: text,
+        x: 770,
+        y: 410,
+        width: 320,
+        height: 36,
+        text: "calc · min · max",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-inset,
+        kind: text,
+        x: 770,
+        y: 460,
+        width: 320,
+        height: 36,
+        text: "inset တွေမှာပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-acenter,
+        kind: text,
+        x: 770,
+        y: 530,
+        width: 320,
+        height: 36,
+        text: "anchor-center",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — overflow and the try list. Black = the screen, blue = the
+    # anchor at its right edge, red = the preferred place that doesn't fit,
+    # green = the option that fits, orange = the list tried in order,
+    # violet = none fits.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "နေရာ မဆံ့ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-screen,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 320,
+        height: 260,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-screen-l,
+        kind: text,
+        x: 290,
+        y: 510,
+        width: 200,
+        height: 36,
+        text: "screen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-anchor,
+        kind: rectangle,
+        x: 520,
+        y: 345,
+        width: 86,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-pref,
+        kind: rectangle,
+        x: 612,
+        y: 330,
+        width: 130,
+        height: 80,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+      }
+    - {
+        id: d-fit,
+        kind: rectangle,
+        x: 384,
+        y: 330,
+        width: 130,
+        height: 80,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#d3f9d8",
+      }
+    - {
+        id: d-flow-1,
+        kind: text,
+        x: 790,
+        y: 240,
+        width: 300,
+        height: 36,
+        text: "① ပထမ နေရာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 830,
+        y: 284,
+        width: 30,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-flow-2,
+        kind: text,
+        x: 790,
+        y: 330,
+        width: 300,
+        height: 36,
+        text: "② try 1 · try 2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 830,
+        y: 374,
+        width: 30,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-flow-3,
+        kind: text,
+        x: 790,
+        y: 420,
+        width: 300,
+        height: 36,
+        text: "③ ဆံ့တာ သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-flow-4,
+        kind: text,
+        x: 790,
+        y: 500,
+        width: 300,
+        height: 36,
+        text: "မဆံ့ရင် ① ကို ထား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — more control. Blue = a custom option, orange = the order and
+    # the shorthand, green = scrolling, violet = hiding with the anchor.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "နောက်ထပ် ထိန်းနိုင်တာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-custom,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 36,
+        text: "@position-try --below { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-custom-2,
+        kind: text,
+        x: 340,
+        y: 290,
+        width: 620,
+        height: 36,
+        text: "area · inset · margin · size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-order,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 560,
+        height: 36,
+        text: "most-width · most-height",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-order-2,
+        kind: text,
+        x: 340,
+        y: 420,
+        width: 620,
+        height: 36,
+        text: "position-try = order + fallbacks",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-scroll,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 620,
+        height: 36,
+        text: "scroll → default anchor ကိုပဲ လိုက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-vis,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 620,
+        height: 36,
+        text: "anchor ပျောက်ရင် ဖျောက် · position-visibility",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4140
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: anchor-intro
+    chapter: "Anchor positioning ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ keyframe animation တွေကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ အချိန်ကနေ နေရာဘက်
+      ကူးပြီး၊ element တစ်ခုကို တခြား element တစ်ခုရဲ့ ဘေးမှာ CSS သက်သက်နဲ့ ကပ်ထားကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-old]] ဥပမာ၊ ခလုတ် တစ်ခုရဲ့ ဘေးမှာ ကပ်ပေါ်ရမယ့် label သေးသေး ဒါမှမဟုတ် menu တစ်ခုကို
+      စဉ်းစားကြည့်ပါ။ မကြာသေးခင်အထိ JavaScript library တစ်ခုက ခလုတ် ဘယ်မှာ ရှိလဲ တိုင်းပြီး၊ label ကို
+      အဲဒီ ဘေးကို ရွှေ့ပေးရပါတယ်။ [[mark:draw-old-cost]] ပြီးတော့ scroll လုပ်တိုင်း၊ resize ဖြစ်တိုင်း
+      ပြန်တိုင်းပြီး ပြန်ရွှေ့ရပါတယ်။ [[mark:draw-new]] anchor positioning ဆိုတာ element တစ်ခုကို တခြား
+      element တစ်ခုရဲ့ ဘေးမှာ ကပ်ပြီး CSS နဲ့ နေရာချတဲ့ နည်းပါ။ အခြေပြုခံရတဲ့ element ကို anchor လို့
+      ခေါ်ပါတယ်။ [[mark:draw-link]] layout ပြောင်းတိုင်း browser က နှစ်ခုကို ကပ်နေအောင် ကိုယ်တိုင်
+      ထိန်းပေးပါတယ်။ ပြီးတော့ နှစ်ခုက parent နဲ့ child ဖြစ်စရာ မလိုသလို၊ HTML ထဲမှာ အနီးအနား ရှိစရာတောင်
+      မလိုပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Anchor positioning: tethering elements"
+        url: "https://web.dev/learn/css/anchor-positioning#tethering_elements"
+      - title: "MDN — CSS anchor positioning (guide)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning"
+      - title: "CSS Anchor Positioning Module Level 1"
+        url: "https://drafts.csswg.org/css-anchor-position-1/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-old
+        type: whiteboard.apply
+        at: { mark: draw-old }
+        upsertIds: [a-old-h, a-old-1, a-old-2]
+        drawMs: 2400
+      - id: draw-old-cost
+        type: whiteboard.apply
+        at: { mark: draw-old-cost }
+        upsertIds: [a-old-3, a-old-4]
+        drawMs: 1600
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [a-new-h, a-anchor, a-anchor-l, a-tag, a-tag-l]
+        drawMs: 2400
+      - id: draw-link
+        type: whiteboard.apply
+        at: { mark: draw-link }
+        upsertIds: [a-arrow, a-link, a-free]
+        drawMs: 2000
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-nav]] header ထဲက nav မှာ link သုံးခုနဲ့၊ နောက်မှ အောက်မျဉ်း ဖြစ်လာမယ့် span အလွတ်
+      တစ်ခု ရှိပါတယ်။ [[mark:select-special]] ဒီနေ့ အထူး card က နာမည်ကို span နဲ့ ထုပ်ထားလို့၊ နာမည်
+      စာသားကိုပဲ anchor အဖြစ် သုံးလို့ ရပါတယ်။ [[mark:select-photos]] ပြီးတော့ ဓာတ်ပုံနဲ့ အသစ် badge ပါတဲ့
+      စားစရာ card သုံးခု ရှိပါတယ်။ [[mark:select-edge]] သူတို့ နောက်မှာ မှာမယ် ခလုတ်နဲ့ info box သေးသေး
+      ရှိပါတယ်။ [[mark:select-tag]] HTML ရဲ့ အဆုံးဆုံးမှာတော့ card နဲ့ ဝေးဝေးမှာ၊ ဒီနေ့ အထူး tag နဲ့
+      ဈေးလျှော့ bubble ရှိပါတယ်။ နှစ်ခုလုံးကို ဒီနေ့ အထူး နာမည်နဲ့ ချိတ်ပါမယ်။ [[mark:open-styles]] CSS
+      ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ အခုတော့ tag နဲ့ bubble က HTML ထဲက
+      အစဉ်အတိုင်း page ရဲ့ အောက်ဆုံးမှာ ရှိနေပါသေးတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Anchor positioning"
+        url: "https://web.dev/learn/css/anchor-positioning"
+      - title: "MDN — Using CSS anchor positioning"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning/Using"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-nav
+        type: editor.select
+        at: { mark: select-nav }
+        target:
+          {
+            file: index.html,
+            text: '<span class="bar" aria-hidden="true" data-testid="bar"></span>',
+            occurrence: 1,
+          }
+      - id: select-special
+        type: editor.select
+        at: { mark: select-special }
+        target:
+          {
+            file: index.html,
+            text: '<span class="special-name" data-testid="special-name">',
+            occurrence: 1,
+          }
+      - id: select-photos
+        type: editor.select
+        at: { mark: select-photos }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="photo-cards" data-testid="photo-cards">',
+            occurrence: 1,
+          }
+      - id: select-edge
+        type: editor.select
+        at: { mark: select-edge }
+        target:
+          {
+            file: index.html,
+            text: '<section class="edge-info" id="order" data-testid="edge-info">',
+            occurrence: 1,
+          }
+      - id: select-tag
+        type: editor.select
+        at: { mark: select-tag }
+        target:
+          {
+            file: index.html,
+            text: "    <span class=\"tag\" data-testid=\"tag\">ယနေ့အထူး</span>\n    <span class=\"bubble\" data-testid=\"bubble\">ဈေးလျှော့</span>\n",
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-special-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: special-name }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tag
+        type: expect.preview
+        at: { afterAction: expect-special-name }
+        timeoutMs: 5000
+        target: { by: testId, value: tag }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-tag }
+
+  - id: first-tether
+    chapter: "Anchor နဲ့ ချိတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:type-name]] ပထမဆုံး ဒီနေ့ အထူး နာမည် စာသားကို anchor name တစ်ခု ပေးပါမယ်။ ဒါမှ တခြား element
+      တွေက သူ့ကို ရှာတွေ့မှာပါ။ နာမည် ပေးရုံနဲ့ page ပေါ်မှာ ဘာမှ မပြောင်းပါဘူး။ [[mark:select-dashed]] ဒီ
+      နာမည်ကို ကြည့်ပါ။ lesson 11 မှာ တွေ့ခဲ့တဲ့ custom property လိုပဲ dash နှစ်ခုနဲ့ စပေမယ့်၊ variable
+      တော့ မဟုတ်ပါဘူး။ တခြား element တွေက ညွှန်းလို့ ရတဲ့ နာမည် သက်သက်ပါ။ [[mark:type-tag]] အခု tag ဘက်ကို
+      သွားရအောင်။ tag ကို absolute ပေးရပါမယ်။ absolute ဒါမှမဟုတ် fixed ဖြစ်တဲ့ element ကိုပဲ anchor နဲ့
+      ချိတ်လို့ ရလို့ပါ။ ပြီးတော့ position anchor က ခုနက ပေးခဲ့တဲ့ နာမည်ကို tag ရဲ့ default anchor အဖြစ်
+      ရွေးပေးပါတယ်။ [[mark:after-tag]] tag က normal flow ထဲကနေ ထွက်သွားလို့၊ bubble က သူ့ နေရာထဲ
+      ရွှေ့လာပြီး tag ရဲ့ အောက်ကို ဝင်သွားပါပြီ။ ဒါပေမဲ့ tag က နာမည်ဆီ မရောက်သေးပါဘူး။ ချိတ်ရုံနဲ့
+      မပြီးဘဲ၊ anchor ရဲ့ ဘယ်ဘက်မှာ ထားမလဲ ဆိုတာပါ ပြောပေးရပါမယ်။ [[mark:type-top]] အလွယ်ဆုံး နည်းက
+      position area ပါ။ သူက anchor ပတ်လည်က နေရာ တစ်ခုကို ရွေးပေးပါတယ်။ top လို့ ပေးကြည့်ရအောင်။
+      [[mark:after-top]] tag က page ရဲ့ အောက်ဆုံးကနေ နာမည်ရဲ့ အပေါ်ကို ခုန်တက်သွားပြီး၊ နာမည်ရဲ့ အလယ်နဲ့
+      ညီနေပါပြီ။ tag မရွှေ့ရင်တော့ ဒီ preview ကို ဆွဲပြနေတဲ့ ကိုယ့် browser က anchor positioning ကို
+      မသိသေးလို့ပါ။ browser ကို update လုပ်ပြီးမှ ဆက်ကြည့်ပါ။ [[mark:visual-only]] HTML ထဲမှာတော့ tag က
+      page အဆုံးမှာပဲ ရှိနေပါသေးတယ်။ ဒီ ချိတ်ဆက်မှုက မျက်စိနဲ့ မြင်ရတာ သက်သက်ပါ။ screen reader က HTML
+      အစဉ်အတိုင်း ဖတ်လို့၊ အရေးကြီးတဲ့ label ကို HTML ထဲမှာလည်း anchor နားမှာ ထားပါ။
+    sources:
+      - title: "web.dev Learn CSS — Anchor positioning: tethering elements"
+        url: "https://web.dev/learn/css/anchor-positioning#tethering_elements"
+      - title: "MDN — anchor-name (a dashed ident)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/anchor-name"
+      - title: "MDN — position-anchor (the default anchor)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/position-anchor"
+      - title: "CSS Anchor Positioning — anchor-name and position-anchor"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#name"
+      - title: "CSS Anchor Positioning — Accessibility implications (visual only, not a semantic link)"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#accessibility"
+    actions:
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".special-name {\n  anchor-name: --special;\n}\n"
+      - id: select-dashed
+        type: editor.select
+        at: { mark: select-dashed }
+        target: { file: styles.css, text: "--special", occurrence: 1 }
+      - id: type-tag
+        type: editor.type
+        at: { mark: type-tag }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  anchor-name: --special;\n}\n", occurrence: 1 }
+        text: "\n.tag {\n  position: absolute;\n  position-anchor: --special;\n}\n"
+      - id: expect-tag-out
+        type: expect.preview
+        at: { mark: after-tag }
+        timeoutMs: 4000
+        target: { by: testId, value: tag }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-top
+        type: editor.type
+        at: { mark: type-top }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-anchor: --special;\n", occurrence: 1 }
+        text: "  position-area: top;\n"
+      - id: expect-top
+        type: expect.preview
+        at: { mark: after-top }
+        timeoutMs: 4000
+        target: { by: testId, value: special-name }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: area-moves
+    narration: >
+      [[mark:type-top-right]] အောက်မှာ position area တွေ ထပ်ထည့်ပါမယ်။ lesson 5 မှာ ကြည့်ခဲ့သလို နောက်မှ
+      ရေးတဲ့ declaration က နိုင်လို့ အဟောင်းကို ဖျက်စရာ မလိုပါဘူး။ top right ကတော့ tag ကို နာမည်ရဲ့
+      အပြင်ဘက်၊ ညာဘက် အပေါ် ထောင့်မှာ ထားပါတယ်။ [[mark:type-span]] bottom span right က tag ကို နာမည်ရဲ့
+      အောက်မှာ ထားပါတယ်။ နာမည်ရဲ့ ဘယ်အစွန်းကနေ စပြီး ညာဘက်ကို ဆန့်ခွင့် ရလို့၊ ခလုတ် အောက်မှာ ပွင့်လာတဲ့
+      dropdown menu လိုပါပဲ။ [[mark:type-right]] right ကတော့ tag ကို နာမည်ရဲ့ ညာဘက် ဘေးမှာ၊ အပေါ်အောက်
+      အလယ်ကျအောင် ထားပါတယ်။ [[mark:after-right]] ဒီ နောက်ဆုံး position area က နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Anchor positioning: position-area"
+        url: "https://web.dev/learn/css/anchor-positioning#position-area"
+      - title: "MDN — position-area"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position-area"
+    actions:
+      - id: type-top-right
+        type: editor.type
+        at: { mark: type-top-right }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: top;\n", occurrence: 1 }
+        text: "  position-area: top right;\n"
+      - id: type-span
+        type: editor.type
+        at: { mark: type-span }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: top right;\n", occurrence: 1 }
+        text: "  position-area: bottom span-right;\n"
+      - id: type-right
+        type: editor.type
+        at: { mark: type-right }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: bottom span-right;\n", occurrence: 1 }
+        text: "  position-area: right;\n"
+      - id: select-right
+        type: editor.select
+        at: { mark: after-right }
+        target: { file: styles.css, text: "  position-area: right;", occurrence: 1 }
+
+  - id: area-grid
+    chapter: "Position area ရဲ့ grid"
+    narration: >
+      [[mark:open-grid]] ဒီ စကားလုံးတွေက ဘာကို ရွေးတာလဲ။ [[mark:draw-grid]] browser က anchor ရဲ့ အနား
+      လေးဘက်ကနေ မျဉ်းတွေ ဆွဲပြီး၊ lesson 14 မှာ တွေ့ခဲ့တဲ့ containing block ရဲ့ အစွန်းထိ ဆန့်ထုတ်တယ်လို့
+      စဉ်းစားကြည့်ပါ။ ဒါဆို အကွက် ကိုးကွက် ပါတဲ့ grid တစ်ခု ရပြီး၊ anchor က အလယ် အကွက်မှာ ရှိပါတယ်။
+      [[mark:draw-labels]] top၊ bottom၊ left၊ right က anchor ပတ်လည်က row နဲ့ column တွေရဲ့ နာမည်တွေပါ။ top
+      right လို စကားလုံး နှစ်လုံး တွဲပေးရင် ထောင့် အကွက်ကို ရွေးပါတယ်။ [[mark:draw-pick]] ရွေးလိုက်တဲ့
+      အကွက်က tag ရဲ့ containing block အသစ် ဖြစ်သွားပါတယ်။ ဒါကြောင့် tag ကို ရာခိုင်နှုန်းနဲ့ ပေးတဲ့
+      အကျယ်တို့၊ margin တို့ကို page နဲ့ မတိုင်းတော့ဘဲ အဲဒီ အကွက်နဲ့ တိုင်းပါတယ်။ [[mark:draw-span]] span
+      ပါတဲ့ စကားလုံးက အလယ် အကွက်နဲ့ သူ ညွှန်းတဲ့ ဘက်က အကွက်ကို ပေါင်းယူပါတယ်။ ဥပမာ bottom span right က
+      အောက်တန်းရဲ့ အလယ် အကွက်နဲ့ ညာဘက် အကွက်ကို ယူပြီး၊ span all ကတော့ အဲဒီ တန်းက အကွက် သုံးကွက်လုံးကို
+      ယူပါတယ်။ [[mark:draw-single]] top လို စကားလုံး တစ်လုံးတည်း ပေးရင် ကျန်တဲ့ axis က span all
+      ဖြစ်သွားပါတယ်။ အဲဒီ axis မှာ browser က tag ကို anchor ရဲ့ အလယ်နဲ့ ညှိပေးလို့၊ ခုနက tag က page ရဲ့
+      အလယ်မှာ မဟုတ်ဘဲ နာမည်ရဲ့ အလယ်မှာ ရှိနေတာပါ။ start၊ center လို axis မသတ်မှတ်တဲ့ စကားလုံး ဆိုရင်တော့
+      axis နှစ်ခုလုံးအတွက် ထပ်သုံးပါတယ်။ [[mark:draw-logical]] block start၊ inline end လို logical
+      စကားလုံးတွေလည်း ရှိပါတယ်။ သူတို့က lesson 21 မှာ တွေ့ခဲ့တဲ့ logical property တွေလိုပဲ containing
+      block ရဲ့ writing mode ကို လိုက်ပါတယ်။ မြန်မာစာနဲ့ အင်္ဂလိပ်စာမှာတော့ block start က အပေါ်ဘက်
+      ဖြစ်ပြီး၊ inline end က ညာဘက်ပါ။ [[mark:draw-self]] ရှေ့မှာ self ပါရင်တော့ element ကိုယ်တိုင်ရဲ့
+      writing mode ကို လိုက်ပါတယ်။ ဒါကိုတော့ သိပ် မလိုပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — How position-area works"
+        url: "https://web.dev/learn/css/anchor-positioning#how_position-area_works"
+      - title: "web.dev Learn CSS — Logical keywords, spanning, single keyword"
+        url: "https://web.dev/learn/css/anchor-positioning#spanning_multiple_grid_areas"
+      - title: "MDN — position-area (the grid, span keywords, one keyword)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position-area"
+      - title: "CSS Anchor Positioning — the position-area property"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#position-area"
+    actions:
+      - id: open-grid
+        type: whiteboard.apply
+        at: { mark: open-grid }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-grid
+        type: whiteboard.apply
+        at: { mark: draw-grid }
+        upsertIds: [b-cb, b-row, b-col, b-cb-l, b-anchor, b-anchor-l]
+        drawMs: 2400
+      - id: draw-labels
+        type: whiteboard.apply
+        at: { mark: draw-labels }
+        upsertIds: [b-top, b-bottom, b-left, b-right]
+        drawMs: 1600
+      - id: draw-pick
+        type: whiteboard.apply
+        at: { mark: draw-pick }
+        upsertIds: [b-pick, b-pick-l]
+        drawMs: 1600
+      - id: draw-span
+        type: whiteboard.apply
+        at: { mark: draw-span }
+        upsertIds: [b-span, b-span-l, b-spanall]
+        drawMs: 2000
+      - id: draw-single
+        type: whiteboard.apply
+        at: { mark: draw-single }
+        upsertIds: [b-single, b-single-2]
+        drawMs: 1600
+      - id: draw-logical
+        type: whiteboard.apply
+        at: { mark: draw-logical }
+        upsertIds: [b-logical]
+        drawMs: 1000
+      - id: draw-self
+        type: whiteboard.apply
+        at: { mark: draw-self }
+        upsertIds: [b-self]
+        drawMs: 1000
+
+  - id: anchor-scope
+    chapter: "Anchor scope ဘာကြောင့် လိုလဲ"
+    narration: >
+      [[mark:close-grid]] component တွေကို ထပ်သုံးတဲ့အခါ ကြုံရတဲ့ ပြဿနာကို ကြည့်ရအောင်။
+      [[mark:scroll-photos]] စားစရာ card တိုင်းမှာ ဓာတ်ပုံနဲ့ အသစ် badge ပါပါတယ်။ [[mark:type-photo]]
+      ဓာတ်ပုံ တိုင်းကို anchor name တူတူ ပေးပြီး၊ badge တိုင်းကိုလည်း အဲဒီ နာမည်နဲ့ ချိတ်ပါမယ်။ badge က
+      ဓာတ်ပုံရဲ့ အပေါ်မှာ ညာဘက် အစွန်းနဲ့ ညီနေရပါမယ်။ [[mark:after-photo]] badge သုံးခုလုံး နောက်ဆုံး
+      ဓာတ်ပုံဆီ ခုန်သွားပါပြီ။ တစ်ခုပေါ် တစ်ခု အတိအကျ ထပ်နေလို့ တစ်ခုပဲ မြင်ရပါတယ်။ [[mark:explain-last]]
+      ဒီ anchor name ကို ကြည့်ပါ။ နာမည် တူတဲ့ anchor တွေ များနေရင် page ထဲက နောက်ဆုံး တစ်ခုက နိုင်ပါတယ်။
+      [[mark:explain-layout]] နောက်ထပ် စည်းမျဉ်း တစ်ခုက၊ browser က anchor ကို သူနဲ့ ချိတ်မယ့် element ထက်
+      အရင် နေရာချပြီးသား ဖြစ်ရပါမယ်။ ဒါကြောင့် HTML မှာ နောက်မှ လာတဲ့ absolute element ကို anchor အဖြစ်
+      သုံးလို့ မရသလို၊ ပွင့်နေတဲ့ popover လို top layer ပေါ်က element ကိုလည်း အပြင်က element တွေအတွက်
+      anchor အဖြစ် သုံးလို့ မရပါဘူး။ [[mark:type-scope]] ဖြေရှင်းနည်းက anchor scope ပါ။ ထပ်ခါ ပါနေတဲ့ card
+      တစ်ခုစီကို ဓာတ်ပုံရဲ့ နာမည်နဲ့ anchor scope ပေးပါမယ်။ အဲဒီအခါ နာမည်က card တစ်ခုစီရဲ့ အထဲမှာပဲ
+      အလုပ်လုပ်လို့၊ badge က ကိုယ့် card ထဲက ဓာတ်ပုံကိုပဲ ရှာတွေ့ပါတော့တယ်။ [[mark:after-scope]] အခု badge
+      တိုင်း ကိုယ့် ဓာတ်ပုံရဲ့ အပေါ်ဘက်ကို ရောက်နေပါပြီ။ ထပ်သုံးတဲ့ component တိုင်းရဲ့ root element မှာ
+      anchor scope ထည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Scoping the potential anchors"
+        url: "https://web.dev/learn/css/anchor-positioning#scoping_the_potential_anchors"
+      - title: "MDN — anchor-scope"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/anchor-scope"
+      - title: "CSS Anchor Positioning — acceptable anchor element (last match wins)"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#acceptable-anchor-element"
+    actions:
+      - id: close-grid
+        type: whiteboard.apply
+        at: { mark: close-grid }
+        open: false
+      - id: scroll-photos
+        type: preview.scroll
+        at: { mark: scroll-photos }
+        timeoutMs: 5000
+        top: 260
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-photo
+        type: editor.type
+        at: { mark: type-photo }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  position-area: right;\n}\n", occurrence: 1 }
+        text: "\n.photo-card img {\n  anchor-name: --photo;\n}\n\n.new {\n  position: absolute;\n  position-anchor: --photo;\n  position-area: top span-left;\n}\n"
+      - id: expect-photo
+        type: expect.preview
+        at: { mark: after-photo }
+        timeoutMs: 4000
+        target: { by: testId, value: new-laphet-thoke }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-photo-name
+        type: editor.select
+        at: { mark: explain-last }
+        target: { file: styles.css, text: "  anchor-name: --photo;", occurrence: 1 }
+      - id: type-scope
+        type: editor.type
+        at: { mark: type-scope }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: top span-left;\n}\n", occurrence: 1 }
+        text: "\n.photo-card {\n  anchor-scope: --photo;\n}\n"
+      - id: expect-scope
+        type: expect.preview
+        at: { mark: after-scope }
+        timeoutMs: 4000
+        target: { by: testId, value: new-mohinga }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-scope
+        type: editor.select
+        at: { mark: after-scope }
+        target: { file: styles.css, text: "anchor-scope: --photo;", occurrence: 1 }
+
+  - id: anchor-function
+    chapter: "Anchor function နဲ့ နေရာချကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-top]] position area က ရေးရ လွယ်ပါတယ်။ အနား တစ်ခုချင်းကို တိတိကျကျ ထိန်းချင်ရင်တော့
+      anchor function ကို သုံးပါတယ်။ [[mark:type-bubble]] ဈေးလျှော့ bubble ကိုလည်း tag လိုပဲ absolute
+      ပေးပြီး၊ ဒီနေ့ အထူး နာမည်ကို default anchor အဖြစ် ပေးပါမယ်။ [[mark:type-insets]] ဒီတစ်ခါ position
+      area အစား lesson 14 က offset လေးခုကို သုံးပါမယ်။ သူတို့ကို inset property လို့လည်း ခေါ်ပါတယ်။ bubble
+      ရဲ့ အောက်အနားကို anchor ရဲ့ အပေါ်အနားမှာ ထားပြီး၊ ဘယ်အနားကို anchor ရဲ့ ဘယ်အနားနဲ့ ညီအောင် ထားပါမယ်။
+      [[mark:after-insets]] ဒီ inset နှစ်ခုကြောင့် bubble က နာမည်ရဲ့ အပေါ်ကို ရောက်လာပြီး၊ ဘယ်အစွန်းချင်း
+      ညီနေပါပြီ။ [[mark:type-center]] အောက်မှာ left inset နောက်တစ်ခု ထပ်ထည့်ပြီး၊ ဒီတစ်ခါ anchor ရဲ့
+      center ကို ပေးပါမယ်။ [[mark:after-center]] ဒီ center ကို ကြည့်ပါ။ အခု bubble ရဲ့ ဘယ်အစွန်းက နာမည်ရဲ့
+      အလယ်ကနေ စပါပြီ။ anchor function က anchor ရဲ့ အနား ဒါမှမဟုတ် အလယ် ရှိတဲ့ နေရာကို length အဖြစ်
+      ပြန်ပေးတာပါ။ ကွင်းထဲမှာ နာမည် မပေးရင် default anchor ကို သုံးပြီး၊ နာမည် ထည့်ရင် တခြား anchor
+      ကိုလည်း ညွှန်းလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — The anchor() function"
+        url: "https://web.dev/learn/css/anchor-positioning#the_anchor_function"
+      - title: "MDN — anchor()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/anchor"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-bubble
+        type: editor.type
+        at: { mark: type-bubble }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  anchor-scope: --photo;\n}\n", occurrence: 1 }
+        text: "\n.bubble {\n  position: absolute;\n  position-anchor: --special;\n}\n"
+      - id: type-insets
+        type: editor.type
+        at: { mark: type-insets }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".bubble {\n  position: absolute;\n  position-anchor: --special;\n",
+            occurrence: 1,
+          }
+        text: "  bottom: anchor(top);\n  left: anchor(left);\n"
+      - id: expect-insets
+        type: expect.preview
+        at: { mark: after-insets }
+        timeoutMs: 4000
+        target: { by: testId, value: bubble }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-insets
+        type: editor.select
+        at: { mark: after-insets }
+        target:
+          { file: styles.css, text: "  bottom: anchor(top);\n  left: anchor(left);", occurrence: 1 }
+      - id: type-center
+        type: editor.type
+        at: { mark: type-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  left: anchor(left);\n", occurrence: 1 }
+        text: "  left: anchor(center);\n"
+      - id: select-center
+        type: editor.select
+        at: { mark: after-center }
+        target: { file: styles.css, text: "anchor(center)", occurrence: 1 }
+
+  - id: anchor-sides
+    narration: >
+      [[mark:open-sides]] ဘယ် အနား စကားလုံးတွေ သုံးလို့ ရလဲ။ [[mark:draw-sides]] ပေးတဲ့ အနားက inset နဲ့
+      axis တူရပါမယ်။ top နဲ့ bottom inset တွေက anchor ရဲ့ အပေါ် ဒါမှမဟုတ် အောက် အနားကို ယူပြီး၊ left နဲ့
+      right inset တွေက ဘယ် ဒါမှမဟုတ် ညာ အနားကို ယူပါတယ်။ [[mark:draw-check]] ဒါကြောင့် bubble ရဲ့ bottom
+      inset ကို anchor ရဲ့ top ပေးတာ မှန်ပေမယ့်၊ left inset မှာ top ပေးရင်တော့ invalid ဖြစ်ပါတယ်။
+      [[mark:draw-inside]] inside က inset နဲ့ ဘက်တူ အနား ဖြစ်ပြီး၊ outside က ဆန့်ကျင်ဘက် အနားပါ။ start နဲ့
+      end က containing block ရဲ့ writing mode ကို လိုက်ပြီး၊ self start နဲ့ self end က element
+      ကိုယ်တိုင်ရဲ့ writing mode ကို လိုက်ပါတယ်။ [[mark:draw-percent]] ရာခိုင်နှုန်းကို anchor ရဲ့ start
+      အနားကနေ တိုင်းပြီး၊ center က 50 ရာခိုင်နှုန်းပါ။ 25 pixel လို length သက်သက်ကတော့ အနား မဟုတ်လို့
+      မရပါဘူး။ [[mark:draw-fallback]] anchor ကို ရှာမတွေ့ရင် declaration တစ်ခုလုံး invalid ဖြစ်သွားလို့၊
+      function ရဲ့ နောက်ဆုံးမှာ fallback တန်ဖိုး ထည့်ထားလို့ ရပါတယ်။ [[mark:draw-calc]] ရလဒ်က length
+      ဖြစ်လို့ calc၊ min၊ max ထဲမှာ သုံးလို့ ရပြီး၊ ဥပမာ နေရာလွတ် နည်းနည်း ချန်ချင်တဲ့အခါ သုံးပါတယ်။
+      ဒါပေမဲ့ anchor function ကို inset property တွေမှာပဲ သုံးလို့ ရပြီး၊ margin၊ width နဲ့ transform မှာ
+      မရပါဘူး။ [[mark:draw-center]] anchor နဲ့ အလယ်ချင်း ညီအောင် ထားချင်ရင်တော့ justify self ဒါမှမဟုတ်
+      align self ကို anchor center ပေးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Anchor side keywords, fallback values, using anchor()"
+        url: "https://web.dev/learn/css/anchor-positioning#anchor_side_keywords"
+      - title: "MDN — anchor() (sides, fallback, only in inset properties)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/anchor"
+      - title: "MDN — justify-self: anchor-center"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-self"
+      - title: "CSS Anchor Positioning — the anchor() function"
+        url: "https://drafts.csswg.org/css-anchor-position-1/#anchor-pos"
+    actions:
+      - id: open-sides
+        type: whiteboard.apply
+        at: { mark: open-sides }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-sides
+        type: whiteboard.apply
+        at: { mark: draw-sides }
+        upsertIds: [c-anchor, c-top, c-bottom, c-left, c-right]
+        drawMs: 2400
+      - id: draw-check
+        type: whiteboard.apply
+        at: { mark: draw-check }
+        upsertIds: [c-ok, c-bad]
+        drawMs: 1600
+      - id: draw-inside
+        type: whiteboard.apply
+        at: { mark: draw-inside }
+        upsertIds: [c-inout, c-startend]
+        drawMs: 1600
+      - id: draw-percent
+        type: whiteboard.apply
+        at: { mark: draw-percent }
+        upsertIds: [c-center]
+        drawMs: 1000
+      - id: draw-fallback
+        type: whiteboard.apply
+        at: { mark: draw-fallback }
+        upsertIds: [c-fallback]
+        drawMs: 1000
+      - id: draw-calc
+        type: whiteboard.apply
+        at: { mark: draw-calc }
+        upsertIds: [c-calc, c-inset]
+        drawMs: 1600
+      - id: draw-center
+        type: whiteboard.apply
+        at: { mark: draw-center }
+        upsertIds: [c-acenter]
+        drawMs: 1000
+
+  - id: anchor-size
+    chapter: "Anchor ရဲ့ အရွယ်အစား"
+    narration: >
+      [[mark:close-sides]] anchor ရဲ့ အရွယ်အစားကိုလည်း ယူသုံးလို့ ရပါတယ်။ [[mark:type-first]] nav ထဲက
+      ပထမဆုံး link ကို ရွေးတဲ့ selector နဲ့ rule အသစ် ရေးပါမယ်။ ကြည့်သူ အခု ရောက်နေတဲ့ အပိုင်းကို ပြတဲ့
+      link ဖြစ်လို့ current ဆိုတဲ့ anchor name ပေးပါမယ်။ [[mark:type-bar]] ပြီးတော့ အောက်မျဉ်းကို absolute
+      ပေးပြီး current link နဲ့ ချိတ်ပါမယ်။ မျဉ်းရဲ့ အပေါ်အနားကို link ရဲ့ အောက်အနားမှာ၊ ဘယ်အနားကို link
+      ရဲ့ ဘယ်အနားမှာ ထားပါမယ်။ [[mark:after-bar]] အောက်မျဉ်းက နေရာ မှန်နေပေမယ့် မမြင်ရပါဘူး။ အကျယ်
+      မပေးရသေးတော့ 0 ဖြစ်နေလို့ပါ။ [[mark:type-size]] anchor size function နဲ့ အောက်မျဉ်းရဲ့ အကျယ်ကို သူ့
+      anchor ဖြစ်တဲ့ ပထမ link ရဲ့ အကျယ်အတိုင်း ပေးပါမယ်။ [[mark:after-size]] ဒီ anchor size ကို ကြည့်ပါ။
+      ပထမ link ရဲ့ အောက်မှာ link နဲ့ အကျယ် တူတဲ့ ရွှေရောင် မျဉ်း ပေါ်လာပါပြီ။ anchor size ကို အကျယ်၊
+      အမြင့်၊ inset နဲ့ margin တွေမှာ သုံးလို့ ရပါတယ်။ ကွင်းထဲမှာ ဘာမှ မပေးရင်တော့ သူ ရှိနေတဲ့ property
+      ရဲ့ axis အတိုင်း တိုင်းပါတယ်။ [[mark:type-third]] အခု ကြည့်သူက မှာယူရန် အပိုင်းကို ရောက်သွားတယ်
+      ဆိုပါစို့။ တတိယ link ကို rule အသစ်နဲ့ anchor name တူတူ ပေးပါမယ်။ ရိုက်နေတုန်း ရွှေရောင် မျဉ်းကို
+      လိုက်ကြည့်ပါ။ [[mark:after-third]] အောက်မျဉ်းက တတိယ link ဆီ ခုန်သွားပြီး သူ့ အကျယ်ကို ယူလိုက်ပါပြီ။
+      link နှစ်ခုက နာမည် တူနေလို့ HTML ထဲမှာ နောက်မှ လာတဲ့ link က နိုင်တာပါ။ rule ရေးတဲ့ အစဉ်ကြောင့်
+      မဟုတ်ပါဘူး။ တကယ့် website မှာတော့ JavaScript က ကြည့်သူ ရောက်နေတဲ့ အပိုင်းရဲ့ link ကို class တစ်ခု
+      ပေးပြီး၊ အဲဒီ class ရှိတဲ့ link ကိုပဲ anchor name ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Using the anchor's size"
+        url: "https://web.dev/learn/css/anchor-positioning#using_the_anchors_size"
+      - title: "MDN — anchor-size()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/anchor-size"
+    actions:
+      - id: close-sides
+        type: whiteboard.apply
+        at: { mark: close-sides }
+        open: false
+      - id: type-first
+        type: editor.type
+        at: { mark: type-first }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  left: anchor(center);\n}\n", occurrence: 1 }
+        text: "\n.nav-link:nth-child(1) {\n  anchor-name: --current;\n}\n"
+      - id: type-bar
+        type: editor.type
+        at: { mark: type-bar }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".nav-link:nth-child(1) {\n  anchor-name: --current;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.bar {\n  position: absolute;\n  position-anchor: --current;\n  top: anchor(bottom);\n  left: anchor(left);\n}\n"
+      - id: expect-bar
+        type: expect.preview
+        at: { mark: after-bar }
+        timeoutMs: 4000
+        target: { by: testId, value: bar }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  top: anchor(bottom);\n  left: anchor(left);\n",
+            occurrence: 1,
+          }
+        text: "  width: anchor-size(width);\n"
+      - id: select-size
+        type: editor.select
+        at: { mark: after-size }
+        target: { file: styles.css, text: "anchor-size(width)", occurrence: 1 }
+      - id: type-third
+        type: editor.type
+        at: { mark: type-third }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  width: anchor-size(width);\n}\n", occurrence: 1 }
+        text: "\n.nav-link:nth-child(3) {\n  anchor-name: --current;\n}\n"
+      - id: expect-third
+        type: expect.preview
+        at: { mark: after-third }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-order }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: overflow-board
+    chapter: "နေရာ မဆံ့ရင်"
+    narration: >
+      [[mark:open-overflow]] anchor က screen အစွန်းနားမှာ ရှိနေရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။
+      [[mark:draw-pref]] ဒီမှာ ကိုယ် ရွေးထားတဲ့ anchor ရဲ့ ညာဘက် နေရာက screen အပြင်ကို ထွက်သွားလို့
+      ပြတ်နေပါတယ်။ [[mark:draw-tries]] ဒါကြောင့် browser ကို အစားထိုး နေရာ စာရင်း တစ်ခု ပေးထားလို့ ရပါတယ်။
+      browser က အစဉ်လိုက် စမ်းပြီး၊ ပထမဆုံး ဆံ့တဲ့ နေရာကို သုံးပါတယ်။ [[mark:draw-keep]] ဘယ်ဟာမှ
+      မဆံ့ရင်တော့ မူလ နေရာမှာပဲ ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Handling overflow"
+        url: "https://web.dev/learn/css/anchor-positioning#handling_overflow"
+      - title: "MDN — Fallback options and conditional hiding for overflow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning/Try_options_hiding"
+    actions:
+      - id: open-overflow
+        type: whiteboard.apply
+        at: { mark: open-overflow }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-screen, d-screen-l, d-anchor]
+      - id: draw-pref
+        type: whiteboard.apply
+        at: { mark: draw-pref }
+        upsertIds: [d-pref, d-flow-1]
+        drawMs: 1600
+      - id: draw-tries
+        type: whiteboard.apply
+        at: { mark: draw-tries }
+        upsertIds: [d-arrow-1, d-flow-2, d-arrow-2, d-flow-3, d-fit]
+        drawMs: 2400
+      - id: draw-keep
+        type: whiteboard.apply
+        at: { mark: draw-keep }
+        upsertIds: [d-flow-4]
+        drawMs: 1000
+
+  - id: flip
+    narration: >
+      [[mark:close-overflow]] မှာယူရန် အတန်းမှာ စမ်းကြည့်ရအောင်။ အခုတော့ info box က အတန်းထဲမှာ မှာမယ်
+      ခလုတ်ရဲ့ ညာဘက်မှာ ရှိနေပါတယ်။ [[mark:type-info]] ခလုတ်ကို order ဆိုတဲ့ anchor name ပေးပါမယ်။
+      ပြီးတော့ info box ကို absolute ပေးတော့ သူက အတန်းထဲကနေ ထွက်သွားလို့၊ ခလုတ်က ညာဘက် အစွန်းကို
+      ရွှေ့သွားပါမယ်။ info box ကို ခလုတ်နဲ့ ချိတ်ပြီး၊ 180 pixel ပုံသေ အကျယ်နဲ့ ခလုတ်ရဲ့ ညာဘက်မှာ
+      ထားခိုင်းပါမယ်။ [[mark:after-info]] ဒီ position area က ညာဘက်ကို ပေးထားပေမယ့် နေရာ မကျန်ပါဘူး။
+      ဒါကြောင့် browser က box ကို မူလ containing block ဖြစ်တဲ့ အတန်းထဲ ပြန်တွန်းထည့်လို့ ခလုတ်ကို
+      ဖုံးသွားပါတယ်။ [[mark:type-flip]] position try fallbacks နဲ့ အစားထိုး နေရာ တစ်ခု ပေးပါမယ်။ flip
+      inline က ခုနက နေရာကို ညာကနေ ဘယ်ကို ပြောင်းပြန် လှန်ပေးပါတယ်။ [[mark:after-flip]] အခု info box က နေရာ
+      ဆံ့တဲ့ ခလုတ်ရဲ့ ဘယ်ဘက်ကို ရောက်သွားပါပြီ။ [[mark:explain-flips]] ဒီ flip inline လိုပဲ flip block က
+      အပေါ်နဲ့ အောက်ကို လှန်ပေးပြီး၊ နှစ်ခု တွဲပေးရင် နှစ်ဘက်လုံး လှန်ပါတယ်။ flip start ကတော့
+      ထောင့်ဖြတ်မျဉ်းအတိုင်း လှန်လို့ ညာဘက်က နေရာက အောက်ဘက်ကို ရောက်သွားပါတယ်။ စာရင်းထဲမှာ position area
+      တန်ဖိုးတွေကိုလည်း comma ခြားပြီး ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Fallback options"
+        url: "https://web.dev/learn/css/anchor-positioning#fallback_options"
+      - title: "MDN — position-try-fallbacks (flip-block, flip-inline, flip-start)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position-try-fallbacks"
+    actions:
+      - id: close-overflow
+        type: whiteboard.apply
+        at: { mark: close-overflow }
+        open: false
+      - id: scroll-end
+        type: preview.scroll
+        at: { mark: close-overflow, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-info
+        type: editor.type
+        at: { mark: type-info }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".nav-link:nth-child(3) {\n  anchor-name: --current;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.edge-btn {\n  anchor-name: --order;\n}\n\n.info {\n  position: absolute;\n  position-anchor: --order;\n  width: 180px;\n  position-area: right;\n}\n"
+      - id: expect-info
+        type: expect.preview
+        at: { mark: after-info }
+        timeoutMs: 4000
+        target: { by: testId, value: info }
+        textContains: "မိနစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-info-area
+        type: editor.select
+        at: { mark: after-info }
+        target: { file: styles.css, text: "  position-area: right;", occurrence: 2 }
+      - id: type-flip
+        type: editor.type
+        at: { mark: type-flip }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position-area: right;\n", occurrence: 2 }
+        text: "  position-try-fallbacks: flip-inline;\n"
+      - id: expect-flip
+        type: expect.preview
+        at: { mark: after-flip }
+        timeoutMs: 4000
+        target: { by: testId, value: edge-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flip
+        type: editor.select
+        at: { mark: explain-flips }
+        target: { file: styles.css, text: "flip-inline", occurrence: 1 }
+
+  - id: more-control
+    narration: >
+      [[mark:open-more]] ပိုရှုပ်တဲ့ အခြေအနေတွေအတွက် ထိန်းလို့ ရတာတွေ ရှိပါသေးတယ်။ [[mark:draw-custom]]
+      position try at-rule နဲ့ ကိုယ်ပိုင် နာမည် ပါတဲ့ အစားထိုး နေရာ တစ်ခု သတ်မှတ်လို့ ရပါတယ်။ သူ့ထဲမှာ
+      position area၊ inset၊ margin နဲ့ အရွယ်အစားတွေ ပေးပြီး၊ နာမည်ကို fallback စာရင်းထဲ ထည့်ပါတယ်။
+      [[mark:draw-order]] position try order က browser ရွေးပုံကို ပြောင်းပါတယ်။ ပထမဆုံး ဆံ့တဲ့ နေရာကို
+      မယူဘဲ၊ အကျယ် အများဆုံး ဒါမှမဟုတ် အမြင့် အများဆုံး ရတဲ့ နေရာကို ယူပါတယ်။ position try shorthand ကတော့
+      order နဲ့ fallback စာရင်းကို တစ်ခါတည်း ပေးပါတယ်။ [[mark:draw-scroll]] scroll ချောမွေ့အောင် browser က
+      element ကို default anchor ရဲ့ scroll ကိုပဲ လိုက်ခိုင်းပါတယ်။ တခြား anchor တွေ ညွှန်းထားရင်တောင်ပါ။
+      [[mark:draw-visibility]] position visibility ကတော့ anchor က scroll ထွက်သွားလို့ မမြင်ရတော့ရင်
+      ချိတ်ထားတဲ့ element ကိုပါ ဖျောက်ပေးပါတယ်။ browser အသစ်တွေမှာ ဒါက default ဖြစ်ပေမယ့်၊ အဟောင်းတွေအတွက်
+      ကိုယ်တိုင် ရေးထားပါ။
+    sources:
+      - title: "web.dev Learn CSS — Fallback order and scrolling"
+        url: "https://web.dev/learn/css/anchor-positioning#fallback_order"
+      - title: "MDN — @position-try"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@position-try"
+      - title: "MDN — position-try-order"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position-try-order"
+      - title: "MDN — position-visibility"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/position-visibility"
+    actions:
+      - id: open-more
+        type: whiteboard.apply
+        at: { mark: open-more }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-custom
+        type: whiteboard.apply
+        at: { mark: draw-custom }
+        upsertIds: [e-custom, e-custom-2]
+        drawMs: 1600
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [e-order, e-order-2]
+        drawMs: 1600
+      - id: draw-scroll
+        type: whiteboard.apply
+        at: { mark: draw-scroll }
+        upsertIds: [e-scroll]
+        drawMs: 1000
+      - id: draw-visibility
+        type: whiteboard.apply
+        at: { mark: draw-visibility }
+        upsertIds: [e-vis]
+        drawMs: 1000
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-more]] page တစ်ခုလုံးကို နောက်တစ်ခါ ကြည့်ပါ။ ဒီမှာ မြင်ရတဲ့ label တိုင်းကို CSS
+      သက်သက်နဲ့ပဲ နေရာချထားတာပါ။ anchor positioning ကို 2026 ခုနှစ် အစကတည်းက အဓိက browser အားလုံးမှာ
+      သုံးလို့ ရနေပါပြီ။ [[mark:explain-support]] browser အဟောင်းတွေမှာတော့ label တွေ နေရာ မှားနေမှာမို့၊
+      supports rule ထဲမှာ anchor မပါတဲ့ ရိုးရိုး fallback တစ်ခု ထားပေးပါ။ ဆောင်းပါး အဟောင်းတွေမှာ position
+      area ကို inset area၊ position try fallbacks ကို position try options ဆိုတဲ့ နာမည်ဟောင်းနဲ့
+      တွေ့ရနိုင်ပေမယ့်၊ အခု အလုပ် မလုပ်တော့ပါဘူး။ [[mark:open-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ anchor
+      function ကို margin မှာ သုံးလို့ ရလား။ [[mark:quiz-answer]] မရပါဘူး။ သူ့ကို top၊ left လို inset
+      property တွေမှာပဲ သုံးလို့ ရပါတယ်။ အရွယ်အစားနဲ့ margin အတွက်တော့ anchor size ရှိပါတယ်။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ anchor name က anchor ကို နာမည်ပေးပြီး၊ position anchor က
+      absolute element ကို သူနဲ့ ချိတ်ပေးပါတယ်။ position area ဒါမှမဟုတ် anchor function က နေရာချပေးပါတယ်။
+      anchor scope က ထပ်သုံးတဲ့ component တွေကို မရောအောင် ခွဲထားပြီး၊ fallback တွေက နေရာ မဆံ့ရင် တခြား
+      နေရာ ရှာပေးပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ popover နဲ့ dialog ကို ကြည့်သွားပါမယ်။
+      အဲဒီမှာ popover ကို ဖွင့်တဲ့ ခလုတ်က anchor name မပေးဘဲ အလိုလို popover ရဲ့ anchor ဖြစ်သွားတာကို
+      တွေ့ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Anchor positioning: check your understanding"
+        url: "https://web.dev/learn/css/anchor-positioning#check_your_understanding"
+      - title: "web.dev — New to the web platform in January 2026 (anchor positioning Baseline)"
+        url: "https://web.dev/blog/web-platform-01-2026"
+      - title: "MDN — @supports"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@supports"
+      - title: "Chrome for Developers — Introducing the CSS anchor positioning API (inset-area and position-try-options renames)"
+        url: "https://developer.chrome.com/blog/anchor-positioning-api"
+      - title: "web.dev Learn CSS — Anchor positioning: implicit tethers (next lesson)"
+        url: "https://web.dev/learn/css/anchor-positioning#implicit_tethers"
+    actions:
+      - id: close-more
+        type: whiteboard.apply
+        at: { mark: close-more }
+        open: false
+      - id: scroll-final
+        type: preview.scroll
+        at: { mark: close-more, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-final-tag
+        type: expect.preview
+        at: { mark: explain-support }
+        timeoutMs: 4000
+        target: { by: testId, value: tag }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: open-quiz }
+        path: styles.css
+        contains: ".special-name {\n  anchor-name: --special;\n}\n\n.tag {\n  position: absolute;\n  position-anchor: --special;\n  position-area: top;\n  position-area: top right;\n  position-area: bottom span-right;\n  position-area: right;\n}\n\n.photo-card img {\n  anchor-name: --photo;\n}\n\n.new {\n  position: absolute;\n  position-anchor: --photo;\n  position-area: top span-left;\n}\n\n.photo-card {\n  anchor-scope: --photo;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".bubble {\n  position: absolute;\n  position-anchor: --special;\n  bottom: anchor(top);\n  left: anchor(left);\n  left: anchor(center);\n}\n\n.nav-link:nth-child(1) {\n  anchor-name: --current;\n}\n\n.bar {\n  position: absolute;\n  position-anchor: --current;\n  top: anchor(bottom);\n  left: anchor(left);\n  width: anchor-size(width);\n}\n\n.nav-link:nth-child(3) {\n  anchor-name: --current;\n}\n\n.edge-btn {\n  anchor-name: --order;\n}\n\n.info {\n  position: absolute;\n  position-anchor: --order;\n  width: 180px;\n  position-area: right;\n  position-try-fallbacks: flip-inline;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
