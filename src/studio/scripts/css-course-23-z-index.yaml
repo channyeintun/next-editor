@@ -1,0 +1,2078 @@
+# CSS course (Burmese), lesson 23 of 43: z-index and stacking contexts.
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 22's negative margin; X, Y and the Z axis as
+# stacked sheets; z-index orders, never moves) → code tour (cups stage with a
+# gold strip, an overlapping flex row, a leaf card, two dropdown-trap copies;
+# empty styles.css) → preview: coffee covers tea (later in the HTML on top)
+# → .cup-a z-index 1 (tea in front; integers, auto) → the strip is under the
+# cups although later (positioned paints over ordinary) → .note z-index 5
+# (nothing) → position: relative (in front) → flex row: .featured z-index 1
+# with no position lifts (flex/grid exception) → leaf: absolute (covers the
+# heading) → z-index -1 (vanishes behind the card's background) → .leaf-card
+# isolation: isolate (between background and text; the context is the floor)
+# → board (contexts as folders; html root; 1.999 vs 2.2) → trap A: bar
+# relative z 1 (no change) → banner relative z 2 (dropdown hidden) →
+# .dropdown z 999 (still hidden) → bar z 3 (back on top) → trap B: no folder,
+# 999 on top → bar opacity 0.97 (hidden again) → board (what creates a
+# context; auto vs 0; compositor layers) → board (painting order) → board
+# (top layer; z-index tokens) → board (pointer-events: none; keyboard; inert)
+# → recap, quiz, hand-off to overflow (lesson 24).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Rules are appended at the END of styles.css; the strip's position and the
+# bar's z-index 3 are later declarations inserted inside their rules.
+# Keystroke-typed values have no misleading valid prefix: "z-index: 1/2/3/5"
+# are single digits, "-1" passes only through "-" (invalid), "999" passes
+# through 9 and 99 (copy A stays hidden either way; copy B's dropdown comes
+# in front at the first "9" — the page is only ~860 px tall, so copy B is in
+# view during trap-a and after-999 says so), "relative", "absolute" and
+# "isolate" are invalid until complete.
+# The opacity rule is line-by-line: a keystroke "0.97" would pass through
+# "0" (opacity 0, the whole bar would flash away).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, hit tests with
+# elementFromPoint at each overlap): start → coffee over tea, cups over the
+# strip, third card over the featured one, dropdown A over its banner,
+# dropdown B under its banner; cup-a z 1 → tea on top; note z 5 → no change;
+# + position relative → strip on top; featured z 1 → featured on top; leaf
+# absolute → over the heading; leaf z -1 → hidden; isolate → between the
+# card's background and the heading text; bar A z 1 → no change; banner A
+# z 2 → dropdown A hidden; dropdown z 999 → A still hidden, B on top; bar A
+# z 3 → A on top; bar B opacity 0.97 → B hidden.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-23-z-index
+  title: "CSS course 23: Z-index နဲ့ stacking context"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 23
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: four lesson blocks (cups-stage, overlap-row, leaf-card,
+      # dropdown-trap ×2). No kit header, no kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- lesson block: cups-stage -->
+              <section class="stage cups-stage" data-testid="cups-stage">
+                <div class="cup cup-a" data-testid="stage-cup-a">လက်ဖက်ရည်</div>
+                <div class="cup cup-b" data-testid="stage-cup-b">ကော်ဖီ</div>
+                <p class="note" data-testid="stage-note">ယနေ့အထူး</p>
+              </section>
+
+              <!-- lesson block: overlap-row -->
+              <ul class="overlap-row" data-testid="overlap-row">
+                <li class="mini-card">ကော်ဖီ</li>
+                <li class="mini-card featured" data-testid="row-featured">လက်ဖက်ရည်</li>
+                <li class="mini-card">သံပုရာရည်</li>
+              </ul>
+
+              <!-- lesson block: leaf-card -->
+              <article class="leaf-card" data-testid="leaf-card">
+                <span class="leaf" data-testid="leaf"></span>
+                <h3>လက်ဖက်သုပ်</h3>
+                <p>ပဲကြော်နဲ့ နှမ်း</p>
+              </article>
+
+              <!-- lesson block: dropdown-trap (copy A) -->
+              <h3 class="trap-label">ပထမ ဥပမာ</h3>
+              <section class="trap trap-a" data-testid="trap-a">
+                <div class="bar">
+                  <span>မီနူး ▾</span>
+                  <ul class="dropdown" data-testid="dropdown-a">
+                    <li>သောက်စရာ</li>
+                    <li>စားစရာ</li>
+                    <li>ဖွင့်ချိန်</li>
+                  </ul>
+                </div>
+                <p class="banner" data-testid="banner-a">ဈေးလျှော့</p>
+              </section>
+
+              <!-- lesson block: dropdown-trap (copy B) -->
+              <h3 class="trap-label">ဒုတိယ ဥပမာ</h3>
+              <section class="trap trap-b" data-testid="trap-b">
+                <div class="bar">
+                  <span>မီနူး ▾</span>
+                  <ul class="dropdown" data-testid="dropdown-b">
+                    <li>သောက်စရာ</li>
+                    <li>စားစရာ</li>
+                    <li>ဖွင့်ချိန်</li>
+                  </ul>
+                </div>
+                <p class="banner" data-testid="banner-b">ဈေးလျှော့</p>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2, C and D; section E pins the demos'
+      # look and positions (the absolutely positioned cups and dropdowns, the
+      # positioned .leaf-card and .trap wrappers, and copy B's positioned bar
+      # and raised banner). No other z-index, opacity or isolation anywhere.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 23 keeps A, B, B2, C and D; section E gives the overlap demos their
+          look and positions. No z-index, opacity or isolation is pinned anywhere
+          except the second dropdown copy's banner (the opacity trap needs it).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 23: the overlap demos. Every z-index the lesson talks about is typed,
+           except the second copy's banner below. */
+
+        /* Two round cups, both absolutely positioned inside the stage; they overlap. */
+        .cup {
+          position: absolute;
+          top: 16px;
+          width: 120px;
+          height: 120px;
+          display: grid;
+          place-items: center;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          color: #fff;
+          font-weight: 700;
+        }
+
+        .cup-a {
+          left: 40px;
+          background: var(--tea);
+        }
+
+        .cup-b {
+          left: 130px;
+          background: var(--tea-dark);
+        }
+
+        /* A static strip across the cups (it stays in normal flow). */
+        .cups-stage .note {
+          width: 300px;
+          margin: 50px 0 0 4px;
+          padding: 4px 16px;
+          background: var(--gold);
+          color: var(--ink);
+          font-weight: 700;
+          text-align: center;
+        }
+
+        /* Three small cards in a flex row; negative margins make them overlap. */
+        .overlap-row {
+          display: flex;
+          margin: 16px 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .mini-card {
+          width: 140px;
+          height: 88px;
+          padding: 10px 12px;
+          background: #fff;
+          border: 2px solid var(--line);
+          border-radius: var(--radius);
+          box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+        }
+
+        .mini-card + .mini-card {
+          margin-inline-start: -40px;
+        }
+
+        .overlap-row .featured {
+          background: var(--cream);
+          border-color: var(--gold);
+        }
+
+        /* A white card with a green leaf; the card is the leaf's containing block. */
+        .leaf-card {
+          position: relative;
+          margin: 16px 0;
+          padding: 16px 20px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .leaf {
+          display: block;
+          top: 6px;
+          left: 6px;
+          width: 48px;
+          height: 48px;
+          border-radius: 0 70% 0 70%;
+          background: #8fd19e;
+        }
+
+        .leaf-card h3 {
+          font-size: 20px;
+        }
+
+        .leaf-card p {
+          margin: 0;
+          color: var(--muted);
+        }
+
+        /* Two copies of a menu bar with a dropdown that hangs over a banner. The
+           dropdown is measured from .trap, so it sits in the same place whether or
+           not its bar is positioned. */
+        .trap-label {
+          margin-top: 16px;
+          color: var(--muted);
+          font-size: 15px;
+        }
+
+        .trap {
+          position: relative;
+        }
+
+        .bar {
+          padding: 8px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .dropdown {
+          position: absolute;
+          top: 44px;
+          left: 16px;
+          width: 150px;
+          margin: 0;
+          padding: 4px 0;
+          list-style: none;
+          background: #fff;
+          color: var(--ink);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
+        }
+
+        .dropdown li {
+          padding: 2px 12px;
+        }
+
+        .banner {
+          min-height: 120px;
+          margin: 8px 0 0;
+          padding: 16px;
+          background: var(--chili);
+          color: #fff;
+          font-weight: 700;
+          text-align: right;
+          border-radius: var(--radius);
+        }
+
+        /* Copy B is ready for the opacity trap: a positioned bar with no z-index,
+           and a raised banner. */
+        .trap-b .bar {
+          position: relative;
+        }
+
+        .trap-b .banner {
+          position: relative;
+          z-index: 2;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the three axes; Z drawn as sheets of paper stacked towards
+    # the viewer. Blue = X and Y, green / orange / violet = back, middle and
+    # front sheets, red = what z-index does, white = what it does not.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "X · Y · Z axis",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-y-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 266,
+        y: 236,
+        width: 30,
+        height: 330,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-y-l,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 30,
+        height: 36,
+        text: "Y",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-x-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 590,
+        width: 360,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-x-l,
+        kind: text,
+        x: 676,
+        y: 586,
+        width: 30,
+        height: 36,
+        text: "X",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-s1,
+        kind: rectangle,
+        x: 340,
+        y: 262,
+        width: 250,
+        height: 150,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-s1-l,
+        kind: text,
+        x: 352,
+        y: 266,
+        width: 120,
+        height: 36,
+        text: "နောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-s2,
+        kind: rectangle,
+        x: 390,
+        y: 312,
+        width: 250,
+        height: 150,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-s2-l,
+        kind: text,
+        x: 402,
+        y: 316,
+        width: 120,
+        height: 36,
+        text: "အလယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-s3,
+        kind: rectangle,
+        x: 440,
+        y: 362,
+        width: 250,
+        height: 150,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-s3-l,
+        kind: text,
+        x: 452,
+        y: 366,
+        width: 120,
+        height: 36,
+        text: "ရှေ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-z-l,
+        kind: text,
+        x: 740,
+        y: 300,
+        width: 280,
+        height: 36,
+        text: "Z → ကိုယ့်ဆီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule,
+        kind: text,
+        x: 740,
+        y: 400,
+        width: 330,
+        height: 36,
+        text: "z-index = အလွှာ အစဉ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule2,
+        kind: text,
+        x: 740,
+        y: 450,
+        width: 330,
+        height: 36,
+        text: "နေရာ · အရွယ် မပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B — stacking contexts as folders; the version-number model.
+    # White = the root, blue = folder A, green = folder B, orange = the
+    # version numbers, red = the verdict.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Stacking context = folder",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-root,
+        kind: rectangle,
+        x: 280,
+        y: 222,
+        width: 800,
+        height: 356,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-root-l,
+        kind: text,
+        x: 296,
+        y: 228,
+        width: 240,
+        height: 36,
+        text: "html · root",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-fa, kind: rectangle, x: 320, y: 280, width: 340, height: 250, strokeColor: "#1971c2" }
+    - {
+        id: b-fa-l,
+        kind: text,
+        x: 336,
+        y: 290,
+        width: 240,
+        height: 36,
+        text: "A · z-index 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-fa-c,
+        kind: rectangle,
+        x: 360,
+        y: 348,
+        width: 260,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-fa-c-l,
+        kind: text,
+        x: 380,
+        y: 374,
+        width: 220,
+        height: 36,
+        text: "child · 999",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-fa-v,
+        kind: text,
+        x: 420,
+        y: 466,
+        width: 140,
+        height: 40,
+        text: "1.999",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - { id: b-fb, kind: rectangle, x: 700, y: 280, width: 340, height: 250, strokeColor: "#2f9e44" }
+    - {
+        id: b-fb-l,
+        kind: text,
+        x: 716,
+        y: 290,
+        width: 240,
+        height: 36,
+        text: "B · z-index 2",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-fb-c,
+        kind: rectangle,
+        x: 740,
+        y: 348,
+        width: 260,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-fb-c-l,
+        kind: text,
+        x: 760,
+        y: 374,
+        width: 220,
+        height: 36,
+        text: "child · 2",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-fb-v,
+        kind: text,
+        x: 820,
+        y: 466,
+        width: 100,
+        height: 40,
+        text: "2.2",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b-compare,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 560,
+        height: 36,
+        text: "2.2 > 1.999 → B ရဲ့ child ရှေ့မှာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — what creates a stacking context. Blue = positioning and
+    # layout, red = visual effects, green = isolation, orange = auto vs 0,
+    # violet = compositor layers are a different thing.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Stacking context ဖြစ်စေတာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-pos,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 560,
+        height: 36,
+        text: "position + z-index (auto မဟုတ်)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-fixed,
+        kind: text,
+        x: 300,
+        y: 266,
+        width: 420,
+        height: 36,
+        text: "fixed · sticky → အမြဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-flex,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 460,
+        height: 36,
+        text: "flex · grid item + z-index",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-opacity,
+        kind: text,
+        x: 300,
+        y: 354,
+        width: 300,
+        height: 36,
+        text: "opacity 1 အောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-transform,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 620,
+        height: 36,
+        text: "transform · filter · clip-path · mask",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-will,
+        kind: text,
+        x: 300,
+        y: 442,
+        width: 220,
+        height: 36,
+        text: "will-change",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-iso,
+        kind: text,
+        x: 300,
+        y: 486,
+        width: 340,
+        height: 36,
+        text: "isolation: isolate",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-zero,
+        kind: text,
+        x: 300,
+        y: 546,
+        width: 640,
+        height: 36,
+        text: "z-index 0 → folder ✓ · auto → folder ✗",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-layer,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 520,
+        height: 36,
+        text: "GPU layer ≠ stacking context",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — painting order inside one stacking context, drawn as a stack
+    # (front at the top). White = the context itself, green = negative,
+    # blue = ordinary content, orange = positioned auto / 0, red = positive,
+    # violet = front / back.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Context တစ်ခုထဲက ဆွဲတဲ့ အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d7,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 360,
+        height: 36,
+        text: "7 · z-index အပေါင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d6,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 400,
+        height: 36,
+        text: "6 · position · auto / 0",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d5,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 340,
+        height: 36,
+        text: "5 · inline · စာသား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d4,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 200,
+        height: 36,
+        text: "4 · float",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d3,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 260,
+        height: 36,
+        text: "3 · block box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d2,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 340,
+        height: 36,
+        text: "2 · z-index အနုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d1,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 480,
+        height: 36,
+        text: "1 · context ရဲ့ နောက်ခံ · border",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-front,
+        kind: text,
+        x: 880,
+        y: 230,
+        width: 100,
+        height: 36,
+        text: "ရှေ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-back,
+        kind: text,
+        x: 880,
+        y: 530,
+        width: 120,
+        height: 36,
+        text: "နောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-circle6,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 270,
+        width: 460,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-circle2,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 470,
+        width: 400,
+        height: 56,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board E — the top layer above every stacking context; z-index tokens.
+    # Blue = the page, violet = the top layer, red = a big z-index that
+    # cannot reach it, orange = the token scale.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Top layer",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-page,
+        kind: rectangle,
+        x: 300,
+        y: 330,
+        width: 520,
+        height: 220,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: e-page-l,
+        kind: text,
+        x: 320,
+        y: 490,
+        width: 420,
+        height: 36,
+        text: "page ရဲ့ stacking context တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-z,
+        kind: text,
+        x: 320,
+        y: 410,
+        width: 320,
+        height: 36,
+        text: "z-index 99999 ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-top,
+        kind: rectangle,
+        x: 360,
+        y: 236,
+        width: 520,
+        height: 130,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: e-top-l,
+        kind: text,
+        x: 380,
+        y: 256,
+        width: 460,
+        height: 36,
+        text: "top layer · dialog · popover",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-tokens,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 640,
+        height: 36,
+        text: "--z-banner: 100 · --z-dropdown: 200",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board F — pointer-events: none. Blue = the button, orange = the
+    # overlay on top of it, red = the click it catches, green = the fix,
+    # violet = the keyboard caveat and inert.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "pointer-events",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-btn,
+        kind: rectangle,
+        x: 345,
+        y: 335,
+        width: 220,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: f-btn-l,
+        kind: text,
+        x: 405,
+        y: 357,
+        width: 110,
+        height: 36,
+        text: "မှာမယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-overlay,
+        kind: rectangle,
+        x: 310,
+        y: 300,
+        width: 290,
+        height: 150,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-overlay-l,
+        kind: text,
+        x: 320,
+        y: 462,
+        width: 160,
+        height: 36,
+        text: "overlay",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 214,
+        width: 40,
+        height: 82,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-catch,
+        kind: text,
+        x: 640,
+        y: 300,
+        width: 360,
+        height: 36,
+        text: "click → overlay က ယူ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-none,
+        kind: text,
+        x: 640,
+        y: 362,
+        width: 380,
+        height: 36,
+        text: "pointer-events: none",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-pass,
+        kind: text,
+        x: 640,
+        y: 410,
+        width: 380,
+        height: 36,
+        text: "click → ခလုတ်ဆီ ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-kb,
+        kind: text,
+        x: 640,
+        y: 490,
+        width: 380,
+        height: 36,
+        text: "keyboard → ရောက်နေဆဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-inert,
+        kind: text,
+        x: 640,
+        y: 540,
+        width: 380,
+        height: 36,
+        text: "inert → လုံးဝ ပိတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4123
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: z-axis
+    chapter: "Box တွေ ထပ်နေရင် ဘယ်ဟာ ရှေ့မှာ ပေါ်မလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အနုတ် margin နဲ့ badge ကို card ရဲ့ အပေါ် ဘောင်ပေါ် တင်ခဲ့ပြီး၊ box တွေ
+      ထပ်နေရင် ဘယ်ဟာ အပေါ်မှာ ပေါ်မလဲ ဆိုတဲ့ မေးခွန်း ချန်ခဲ့ပါတယ်။ ဒီ lesson မှာ browser က အဲဒါကို ဘယ်လို
+      ဆုံးဖြတ်လဲ ကြည့်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-axes]] page မှာ ကိုယ် သိပြီးသား ဦးတည်ရာ နှစ်ခု ရှိပါတယ်။ X က ဘယ်ကနေ ညာကို
+      သွားပြီး၊ Y က အပေါ်ကနေ အောက်ကို ဆင်းပါတယ်။ [[mark:draw-sheets]] တတိယ ဦးတည်ရာ Z ကတော့ screen ထဲကနေ
+      ကိုယ့်ဆီကို ထွက်လာပါတယ်။ box တွေကို စားပွဲပေါ်မှာ ထပ်ထားတဲ့ စက္ကူရွက်တွေလို စဉ်းစားကြည့်ပါ။ ကိုယ်နဲ့
+      အနီးဆုံး စက္ကူက သူ့နောက်က စက္ကူတွေကို ဖုံးထားပါတယ်။ [[mark:draw-z-rule]] lesson 14 မှာ ပြောခဲ့သလို၊
+      z-index ဆိုတာ box တွေ ထပ်နေရင် ဘယ်ဟာ အပေါ်က ပေါ်မလဲ ဆိုတဲ့ နံပါတ်ပါ။ သူက box ကို ဘေးကို မရွှေ့သလို၊
+      ကြီးလည်း မလာစေပါဘူး။ ဘယ်ဟာ ရှေ့မှာ ရှိမလဲ ဆိုတာကိုပဲ ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Z-index and stacking contexts"
+        url: "https://web.dev/learn/css/z-index"
+      - title: "MDN — z-index"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/z-index"
+      - title: "CSS 2.2 — 9.9 Layered presentation"
+        url: "https://www.w3.org/TR/CSS22/visuren.html#layers"
+    actions:
+      - id: open-axes-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the code tour, well over 40 s later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-axes
+        type: whiteboard.apply
+        at: { mark: draw-axes }
+        upsertIds: [a-x-arrow, a-x-l, a-y-arrow, a-y-l]
+        drawMs: 2400
+      - id: draw-sheets
+        type: whiteboard.apply
+        at: { mark: draw-sheets }
+        upsertIds: [a-s1, a-s1-l, a-s2, a-s2-l, a-s3, a-s3-l, a-z-l]
+        drawMs: 3600
+      - id: draw-z-rule
+        type: whiteboard.apply
+        at: { mark: draw-z-rule }
+        upsertIds: [a-rule, a-rule2]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-axes]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက ဒီ lesson ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-cups]] ပထမက လက်ဖက်ရည်နဲ့ ကော်ဖီ ခွက်ဝိုင်း နှစ်ခုပါ။ box အဖြူထဲမှာ absolute နဲ့
+      နေရာချထားလို့ ထပ်နေပြီး၊ သူတို့ကို ဖြတ်ပြီး ရွှေရောင် အစင်း တစ်ခု ရှိပါတယ်။ [[mark:select-row]] ဒုတိယက
+      flex row ထဲက card သေးသေး သုံးခုပါ။ lesson 22 ရဲ့ အနုတ် margin နဲ့ တစ်ခုပေါ် တစ်ခု ထပ်ထားပါတယ်။
+      [[mark:select-leaf]] ပြီးတော့ ခေါင်းစဉ် မတိုင်ခင် အစိမ်းရောင် အရွက်လေး တစ်ရွက် ပါတဲ့ card ပါ။
+      [[mark:select-traps]] အောက်ဆုံးမှာ ပုံစံတူ menu bar နှစ်ခု ရှိပြီး၊ သူတို့ရဲ့ dropdown list က အနီရောင်
+      banner ပေါ်အထိ တွဲကျနေပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ [[mark:preview-opens]]
+      preview ပွင့်လာပါပြီ။ ခွက်တွေကို ကြည့်ပါ၊ ကော်ဖီက လက်ဖက်ရည်ကို တစ်ပိုင်း ဖုံးထားပါတယ်။ ဘယ်ဟာ ရှေ့မှာ
+      ထားရမလဲ ကိုယ် မပြောရသေးလို့၊ browser က HTML အစဉ်အတိုင်း သွားပါတယ်။ နောက်မှ လာတဲ့ element ကို အရင်
+      element ရဲ့ ရှေ့မှာ ဆွဲပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Z-index (overlapping elements)"
+        url: "https://web.dev/learn/css/z-index"
+      - title: "MDN — Stacking without the z-index property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_without_z-index"
+    actions:
+      - id: close-axes-board
+        type: whiteboard.apply
+        at: { mark: close-axes }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-cups
+        type: editor.select
+        at: { mark: select-cups }
+        target:
+          {
+            file: index.html,
+            text: '<section class="stage cups-stage" data-testid="cups-stage">',
+            occurrence: 1,
+          }
+      - id: select-row
+        type: editor.select
+        at: { mark: select-row }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="overlap-row" data-testid="overlap-row">',
+            occurrence: 1,
+          }
+      - id: select-leaf
+        type: editor.select
+        at: { mark: select-leaf }
+        target:
+          { file: index.html, text: '<span class="leaf" data-testid="leaf"></span>', occurrence: 1 }
+      - id: select-traps
+        type: editor.select
+        at: { mark: select-traps }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="dropdown" data-testid="dropdown-a">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-cups
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: cups-stage }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-trap-b
+        type: expect.preview
+        at: { afterAction: expect-cups }
+        timeoutMs: 5000
+        target: { by: testId, value: dropdown-b }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-trap-b }
+
+  - id: z-index-one
+    chapter: "Z-index ပေးကြည့်ရအောင်"
+    narration: >
+      [[mark:type-cup-a]] လက်ဖက်ရည် ခွက်ကို ရှေ့ကို ယူလာကြည့်ရအောင်။ သူ့အတွက် rule အသစ် တစ်ခု ရေးပြီး z-index
+      1 ပေးပါမယ်။ ရိုက်နေတုန်း ခွက်တွေကို လိုက်ကြည့်ပါ။ [[mark:after-cup-a]] လက်ဖက်ရည်က ကော်ဖီရဲ့ ရှေ့
+      ရောက်လာပါပြီ။ [[mark:select-z-one]] ဒီ z-index ကို ကြည့်ပါ။ သူ့ တန်ဖိုးက unit မပါတဲ့ ကိန်းပြည့်
+      ဖြစ်ရလို့၊ တစ်ခုခွဲလို တန်ဖိုး ပေးလို့ မရပါဘူး။ အပေါင်း၊ သုည၊ အနုတ် ဘာမဆို ရပြီး၊ နံပါတ် ကြီးတဲ့ box ကို
+      ရှေ့မှာ ဆွဲပါတယ်။ default က auto ဖြစ်ပြီး၊ auto box ကို browser က အဆင့် သုညမှာ ဆွဲပါတယ်။ ကော်ဖီက auto ပဲ
+      ရှိသေးလို့ လက်ဖက်ရည်ရဲ့ 1 က နိုင်တာပါ။ နံပါတ် တူနေရင်တော့ HTML အစဉ်က ပြန်ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Z-index"
+        url: "https://web.dev/learn/css/z-index#z-index"
+      - title: "MDN — z-index (values: auto | integer)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/z-index#values"
+      - title: "CSS 2.2 — 9.9.1 Specifying the stack level: the z-index property"
+        url: "https://www.w3.org/TR/CSS22/visuren.html#z-index"
+    actions:
+      - id: type-cup-a
+        type: editor.type
+        at: { mark: type-cup-a }
+        cadence: natural
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".cup-a {\n  z-index: 1;\n}\n"
+      - id: expect-cup-a
+        type: expect.preview
+        at: { mark: after-cup-a }
+        timeoutMs: 4000
+        target: { by: testId, value: stage-cup-a }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-z-one
+        type: editor.select
+        at: { mark: select-z-one }
+        target: { file: styles.css, text: "z-index: 1;", occurrence: 1 }
+
+  - id: needs-position
+    narration: >
+      အခု ရွှေရောင် အစင်းကို ကြည့်ပါ။ HTML မှာ သူက ခွက် နှစ်ခု ပြီးမှ လာပေမယ့်၊ ခွက်တွေက သူ့ကို
+      ဖုံးထားပါတယ်။ ဘာကြောင့်လဲဆိုတော့၊ အစင်းက flow layout ထဲက သာမန် box ဖြစ်ပြီး၊ browser က position
+      ပေးထားတဲ့ box တွေကို သာမန် box တွေ ပြီးမှ ဆွဲလို့ပါ။ [[mark:type-note-z]] အစင်းကိုလည်း အဲဒီနည်းနဲ့ပဲ
+      ရှေ့ကို ယူလာကြည့်ရအောင်။ z-index 5 ပေးပါမယ်။ ဒီမှာ ရှိတဲ့ နံပါတ် အားလုံးထက် ကြီးလို့၊ ခွက်
+      နှစ်ခုလုံးရဲ့ ရှေ့ကို ရောက်သင့်ပါတယ်။ [[mark:after-note-z]] ဘာမှ မပြောင်းပါဘူး။
+      [[mark:select-note-z]] ဒီ z-index ကို ကြည့်ပါ။ z-index က position ပေးထားတဲ့ box မှာပဲ
+      အလုပ်လုပ်ပါတယ်။ အစင်းရဲ့ position က default ဖြစ်တဲ့ static ပဲ ရှိသေးလို့၊ browser က ဒီ နံပါတ်ကို
+      ထည့်မတွက်ပါဘူး။ [[mark:type-note-pos]] ဒါကြောင့် position ကို relative ပေးပါမယ်။ offset မပေးလို့
+      နေရာ လုံးဝ မရွေ့ပါဘူး။ [[mark:after-note-pos]] အခု အစင်းနဲ့ သူ့ စာသားက ရှေ့ကို ရောက်လာပါပြီ။
+      ဒါကြောင့် z-index အလုပ် မလုပ်ဘူး ထင်ရရင်၊ position ကို အရင် စစ်ကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Z-index (needs a position)"
+        url: "https://web.dev/learn/css/z-index#z-index"
+      - title: "MDN — z-index (applies to positioned elements, flex and grid items)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/z-index"
+      - title: "MDN — Stacking without the z-index property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_without_z-index"
+    actions:
+      - id: type-note-z
+        type: editor.type
+        at: { mark: type-note-z }
+        cadence: natural
+        target: { file: styles.css, after: "  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.note {\n  z-index: 5;\n}\n"
+      - id: expect-note-z
+        type: expect.preview
+        at: { mark: after-note-z }
+        timeoutMs: 4000
+        target: { by: testId, value: stage-note }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-note-z
+        type: editor.select
+        at: { mark: select-note-z }
+        target: { file: styles.css, text: "z-index: 5;", occurrence: 1 }
+      - id: type-note-pos
+        type: editor.type
+        at: { mark: type-note-pos }
+        cadence: natural
+        target: { file: styles.css, after: "  z-index: 5;\n", occurrence: 1 }
+        text: "  position: relative;\n"
+      - id: expect-note-pos
+        type: expect.preview
+        at: { mark: after-note-pos }
+        timeoutMs: 4000
+        target: { by: testId, value: stage-note }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: flex-items
+    narration: >
+      အခု card သေးသေး သုံးခုကို ကြည့်ရအောင်။ card တစ်ခုစီကို ဘယ်ဘက်က card ပေါ် ဆွဲတင်ထားပြီး၊ ဒီမှာလည်း
+      နောက်မှ လာတဲ့ card က အရင် card ကို ဖုံးပါတယ်။ ဒါကြောင့် အလယ်က လက်ဖက်ရည် card ရဲ့ ညာဘက် တစ်ပိုင်း
+      ကွယ်နေပါတယ်။ [[mark:type-featured]] ရွှေရောင် border ပါတဲ့ အလယ်က အထူး card ကို z-index 1 ပေးပါမယ်။
+      position ကိုတော့ လုံးဝ မပေးပါဘူး။ [[mark:after-featured]] position မပါပေမယ့် သူ ရှေ့ကို ရောက်လာပြီး၊
+      သူ့ border က တတိယ card ရဲ့ အစကို ဖုံးသွားပါပြီ။ [[mark:explain-flex]] ဒါက ခုနက စည်းမျဉ်းရဲ့
+      ခြွင်းချက်ပါ။ flex item နဲ့ grid item တွေက position မပါဘဲ z-index ကို လက်ခံပါတယ်။ lesson 19 မှာ
+      ဓာတ်ပုံ card ရဲ့ badge က z-index နဲ့ ရှေ့ ပြန်ရောက်ခဲ့တာလည်း သူက grid item ဖြစ်လို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Z-index (flex and grid items)"
+        url: "https://web.dev/learn/css/z-index#z-index"
+      - title: "CSS Flexible Box Layout 1 — 4.3 Flex item z-ordering"
+        url: "https://drafts.csswg.org/css-flexbox-1/#painting"
+      - title: "CSS Grid Layout 2 — 9.5 Z-axis ordering: the z-index property"
+        url: "https://drafts.csswg.org/css-grid/#z-order"
+    actions:
+      - id: type-featured
+        type: editor.type
+        at: { mark: type-featured }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  position: relative;\n}\n", occurrence: 1 }
+        text: "\n.overlap-row .featured {\n  z-index: 1;\n}\n"
+      - id: expect-featured
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: row-featured }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: negative-z
+    chapter: "အနုတ် z-index နဲ့ isolation"
+    narration: >
+      [[mark:scroll-leaf]] နောက်တစ်ခုက အရွက် card ပါ။ အရွက်က HTML မှာ ခေါင်းစဉ်ထက် အရင် ရေးထားတဲ့ span
+      ဖြစ်ပြီး၊ အခု ခေါင်းစဉ် အပေါ်မှာ တစ်ကြောင်း ယူထားပါတယ်။ [[mark:type-leaf-abs]] အရွက်ကို ခေါင်းစဉ်ရဲ့
+      နောက်မှာ အလှဆင် ပုံလေး တစ်ခုအဖြစ် ထားချင်ပါတယ်။ ဒါကြောင့် ပထမဆုံး absolute နဲ့ နေရာချပြီး flow ထဲကနေ
+      ထုတ်ပါမယ်။ card မှာ position ပေးထားပြီးသား ဖြစ်လို့၊ အရွက်ကို card ထဲမှာပဲ နေရာချပါမယ်။
+      [[mark:after-leaf-abs]] အရွက်က card ရဲ့ ထောင့်ကို ရောက်သွားပြီး၊ position ပေးထားတဲ့ box ဖြစ်လို့
+      ခေါင်းစဉ်ရဲ့ အစကို ဖုံးနေပါတယ်။ [[mark:type-leaf-neg]] ခေါင်းစဉ်ရဲ့ နောက်ကို ပို့ဖို့ z-index ကို
+      အနုတ် တန်ဖိုး၊ အနုတ် 1 ပေးပါမယ်။ [[mark:after-leaf-neg]] အရွက် ပျောက်သွားပါပြီ။
+      [[mark:explain-gone]] သူက card ရဲ့ နောက်ခံ အဖြူ အပါအဝင်၊ အဆင့် သုညမှာ ရှိတဲ့ အရာအားလုံးရဲ့ နောက်ကို
+      ရောက်သွားတာပါ။ card မှာ position ရှိပေမယ့် z-index မရှိလို့ ကိုယ်ပိုင် အုပ်စု မဖြစ်ပါဘူး။ ဒါကြောင့်
+      အရွက်က page တစ်ခုလုံးရဲ့ အလွှာတွေနဲ့ တိုက်ရိုက် ပြိုင်ရတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Negative z-index"
+        url: "https://web.dev/learn/css/z-index#negative_z-index"
+      - title: "MDN — z-index (negative values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/z-index"
+    actions:
+      - id: scroll-leaf
+        type: preview.scroll
+        at: { mark: scroll-leaf }
+        timeoutMs: 5000
+        top: 280
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-leaf-abs
+        type: editor.type
+        at: { mark: type-leaf-abs }
+        cadence: natural
+        target:
+          { file: styles.css, after: ".overlap-row .featured {\n  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.leaf {\n  position: absolute;\n}\n"
+      - id: expect-leaf-abs
+        type: expect.preview
+        at: { mark: after-leaf-abs }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-card }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-leaf-neg
+        type: editor.type
+        at: { mark: type-leaf-neg }
+        cadence: natural
+        target: { file: styles.css, after: "  position: absolute;\n", occurrence: 1 }
+        text: "  z-index: -1;\n"
+      - id: expect-leaf-neg
+        type: expect.preview
+        at: { mark: after-leaf-neg }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-card }
+        textContains: "ပဲကြော်နဲ့ နှမ်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: isolation
+    narration: >
+      [[mark:type-isolate]] card ကိုယ်တိုင်ကို အရွက်ရဲ့ အောက်ဆုံး အလွှာ ဖြစ်စေချင်ပါတယ်။ isolation ဆိုတဲ့
+      property က အဲဒါကို တိတိကျကျ လုပ်ပေးပါတယ်။ [[mark:after-isolate]] အရွက် ပြန်ပေါ်လာပြီး၊ အခု card ရဲ့
+      နောက်ခံနဲ့ ခေါင်းစဉ် စာသားကြားမှာ ရှိနေပါတယ်။ [[mark:select-isolate]] ဒီ isolation က card ကို
+      stacking context တစ်ခု ဖြစ်စေပါတယ်။ stacking context ဆိုတာ element တွေကို အလွှာ အုပ်စု တစ်ခုအဖြစ်
+      ချုပ်ထားတာပါ။ isolation က အဲဒါကလွဲပြီး ဘာမှ မပြောင်းပါဘူး။ အုပ်စုထဲမှာ card ရဲ့ နောက်ခံက အမြဲ
+      အောက်ဆုံး အလွှာ ဖြစ်လို့၊ child က အနုတ် 1 ဖြစ်ဖြစ် အနုတ် 999 ဖြစ်ဖြစ် အဲဒီ အောက်ကို
+      မရောက်နိုင်ပါဘူး။
+    sources:
+      - title: "MDN — isolation"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/isolation"
+      - title: "web.dev Learn CSS — Stacking context"
+        url: "https://web.dev/learn/css/z-index#stacking_context"
+      - title: "CSS Compositing and Blending 1 — the isolation property"
+        url: "https://drafts.fxtf.org/compositing-1/#isolation"
+    actions:
+      - id: type-isolate
+        type: editor.type
+        at: { mark: type-isolate }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  z-index: -1;\n}\n", occurrence: 1 }
+        text: "\n.leaf-card {\n  isolation: isolate;\n}\n"
+      - id: expect-isolate
+        type: expect.preview
+        at: { mark: after-isolate }
+        timeoutMs: 4000
+        target: { by: testId, value: leaf-card }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-isolate
+        type: editor.select
+        at: { mark: select-isolate }
+        target: { file: styles.css, text: "isolation: isolate;", occurrence: 1 }
+
+  - id: folders
+    chapter: "Stacking context ကို folder လို ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-folders]] stacking context ကို ပိုအသေးစိတ် ကြည့်ရအောင်။ တစ်ခုစီကို folder တစ်ခုလို
+      မြင်ကြည့်ပါ။ [[mark:draw-root]] html element က root folder ပါ။ page ပေါ်က အရာအားလုံး သူ့ထဲမှာ
+      ရှိလို့၊ page ကိုယ်တိုင်ရဲ့ နောက်မှာ ဘာကိုမှ ဆွဲလို့ မရပါဘူး။ body ကတောင် တစ်ခုခုက folder ဖြစ်အောင်
+      မလုပ်ရင် folder မဟုတ်ပါဘူး။ [[mark:draw-folders]] အဲဒီထဲမှာ stacking context ကိုယ်စီ ဖြစ်နေတဲ့ box
+      နှစ်ခု ရှိပါတယ်။ A က z-index 1၊ B က 2 ပါ။ [[mark:draw-children]] A ထဲမှာ z-index 999 ပါတဲ့ child
+      တစ်ခု၊ B ထဲမှာ 2 ပါတဲ့ child တစ်ခု ရှိပါတယ်။ ဘယ် child က ရှေ့မှာ ပေါ်မလဲ။ [[mark:draw-versions]]
+      browser က folder တွေကို အရင် နှိုင်းယှဉ်ပါတယ်။ 1 နဲ့ 2 ကို ယှဉ်တော့ B က နိုင်ပါတယ်။ child ရဲ့
+      နံပါတ်က သူ့ folder ထဲမှာပဲ အရေးပါလို့၊ version နံပါတ်လို ဖတ်ကြည့်ပါ။ A ရဲ့ child က တစ် ဒသမ ကိုး ကိုး
+      ကိုး၊ B ရဲ့ child က နှစ် ဒသမ နှစ် ပါ။ [[mark:draw-compare]] 999 က ကြည့်ရတာ အများကြီး ပိုကြီးပေမယ့်၊
+      နှစ် ဒသမ နှစ်က ပိုကြီးလို့ B ရဲ့ child က ရှေ့မှာ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Stacking context"
+        url: "https://web.dev/learn/css/z-index#stacking_context"
+      - title: "MDN — Stacking context"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context"
+    actions:
+      - id: open-folders-board
+        type: whiteboard.apply
+        at: { mark: open-folders }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-root
+        type: whiteboard.apply
+        at: { mark: draw-root }
+        upsertIds: [b-root, b-root-l]
+        drawMs: 1600
+      - id: draw-folders
+        type: whiteboard.apply
+        at: { mark: draw-folders }
+        upsertIds: [b-fa, b-fa-l, b-fb, b-fb-l]
+        drawMs: 2400
+      - id: draw-children
+        type: whiteboard.apply
+        at: { mark: draw-children }
+        upsertIds: [b-fa-c, b-fa-c-l, b-fb-c, b-fb-c-l]
+        drawMs: 2400
+      - id: draw-versions
+        type: whiteboard.apply
+        at: { mark: draw-versions }
+        upsertIds: [b-fa-v, b-fb-v]
+        drawMs: 1400
+      - id: draw-compare
+        type: whiteboard.apply
+        at: { mark: draw-compare }
+        upsertIds: [b-compare]
+        drawMs: 1600
+
+  - id: trap-a
+    chapter: "Dropdown က banner နောက် ရောက်သွားရင်"
+    narration: >
+      [[mark:close-folders]] page ဆီ ပြန်ရအောင်။ [[mark:scroll-trap-a]] ဒါက ပထမ ဥပမာပါ။ dropdown list က
+      အခုတော့ banner ရဲ့ ရှေ့မှာ ရှိပါတယ်။ [[mark:type-bar-a]] တကယ့်
+      website header တွေလိုပဲ၊ bar ကို position နဲ့ z-index 1 ပေးပါမယ်။ ဒါမှ menu က သူ့ပြီးမှ လာတဲ့ content
+      တွေရဲ့ ရှေ့မှာ ရှိနေမှာပါ။ [[mark:after-bar-a]] အခုထိ ဘာမှ မပြောင်းသေးပါဘူး။ bar ရဲ့ folder က ရိုးရိုး
+      banner ရဲ့ ရှေ့မှာ ရှိနေဆဲပါ။ [[mark:type-banner-a]] အခု banner ကိုလည်း position နဲ့ z-index 2 ပေးပါမယ်။
+      page ပေါ်က တခြား box ကို ဖုံးဖို့ တစ်ယောက်ယောက်က မြှင့်ထားတယ် ဆိုပါစို့။ [[mark:after-banner-a]]
+      dropdown က banner ရဲ့ နောက်ကို ရောက်သွားပါပြီ။ သူ့ အပေါ်ဘက် အစွန်းလေးပဲ မြင်ရပါတော့တယ်။
+      [[mark:type-999]] ဒီလို ဖြစ်ရင် လူအများစု ပထမဆုံး လုပ်ကြတာက၊ သေချာ နိုင်အောင် dropdown ကို 999 လို
+      နံပါတ် အကြီးကြီး ပေးလိုက်တာပါ။ [[mark:after-999]] ဒါပေမဲ့ ပထမ ဥပမာမှာ ကွယ်နေတုန်းပါ။ အောက်က ဒုတိယ
+      ဥပမာမှာတော့ ရှေ့ ရောက်လာပါတယ်၊ ခဏနေ ပြန်ကြည့်ပါမယ်။ [[mark:select-bar-one]] ဒီ bar ရဲ့ z-index ကို
+      ကြည့်ပါ။ ခုနက folder board အတိုင်း ဖြစ်နေတာပါ။ bar ရဲ့ 1 က သူ့ကို folder ဖြစ်စေလို့၊ dropdown က တစ် ဒသမ
+      ကိုး ကိုး ကိုး ဖြစ်ပြီး banner ရဲ့ 2 ကို ရှုံးပါတယ်။ [[mark:type-bar-three]] ဖြေရှင်းနည်းက child ကို
+      မဟုတ်ဘဲ folder ကို မြှင့်တာပါ။ bar ကို 3 ပေးပါမယ်။ [[mark:after-bar-three]] list က ရှေ့
+      ပြန်ရောက်လာပါပြီ။ နောက်မှ ရေးတဲ့ declaration က နိုင်လို့ bar ရဲ့ 1 ကို မတွက်တော့ဘဲ၊ dropdown က သုံး ဒသမ
+      ကိုး ကိုး ကိုး ဖြစ်ပြီး 2 ကို နိုင်ပါတယ်။
+    sources:
+      - title: "MDN — Stacking context (the version-number model)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context"
+      - title: "web.dev Learn CSS — Stacking context"
+        url: "https://web.dev/learn/css/z-index#stacking_context"
+      - title: "Ahmad Shadeed — Understanding z-index"
+        url: "https://ishadeed.com/article/understanding-z-index/"
+    actions:
+      - id: close-folders-board
+        type: whiteboard.apply
+        at: { mark: close-folders }
+        open: false
+      - id: scroll-trap-a
+        type: preview.scroll
+        at: { mark: scroll-trap-a }
+        timeoutMs: 5000
+        top: 400
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-trap-a
+        type: expect.preview
+        at: { afterAction: scroll-trap-a }
+        timeoutMs: 4000
+        target: { by: testId, value: dropdown-a }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bar-a
+        type: editor.type
+        at: { mark: type-bar-a }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  isolation: isolate;\n}\n", occurrence: 1 }
+        text: "\n.trap-a .bar {\n  position: relative;\n  z-index: 1;\n}\n"
+      - id: expect-bar-a
+        type: expect.preview
+        at: { mark: after-bar-a }
+        timeoutMs: 4000
+        target: { by: testId, value: banner-a }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-banner-a
+        type: editor.type
+        at: { mark: type-banner-a }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  position: relative;\n  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.trap-a .banner {\n  position: relative;\n  z-index: 2;\n}\n"
+      - id: expect-banner-a
+        type: expect.preview
+        at: { mark: after-banner-a }
+        timeoutMs: 4000
+        target: { by: testId, value: banner-a }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-999
+        type: editor.type
+        at: { mark: type-999 }
+        cadence: natural
+        target:
+          { file: styles.css, after: "  position: relative;\n  z-index: 2;\n}\n", occurrence: 1 }
+        text: "\n.dropdown {\n  z-index: 999;\n}\n"
+      - id: expect-999
+        type: expect.preview
+        at: { mark: after-999 }
+        timeoutMs: 4000
+        target: { by: testId, value: dropdown-a }
+        textContains: "စားစရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-bar-one
+        type: editor.select
+        at: { mark: select-bar-one }
+        target: { file: styles.css, text: "z-index: 1;", occurrence: 3 }
+      - id: type-bar-three
+        type: editor.type
+        at: { mark: type-bar-three }
+        cadence: natural
+        target: { file: styles.css, after: "  position: relative;\n  z-index: 1;\n", occurrence: 1 }
+        text: "  z-index: 3;\n"
+      - id: expect-bar-three
+        type: expect.preview
+        at: { mark: after-bar-three }
+        timeoutMs: 4000
+        target: { by: testId, value: dropdown-a }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: opacity-trap
+    chapter: "Stacking context ဖြစ်စေတဲ့ property တွေ"
+    narration: >
+      [[mark:scroll-trap-b]] အခု ဒုတိယ ဥပမာပါ။ ဒီမှာတော့ base ဖိုင်က bar ကို position ပေးထားပြီး၊ banner
+      ကိုလည်း position နဲ့ z-index 2 ပေးထားပြီးသားပါ။ bar မှာ z-index မရှိလို့ folder မဟုတ်ပါဘူး။
+      [[mark:look-trap-b]] ဒါကြောင့် ဒီ dropdown က ရှေ့မှာ ရှိနေတာပါ။ ခုနက ရိုက်ခဲ့တဲ့ 999 က ဒီမှာလည်း
+      အလုပ်လုပ်ပြီး၊ banner ရဲ့ 2 နဲ့ တိုက်ရိုက် ပြိုင်နေလို့ပါ။ [[mark:type-opacity]] designer တစ်ယောက်က ဒီ
+      bar ကို နည်းနည်း ဖျော့ချင်လို့၊ opacity ကို 1 ထက် အနည်းငယ် လျှော့ပေးတယ် ဆိုပါစို့။
+      [[mark:after-opacity]] bar က သိပ် မပြောင်းပေမယ့်၊ dropdown ကတော့ banner နောက်ကို ရောက်သွားပါပြီ။
+      [[mark:select-opacity]] ဒီ opacity ကို ကြည့်ပါ။ opacity က 1 ထက် နည်းရင်လည်း bar က အဆင့် သုညမှာ folder
+      ဖြစ်သွားပါတယ်။ dropdown ရဲ့ 999 က အဲဒီထဲမှာ ပိတ်မိသွားပြန်ပြီး၊ သုညက banner ရဲ့ 2 ကို ရှုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Creating a stacking context"
+        url: "https://web.dev/learn/css/z-index#creating_a_stacking_context"
+      - title: "MDN — Stacking context (opacity less than 1)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context#features_creating_stacking_contexts"
+      - title: "CSS Color 4 — transparency: the opacity property"
+        url: "https://drafts.csswg.org/css-color/#transparency"
+    actions:
+      - id: scroll-trap-b
+        type: preview.scroll
+        at: { mark: scroll-trap-b }
+        timeoutMs: 5000
+        top: 600
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-trap-b-front
+        type: expect.preview
+        at: { mark: look-trap-b }
+        timeoutMs: 4000
+        target: { by: testId, value: dropdown-b }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Line-by-line: a keystroke "0.97" would pass through "0" and flash
+      # the whole bar away for a moment.
+      - id: type-opacity
+        type: editor.type
+        at: { mark: type-opacity }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  z-index: 999;\n}\n", occurrence: 1 }
+        text: "\n.trap-b .bar {\n  opacity: 0.97;\n}\n"
+      - id: expect-opacity
+        type: expect.preview
+        at: { mark: after-opacity }
+        timeoutMs: 4000
+        target: { by: testId, value: banner-b }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-opacity
+        type: editor.select
+        at: { mark: select-opacity }
+        target: { file: styles.css, text: "opacity: 0.97;", occurrence: 1 }
+
+  - id: creators
+    narration: >
+      [[mark:open-creators]] stacking context ကို ဖြစ်စေတာ opacity တစ်ခုတည်း မဟုတ်ပါဘူး။ အဖြစ်များတာတွေကို
+      စုကြည့်ရအောင်။ [[mark:draw-positioned]] ပထမက position ပေးထားပြီး z-index က auto မဟုတ်တဲ့ box ပါ။ fixed
+      နဲ့ sticky box တွေကတော့ z-index မပါလည်း အမြဲ ဖြစ်ပါတယ်။ [[mark:draw-flex-grid]] z-index ပါတဲ့ flex item
+      နဲ့ grid item ပါ။ [[mark:draw-effects]] opacity 1 ထက် နည်းရင်၊ ဒါမှမဟုတ် transform၊ filter၊ clip path၊
+      mask တစ်ခုခု ပါရင်လည်း ဖြစ်ပါတယ်။ will change ထဲမှာ အဲဒီ property တစ်ခုကို ရေးထားရင်လည်း ဖြစ်ပါတယ်။
+      [[mark:draw-isolation]] isolation ကတော့ ဒီအလုပ် တစ်ခုတည်းအတွက်ပါ။ [[mark:draw-auto-zero]] auto နဲ့ သုည
+      ဘာကွာလဲ ဆိုတာလည်း ဒီ စာရင်းကနေ သိနိုင်ပါတယ်။ နှစ်ခုလုံး အဆင့် သုညမှာ ထားပေမယ့်၊ သုညက folder အသစ်
+      ဖြစ်စေပြီး auto က မဖြစ်စေပါဘူး။ [[mark:draw-layers]] opacity၊ transform၊ will change လို property တွေ
+      ပါရင် browser က box ကို GPU layer သီးသန့် ပေါ် တင်လေ့ ရှိပါတယ်။ page ပေါ်မှာ သီးသန့် တင်ထားတဲ့
+      စက္ကူလေးလိုပဲ၊ page ကို ပြန်မဆွဲဘဲ သူ့ကိုပဲ ရွှေ့လို့ ရပါတယ်။ ဒါက မြန်အောင် လုပ်တဲ့ နည်း ဖြစ်ပြီး
+      stacking context နဲ့ မတူပါဘူး။ [[mark:debug-tip]] ဒါကြောင့် z-index အလုပ် မလုပ်ရင်၊ parent တွေကို
+      အပေါ်ကို တစ်ဆင့်ချင်း လိုက်စစ်ပြီး ဒီထဲက တစ်ခုခု ရှာကြည့်ပါ။
+    sources:
+      - title: "MDN — Stacking context: features creating stacking contexts"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context#features_creating_stacking_contexts"
+      - title: "web.dev Learn CSS — Creating a stacking context"
+        url: "https://web.dev/learn/css/z-index#creating_a_stacking_context"
+      - title: "Surma — Forcing layers"
+        url: "https://surma.dev/things/forcing-layers/"
+    actions:
+      - id: open-creators-board
+        type: whiteboard.apply
+        at: { mark: open-creators }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-positioned
+        type: whiteboard.apply
+        at: { mark: draw-positioned }
+        upsertIds: [c-pos, c-fixed]
+        drawMs: 2000
+      - id: draw-flex-grid
+        type: whiteboard.apply
+        at: { mark: draw-flex-grid }
+        upsertIds: [c-flex]
+        drawMs: 1000
+      - id: draw-effects
+        type: whiteboard.apply
+        at: { mark: draw-effects }
+        upsertIds: [c-opacity, c-transform, c-will]
+        drawMs: 2400
+      - id: draw-isolation
+        type: whiteboard.apply
+        at: { mark: draw-isolation }
+        upsertIds: [c-iso]
+        drawMs: 1000
+      - id: draw-auto-zero
+        type: whiteboard.apply
+        at: { mark: draw-auto-zero }
+        upsertIds: [c-zero]
+        drawMs: 1400
+      - id: draw-layers
+        type: whiteboard.apply
+        at: { mark: draw-layers }
+        upsertIds: [c-layer]
+        drawMs: 1400
+
+  - id: paint-order
+    chapter: "ဆွဲတဲ့ အစဉ်နဲ့ top layer"
+    narration: >
+      [[mark:open-paint]] stacking context တစ်ခုထဲမှာ browser က အနောက်ဆုံးကနေ အရှေ့ဆုံးအထိ အစဉ်
+      တစ်ခုအတိုင်း ဆွဲပါတယ်။ [[mark:draw-paint-back]] ပထမဆုံးက context ကိုယ်တိုင်ရဲ့ နောက်ခံနဲ့ border
+      ဖြစ်ပြီး၊ ဒုတိယက z-index အနုတ် ပါတဲ့ child တွေပါ။ [[mark:draw-paint-flow]] ပြီးတော့ သာမန် block box
+      တွေ၊ float တွေနဲ့ စာသားလို inline content တွေပါ။ [[mark:draw-paint-front]] ပြီးမှ position ပေးထားတဲ့
+      auto နဲ့ သုည box တွေကို HTML အစဉ်အတိုင်း ဆွဲပြီး၊ နောက်ဆုံး z-index အပေါင်းတွေကို အငယ်ကနေ ဆွဲပါတယ်။
+      [[mark:circle-six]] အစမှာ မြင်ခဲ့တာ ဒါပါ။ ခွက်တွေက position ပေးထားလို့ နံပါတ် 6 မှာ ဆွဲပြီး၊ နံပါတ်
+      3 မှာ ဆွဲတဲ့ ရွှေရောင် အစင်းရဲ့ ရှေ့ကို ရောက်ခဲ့တာပါ။ [[mark:circle-two]] အနုတ် 1 ရှိတဲ့
+      အရွက်ကိုလည်း နံပါတ် 2 မှာ၊ card ရဲ့ နောက်ခံ ပြီးတာနဲ့ ဆွဲလို့ စာသားရဲ့ နောက်မှာ ရောက်နေတာပါ။
+    sources:
+      - title: "CSS 2.2 — Appendix E: Elaborate description of stacking contexts"
+        url: "https://www.w3.org/TR/CSS22/zindex.html"
+      - title: "MDN — Stacking without the z-index property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_without_z-index"
+    actions:
+      - id: open-paint-board
+        type: whiteboard.apply
+        at: { mark: open-paint }
+        clear: true
+        upsertIds: [d-title, d-front, d-back]
+      - id: draw-paint-back
+        type: whiteboard.apply
+        at: { mark: draw-paint-back }
+        upsertIds: [d1, d2]
+        drawMs: 1600
+      - id: draw-paint-flow
+        type: whiteboard.apply
+        at: { mark: draw-paint-flow }
+        upsertIds: [d3, d4, d5]
+        drawMs: 1800
+      - id: draw-paint-front
+        type: whiteboard.apply
+        at: { mark: draw-paint-front }
+        upsertIds: [d6, d7]
+        drawMs: 1600
+      - id: circle-six
+        type: whiteboard.apply
+        at: { mark: circle-six }
+        upsertIds: [d-circle6]
+        drawMs: 1200
+      - id: circle-two
+        type: whiteboard.apply
+        at: { mark: circle-two }
+        upsertIds: [d-circle2]
+        drawMs: 1200
+
+  - id: top-layer
+    narration: >
+      [[mark:open-top]] ဒါ အားလုံးရဲ့ အပေါ်မှာ အလွှာ တစ်ခု ရှိပါသေးတယ်။ [[mark:draw-top]] top layer ဆိုတာ
+      page ရဲ့ အလွှာ အားလုံးရဲ့ အပေါ်ဆုံးမှာ browser က သီးသန့် ထားပေးတဲ့ အလွှာပါ။ modal dialog နဲ့ popover
+      တွေက အဲဒီမှာ ပွင့်လို့၊ z-index ဘယ်လောက် ကြီးကြီး အဲဒီအထိ မမီပါဘူး။ lesson 41 မှာ သုံးပါမယ်။
+      [[mark:draw-tokens]] ကျန်တာတွေအတွက်တော့ team တော်တော်များများက နံပါတ်ကို ပိုကြီးကြီး
+      ပေးသွားမယ့်အစား၊ z-index တန်ဖိုး အနည်းငယ်ကို custom property တွေထဲ သိမ်းပြီး၊ dropdown၊ banner လို
+      အမျိုးအစား တစ်ခုစီကို နာမည် ပေးကြပါတယ်။
+    sources:
+      - title: "MDN — Top layer"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Top_layer"
+      - title: "web.dev Learn CSS — Popover and dialog"
+        url: "https://web.dev/learn/css/popover-and-dialog"
+      - title: "MDN — Using CSS custom properties"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascading_variables/Using_custom_properties"
+    actions:
+      - id: open-top-board
+        type: whiteboard.apply
+        at: { mark: open-top }
+        clear: true
+        upsertIds: [e-title, e-page, e-page-l, e-z]
+      - id: draw-top
+        type: whiteboard.apply
+        at: { mark: draw-top }
+        upsertIds: [e-top, e-top-l]
+        drawMs: 1800
+      - id: draw-tokens
+        type: whiteboard.apply
+        at: { mark: draw-tokens }
+        upsertIds: [e-tokens]
+        drawMs: 1400
+
+  - id: pointer-events
+    chapter: "Click တွေ ဖြတ်သွားအောင်"
+    narration: >
+      [[mark:open-pointer]] box တွေ ထပ်နေရင် click နဲ့ ပတ်သက်တဲ့ ပြဿနာ တစ်ခုလည်း ရှိပါသေးတယ်။
+      [[mark:draw-overlay]] ခွက်ပေါ်က အငွေ့ပုံလို အလှဆင် overlay လေး တစ်ခုက မှာမယ် ခလုတ်ရဲ့ ရှေ့မှာ ထပ်နေတယ်
+      ဆိုပါစို့။ [[mark:draw-click]] click က ရှေ့ဆုံးမှာ ဆွဲထားတဲ့ အရာဆီ ရောက်ပါတယ်။ ဒါကြောင့် overlay က click
+      ကို ယူသွားပြီး၊ ခလုတ်ဆီ ဘယ်တော့မှ မရောက်ပါဘူး။ [[mark:draw-none]] pointer events ကို none ပေးလိုက်ရင်
+      ဒီပြဿနာ ပြေလည်ပါတယ်။ element က mouse နဲ့ touch ကို မတုံ့ပြန်တော့လို့၊ click တွေနဲ့ hover က သူ့နောက်က
+      element ဆီ ဖြတ်သွားပါတယ်။ [[mark:draw-keyboard]] ဒါပေမဲ့ သူက pointer ကိုပဲ တားပါတယ်။ ဒါကြောင့် ခလုတ်
+      တစ်ခုကို ပိတ်ချင်လို့ none ပေးရင်တောင်၊ keyboard နဲ့ ဆက်ရောက်နိုင်ပြီး screen reader တွေကလည်း
+      မြင်နေဆဲပါ။ အပိုင်း တစ်ခုလုံးကို လုံးဝ ပိတ်ချင်ရင်တော့ HTML ရဲ့ inert attribute ကို သုံးပါ။
+      [[mark:try-it]] pointer events ကိုတော့ preview မှာ ပြလို့ မရပါဘူး။ ဒီ player က click တွေကို တကယ့်
+      pointer မပါဘဲ script နဲ့ element ဆီ တိုက်ရိုက် ပို့လို့ပါ။ lesson ကို pause လုပ်ပြီး ကိုယ့် browser မှာ
+      စမ်းကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Cursors and pointers: disabling all events"
+        url: "https://web.dev/learn/css/cursors-and-pointers"
+      - title: "MDN — pointer-events"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/pointer-events"
+      - title: "MDN — inert"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert"
+    actions:
+      - id: open-pointer-board
+        type: whiteboard.apply
+        at: { mark: open-pointer }
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-overlay
+        type: whiteboard.apply
+        at: { mark: draw-overlay }
+        upsertIds: [f-btn, f-btn-l, f-overlay, f-overlay-l]
+        drawMs: 2200
+      - id: draw-click
+        type: whiteboard.apply
+        at: { mark: draw-click }
+        upsertIds: [f-arrow, f-catch]
+        drawMs: 1600
+      - id: draw-none
+        type: whiteboard.apply
+        at: { mark: draw-none }
+        upsertIds: [f-none, f-pass]
+        drawMs: 1800
+      - id: draw-keyboard
+        type: whiteboard.apply
+        at: { mark: draw-keyboard }
+        upsertIds: [f-kb, f-inert]
+        drawMs: 1800
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ z-index မပါရင် နောက်မှ လာတဲ့ box ကို ရှေ့မှာ ဆွဲပြီး၊ position
+      ပေးထားတဲ့ box တွေကို သာမန် box တွေရဲ့ ရှေ့မှာ ဆွဲပါတယ်။ z-index အလုပ်လုပ်ဖို့ position လိုပေမယ့်၊ flex
+      item နဲ့ grid item တွေမှာတော့ မလိုပါဘူး။ နံပါတ် ကြီးတာက stacking context တစ်ခုတည်းထဲမှာပဲ နိုင်ပြီး၊
+      opacity၊ transform၊ isolation လို property တွေကလည်း context အသစ် ဖြစ်စေပါတယ်။ [[mark:quiz]] မေးခွန်း
+      တစ်ခု မေးကြည့်ရအောင်။ 999 ပေးထားတဲ့ dropdown က banner နောက်မှာ ကွယ်နေရင် ဘယ်မှာ ရှာရမလဲ။ ခဏ
+      စဉ်းစားကြည့်ပါ။ အဖြေကတော့ dropdown ရဲ့ parent တွေထဲမှာ folder ဖြစ်နေတဲ့ တစ်ခုကို ရှာပြီး၊ အဲဒီ folder
+      ကို မြှင့်ရပါမယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ content က box ထက် ကြီးနေရင် ဘာဖြစ်မလဲ ဆိုတာ
+      ဆုံးဖြတ်ပေးတဲ့ overflow ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Z-index: check your understanding"
+        url: "https://web.dev/learn/css/z-index#check_your_understanding"
+      - title: "Ahmad Shadeed — Understanding z-index"
+        url: "https://ishadeed.com/article/understanding-z-index/"
+      - title: "web.dev Learn CSS — Overflow (next lesson)"
+        url: "https://web.dev/learn/css/overflow"
+    actions:
+      - id: close-pointer-board
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".cup-a {\n  z-index: 1;\n}\n\n.note {\n  z-index: 5;\n  position: relative;\n}\n\n.overlap-row .featured {\n  z-index: 1;\n}\n\n.leaf {\n  position: absolute;\n  z-index: -1;\n}\n\n.leaf-card {\n  isolation: isolate;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "\n.trap-a .bar {\n  position: relative;\n  z-index: 1;\n  z-index: 3;\n}\n\n.trap-a .banner {\n  position: relative;\n  z-index: 2;\n}\n\n.dropdown {\n  z-index: 999;\n}\n\n.trap-b .bar {\n  opacity: 0.97;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
