@@ -1,0 +1,1426 @@
+# SRE from zero, lesson 8: From monitoring to observability (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-08-observability.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-08-observability.md \
+#     src/studio/scripts/sre-08-observability.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Three marks add no spoken text and sit at an existing ။ or ၊:
+# hook-refunds splits the hook's opening narration in two (one 486-character
+# dialog would pass the 450-character limit; no action uses it), b1-s1b keeps
+# board B1's first step to three new elements (the bus, metric and log, then
+# trace and profile as the narration reaches "trace က", right after the ၊ that
+# ends the log clause, so each box lands as it is named), and
+# ask-question makes the recap question its own dialog so the question-line
+# select can hang off it for the ⟪pause 3s⟫, as in Module 1.
+#
+# ⟪close board⟫ straight into the next board (scenes 4, 5 and 6) wipes the
+# open board 400 ms early (whiteboard.apply clear) instead of closing the
+# panel, so the editor does not flash between two boards; the next board then
+# draws with open: true, clear: true as usual. A board followed by a deck page
+# closes the panel (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards (B1 P2 comb fan-in, B2 P1 vertical flow, B3 P6 lanes, B4 P1 flow,
+# B5 P5 bars). Colour jobs: #1e1e1e ink (paints white) for arrows, the bus,
+# the cluster outline and the axis; blue the thing named and data series;
+# green healthy or done; red failure; orange the limit or caveat; violet the
+# result. A label on two lines is two text assets, one per line, so each line
+# meets the 0.55 em width rule on its own; four labels whose Virgil digits or
+# Latin measured wider than that rule in Chrome (B2's second rule line, the
+# prober's second line, and both B5 counts) get their measured width. In B5 the bar heights follow the
+# failure rates (Operator C 2.5% is taller than Operator A 1.2%); the orange
+# outline around each bar's top is its uncertainty, wide for C and narrow for A.
+#
+# Deck pages: deck "Next Editor · SRE 2 · Agree and notice". The /pub URL
+# below is a placeholder until Chan publishes the deck; the Director's
+# unreachable-deck warning is expected until then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-08-observability.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-08-observability.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-08-observability.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-08-observability
+  title: "SRE from zero 8: Monitoring ကနေ observability ဆီ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Monitoring ကနေ observability ဆီ
+
+        - observability — ကြိုမတွေးထားတဲ့ မေးခွန်းကို ချိတ်ဆက်ထားတဲ့ data ကနေ ဖြေ
+        - golden signals — latency · traffic · error · saturation
+        - trace — request တစ်ခု service တွေကို ဖြတ်သွားတဲ့ လမ်းကြောင်း
+        - shared fate — monitoring က app နဲ့ အတူ ပျက်
+        - generated dashboard — shared library ကနေ service တိုင်းအတွက် အလိုလို ထွက်
+        - cardinality — label တစ်ခုမှာ မတူတဲ့ တန်ဖိုး ဘယ်နှမျိုး
+        - အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert — နမူနာ အရေအတွက်ပါ တွက်ပြီး သေချာမှ page
+
+        မေးခွန်း: monitoring က app နဲ့ cluster တစ်ခုတည်းပေါ်မှာ run နေတယ်။ cluster ပျက်ရင် ဘာဖြစ်မလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Monitoring ကနေ observability ဆီ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 8</p>
+              <h1>Monitoring ကနေ observability ဆီ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l08-p01
+      contentType: google
+      name: "Cover: Top-up never confirms"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p01
+    - id: l08-p01b
+      contentType: google
+      name: Two days to find the cause
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p01b
+    - id: l08-p02
+      contentType: google
+      name: Monitoring vs observability
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p02
+    - id: l08-p02b
+      contentType: google
+      name: Time to mitigate, then time to detect
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p02b
+    - id: l08-p03
+      contentType: google
+      name: "Telemetry: a bill and a duty"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p03
+    - id: l08-p03b
+      contentType: google
+      name: A user ID metric label
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p03b
+    - id: l08-p03c
+      contentType: google
+      name: Mark every field
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p03c
+    - id: l08-p04
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l08_p04
+  whiteboardAssets:
+    # ---- Board B1: four signals fan into one bus, out comes one request's story (P2)
+    - {
+        id: l08-b1-bus,
+        kind: rectangle,
+        x: 485,
+        y: 175,
+        width: 18,
+        height: 330,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-r1,
+        kind: rectangle,
+        x: 255,
+        y: 175,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b1-t1,
+        kind: text,
+        x: 268,
+        y: 187,
+        width: 140,
+        height: 35,
+        text: "metric",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 185,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-r2,
+        kind: rectangle,
+        x: 255,
+        y: 265,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b1-t2,
+        kind: text,
+        x: 268,
+        y: 277,
+        width: 140,
+        height: 35,
+        text: "log",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 275,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-r3,
+        kind: rectangle,
+        x: 255,
+        y: 355,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b1-t3,
+        kind: text,
+        x: 268,
+        y: 367,
+        width: 140,
+        height: 35,
+        text: "trace",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 365,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-r4,
+        kind: rectangle,
+        x: 255,
+        y: 445,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b1-t4,
+        kind: text,
+        x: 268,
+        y: 457,
+        width: 140,
+        height: 35,
+        text: "profile",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 455,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-a5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 508,
+        y: 320,
+        width: 52,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b1-story,
+        kind: rectangle,
+        x: 565,
+        y: 300,
+        width: 420,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l08-b1-story-t,
+        kind: text,
+        x: 580,
+        y: 322,
+        width: 400,
+        height: 35,
+        text: "request တစ်ခုရဲ့ ဇာတ်လမ်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-same,
+        kind: text,
+        x: 545,
+        y: 395,
+        width: 535,
+        height: 35,
+        text: "label တူ · trace ID တူ · code နေရာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b1-golden,
+        kind: text,
+        x: 255,
+        y: 530,
+        width: 600,
+        height: 35,
+        text: "latency · traffic · error · saturation",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B2: the tap that never confirms, top to bottom (P1), then the layers
+    - {
+        id: l08-b2-r1,
+        kind: rectangle,
+        x: 260,
+        y: 160,
+        width: 300,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b2-t1,
+        kind: text,
+        x: 275,
+        y: 177,
+        width: 200,
+        height: 35,
+        text: "Top-up နှိပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 390,
+        y: 235,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b2-r2,
+        kind: rectangle,
+        x: 260,
+        y: 280,
+        width: 300,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l08-b2-t2,
+        kind: text,
+        x: 275,
+        y: 297,
+        width: 190,
+        height: 35,
+        text: "API: 200 OK",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 390,
+        y: 355,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b2-r3,
+        kind: rectangle,
+        x: 260,
+        y: 400,
+        width: 300,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b2-t3,
+        kind: text,
+        x: 275,
+        y: 417,
+        width: 260,
+        height: 35,
+        text: "status field ဖတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 390,
+        y: 475,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b2-r4,
+        kind: rectangle,
+        x: 260,
+        y: 520,
+        width: 300,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l08-b2-t4,
+        kind: text,
+        x: 275,
+        y: 537,
+        width: 275,
+        height: 35,
+        text: "အတည်ပြုချက် မပေါ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-check,
+        kind: freedraw,
+        stroke: check,
+        x: 575,
+        y: 525,
+        width: 50,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l08-b2-rule1,
+        kind: text,
+        x: 650,
+        y: 520,
+        width: 260,
+        height: 35,
+        text: "စည်း: ငွေဖြတ်ရင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-rule2,
+        kind: text,
+        x: 650,
+        y: 555,
+        width: 290,
+        height: 35,
+        text: "ဘေလ်ဝင်တာ ပြရမယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-prevent1,
+        kind: text,
+        x: 650,
+        y: 170,
+        width: 430,
+        height: 35,
+        text: "ကြိုကာ: ကိုယ့် ပြောင်းလဲမှု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-prevent2,
+        kind: text,
+        x: 650,
+        y: 205,
+        width: 180,
+        height: 35,
+        text: "အလိုလို ရပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-catch,
+        kind: text,
+        x: 650,
+        y: 280,
+        width: 440,
+        height: 35,
+        text: "ဖမ်း: journey SLO burn alert",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b2-defense,
+        kind: text,
+        x: 650,
+        y: 360,
+        width: 260,
+        height: 35,
+        text: "defense in depth",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B3: monitoring shares the app's fate, then moves out (P6 lanes)
+    - {
+        id: l08-b3-cluster,
+        kind: rectangle,
+        x: 260,
+        y: 165,
+        width: 560,
+        height: 170,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b3-cluster-t,
+        kind: text,
+        x: 275,
+        y: 175,
+        width: 130,
+        height: 35,
+        text: "cluster",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-app,
+        kind: rectangle,
+        x: 285,
+        y: 225,
+        width: 200,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l08-b3-app-t,
+        kind: text,
+        x: 300,
+        y: 247,
+        width: 80,
+        height: 35,
+        text: "app",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-mon,
+        kind: rectangle,
+        x: 515,
+        y: 225,
+        width: 280,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l08-b3-mon-t,
+        kind: text,
+        x: 530,
+        y: 247,
+        width: 180,
+        height: 35,
+        text: "monitoring",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-app-a,
+        kind: rectangle,
+        x: 260,
+        y: 390,
+        width: 230,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l08-b3-app-a-t,
+        kind: text,
+        x: 275,
+        y: 412,
+        width: 200,
+        height: 35,
+        text: "app · zone A",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-mon-b,
+        kind: rectangle,
+        x: 515,
+        y: 390,
+        width: 315,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l08-b3-mon-b-t,
+        kind: text,
+        x: 528,
+        y: 412,
+        width: 300,
+        height: 35,
+        text: "monitoring · zone B",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-prober,
+        kind: rectangle,
+        x: 850,
+        y: 385,
+        width: 245,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l08-b3-prober-t1,
+        kind: text,
+        x: 862,
+        y: 395,
+        width: 225,
+        height: 35,
+        text: "အပြင်က prober:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-prober-t2,
+        kind: text,
+        x: 862,
+        y: 432,
+        width: 220,
+        height: 35,
+        text: "alert ဆက်တက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-fast,
+        kind: text,
+        x: 260,
+        y: 520,
+        width: 365,
+        height: 35,
+        text: "alert: မြန်၊ နောက်ဆုံးရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b3-slow,
+        kind: text,
+        x: 660,
+        y: 520,
+        width: 425,
+        height: 35,
+        text: "နောက်မှ မေး: နှေး၊ ပြည့်စုံ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B4: one shared library gives every service the same things (P1)
+    - {
+        id: l08-b4-r1,
+        kind: rectangle,
+        x: 255,
+        y: 300,
+        width: 275,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l08-b4-t1a,
+        kind: text,
+        x: 268,
+        y: 313,
+        width: 255,
+        height: 35,
+        text: "gateway client က",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b4-t1b,
+        kind: text,
+        x: 268,
+        y: 350,
+        width: 150,
+        height: 35,
+        text: "dashboard",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b4-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 330,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b4-r2,
+        kind: rectangle,
+        x: 580,
+        y: 300,
+        width: 245,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l08-b4-t2a,
+        kind: text,
+        x: 592,
+        y: 313,
+        width: 225,
+        height: 35,
+        text: "service အလိုက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b4-t2b,
+        kind: text,
+        x: 592,
+        y: 350,
+        width: 225,
+        height: 35,
+        text: "ကိုက်တဲ့ alert",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b4-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 830,
+        y: 330,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b4-r3,
+        kind: rectangle,
+        x: 875,
+        y: 300,
+        width: 220,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l08-b4-t3a,
+        kind: text,
+        x: 887,
+        y: 313,
+        width: 180,
+        height: 35,
+        text: "အလိုလို စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b4-t3b,
+        kind: text,
+        x: 887,
+        y: 350,
+        width: 165,
+        height: 35,
+        text: "+ rollback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B5: alert on evidence, two operators against one limit (P5 bars)
+    - {
+        id: l08-b5-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 430,
+        width: 720,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l08-b5-limit,
+        kind: rectangle,
+        x: 280,
+        y: 396,
+        width: 720,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l08-b5-limit-t,
+        kind: text,
+        x: 470,
+        y: 405,
+        width: 225,
+        height: 35,
+        text: "ခွင့်ပြု: 0.5%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-c-bar,
+        kind: rectangle,
+        x: 340,
+        y: 300,
+        width: 60,
+        height: 160,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l08-b5-c-t1,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 380,
+        height: 35,
+        text: "Operator C၊ မနက် 3 နာရီ:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-c-t2,
+        kind: text,
+        x: 280,
+        y: 510,
+        width: 150,
+        height: 35,
+        text: "40 ထဲက 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-c-band,
+        kind: rectangle,
+        x: 320,
+        y: 172,
+        width: 100,
+        height: 240,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l08-b5-c-nopage,
+        kind: text,
+        x: 435,
+        y: 190,
+        width: 165,
+        height: 35,
+        text: "page မပို့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-a-bar,
+        kind: rectangle,
+        x: 770,
+        y: 350,
+        width: 60,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l08-b5-a-t1,
+        kind: text,
+        x: 690,
+        y: 475,
+        width: 180,
+        height: 35,
+        text: "Operator A:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-a-t2,
+        kind: text,
+        x: 690,
+        y: 510,
+        width: 265,
+        height: 35,
+        text: "20,000 ထဲက 240",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-a-band,
+        kind: rectangle,
+        x: 755,
+        y: 336,
+        width: 90,
+        height: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l08-b5-a-page,
+        kind: text,
+        x: 860,
+        y: 318,
+        width: 150,
+        height: 35,
+        text: "page ပို့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-note1,
+        kind: text,
+        x: 280,
+        y: 570,
+        width: 425,
+        height: 35,
+        text: "မိနစ် ပျမ်းမျှက 5 စက္ကန့်စာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l08-b5-note2,
+        kind: text,
+        x: 280,
+        y: 605,
+        width: 345,
+        height: 35,
+        text: "ခုန်တက်တာကို ဖုံးနိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2608
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: အတည်ပြုချက် မပေါ်တဲ့ Top-up
+    narration: >
+      [[mark:show-p01]] Eats order တွေ ရပ်ခဲ့ပြီးနောက် Padauk က order တစ်ခုကို အစအဆုံး တိုင်းတဲ့ journey SLO နဲ့ အကြီးဆုံး merchant ၁၀ ခုအတွက် SLO တွေ ထည့်ထားပါတယ်။ ဒီတစ်ပတ်မှာတော့ top-up လုပ်ရင် app က loading လည်နေရုံပဲ ဖြစ်ပြီး ဖုန်းဘေလ် ဝင်ပြီ ဆိုတဲ့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။
+      [[mark:hook-refunds]] စောင့်မနေနိုင်တဲ့ user တွေက ဖုန်းကတ် ဝယ်ဖြည့်ပြီး refund တောင်းကြပေမဲ့ အဲဒီ top-up တွေက တကယ်တော့ ဘေလ် ဝင်ပြီးသားပါ။ API က success code ပြန်ပေးပြီး dashboard တိုင်းကလည်း အစိမ်းရောင်ချည်းပါ။ system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l08-p01,
+        }
+
+  - id: monitoring-vs-observability
+    chapter: Monitoring နဲ့ observability
+    narration: >
+      [[mark:show-p01b]] မသီရိက graph တွေကို တစ်ခုပြီး တစ်ခု ဖွင့်ကြည့်၊ log တွေကို လက်နဲ့ လိုက်ဖတ်ပြီး senior တွေကိုလည်း ဖုန်းဆက် မေးရပါတယ်။ ဒါပေမဲ့ အကြောင်းရင်း ရှာတွေ့တော့ user တွေ ဒုက္ခရောက်နေတာ ၂ ရက် ကြာနေပါပြီ။
+      [[mark:show-p02]] Padauk မှာ ရှိခဲ့တာက monitoring ပါ။ ကြိုရွေးထားတဲ့ ကိန်းဂဏန်းတွေကို dashboard မှာ ဆွဲထားပြီး ပျက်နေလား ဆိုတာကို ဖြေပေးပါတယ်။ ဘယ်လို၊ ဘယ်မှာ၊ ဘာကြောင့် ပျက်လဲ ဆိုတာကိုတော့ senior တွေ မှတ်မိတာကိုပဲ အားကိုးခဲ့ရပါတယ်။
+      observability ကတော့ data တွေကို ချိတ်ဆက်ပြီး အဖွဲ့တိုင်း မျှသုံးထားလို့ ကြိုမတွေးထားတဲ့ မေးခွန်းအသစ်တွေကိုပါ အချိန်မရွေး မေးပြီး ဖြေလို့ရတာပါ။
+      [[mark:show-p02b]] observability ရဲ့ ပထမ ပစ်မှတ်ကတော့ ပြဿနာ သိကတည်းက user တွေ ပြန်အဆင်ပြေတဲ့အထိ ကြာချိန်၊ time to mitigate ကို တိုစေဖို့ပါ၊ ဒီ ၂ ရက်ရဲ့ အများစုက ဒီအပိုင်းပါ။ ပြီးမှ ပြဿနာ စဖြစ်ကတည်းက Padauk သိရတဲ့အထိ ကြာချိန်၊ time to detect ကို တိုအောင် လုပ်ပါတယ်၊ ဒီတစ်ခါ user တွေက Padauk ထက် အရင် သိခဲ့လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+    actions:
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l08-p01b }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l08-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l08-p02b }
+
+  - id: connected-signals
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ဒီ ၂ ရက်ကို တိုစေချင်တော့ မသီရိက signal လေးမျိုးကို ချိတ်မိအောင် စုပါတယ်။ metric က အချိန်နဲ့အမျှ တိုင်းထားတဲ့ ကိန်းဂဏန်း၊ log က event တစ်ခုချင်းရဲ့ မှတ်တမ်း၊ [[mark:b1-s1b]] trace က request တစ်ခု service တွေကို ဖြတ်သွားတဲ့ လမ်းကြောင်းဖြစ်ပြီး၊ profile ကတော့ code ရဲ့ ဘယ်အပိုင်းက CPU နဲ့ memory ကို အများဆုံး သုံးလဲ ပြပါတယ်။
+      [[mark:b1-s2]] signal တိုင်းမှာ service၊ version၊ zone ဆိုတဲ့ label တွေ၊ trace ID နဲ့ code နေရာ တူတူ ပါနေရင် ဘယ်နေရာ၊ ဘယ် request၊ ဘယ် code လဲ ဆိုတာ တစ်ဆက်တည်း ရှာပြီး request တစ်ခုရဲ့ ဇာတ်လမ်းကို မြင်ရပါတယ်။ ဥပမာ refund တောင်းထားတဲ့ top-up တစ်ခုရဲ့ trace ID နဲ့ ရှာရုံနဲ့ ဘေလ်က ၃ စက္ကန့်နဲ့ ဝင်ပြီးသားဖြစ်ပြီး status ဖတ်တဲ့ code ကပဲ ဘာမှ ရှာမတွေ့ခဲ့တာ မိနစ်ပိုင်းနဲ့ သိရမှာပါ။
+      [[mark:b1-s3]] ဘယ်ကစရမလဲ မသိရင် latency၊ traffic၊ error နဲ့ resource ဘယ်လောက် ပြည့်နေလဲ ပြတဲ့ saturation ဆိုတဲ့ four golden signals ကနေ စပါ။ ဒါပေမဲ့ အဲဒီ ၂ ရက်မှာ လေးခုလုံး ကောင်းနေခဲ့ပါတယ်။ signal တွေ ထုတ်ဖို့ကိုတော့ vendor တစ်ခုတည်းနဲ့ မချည်နှောင်ထားတဲ့ open standard၊ OpenTelemetry ကို ရွေးပါတယ်၊ tool တစ်ခုကို နှစ်ချီ သုံးရတတ်လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "OpenTelemetry: Signals", url: "https://opentelemetry.io/docs/concepts/signals/" }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      # Step 1 is split in two so no step adds more than three elements: the bus
+      # with metric and log, then trace and profile as soon as "trace က" is said
+      # (b1-s1b sits after the ၊ that ends the log clause).
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l08-b1-bus, l08-b1-r1, l08-b1-t1, l08-b1-a1, l08-b1-r2, l08-b1-t2, l08-b1-a2]
+        drawMs: 2200
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds: [l08-b1-r3, l08-b1-t3, l08-b1-a3, l08-b1-r4, l08-b1-t4, l08-b1-a4]
+        drawMs: 1800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l08-b1-a5, l08-b1-story, l08-b1-story-t, l08-b1-same]
+        drawMs: 2400
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l08-b1-golden],
+          drawMs: 1400,
+        }
+
+  - id: success-hides-failure
+    chapter: Success code နောက်က failure
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို alert ဘာလို့ မတက်ခဲ့တာလဲ? user က Top-up ကို နှိပ်တော့ API က success code ပြန်ပေးပြီး ဘေလ်လည်း ၁၀ စက္ကန့်အတွင်း ဝင်လို့ lesson ၆ က Top-up SLO လည်း အစိမ်းရောင်ပါ။ ပြဿနာက Operator A က သူ့ response ထဲက status field နာမည်ကို ကြိုမပြောဘဲ ပြောင်းလိုက်တာပါ။ Padauk ရဲ့ code က နာမည်ဟောင်းကို ရှာမတွေ့တော့ top-up မပြီးသေးဘူးလို့ ယူဆနေခဲ့ပါတယ်။
+      [[mark:b2-s2]] app မှာတော့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။ lesson ၁ က ငွေ နှစ်ခါ ဖြတ်ခဲ့တာလိုပဲ user တကယ် ဘာရသွားလဲ ဆိုတာကို system က မစစ်ခဲ့တာပါ။ service တစ်ခုချင်း ကောင်းနေတာထက် user လုပ်ချင်တာ ပြီးသွားလား ဆိုတာက ပိုအရေးကြီးပါတယ်။
+      [[mark:b2-s3]] ဒါကြောင့် ငွေဖြတ်တဲ့ top-up တိုင်းမှာ ဘေလ်ဝင်ကြောင်း app မှာ ၁၀ စက္ကန့်အတွင်း ပေါ်ရမယ် ဆိုတဲ့ user အဆင့် check ကို ထည့်ပါတယ်။ Operator A လို ပြောင်းလဲမှုမျိုး ထပ်ဖြစ်ရင် ဒီ check က မိနစ်ပိုင်းအတွင်း ကျမှာပါ။
+      [[mark:b2-s4]] config ပြောင်းတာ၊ release အသစ် ထုတ်တာ၊ feature ကို user ၅ ရာခိုင်နှုန်းဆီ ဖွင့်တာလို Padauk ကိုယ်တိုင် ပြောင်းနေတုန်း ဒီ check ကျရင် အဲဒီ ပြောင်းလဲမှုက အလိုလို ရပ်သွားပါတယ်။ ဒါက ကြိုကာတာပါ၊ lesson ၁၉ မှာ ဆက်ကြည့်ပါမယ်။
+      [[mark:b2-s5]] Operator A လို အပြင်က ပြောင်းတာကိုတော့ ကြိုမတားနိုင်လို့ top-up လုပ်တဲ့ critical user journey ရဲ့ SLO မှာ error budget မြန်မြန် ကုန်လာရင် တက်တဲ့ SLO burn alert နဲ့ ဖမ်းပါတယ်။ ကြိုကာတဲ့ အလွှာနဲ့ ဖမ်းတဲ့ အလွှာ နှစ်ခုလုံး ထားတာက defense in depth ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+      - {
+          title: "Workbook: Alerting on SLOs",
+          url: "https://sre.google/workbook/alerting-on-slos/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [l08-b2-r1, l08-b2-t1, l08-b2-a1, l08-b2-r2, l08-b2-t2, l08-b2-a2, l08-b2-r3, l08-b2-t3]
+        drawMs: 2600
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l08-b2-a3, l08-b2-r4, l08-b2-t4],
+          drawMs: 1200,
+        }
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l08-b2-check, l08-b2-rule1, l08-b2-rule2]
+        drawMs: 1600
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l08-b2-prevent1, l08-b2-prevent2]
+        drawMs: 1400
+      - id: b2-s5
+        type: whiteboard.apply
+        at: { mark: b2-s5 }
+        upsertIds: [l08-b2-catch, l08-b2-defense]
+        drawMs: 1600
+
+  - id: shared-fate
+    chapter: App နဲ့ အတူ မပျက်တဲ့ monitoring
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] သီတင်းကျွတ် ညမှာတော့ Top-up run နေတဲ့ cluster တစ်ခုလုံး ပျက်သွားပေမဲ့ page တစ်ခုမှ မဝင်ခဲ့ပါဘူး။ monitoring ကိုပါ အဲဒီ cluster ထဲမှာ run ထားလို့ alert တွေပါ အတူ ပျောက်သွားပြီး Facebook post တွေကို support က မစု မြင်မှ သိခဲ့ရပါတယ်။ ဒီလို monitoring က သူ စောင့်ကြည့်တဲ့ system နဲ့ အတူ ပျက်တာကို shared fate လို့ ခေါ်ပါတယ်။
+      [[mark:b3-s2]] ဒါကြောင့် monitoring ကို app မရှိတဲ့ zone B ဆီ ရွှေ့ပြီး production service တွေကို တတ်နိုင်သမျှ နည်းနည်းပဲ မှီအောင် ထားပါတယ်။ အခု zone A က app ပျက်ရင်တောင် zone B က page ပို့နိုင်ပါသေးတယ်။
+      [[mark:b3-s3]] cloud အပြင်ကနေ user လိုပဲ မိနစ်တိုင်း top-up တစ်ခု စမ်းဖြည့်ကြည့်တဲ့ prober လည်း ထည့်လိုက်လို့ အထဲမှာ အကုန် ပျက်ရင်တောင် alert ဆက်တက်ပါတယ်။
+      [[mark:b3-s4]] alert တွေက မြန်မြန် ရောက်တဲ့ နောက်ဆုံးရ data ကို သုံးပြီး၊ နောက်မှ မေးမယ့် မေးခွန်းတွေအတွက်တော့ နှေးပေမဲ့ ပြည့်စုံတဲ့ data ကို သိမ်းပါတယ်။ incident အတွင်း နောက်ဆုံးရ data ကို အရင် ပြရပါမယ်၊ တစ်စိတ်တစ်ပိုင်း မြင်ရတာတောင် ဘာမှ မမြင်ရတာထက် ကောင်းလို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [l08-b3-cluster, l08-b3-cluster-t, l08-b3-app, l08-b3-app-t, l08-b3-mon, l08-b3-mon-t]
+        drawMs: 2200
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l08-b3-app-a, l08-b3-app-a-t, l08-b3-mon-b, l08-b3-mon-b-t]
+        drawMs: 1600
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l08-b3-prober, l08-b3-prober-t1, l08-b3-prober-t2]
+        drawMs: 1200
+      - {
+          id: b3-s4,
+          type: whiteboard.apply,
+          at: { mark: b3-s4 },
+          upsertIds: [l08-b3-fast, l08-b3-slow],
+          drawMs: 1600,
+        }
+
+  - id: thirty-services
+    chapter: Service 30 နဲ့ generated dashboard
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] Padauk မှာ service ၃၀ လောက် ရှိလာတော့ dashboard ကို အဖွဲ့တိုင်း လက်နဲ့ ဆွဲရတာ မမီတော့ပါဘူး။ ဒါကြောင့် မသီရိက ဖုန်းကုမ္ပဏီတွေဆီ ချိတ်ပေးတဲ့ operator gateway client နဲ့ HTTP၊ database library တွေထဲကို standard metric တွေ ထည့်ပါတယ်။ အဲဒီ library တွေ သုံးတဲ့ service တိုင်းမှာ တူညီတဲ့ graph တွေ အလိုလို ထွက်လာတာကို generated dashboard လို့ ခေါ်ပါတယ်။
+      [[mark:b4-s2]] library ပိုင်ရှင်က alert တစ်ခု ရေးလိုက်ရင်လည်း သုံးတဲ့ service တိုင်းမှာ ပါသွားပြီး service တစ်ခုချင်းရဲ့ traffic နဲ့ ကိုက်အောင် သူ့ဘာသာ ချိန်ညှိပါတယ်။ user ဒုက္ခရောက်တာကို ပြတဲ့ alert တွေဘေးမှာ quota ပြည့်ခါနီးတာလို အကြောင်းရင်းကို ပြတဲ့ alert တွေလည်း ထားပါတယ်။
+      [[mark:b4-s3]] Top-up alert တက်ရင် script တစ်ခုက နောက်ဆုံး deploy၊ ဖုန်းကုမ္ပဏီတွေရဲ့ latency၊ database connection တွေကို အလိုလို စစ်ပြီး တွေ့တာကို incident chat channel ထဲ တင်ပေးလို့ on-call ကျနေတဲ့သူက စစ်ပြီးသား အချက်တွေကနေ စလို့ရပါတယ်။ deploy ပြီးချင်း error တွေ ရုတ်တရက် တက်လာရင်တော့ အလိုအလျောက် rollback လုပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - { title: "OpenTelemetry: Signals", url: "https://opentelemetry.io/docs/concepts/signals/" }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l08-b4-r1, l08-b4-t1a, l08-b4-t1b]
+        drawMs: 1400
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l08-b4-a1, l08-b4-r2, l08-b4-t2a, l08-b4-t2b]
+        drawMs: 1600
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l08-b4-a2, l08-b4-r3, l08-b4-t3a, l08-b4-t3b]
+        drawMs: 1600
+
+  - id: telemetry-bill
+    chapter: Telemetry ရဲ့ bill နဲ့ တာဝန်
+    narration: >
+      [[mark:close-b4]] [[mark:show-p03]] လကုန်တော့ metric၊ log၊ trace လို telemetry ရဲ့ bill က ၃ လအတွင်း ၂ ဆ ဖြစ်နေလို့ CTO ကိုနေလင်းက အကြောင်းရင်း မေးပါတယ်။ ရှာကြည့်တော့ debug log တစ်ခုက request တစ်ခုလုံးကို user ရဲ့ NRC နံပါတ်နဲ့ အတူ ရေးနေတာ တွေ့ပါတယ်။ ဒါက bill ကိစ္စ သက်သက် မဟုတ်ဘဲ တာဝန်ကိစ္စပါ။
+      ဒါကြောင့် log ရေးတဲ့ နေရာမှာတင် NRC နံပါတ်ကို ဖုံးပါတယ်။ lesson ၄ က စည်းမျဉ်းလိုပဲ log ကိုလည်း ပြည်တွင်းမှာပဲ ထားရမယ် ဆိုပါစို့။ အသေးစိတ် data ကိုတော့ ရက် ၃၀ ပြီးရင် ဖျက်ပါတယ်။
+      [[mark:show-p03b]] bill တက်တဲ့ နောက်အကြောင်း တစ်ခုက metric တစ်ခုမှာ user ID ကို label အဖြစ် ထည့်ထားတာပါ။ label တစ်ခုမှာ မတူတဲ့ တန်ဖိုး ဘယ်နှမျိုး ရှိလဲ ဆိုတာက cardinality ပါ။ တန်ဖိုး တစ်မျိုးစီက time series တစ်ခုစီ ဖြစ်လို့ user ၁၂ သိန်းဆိုရင် series ၁၂ သိန်း ဖြစ်ပြီး bill အဆမတန် တက်ပါတယ်။ ဒါကြောင့် user ID ကို ရှာရ ပိုကုန်ပေမဲ့ သိမ်းနိုင်တဲ့ log နဲ့ trace ထဲမှာပဲ ထားပါ။
+      [[mark:show-p03c]] field တိုင်းမှာလည်း ဘယ်လို data လဲ ဆိုတဲ့ အမှတ်အသား တပ်ပြီး ဘယ်ရောက်ရောက် ပါသွားအောင် ထားပါ။ ဥပမာ Operator တစ်ခုရဲ့ error rate က personal data မဟုတ်ပေမဲ့ ဖုန်းနံပါတ် ပါတဲ့ log က personal data ပါ။ နာမည် မပါတဲ့ မန္တလေး ဆိုင်ခွဲတွေရဲ့ ကိန်းဂဏန်းကလည်း supermarket chain တစ်ခုတည်းရဲ့ data မို့ ဘယ်သူ့ data လဲ သိနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "OpenTelemetry: Signals", url: "https://opentelemetry.io/docs/concepts/signals/" }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l08-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l08-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l08-p03c }
+
+  - id: alert-on-evidence
+    chapter: အထောက်အထား ခိုင်လုံမှ page ပို့
+    narration: >
+      [[mark:close-p03c]] [[mark:b5-s1]] နောက်ဆုံး ပြဿနာက ညဘက် page တွေပါ။ ဒီ လိမ္မော်ရောင် မျဉ်းက Top-up SLO ပေးထားတဲ့ fail ခွင့် ၀.၅ ရာခိုင်နှုန်းပါ။ alert အဟောင်းက Operator တစ်ခုရဲ့ error rate ဒီမျဉ်းကို ကျော်တာနဲ့ page ပို့ပါတယ်။ fail အရေအတွက်ကို ပုံသေ ထားတဲ့ စည်းကလည်း traffic နည်းတဲ့ Operator မှာ ပျက်နေရင်တောင် မတက်ဘဲ များတဲ့ Operator မှာ ကောင်းနေရင်တောင် တက်လို့ နှစ်ဘက်လုံး မှားပါတယ်။
+      [[mark:b5-s2]] မနက် ၃ နာရီမှာ Operator C ဆီ top-up ၄၀ ထဲက တစ်ခု fail တော့ ၂.၅ ရာခိုင်နှုန်း ဖြစ်လို့ page ဝင်လာပြီး မသီရိ အိပ်ရာက ထရပေမဲ့ တကယ်တော့ ဘာပြဿနာမှ မရှိခဲ့ပါဘူး။ နမူနာ နည်းလို့ တကယ့် fail နှုန်းက ၀.၅ ရာခိုင်နှုန်း အောက်ကနေ ၁၃ ရာခိုင်နှုန်းလောက်အထိ ဖြစ်နိုင်ပြီး ဒီ ကျယ်တဲ့ အကွက်က မျဉ်းကို ဖြတ်နေလို့ အထောက်အထား မခိုင်လုံပါဘူး။
+      [[mark:b5-s3]] Operator A မှာတော့ ၂၀၀၀၀ ထဲက ၂၄၀၊ ၁.၂ ရာခိုင်နှုန်းပဲ fail ဖြစ်ပေမဲ့ နမူနာ များတော့ အကွက်က ကျဉ်းပြီး တစ်ခုလုံး မျဉ်းအပေါ်မှာ ရှိလို့ page ပို့ရပါမယ်။ ဒီလို နမူနာ အရေအတွက်ပါ တွက်ပြီး ပြဿနာ ရှိတာ သေချာမှ page ပို့တာကို အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert လို့ ခေါ်ပါတယ်။
+      [[mark:b5-s4]] ပျမ်းမျှကလည်း လှည့်စားတတ်ပါတယ်။ ဥပမာ မိနစ် ပျမ်းမျှက ၅ စက္ကန့်စာပဲ ရုတ်တရက် တက်တဲ့ error တွေကို ဖုံးထားနိုင်ပါတယ်။ monitoring ကောင်းလာစမှာလည်း failure တွေ ပိုများလာသလို ထင်ရပေမဲ့ အရင်က မမြင်ရတာတွေ ပေါ်လာတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "Workbook: Alerting on SLOs",
+          url: "https://sre.google/workbook/alerting-on-slos/",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      # The axis is furniture (no drawMs); the limit line draws in as it is named.
+      - {
+          id: b5-s1,
+          type: whiteboard.apply,
+          at: { mark: b5-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l08-b5-axis],
+        }
+      - {
+          id: b5-s1-draw,
+          type: whiteboard.apply,
+          at: { afterAction: b5-s1 },
+          upsertIds: [l08-b5-limit, l08-b5-limit-t],
+          drawMs: 1200,
+        }
+      - id: b5-s2
+        type: whiteboard.apply
+        at: { mark: b5-s2 }
+        upsertIds: [l08-b5-c-bar, l08-b5-c-t1, l08-b5-c-t2, l08-b5-c-band, l08-b5-c-nopage]
+        drawMs: 2400
+      - id: b5-s3
+        type: whiteboard.apply
+        at: { mark: b5-s3 }
+        upsertIds: [l08-b5-a-bar, l08-b5-a-t1, l08-b5-a-t2, l08-b5-a-band, l08-b5-a-page]
+        drawMs: 2400
+      - {
+          id: b5-s4,
+          type: whiteboard.apply,
+          at: { mark: b5-s4 },
+          upsertIds: [l08-b5-note1, l08-b5-note2],
+          drawMs: 1400,
+        }
+
+  - id: this-week
+    narration: >
+      [[mark:close-b5]] [[mark:show-p04]] ဒီအပတ်တော့ ကိုယ့် monitoring ကို ဒီလို စစ်ကြည့်ပါ။ success code ပြန်ပေးပေမဲ့ user ဘက်မှာ မအောင်မြင်တဲ့ နေရာ တစ်ခုကို ရှာကြည့်ပါ။ ကိုယ့် monitoring က app နဲ့ cluster တစ်ခုတည်း၊ zone တစ်ခုတည်းမှာ run နေလား စစ်ပါ။ ပြီးတော့ user ID လို တန်ဖိုး အရမ်းများတဲ့ metric label တစ်ခုကို ဖယ်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+    actions:
+      - {
+          id: close-b5,
+          type: whiteboard.apply,
+          at: { mark: close-b5, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l08-p04 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p04]] [[mark:open-notes]] notes ကို တစ်ကြောင်းချင်း ပြန်လှန်ကြည့်ရအောင်။ [[mark:sel-observability]] observability က ကြိုမတွေးထားတဲ့ မေးခွန်းတွေကို ချိတ်ဆက်ထားတဲ့ data ကနေ ဖြေနိုင်တာပါ။ [[mark:sel-golden]] golden signals က အရင်ဆုံး ကြည့်ရမယ့် signal လေးခုဖြစ်ပြီး၊ [[mark:sel-trace]] trace က request တစ်ခုရဲ့ လမ်းကြောင်း တစ်ခုလုံးပါ။ [[mark:sel-shared-fate]] shared fate ဆိုတာ monitoring က app နဲ့ အတူ ပျက်တာပါ။
+      [[mark:sel-generated]] generated dashboard က shared library ကနေ အလိုလို ထွက်လာတဲ့ dashboard ဖြစ်ပြီး၊ [[mark:sel-cardinality]] cardinality က label တစ်ခုမှာ မတူတဲ့ တန်ဖိုး ဘယ်နှမျိုး ရှိလဲ ဆိုတာပါ။ [[mark:sel-evidence]] အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert ကတော့ နမူနာ အရေအတွက်ပါ တွက်ပြီး သေချာမှ page ပို့တာပါ။ ဒီ မေးခွန်းကို ဖြေကြည့်ပါဦး။ [[mark:ask-question]] monitoring က app နဲ့ cluster တစ်ခုတည်းမှာ run နေရင် အဲဒီ cluster ပျက်တဲ့နေ့ ဘာဖြစ်မလဲ?
+      [[mark:pause-question]] alert တွေပါ app နဲ့ အတူ ပျက်သွားလို့ user တွေ post တင်မှပဲ သိရပါမယ်။ Module ၃ မှာတော့ မနက် ၂ နာရီမှာ alert တက်လာပေမဲ့ လူ ၆၀ ရှိတဲ့ Viber group ထဲ ရောက်သွားပြီး အဲဒီ group ကို လူတိုင်းက အသံပိတ်ထားကြပါတယ်။ ဘယ်သူ ဖြေမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      # occurrence 2: the title line "# Monitoring ကနေ observability ဆီ" holds the first match.
+      - {
+          id: sel-observability,
+          type: editor.select,
+          at: { mark: sel-observability },
+          target: { file: notes.md, text: "observability", occurrence: 2 },
+        }
+      - {
+          id: sel-golden,
+          type: editor.select,
+          at: { mark: sel-golden },
+          target: { file: notes.md, text: "golden signals", occurrence: 1 },
+        }
+      - {
+          id: sel-trace,
+          type: editor.select,
+          at: { mark: sel-trace },
+          target: { file: notes.md, text: "trace", occurrence: 1 },
+        }
+      - {
+          id: sel-shared-fate,
+          type: editor.select,
+          at: { mark: sel-shared-fate },
+          target: { file: notes.md, text: "shared fate", occurrence: 1 },
+        }
+      - {
+          id: sel-generated,
+          type: editor.select,
+          at: { mark: sel-generated },
+          target: { file: notes.md, text: "generated dashboard", occurrence: 1 },
+        }
+      - {
+          id: sel-cardinality,
+          type: editor.select,
+          at: { mark: sel-cardinality },
+          target: { file: notes.md, text: "cardinality", occurrence: 1 },
+        }
+      - id: sel-evidence
+        type: editor.select
+        at: { mark: sel-evidence }
+        target: { file: notes.md, text: "အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert", occurrence: 1 }
+      # The voice script's ⟪pause 3s⟫, as in Module 1. A select anchored at
+      # pause-question would drag under the answer's first words (the scheduler
+      # holds only the dialog after its anchor's), so it hangs off ask-question,
+      # the question's own dialog: it starts about as the question ends, its drag
+      # runs in silence, and the answer at pause-question waits for it.
+      # The question is 85 characters, longer than Module 1's, so the pause is
+      # shorter at the slower rates: 6350 ms leaves about 2.8 / 1.5 / 0.4 s of
+      # quiet after the question at 55 / 70 / 95 ms per character; an offset
+      # above ~6440 trips compile-check's 2.5 s inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 6350 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: monitoring က app နဲ့ cluster တစ်ခုတည်းပေါ်မှာ run နေတယ်။ cluster ပျက်ရင် ဘာဖြစ်မလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
