@@ -1,0 +1,1507 @@
+# CSS course (Burmese), lesson 3 of 43: simple selectors.
+#
+# Narration below is Burmese (its source is voice-script.md next to this
+# file; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese.
+#
+# Shape: board (recall lesson 2; the "only the first paragraph" job; rule
+# anatomy) → code tour (index.html: the new PDF link, the two about
+# paragraphs; empty styles.css) → the job solved live with one selector that
+# lesson 4 explains → board (the simple selectors) → type selector →
+# class selector (token match, names can't start with a digit) → ID selector,
+# then a later class rule that loses to it (weights preview) → attribute
+# presence and exact value (hot/iced stripes) → substring operators on the
+# PDF, phone and Facebook links → case flag i (s explained only) → selector
+# list, then one invalid selector drops a whole rule → universal selector
+# outlines every box → recap on the map board with weights, hand-off to
+# lesson 4 (combinators and position).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every typed
+# state is plain CSS that hot-swaps with no reload, so no interaction is ever
+# lost and index.html is never edited. Colour values are keywords with no
+# valid shorter prefix. The only scripted interaction is preview.scroll.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-03-selectors
+  title: "CSS course 3: Selector တွေ အပိုင်း 1"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 3
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (with a fourth nav link: the PDF menu) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                  <li><a class="nav-link" href="/menu.pdf" data-testid="nav-pdf">PDF မီနူး</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: about (with a second paragraph) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+                <p>ဧည့်သည်တိုင်းကို မိသားစုလို ကြိုဆိုပါတယ်။</p>
+              </section>
+            </main>
+
+            <!-- kit block: footer (the two links carry test ids) -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789" data-testid="phone-link">09 123 456 789</a> · <a href="https://facebook.com/" data-testid="facebook-link">Facebook</a></p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (no D). Lesson-3 exclusions:
+      # `.menu-card .desc` drops its colour (the type-selector demo colours
+      # every paragraph, and a class rule would win over it). Section E pins
+      # the footer paragraphs to cream so that demo leaves the dark footer
+      # readable. Never typed, never shown.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types
+          can focus on one idea. Lesson 3 keeps sections A, B, B2 and C; the card
+          descriptions take their colour from the page, and section E keeps the
+          footer's paragraphs cream.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 3: the footer's paragraphs stay cream on the dark footer. */
+        .site-footer p {
+          color: var(--cream);
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A: the job (only the first paragraph) next to the two parts of a
+    # rule. Orange = selector (the lesson's subject), blue = declarations and
+    # paragraphs, red = "too many", green = "just this one", violet = the
+    # question the lesson answers.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ပထမ စာပိုဒ်ကိုပဲ ရွေးချင်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-sel,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 30,
+        height: 40,
+        text: "p",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-decl,
+        kind: text,
+        x: 345,
+        y: 236,
+        width: 330,
+        height: 40,
+        text: "{ font-weight: bold; }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-sel-label,
+        kind: text,
+        x: 290,
+        y: 296,
+        width: 120,
+        height: 36,
+        text: "selector",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-decl-label,
+        kind: text,
+        x: 470,
+        y: 296,
+        width: 160,
+        height: 36,
+        text: "declaration",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-about-frame,
+        kind: rectangle,
+        x: 740,
+        y: 230,
+        width: 340,
+        height: 340,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-about-h,
+        kind: text,
+        x: 760,
+        y: 244,
+        width: 200,
+        height: 36,
+        text: "ဆိုင်အကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p1,
+        kind: rectangle,
+        x: 760,
+        y: 300,
+        width: 300,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-p1-label,
+        kind: text,
+        x: 780,
+        y: 335,
+        width: 30,
+        height: 36,
+        text: "p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-p2,
+        kind: rectangle,
+        x: 760,
+        y: 440,
+        width: 300,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-p2-label,
+        kind: text,
+        x: 780,
+        y: 475,
+        width: 30,
+        height: 36,
+        text: "p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-both-label,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 300,
+        height: 36,
+        text: "p ဆိုရင် နှစ်ပိုဒ်လုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-both-c1,
+        kind: freedraw,
+        stroke: circle,
+        x: 766,
+        y: 322,
+        width: 60,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-both-c2,
+        kind: freedraw,
+        stroke: circle,
+        x: 766,
+        y: 462,
+        width: 60,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-first-label,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 260,
+        height: 36,
+        text: "ပထမ တစ်ပိုဒ်ပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-first-check,
+        kind: freedraw,
+        stroke: check,
+        x: 990,
+        y: 325,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-question,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 300,
+        height: 40,
+        text: "ဘယ်လို ရွေးမလဲ?",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+
+    # Board B: the simple selectors, one colour per kind; the recap adds a
+    # weight column (one square per tier) on the right of the same board.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Simple selector တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-type-code,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 40,
+        text: "p",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-type-desc,
+        kind: text,
+        x: 580,
+        y: 240,
+        width: 260,
+        height: 40,
+        text: "element နာမည်နဲ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-class-code,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: ".featured",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-class-desc,
+        kind: text,
+        x: 580,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: "class နဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-id-code,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 220,
+        height: 40,
+        text: "#today-special",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-id-desc,
+        kind: text,
+        x: 580,
+        y: 380,
+        width: 200,
+        height: 40,
+        text: "ID နဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-attr-code,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 200,
+        height: 40,
+        text: "[data-temp]",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-attr-desc,
+        kind: text,
+        x: 580,
+        y: 450,
+        width: 260,
+        height: 40,
+        text: "attribute နဲ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-all-code,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 200,
+        height: 40,
+        text: "*",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-all-desc,
+        kind: text,
+        x: 580,
+        y: 520,
+        width: 260,
+        height: 40,
+        text: "element အားလုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-weight-title,
+        kind: text,
+        x: 930,
+        y: 186,
+        width: 150,
+        height: 36,
+        text: "အလေးချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Weight tiers, not a scale: three equal squares in three columns (ID,
+    # class/attribute, element name: the triad lesson 6 counts), so nothing
+    # on the board suggests that weights add up. Further left = heavier.
+    - {
+        id: c-bar-type,
+        kind: rectangle,
+        x: 1060,
+        y: 246,
+        width: 40,
+        height: 28,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-bar-class,
+        kind: rectangle,
+        x: 995,
+        y: 316,
+        width: 40,
+        height: 28,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-bar-id,
+        kind: rectangle,
+        x: 930,
+        y: 386,
+        width: 40,
+        height: 28,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: c-bar-attr,
+        kind: rectangle,
+        x: 995,
+        y: 456,
+        width: 40,
+        height: 28,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-bar-all,
+        kind: text,
+        x: 1000,
+        y: 520,
+        width: 30,
+        height: 40,
+        text: "0",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-note,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 420,
+        height: 36,
+        text: "အလေးချိန် တွက်နည်း · lesson 6",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4103
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: first-paragraph-job
+    chapter: "ပထမ စာပိုဒ်ကိုပဲ ဘယ်လို ရွေးမလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ element တိုင်းဟာ box တစ်ခု ဖြစ်တယ် ဆိုတာ မြင်ခဲ့ပြီး၊ box တွေကို padding၊
+      border နဲ့ margin ပေးခဲ့ပါတယ်။ rule တိုင်းမှာ box တွေကို အရင် ရွေးခဲ့ရပါတယ်။ ဒီ lesson မှာတော့
+      အဲဒီလို ရွေးတဲ့ နည်းတွေကို ကြည့်သွားပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်က editor ထဲမှာ dev server ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။
+      [[mark:draw-rule]] lesson 1 က rule ရဲ့ အပိုင်း နှစ်ပိုင်းကို ပြန်ကြည့်ရအောင်။ ရှေ့ဆုံးက selector က
+      element တွေကို ရွေးပြီး၊ curly brace ထဲက declaration တွေကတော့ အဲဒီ element တွေ ဘယ်လို ပေါ်ရမလဲ ဆိုတာ
+      ပြောပါတယ်။ [[mark:draw-about]] ပုစ္ဆာလေး တစ်ခု စဉ်းစားကြည့်ရအောင်။ ဆိုင်အကြောင်း အပိုင်းမှာ
+      ခေါင်းစဉ် တစ်ခုနဲ့ စာပိုဒ် နှစ်ပိုဒ် ပါပါတယ်။ [[mark:draw-both]] စာပိုဒ် element နာမည် တစ်ခုတည်းနဲ့
+      ရွေးရင်၊ ဒီ နှစ်ပိုဒ်လုံး ပါသွားရုံ မကဘဲ page ထဲက တခြား စာပိုဒ်တွေပါ ပါသွားပါတယ်။
+      [[mark:draw-first]] ဒါပေမဲ့ ကိုယ်က ပထမ စာပိုဒ်ကိုပဲ စာလုံးထူ ဖြစ်စေချင်တာပါ။ [[mark:draw-question]]
+      ဒါကြောင့် ကိုယ် လိုချင်တဲ့ element တွေကိုပဲ တိတိကျကျ ရွေးပြီး၊ ကျန်တာတွေကို မထိတဲ့ နည်း လိုပါတယ်။
+      အဲဒါက selector တွေရဲ့ အလုပ် ဖြစ်ပြီး၊ ဒီ lesson နဲ့ နောက် lesson က သူတို့ အကြောင်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors"
+        url: "https://web.dev/learn/css/selectors"
+      - title: "web.dev Learn CSS — Selectors: the parts of a CSS rule"
+        url: "https://web.dev/learn/css/selectors#the_parts_of_a_css_rule"
+      - title: "MDN — CSS syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_syntax/Syntax"
+    actions:
+      - id: open-job-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [a-sel, a-decl, a-sel-label, a-decl-label]
+        drawMs: 2400
+      - id: draw-about
+        type: whiteboard.apply
+        at: { mark: draw-about }
+        upsertIds: [a-about-frame, a-about-h, a-p1, a-p1-label, a-p2, a-p2-label]
+        drawMs: 2800
+      - id: draw-both
+        type: whiteboard.apply
+        at: { mark: draw-both }
+        upsertIds: [a-both-label, a-both-c1, a-both-c2]
+        drawMs: 1800
+      - id: draw-first
+        type: whiteboard.apply
+        at: { mark: draw-first }
+        upsertIds: [a-first-label, a-first-check]
+        drawMs: 1400
+      - id: draw-question
+        type: whiteboard.apply
+        at: { mark: draw-question }
+        upsertIds: [a-question]
+        drawMs: 900
+
+  - id: code-tour
+    narration: >
+      [[mark:close-job-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      ခါတိုင်းလို header၊ သောက်စရာ menu၊ ဆိုင်အကြောင်း အပိုင်းနဲ့ footer ပါတဲ့ လက်ဖက်ရည်ဆိုင် page ပါ။
+      [[mark:select-pdf]] header မှာ link အသစ် တစ်ခု ပါလာပါတယ်။ menu ကို PDF ဖိုင်နဲ့ ကြည့်လို့ ရတဲ့ link
+      ပါ။ နောက်မှ သူ့ လိပ်စာနဲ့ ရွေးကြည့်ပါမယ်။ [[mark:select-about]] ဆိုင်အကြောင်း အပိုင်းမှာလည်း စာပိုဒ်
+      နောက်တစ်ပိုဒ် ပါလာလို့၊ board ပေါ်ကလိုပဲ ခေါင်းစဉ် တစ်ခုနဲ့ စာပိုဒ် နှစ်ပိုဒ် ဖြစ်နေပါပြီ။
+      [[mark:open-styles]] ကိုယ့် CSS ဖိုင်ကတော့ အလွတ် ပြန်ဖြစ်နေပါတယ်။ ဆိုင်ရဲ့ အရောင်တွေ၊ card
+      ဘောင်တွေနဲ့ ပြီးခဲ့တဲ့ lesson က border box rule ကို base ဖိုင်ကနေ ယူထားလို့၊ ဒီ lesson မှာ ရိုက်မယ့်
+      rule တိုင်းက element ရွေးတဲ့ အကြောင်းချည်းပါ။ [[mark:preview-opens]] dev server အသင့် ဖြစ်သွားလို့၊
+      ညာဘက်မှာ preview ပွင့်လာပါပြီ။ card တွေမှာ base ဖိုင်က ပေးထားတဲ့ အဖြူရောင် နောက်ခံနဲ့ ဘောင်
+      ပါးပါးလေး ရှိပြီး၊ အဲဒါတွေကို selector တွေနဲ့ ပြောင်းကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors"
+        url: "https://web.dev/learn/css/selectors"
+      - title: "MDN — <a>: the Anchor element (href)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a"
+    actions:
+      - id: close-job-board
+        type: whiteboard.apply
+        at: { mark: close-job-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-pdf
+        type: editor.select
+        at: { mark: select-pdf }
+        target:
+          {
+            file: index.html,
+            text: '<a class="nav-link" href="/menu.pdf" data-testid="nav-pdf">PDF မီနူး</a>',
+            occurrence: 1,
+          }
+      - id: select-about
+        type: editor.select
+        at: { mark: select-about }
+        target: { file: index.html, text: "<p>ဧည့်သည်တိုင်းကို မိသားစုလို ကြိုဆိုပါတယ်။</p>", occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-pdf-link
+        type: expect.preview
+        at: { afterAction: expect-header }
+        timeoutMs: 5000
+        target: { by: testId, value: nav-pdf }
+        attribute: { name: href, value: "/menu.pdf" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-pdf-link }
+
+  - id: first-paragraph-live
+    narration: >
+      [[mark:scroll-about]] preview ကို ဆိုင်အကြောင်း အပိုင်းအထိ ဆင်းပြီး၊ board ပေါ်က ပုစ္ဆာကို
+      ဖြေကြည့်ရအောင်။ [[mark:type-first]] စာသားကို စာလုံးထူ ဖြစ်စေတဲ့ rule တစ်ခု ရေးပါမယ်။ ရှေ့က selector
+      က နည်းနည်း ရှည်ပေမဲ့၊ ဘာကို ရွေးလဲ ဆိုတာ ခဏနေ ရှင်းပြပါမယ်။ [[mark:after-first]] preview ကို
+      ကြည့်ပါ။ ပထမ စာပိုဒ်ပဲ စာလုံးထူ ဖြစ်သွားပြီး၊ ဒုတိယ စာပိုဒ်ကတော့ အရင်အတိုင်း ကျန်နေပါတယ်။
+      [[mark:select-first]] ဒီ selector ကို ကြည့်ပါ။ ဆိုင်အကြောင်း အပိုင်းထဲက စာပိုဒ်တွေထဲမှာ ပထမဆုံး
+      တစ်ပိုဒ်ကို ရွေးပါ လို့ ပြောထားတာပါ။ [[mark:pieces]] ဒါက အပိုင်း သေးသေးလေးတွေကို ပေါင်းရေးထားတာပါ။
+      class နာမည် တစ်ခု၊ element နာမည် တစ်ခုနဲ့ နေရာကို ပြောတဲ့ အပိုင်း တစ်ခု ပါပါတယ်။ ဒီ lesson မှာ
+      အပိုင်းလေးတွေကို တစ်ခုစီ လေ့လာပြီး၊ နောက် lesson မှာ ဘယ်လို တွဲရေးလဲ၊ နေရာနဲ့ ဘယ်လို ရွေးလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ [[mark:scroll-menu]] menu ဆီ ပြန်တက်ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors (the first-paragraph example)"
+        url: "https://web.dev/learn/css/selectors"
+      - title: "MDN — :first-of-type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:first-of-type"
+    actions:
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: scroll-about }
+        timeoutMs: 4000
+        top: 480
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-first
+        type: editor.type
+        at: { mark: type-first }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".about p:first-of-type {\n  font-weight: bold;\n}\n"
+      - id: expect-about
+        type: expect.preview
+        at: { mark: after-first }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဧည့်သည်တိုင်းကို မိသားစုလို ကြိုဆိုပါတယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-first
+        type: editor.select
+        at: { mark: select-first }
+        target: { file: styles.css, text: ".about p:first-of-type", occurrence: 1 }
+      # The three pieces, each highlighted as its words are spoken: the class
+      # name, the element name, then the part that says the position.
+      - id: select-piece-class
+        type: editor.select
+        at: { mark: pieces, offsetMs: 2900 }
+        target: { file: styles.css, text: ".about", occurrence: 1 }
+      - id: select-piece-type
+        type: editor.select
+        at: { mark: pieces, offsetMs: 4250 }
+        target: { file: styles.css, text: "p", occurrence: 1 }
+      - id: select-piece-position
+        type: editor.select
+        at: { mark: pieces, offsetMs: 5850 }
+        target: { file: styles.css, text: ":first-of-type", occurrence: 1 }
+      - id: scroll-menu
+        type: preview.scroll
+        at: { mark: scroll-menu }
+        timeoutMs: 4000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: simple-map
+    chapter: "Simple selector တွေ"
+    narration: >
+      [[mark:open-map]] simple selector တွေကနေ စကြည့်ရအောင်။ သူတို့က element ကို အချက် တစ်ချက်တည်း
+      ကြည့်ပြီး ရွေးတဲ့ selector တွေပါ။ [[mark:draw-type]] element ရဲ့ နာမည်နဲ့ ရွေးတာကို type selector
+      လို့ ခေါ်ပါတယ်။ ဥပမာ စာပိုဒ် element ရဲ့ နာမည်ကို ရေးရင်၊ စာပိုဒ် အားလုံးကို ရွေးပါတယ်။
+      [[mark:draw-class]] class selector က class တူတဲ့ element တွေကို ရွေးပြီး၊ element အမျိုးအစား မတူလည်း
+      ရပါတယ်။ [[mark:draw-id]] ID selector က page ထဲမှာ တစ်ခုတည်းသာ ရှိရမယ့် ID နဲ့ element ကို ရွေးပါတယ်။
+      [[mark:draw-attr]] attribute selector က element မှာ HTML attribute တစ်ခု ရှိလား၊ သူ့ တန်ဖိုး ဘာလဲ
+      ဆိုတာ ကြည့်ပြီး ရွေးပါတယ်။ [[mark:draw-all]] universal selector ကတော့ page ထဲက element အားလုံးကို
+      ရွေးပါတယ်။ [[mark:marks-note]] element နာမည်မှာ သင်္ကေတ မပါပေမယ့်၊ ကျန်တဲ့ selector တွေမှာ
+      ကိုယ်ပိုင် သင်္ကေတ ရှိလို့၊ ဘယ် selector အမျိုးအစားလဲ ဆိုတာ browser က သိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: simple selectors"
+        url: "https://web.dev/learn/css/selectors#simple_selectors"
+      - title: "MDN — CSS selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors"
+      - title: "Selectors Level 4 — simple selectors"
+        url: "https://www.w3.org/TR/selectors-4/#simple"
+    actions:
+      - id: open-map
+        type: whiteboard.apply
+        at: { mark: open-map }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-type
+        type: whiteboard.apply
+        at: { mark: draw-type }
+        upsertIds: [b-type-code, b-type-desc]
+        drawMs: 1400
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [b-class-code, b-class-desc]
+        drawMs: 1400
+      - id: draw-id
+        type: whiteboard.apply
+        at: { mark: draw-id }
+        upsertIds: [b-id-code, b-id-desc]
+        drawMs: 1400
+      - id: draw-attr
+        type: whiteboard.apply
+        at: { mark: draw-attr }
+        upsertIds: [b-attr-code, b-attr-desc]
+        drawMs: 1400
+      - id: draw-all
+        type: whiteboard.apply
+        at: { mark: draw-all }
+        upsertIds: [b-all-code, b-all-desc]
+        drawMs: 1200
+
+  - id: type-selector
+    chapter: "Type၊ class နဲ့ ID selector"
+    narration: >
+      [[mark:close-map]] type selector နဲ့ စပြီး editor ထဲမှာ စမ်းကြည့်ရအောင်။ [[mark:type-p]] ဒီ rule က
+      page ထဲက စာပိုဒ် element အားလုံးကို ရွေးပြီး၊ သူတို့ထဲက စာသားကို အညိုရောင် ပေးပါတယ်။
+      [[mark:after-p]] card တွေကို ကြည့်ပါ။ သောက်စရာ အကြောင်း စာသားတွေ အကုန် တစ်ပြိုင်နက် အညိုရောင်
+      ဖြစ်သွားပါပြီ။ header ထဲက English စာကြောင်းလည်း စာပိုဒ်ပါ၊ ဒါပေမဲ့ base ဖိုင်က class rule က သူ့ကို
+      အရောင် ပေးထားလို့ မပြောင်းပါဘူး။ [[mark:broad-note]] ဒါက type selector ရဲ့ အားသာချက်လည်း ဖြစ်သလို၊
+      သတိထားစရာလည်း ဖြစ်ပါတယ်။ page တစ်ခုလုံးက အဲဒီ element တိုင်းကို ထိလို့ပါ။ ဒါကြောင့် အခြေခံ style
+      တွေအတွက် သင့်တော်ပြီး၊ သီးသန့် ပုံစံ လိုတဲ့ element တွေအတွက်တော့ class က ပိုသင့်တော်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: type selector"
+        url: "https://web.dev/learn/css/selectors#type_selector"
+      - title: "MDN — Type selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Type_selectors"
+    actions:
+      - id: close-map
+        type: whiteboard.apply
+        at: { mark: close-map }
+        open: false
+      - id: type-p
+        type: editor.type
+        at: { mark: type-p }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".about p:first-of-type {\n  font-weight: bold;\n}\n",
+            occurrence: 1,
+          }
+        text: "\np {\n  color: saddlebrown;\n}\n"
+      - id: expect-desc
+        type: expect.preview
+        at: { mark: after-p }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "နို့ဆီနဲ့ ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: class-selector
+    narration: >
+      [[mark:open-index-class]] အခု class selector ကို ကြည့်ရအောင်။ HTML ထဲက ပထမ card ကို ကြည့်ပါ။
+      [[mark:select-class]] သူ့ class attribute ထဲမှာ menu card နဲ့ featured ဆိုတဲ့ နာမည် နှစ်ခုကို space
+      နဲ့ ခြားပြီး ရေးထားပါတယ်။ element တစ်ခုမှာ class နာမည် လိုသလောက် ပေးလို့ ရပါတယ်။ [[mark:select-id]]
+      ဒီ card မှာ today special ဆိုတဲ့ ID လည်း ရှိပါတယ်။ ID ဆိုတာ page တစ်ခုလုံးမှာ element တစ်ခုတည်းပဲ
+      သုံးရမယ့် နာမည်ပါ။ [[mark:open-styles-class]] CSS ဖိုင်ကို ပြန်သွားပြီး၊ featured card ကို သူ့ class
+      နဲ့ ရွေးကြည့်ရအောင်။ [[mark:type-featured]] ရှေ့က အစက်လေးက ဒါ class နာမည် ဖြစ်တယ် ဆိုတာ ပြပါတယ်။ ဒီ
+      rule က အဲဒီ class ပါတဲ့ element တိုင်းကို ပိုထူတဲ့ ရွှေရောင် ဘောင် ပေးပါတယ်။ [[mark:after-featured]]
+      ပထမ card မှာပဲ ရွှေရောင် ဘောင် ပေါ်လာပါပြီ။ သူ့ class attribute မှာ နာမည် နှစ်ခု ရှိပေမယ့် ပြဿနာ
+      မရှိပါဘူး။ အဲဒီ နာမည်တွေထဲမှာ featured ပါနေရင် class selector က ကိုက်ပါတယ်။ [[mark:digit-rule]]
+      နာမည်တွေမှာ စည်းမျဉ်း တစ်ခု ရှိပါတယ်။ HTML မှာ class ဒါမှမဟုတ် ID ကို ဂဏန်းနဲ့ စလို့ ရပေမယ့်၊ CSS
+      selector ထဲမှာတော့ ဒီအတိုင်း ရေးလို့ မရပါဘူး။ escape လုပ်မှ ရပြီး၊ မလုပ်ရင် browser က selector ကို
+      နားမလည်ပါဘူး။ ဒါကြောင့် class နဲ့ ID နာမည်တွေကို အက္ခရာနဲ့ပဲ စပေးတာ အလွယ်ဆုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: class selector"
+        url: "https://web.dev/learn/css/selectors#class_selector"
+      - title: "MDN — Class selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Class_selectors"
+      - title: "MDN — CSS identifiers (<ident>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/ident"
+      - title: "CSS 2.1 — characters and case (identifiers cannot start with a digit)"
+        url: "https://www.w3.org/TR/CSS21/syndata.html#characters"
+    actions:
+      - id: open-index-class
+        type: workspace.openFile
+        at: { mark: open-index-class }
+        path: index.html
+      - id: select-class
+        type: editor.select
+        at: { mark: select-class }
+        target: { file: index.html, text: 'class="menu-card featured"', occurrence: 1 }
+      - id: select-id
+        type: editor.select
+        at: { mark: select-id }
+        target: { file: index.html, text: 'id="today-special"', occurrence: 1 }
+      - id: expect-class-attr
+        type: expect.preview
+        at: { afterAction: select-class }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-styles-class
+        type: workspace.openFile
+        at: { mark: open-styles-class }
+        path: styles.css
+      - id: type-featured
+        type: editor.type
+        at: { mark: type-featured }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: saddlebrown;\n}\n", occurrence: 1 }
+        text: "\n.featured {\n  border: 2px solid gold;\n}\n"
+      - id: expect-featured
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: id-selector
+    narration: >
+      [[mark:type-special]] အခု ID selector ကို စမ်းပါမယ်။ ရှေ့က hash က ဒါ ID နာမည် ဖြစ်တယ် ဆိုတာ ပြပါတယ်။
+      လက်ဖက်ရည် card ကို အဝါဖျော့ရောင် နောက်ခံ ပေးပါမယ်။ [[mark:after-special]] ပထမ card မှာ အဝါဖျော့ရောင်
+      နောက်ခံ ရသွားပါပြီ။ [[mark:type-all-cards]] နောက်တစ်ခုက menu card တိုင်းအတွက် class rule ပါ။
+      ခရမ်းဖျော့ရောင် နောက်ခံ ပေးပါမယ်။ ID rule ရဲ့ နောက်မှာ ရေးထားလို့၊ ဒီ rule က နိုင်မယ်လို့ ထင်စရာ
+      ရှိပါတယ်။ [[mark:after-all-cards]] preview ကို ကြည့်ပါ။ ကျန်တဲ့ card သုံးခုက ခရမ်းဖျော့ရောင်
+      ဖြစ်သွားပေမယ့်၊ ပထမ card ကတော့ အဝါဖျော့ရောင် အတိုင်း ကျန်နေပါတယ်။ [[mark:id-weight]] နောက်ခံ ပေးတဲ့
+      ဒီ rule နှစ်ခုကို ကြည့်ပါ။ rule တွေ ပြိုင်တဲ့အခါ browser က ရေးထားတဲ့ အစဉ်ကို မကြည့်ခင် selector ရဲ့
+      အလေးချိန်ကို အရင် နှိုင်းယှဉ်ပါတယ်။ ID က class ဘယ်နှခုထက်မဆို ပိုလေးပြီး၊ class နဲ့ attribute က
+      element နာမည်ထက် ပိုလေးပါတယ်။ [[mark:avoid-id]] ID က ဒီလောက် လေးလို့၊ ID နဲ့ ပေးထားတဲ့ style ကို
+      နောက်မှ တခြား rule နဲ့ ပြောင်းဖို့ ခက်ပါတယ်။ ပြီးတော့ ID က element တစ်ခုတည်းအတွက် ဖြစ်လို့ style ကို
+      ပြန်သုံးလို့ မရပါဘူး။ ဒါကြောင့် developer အများစုက style ကို class နဲ့ ပေးပြီး၊ ID ကိုတော့ page ထဲက
+      အပိုင်း တစ်ခုဆီ ခုန်သွားဖို့၊ ဒါမှမဟုတ် label ကို form အကွက်နဲ့ ချိတ်ဖို့လို နေရာတွေမှာ သုံးကြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: ID selector"
+        url: "https://web.dev/learn/css/selectors#id_selector"
+      - title: "MDN — ID selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/ID_selectors"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Specificity"
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+    actions:
+      - id: type-special
+        type: editor.type
+        at: { mark: type-special }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: 2px solid gold;\n}\n", occurrence: 1 }
+        text: "\n#today-special {\n  background: wheat;\n}\n"
+      - id: type-all-cards
+        type: editor.type
+        at: { mark: type-all-cards }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: wheat;\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  background: lavender;\n}\n"
+      - id: expect-id-attr
+        type: expect.preview
+        at: { mark: after-all-cards }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: id, value: "today-special" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-two-backgrounds
+        type: editor.select
+        at: { mark: id-weight }
+        target:
+          {
+            file: styles.css,
+            text: "#today-special {\n  background: wheat;\n}\n\n.menu-card {\n  background: lavender;\n}\n",
+            occurrence: 1,
+          }
+
+  - id: attribute-selector
+    chapter: "Attribute selector တွေ"
+    narration: >
+      [[mark:open-index-attr]] နောက်တစ်ခုက attribute selector တွေပါ။ HTML ထဲမှာ သောက်စရာ card တိုင်းမှာ
+      ပူလား အေးလား ဆိုတာ ပြတဲ့ data attribute တစ်ခု ပါပါတယ်။ [[mark:select-hot]] ဒါက hot လို့ မှတ်ထားတဲ့
+      ကော်ဖီ card ပါ။ [[mark:select-iced]] ဒါက iced လို့ မှတ်ထားတဲ့ သံပုရာရည် card ပါ။ data နဲ့ စတဲ့
+      attribute တွေမှာ ကိုယ့် အချက်အလက်ကို ကြိုက်သလို ထည့်လို့ ရပြီး၊ selector တွေကလည်း သူတို့ကို ဖတ်လို့
+      ရပါတယ်။ [[mark:open-styles-attr]] CSS ဖိုင်ကို ပြန်ဖွင့်ပါမယ်။ [[mark:type-presence]] attribute
+      နာမည်ကို လေးထောင့်ကွင်းထဲ ထည့်ရေးရင်၊ တန်ဖိုး ဘာပဲ ဖြစ်ဖြစ် အဲဒီ attribute ရှိတဲ့ element တိုင်းကို
+      ရွေးပါတယ်။ card တိုင်းရဲ့ ဘယ်ဘက်မှာ မီးခိုးရောင် အစင်း ထူထူ တစ်ခု ရပါမယ်။ [[mark:after-presence]]
+      card လေးခုလုံးမှာ attribute ရှိလို့၊ လေးခုလုံး အစင်း ရသွားပါပြီ။ [[mark:type-hot]] အခု တန်ဖိုးပါ
+      ထည့်ကြည့်ရအောင်။ ဒီ rule က တန်ဖိုး အတိအကျ hot ဖြစ်တဲ့ element တွေကိုပဲ ရွေးပြီး၊ သူတို့ရဲ့ အစင်းကို
+      အနီရောင် ပြောင်းပါတယ်။ [[mark:type-iced]] နောက်ထပ် rule တစ်ခုက တန်ဖိုး iced အတွက်ပါ။ အစင်းကို
+      အပြာရောင် ပြောင်းပေးပါမယ်။ အရောင် နာမည် ရိုက်ပြီးသွားတဲ့အခါ iced card တွေကို ကြည့်ထားပါ။
+      [[mark:after-values]] အခု ပူတဲ့ သောက်စရာတွေမှာ အနီရောင်၊ အေးတဲ့ သောက်စရာတွေမှာ အပြာရောင် အစင်း
+      ရှိသွားပါပြီ။ တန်ဖိုးက အတိအကျ တူမှ ကိုက်ပါတယ်။ ဒီလို စကားလုံး တစ်လုံးတည်း တန်ဖိုးဆိုရင် quote တွေ
+      မထည့်လည်း ရပေမယ့်၊ ထည့်ရေးတာက အကျင့်ကောင်း တစ်ခုပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: attribute selector"
+        url: "https://web.dev/learn/css/selectors#attribute_selector"
+      - title: "MDN — Attribute selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors"
+      - title: "MDN — Using data attributes"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Solve_HTML_problems/Use_data_attributes"
+    actions:
+      - id: open-index-attr
+        type: workspace.openFile
+        at: { mark: open-index-attr }
+        path: index.html
+      - id: select-hot
+        type: editor.select
+        at: { mark: select-hot }
+        target: { file: index.html, text: 'data-temp="hot"', occurrence: 2 }
+      - id: select-iced
+        type: editor.select
+        at: { mark: select-iced }
+        target: { file: index.html, text: 'data-temp="iced"', occurrence: 1 }
+      - id: expect-hot-attr
+        type: expect.preview
+        at: { afterAction: select-iced }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        attribute: { name: data-temp, value: "hot" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-styles-attr
+        type: workspace.openFile
+        at: { mark: open-styles-attr }
+        path: styles.css
+      - id: scroll-cards
+        type: preview.scroll
+        at: { mark: open-styles-attr, offsetMs: 700 }
+        timeoutMs: 4000
+        top: 230
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-presence
+        type: editor.type
+        at: { mark: type-presence }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: lavender;\n}\n", occurrence: 1 }
+        text: "\n[data-temp] {\n  border-left: 6px solid gray;\n}\n"
+      - id: type-hot
+        type: editor.type
+        at: { mark: type-hot }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-left: 6px solid gray;\n}\n", occurrence: 1 }
+        text: "\n[data-temp=\"hot\"] {\n  border-left-color: firebrick;\n}\n"
+      - id: type-iced
+        type: editor.type
+        at: { mark: type-iced }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-left-color: firebrick;\n}\n", occurrence: 1 }
+        text: "\n[data-temp=\"iced\"] {\n  border-left-color: steelblue;\n}\n"
+      - id: expect-iced-attr
+        type: expect.preview
+        at: { mark: after-values }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        attribute: { name: data-temp, value: "iced" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: substring-selectors
+    narration: >
+      [[mark:open-index-links]] attribute selector က တန်ဖိုးရဲ့ တစ်စိတ်တစ်ပိုင်းနဲ့လည်း ကိုက်ကြည့်လို့
+      ရပြီး၊ link လိပ်စာတွေအတွက် အသုံးဝင်ပါတယ်။ link သုံးခုကို ကြည့်ရအောင်။ [[mark:select-pdf-href]] PDF
+      မီနူး link ရဲ့ လိပ်စာက PDF နဲ့ ဆုံးပါတယ်။ [[mark:select-tel-href]] footer ထဲက ဖုန်း link ရဲ့ လိပ်စာက
+      tel နဲ့ colon နဲ့ စပါတယ်။ ဒါက ဖုန်းနဲ့ နှိပ်လိုက်ရင် အဲဒီ နံပါတ်ကို ခေါ်ပေးဖို့ ပြောထားတာပါ။
+      [[mark:select-fb-href]] Facebook link ရဲ့ လိပ်စာထဲမှာတော့ facebook ဆိုတဲ့ စကားလုံး ပါပါတယ်။
+      [[mark:open-styles-links]] CSS ဖိုင်ကို ပြန်သွားပြီး၊ page ရဲ့ ထိပ်ကို ပြန်တက်ပါမယ်။
+      [[mark:type-pdf]] ပထမ rule က လိပ်စာ PDF နဲ့ ဆုံးတဲ့ link တွေ အားလုံးကို ရွေးပြီး၊ သူတို့ရဲ့ စာသားကို
+      ရွှေရောင် ပြောင်းပေးပါတယ်။ [[mark:after-pdf]] header ထဲက PDF link က ရွှေရောင် ဖြစ်သွားပါပြီ။ ရှေ့က
+      element နာမည်က ဒီ rule ကို link တွေမှာပဲ ကန့်သတ်ပါတယ်။ ဒီလို selector နှစ်ခု ကပ်ရေးရင် element
+      တစ်ခုတည်းက နှစ်ခုလုံးနဲ့ ကိုက်မှ ရွေးပါတယ်။ အဲဒါကို compound selector လို့ ခေါ်ပြီး နောက် lesson မှာ
+      ကြည့်ပါမယ်။ [[mark:scroll-footer]] footer အထိ ဆင်းကြည့်ရအောင်။ [[mark:type-tel]] ဒုတိယ rule ကတော့
+      လိပ်စာ tel နဲ့ စတဲ့ link တွေကို ရွေးပြီး၊ footer ထဲက ဖုန်းနံပါတ်ကို စာလုံးထူ ဖြစ်အောင် လုပ်ပေးပါတယ်။
+      [[mark:type-fb]] တတိယ rule ကတော့ လိပ်စာထဲ ဘယ်နေရာမှာ ဖြစ်ဖြစ် facebook ဆိုတဲ့ စကားလုံး ပါတဲ့ link
+      တွေကို ရွေးပြီး၊ အပြာဖျော့ရောင် ပေးပါတယ်။ [[mark:after-links]] ဖုန်းနံပါတ်က စာလုံးထူ ဖြစ်သွားပြီး၊
+      Facebook link က အပြာဖျော့ရောင် ဖြစ်သွားပါပြီ။ ဆိုတော့ တန်ဖိုးရဲ့ အစ၊ အဆုံး ဒါမှမဟုတ် အထဲက
+      ဘယ်နေရာမှာမဆို ကိုက်ကြည့်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: attribute selector"
+        url: "https://web.dev/learn/css/selectors#attribute_selector"
+      - title: "MDN — Attribute selectors (^=, $=, *=)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors"
+      - title: "Selectors Level 4 — substring matching attribute selectors"
+        url: "https://www.w3.org/TR/selectors-4/#attribute-substrings"
+    actions:
+      - id: open-index-links
+        type: workspace.openFile
+        at: { mark: open-index-links }
+        path: index.html
+      - id: select-pdf-href
+        type: editor.select
+        at: { mark: select-pdf-href }
+        target: { file: index.html, text: 'href="/menu.pdf"', occurrence: 1 }
+      - id: select-tel-href
+        type: editor.select
+        at: { mark: select-tel-href }
+        target: { file: index.html, text: 'href="tel:+959123456789"', occurrence: 1 }
+      - id: select-fb-href
+        type: editor.select
+        at: { mark: select-fb-href }
+        target: { file: index.html, text: 'href="https://facebook.com/"', occurrence: 1 }
+      - id: open-styles-links
+        type: workspace.openFile
+        at: { mark: open-styles-links }
+        path: styles.css
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: open-styles-links, offsetMs: 700 }
+        timeoutMs: 4000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-pdf
+        type: editor.type
+        at: { mark: type-pdf }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border-left-color: steelblue;\n}\n", occurrence: 1 }
+        text: "\na[href$=\".pdf\"] {\n  color: gold;\n}\n"
+      - id: expect-pdf-text
+        type: expect.preview
+        at: { mark: after-pdf }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-pdf }
+        textContains: "PDF မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 4000
+        top: 600
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-tel
+        type: editor.type
+        at: { mark: type-tel }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: gold;\n}\n", occurrence: 1 }
+        text: "\na[href^=\"tel:\"] {\n  font-weight: bold;\n}\n"
+      - id: type-fb
+        type: editor.type
+        at: { mark: type-fb }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "a[href^=\"tel:\"] {\n  font-weight: bold;\n}\n",
+            occurrence: 1,
+          }
+        text: "\na[href*=\"facebook\"] {\n  color: skyblue;\n}\n"
+      - id: expect-phone-href
+        type: expect.preview
+        at: { mark: after-links }
+        timeoutMs: 4000
+        target: { by: testId, value: phone-link }
+        attribute: { name: href, value: "tel:+959123456789" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-facebook-href
+        type: expect.preview
+        at: { afterAction: expect-phone-href }
+        timeoutMs: 4000
+        target: { by: testId, value: facebook-link }
+        attribute: { name: href, value: "https://facebook.com/" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # The closing sentence names start, end and anywhere inside; each word
+      # highlights the operator and value that mean it.
+      - id: select-op-start
+        type: editor.select
+        at: { mark: after-links, offsetMs: 6200 }
+        target: { file: styles.css, text: '^="tel:"', occurrence: 1 }
+      - id: select-op-end
+        type: editor.select
+        at: { mark: after-links, offsetMs: 7000 }
+        target: { file: styles.css, text: '$=".pdf"', occurrence: 1 }
+      - id: select-op-contains
+        type: editor.select
+        at: { mark: after-links, offsetMs: 8100 }
+        target: { file: styles.css, text: '*="facebook"', occurrence: 1 }
+
+  - id: case-flag
+    narration: >
+      [[mark:scroll-cards-again]] menu ဆီ ပြန်တက်ပါမယ်။ HTML မှာ data attribute လို attribute အများစုရဲ့
+      တန်ဖိုးကို နှိုင်းယှဉ်တဲ့အခါ၊ စာလုံးကြီး စာလုံးသေး ကွာတာလည်း အရေးပါပါတယ်။ [[mark:type-upper]] ဒီ
+      rule ကတော့ iced ကို စာလုံးကြီးတွေနဲ့ ရေးထားတဲ့ တန်ဖိုးကို ရှာပါတယ်။ ကိုက်တဲ့ card တွေကို အပြာရောင်
+      မျဉ်းပြတ် outline ပေးထားလို့၊ ဘယ် card တွေကို ရွေးလဲ ဆိုတာ မြင်ရပါမယ်။ [[mark:after-upper]] card
+      တွေမှာ ဘာမှ မပြောင်းပါဘူး။ HTML ထဲမှာ တန်ဖိုးကို စာလုံးသေးနဲ့ ရေးထားလို့၊ selector နဲ့ မကိုက်တာပါ။
+      [[mark:type-flag]] အခု ပိတ်တဲ့ လေးထောင့်ကွင်းရဲ့ ရှေ့မှာ i ဆိုတဲ့ စာလုံး တစ်လုံး ထည့်ပါမယ်။
+      [[mark:after-flag]] iced card နှစ်ခုလုံးမှာ အပြာရောင် မျဉ်းပြတ် outline ပေါ်လာပါပြီ။ selector ထဲက i
+      flag က တန်ဖိုးကို နှိုင်းယှဉ်တဲ့အခါ စာလုံးကြီး စာလုံးသေး မခွဲဘဲ ကြည့်ခိုင်းတာပါ။ [[mark:s-flag]] s
+      flag လည်း ရှိပြီး၊ စာလုံးကြီး စာလုံးသေး အတိအကျ တူမှ ကိုက်ခိုင်းပါတယ်။ ဒါပေမဲ့ Chrome နဲ့ Edge က
+      သူ့ကို နားမလည်လို့ rule တစ်ခုလုံးကို ပစ်လိုက်ပါတယ်။ data attribute တွေမှာတော့ မူလကတည်းက စာလုံးကြီး
+      စာလုံးသေး ခွဲပြီးသားမို့ s flag မလိုပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: attribute selector (case sensitivity)"
+        url: "https://web.dev/learn/css/selectors#attribute_selector"
+      - title: "MDN — Attribute selectors (the i and s flags, browser support)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors"
+      - title: "HTML Standard — case-sensitivity of selectors"
+        url: "https://html.spec.whatwg.org/multipage/semantics-other.html#case-sensitivity-of-selectors"
+    actions:
+      - id: scroll-cards-again
+        type: preview.scroll
+        at: { mark: scroll-cards-again }
+        timeoutMs: 4000
+        top: 230
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-upper
+        type: editor.type
+        at: { mark: type-upper }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: skyblue;\n}\n", occurrence: 1 }
+        text: "\n[data-temp=\"ICED\"] {\n  outline: 2px dashed steelblue;\n}\n"
+      - id: expect-lowercase
+        type: expect.preview
+        at: { mark: after-upper }
+        timeoutMs: 4000
+        target: { by: testId, value: card-falooda }
+        attribute: { name: data-temp, value: "iced" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-flag
+        type: editor.type
+        at: { mark: type-flag }
+        cadence: natural
+        target: { file: styles.css, after: '[data-temp="ICED"', occurrence: 1 }
+        text: " i"
+      - id: select-flag
+        type: editor.select
+        at: { mark: after-flag }
+        target: { file: styles.css, text: '[data-temp="ICED" i]', occurrence: 1 }
+
+  - id: selector-list
+    chapter: "Selector list နဲ့ universal selector"
+    narration: >
+      [[mark:type-list]] တစ်ခါတလေ element အမျိုးမျိုးကို style တူတူ ပေးဖို့ လိုပါတယ်။ အဲဒီအခါ rule သုံးခု
+      ရေးမယ့်အစား၊ selector list နဲ့ rule တစ်ခုတည်း ရေးလို့ ရပါတယ်။ selector တွေကို comma နဲ့
+      ခွဲရေးထားပြီး၊ အဲဒီထဲက တစ်ခုခုနဲ့ ကိုက်တဲ့ element မှန်သမျှကို rule က style ပေးပါတယ်။
+      [[mark:after-list]] အပိုင်း ခေါင်းစဉ်၊ သောက်စရာ နာမည်တွေနဲ့ ဈေးနှုန်းတွေ အကုန် အစိမ်းရင့်ရောင်
+      ဖြစ်သွားပါပြီ။ [[mark:select-list]] ဒီ list ကို ကြည့်ပါ။ selector တစ်ခုစီက သီးသန့် ကိုက်တာ ဖြစ်လို့၊
+      element တစ်ခုက selector အားလုံးနဲ့ ကိုက်စရာ မလိုပါဘူး။ [[mark:type-name]] အခု သောက်စရာ
+      နာမည်တွေအတွက်ပဲ rule သီးသန့် တစ်ခု ရေးပါမယ်။ အလုပ်လုပ်တာ မြင်ရအောင် နာမည်တိုင်းကို အောက်မျဉ်း
+      တားပေးပါမယ်။ [[mark:after-name]] နာမည်တွေမှာ အောက်မျဉ်း ပေါ်လာပါပြီ။ [[mark:type-bad]] ဒီ rule မှာ
+      ဒုတိယ selector တစ်ခု ထည့်ပါမယ်။ ဂဏန်းနဲ့ စတဲ့ class နာမည်ကို တမင် ထည့်တာပါ။ [[mark:after-bad]]
+      နာမည်တွေရဲ့ အောက်မျဉ်းတွေ အကုန် ပျောက်သွားပါပြီ။ ပထမ selector ကို ဘာမှ မပြင်ခဲ့ပေမယ့်၊ ဂဏန်းနဲ့ စတဲ့
+      ဒီ selector ကို browser က နားမလည်လို့ list တစ်ခုလုံး မှားသွားပြီး၊ rule တစ်ခုလုံးကို ပစ်လိုက်တာပါ။
+      [[mark:list-tip]] ဒါကြောင့် list တစ်ခု အလုပ် မလုပ်တော့ရင်၊ သူ့ထဲက selector တစ်ခုချင်းစီကို
+      စစ်ကြည့်ပါ။ နားမလည်တဲ့ selector တွေကို ကျော်သွားပေးတဲ့ list ရေးနည်း တစ်မျိုးကိုတော့ course ရဲ့
+      နောက်ပိုင်းမှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: grouping selectors"
+        url: "https://web.dev/learn/css/selectors#grouping_selectors"
+      - title: "MDN — Selector list (invalid selector lists)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Selector_list"
+      - title: "Selectors Level 4 — selector lists"
+        url: "https://www.w3.org/TR/selectors-4/#grouping"
+    actions:
+      - id: type-list
+        type: editor.type
+        at: { mark: type-list }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline: 2px dashed steelblue;\n}\n", occurrence: 1 }
+        text: "\nh2, h3, .price {\n  color: darkgreen;\n}\n"
+      - id: expect-price
+        type: expect.preview
+        at: { mark: after-list }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-list
+        type: editor.select
+        at: { mark: select-list }
+        target: { file: styles.css, text: "h2, h3, .price", occurrence: 1 }
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: darkgreen;\n}\n", occurrence: 1 }
+        text: "\n.name {\n  text-decoration: underline;\n}\n"
+      - id: type-bad
+        type: editor.type
+        at: { mark: type-bad }
+        cadence: block
+        target: { file: styles.css, after: "\n.name", occurrence: 1 }
+        text: ", .2for1"
+      - id: select-bad
+        type: editor.select
+        at: { mark: after-bad }
+        target: { file: styles.css, text: ".2for1", occurrence: 1 }
+
+  - id: universal-selector
+    narration: >
+      [[mark:scroll-top-universal]] နောက်ဆုံးအနေနဲ့ universal selector ကို ကြည့်ပါမယ်။ page ရဲ့ ထိပ်ကို
+      ပြန်တက်ရအောင်။ [[mark:type-star]] ဒီ rule က page ထဲက element တိုင်းကို ရွေးပြီး၊ တစ်ခုစီရဲ့
+      ပတ်လည်မှာ အနီရောင် မျဉ်းပြတ် outline ပါးပါး ဆွဲပေးပါတယ်။ [[mark:after-star]] box တွေ အကုန်
+      တစ်ပြိုင်နက် ပေါ်လာပါပြီ။ header၊ logo၊ link တစ်ခုချင်းစီ၊ card တိုင်းနဲ့ card ထဲက အရာတွေ အားလုံးမှာ
+      မျဉ်း ပတ်ထားပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ အရာတိုင်း box ပါလို့ ပြောခဲ့တာကို ဒီမှာ မြင်ရပါပြီ။ outline
+      က နေရာ မယူလို့ ဘာမှ မရွေ့သွားပါဘူး။ [[mark:star-weight]] iced card တွေကို ကြည့်ပါ။ အပြာရောင် outline
+      က ကျန်နေပါတယ်။ universal rule က နောက်မှ ရေးထားပေမယ့်၊ attribute selector က ပိုလေးလို့ပါ။
+      [[mark:star-pseudo]] နောက်တစ်ချက်က၊ universal selector က pseudo-element တွေကို မရွေးပါဘူး။
+      pseudo-element ဆိုတာ CSS နဲ့ element ထဲမှာ ထည့်လို့ ရတဲ့ box အပိုတွေပါ။ ဒါကြောင့် ပြီးခဲ့တဲ့ lesson
+      က border box rule မှာ သူတို့ကို သီးသန့် ရေးခဲ့ရတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: universal selector"
+        url: "https://web.dev/learn/css/selectors#universal_selector"
+      - title: "MDN — Universal selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Universal_selectors"
+      - title: "MDN — outline"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/outline"
+    actions:
+      - id: scroll-top-universal
+        type: preview.scroll
+        at: { mark: scroll-top-universal }
+        timeoutMs: 4000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-star
+        type: editor.type
+        at: { mark: type-star }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-decoration: underline;\n}\n", occurrence: 1 }
+        text: "\n* {\n  outline: 1px dashed tomato;\n}\n"
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: after-star }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ simple selector တစ်ခုစီက အချက် တစ်ချက်တည်းနဲ့ ရွေးပါတယ်။
+      element နာမည်၊ class၊ ID၊ attribute ဒါမှမဟုတ် တန်ဖိုးနဲ့ ရွေးနိုင်သလို၊ element အားလုံးကိုလည်း
+      တစ်ခါတည်း ရွေးနိုင်ပါတယ်။ [[mark:draw-weights]] ညာဘက်က အကွက်လေးတွေက သူတို့ရဲ့ အလေးချိန်ကို ပြပါတယ်။
+      ID က အလေးဆုံး ဖြစ်ပြီး၊ universal selector မှာတော့ အလေးချိန် လုံးဝ မရှိပါဘူး။ [[mark:draw-note]]
+      lesson 6 မှာ ဒီ အလေးချိန်တွေကို သေချာ တွက်ပါမယ်။ [[mark:quiz]] ကိုယ့်ဘာသာ စစ်ကြည့်ချင်ရင် pause
+      လုပ်ပြီး၊ board ပေါ်က selector တစ်ခုစီက ဘာကို ရွေးလဲ ဆိုတာ ဘေးက စာကို မဖတ်ခင် ပြောကြည့်ပါ။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ simple selector တွေကို တွဲရေးပြီး၊ element တွေကို page
+      ထဲမှာ ဘယ်နေရာ ရှိလဲ ဆိုတာနဲ့ ရွေးကြည့်ပါမယ်။ lesson အစက ပထမ စာပိုဒ်ကို ရွေးတဲ့ selector ကိုလည်း
+      အဲဒီမှာ အသေးစိတ် ရှင်းပြပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: check your understanding"
+        url: "https://web.dev/learn/css/selectors#check_your_understanding"
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "web.dev Learn CSS — Selectors: complex selectors"
+        url: "https://web.dev/learn/css/selectors#complex_selectors"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: open-recap }
+        open: true
+        upsertIds: [b-title]
+      - id: draw-weights
+        type: whiteboard.apply
+        at: { mark: draw-weights }
+        upsertIds: [c-weight-title, c-bar-id, c-bar-class, c-bar-attr, c-bar-type, c-bar-all]
+        drawMs: 3600
+      - id: draw-note
+        type: whiteboard.apply
+        at: { mark: draw-note }
+        upsertIds: [c-note]
+        drawMs: 1000
+      - id: expect-css-start
+        type: expect.file
+        at: { afterAction: draw-weights }
+        path: styles.css
+        contains: ".about p:first-of-type {\n  font-weight: bold;\n}\n\np {\n  color: saddlebrown;\n}\n\n.featured {\n  border: 2px solid gold;\n}\n\n#today-special {\n  background: wheat;\n}\n\n.menu-card {\n  background: lavender;\n}\n"
+      - id: expect-css-attributes
+        type: expect.file
+        at: { afterAction: expect-css-start }
+        path: styles.css
+        contains: "[data-temp] {\n  border-left: 6px solid gray;\n}\n\n[data-temp=\"hot\"] {\n  border-left-color: firebrick;\n}\n\n[data-temp=\"iced\"] {\n  border-left-color: steelblue;\n}\n\na[href$=\".pdf\"] {\n  color: gold;\n}\n\na[href^=\"tel:\"] {\n  font-weight: bold;\n}\n\na[href*=\"facebook\"] {\n  color: skyblue;\n}\n"
+      - id: expect-css-end
+        type: expect.file
+        at: { afterAction: expect-css-attributes }
+        path: styles.css
+        contains: "[data-temp=\"ICED\" i] {\n  outline: 2px dashed steelblue;\n}\n\nh2, h3, .price {\n  color: darkgreen;\n}\n\n.name, .2for1 {\n  text-decoration: underline;\n}\n\n* {\n  outline: 1px dashed tomato;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
