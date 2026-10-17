@@ -1,0 +1,2154 @@
+# CSS course (Burmese), lesson 20 of 43: grid part 3, areas and subgrid.
+#
+# Narration is Burmese (voice-script.md next to this file is its source; the
+# English draft is probe/english-draft.yaml.bak). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall 18–19; the page drawn as a map of named areas) → code
+# tour (one .layout wrapper, four direct children; two drink cards whose
+# descriptions differ by lines; the coming-soon box; empty styles.css) →
+# .layout display grid, 1fr 1fr, gap (auto placement squeezes the header into
+# half a row) → grid-template-areas typed as three strings (nothing moves: no
+# item has a name yet) → grid-area names (every part moves to its area; scroll
+# to the footer) → board (equal cell counts; rectangles only; an L-shaped
+# area makes the whole declaration skipped) → a later areas declaration with
+# a dot (the footer takes half a row, the other cell stays empty) → the
+# original map again → @media (width < 40em) with a one-column map (the old
+# two columns leave the right half empty) → grid-template-columns: 1fr (full
+# width) → board (grid-template shorthand; grid resets what it omits) →
+# drinks list 1fr 1fr with a column gap (cards stretch to one height, prices
+# at different heights) → card display grid + span 3 + subgrid rows (titles,
+# descriptions and prices line up) → board (the parent's row lines run
+# through both cards; columns or both; display: contents caveat) → board
+# (inline axis = justify, block axis = align; -items / -self / -content;
+# place-*) → the coming-soon box: display grid (rows share the height, the
+# label stretches both ways) → place-content center → align-content
+# space-between → justify-items center → .soon .label justify-self start →
+# quiz board + recap, hand-off to logical properties (lesson 21).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every prefix of an area name is itself a valid name ("h", "he" …) that
+# matches no area and would throw the item into implicit tracks, so the
+# grid-area rules and every areas declaration typed AFTER the names exist are
+# revealed whole (line-by-line, each line complete and valid). The first,
+# three-line map is typed while no item has a name, so its partial states
+# change nothing. The media query's map sits on one line for the same reason.
+# Keystroke-typed values have no misleading valid prefix ("display: g…",
+# "1f", "span", "s…", "cente", "space-" are invalid until complete).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): start 4 parts
+# stacked 400 wide → layout 1fr 1fr: header 194 wide in the left cell, drinks
+# right, hours left, footer right → areas: unchanged → names: header 400 wide
+# at the top, drinks | hours 194 each (row 449 tall), footer 400 wide at
+# y 732 → dot: footer 194 → restore 400 → media map: every part 194 wide in
+# the left column → columns 1fr: 400 wide → drinks list 1fr 1fr: cards 182
+# wide, both 156 tall, prices at y 381 and 432 → subgrid: both prices at
+# y 436 → soon grid: label 348 × 85 (stretched) → place-content: label and
+# note 161 wide, centred → space-between: label at the top, note at the
+# bottom → justify-items: label 68 wide, centred → justify-self start: label
+# at the track's start (x 135, the note's left edge).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-20-grid-areas
+  title: "CSS course 20: Grid အပိုင်း 3၊ area နဲ့ subgrid"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 20
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: one .layout wrapper whose four direct children are the kit
+      # header (verbatim), the kit drinks block (as <main>) cut to two cards (no badge, so
+      # each card has exactly three parts; one description is one word, the
+      # other runs over three lines at the card's width), the kit hours block
+      # with the lesson's coming-soon box inside it, and the kit footer
+      # (verbatim). No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- lesson block: layout (the four parts of the page are its direct children) -->
+            <div class="layout" data-testid="layout">
+              <!-- kit block: header -->
+              <header class="site-header" id="site-header" data-testid="site-header">
+                <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+                <p class="tagline" lang="en">Yangon · since 1998</p>
+                <nav class="nav" aria-label="ဆိုင်">
+                  <ul>
+                    <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                    <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                    <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                  </ul>
+                </nav>
+              </header>
+
+              <!-- kit block: drinks, the main landmark (two cards; their descriptions differ by lines on purpose, for subgrid) -->
+              <main class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့်</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်၊ ပူတင်း၊ နို့အေးနဲ့ ရောထားတဲ့ ချိုချို အအေး တစ်ခွက်</p>
+                    <span class="price" data-testid="price-falooda">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </main>
+
+              <!-- kit block: hours, plus the lesson's coming-soon block -->
+              <section class="hours" id="hours" data-testid="hours">
+                <h2>ဖွင့်ချိန်</h2>
+                <ul class="hours-list">
+                  <li>တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ</li>
+                  <li>စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ</li>
+                </ul>
+                <!-- lesson block: coming-soon -->
+                <div class="soon" data-testid="soon">
+                  <span class="label" data-testid="soon-label">မကြာမီ</span>
+                  <p class="note" data-testid="soon-note">ည ၁၀ နာရီထိ ဖွင့်ပါမယ်</p>
+                </div>
+              </section>
+
+              <!-- kit block: footer -->
+              <footer class="site-footer" data-testid="footer">
+                <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+                <p><a href="tel:+959123456789">09 123 456 789</a> · <a href="https://facebook.com/">Facebook</a></p>
+                <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+              </footer>
+            </div>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and C of the course kit (the footer's top
+      # margin dropped); section E gives every area a visible box and styles
+      # the coming-soon box. No grid or alignment declaration anywhere.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 20 keeps A, B, B2 and C (the footer's top margin dropped: the grid
+          gap is the only space between the layout's areas); section E gives every
+          area of the layout a visible box and styles the coming-soon block. There
+          is no grid or alignment declaration anywhere in this file.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 20: each area of the layout reads as its own box. */
+        .layout {
+          padding: 16px;
+        }
+
+        .site-header,
+        .site-footer {
+          border-radius: var(--radius);
+        }
+
+        .drinks {
+          padding: 12px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .hours {
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* The coming-soon box: a fixed height, so alignment has room to show. */
+        .soon {
+          height: 200px;
+          margin-top: 12px;
+          padding: 12px;
+          background: var(--cream);
+          border: 1px dashed var(--tea);
+          border-radius: var(--radius);
+        }
+
+        .soon .label {
+          padding: 0 12px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 14px;
+        }
+
+        .soon .note {
+          margin: 0;
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the page as a map of named areas. White = the wrapper (the
+    # grid container); each area has its own colour: orange header, green
+    # menu, violet hours, blue footer.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "Layout ကို area တွေနဲ့ ဆွဲမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-frame,
+        kind: rectangle,
+        x: 300,
+        y: 228,
+        width: 420,
+        height: 384,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-header,
+        kind: rectangle,
+        x: 315,
+        y: 243,
+        width: 390,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-header-l,
+        kind: text,
+        x: 335,
+        y: 259,
+        width: 120,
+        height: 36,
+        text: "header",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-menu,
+        kind: rectangle,
+        x: 315,
+        y: 325,
+        width: 189,
+        height: 190,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-menu-l,
+        kind: text,
+        x: 335,
+        y: 341,
+        width: 100,
+        height: 36,
+        text: "menu",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-hours,
+        kind: rectangle,
+        x: 516,
+        y: 325,
+        width: 189,
+        height: 190,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-hours-l,
+        kind: text,
+        x: 536,
+        y: 341,
+        width: 100,
+        height: 36,
+        text: "hours",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-footer,
+        kind: rectangle,
+        x: 315,
+        y: 527,
+        width: 390,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-footer-l,
+        kind: text,
+        x: 335,
+        y: 543,
+        width: 120,
+        height: 36,
+        text: "footer",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-t1,
+        kind: text,
+        x: 780,
+        y: 260,
+        width: 300,
+        height: 36,
+        text: "1 · area နာမည်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-t2,
+        kind: text,
+        x: 780,
+        y: 330,
+        width: 300,
+        height: 36,
+        text: "2 · subgrid",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-t3,
+        kind: text,
+        x: 780,
+        y: 400,
+        width: 300,
+        height: 36,
+        text: "3 · alignment",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the two rules of the map, and an L-shaped area that breaks
+    # the second. Blue = rule 1, green = rule 2, orange / violet = valid
+    # areas, red = the L-shaped area and what happens to it.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Template area ရဲ့ စည်းမျဉ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-rule1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 700,
+        height: 36,
+        text: "row တိုင်းမှာ cell အရေအတွက် တူရမယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-rule2,
+        kind: text,
+        x: 300,
+        y: 268,
+        width: 560,
+        height: 36,
+        text: "area တစ်ခု = လေးထောင့် တစ်ခု",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-c1,
+        kind: rectangle,
+        x: 300,
+        y: 330,
+        width: 130,
+        height: 64,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: b-c1-l,
+        kind: text,
+        x: 318,
+        y: 344,
+        width: 100,
+        height: 36,
+        text: "header",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: rectangle,
+        x: 442,
+        y: 330,
+        width: 130,
+        height: 64,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: b-c2-l,
+        kind: text,
+        x: 460,
+        y: 344,
+        width: 100,
+        height: 36,
+        text: "header",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-c3,
+        kind: rectangle,
+        x: 300,
+        y: 404,
+        width: 130,
+        height: 64,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: b-c3-l,
+        kind: text,
+        x: 318,
+        y: 418,
+        width: 100,
+        height: 36,
+        text: "menu",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-c4,
+        kind: rectangle,
+        x: 442,
+        y: 404,
+        width: 130,
+        height: 64,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-c4-l,
+        kind: text,
+        x: 460,
+        y: 418,
+        width: 100,
+        height: 36,
+        text: "hours",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-c5,
+        kind: rectangle,
+        x: 300,
+        y: 478,
+        width: 130,
+        height: 64,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: b-c5-l,
+        kind: text,
+        x: 318,
+        y: 492,
+        width: 100,
+        height: 36,
+        text: "menu",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-c6,
+        kind: rectangle,
+        x: 442,
+        y: 478,
+        width: 130,
+        height: 64,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: b-c6-l,
+        kind: text,
+        x: 460,
+        y: 492,
+        width: 100,
+        height: 36,
+        text: "menu",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 282,
+        y: 392,
+        width: 312,
+        height: 164,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-l-note,
+        kind: text,
+        x: 640,
+        y: 450,
+        width: 260,
+        height: 36,
+        text: "L ပုံ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-drop,
+        kind: text,
+        x: 300,
+        y: 576,
+        width: 720,
+        height: 36,
+        text: "မှားရင် declaration တစ်ခုလုံးကို ကျော်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — the grid-template shorthand for the wide layout, and the grid
+    # shorthand's catch. Orange = the area strings, green = row heights,
+    # blue = columns, violet = grid, red = the reset.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Shorthand နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-code,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 260,
+        height: 36,
+        text: "grid-template:",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-s1,
+        kind: text,
+        x: 330,
+        y: 268,
+        width: 260,
+        height: 36,
+        text: '"header header"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1,
+        kind: text,
+        x: 640,
+        y: 268,
+        width: 80,
+        height: 36,
+        text: "auto",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-s2,
+        kind: text,
+        x: 330,
+        y: 314,
+        width: 260,
+        height: 36,
+        text: '"menu hours"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2,
+        kind: text,
+        x: 640,
+        y: 314,
+        width: 80,
+        height: 36,
+        text: "1fr",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-s3,
+        kind: text,
+        x: 330,
+        y: 360,
+        width: 260,
+        height: 36,
+        text: '"footer footer"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3,
+        kind: text,
+        x: 640,
+        y: 360,
+        width: 80,
+        height: 36,
+        text: "auto",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-cols,
+        kind: text,
+        x: 330,
+        y: 406,
+        width: 220,
+        height: 36,
+        text: "/ 1fr 1fr;",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-areas-l,
+        kind: text,
+        x: 780,
+        y: 268,
+        width: 260,
+        height: 36,
+        text: "area map",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-rows-l,
+        kind: text,
+        x: 780,
+        y: 314,
+        width: 260,
+        height: 36,
+        text: "row အမြင့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-cols-l,
+        kind: text,
+        x: 780,
+        y: 406,
+        width: 260,
+        height: 36,
+        text: "column တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-grid,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 720,
+        height: 36,
+        text: "grid = grid-template + grid-auto-*",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-reset,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 720,
+        height: 36,
+        text: "မရေးထားတာ အကုန် default ပြန်ဖြစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — subgrid: the parent's row lines run through both cards.
+    # White = the cards, orange = titles, violet = descriptions, red =
+    # prices, blue = the parent's row lines; violet / red notes below.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Subgrid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-card1,
+        kind: rectangle,
+        x: 300,
+        y: 220,
+        width: 190,
+        height: 250,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-card2,
+        kind: rectangle,
+        x: 520,
+        y: 220,
+        width: 190,
+        height: 250,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-n1,
+        kind: rectangle,
+        x: 314,
+        y: 232,
+        width: 162,
+        height: 30,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-n2,
+        kind: rectangle,
+        x: 534,
+        y: 232,
+        width: 162,
+        height: 30,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-d1,
+        kind: rectangle,
+        x: 314,
+        y: 282,
+        width: 162,
+        height: 30,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: d-d2,
+        kind: rectangle,
+        x: 534,
+        y: 282,
+        width: 162,
+        height: 112,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: d-p1,
+        kind: rectangle,
+        x: 314,
+        y: 424,
+        width: 162,
+        height: 30,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: d-p2,
+        kind: rectangle,
+        x: 534,
+        y: 424,
+        width: 162,
+        height: 30,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: d-line1,
+        kind: freedraw,
+        stroke: underline,
+        x: 286,
+        y: 254,
+        width: 438,
+        height: 20,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-line2,
+        kind: freedraw,
+        stroke: underline,
+        x: 286,
+        y: 396,
+        width: 438,
+        height: 20,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-r1,
+        kind: text,
+        x: 760,
+        y: 228,
+        width: 110,
+        height: 36,
+        text: "row 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-r2,
+        kind: text,
+        x: 760,
+        y: 320,
+        width: 110,
+        height: 36,
+        text: "row 2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-r3,
+        kind: text,
+        x: 760,
+        y: 420,
+        width: 110,
+        height: 36,
+        text: "row 3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-share,
+        kind: text,
+        x: 300,
+        y: 496,
+        width: 720,
+        height: 36,
+        text: "row line တွေက parent grid ဆီက",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-axes,
+        kind: text,
+        x: 300,
+        y: 546,
+        width: 720,
+        height: 36,
+        text: "column မှာလည်း · နှစ်ဘက်လုံးမှာလည်း ရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-contents,
+        kind: text,
+        x: 300,
+        y: 596,
+        width: 720,
+        height: 36,
+        text: "display: contents → card box ပျောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board E — alignment in grid. White = the container and its items,
+    # orange = the inline axis (justify), blue = the block axis (align),
+    # green = -items, violet = -self, red = -content.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Grid alignment",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-box,
+        kind: rectangle,
+        x: 300,
+        y: 226,
+        width: 300,
+        height: 190,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-i1,
+        kind: rectangle,
+        x: 316,
+        y: 242,
+        width: 120,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-i2,
+        kind: rectangle,
+        x: 464,
+        y: 242,
+        width: 120,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-i3,
+        kind: rectangle,
+        x: 316,
+        y: 330,
+        width: 120,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-i4,
+        kind: rectangle,
+        x: 464,
+        y: 330,
+        width: 120,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-in,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 428,
+        width: 300,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-in-l,
+        kind: text,
+        x: 300,
+        y: 466,
+        width: 380,
+        height: 36,
+        text: "inline axis · justify",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-bl,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 614,
+        y: 226,
+        width: 30,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-bl-l,
+        kind: text,
+        x: 660,
+        y: 226,
+        width: 380,
+        height: 36,
+        text: "block axis · align",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-items,
+        kind: text,
+        x: 660,
+        y: 300,
+        width: 420,
+        height: 36,
+        text: "-items → item အားလုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-self,
+        kind: text,
+        x: 660,
+        y: 348,
+        width: 420,
+        height: 36,
+        text: "-self → item တစ်ခု",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-content,
+        kind: text,
+        x: 660,
+        y: 396,
+        width: 420,
+        height: 36,
+        text: "-content → track တွေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-place,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 560,
+        height: 36,
+        text: "place-* = align + justify",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 760,
+        height: 40,
+        text: "subgrid က row တွေကိုပဲ မျှသုံးလို့ ရလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-check,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 306,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 370,
+        y: 310,
+        width: 700,
+        height: 40,
+        text: "column လည်း ရ၊ နှစ်ဘက်လုံးလည်း ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 760,
+        height: 36,
+        text: "grid-area ပါတဲ့ item ကို auto placement မရွှေ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4120
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: areas-intro
+    chapter: "Page ကို area တွေနဲ့ ဆွဲကြည့်ရအောင်"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson နှစ်ခုမှာ track တွေရဲ့ အရွယ်အစား ပေးပြီး၊ item တွေကို line နံပါတ်နဲ့
+      နေရာချခဲ့ပါတယ်။ ဒါပေမဲ့ page တစ်ခုလုံးကို line နံပါတ်တွေနဲ့ ချရင် ဖတ်ရ ခက်ပါတယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-area-map]] ဒီ lesson မှာတော့ page ရဲ့ အပိုင်း တစ်ခုစီကို နာမည် ပေးပြီး၊ အဲဒီ နာမည်တွေနဲ့
+      layout ကို ပုံဆွဲသလို ရေးကြည့်ပါမယ်။ header က အပေါ်မှာ တစ်တန်းလုံး ယူပြီး၊ menu နဲ့ hours က
+      ဘေးချင်းကပ် ရှိပါမယ်။ footer ကတော့ အောက်ဆုံးမှာ တစ်တန်းလုံး ယူပါမယ်။ [[mark:draw-topics]] အဲဒီနောက်
+      card နှစ်ခုရဲ့ အထဲက အပိုင်းတွေကို subgrid နဲ့ တန်းညီအောင် လုပ်ပြီး၊ grid ထဲက item တွေနဲ့ track
+      တွေကို ရွှေ့ပေးတဲ့ alignment နဲ့ အဆုံးသတ်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: grid template areas"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "MDN — grid-template-areas"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-areas"
+      - title: "MDN — Grid template areas"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_template_areas"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-area-map
+        type: whiteboard.apply
+        at: { mark: draw-area-map }
+        upsertIds:
+          [
+            a-frame,
+            a-header,
+            a-header-l,
+            a-menu,
+            a-menu-l,
+            a-hours,
+            a-hours-l,
+            a-footer,
+            a-footer-l,
+          ]
+        drawMs: 4000
+      - id: draw-topics
+        type: whiteboard.apply
+        at: { mark: draw-topics }
+        upsertIds: [a-t1, a-t2, a-t3]
+        drawMs: 2000
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-layout]] ဒီ wrapper element ထဲမှာ page တစ်ခုလုံး ရှိပါတယ်။ သူ့ရဲ့ တိုက်ရိုက် child
+      လေးခုက header၊ သောက်စရာ အပိုင်း၊ ဖွင့်ချိန် အပိုင်းနဲ့ footer ဖြစ်ပြီး၊ ဒီ lesson မှာ နေရာချမယ့်
+      အပိုင်းတွေက သူတို့ပါ။ [[mark:select-desc]] သောက်စရာ အပိုင်းမှာ card နှစ်ခု ပါပါတယ်။ ဒီ card ရဲ့
+      ဖော်ပြချက်က တော်တော် ရှည်ပေမယ့်၊ ကျန်တဲ့ card ရဲ့ ဖော်ပြချက်ကတော့ စကားလုံး တစ်လုံးတည်းပါ။ ဒီ
+      ကွာခြားချက်က နောက်မှ အရေးပါလာပါမယ်။ [[mark:select-soon]] ဖွင့်ချိန် အပိုင်းထဲမှာတော့ မကြာမီ လို့
+      ရေးထားတဲ့ box သေးသေးလေး တစ်ခု ရှိပြီး၊ alignment ကို သူ့ပေါ်မှာ စမ်းပါမယ်။ [[mark:open-styles]]
+      ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ base ဖိုင်ကတော့ အပိုင်း တစ်ခုစီကို အရောင်နဲ့ ထောင့်ဝိုင်း ပေးထားပြီး၊
+      မကြာမီ box ကို အမြင့် ပုံသေ ပေးထားပါတယ်။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ layout
+      မပေးရသေးလို့ အပိုင်းတွေက flow layout အတိုင်း တစ်ခုအောက် တစ်ခု ဆင့်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid"
+        url: "https://web.dev/learn/css/grid"
+      - title: "MDN — Basic concepts of grid layout (grid items are the direct children)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Basic_concepts_of_grid_layout"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-layout
+        type: editor.select
+        at: { mark: select-layout }
+        target:
+          { file: index.html, text: '<div class="layout" data-testid="layout">', occurrence: 1 }
+      - id: select-desc
+        type: editor.select
+        at: { mark: select-desc }
+        target:
+          {
+            file: index.html,
+            text: '<p class="desc">ရေခဲမုန့်၊ ပူတင်း၊ နို့အေးနဲ့ ရောထားတဲ့ ချိုချို အအေး တစ်ခွက်</p>',
+            occurrence: 1,
+          }
+      - id: select-soon
+        type: editor.select
+        at: { mark: select-soon }
+        target: { file: index.html, text: '<div class="soon" data-testid="soon">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-layout
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: layout }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-soon
+        type: expect.preview
+        at: { afterAction: expect-layout }
+        timeoutMs: 5000
+        target: { by: testId, value: soon-label }
+        textContains: "မကြာမီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-soon }
+
+  - id: auto-first
+    narration: >
+      [[mark:type-layout]] ပထမဆုံး wrapper ကို grid container လုပ်ပါမယ်။ lesson 18 မှာလိုပဲ 1 fr စီ ရတဲ့
+      column နှစ်ခု ပေးပြီး၊ track တွေကြားမှာ gap ထည့်ပါမယ်။ ဒါဆို wrapper ရဲ့ child လေးခုက grid item တွေ
+      ဖြစ်သွားပါတယ်။ [[mark:after-layout]] preview ကို ကြည့်ပါ။ နေရာ မပေးထားတဲ့ item တွေကို auto placement
+      က HTML အစဉ်အတိုင်း row တစ်ခုမှာ နှစ်ခုစီ ထည့်လို့၊ header က ဘယ်ဘက် တစ်ဝက်ထဲမှာ ကျဉ်းနေပြီး footer က
+      ဖွင့်ချိန် အပိုင်းရဲ့ ဘေးကို ရောက်နေပါတယ်။ [[mark:explain-auto]] ဒါက ကိုယ် လိုချင်တဲ့ page
+      မဟုတ်ပါဘူး။ line နံပါတ်နဲ့ နေရာချလို့ ရပေမယ့်၊ ပိုရှင်းတဲ့ နည်းက map တစ်ခု ဆွဲတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-placement"
+        url: "https://web.dev/learn/css/grid#auto-placement"
+      - title: "MDN — Auto-placement in grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Auto-placement_in_grid_layout"
+    actions:
+      - id: type-layout
+        type: editor.type
+        at: { mark: type-layout }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".layout {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 12px;\n}\n"
+      - id: expect-layout-grid
+        type: expect.preview
+        at: { mark: after-layout }
+        timeoutMs: 4000
+        target: { by: testId, value: footer }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: template-areas
+    narration: >
+      [[mark:type-areas]] map ကို grid template areas ဆိုတဲ့ property နဲ့ ရေးပါတယ်။ area တွေကို
+      နာမည်ပေးပြီး layout ကို ပုံဆွဲသလို ရေးတာပါ။ quote ထဲမှာ ရေးတဲ့ စာသားကို string လို့ ခေါ်ပါတယ်။
+      string တစ်ခုက row တစ်ခု၊ သူ့ထဲက စကားလုံး တစ်လုံးက cell တစ်ကွက်ပါ။ [[mark:after-areas]] ဘာမှ
+      မရွေ့သေးပါဘူး။ map ရှိနေပေမယ့် item တွေမှာ area နာမည် မပေးရသေးလို့၊ auto placement က အကွက်တွေကို
+      အစဉ်အတိုင်း ဆက်ဖြည့်နေတုန်းပါ။ [[mark:select-areas]] ဒီ string သုံးခုကို ကြည့်ပါ။ အပေါ်မှာ header
+      cell နှစ်ကွက်၊ ပြီးရင် menu နဲ့ hours၊ အောက်မှာ footer cell နှစ်ကွက် ရှိပါတယ်။ ဘေးချင်းကပ် cell တွေက
+      နာမည် တူရင် area တစ်ခုတည်း ဖြစ်သွားလို့၊ header က column နှစ်ခုလုံးကို ယူပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: grid template areas"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "MDN — grid-template-areas"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-areas"
+      - title: "CSS Grid Layout Module Level 2 — named areas: grid-template-areas"
+        url: "https://drafts.csswg.org/css-grid/#grid-template-areas-property"
+    actions:
+      # Typed while no item has a name: its partial states change nothing.
+      - id: type-areas
+        type: editor.type
+        at: { mark: type-areas }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  gap: 12px;\n", occurrence: 1 }
+        text: "  grid-template-areas:\n    \"header header\"\n    \"menu hours\"\n    \"footer footer\";\n"
+      - id: select-areas
+        type: editor.select
+        at: { mark: select-areas }
+        target:
+          {
+            file: styles.css,
+            text: "\"header header\"\n    \"menu hours\"\n    \"footer footer\"",
+            occurrence: 1,
+          }
+
+  - id: area-names
+    narration: >
+      [[mark:type-names]] ဒါဆို item တွေကို နာမည် ပေးရအောင်။ အပိုင်း တစ်ခုစီကို grid area နဲ့ map ထဲက
+      နာမည် ပေးပါမယ်။ header၊ menu၊ hours နဲ့ footer ပါ။ [[mark:after-names]] အခု အပိုင်းတိုင်း သူ့ area
+      ကို ရောက်သွားပါပြီ။ header က အပေါ်မှာ တစ်တန်းလုံး ယူပြီး၊ သူ့အောက်မှာ menu နဲ့ hours က ဘေးချင်းကပ်
+      ရှိနေပါတယ်။ [[mark:scroll-footer]] အောက်ဘက်မှာတော့ footer က တစ်တန်းလုံး ယူထားပါတယ်။
+      [[mark:select-grid-area]] ဒီ grid area declaration ကို ကြည့်ပါ။ နာမည်ကို quote မပါဘဲ ရေးရပြီး၊ map
+      ထဲက စကားလုံး တစ်လုံးနဲ့ တူရပါမယ်။ class နဲ့တော့ တူစရာ မလိုပါဘူး။ ဥပမာ သောက်စရာ အပိုင်းကို menu လို့
+      နာမည် ပေးထားပါတယ်။ [[mark:explain-placed]] နာမည် ပါတဲ့ item ကို တမင် နေရာချထားတာမို့၊ auto placement
+      က သူ့ကို မရွှေ့ပါဘူး။ grid area မှာ နာမည် အစား line နံပါတ် လေးခုလည်း ပေးလို့ ရပါတယ်။ သူက lesson 19 က
+      grid row နဲ့ grid column ကို ပေါင်းထားတဲ့ shorthand ပါ။ row အစ၊ column အစ၊ row အဆုံး၊ column အဆုံး
+      အစဉ်နဲ့ ရေးပါတယ်။
+    sources:
+      - title: "MDN — grid-area"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-area"
+      - title: "web.dev Learn CSS — Grid: grid template areas"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "CSS Grid Layout Module Level 2 — placement shorthands: grid-area"
+        url: "https://drafts.csswg.org/css-grid/#propdef-grid-area"
+    actions:
+      # Revealed line by line: every line is a complete, valid rule (a half-typed
+      # name would match no area and throw the item into implicit tracks).
+      - id: type-names
+        type: editor.type
+        at: { mark: type-names }
+        cadence: line-by-line
+        target: { file: styles.css, after: "    \"footer footer\";\n}\n", occurrence: 1 }
+        text: "\n.site-header { grid-area: header; }\n.drinks { grid-area: menu; }\n.hours { grid-area: hours; }\n.site-footer { grid-area: footer; }\n"
+      - id: expect-names
+        type: expect.preview
+        at: { mark: after-names }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 5000
+        top: 200
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: select-grid-area
+        type: editor.select
+        at: { mark: select-grid-area }
+        target: { file: styles.css, text: ".drinks { grid-area: menu; }", occurrence: 1 }
+
+  - id: areas-rules
+    chapter: "Template area ရဲ့ စည်းမျဉ်းတွေ"
+    narration: >
+      [[mark:open-rules]] စည်းမျဉ်း နှစ်ခု ရှိပါတယ်။ [[mark:draw-rule-count]] ပထမ၊ row string တိုင်းမှာ
+      cell အရေအတွက် တူရပါမယ်။ ဒါမှ grid တစ်ခုလုံးက လေးထောင့် အပြည့် ဖြစ်မှာပါ။ [[mark:draw-rule-rect]]
+      ဒုတိယ၊ နာမည် တစ်ခုရဲ့ area က လေးထောင့် တစ်ခု ဖြစ်ရပါမယ်။ [[mark:draw-l-shape]] ဥပမာ ဒီ map မှာ menu
+      က အလယ် row ရဲ့ ဘယ်ဘက် cell နဲ့ အောက်ဆုံး row ရဲ့ cell နှစ်ကွက်လုံးကို ယူထားပါတယ်။ ဒါက လေးထောင့်
+      မဟုတ်ဘဲ L ပုံ ဖြစ်နေပါတယ်။ [[mark:draw-l-cross]] စည်းမျဉ်း တစ်ခုခုနဲ့ မကိုက်ရင်၊ browser က မှားတဲ့
+      row တစ်ခုတည်းကို မဟုတ်ဘဲ grid template areas declaration တစ်ခုလုံးကို ကျော်သွားပါတယ်။ ဒါကြောင့် grid
+      က အဲဒီ declaration မရှိသလိုပဲ ဖြစ်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: grid template areas (rules)"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "MDN — grid-template-areas (rectangular areas; invalid declarations)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-areas"
+      - title: "CSS Grid Layout Module Level 2 — grid-template-areas: a non-rectangular area is a parse error"
+        url: "https://drafts.csswg.org/css-grid/#grid-template-areas-property"
+    actions:
+      - id: open-rules-board
+        type: whiteboard.apply
+        at: { mark: open-rules }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-rule-count
+        type: whiteboard.apply
+        at: { mark: draw-rule-count }
+        upsertIds: [b-rule1]
+        drawMs: 1600
+      - id: draw-rule-rect
+        type: whiteboard.apply
+        at: { mark: draw-rule-rect }
+        upsertIds: [b-rule2]
+        drawMs: 1400
+      - id: draw-l-shape
+        type: whiteboard.apply
+        at: { mark: draw-l-shape }
+        upsertIds:
+          [b-c1, b-c1-l, b-c2, b-c2-l, b-c3, b-c3-l, b-c4, b-c4-l, b-c5, b-c5-l, b-c6, b-c6-l]
+        drawMs: 3600
+      - id: draw-l-cross
+        type: whiteboard.apply
+        at: { mark: draw-l-cross }
+        upsertIds: [b-circle, b-l-note, b-drop]
+        drawMs: 2400
+
+  - id: empty-cell
+    narration: >
+      [[mark:close-rules]] editor ထဲ ပြန်ရအောင်။ တစ်ခါတလေ cell တစ်ကွက်ကို အလွတ် ထားချင်တာ ရှိပါတယ်။ map
+      ထဲမှာ အစက် တစ်စက်က cell အလွတ်ကို ဆိုလိုပါတယ်။ [[mark:type-dot]] ဒါဆို footer က ဘယ်ဘက် cell ကိုပဲ
+      ယူပြီး၊ ညာဘက် cell မှာ အစက် ပါတဲ့ map ကို declaration နောက်တစ်ခုနဲ့ ထပ်ရေးပါမယ်။ [[mark:after-dot]]
+      footer က ဘယ်ဘက် တစ်ဝက်ကိုပဲ ယူတော့ပြီး၊ ဘေးက cell က အလွတ် ကျန်နေပါတယ်။ ထုံးစံအတိုင်း နောက်မှ ရေးတာ
+      နိုင်ပါတယ်။ [[mark:select-dot]] ဒီ အစက်ကို ကြည့်ပါ။ အစက် အများကြီးကို ကြားမှာ space မခြားဘဲ
+      ဆက်ရေးရင်လည်း cell တစ်ကွက်ပဲ ဖြစ်ပါတယ်။ ဒါကြောင့် နာမည်တွေ အရှည် မတူရင်တောင် map ကို တန်းညီအောင်
+      ရေးလို့ ရပါတယ်။ [[mark:type-restore]] footer ကို အပြည့် ပြန်ယူစေချင်လို့၊ ပထမ map ကို declaration
+      နောက်တစ်ခုနဲ့ ပြန်ရေးပါမယ်။ [[mark:after-restore]] footer က အောက်ဆုံးမှာ တစ်တန်းလုံး ပြန်ယူပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: grid template areas (empty cells)"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "MDN — grid-template-areas (a sequence of full stops is a null cell)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-areas#values"
+    actions:
+      - id: close-rules-board
+        type: whiteboard.apply
+        at: { mark: close-rules }
+        open: false
+      # One complete line: the names exist now, so a partial map would throw
+      # the footer into implicit tracks.
+      - id: type-dot
+        type: editor.type
+        at: { mark: type-dot }
+        cadence: line-by-line
+        target: { file: styles.css, after: "    \"footer footer\";\n", occurrence: 1 }
+        text: "  grid-template-areas: \"header header\" \"menu hours\" \"footer .\";\n"
+      - id: expect-dot
+        type: expect.preview
+        at: { mark: after-dot }
+        timeoutMs: 4000
+        target: { by: testId, value: footer }
+        textContains: "09 123 456 789"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-dot
+        type: editor.select
+        at: { mark: select-dot }
+        target: { file: styles.css, text: '"footer ."', occurrence: 1 }
+      - id: type-restore
+        type: editor.type
+        at: { mark: type-restore }
+        cadence: line-by-line
+        target: { file: styles.css, after: "\"footer .\";\n", occurrence: 1 }
+        text: "  grid-template-areas: \"header header\" \"menu hours\" \"footer footer\";\n"
+      - id: expect-restore
+        type: expect.preview
+        at: { mark: after-restore }
+        timeoutMs: 4000
+        target: { by: testId, value: footer }
+        textContains: "ရန်ကုန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: areas-media
+    chapter: "Screen ကျဉ်းရင် area တွေကို ပြန်စီကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-top]] ဖုန်းမှာဆိုရင် column နှစ်ခုက ကျဉ်းလွန်းလို့၊ screen ကျဉ်းရင် column
+      တစ်ခုတည်းကို ပြောင်းကြည့်ရအောင်။ lesson 8 မှာလိုပဲ screen အကျယ် 40 em ထက် ကျဉ်းမှ အလုပ်လုပ်မယ့်
+      media query တစ်ခု ထည့်ပါမယ်။ [[mark:type-media]] သူ့ထဲမှာ wrapper ကို map အသစ် ပေးပြီး၊ cell
+      တစ်ကွက်စီ ပါတဲ့ string လေးခု ရေးပါမယ်။ [[mark:after-media]] preview က ဖုန်း screen လောက်ပဲ ကျယ်ပြီး
+      40 em ထက် အများကြီး ကျဉ်းလို့၊ rule က ချက်ချင်း အလုပ်လုပ်ပါတယ်။ အပိုင်းတွေက အစဉ်အတိုင်း အပေါ်အောက်
+      ဆင့်သွားပေမယ့်၊ ဘယ်ဘက် တစ်ဝက်မှာပဲ ရှိနေပါတယ်။ [[mark:select-media-map]] ဘာကြောင့်လဲဆိုတော့၊ ဒီ map
+      မှာ column တစ်ခုပဲ ပါပေမယ့်၊ ပထမ rule က ပေးထားတဲ့ column နှစ်ခုက ရှိနေတုန်းမို့ ညာဘက် column က အလွတ်
+      ကျန်နေလို့ပါ။ [[mark:type-media-cols]] ဒါကြောင့် media query ထဲမှာ column ကိုလည်း 1 fr column
+      တစ်ခုတည်း ပေးပါမယ်။ [[mark:after-media-cols]] အခု အပိုင်းတိုင်းက အကျယ် အပြည့် ယူသွားပါပြီ။ HTML ကို
+      လုံးဝ မပြင်ဘဲ map အသစ်နဲ့ column တစ်ခု ပေးလိုက်ရုံပါပဲ။ screen အကျယ် 40 em ထက် ကျယ်ရင်တော့ column
+      နှစ်ခု ပါတဲ့ map က ဆက်အလုပ်လုပ်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: grid template areas (redefining areas)"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+      - title: "MDN — Grid layout and media queries (redefining the grid)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_template_areas#redefining_the_grid_using_media_queries"
+      - title: "MDN — Using media queries (range syntax)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_media_queries/Using_media_queries"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # The map is one line, so it lands whole (see the header comment).
+      - id: type-media
+        type: editor.type
+        at: { mark: type-media }
+        cadence: line-by-line
+        target: { file: styles.css, after: ".site-footer { grid-area: footer; }\n", occurrence: 1 }
+        text: "\n@media (width < 40em) {\n  .layout {\n    grid-template-areas: \"header\" \"menu\" \"hours\" \"footer\";\n  }\n}\n"
+      - id: expect-media
+        type: expect.preview
+        at: { mark: after-media }
+        timeoutMs: 4000
+        target: { by: testId, value: hours }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-media-map
+        type: editor.select
+        at: { mark: select-media-map }
+        target: { file: styles.css, text: '"header" "menu" "hours" "footer"', occurrence: 1 }
+      - id: type-media-cols
+        type: editor.type
+        at: { mark: type-media-cols }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "    grid-template-areas: \"header\" \"menu\" \"hours\" \"footer\";\n",
+            occurrence: 1,
+          }
+        text: "    grid-template-columns: 1fr;\n"
+      - id: expect-media-cols
+        type: expect.preview
+        at: { mark: after-media-cols }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: shorthands
+    chapter: "Grid template နဲ့ grid shorthand"
+    narration: >
+      [[mark:open-shorthand]] area၊ row နဲ့ column တွေကို declaration တစ်ခုတည်းနဲ့လည်း ရေးလို့ ရပါတယ်။
+      [[mark:draw-template]] grid template shorthand က သုံးခုလုံးကို ပေးပါတယ်။ row တစ်ခုစီရဲ့ string ကို
+      အရင် ရေးပြီး နောက်မှာ အဲဒီ row ရဲ့ အမြင့်ကို ရေးပါတယ်။ မျဉ်းစောင်း နောက်မှာတော့ column တွေ လာပါတယ်။
+      [[mark:draw-template-labels]] ဒါက screen ကျယ်တဲ့ layout ပါ။ header နဲ့ footer row တွေက content
+      လောက်ပဲ မြင့်ပြီး၊ အလယ် row ကတော့ layout ကို အမြင့် ပေးထားရင် ကျန်တဲ့ နေရာကို ယူပါတယ်။ column က 1 fr
+      column နှစ်ခုပါ။ [[mark:draw-grid-short]] grid ဆိုတဲ့ shorthand လည်း ရှိပါသေးတယ်။ grid template
+      ပေးနိုင်တာ အကုန်လုံးအပြင်၊ lesson 19 က grid auto flow နဲ့ grid auto rows လို setting တွေကိုပါ
+      ပေးပြီး၊ ကိုယ် မရေးခဲ့တာ မှန်သမျှ default တန်ဖိုး ပြန်ဖြစ်သွားပါတယ်။ [[mark:draw-grid-reset]]
+      default ပြန်ဖြစ်တာက မထင်ထားတဲ့ ပြဿနာ ဖြစ်တတ်လို့၊ grid shorthand ကို မသုံးဘဲ property တွေကို သီးသန့်
+      ရေးကြတာ များပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: shorthands"
+        url: "https://web.dev/learn/css/grid#shorthands"
+      - title: "MDN — grid-template"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template"
+      - title: "MDN — grid (resets the sub-properties it omits)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid"
+    actions:
+      - id: open-shorthand-board
+        type: whiteboard.apply
+        at: { mark: open-shorthand }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-template
+        type: whiteboard.apply
+        at: { mark: draw-template }
+        upsertIds: [c-code, c-s1, c-r1, c-s2, c-r2, c-s3, c-r3, c-cols]
+        drawMs: 3600
+      - id: draw-template-labels
+        type: whiteboard.apply
+        at: { mark: draw-template-labels }
+        upsertIds: [c-areas-l, c-rows-l, c-cols-l]
+        drawMs: 1800
+      - id: draw-grid-short
+        type: whiteboard.apply
+        at: { mark: draw-grid-short }
+        upsertIds: [c-grid]
+        drawMs: 1600
+      - id: draw-grid-reset
+        type: whiteboard.apply
+        at: { mark: draw-grid-reset }
+        upsertIds: [c-reset]
+        drawMs: 1400
+
+  - id: subgrid-problem
+    chapter: "Subgrid နဲ့ card တွေကို ညီအောင် လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-shorthand]] အခု သောက်စရာ card နှစ်ခုပါ။ [[mark:type-menu-grid]] သူတို့ကို ဘေးချင်းကပ်
+      ထားရအောင်။ card တွေရဲ့ list ကို 1 fr column နှစ်ခု ပါတဲ့ grid လုပ်ပြီး၊ column တွေကြားမှာပဲ gap
+      ပေးပါမယ်။ ဒီ list ရဲ့ class ကလည်း menu ဖြစ်ပေမယ့်၊ area နာမည် menu နဲ့ မဆိုင်ပါဘူး။
+      [[mark:after-menu-grid]] card နှစ်ခု ဘေးချင်းကပ် ဖြစ်ပြီး အမြင့်လည်း တူနေပါတယ်။ grid item တွေက row
+      ပြည့်အောင် ဆန့်လို့ပါ။ ဒါပေမဲ့ ဈေးနှုန်းတွေကို ကြည့်ပါ။ ဖော်ပြချက် ရှည်တဲ့ card မှာ ဈေးနှုန်းက
+      တစ်ဖက် card ထက် အများကြီး အောက် ရောက်နေပါတယ်။ [[mark:explain-problem]] card တစ်ခုစီက သူ့ content ကို
+      သူ့ဘာသာ စီတာ ဖြစ်လို့၊ ဘေးက card ရဲ့ ဖော်ပြချက် ဘယ်လောက် ရှည်လဲ မသိနိုင်ပါဘူး။ card နှစ်ခုလုံးကို
+      သိတာက list ရဲ့ grid တစ်ခုတည်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: subgrid"
+        url: "https://web.dev/learn/css/grid#subgrid"
+      - title: "MDN — Subgrid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Subgrid"
+      - title: "MDN — column-gap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/column-gap"
+    actions:
+      - id: close-shorthand-board
+        type: whiteboard.apply
+        at: { mark: close-shorthand }
+        open: false
+      - id: type-menu-grid
+        type: editor.type
+        at: { mark: type-menu-grid }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "    grid-template-columns: 1fr;\n  }\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  column-gap: 12px;\n}\n"
+      - id: expect-menu-grid
+        type: expect.preview
+        at: { mark: after-menu-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: price-falooda }
+        textContains: "3,000"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: subgrid-fix
+    narration: >
+      [[mark:type-subgrid]] ဒါကြောင့် card တစ်ခုစီကိုလည်း grid လုပ်ပါမယ်။ ရိုက်နေတုန်း ဈေးနှုန်း နှစ်ခုကို
+      ကြည့်ထားပါ။ card က list မှာ browser ထပ်ဖွင့်ပေးတဲ့ row သုံးခုကို ဖြတ်ယူပြီး၊ သူ့ အပိုင်း တစ်ခုစီက
+      row တစ်ခုစီ ရပါတယ်။ နောက်ဆုံးမှာ row တွေအတွက် subgrid ကို ပေးပါမယ်။ subgrid ဆိုတာ child grid က
+      ကိုယ်ပိုင် track မဆွဲဘဲ parent grid ရဲ့ track တွေကို ဆက်သုံးတာပါ။ [[mark:after-subgrid]] အခု card
+      နှစ်ခုရဲ့ ခေါင်းစဉ်တွေ၊ ဖော်ပြချက်တွေနဲ့ ဈေးနှုန်းတွေက တစ်တန်းတည်း ညီသွားပါပြီ။ ဖော်ပြချက် row ကတော့
+      ရှည်တဲ့ ဖော်ပြချက်လောက် မြင့်ပါတယ်။ [[mark:select-span]] ဒီ span ကို ကြည့်ပါ။ subgrid က သူ
+      ဖြတ်ယူထားတဲ့ track တွေကိုပဲ မျှသုံးလို့၊ card က သူ့ အပိုင်း သုံးခုအတွက် လိုတဲ့ row သုံးခုကို
+      ဖြတ်ယူထားတာပါ။ [[mark:select-subgrid]] ပြီးတော့ ဒီ subgrid တန်ဖိုးကို ကြည့်ပါ။ card က သူ့ box၊
+      border နဲ့ padding ကို ဆက်ထားပေမယ့်၊ သူ့ child တွေကတော့ list ရဲ့ row line တွေပေါ်မှာ နေရာယူပါတယ်။
+      subgrid က parent ရဲ့ gap ကိုလည်း ယူသုံးပါတယ်။ ကိုယ့် list မှာ column gap ပဲ ရှိလို့ အပိုင်းတွေက
+      အပေါ်အောက် ကပ်နေပါတယ်။ subgrid က အခု Baseline ဖြစ်ပြီး browser အဓိက အားလုံးမှာ သုံးလို့ ရနေပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: subgrid"
+        url: "https://web.dev/learn/css/grid#subgrid"
+      - title: "MDN — Subgrid (spanning the parent tracks; gaps are inherited)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Subgrid"
+      - title: "CSS Grid Layout Module Level 2 — subgrids"
+        url: "https://drafts.csswg.org/css-grid-2/#subgrids"
+      - title: "webstatus.dev — Subgrid (Baseline)"
+        url: "https://webstatus.dev/features/subgrid"
+    actions:
+      - id: type-subgrid
+        type: editor.type
+        at: { mark: type-subgrid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  column-gap: 12px;\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu-card {\n  display: grid;\n  grid-row: span 3;\n  grid-template-rows: subgrid;\n}\n"
+      - id: expect-subgrid
+        type: expect.preview
+        at: { mark: after-subgrid }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-span
+        type: editor.select
+        at: { mark: select-span }
+        target: { file: styles.css, text: "grid-row: span 3;", occurrence: 1 }
+      - id: select-subgrid
+        type: editor.select
+        at: { mark: select-subgrid }
+        target: { file: styles.css, text: "grid-template-rows: subgrid;", occurrence: 1 }
+
+  - id: subgrid-board
+    narration: >
+      [[mark:open-subgrid-board]] ဘာ ဖြစ်သွားလဲ ကြည့်ရအောင်။ [[mark:draw-subgrid-cards]] ဘေးချင်းကပ် card
+      နှစ်ခုမှာ ခေါင်းစဉ်၊ ဖော်ပြချက်နဲ့ ဈေးနှုန်း ကိုယ်စီ ပါပါတယ်။ [[mark:draw-subgrid-lines]] row line
+      တွေက list ရဲ့ line တွေ ဖြစ်ပြီး card နှစ်ခုလုံးကို ဖြတ်သွားပါတယ်။ ဒါကြောင့် အပိုင်းတိုင်းက card
+      နှစ်ခုလုံးမှာ row တူတူကို ရောက်ပါတယ်။ [[mark:draw-subgrid-axes]] ဒီမှာ row တွေကို မျှသုံးခဲ့ပေမယ့်၊
+      subgrid က column တွေအတွက်ရော၊ နှစ်ဘက်လုံးအတွက်ပါ ရပါတယ်။ subgrid မပေးတဲ့ ဘက်မှာတော့ card က
+      ကိုယ်ပိုင် track တွေကိုပဲ သုံးပါတယ်။ [[mark:draw-contents]] card ရဲ့ child တွေကို အပြင်က grid နဲ့
+      ညီအောင် လုပ်ဖို့ display contents ကို သုံးတာလည်း တွေ့ရနိုင်ပါတယ်။ သူက card ရဲ့ box ကို
+      ဖယ်လိုက်ပါတယ်။ ဒါပေမဲ့ card ရဲ့ နောက်ခံနဲ့ border ပါ ပျောက်သွားပြီး၊ browser တချို့မှာ အဲဒီ element
+      က list ဒါမှမဟုတ် ခလုတ် ဖြစ်မှန်း screen reader က မသိရတော့တာ ရှိခဲ့ပါတယ်။ subgrid ကတော့ box ကို
+      ဆက်ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: subgrid (rows, columns or both)"
+        url: "https://web.dev/learn/css/grid#subgrid"
+      - title: "MDN — Subgrid in one or both dimensions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Subgrid"
+      - title: "MDN — display: contents (accessibility concerns)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display#display_contents"
+    actions:
+      - id: open-subgrid-board
+        type: whiteboard.apply
+        at: { mark: open-subgrid-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-subgrid-cards
+        type: whiteboard.apply
+        at: { mark: draw-subgrid-cards }
+        upsertIds: [d-card1, d-card2, d-n1, d-n2, d-d1, d-d2, d-p1, d-p2]
+        drawMs: 3000
+      - id: draw-subgrid-lines
+        type: whiteboard.apply
+        at: { mark: draw-subgrid-lines }
+        upsertIds: [d-line1, d-line2, d-r1, d-r2, d-r3, d-share]
+        drawMs: 3200
+      - id: draw-subgrid-axes
+        type: whiteboard.apply
+        at: { mark: draw-subgrid-axes }
+        upsertIds: [d-axes]
+        drawMs: 1600
+      - id: draw-contents
+        type: whiteboard.apply
+        at: { mark: draw-contents }
+        upsertIds: [d-contents]
+        drawMs: 1600
+
+  - id: align-board
+    chapter: "Grid ထဲမှာ align လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-align-board]] နောက်ဆုံး တစ်ခုက alignment ပါ။ property နာမည်တွေက lesson 17 မှာ flexbox
+      နဲ့ သုံးခဲ့တာတွေပါပဲ။ [[mark:draw-inline]] grid မှာ flexbox လို main axis မရှိလို့၊ justify property
+      တွေက inline axis အတိုင်း အလုပ်လုပ်ပါတယ်။ inline axis က စာလုံးတွေ စီသွားတဲ့ ဘက် ဖြစ်ပြီး၊ ဒီမှာ
+      ဘယ်ကနေ ညာပါ။ [[mark:draw-block]] align property တွေကတော့ block axis အတိုင်းပါ။ စာကြောင်းတွေ
+      ဆင့်သွားတဲ့ ဘက် ဖြစ်ပြီး အပေါ်ကနေ အောက်ပါ။ [[mark:draw-items]] justify items နဲ့ align items ကို
+      container မှာ ပေးပြီး၊ item တိုင်းက သူ့ area ထဲမှာ ဘယ်နေရာ နေမလဲ သတ်မှတ်ပါတယ်။ [[mark:draw-self]]
+      justify self နဲ့ align self ကိုတော့ item တစ်ခုမှာ ပေးပြီး အဲဒီ item အတွက်ပဲ ပြောင်းပါတယ်။ lesson 17
+      မှာ flexbox က justify self ကို ကျော်တာ မြင်ခဲ့ပေမယ့်၊ grid မှာတော့ အလုပ်လုပ်ပါတယ်။
+      [[mark:draw-content]] justify content နဲ့ align content ကတော့ track တွေ အားလုံးက container ထက်
+      သေးနေရင်၊ သူတို့ကို အစုလိုက် ရွှေ့ပါတယ်။ [[mark:draw-place]] အတွဲ တစ်တွဲစီမှာ place shorthand
+      ရှိပြီး၊ align တန်ဖိုးကို အရင်၊ justify တန်ဖိုးကို နောက်မှ ရေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: alignment"
+        url: "https://web.dev/learn/css/grid#alignment"
+      - title: "MDN — Box alignment in grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Box_alignment_in_grid_layout"
+      - title: "CSS Box Alignment Module Level 3"
+        url: "https://drafts.csswg.org/css-align/"
+    actions:
+      - id: open-align-board
+        type: whiteboard.apply
+        at: { mark: open-align-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds: [e-box, e-i1, e-i2, e-i3, e-i4, e-in, e-in-l]
+        drawMs: 3200
+      - id: draw-block
+        type: whiteboard.apply
+        at: { mark: draw-block }
+        upsertIds: [e-bl, e-bl-l]
+        drawMs: 1800
+      - id: draw-items
+        type: whiteboard.apply
+        at: { mark: draw-items }
+        upsertIds: [e-items]
+        drawMs: 1400
+      - id: draw-self
+        type: whiteboard.apply
+        at: { mark: draw-self }
+        upsertIds: [e-self]
+        drawMs: 1400
+      - id: draw-content
+        type: whiteboard.apply
+        at: { mark: draw-content }
+        upsertIds: [e-content]
+        drawMs: 1400
+      - id: draw-place
+        type: whiteboard.apply
+        at: { mark: draw-place }
+        upsertIds: [e-place]
+        drawMs: 1400
+
+  - id: soon-stretch
+    narration: >
+      [[mark:close-align-board]] မကြာမီ box မှာ စမ်းကြည့်ရအောင်။ [[mark:scroll-soon]] အမြင့် ပုံသေ
+      ရှိပြီး၊ အစိမ်းရောင် label နဲ့ စာ တစ်ကြောင်း ပါပါတယ်။ [[mark:type-soon-grid]] ပထမဆုံး box ကို item
+      နှစ်ခု ပါတဲ့ grid container လုပ်ပါမယ်။ [[mark:after-soon-grid]] row နှစ်ခုက box ရဲ့ အမြင့်ကို
+      ခွဲယူပြီး၊ label က သူ့ cell ပြည့်အောင် ဘယ်ညာရော အပေါ်အောက်ပါ ဆန့်သွားပါတယ်။ ဒါက default ပါ။ grid
+      item တွေက axis နှစ်ဘက်လုံးမှာ stretch ဖြစ်ပါတယ်။ [[mark:explain-stretch]] ခြွင်းချက် တစ်ခုက ပုံလို
+      aspect ratio ရှိတဲ့ item ပါ။ aspect ratio ဆိုတာ ပုံသေ ဖြစ်နေတဲ့ အကျယ်နဲ့ အမြင့် အချိုးပါ။ အဲဒီ item
+      ကိုတော့ ပုံ မပျက်အောင် stretch မလုပ်ဘဲ အစမှာ ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: alignment (items stretch by default)"
+        url: "https://web.dev/learn/css/grid#alignment"
+      - title: "MDN — align-self (normal behaves as stretch; items with an aspect ratio as start)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-self#values"
+      - title: "MDN — align-content (normal stretches auto tracks)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-content"
+    actions:
+      - id: close-align-board
+        type: whiteboard.apply
+        at: { mark: close-align-board }
+        open: false
+      - id: scroll-soon
+        type: preview.scroll
+        at: { mark: scroll-soon }
+        timeoutMs: 5000
+        top: 320
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-soon-grid
+        type: editor.type
+        at: { mark: type-soon-grid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  grid-template-rows: subgrid;\n}\n", occurrence: 1 }
+        text: "\n.soon {\n  display: grid;\n}\n"
+      - id: expect-soon-grid
+        type: expect.preview
+        at: { mark: after-soon-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: soon-label }
+        textContains: "မကြာမီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: soon-align
+    narration: >
+      [[mark:type-place-content]] အခု place content ကို center ပေးပါမယ်။ axis နှစ်ဘက်လုံးကို တစ်ခါတည်း
+      ပေးတာပါ။ [[mark:after-place-content]] track တွေက content လောက်ပဲ ကျုံ့သွားပြီး၊ label နဲ့ စာကြောင်းက
+      box ရဲ့ အလယ်ကို ရောက်သွားပါတယ်။ place content က item တွေကို မဟုတ်ဘဲ track တွေကို ရွှေ့တာပါ။ label က
+      အောက်က စာကြောင်းလောက် ကျယ်နေတာကို သတိထား ကြည့်ပါ။ သူ့ track ထဲမှာ stretch ဖြစ်နေတုန်းမို့ပါ။
+      [[mark:type-align-content]] နောက်တစ်ခုက align content ကို space between ပေးတာပါ။ နောက်မှ ရေးတဲ့အတွက်
+      place content ရဲ့ block axis ဘက် တစ်ဝက်ကိုပဲ အစားထိုးပါတယ်။ [[mark:after-align-content]] နေရာလွတ်က
+      row နှစ်ခုကြားကို ရောက်သွားလို့ label က အပေါ်ဆုံး၊ စာကြောင်းက အောက်ဆုံးကို ရောက်သွားပါတယ်။
+      [[mark:type-justify-items]] အခု justify items ကို center ပေးပါမယ်။ item တိုင်းကို သူ့ cell ထဲမှာ
+      ဘယ်ညာ အလယ် ပို့ပါတယ်။ [[mark:after-justify-items]] label က သူ့ စာသားလောက်ပဲ ကျဉ်းသွားပြီး cell ရဲ့
+      အလယ်မှာ ရှိနေပါတယ်။ place items ကတော့ align items နဲ့ justify items ကို တစ်ခါတည်း ပေးပါတယ်။
+      [[mark:type-justify-self]] နောက်ဆုံး label အတွက်ပဲ rule တစ်ခု ရေးပြီး justify self ကို start
+      ပေးပါမယ်။ ဒီ item တစ်ခုအတွက် justify items ကို အစားထိုးတာပါ။ [[mark:after-justify-self]] label က သူ့
+      cell ရဲ့ အစဘက်ကို ရောက်သွားပြီး စာကြောင်းကတော့ အလယ်မှာ ကျန်ပါတယ်။ item တစ်ခုတည်းအတွက် shorthand
+      ကတော့ place self ပါ။
+    sources:
+      - title: "MDN — place-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/place-content"
+      - title: "MDN — justify-items"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-items"
+      - title: "MDN — justify-self"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-self"
+      - title: "MDN — place-items and place-self"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/place-items"
+      - title: "web.dev Learn CSS — Grid: alignment"
+        url: "https://web.dev/learn/css/grid#alignment"
+    actions:
+      - id: type-place-content
+        type: editor.type
+        at: { mark: type-place-content }
+        cadence: natural
+        target: { file: styles.css, after: ".soon {\n  display: grid;\n", occurrence: 1 }
+        text: "  place-content: center;\n"
+      - id: expect-place-content
+        type: expect.preview
+        at: { mark: after-place-content }
+        timeoutMs: 4000
+        target: { by: testId, value: soon-note }
+        textContains: "ဖွင့်ပါမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-align-content
+        type: editor.type
+        at: { mark: type-align-content }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  place-content: center;\n", occurrence: 1 }
+        text: "  align-content: space-between;\n"
+      - id: expect-align-content
+        type: expect.preview
+        at: { mark: after-align-content }
+        timeoutMs: 4000
+        target: { by: testId, value: soon }
+        textContains: "မကြာမီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-justify-items
+        type: editor.type
+        at: { mark: type-justify-items }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  align-content: space-between;\n", occurrence: 1 }
+        text: "  justify-items: center;\n"
+      - id: expect-justify-items
+        type: expect.preview
+        at: { mark: after-justify-items }
+        timeoutMs: 4000
+        target: { by: testId, value: soon-label }
+        textContains: "မကြာမီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-justify-self
+        type: editor.type
+        at: { mark: type-justify-self }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-items: center;\n}\n", occurrence: 1 }
+        text: "\n.soon .label {\n  justify-self: start;\n}\n"
+      - id: expect-justify-self
+        type: expect.preview
+        at: { mark: after-justify-self }
+        timeoutMs: 4000
+        target: { by: testId, value: soon-note }
+        textContains: "ဖွင့်ပါမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း တစ်ခုပါ။ subgrid က row တွေကိုပဲ မျှသုံးနိုင်သလား။ ခဏ စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] row တွေကိုပဲ မဟုတ်ပါဘူး။ column တွေ ဒါမှမဟုတ် နှစ်ဘက်လုံးကိုလည်း ရပါတယ်။
+      ပြီးတော့ grid area ပါတဲ့ item ကို ကိုယ်တိုင် နေရာချထားလို့ auto placement က မရွှေ့ပါဘူး။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ grid template areas က layout ကို နာမည် ပေးထားတဲ့ cell တွေနဲ့
+      ပုံဆွဲပေးပြီး၊ grid area က item တစ်ခုစီကို သူ့ area ထဲ ထည့်ပေးပါတယ်။ row တိုင်းမှာ cell အရေအတွက်
+      တူရပြီး၊ area တိုင်း လေးထောင့် ဖြစ်ရပါတယ်။ အစက်က cell ကို အလွတ် ထားပေးပါတယ်။ [[mark:recap-more]]
+      media query က HTML ကို မပြင်ဘဲ map ကို အသစ် တစ်ခုနဲ့ လဲပေးနိုင်ပါတယ်။ subgrid က အထဲက grid ကို parent
+      ရဲ့ track တွေ မျှသုံးခိုင်းပြီး၊ justify နဲ့ align property တွေက item တွေနဲ့ track တွေကို axis
+      နှစ်ခုပေါ်မှာ ရွှေ့ပေးပါတယ်။ [[mark:next-lesson]] grid lesson သုံးခုက ဒီမှာ ပြီးပါပြီ။ justify self
+      မှာ start ကို သုံးခဲ့ပါတယ်။ start ဆိုတာ စာ စရေးတဲ့ ဘက် ဖြစ်ပြီး၊ အမြဲတမ်း ဘယ်ဘက် မဟုတ်ပါဘူး။ နောက်
+      lesson မှာတော့ ဒီလိုပဲ ဘယ်၊ ညာ အစား start နဲ့ end ကို သုံးတဲ့ logical property တွေကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: check your understanding"
+        url: "https://web.dev/learn/css/grid#check_your_understanding"
+      - title: "web.dev Learn CSS — Grid"
+        url: "https://web.dev/learn/css/grid"
+      - title: "web.dev Learn CSS — Logical properties (next lesson)"
+        url: "https://web.dev/learn/css/logical-properties"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-check, f-a, f-rule]
+        drawMs: 2400
+      - id: expect-final-layout
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".layout {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 12px;\n  grid-template-areas:\n    \"header header\"\n    \"menu hours\"\n    \"footer footer\";\n  grid-template-areas: \"header header\" \"menu hours\" \"footer .\";\n  grid-template-areas: \"header header\" \"menu hours\" \"footer footer\";\n}\n\n.site-header { grid-area: header; }\n.drinks { grid-area: menu; }\n.hours { grid-area: hours; }\n.site-footer { grid-area: footer; }\n\n@media (width < 40em) {\n  .layout {\n    grid-template-areas: \"header\" \"menu\" \"hours\" \"footer\";\n    grid-template-columns: 1fr;\n  }\n}\n"
+      - id: expect-final-subgrid
+        type: expect.file
+        at: { afterAction: expect-final-layout }
+        path: styles.css
+        contains: "\n.drinks .menu {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  column-gap: 12px;\n}\n\n.drinks .menu-card {\n  display: grid;\n  grid-row: span 3;\n  grid-template-rows: subgrid;\n}\n"
+      - id: expect-final-align
+        type: expect.file
+        at: { afterAction: expect-final-subgrid }
+        path: styles.css
+        contains: "\n.soon {\n  display: grid;\n  place-content: center;\n  align-content: space-between;\n  justify-items: center;\n}\n\n.soon .label {\n  justify-self: start;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
