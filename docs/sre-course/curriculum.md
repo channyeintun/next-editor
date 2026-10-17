@@ -354,19 +354,24 @@ One deck per module (per the platform report: about 15–35 pages each), with Mo
 and Module 6 in two so no deck passes about 4 MB per fetch. That is **9 decks and 9 publish clicks**
 for Chan.
 
-| Deck                                                   | Lessons | Pages (incl. map) |
-| ------------------------------------------------------ | ------- | ----------------- |
-| Next Editor · SRE 1 · Why SRE                          | L01–L05 | 27                |
-| Next Editor · SRE 2 · Agree and notice                 | L06–L08 | 19                |
-| Next Editor · SRE 3 · Respond and learn                | L09–L13 | 27                |
-| Next Editor · SRE 4 · People and teams                 | L14–L16 | 22                |
-| Next Editor · SRE 5A · Toil and tests                  | L17–L19 | 15                |
-| Next Editor · SRE 5B · Capacity and data               | L20–L22 | 19                |
-| Next Editor · SRE 5C · Design and platforms            | L23–L25 | 14                |
-| Next Editor · SRE 6A · AI                              | L26–L29 | 22                |
-| Next Editor · SRE 6B · Where you work, and what's next | L30–L32 | 16                |
-| **Total**                                              | 32      | **181**           |
+| Deck                                                   | Lessons | Pages (incl. map)                |
+| ------------------------------------------------------ | ------- | -------------------------------- |
+| Next Editor · SRE 1 · Why SRE                          | L01–L05 | 27 (built: 61 with pacing pages) |
+| Next Editor · SRE 2 · Agree and notice                 | L06–L08 | 19                               |
+| Next Editor · SRE 3 · Respond and learn                | L09–L13 | 27                               |
+| Next Editor · SRE 4 · People and teams                 | L14–L16 | 22                               |
+| Next Editor · SRE 5A · Toil and tests                  | L17–L19 | 15                               |
+| Next Editor · SRE 5B · Capacity and data               | L20–L22 | 19                               |
+| Next Editor · SRE 5C · Design and platforms            | L23–L25 | 14                               |
+| Next Editor · SRE 6A · AI                              | L26–L29 | 22                               |
+| Next Editor · SRE 6B · Where you work, and what's next | L30–L32 | 16                               |
+| **Total**                                              | 32      | **181**                          |
 
+- **Built so far:** SRE 1 ([edit](https://docs.google.com/presentation/d/1C9xeoD0ksYQ53VJi5r8S5gFbu_6RBb91kui2eONaf0I/edit),
+  [published](https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub)),
+  61 pages, about 92 KB of SVG per page. New module decks start as a Drive copy of the page-kit deck
+  [Next Editor · SRE · Page kit](https://docs.google.com/presentation/d/1B08KSgB1rhx_x3jkboJ-igU4LbbPo3hh8m7dpNplttI/edit)
+  (kit pages K1–K7 with `{{FIELD}}` placeholders), not of the lesson template.
 - Copy "Next Editor · Lesson Template" (Drive id `1J6QneZBDjB3c2dZ7fp3XBk0-yZt4F42uGgU8UUcrD9A`)
   with the Drive `copy_file` tool, **delete its 12 sample pages** (they add about 1 MB to every
   fetch), and build pages with `update_presentation`, checking each with
