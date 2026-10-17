@@ -1,0 +1,1222 @@
+# SRE from zero, lesson 7: SLOs from the user's side (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-07-slo-from-the-users-side.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-07-slo-from-the-users-side.md \
+#     src/studio/scripts/sre-07-slo-from-the-users-side.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: every Eats SLO is green while lunch orders hang (cover); three ways
+# a green SLO lies. Board B1 (P1 flow): where we measured, a lost callback and
+# the synthetic test order. Pages: measure the journey, bad minutes, what only
+# the phone sees. Board B2 (P5 bars): whom we averaged, the supermarket chain's
+# Mandalay stores and per-customer SLOs. Board B3 (P5 bars): what we never
+# promised, the profile service's implicit SLO. Pages: make the promise
+# explicit, where SLOs strain, this week; recap on notes.md.
+#
+# Extra marks, all at existing sentence ends, add no spoken text: b1-s1b, b2-s2b
+# and b3-s2b keep each board step to at most three new labelled elements and
+# land the shop, the 2% note and the Eats box as they are named; b1-s3b and
+# b2-s3b land the second bar and the finding as the narration names them;
+# hook-lunch only splits the opening 488-character dialog; ask-question times
+# the recap pause (see select-question). No page or board step holds longer
+# than ~37 s at 70 ms/char (the cover), so no pacing page was added beyond the
+# voice script's own.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for titles, axes and the
+# finding arrow; blue the thing named and the delivered-reliability bars; green
+# healthy (the two backends whose SLOs read green, the end-to-end test, the fix);
+# red failure; orange the caveat or limit (the written threshold, the removed
+# cache, the cost of getting better); violet the request flow and the teams
+# that built on the profile service. A label on two lines is two text assets,
+# one per line: the overflow rule counts a whole text's length.
+#
+# Deck pages: deck "Next Editor · SRE 2 · Agree and notice". The /pub URL
+# below is a placeholder until Chan publishes the deck; the Director's
+# unreachable-deck warning is expected until then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-07-slo-from-the-users-side.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-07-slo-from-the-users-side.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-07-slo-from-the-users-side.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-07-slo-from-the-users-side
+  title: "SRE from zero 7: User ဘက်က ကြည့်တဲ့ SLO"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # User ဘက်က ကြည့်တဲ့ SLO
+
+        - critical user journey — user ရည်ရွယ်ချက် တစ်ခု ပြီးဖို့ ဖြတ်သွားတဲ့ အဆင့်တွေ၊ user ပြောသလို နာမည်ပေး
+        - synthetic test order — လမ်းတစ်လျှောက်လုံးကို user လို လျှောက်စစ်တဲ့ test
+        - bad minute — journey ရဲ့ အဆင့် တစ်ခုခု မကောင်းခဲ့တဲ့ မိနစ်
+        - client-side SLO — server မမြင်ရတာကို ဖုန်းဘက်ကနေ တိုင်း
+        - per-customer SLO — ပျမ်းမျှထဲမှာ ပျောက်နေတဲ့ customer ကြီးကို ခွဲတိုင်း
+        - implicit SLO — ကတိ မပေးထားပေမဲ့ သုံးတဲ့သူတွေ အားကိုးလာတဲ့ reliability
+
+        မေးခွန်း: ရက် 30၊ ကောင်းတဲ့ မိနစ် 99.5%။ bad minute ဘယ်နှခု သုံးခွင့် ရှိလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>User ဘက်က ကြည့်တဲ့ SLO</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 7</p>
+              <h1>User ဘက်က ကြည့်တဲ့ SLO</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l07-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p01
+    - id: l07-p01b
+      contentType: google
+      name: Three ways a green SLO lies
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p01b
+    - id: l07-p02
+      contentType: google
+      name: Measure the journey
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p02
+    - id: l07-p02b
+      contentType: google
+      name: Journey steps
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p02b
+    - id: l07-p02c
+      contentType: google
+      name: A bad minute
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p02c
+    - id: l07-p03
+      contentType: google
+      name: Bad minutes a month
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p03
+    - id: l07-p04
+      contentType: google
+      name: What only the phone sees
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p04
+    - id: l07-p04b
+      contentType: google
+      name: The noise floor
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p04b
+    - id: l07-p04c
+      contentType: google
+      name: Count above the floor
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p04c
+    - id: l07-p04d
+      contentType: google
+      name: Hard parts of phone data
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p04d
+    - id: l07-p05
+      contentType: google
+      name: Make the promise explicit
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p05
+    - id: l07-p06
+      contentType: google
+      name: Where SLOs strain
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p06
+    - id: l07-p06b
+      contentType: google
+      name: A means, not the goal
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p06b
+    - id: l07-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l07_p07
+  whiteboardAssets:
+    # ---- Board B1: the lunch order path (P1 flow, four boxes) -------------
+    # Step 1: app -> payment -> order. Payment and order are green: their own SLOs read green.
+    - {
+        id: l07-b1-app,
+        kind: rectangle,
+        x: 280,
+        y: 250,
+        width: 140,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l07-b1-app-t,
+        kind: text,
+        x: 300,
+        y: 272,
+        width: 80,
+        height: 35,
+        text: "app",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 426,
+        y: 270,
+        width: 54,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l07-b1-pay,
+        kind: rectangle,
+        x: 486,
+        y: 250,
+        width: 170,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l07-b1-pay-t,
+        kind: text,
+        x: 504,
+        y: 272,
+        width: 130,
+        height: 35,
+        text: "payment",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 662,
+        y: 270,
+        width: 54,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l07-b1-ord,
+        kind: rectangle,
+        x: 722,
+        y: 250,
+        width: 140,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l07-b1-ord-t,
+        kind: text,
+        x: 742,
+        y: 272,
+        width: 100,
+        height: 35,
+        text: "order",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Step 1b: on to the shop.
+    - {
+        id: l07-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 868,
+        y: 270,
+        width: 54,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l07-b1-shop,
+        kind: rectangle,
+        x: 928,
+        y: 250,
+        width: 150,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l07-b1-shop-t,
+        kind: text,
+        x: 950,
+        y: 272,
+        width: 100,
+        height: 35,
+        text: "ဆိုင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Step 2: the callback between payment and order is lost.
+    - {
+        id: l07-b1-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 656,
+        y: 262,
+        width: 66,
+        height: 56,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l07-b1-lost,
+        kind: text,
+        x: 600,
+        y: 345,
+        width: 250,
+        height: 35,
+        text: "callback ပျောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 3: the home-page check covers only the start; 3b: the test order spans the path.
+    - {
+        id: l07-b1-home-bar,
+        kind: rectangle,
+        x: 280,
+        y: 430,
+        width: 140,
+        height: 14,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l07-b1-home-t,
+        kind: text,
+        x: 440,
+        y: 418,
+        width: 310,
+        height: 35,
+        text: "home page check: OK",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b1-test-bar,
+        kind: rectangle,
+        x: 280,
+        y: 510,
+        width: 798,
+        height: 14,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l07-b1-test-t,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 310,
+        height: 35,
+        text: "test order၊ အစအဆုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: whom we averaged (P5 bars) ------------------------------
+    # Bar heights are schematic (no scale is drawn); the red bar is narrow because
+    # the Mandalay stores are about 2% of all payments.
+    - {
+        id: l07-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 285,
+        y: 430,
+        width: 430,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l07-b2-all,
+        kind: rectangle,
+        x: 300,
+        y: 195,
+        width: 110,
+        height: 260,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l07-b2-all-t,
+        kind: text,
+        x: 470,
+        y: 200,
+        width: 400,
+        height: 35,
+        text: "ငွေချေမှု အားလုံး: 99.91%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b2-chain,
+        kind: rectangle,
+        x: 425,
+        y: 285,
+        width: 24,
+        height: 170,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l07-b2-chain-t,
+        kind: text,
+        x: 470,
+        y: 290,
+        width: 445,
+        height: 35,
+        text: "chain၊ မန္တလေး ဆိုင်ခွဲ: 96%",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b2-share,
+        kind: text,
+        x: 405,
+        y: 472,
+        width: 335,
+        height: 35,
+        text: "ငွေချေမှုရဲ့ 2% လောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 3: per-customer SLOs, then what they found.
+    - {
+        id: l07-b2-per,
+        kind: rectangle,
+        x: 280,
+        y: 545,
+        width: 280,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l07-b2-per-t1,
+        kind: text,
+        x: 295,
+        y: 555,
+        width: 230,
+        height: 35,
+        text: "merchant 10 ခု",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b2-per-t2,
+        kind: text,
+        x: 295,
+        y: 590,
+        width: 255,
+        height: 35,
+        text: "per-customer SLO",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b2-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 570,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l07-b2-found,
+        kind: rectangle,
+        x: 620,
+        y: 545,
+        width: 370,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l07-b2-found-t1,
+        kind: text,
+        x: 635,
+        y: 555,
+        width: 305,
+        height: 35,
+        text: "တွေ့တာ: ငွေရှင်းစက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b2-found-t2,
+        kind: text,
+        x: 635,
+        y: 590,
+        width: 350,
+        height: 35,
+        text: "model အဟောင်း တစ်မျိုး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3: what we never promised (P5 monthly bars) ---------------
+    # Axis at y 500; bar height = (percent - 99) x 200 px, so 99.99% stands 198 px,
+    # 99.7% 140 px, and the written 99.5% sits 100 px up (y 400). The two measured
+    # levels (99.99%, 99.7%) are named under the axis, below their bars; the other
+    # labels sit in the right-hand column (x 750+), beside what they name.
+    - {
+        id: l07-b3-title,
+        kind: text,
+        x: 750,
+        y: 160,
+        width: 310,
+        height: 45,
+        text: "profile service",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l07-b3-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 285,
+        y: 476,
+        width: 455,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l07-b3-m1,
+        kind: rectangle,
+        x: 300,
+        y: 302,
+        width: 50,
+        height: 198,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l07-b3-m2,
+        kind: rectangle,
+        x: 362,
+        y: 304,
+        width: 50,
+        height: 196,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l07-b3-m3,
+        kind: rectangle,
+        x: 424,
+        y: 302,
+        width: 50,
+        height: 198,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l07-b3-m4,
+        kind: rectangle,
+        x: 486,
+        y: 302,
+        width: 50,
+        height: 198,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l07-b3-m5,
+        kind: rectangle,
+        x: 548,
+        y: 304,
+        width: 50,
+        height: 196,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l07-b3-m6,
+        kind: rectangle,
+        x: 610,
+        y: 302,
+        width: 50,
+        height: 198,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    # The delivered level, named under the bars it measures (like the red bar's label in step 3).
+    - {
+        id: l07-b3-actual-t,
+        kind: text,
+        x: 400,
+        y: 514,
+        width: 130,
+        height: 35,
+        text: "99.99%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-written,
+        kind: rectangle,
+        x: 290,
+        y: 398,
+        width: 445,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l07-b3-written-t,
+        kind: text,
+        x: 750,
+        y: 385,
+        width: 245,
+        height: 35,
+        text: "ရေးထားတာ: 99.5%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 2: teams build on it (violet bricks on the bars); 2b: Eats drops its cache.
+    - {
+        id: l07-b3-team1,
+        kind: rectangle,
+        x: 300,
+        y: 250,
+        width: 172,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l07-b3-team2,
+        kind: rectangle,
+        x: 480,
+        y: 250,
+        width: 180,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l07-b3-team-t1,
+        kind: text,
+        x: 750,
+        y: 215,
+        width: 320,
+        height: 35,
+        text: "သူ့အပေါ် ဆောက်ထားတဲ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-team-t2,
+        kind: text,
+        x: 750,
+        y: 250,
+        width: 135,
+        height: 35,
+        text: "အဖွဲ့တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-eats,
+        kind: rectangle,
+        x: 300,
+        y: 196,
+        width: 290,
+        height: 46,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l07-b3-eats-t,
+        kind: text,
+        x: 312,
+        y: 202,
+        width: 272,
+        height: 35,
+        text: "Eats: cache ဖြုတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 3: the month after the database move.
+    - {
+        id: l07-b3-drop,
+        kind: rectangle,
+        x: 672,
+        y: 360,
+        width: 50,
+        height: 140,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l07-b3-drop-t,
+        kind: text,
+        x: 560,
+        y: 514,
+        width: 430,
+        height: 35,
+        text: "99.7%: သောကြာ နေ့လယ် outage",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 4: the implicit SLO; step 5: getting better hurts too.
+    - {
+        id: l07-b3-implicit-t1,
+        kind: text,
+        x: 750,
+        y: 298,
+        width: 230,
+        height: 35,
+        text: "implicit SLO =",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-implicit-t2,
+        kind: text,
+        x: 750,
+        y: 333,
+        width: 305,
+        height: 35,
+        text: "တကယ် ရနေတဲ့ bar တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-better-t1,
+        kind: text,
+        x: 280,
+        y: 572,
+        width: 290,
+        height: 35,
+        text: "ပိုကောင်းလာရင်လည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l07-b3-better-t2,
+        kind: text,
+        x: 280,
+        y: 608,
+        width: 540,
+        height: 35,
+        text: "ပြန်စစ်တဲ့ job၊ retry wrapper အလဟဿ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2607
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: SLO အစိမ်းနဲ့ ရပ်နေတဲ့ order
+    narration: >
+      [[mark:show-p01]] Top-up မှာ သဘောတူထားတဲ့ ပစ်မှတ်၊ SLO တွေနဲ့ ပျက်ခွင့်၊ error budget ကုန်ရင် ဘာလုပ်မလဲ ဆိုတဲ့ policy ရလာတော့ အစားအသောက် ပို့ပေးတဲ့ Padauk Eats အဖွဲ့ကလည်း သူတို့အတွက် လုပ်ပေးဖို့ တောင်းပါတယ်။ မသီရိက Eats သုံးတဲ့ payment service နဲ့ order service အတွက် SLO တွေ ရေးပေးပါတယ်။
+      [[mark:hook-lunch]] တစ်ရက် နေ့လယ်စာချိန်မှာ SLO တွေ အားလုံး အစိမ်းရောင် ပြနေပေမဲ့ ငွေဖြတ်သွားပြီ၊ loading က လည်နေတုန်းပဲ၊ ပြေစာလည်း မပေါ်ဘူး ဆိုတဲ့ message တွေ မစုရဲ့ support အဖွဲ့ဆီ အဆက်မပြတ် ဝင်လာပါတယ်။ ဒါဆို ဘာကို တိုင်းဖို့ မေ့ခဲ့လဲ?
+      [[mark:show-p01b]] ဒီ lesson မှာ အစိမ်းရောင် SLO က လှည့်စားတတ်တဲ့ နည်း သုံးမျိုးကို ကြည့်ပါမယ်။ ဘယ်နေရာမှာ တိုင်းခဲ့လဲ၊ ဘယ်သူတွေကို ပျမ်းမျှခဲ့လဲ၊ ဘာကို ကတိ မပေးခဲ့လဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+    actions:
+      # -1750 / -1450, as Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l07-p01,
+        }
+      # The three lies, as the narration lists them.
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l07-p01b }
+
+  - id: where-measured
+    chapter: ဘယ်နေရာမှာ တိုင်းခဲ့လဲ
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] မသီရိက နေ့လယ်စာ မှာတဲ့ လမ်းကြောင်းကို ဆွဲကြည့်ပါတယ်။ user က app ကနေ ငွေချေရင် payment service က ငွေဖြတ်ပြီး order service ကို ငွေရပြီလို့ ပြန်ခေါ်ပြောရပါတယ်၊ ဒီလို ပြန်ခေါ်တာကို callback လို့ ခေါ်ပါတယ်။ [[mark:b1-s1b]] callback ရောက်မှ order က ဆိုင်ဆီ ရောက်ပြီး app မှာ ပြေစာ ပေါ်တာပါ။ SLO တွေကတော့ service တစ်ခုချင်းအလိုက်ပဲ ရှိပါတယ်။
+      [[mark:b1-s2]] အဲဒီနေ့က callback တွေ error မပြဘဲ တိတ်တိတ်လေး ပျောက်နေခဲ့ပါတယ်။ payment service က ငွေဖြတ်တာ အောင်မြင်နေလို့ အစိမ်းရောင်၊ order service ကလည်း ရောက်လာတဲ့ request တွေကို အကုန် လုပ်ပေးနေလို့ အစိမ်းရောင်ပါပဲ။ ရောက်မလာတဲ့ request ကိုတော့ fail လို့ ဘယ်သူမှ မရေတွက်ပါဘူး။ ဒါကြောင့် SLO တိုင်း အစိမ်းရောင် ဖြစ်နေပေမဲ့ user ကတော့ ငွေပေးပြီးသားနဲ့ ဗိုက်ဆာဆာ စောင့်နေရတာပါ။
+      [[mark:b1-s3]] home page ပွင့်လား မိနစ်တိုင်း စစ်တဲ့ check ကလည်း လမ်းကြောင်းရဲ့ အစလေးကိုပဲ စစ်လို့ OK ပဲ ပြနေခဲ့ပါတယ်။ [[mark:b1-s3b]] ဒါကြောင့် မသီရိက test wallet နဲ့ test ဆိုင်ကို သုံးပြီး order တစ်ခုကို user လို အစအဆုံး မိနစ်တိုင်း မှာကြည့်တဲ့ synthetic test order ကို ထည့်ပါတယ်၊ ပြေစာ မပေါ်ရင် fail ဖြစ်လို့ user တွေ မတိုင်ခင် သိရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      # Step 1 is split in two: at most three boxes per step, and the shop lands as it is named.
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l07-b1-app,
+            l07-b1-app-t,
+            l07-b1-a1,
+            l07-b1-pay,
+            l07-b1-pay-t,
+            l07-b1-a2,
+            l07-b1-ord,
+            l07-b1-ord-t,
+          ]
+        drawMs: 2400
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds: [l07-b1-a3, l07-b1-shop, l07-b1-shop-t]
+        drawMs: 1000
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l07-b1-strike, l07-b1-lost]
+        drawMs: 1200
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l07-b1-home-bar, l07-b1-home-t]
+        drawMs: 1200
+      # The test order's bar lands as the narration names it.
+      - id: b1-s3b
+        type: whiteboard.apply
+        at: { mark: b1-s3b }
+        upsertIds: [l07-b1-test-bar, l07-b1-test-t]
+        drawMs: 1600
+
+  - id: journey
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] ဒါက ပထမ လှည့်စားပုံပါ၊ တိုင်းတဲ့ နေရာ မှားနေတာပါ။ user တစ်ယောက် ရည်ရွယ်ချက် တစ်ခု ပြီးဖို့ ဖြတ်သွားရတဲ့ အရေးကြီး အဆင့်တွေကို critical user journey လို့ ခေါ်ပြီး service တစ်ခုချင်းအစား journey တစ်ခုလုံးကို တိုင်းရပါမယ်။ Eats အဖွဲ့က ဒီ journey ကို architecture ပုံထဲက နာမည်တွေနဲ့ မခေါ်ဘဲ user ပြောသလို နေ့လယ်စာ မှာမယ်လို့ ခေါ်ပြီး app ထဲမှာရော Padauk API မှာရော တိုင်းပါတယ်။
+      [[mark:show-p02b]] journey ထဲက ဟင်း ရွေးတာ၊ Pay နှိပ်တာ၊ ပြေစာ မြင်တာ ဆိုတဲ့ အဆင့်တွေကိုလည်း နာမည်ပေးပြီး metric နဲ့ log လို telemetry တွေမှာ journey နာမည်ကို tag အဖြစ် တွဲထားတော့ ဘယ် journey ရဲ့ ဘယ်အဆင့်မှာ ပျက်နေလဲ ချက်ချင်း မြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l07-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l07-p02b }
+
+  - id: bad-minutes
+    chapter: Bad minute
+    narration: >
+      [[mark:show-p02c]] ဒါဆို journey ကို ဘယ်လို တိုင်းမလဲ? အဆင့်တိုင်းမှာ user ကြုံရတာကို တိုင်းတဲ့ ကိန်းဂဏန်း၊ SLI တစ်ခုစီ ရှိပါတယ်။ ဥပမာ နေ့လယ် ၁၂ နာရီ ၇ မိနစ်မှာ Pay နှိပ်တာ အဆင်ပြေပေမဲ့ ပြေစာ မြင်တဲ့ အဆင့်က fail နေရင် အဲဒီ မိနစ်ကို journey အတွက် မကောင်းတဲ့ မိနစ်၊ bad minute လို့ ရေတွက်ပါတယ်၊ user အတွက်တော့ အဆင့် တစ်ခု ပျက်ရင် journey တစ်ခုလုံး ပျက်တာပါပဲ။
+      [[mark:show-p03]] journey SLO ကတော့ မိနစ် အားလုံးထဲက ကောင်းတဲ့ မိနစ် ရာခိုင်နှုန်းပါ။ ရက် ၃၀ မှာ မိနစ် ၄၃၂၀၀ ရှိပြီး product manager မနှင်းနဲ့ Eats အဖွဲ့က ၉၉.၉ ရာခိုင်နှုန်းကို သဘောတူထားတော့ တစ်လကို bad minute ၄၃ ခုလောက်ပဲ သုံးခွင့် ရှိပါတယ်၊ ဒါက journey ရဲ့ error budget ပါ။ callback ပျောက်တဲ့ နေ့လယ်မျိုးဆို ဒီ budget မြန်မြန် ကုန်လို့ alert တက်မှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+    actions:
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l07-p02c }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l07-p03 }
+
+  - id: phone
+    chapter: ဖုန်းကပဲ မြင်တာ
+    narration: >
+      [[mark:show-p04]] တချို့ ပြဿနာတွေကို server က ဘယ်တော့မှ မမြင်ရပါဘူး။ app crash ဖြစ်တာ၊ လိုင်းပြတ်တာ၊ ခလုတ် နှိပ်လို့ ဘာမှ မဖြစ်တာတွေကို user ရဲ့ ဖုန်းကပဲ မြင်လို့ ဖုန်းဘက်ကနေ တိုင်းတဲ့ client-side SLO လည်း လိုပါတယ်။ ဒါပေမဲ့ ဖုန်းက data မှာ ရှောင်လို့မရတဲ့ နောက်ခံ fail တွေ အမြဲ ပါပါတယ်။
+      [[mark:show-p04b]] ဥပမာ Eats rider တွေက ဈေးပေါတဲ့ ဖုန်းနဲ့ အားနည်းတဲ့ mobile data ကို သုံးလို့ ပုံမှန် နေ့တွေမှာတောင် request ၃ ရာခိုင်နှုန်းလောက် fail နေပါတယ်။ request တွေကို တိုက်ရိုက် ရေတွက်ရင် ပစ်မှတ်ကို ၉၇ ရာခိုင်နှုန်းအောက် လျှော့ထားရပြီး budget က အရမ်း ကျယ်သွားလို့ တကယ့် outage မှာတောင် page ဝင်မလာနိုင်တော့ပါဘူး။
+      [[mark:show-p04c]] ဒါကြောင့် rider app မှာ တစ်မိနစ်အတွင်း fail တာ ၅ ရာခိုင်နှုန်း ကျော်မှ bad minute လို့ ရေတွက်ပါတယ်။ ဒီတော့ ပုံမှန် မိနစ်တွေက budget ကို မသုံးတော့ဘဲ rider တွေ တကယ် ဒုက္ခရောက်တဲ့ မိနစ်တွေကပဲ သုံးလို့ ပစ်မှတ်ကို တင်းတင်း ထားနိုင်ပါတယ်။
+      [[mark:show-p04d]] ဖုန်းဘက်က ပြဿနာကို ပြင်ရင်လည်း app store ကနေ user တွေ update လုပ်တဲ့အထိ ရက်နဲ့ချီ စောင့်ရပါတယ်။ ဖုန်းက data ကလည်း နောက်ကျပြီး ရောက်တတ်သလို ဘယ်သူမဆို ခေါ်လို့ရတဲ့ public endpoint ကနေ ကိုယ် မထိန်းနိုင်တဲ့ device တွေဆီက လာတာမို့ ယုံဖို့ သတိထားရပါတယ်။
+      ဒါကြောင့် SLI တစ်ခုချင်းကို အဖွဲ့တိုင်း ယုံတဲ့ အဓိပ္ပာယ် တစ်ခုတည်း သတ်မှတ်ပြီး မျှသုံးတဲ့ SLO tool တစ်ခုထဲမှာ ထားပါ၊ ဒါမှ ကိန်းဂဏန်းကို ငြင်းမနေဘဲ ပြင်ကြမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "OpenTelemetry: Browser getting started",
+          url: "https://opentelemetry.io/docs/languages/js/getting-started/browser/",
+        }
+      - { title: "web.dev: Web Vitals", url: "https://web.dev/articles/vitals" }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l07-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l07-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l07-p04c }
+      - { id: show-p04d, type: slide.show, at: { mark: show-p04d }, slideId: l07-p04d }
+
+  - id: whom-averaged
+    chapter: ဘယ်သူတွေကို ပျမ်းမျှခဲ့လဲ
+    narration: >
+      [[mark:close-p04d]] [[mark:b2-s1]] ဒုတိယ လှည့်စားပုံက ဆိုင်တွေမှာ QR နဲ့ ငွေလက်ခံပေးတဲ့ Padauk for Business မှာ ပေါ်ပါတယ်။ ငွေချေမှု အားလုံးကို ပေါင်းကြည့်ရင် ၉၉.၉၁ ရာခိုင်နှုန်း အောင်မြင်နေလို့ dashboard က အစိမ်းရောင်ပါ။ ဒါပေမဲ့ တစ်မနက်မှာ အကြီးဆုံး customer ဖြစ်တဲ့ supermarket chain က ဒေါသတကြီး ဖုန်းဆက်လာပါတယ်။
+      [[mark:b2-s2]] သူတို့ရဲ့ မန္တလေး ဆိုင်ခွဲတွေမှာ QR ငွေချေတာ ၂၅ ခါမှာ ၁ ခါ fail နေတာ ရက်အတော်ကြာနေပါပြီ။ [[mark:b2-s2b]] အဲဒီ ဆိုင်ခွဲတွေက ငွေချေမှု အားလုံးရဲ့ ၂ ရာခိုင်နှုန်းလောက်ပဲ ရှိလို့ သူတို့ရဲ့ ၉၆ ရာခိုင်နှုန်းက ပေါင်းထားတဲ့ ကိန်းဂဏန်းကို သိပ်မလှုပ်နိုင်ပါဘူး။ lesson ၄ က gray failure လိုပဲ ကိန်းဂဏန်း တစ်ခုတည်းက နေ့တိုင်း ဒုက္ခရောက်နေတဲ့ အုပ်စု သေးသေးလေးကို ဖုံးထားနိုင်တာပါ။
+      [[mark:b2-s3]] ဒါကြောင့် Padauk က အကြီးဆုံး merchant ၁၀ ခုအတွက် တစ်ခုချင်း သီးသန့် တိုင်းတဲ့ per-customer SLO တွေ ထားလိုက်ပါတယ်၊ ရှိပြီးသား metric မှာ merchant label တစ်ခု ထည့်ရုံပါပဲ။ [[mark:b2-s3b]] ခွဲကြည့်တော့ fail တွေက ကောင်တာက ငွေရှင်းစက် model အဟောင်း တစ်မျိုးမှာပဲ စုနေတာ တွေ့ရပါတယ်။ အခုဆို alert မှာ merchant နာမည် ပါလာလို့ account manager က ဆိုင်တွေ မတိုင်ခင် chain ကို ကြိုဖုန်းဆက်နိုင်ပါပြီ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+    actions:
+      - { id: close-p04d, type: slide.close, at: { mark: close-p04d, offsetMs: -400 } }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l07-b2-axis, l07-b2-all, l07-b2-all-t]
+        drawMs: 1800
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l07-b2-chain, l07-b2-chain-t]
+        drawMs: 1200
+      # The 2% note lands as the narration names it.
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds: [l07-b2-share]
+        drawMs: 900
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l07-b2-per, l07-b2-per-t1, l07-b2-per-t2]
+        drawMs: 1500
+      # The finding lands as the narration names it.
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l07-b2-arrow, l07-b2-found, l07-b2-found-t1, l07-b2-found-t2]
+        drawMs: 1800
+
+  - id: never-promised
+    chapter: ဘာကို ကတိ မပေးခဲ့လဲ
+    narration: >
+      [[mark:b3-s1]] တတိယ လှည့်စားပုံကတော့ ကတိ မပေးခဲ့တဲ့ နေရာက လာပါတယ်။ user လိပ်စာတွေ သိမ်းပြီး တခြား အဖွဲ့တွေကို ပေးတဲ့ profile service က SLO ကို ၉၉.၅ ရာခိုင်နှုန်းလို့ ရေးထားပေမဲ့ လပေါင်း အများကြီး တကယ် ပေးခဲ့တာက ၉၉.၉၉ ရာခိုင်နှုန်းပါ။
+      [[mark:b3-s2]] ဘယ်တော့မှ မပျက်တာ မြင်တော့ တခြား အဖွဲ့တွေက သူ့အပေါ် တဖြည်းဖြည်း အားကိုးလာကြပါတယ်။ [[mark:b3-s2b]] ဥပမာ Eats အဖွဲ့က profile service ပျက်ရင် သုံးဖို့ ထားတဲ့ လိပ်စာ cache ကို မလိုတော့ဘူး ထင်ပြီး ဖြုတ်လိုက်ပေမဲ့ ဘယ်သူ့ကိုမှ မပြောခဲ့ပါဘူး။
+      [[mark:b3-s3]] နောက်တော့ profile အဖွဲ့က database ကို အသစ် တစ်ခုဆီ ပြောင်းလိုက်တော့ ၉၉.၇ ရာခိုင်နှုန်းကို ကျသွားပါတယ်။ ရေးထားတဲ့ ၉၉.၅ ရာခိုင်နှုန်းထက် မြင့်နေသေးလို့ သူတို့အမြင်မှာ ဘာမှ မမှားပါဘူး။ ဒါပေမဲ့ သောကြာနေ့ နေ့လယ်စာချိန်မှာ profile service ခဏ ရပ်သွားတော့ Eats app က လိပ်စာ မပြနိုင်လို့ order တွေ ရပ်ကုန်ပါတယ်။
+      [[mark:b3-s4]] service တစ်ခုကို သုံးတဲ့သူတွေက ရေးထားတဲ့ reliability ပေါ်မှာ မဟုတ်ဘဲ တကယ် ရနေတဲ့ reliability ပေါ်မှာ ဆောက်ကြပါတယ်။ ကတိ မပေးထားပေမဲ့ ဒီလိုပဲ အမြဲ ဖြစ်မှာလို့ အားကိုးလာတဲ့ အဲဒီ အဆင့်ကို implicit SLO လို့ ခေါ်ပါတယ်။ Hyrum's law ကလည်း user များလာရင် မြင်ရတဲ့ အပြုအမူ မှန်သမျှကို တစ်ယောက်ယောက်က အားကိုးလာမယ်လို့ ဆိုပါတယ်၊ reliability လည်း အဲဒီထဲမှာ ပါပါတယ်။
+      [[mark:b3-s5]] reliability ကျသွားတာရော တက်လာတာရော နှစ်ဘက်လုံး ဒုက္ခ ပေးတတ်ပါတယ်။ ဖုန်းကုမ္ပဏီတွေဆီ ချိတ်ပေးတဲ့ operator gateway client က ရုတ်တရက် အများကြီး ပိုစိတ်ချရလာတော့ gateway ပျက်မှာ စိုးလို့ ဆောက်ထားတဲ့ Top-up ရဲ့ ညတိုင်း ပြန်စစ်တဲ့ job နဲ့ Bill Pay ရဲ့ retry wrapper က ကုန်ကျစရိတ် သက်သက် ဖြစ်သွားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+      # † in the curriculum; URL opened and checked 2026-10-18.
+      - { title: "Hyrum's Law (Hyrum Wright)", url: "https://www.hyrumslaw.com/" }
+    actions:
+      # A new topic on the open board: wipe B2, the title is furniture.
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l07-b3-title],
+        }
+      - id: b3-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds:
+          [
+            l07-b3-axis,
+            l07-b3-m1,
+            l07-b3-m2,
+            l07-b3-m3,
+            l07-b3-m4,
+            l07-b3-m5,
+            l07-b3-m6,
+            l07-b3-actual-t,
+            l07-b3-written,
+            l07-b3-written-t,
+          ]
+        drawMs: 2400
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l07-b3-team1, l07-b3-team2, l07-b3-team-t1, l07-b3-team-t2]
+        drawMs: 1600
+      # Step 2 is split: the Eats box stacks on as the narration names it.
+      - id: b3-s2b
+        type: whiteboard.apply
+        at: { mark: b3-s2b }
+        upsertIds: [l07-b3-eats, l07-b3-eats-t]
+        drawMs: 1000
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l07-b3-drop, l07-b3-drop-t]
+        drawMs: 1200
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l07-b3-implicit-t1, l07-b3-implicit-t2]
+        drawMs: 1200
+      - id: b3-s5
+        type: whiteboard.apply
+        at: { mark: b3-s5 }
+        upsertIds: [l07-b3-better-t1, l07-b3-better-t2]
+        drawMs: 1600
+
+  - id: explicit
+    narration: >
+      [[mark:close-b3]] [[mark:show-p05]] ဒီ ပြဿနာရဲ့ အဖြေက မရေးထားတဲ့ ကတိကို ရေးထားတဲ့ ကတိ ဖြစ်အောင် လုပ်တာပါ။ profile အဖွဲ့က တကယ် ဆိုလိုတဲ့ SLO ကို ရေးတင်ပြီး သုံးတဲ့ အဖွဲ့တွေနဲ့ ပုံမှန် စကားပြောပါတယ်။ SLO ထက် အများကြီး ပိုကောင်းနေရင် အဲဒီ အပိုကို အားမကိုးပါနဲ့လို့ ကြိုပြောပြီး database ပြောင်းတာလို အပြောင်းအလဲတွေကိုလည်း ကြိုကြေညာပါတယ်။ Eats အဖွဲ့ကလည်း cache ကို ပြန်ထည့်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l07-p05 }
+
+  - id: strain
+    chapter: SLO ရဲ့ အကန့်အသတ်
+    narration: >
+      [[mark:show-p06]] SLO တွေ မကိုက်တဲ့ နေရာတွေလည်း ရှိပါတယ်။ SLO က event တစ်ခုချင်းကို ကောင်းလား မကောင်းလား ရေတွက်နိုင်မှ အလုပ်ဖြစ်ပါတယ်။ ဥပမာ AI က အဖြေ မှားပြောနေတောင် request က အောင်မြင်တယ်လို့ပဲ ပြန်လာတတ်လို့ ရေတွက်ဖို့ ခက်ပါတယ်၊ ဒါကို lesson ၂၇ မှာ ကြည့်ပါမယ်။
+      SLO လွဲတဲ့အခါ တုံ့ပြန်ပုံကလည်း page ပို့မလား၊ ဘာမှ မလုပ်ဘူးလား ဆိုတဲ့ နှစ်မျိုးတည်း ဖြစ်နေတတ်လို့ ticket ဖွင့်တာ၊ rollout ကို ဖြည်းဖြည်း လုပ်တာလို ကြားထဲက တုံ့ပြန်မှုတွေကို ရည်ရွယ်ပြီး ကြိုစီစဉ်ထားရပါမယ်။
+      [[mark:show-p06b]] ဒါကြောင့် SLO ဆိုတာ ပန်းတိုင် မဟုတ်ဘဲ user လိုချင်တာနဲ့ ကုမ္ပဏီ တတ်နိုင်တာကို ညှိပေးတဲ့ နည်းလမ်း တစ်ခုပါ။ SLO ကို တင်းတင်း ထားတာက service အရေးကြီးကြောင်း ပြတဲ့ တံဆိပ် မဟုတ်ပါဘူး။ Eats မှာလည်း မနှင်းနဲ့ engineer တွေ ဘယ်လောက်ဆို လုံလောက်ပြီလို့ အတူ သဘောတူခဲ့တာကမှ တကယ့် တန်ဖိုးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "Workbook: Example Error Budget Policy",
+          url: "https://sre.google/workbook/error-budget-policy/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l07-p06 }
+      - { id: show-p06b, type: slide.show, at: { mark: show-p06b }, slideId: l07-p06b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] ကိုယ့် SLO တွေ လှည့်စားနေလား ဒီအပတ် စစ်ကြည့်ရအောင်။ ကိုယ့် product ရဲ့ အရေးအကြီးဆုံး journey ကို user ပြောမယ့် စကားနဲ့ ချရေးကြည့်ပါ။ SLI တစ်ခုကို အကြီးဆုံး customer တွေအလိုက် ခွဲကြည့်ပါ။ ပြီးတော့ ကတိထက် အများကြီး ပိုပေးနေတဲ့ နေရာ တစ်ခုကို ရှာပြီး ဘယ်သူတွေ အားကိုးနေလဲ မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l07-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] အစိမ်းရောင် SLO ကို မယုံခင် မှတ်ထားစရာတွေပါ။ [[mark:sel-cuj]] critical user journey က user ရည်ရွယ်ချက် တစ်ခု ပြီးဖို့ ဖြတ်သွားရတဲ့ အဆင့်တွေကို user ပြောသလို နာမည်ပေးထားတာပါ၊ [[mark:sel-synthetic]] synthetic test order က အဲဒီ လမ်းတစ်လျှောက်လုံးကို user လို အမြဲ လျှောက်စစ်ပေးပါတယ်။
+      [[mark:sel-bad-minute]] bad minute က journey ရဲ့ အဆင့် တစ်ခုခု မကောင်းခဲ့တဲ့ မိနစ်ပါ။ [[mark:sel-client]] client-side SLO က server မမြင်ရတာကို ဖုန်းဘက်ကနေ တိုင်းတာပါ။ [[mark:sel-per-customer]] per-customer SLO က ပျမ်းမျှထဲမှာ ပျောက်နေတဲ့ customer ကြီးကို ခွဲတိုင်းတာ ဖြစ်ပြီး၊ [[mark:sel-implicit]] implicit SLO ကတော့ ကတိ မပေးထားပေမဲ့ သုံးတဲ့သူတွေ အားကိုးလာတဲ့ reliability ပါ။
+      [[mark:sel-question]] ဒါဆို ခေါင်းထဲမှာ တွက်ကြည့်ပါ။ [[mark:ask-question]] journey SLO က ရက် ၃၀ မှာ ကောင်းတဲ့ မိနစ် ၉၉.၅ ရာခိုင်နှုန်း ဆိုရင် တစ်လကို bad minute ဘယ်နှခု သုံးခွင့် ရှိလဲ?
+      [[mark:pause-question]] မိနစ် ၄၃၂၀၀ ရဲ့ ၀.၅ ရာခိုင်နှုန်းမို့ bad minute ၂၁၆ ခုပါ။ အဲဒီနောက် Top-up မှာတော့ app က ဖုန်းဘေလ် ဝင်ကြောင်း ဘယ်တော့မှ မပြလို့ user တွေက ဝင်ပြီးသား top-up တွေအတွက်တောင် refund တောင်းလာပေမဲ့ dashboard တိုင်းမှာ အားလုံး ကောင်းနေပါတယ်။ system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-cuj,
+          type: editor.select,
+          at: { mark: sel-cuj },
+          target: { file: notes.md, text: "critical user journey", occurrence: 1 },
+        }
+      - {
+          id: sel-synthetic,
+          type: editor.select,
+          at: { mark: sel-synthetic },
+          target: { file: notes.md, text: "synthetic test order", occurrence: 1 },
+        }
+      - {
+          id: sel-bad-minute,
+          type: editor.select,
+          at: { mark: sel-bad-minute },
+          target: { file: notes.md, text: "bad minute", occurrence: 1 },
+        }
+      - {
+          id: sel-client,
+          type: editor.select,
+          at: { mark: sel-client },
+          target: { file: notes.md, text: "client-side SLO", occurrence: 1 },
+        }
+      - {
+          id: sel-per-customer,
+          type: editor.select,
+          at: { mark: sel-per-customer },
+          target: { file: notes.md, text: "per-customer SLO", occurrence: 1 },
+        }
+      - {
+          id: sel-implicit,
+          type: editor.select,
+          at: { mark: sel-implicit },
+          target: { file: notes.md, text: "implicit SLO", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the question and leave no
+      # pause, and one at pause-question would drag under the answer's first words
+      # (the scheduler holds only the dialog after its anchor's). So the
+      # question-line select hangs off ask-question, one more mark at an existing
+      # sentence end that makes the question its own dialog: it starts about as
+      # the question ends, its drag runs in silence, and the answer at
+      # pause-question waits for it. The question is a long dialog (~110
+      # characters, no ၊ to split at), so the quiet depends on the voice's speed:
+      # 7750 leaves about 2.8 / 1.1 / 0.35 s before the answer at 55 / 70 / 95
+      # ms per char (at 95 the drag starts under the question's last words, as
+      # in lesson 2); more trips compile-check's 2.5 s inserted-silence warning
+      # at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 7750 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: ရက် 30၊ ကောင်းတဲ့ မိနစ် 99.5%။ bad minute ဘယ်နှခု သုံးခွင့် ရှိလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
