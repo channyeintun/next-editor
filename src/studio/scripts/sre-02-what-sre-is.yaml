@@ -111,47 +111,47 @@ lesson:
     - id: l02-p01
       contentType: google
       name: "Cover: 20 minutes of 10× fees"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p01
     - id: l02-p01b
       contentType: google
       name: "Cover: what do we fix first"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p01b
     - id: l02-p02
       contentType: google
       name: "What Ma Su's inbox said"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p02
     - id: l02-p02b
       contentType: google
       name: "Measure what users feel"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p02b
     - id: l02-p03
       contentType: google
       name: "How reliable is enough?"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p03
     - id: l02-p03b
       contentType: google
       name: "SRE: practice, engineer, team"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p03b
     - id: l02-p04
       contentType: google
       name: "Hand fix vs engineering fix"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p04
     - id: l02-p04b
       contentType: google
       name: "Automation pays twice"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p04b
     - id: l02-p05
       contentType: google
       name: "This week"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l02_p05
   whiteboardAssets:
     # ---- Board B1 step 1: how long (P5 bars; 700 px = 20 minutes) --------
