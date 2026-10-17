@@ -1,0 +1,1894 @@
+# CSS course (Burmese), lesson 15 of 43: flexbox part 1, axes and wrap.
+#
+# Narration is Burmese (voice-script.md next to this file is its source, with
+# the marks inline; DESIGN.md is the span-by-span brief). Every [[mark:…]] sits
+# where its action begins, at a sentence end or right after a ၊ pause; each
+# span carries one piece of meaning.
+#
+# Shape: board (recall lesson 14; the sidebar pattern; flexbox lays a group out
+# along one direction; what a flex layout can do; the three flexbox lessons)
+# while the dev server starts → code tour (index.html: the nav list, the chip
+# row and its right-to-left copy, the snack list; empty styles.css) → the nav
+# list becomes a flex container: row, content-sized, at the start, no grow, no
+# wrap; initial values; inline flex → board (main and cross axis for row and
+# column; main-start/main-end, cross-start/cross-end) → the chips become a
+# flex row: the right-to-left copy starts on the right (writing direction;
+# vertical writing modes) → column, column-reverse, row-reverse on the chips →
+# board (visual order vs HTML/Tab/screen-reader order; reading-flow) → the
+# snack list becomes a flex row: the cards shrink to min-content and overflow
+# past the list's dashed edge (nowrap default; cross-axis stretch; quiz: grid
+# does not drop columns by itself either, lesson 19) → wrap, then wrap-reverse;
+# flex-wrap: balance named (Chrome and Edge) → board (each flex line is independent; grid lines up both ways; one
+# dimension) → flex-flow: row wrap (the shorthand undoes wrap-reverse), gap →
+# recap, hand-off to lesson 16 (grow, shrink, basis).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no HTML edit,
+# so no reload; no interaction. Mid-typing prefixes: every keystroke-typed
+# value has either no valid prefix or only the value already in force
+# ("column" while typing column-reverse after column, "wrap" while typing
+# wrap-reverse after wrap). The two lines whose prefix would flash a different
+# layout ("row" inside row-reverse after column-reverse, "row" inside
+# "row wrap", which means row nowrap) are typed line-by-line.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-15-flexbox
+  title: "CSS course 15: Flexbox အပိုင်း 1၊ axis နဲ့ wrap"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 15
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit block header (the nav list is the first flex
+      # container), the lesson block chips (four tea-strength chips in a
+      # .chips row, and the same row again inside <div dir="rtl">, each row
+      # with a small caption) and kit block snacks (five cards; the list has
+      # the .demo dashed outline so the overflow past its edge is visible).
+      # No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- lesson block: chips (one row, and a copy inside a right-to-left box) -->
+              <section class="strengths" data-testid="strengths">
+                <h2>လက်ဖက်ရည် အရသာ</h2>
+                <p class="row-label">ဘယ်ကနေ ညာ</p>
+                <div class="chips demo" data-testid="chips">
+                  <span class="chip">ချိုဆိမ့်</span>
+                  <span class="chip">ပေါ့ဆိမ့်</span>
+                  <span class="chip">ကျဆိမ့်</span>
+                  <span class="chip">နို့စိမ်း</span>
+                </div>
+                <p class="row-label">ညာကနေ ဘယ်</p>
+                <div dir="rtl" data-testid="rtl-box">
+                  <div class="chips demo" data-testid="chips-rtl">
+                    <span class="chip">ချိုဆိမ့်</span>
+                    <span class="chip">ပေါ့ဆိမ့်</span>
+                    <span class="chip">ကျဆိမ့်</span>
+                    <span class="chip">နို့စိမ်း</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- kit block: snacks -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu demo" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2, C (with .menu-card margin 0, so only the
+      # typed gap ever spaces the cards) and D (.demo). Section E pins the
+      # dashed outlines on the nav items, the chip pills, the row captions,
+      # the sections' top space, and a min-height on the snacks section so
+      # the preview can always scroll the snack list to the top. Never typed,
+      # never shown; none of it is flex layout.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 15 keeps sections A, B, B2, C (cards with no
+          margin, so only a typed gap ever spaces them) and D, and pins the chip
+          pills and the outlined nav items in section E.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 15: the nav items show their edges; the tea-strength chips are pills. */
+        .nav li {
+          padding: 0 8px;
+          outline: 1px dashed var(--tea-light);
+        }
+
+        .row-label {
+          margin: 8px 0 4px;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .chip {
+          padding: 2px 12px;
+          background: var(--cream);
+          border: 1px solid var(--tea-light);
+          border-radius: 999px;
+        }
+
+        .strengths,
+        .snacks {
+          margin-top: 16px;
+        }
+
+        /* Tall enough that the preview can always scroll the snacks to the top. */
+        .snacks {
+          min-height: 100vh;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — the sidebar pattern (wide: side by side; narrow: the sidebar
+    # above), one direction, and the three flexbox lessons. Blue = sidebar,
+    # green = content, orange = a flex row, violet = the roadmap.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Flexbox ဘာကြောင့် လိုလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-wide-frame,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 390,
+        height: 130,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-wide-sb,
+        kind: rectangle,
+        x: 312,
+        y: 234,
+        width: 124,
+        height: 106,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-wide-sb-t,
+        kind: text,
+        x: 320,
+        y: 268,
+        width: 108,
+        height: 36,
+        text: "sidebar",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-wide-ct,
+        kind: rectangle,
+        x: 448,
+        y: 234,
+        width: 230,
+        height: 106,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-wide-ct-t,
+        kind: text,
+        x: 508,
+        y: 268,
+        width: 112,
+        height: 36,
+        text: "content",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-wide-label,
+        kind: text,
+        x: 300,
+        y: 364,
+        width: 300,
+        height: 36,
+        text: "ကျယ်ရင် ဘေးချင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-narrow-frame,
+        kind: rectangle,
+        x: 800,
+        y: 222,
+        width: 150,
+        height: 250,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-narrow-sb,
+        kind: rectangle,
+        x: 812,
+        y: 234,
+        width: 126,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-narrow-sb-t,
+        kind: text,
+        x: 822,
+        y: 246,
+        width: 108,
+        height: 36,
+        text: "sidebar",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-narrow-ct,
+        kind: rectangle,
+        x: 812,
+        y: 304,
+        width: 126,
+        height: 156,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-narrow-ct-t,
+        kind: text,
+        x: 820,
+        y: 364,
+        width: 112,
+        height: 36,
+        text: "content",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-narrow-label,
+        kind: text,
+        x: 780,
+        y: 486,
+        width: 280,
+        height: 36,
+        text: "ကျဉ်းရင် အပေါ်အောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-row-1,
+        kind: rectangle,
+        x: 300,
+        y: 420,
+        width: 70,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-row-2,
+        kind: rectangle,
+        x: 380,
+        y: 420,
+        width: 130,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-row-3,
+        kind: rectangle,
+        x: 520,
+        y: 420,
+        width: 90,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-row-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 474,
+        width: 310,
+        height: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-row-label,
+        kind: text,
+        x: 300,
+        y: 512,
+        width: 420,
+        height: 36,
+        text: "တစ်ဘက်တည်း · one-dimensional",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-road-15,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 230,
+        height: 36,
+        text: "15 · axis နဲ့ wrap",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-road-16,
+        kind: text,
+        x: 580,
+        y: 590,
+        width: 210,
+        height: 36,
+        text: "16 · အရွယ်အစား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-road-17,
+        kind: text,
+        x: 840,
+        y: 590,
+        width: 200,
+        height: 36,
+        text: "17 · alignment",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — main axis (blue) and cross axis (orange) for a row and for a
+    # column, with main-start/main-end and cross-start/cross-end on the row.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Main axis နဲ့ cross axis",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-row-t,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 80,
+        height: 36,
+        text: "row",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-row-box,
+        kind: rectangle,
+        x: 300,
+        y: 262,
+        width: 330,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-row-i1,
+        kind: rectangle,
+        x: 314,
+        y: 276,
+        width: 80,
+        height: 72,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-row-i2,
+        kind: rectangle,
+        x: 404,
+        y: 276,
+        width: 80,
+        height: 72,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-row-i3,
+        kind: rectangle,
+        x: 494,
+        y: 276,
+        width: 80,
+        height: 72,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-main-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 372,
+        width: 330,
+        height: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-main-t,
+        kind: text,
+        x: 390,
+        y: 404,
+        width: 150,
+        height: 36,
+        text: "main axis",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-main-start,
+        kind: text,
+        x: 300,
+        y: 452,
+        width: 150,
+        height: 36,
+        text: "main-start",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-main-end,
+        kind: text,
+        x: 510,
+        y: 452,
+        width: 130,
+        height: 36,
+        text: "main-end",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-cross-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 648,
+        y: 262,
+        width: 28,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-cross-start,
+        kind: text,
+        x: 690,
+        y: 258,
+        width: 160,
+        height: 36,
+        text: "cross-start",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-cross-end,
+        kind: text,
+        x: 690,
+        y: 330,
+        width: 140,
+        height: 36,
+        text: "cross-end",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-cross-t,
+        kind: text,
+        x: 660,
+        y: 404,
+        width: 160,
+        height: 36,
+        text: "cross axis",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-col-t,
+        kind: text,
+        x: 900,
+        y: 222,
+        width: 110,
+        height: 36,
+        text: "column",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-col-box,
+        kind: rectangle,
+        x: 900,
+        y: 262,
+        width: 130,
+        height: 250,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-col-i1,
+        kind: rectangle,
+        x: 914,
+        y: 274,
+        width: 102,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-col-i2,
+        kind: rectangle,
+        x: 914,
+        y: 354,
+        width: 102,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-col-i3,
+        kind: rectangle,
+        x: 914,
+        y: 434,
+        width: 102,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-col-main,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 1044,
+        y: 262,
+        width: 28,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-col-cross,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 900,
+        y: 522,
+        width: 130,
+        height: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 520,
+        height: 36,
+        text: "ဘယ်၊ ညာ မဟုတ်ဘဲ start နဲ့ end",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — what reversing does not change. Green = HTML order, blue =
+    # what the screen shows, red = where Tab goes, orange = screen readers,
+    # violet = reading-flow, Chrome and Edge only (x 620: the Burmese label
+    # measures ~433 px wide in Virgil, so it ends near 1053, inside the board).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "မြင်ရတဲ့ အစဉ်နဲ့ HTML အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-html-t,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 200,
+        height: 36,
+        text: "HTML အစဉ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-html-seq,
+        kind: text,
+        x: 560,
+        y: 226,
+        width: 300,
+        height: 46,
+        text: "1 → 2 → 3 → 4",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: c-screen-t,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "row-reverse မှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-box-4,
+        kind: rectangle,
+        x: 300,
+        y: 348,
+        width: 90,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-num-4,
+        kind: text,
+        x: 334,
+        y: 360,
+        width: 24,
+        height: 46,
+        text: "4",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: c-box-3,
+        kind: rectangle,
+        x: 400,
+        y: 348,
+        width: 90,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-num-3,
+        kind: text,
+        x: 434,
+        y: 360,
+        width: 24,
+        height: 46,
+        text: "3",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: c-box-2,
+        kind: rectangle,
+        x: 500,
+        y: 348,
+        width: 90,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-num-2,
+        kind: text,
+        x: 534,
+        y: 360,
+        width: 24,
+        height: 46,
+        text: "2",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: c-box-1,
+        kind: rectangle,
+        x: 600,
+        y: 348,
+        width: 90,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-num-1,
+        kind: text,
+        x: 634,
+        y: 360,
+        width: 24,
+        height: 46,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: c-tab,
+        kind: text,
+        x: 300,
+        y: 438,
+        width: 520,
+        height: 36,
+        text: "Tab ← ညာကနေ ဘယ်ကို ခုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-reader,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 560,
+        height: 36,
+        text: "screen reader · HTML အစဉ်အတိုင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-fix,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 320,
+        height: 36,
+        text: "HTML ကို ပြင်ပါ  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-rf,
+        kind: text,
+        x: 620,
+        y: 570,
+        width: 440,
+        height: 36,
+        text: "reading-flow · Chrome၊ Edge ပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — each wrapped line is its own flex line (blue boxes whose edges
+    # do not line up, circled in red) vs grid (green, aligned columns).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Flex line တစ်ကြောင်းချင်း သီးသန့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-flex-t,
+        kind: text,
+        x: 300,
+        y: 224,
+        width: 120,
+        height: 36,
+        text: "flexbox",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-f1,
+        kind: rectangle,
+        x: 300,
+        y: 268,
+        width: 170,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-f2,
+        kind: rectangle,
+        x: 478,
+        y: 268,
+        width: 110,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-f3,
+        kind: rectangle,
+        x: 300,
+        y: 332,
+        width: 110,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-f4,
+        kind: rectangle,
+        x: 418,
+        y: 332,
+        width: 170,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-miss,
+        kind: freedraw,
+        stroke: circle,
+        x: 382,
+        y: 252,
+        width: 120,
+        height: 152,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-miss-t,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 260,
+        height: 36,
+        text: "column မညီ  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-grid-t,
+        kind: text,
+        x: 720,
+        y: 224,
+        width: 80,
+        height: 36,
+        text: "grid",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-g1,
+        kind: rectangle,
+        x: 720,
+        y: 268,
+        width: 150,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-g2,
+        kind: rectangle,
+        x: 878,
+        y: 268,
+        width: 150,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-g3,
+        kind: rectangle,
+        x: 720,
+        y: 332,
+        width: 150,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-g4,
+        kind: rectangle,
+        x: 878,
+        y: 332,
+        width: 150,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-grid-ok,
+        kind: text,
+        x: 720,
+        y: 420,
+        width: 240,
+        height: 36,
+        text: "column ညီ  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-1d,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 560,
+        height: 36,
+        text: "flexbox · တစ်ကြိမ်မှာ axis တစ်ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-2d,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 560,
+        height: 36,
+        text: "grid · axis နှစ်ခုလုံး (lesson 18)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4115
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Flexbox ဘာကြောင့် လိုလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ position နဲ့ transform သုံးပြီး box တွေကို ရွှေ့ခဲ့ပေမယ့်၊ page ပေါ်က box
+      အများစုကတော့ အပေါ်ကနေ အောက်ကို ဆင့်နေတုန်းပါ။ ဒီ lesson ကနေ flexbox ကို စကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-wide]] မကြာခဏ တွေ့ရတဲ့ layout တစ်ခုက ဘေးမှာ sidebar၊ ကျန်တဲ့ နေရာမှာ အဓိက content
+      ရှိတာပါ။ screen ကျယ်ရင် နှစ်ခုက ဘေးချင်းကပ် ရှိပါတယ်။ [[mark:draw-narrow]] ဖုန်းလို screen
+      ကျဉ်းမှာတော့ နှစ်ခုလုံး ဘေးချင်း မဆံ့လို့၊ sidebar က content ရဲ့ အပေါ်ကို ရောက်သွားတာ
+      ပိုကောင်းပါတယ်။ [[mark:flexible-limits]] flexbox က ဒီလို layout နဲ့ သင့်တော်ပါတယ်။ အရွယ်အစား ပုံသေ
+      မပေးဘဲ၊ ဘယ်လောက်ထိ ကြီးမလဲ ကျုံ့မလဲ ဆိုတဲ့ အကန့်အသတ်ပဲ ပေးရလို့ပါ။ နေရာ မလောက်ရင်လည်း item တွေက
+      နောက်တစ်တန်းကို ဆင်းနိုင်ပါတယ်။ [[mark:draw-row]] flexbox ဆိုတာ item အုပ်စု တစ်ခုကို row တစ်ခု
+      ဒါမှမဟုတ် column တစ်ခု၊ တစ်ဘက်တည်းအတိုင်း တန်းစီပေးတဲ့ layout နည်းပါ။ ဒါကြောင့် flexbox ကို
+      one-dimensional layout လို့ ခေါ်ပါတယ်။ item တွေ အရွယ်အစား မတူရင်လည်း တစ်ခုချင်း မဟုတ်ဘဲ အုပ်စုလိုက်
+      ကြည့်ပြီး၊ တန်းထဲမှာ အဆင်ပြေဆုံး ဆံ့အောင် နေရာ ခွဲပေးပါတယ်။ [[mark:features]] flex layout က row
+      ဒါမှမဟုတ် column ဖြစ်နိုင်ပြီး၊ စာရေးတဲ့ ဦးတည်ရာကို လိုက်ပါတယ်။ တစ်တန်းတည်း ထားမလား၊ နောက်တစ်တန်း
+      ဆင်းခွင့် ပေးမလား ရွေးနိုင်သလို၊ အစဉ် ပြောင်းပြတာ၊ ကြီးအောင် ကျုံ့အောင် လုပ်တာ၊ align လုပ်တာတွေလည်း
+      ရပါတယ်။ [[mark:draw-roadmap]] ဒါတွေ အကုန်လုံးက lesson တစ်ခုစာ မကလို့ flexbox ကို lesson သုံးခု
+      ခွဲထားပါတယ်။ ဒီနေ့ flex container၊ သူ့ရဲ့ axis နှစ်ခု၊ direction နဲ့ wrap ကို ကြည့်ပါမယ်။ lesson 16 မှာ item တွေ ကြီးတာ ကျုံ့တာနဲ့ ဒီ sidebar layout ကို၊ lesson 17 မှာ alignment ကို ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "web.dev Learn CSS — Flexbox: what can you do with a flex layout?"
+        url: "https://web.dev/learn/css/flexbox#what_can_you_do_with_a_flex_layout"
+      - title: "web.dev Learn CSS — Layout: flexbox"
+        url: "https://web.dev/learn/css/layout#flexbox"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the code tour, about two minutes of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-wide
+        type: whiteboard.apply
+        at: { mark: draw-wide }
+        upsertIds: [a-wide-frame, a-wide-sb, a-wide-sb-t, a-wide-ct, a-wide-ct-t, a-wide-label]
+        drawMs: 2400
+      - id: draw-narrow
+        type: whiteboard.apply
+        at: { mark: draw-narrow }
+        upsertIds:
+          [a-narrow-frame, a-narrow-sb, a-narrow-sb-t, a-narrow-ct, a-narrow-ct-t, a-narrow-label]
+        drawMs: 2400
+      - id: draw-row
+        type: whiteboard.apply
+        at: { mark: draw-row }
+        upsertIds: [a-row-1, a-row-2, a-row-3, a-row-arrow, a-row-label]
+        drawMs: 2600
+      - id: draw-roadmap
+        type: whiteboard.apply
+        at: { mark: draw-roadmap }
+        upsertIds: [a-road-15, a-road-16, a-road-17]
+        drawMs: 2400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။ အပေါ်ဆုံးမှာ
+      ဆိုင်ရဲ့ header ရှိပါတယ်။ [[mark:select-nav]] header ထဲက navigation က link သုံးခု ပါတဲ့ list
+      တစ်ခုပါ။ list item တစ်ခုစီမှာ မျဉ်းပြတ် outline ပါလို့၊ သူ့ box ဘယ်က စပြီး ဘယ်မှာ ဆုံးလဲ မြင်ရပါတယ်။
+      [[mark:select-chips]] header အောက်မှာ လက်ဖက်ရည် အရသာ တစ်မျိုးစီအတွက် chip လေးခု တစ်တန်း ရှိပါတယ်။
+      [[mark:select-rtl]] ပြီးတော့ အဲဒီ chip တွေကိုပဲ နောက်ထပ် box တစ်ခုထဲမှာ ထပ်ပြီး ထည့်ထားပါတယ်။ ဒီ box ထဲမှာတော့ Arabic တို့ Hebrew တို့လို စာကို ညာကနေ ဘယ် ရေးပါတယ်။ [[mark:select-snacks]] နောက်ဆုံးက card
+      ငါးခု ပါတဲ့ စားစရာ menu ပါ။ သူ့ list မှာလည်း မျဉ်းပြတ် outline ပါပြီး၊ card တွေမှာ margin မရှိလို့
+      card တွေကြားမှာ နေရာလွတ် မရှိသေးပါဘူး။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ nav item တွေနဲ့ စားစရာ card
+      တွေက အပေါ်အောက် ဆင့်နေပါတယ်။ flow layout က block box တွေကို အဲဒီလို စီလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Layout: normal flow"
+        url: "https://web.dev/learn/css/layout#flow"
+      - title: "MDN — The dir global attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/dir"
+      - title: "MDN — Block and inline layout in normal flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_and_inline_layout_in_normal_flow"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-nav
+        type: editor.select
+        at: { mark: select-nav }
+        target:
+          {
+            file: index.html,
+            text: "<ul>\n          <li><a class=\"nav-link active\" href=\"#drinks\" data-testid=\"nav-drinks\">မီနူး</a></li>\n          <li><a class=\"nav-link\" href=\"#hours\" data-testid=\"nav-hours\">ဖွင့်ချိန်</a></li>\n          <li><a class=\"nav-link\" href=\"#order\" data-testid=\"nav-order\">မှာယူရန်</a></li>\n        </ul>",
+            occurrence: 1,
+          }
+      - id: select-chips
+        type: editor.select
+        at: { mark: select-chips }
+        target:
+          { file: index.html, text: '<div class="chips demo" data-testid="chips">', occurrence: 1 }
+      - id: select-rtl
+        type: editor.select
+        at: { mark: select-rtl }
+        target: { file: index.html, text: '<div dir="rtl" data-testid="rtl-box">', occurrence: 1 }
+      - id: select-snacks
+        type: editor.select
+        at: { mark: select-snacks }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="menu demo" data-testid="menu-snacks">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-chips
+        type: expect.preview
+        at: { afterAction: expect-header }
+        timeoutMs: 5000
+        target: { by: testId, value: chips }
+        textContains: "ချိုဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-rtl-box
+        type: expect.preview
+        at: { afterAction: expect-chips }
+        timeoutMs: 5000
+        target: { by: testId, value: rtl-box }
+        attribute: { name: dir, value: rtl }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-snacks
+        type: expect.preview
+        at: { afterAction: expect-rtl-box }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-snacks }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-snacks }
+
+  - id: display-flex
+    chapter: "Flex container လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:type-nav]] nav ကနေ စကြည့်ရအောင်။ nav ထဲက list မှာ သူ့ child တွေကို flexbox နဲ့
+      စီခိုင်းလိုက်ပါမယ်။ ရိုက်နေတုန်း header ကို လိုက်ကြည့်ပါ။ [[mark:after-nav]] link သုံးခုက
+      တစ်တန်းတည်း ဖြစ်သွားပါပြီ။ [[mark:select-display]] ဒီ display declaration ကို ကြည့်ပါ။ ဒီ
+      တစ်ခုတည်းနဲ့ list က flex container ဖြစ်သွားပြီး၊ သူ့ရဲ့ တိုက်ရိုက် child ဖြစ်တဲ့ list item တွေက flex
+      item တွေ ဖြစ်သွားပါတယ်။ သူတို့ထဲက link တွေကတော့ တိုက်ရိုက် child မဟုတ်လို့ flex item မဖြစ်ပါဘူး။
+      lesson 13 မှာ ဒါကို ခဏ မြင်ခဲ့ပါတယ်။ [[mark:defaults]] တခြား CSS ဘာမှ မရေးရသေးဘဲ item တွေ ဘယ်လို
+      နေရာယူလဲ ကြည့်ပါ။ တစ်တန်းတည်းမှာ စီနေပြီး၊ တစ်ခုစီက သူ့ စာသား ရှိသလောက်ပဲ ကျယ်တာကို မျဉ်းပြတ်
+      outline တွေက ပြနေပါတယ်။ [[mark:defaults-2]] item တွေက ဘယ်ဘက်ကနေ စပြီး၊ တန်းရဲ့ ကျန်တဲ့ နေရာက
+      လွတ်နေပါတယ်။ flex item တွေက နေရာလွတ်ကို ဖြည့်အောင် မကြီးလို့ပါ။ item တွေ များလို့ မဆံ့တော့ရင်လည်း
+      နောက်တစ်တန်း မဆင်းဘဲ တစ်တန်းတည်းမှာပဲ ဆက်နေပါမယ်။ [[mark:initial-values]] အဲဒါတွေ တစ်ခုမှ ကိုယ်
+      မရေးထားပါဘူး။ CSS property တိုင်းမှာ initial value ရှိပြီး၊ list က flex container ဖြစ်သွားတာနဲ့ flex
+      property တွေက အဲဒီ initial value တွေနဲ့ အလုပ် စလုပ်ပါတယ်။ ဒါကြောင့် declaration တစ်ခုတည်း ရေးရုံနဲ့
+      flexbox ရဲ့ default ပုံစံကို ရတာပါ။ [[mark:inline-flex]] list ကိုယ်တိုင်ကတော့ page ပေါ်မှာ block
+      လိုပဲ နေရာယူနေတုန်းပါ။ စာကြောင်း တစ်ကြောင်းထဲမှာ ဝင်နေမယ့် flex container လိုရင်တော့ inline flex ကို
+      သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: creating a flex container"
+        url: "https://web.dev/learn/css/flexbox#creating_a_flex_container"
+      - title: "MDN — Flex container"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Flex_Container"
+      - title: "MDN — display"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display"
+      - title: "CSS Flexible Box Layout Module Level 1 — Flex containers"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-containers"
+    actions:
+      - id: type-nav
+        type: editor.type
+        at: { mark: type-nav }
+        cadence: natural
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".nav ul {\n  display: flex;\n}\n"
+      - id: expect-nav
+        type: expect.preview
+        at: { mark: after-nav }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-order }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-display
+        type: editor.select
+        at: { mark: select-display }
+        target: { file: styles.css, text: "display: flex;", occurrence: 1 }
+
+  - id: axes-board
+    chapter: "Main axis နဲ့ cross axis"
+    narration: >
+      [[mark:open-axes]] flexbox မှာ axis နှစ်ခုကို အရင် သိထားရပါမယ်။ [[mark:draw-row-axes]] item တွေ
+      တန်းစီသွားတဲ့ ဦးတည်ရာကို main axis လို့ ခေါ်ပါတယ်။ row မှာဆိုရင် စာ ရေးသွားတဲ့ ဘက်အတိုင်း၊
+      မြန်မာစာမှာ ဘယ်ကနေ ညာကို သွားပါတယ်။ [[mark:draw-cross]] cross axis ကတော့ main axis ကို ထောင့်မှန်ကျ
+      ဖြတ်သွားတဲ့ ဦးတည်ရာ ဖြစ်လို့၊ row မှာ အပေါ်ကနေ အောက်ပါ။ [[mark:draw-starts]] axis တစ်ခုစီမှာ အစနဲ့
+      အဆုံး ရှိပါတယ်။ item တွေက main start ကနေ စပြီး main end ဘက်ကို စီသွားပါတယ်။ cross axis ရဲ့ အစွန်း
+      နှစ်ဘက်ကိုတော့ cross start နဲ့ cross end လို့ ခေါ်ပါတယ်။ [[mark:draw-column]] main axis ဘယ်ဘက်
+      သွားမလဲ ဆိုတာကို flex direction ဆိုတဲ့ property က ဆုံးဖြတ်ပါတယ်။ direction ကို column ပေးရင် main
+      axis က အပေါ်ကနေ အောက် ဖြစ်ပြီး၊ cross axis က ဘေးတိုက် ဖြစ်သွားပါတယ်။ [[mark:axes-why]] ဒီ နာမည်တွေ
+      အရေးကြီးတာက lesson 17 က alignment တွေ axis အလိုက် အလုပ်လုပ်လို့ပါ။ direction ပြောင်းလိုက်ရင်
+      alignment declaration ကို မပြင်ဘဲ၊ သူက axis နဲ့အတူ လိုက်လှည့်သွားပါတယ်။ [[mark:draw-note]] flexbox က
+      ဘယ်၊ ညာ၊ အပေါ်၊ အောက် မသုံးဘဲ start နဲ့ end ကိုပဲ သုံးတာ မှတ်ထားပါ။ ဘာကြောင့်လဲ ဆိုတာ နောက် demo က
+      ပြပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: the main axis and the cross axis"
+        url: "https://web.dev/learn/css/flexbox#the_main_axis_and_the_cross_axis"
+      - title: "MDN — Main axis"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Main_Axis"
+      - title: "MDN — Cross axis"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Cross_Axis"
+      - title: "CSS Flexible Box Layout Module Level 1 — Flex layout box model and terminology"
+        url: "https://www.w3.org/TR/css-flexbox-1/#box-model"
+    actions:
+      - id: open-axes
+        type: whiteboard.apply
+        at: { mark: open-axes }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-row-axes
+        type: whiteboard.apply
+        at: { mark: draw-row-axes }
+        upsertIds: [b-row-t, b-row-box, b-row-i1, b-row-i2, b-row-i3, b-main-arrow, b-main-t]
+        drawMs: 3000
+      - id: draw-cross
+        type: whiteboard.apply
+        at: { mark: draw-cross }
+        upsertIds: [b-cross-arrow, b-cross-t]
+        drawMs: 1400
+      - id: draw-starts
+        type: whiteboard.apply
+        at: { mark: draw-starts }
+        upsertIds: [b-main-start, b-main-end, b-cross-start, b-cross-end]
+        drawMs: 2800
+      - id: draw-column
+        type: whiteboard.apply
+        at: { mark: draw-column }
+        upsertIds: [b-col-t, b-col-box, b-col-i1, b-col-i2, b-col-i3, b-col-main, b-col-cross]
+        drawMs: 3000
+      - id: draw-note
+        type: whiteboard.apply
+        at: { mark: draw-note }
+        upsertIds: [b-note]
+        drawMs: 1400
+
+  - id: chips-rtl
+    chapter: "စာရေးတဲ့ ဦးတည်ရာနဲ့ flexbox"
+    narration: >
+      [[mark:close-axes]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-chips]] အခု chip တန်းကိုလည်း flex
+      container ဖြစ်အောင် လုပ်ပါမယ်။ rule တစ်ခုတည်း ဖြစ်ပေမယ့် selector က chip တန်း နှစ်တန်းလုံးကို
+      ရွေးပါတယ်။ ရိုက်နေတုန်း ညာကနေ ဘယ် လို့ ရေးထားတဲ့ အောက်က တန်းကို သတိထား ကြည့်ပါ။ [[mark:after-chips]]
+      အပေါ်က တန်းက chip တွေ ဘေးချင်းကပ် ရှိပြီးသား ဖြစ်လို့ သိပ် မပြောင်းပါဘူး။ ဒါပေမဲ့ ညာကနေ ဘယ် တန်းကို
+      ကြည့်ပါ၊ ပထမ chip က ညာဘက် အစွန်ဆုံးကို ရောက်သွားပါပြီ။ [[mark:rtl-explain]] flex row က စာကြောင်း
+      ရေးသွားတဲ့ ဘက်အတိုင်း သွားပါတယ်။ မြန်မာစာမှာ main start က ဘယ်ဘက်မှာ ရှိပေမယ့်၊ ညာကနေ ဘယ် box ထဲမှာတော့ ညာဘက်မှာ ရှိလို့ တန်းက အဲဒီကနေ စပါတယ်။ flex မပေးခင်က chip တွေက စကားလုံးတွေလို စာကြောင်းထဲမှာ ရှိလို့ မြန်မာစာရဲ့ ဘယ်ကနေ ညာ အစဉ်အတိုင်း ရှိခဲ့တာပါ။ စာရေးတဲ့ ဦးတည်ရာက HTML ကနေ လာပြီး၊ flex row က အဲဒါကို လိုက်တာပါ။ [[mark:vertical-note]] writing mode က
+      ဂျပန်စာ တချို့လို ဒေါင်လိုက် ဖြစ်နေရင်တော့ row တောင် အပေါ်ကနေ အောက်ကို သွားပါတယ်။ ဒါကြောင့် flexbox
+      က ဘယ်ညာ မပြောဘဲ start နဲ့ end ကို သုံးလို့၊ ဘာသာစကား တိုင်းမှာ CSS တစ်ခုတည်းက အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: writing modes and direction"
+        url: "https://web.dev/learn/css/flexbox#writing_modes_and_direction"
+      - title: "MDN — writing-mode"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/writing-mode"
+      - title: "MDN — Relationship of flexbox to other layout methods (writing modes)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Relationship_of_flexbox_to_other_layout_methods"
+    actions:
+      - id: close-axes
+        type: whiteboard.apply
+        at: { mark: close-axes }
+        open: false
+      - id: type-chips
+        type: editor.type
+        at: { mark: type-chips }
+        cadence: natural
+        target: { file: styles.css, after: "  display: flex;\n}\n", occurrence: 1 }
+        text: "\n.chips {\n  display: flex;\n}\n"
+      - id: expect-chips-rtl
+        type: expect.preview
+        at: { mark: after-chips }
+        timeoutMs: 4000
+        target: { by: testId, value: chips-rtl }
+        textContains: "နို့စိမ်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: directions
+    chapter: "Flex direction ပြောင်းကြည့်ရအောင်"
+    narration: >
+      [[mark:type-column]] အခု direction ကို ပြောင်းကြည့်ရအောင်။ chip တွေရဲ့ flex direction ကို column
+      ပေးပါမယ်။ [[mark:after-column]] chip တန်း နှစ်တန်းလုံး အပေါ်အောက် ဆင့်သွားပါပြီ။ main axis က
+      အပေါ်ကနေ အောက် ဖြစ်သွားပြီး၊ chip တစ်ခုစီကလည်း cross axis အတိုင်း အကျယ် အပြည့် ဆန့်သွားပါတယ်။
+      [[mark:type-colrev]] နောက်တစ်ခုက column reverse ပါ။ ခုနက declaration ရဲ့ အောက်မှာ ထည့်ပါမယ်။ lesson
+      5 မှာ မြင်ခဲ့သလို နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။ [[mark:after-colrev]] အခု main start က
+      အောက်ခြေကို ရောက်သွားလို့၊ ပထမ chip က အောက်ဆုံးမှာ၊ နောက်ဆုံး chip က အပေါ်ဆုံးမှာ ရှိနေပါပြီ။
+      [[mark:type-rowrev]] နောက်ဆုံးက row reverse ပါ။ [[mark:after-rowrev]] row ပြန်ဖြစ်သွားပေမယ့် ဟိုဘက်
+      အစွန်းကနေ စပါတယ်။ အပေါ်က တန်းမှာ chip တွေက ညာဘက်ကနေ စပြီး အစဉ် ပြောင်းပြန် ဖြစ်နေပါတယ်။ ညာကနေ ဘယ်
+      တန်းမှာတော့ ဘယ်ဘက်ကနေ စပါတယ်။ [[mark:select-rowrev]] ဒီ row reverse ကို ကြည့်ပါ။ ညာကနေ စခိုင်းတာ
+      မဟုတ်ဘဲ၊ main start နဲ့ main end ကို လဲလိုက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: controlling the direction of items"
+        url: "https://web.dev/learn/css/flexbox#controlling_the_direction_of_items"
+      - title: "MDN — flex-direction"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-direction"
+      - title: "CSS Flexible Box Layout Module Level 1 — flex-direction"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-direction-property"
+    actions:
+      - id: type-column
+        type: editor.type
+        at: { mark: type-column }
+        cadence: natural
+        target: { file: styles.css, after: ".chips {\n  display: flex;\n", occurrence: 1 }
+        text: "  flex-direction: column;\n"
+      - id: expect-column
+        type: expect.preview
+        at: { mark: after-column }
+        timeoutMs: 4000
+        target: { by: testId, value: chips }
+        textContains: "ကျဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Keystroke-safe: the prefix "column" is the value already in force.
+      - id: type-colrev
+        type: editor.type
+        at: { mark: type-colrev }
+        cadence: natural
+        target: { file: styles.css, after: "  flex-direction: column;\n", occurrence: 1 }
+        text: "  flex-direction: column-reverse;\n"
+      # line-by-line: a keystroke-typed "row-reverse" passes through "row"
+      # and would flash a plain row after the column-reverse stack.
+      - id: type-rowrev
+        type: editor.type
+        at: { mark: type-rowrev }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  flex-direction: column-reverse;\n", occurrence: 1 }
+        text: "  flex-direction: row-reverse;\n"
+      - id: expect-rowrev
+        type: expect.preview
+        at: { mark: after-rowrev }
+        timeoutMs: 4000
+        target: { by: testId, value: chips-rtl }
+        textContains: "ပေါ့ဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-rowrev
+        type: editor.select
+        at: { mark: select-rowrev }
+        target: { file: styles.css, text: "row-reverse", occurrence: 1 }
+
+  - id: order-board
+    chapter: "မြင်ရတဲ့ အစဉ်နဲ့ HTML အစဉ်"
+    narration: >
+      [[mark:open-order]] အစဉ် ပြောင်းပြန် လုပ်ရင် preview မှာ မမြင်ရတဲ့ ပြဿနာ တစ်ခု ရှိပါတယ်။
+      [[mark:draw-html-order]] ဥပမာ HTML ထဲမှာ item တွေက 1၊ 2၊ 3၊ 4 အစဉ်အတိုင်း ရှိတယ် ဆိုပါစို့။
+      [[mark:draw-visual]] row reverse ပေးလိုက်တော့ screen ပေါ်မှာ 4၊ 3၊ 2၊ 1 လို့ မြင်ရပါတယ်။
+      [[mark:draw-tab]] ဒါပေမဲ့ Tab key က HTML အစဉ်အတိုင်းပဲ သွားပါတယ်။ ဒါတွေက link တွေ ဆိုရင်၊ Tab key
+      နှိပ်တိုင်း ရွေးထားတဲ့ link က ညာကနေ ဘယ်ကို ခုန်သွားလို့၊ လူတွေ ဖတ်တဲ့ ဘက်နဲ့ ပြောင်းပြန် ဖြစ်ပါမယ်။
+      [[mark:draw-reader]] screen ပေါ်က စာကို အသံနဲ့ ဖတ်ပြတဲ့ screen reader ကလည်း မြင်ရတဲ့ အစဉ် မဟုတ်ဘဲ
+      HTML အစဉ်အတိုင်း ဖတ်ပါတယ်။ ဒါကြောင့် အစဉ်က အရေးကြီးရင် HTML အစဉ်ကို ပြင်ပြီး၊ keyboard နဲ့ page ကို
+      စမ်းကြည့်ပါ။ [[mark:draw-reading-flow]] reading flow ဆိုတဲ့ property အသစ်က Tab key နဲ့ screen reader
+      ရဲ့ အစဉ်ကို မြင်ရတဲ့ အစဉ်နဲ့ ကိုက်အောင် လုပ်ပေးနိုင်ပေမယ့်၊ အခု Chrome နဲ့ Edge မှာပဲ ရသေးလို့
+      အားမကိုးပါနဲ့။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: reversing the flow of items and accessibility"
+        url: "https://web.dev/learn/css/flexbox#reversing_the_flow_of_items_and_accessibility"
+      - title: "MDN — Ordering flex items"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Ordering_flex_items"
+      - title: "CSS Display Module Level 3 — Reordering and accessibility"
+        url: "https://www.w3.org/TR/css-display-3/#order-accessibility"
+      - title: "MDN — reading-flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/reading-flow"
+    actions:
+      - id: open-order
+        type: whiteboard.apply
+        at: { mark: open-order }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-html-order
+        type: whiteboard.apply
+        at: { mark: draw-html-order }
+        upsertIds: [c-html-t, c-html-seq]
+        drawMs: 1600
+      - id: draw-visual
+        type: whiteboard.apply
+        at: { mark: draw-visual }
+        upsertIds:
+          [c-screen-t, c-box-4, c-num-4, c-box-3, c-num-3, c-box-2, c-num-2, c-box-1, c-num-1]
+        drawMs: 2800
+      - id: draw-tab
+        type: whiteboard.apply
+        at: { mark: draw-tab }
+        upsertIds: [c-tab]
+        drawMs: 1600
+      - id: draw-reader
+        type: whiteboard.apply
+        at: { mark: draw-reader }
+        upsertIds: [c-reader, c-fix]
+        drawMs: 2400
+      - id: draw-reading-flow
+        type: whiteboard.apply
+        at: { mark: draw-reading-flow }
+        upsertIds: [c-rf]
+        drawMs: 1400
+
+  - id: nowrap
+    chapter: "Item တွေ မဆံ့တော့ရင်"
+    narration: >
+      [[mark:close-order]] item တွေ မဆံ့တော့ရင် ဘာဖြစ်လဲ ဆိုတာ စားစရာ menu နဲ့ ကြည့်ရအောင်။
+      [[mark:scroll-snacks]] ဒီမှာ card ငါးခုက အပေါ်အောက် ဆင့်နေပါတယ်။ [[mark:type-snacks]] သူတို့ရဲ့ list
+      ကိုလည်း flex container လုပ်ပါမယ်။ card ငါးခုကို ဘေးချင်းကပ် စီဖို့ နေရာ အများကြီး လိုပေမယ့်၊ preview
+      က ဖုန်း screen လောက်ပဲ ကျယ်ပါတယ်။ ရိုက်နေတုန်း list ရဲ့ မျဉ်းပြတ် အစွန်းကို သတိထား ကြည့်ပါ။
+      [[mark:after-snacks]] card တွေက တစ်တန်းတည်းထဲ ကျပ်ကျပ် ဝင်သွားပါပြီ။ စာကြောင်းတွေ ထပ်ခွဲလို့
+      မရတော့တဲ့ အထိ ကျုံ့သွားပေမယ့် မဆံ့သေးလို့၊ နောက်ဆုံး card တွေက မျဉ်းပြတ် အစွန်းကို လွန်ပြီး screen
+      ဘေးကနေ ထွက်သွားပါတယ်။ [[mark:explain-nowrap]] item တွေ မဆံ့ရင် နောက်တစ်တန်း ဆင်းခွင့် ပေးတာကို wrap
+      လို့ ခေါ်ပါတယ်။ flex wrap ရဲ့ initial value က no wrap ဖြစ်လို့ item တွေ မဆင်းဘဲ ကျုံ့ပါတယ်။ ဒါပေမဲ့ lesson 2 မှာ ကြည့်ခဲ့တဲ့ min-content အထိပဲ ကျုံ့နိုင်ပါတယ်။ ဆိုလိုတာက အရှည်ဆုံး စကားလုံးလောက် အကျယ်ပါ။ အဲဒီနောက်
+      container အပြင်ကို လျှံထွက်ပါတယ်။ ဖုန်းမှာဆိုရင် menu တစ်ပိုင်း screen အပြင် ရောက်နေလို့ page ကို
+      ဘေးတိုက် scroll လုပ်ရပါမယ်။ [[mark:stretch-cards]] card တိုင်း အမြင့် တူသွားတာကိုလည်း ကြည့်ပါ။ item တွေက cross axis အတိုင်း ဆန့်တာက နောက်ထပ် default တစ်ခုပါ။ ဒါကို lesson 17 မှာ
+      ကြည့်ပါမယ်။ [[mark:quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ grid မှာရော screen ကျဉ်းသွားရင် column အရေအတွက်က သူ့ဘာသာ လျော့သွားသလား။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] မလျော့ပါဘူး။ နေရာ ဆံ့သလောက်ပဲ column လုပ်ခိုင်းတာကို lesson 19 မှာ ကိုယ်တိုင် ရေးရပါတယ်။ ဒါကြောင့် flexbox မှာရော grid မှာပါ နေရာ မဆံ့ရင် ဘာလုပ်မလဲ ဆိုတာ ကိုယ်တိုင် ရွေးရတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: wrapping flex items"
+        url: "https://web.dev/learn/css/flexbox#wrapping_flex_items"
+      - title: "web.dev Learn CSS — Layout (flex and grid do not wrap by default)"
+        url: "https://web.dev/learn/css/layout"
+      - title: "MDN — flex-wrap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-wrap"
+      - title: "CSS Flexible Box Layout Module Level 1 — Automatic minimum size of flex items"
+        url: "https://www.w3.org/TR/css-flexbox-1/#min-size-auto"
+    actions:
+      - id: close-order
+        type: whiteboard.apply
+        at: { mark: close-order }
+        open: false
+      # Document scroll: the snacks heading to the top of the preview (section
+      # top 392 px at 432 px wide; .snacks has min-height 100vh, so the scroll
+      # is always possible).
+      - id: scroll-snacks
+        type: preview.scroll
+        at: { mark: scroll-snacks }
+        timeoutMs: 5000
+        top: 380
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-snacks
+        type: editor.type
+        at: { mark: type-snacks }
+        cadence: natural
+        target: { file: styles.css, after: "  flex-direction: row-reverse;\n}\n", occurrence: 1 }
+        text: "\n.snacks .menu {\n  display: flex;\n}\n"
+      - id: expect-snacks-row
+        type: expect.preview
+        at: { mark: after-snacks }
+        timeoutMs: 4000
+        target: { by: testId, value: card-shan-noodles }
+        textContains: "ကုန်သွားပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: wrap
+    chapter: "Wrap ဖွင့်ကြည့်ရအောင်"
+    narration: >
+      [[mark:type-wrap]] ဒါဆို wrap ကို ဖွင့်ပြီး card တွေကို နောက်တစ်တန်း ဆင်းခွင့် ပေးကြည့်ရအောင်။
+      [[mark:after-wrap]] အခု card တွေက တန်းအသစ်တွေကို ဆင်းသွားပါပြီ။ card တစ်ခုစီက သူ့ content လိုသလောက်
+      အကျယ်ကို ပြန်ရပြီး၊ နောက် card က မဆံ့တော့ရင် တန်းအသစ်ကနေ စပါတယ်။ [[mark:line-ends]] card တွေက
+      တန်းကို ပြည့်အောင် မဆန့်လို့၊ တန်းတွေရဲ့ အဆုံးမှာ နေရာလွတ် ကျန်နေပါတယ်။ အဲဒီ နေရာလွတ်ကို ယူပြီး item
+      တွေ ကြီးလာအောင် လုပ်တာကို lesson 16 မှာ ကြည့်ပါမယ်။ [[mark:type-wraprev]] နောက်ထပ် တန်ဖိုး တစ်ခုက
+      wrap reverse ပါ။ သူ့ကို အောက်မှာ ထည့်ကြည့်ရအောင်။ [[mark:after-wraprev]] အခု တန်းတွေက အောက်ကနေ
+      အပေါ်ကို ဆင့်သွားပါပြီ။ ပထမ တန်းက အောက်ဆုံးမှာ ရှိပြီး၊ တန်းအသစ်တိုင်းက သူ့ အပေါ်မှာ တက်လာပါတယ်။
+      wrap reverse က cross start နဲ့ cross end ကို လဲလိုက်လို့ပါ။ သိပ် မသုံးကြပါဘူး။ [[mark:balance-note]]
+      Chrome နဲ့ Edge မှာ တန်းတွေကို အရှည် မျှမျှ ဖြစ်အောင် ခွဲပေးတဲ့ တန်ဖိုး အသစ် တစ်ခု ရှိပေမယ့်၊ တခြား
+      browser တွေမှာ မရသေးလို့ ဒီမှာ မသုံးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: wrapping flex items"
+        url: "https://web.dev/learn/css/flexbox#wrapping_flex_items"
+      - title: "MDN — flex-wrap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-wrap"
+      - title: "CSS Flexible Box Layout Module Level 1 — flex-wrap"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-wrap-property"
+    actions:
+      - id: type-wrap
+        type: editor.type
+        at: { mark: type-wrap }
+        cadence: natural
+        target: { file: styles.css, after: ".snacks .menu {\n  display: flex;\n", occurrence: 1 }
+        text: "  flex-wrap: wrap;\n"
+      - id: expect-wrap
+        type: expect.preview
+        at: { mark: after-wrap }
+        timeoutMs: 4000
+        target: { by: testId, value: card-mohinga }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Keystroke-safe: the prefix "wrap" is the value already in force.
+      - id: type-wraprev
+        type: editor.type
+        at: { mark: type-wraprev, offsetMs: 300 }
+        cadence: natural
+        target: { file: styles.css, after: "  flex-wrap: wrap;\n", occurrence: 1 }
+        text: "  flex-wrap: wrap-reverse;\n"
+      - id: expect-wraprev
+        type: expect.preview
+        at: { mark: after-wraprev }
+        timeoutMs: 4000
+        target: { by: testId, value: card-palata }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: lines-board
+    chapter: "Flexbox ဘာကြောင့် one-dimensional လဲ"
+    narration: >
+      card တွေကို ပြန်ကြည့်ပါ။ တစ်တန်းထဲက card တွေရဲ့ အစွန်းတွေက နောက်တစ်တန်းက အစွန်းတွေနဲ့ မညီပါဘူး။
+      [[mark:open-lines]] wrap ဖြစ်လာတဲ့ တန်းတိုင်းက flex line တစ်ကြောင်းစီ ဖြစ်လို့ပါ။
+      [[mark:draw-flex-lines]] flexbox က line တစ်ကြောင်းချင်းကို သီးသန့် စီပြီး၊ အပေါ်က line ဒါမှမဟုတ်
+      အောက်က line ကို လုံးဝ မကြည့်ပါဘူး။ ဒါကြောင့် card တွေ column လိုက် မညီနိုင်တာပါ။
+      [[mark:draw-grid-lines]] item တွေကို row နဲ့ column နှစ်ဘက်လုံး တစ်ပြိုင်နက် ညီအောင် စီချင်ရင်၊
+      ဦးတည်ရာ နှစ်ခုလုံးကို ထိန်းတဲ့ layout လိုပါတယ်။ အဲဒါက lesson 18 က grid ပါ။ [[mark:draw-1d-2d]]
+      one-dimensional ဆိုတာ တကယ်တမ်းတော့ ဒါကို ဆိုလိုတာပါ။ flexbox က တစ်ကြိမ်မှာ axis တစ်ခုကို ထိန်းပြီး၊
+      grid က axis နှစ်ခုလုံးကို ထိန်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: wrapping flex items (each line is independent)"
+        url: "https://web.dev/learn/css/flexbox#wrapping_flex_items"
+      - title: "web.dev Learn CSS — Layout: flexbox and grid"
+        url: "https://web.dev/learn/css/layout#flexbox_and_grid"
+      - title: "MDN — Relationship of grid layout to other layout methods"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Relationship_of_grid_layout_with_other_layout_methods"
+    actions:
+      - id: open-lines
+        type: whiteboard.apply
+        at: { mark: open-lines }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-flex-lines
+        type: whiteboard.apply
+        at: { mark: draw-flex-lines }
+        upsertIds: [d-flex-t, d-f1, d-f2, d-f3, d-f4, d-miss, d-miss-t]
+        drawMs: 3200
+      - id: draw-grid-lines
+        type: whiteboard.apply
+        at: { mark: draw-grid-lines }
+        upsertIds: [d-grid-t, d-g1, d-g2, d-g3, d-g4, d-grid-ok]
+        drawMs: 3000
+      - id: draw-1d-2d
+        type: whiteboard.apply
+        at: { mark: draw-1d-2d }
+        upsertIds: [d-1d, d-2d]
+        drawMs: 2400
+
+  - id: flow-gap
+    chapter: "Flex flow နဲ့ gap"
+    narration: >
+      [[mark:close-lines]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-flow]] direction နဲ့ wrap ကို
+      အများအားဖြင့် တွဲပေးကြလို့၊ နှစ်ခုလုံးကို တစ်ခါတည်း ပေးတဲ့ flex flow ဆိုတဲ့ shorthand ရှိပါတယ်။ wrap
+      လုပ်တဲ့ row ဖြစ်အောင် ပေးပါမယ်။ [[mark:after-flow]] တန်းတွေက အပေါ်ကနေ အောက် ပြန်စီသွားပါပြီ။
+      [[mark:select-flow]] ဒီ shorthand ကို ကြည့်ပါ။ သူက wrap ကိုပါ ပေးပြီး နောက်မှ ရေးထားလို့၊ အပေါ်က
+      wrap reverse ကို နိုင်သွားပါတယ်။ သူ့ initial value က row နဲ့ no wrap ဖြစ်ပြီး၊ စကားလုံး နှစ်လုံးကို
+      ဘယ်အစဉ်နဲ့ ရေးရေး ရပါတယ်။ [[mark:type-gap]] အခု card တွေ တစ်ခုနဲ့ တစ်ခု ကပ်နေလို့၊ သူတို့ရဲ့ list
+      မှာ gap ထည့်ပါမယ်။ [[mark:after-gap]] အခု တန်းတစ်ခုထဲက card တွေကြားမှာရော၊ တန်းတွေကြားမှာပါ နေရာလွတ်
+      ပေါ်လာပါပြီ။ ဒါပေမဲ့ list ရဲ့ အစွန်းနဲ့ card တွေကြားမှာတော့ နေရာလွတ် အပို မရှိပါဘူး။ lesson 13 မှာ
+      ပြောခဲ့သလို gap က item တွေရဲ့ ကြားထဲမှာပဲ ထည့်လို့ပါ။ [[mark:gap-more]] card တိုင်းကို margin
+      ပေးမယ့်အစား container မှာ တစ်ခါတည်း ပေးရုံပါပဲ။ တန်းတွေကြားနဲ့ card တွေကြား နေရာလွတ် မတူစေချင်ရင်
+      row gap နဲ့ column gap ကို သီးသန့် ပေးလို့ ရပါတယ်။ ဒီ gap ကပဲ grid မှာရော၊ lesson 13 က multicolumn
+      layout မှာပါ အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: the flex-flow shorthand"
+        url: "https://web.dev/learn/css/flexbox#the_flex-flow_shorthand"
+      - title: "MDN — flex-flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-flow"
+      - title: "MDN — gap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
+      - title: "web.dev Learn CSS — Grid (gap)"
+        url: "https://web.dev/learn/css/grid"
+    actions:
+      - id: close-lines
+        type: whiteboard.apply
+        at: { mark: close-lines }
+        open: false
+      # line-by-line: a keystroke-typed "row wrap" passes through "row",
+      # which means row nowrap and would squeeze the cards back into one row.
+      - id: type-flow
+        type: editor.type
+        at: { mark: type-flow }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  flex-wrap: wrap-reverse;\n", occurrence: 1 }
+        text: "  flex-flow: row wrap;\n"
+      - id: expect-flow
+        type: expect.preview
+        at: { mark: after-flow }
+        timeoutMs: 4000
+        target: { by: testId, value: card-e-kya-kwe }
+        textContains: "အီကြာကွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flow
+        type: editor.select
+        at: { mark: select-flow }
+        target: { file: styles.css, text: "flex-flow: row wrap;", occurrence: 1 }
+      - id: type-gap
+        type: editor.type
+        at: { mark: type-gap, offsetMs: 400 }
+        cadence: natural
+        target: { file: styles.css, after: "  flex-flow: row wrap;\n", occurrence: 1 }
+        text: "  gap: 12px;\n"
+      - id: expect-gap
+        type: expect.preview
+        at: { mark: after-gap }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-thoke }
+        textContains: "လက်ဖက်သုပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ flex container က သူ့ တိုက်ရိုက် child တွေကို main axis
+      တစ်လျှောက် တန်းစီပါတယ်။ flex direction က အဲဒီ axis ကို ရွေးပြီး၊ start နဲ့ end က စာရေးတဲ့ ဦးတည်ရာကို
+      လိုက်ပါတယ်။ reverse က မြင်ရတာကိုပဲ ပြောင်းပြီး ဖတ်တဲ့ အစဉ်ကို မပြောင်းပါဘူး။ wrap ကို ကိုယ်တိုင်
+      မဖွင့်မချင်း item တွေ နောက်တစ်တန်း မဆင်းပါဘူး။ gap ကတော့ item တွေကြားမှာပဲ နေရာလွတ် ထည့်ပါတယ်။
+      [[mark:next-lesson]] အခုထိ item တိုင်းက သူ့ content လောက်ပဲ ကျယ်နေပါသေးတယ်။ နောက် lesson မှာတော့
+      item တွေက နေရာလွတ်ကို ခွဲယူပြီး ကြီးတာ၊ နေရာ မလောက်ရင် ကျုံ့တာကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+      - title: "web.dev Learn CSS — Flexbox: controlling space inside flex items (next lesson)"
+        url: "https://web.dev/learn/css/flexbox#controlling_space_inside_flex_items"
+    actions:
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".nav ul {\n  display: flex;\n}\n\n.chips {\n  display: flex;\n  flex-direction: column;\n  flex-direction: column-reverse;\n  flex-direction: row-reverse;\n}\n\n.snacks .menu {\n  display: flex;\n  flex-wrap: wrap;\n  flex-wrap: wrap-reverse;\n  flex-flow: row wrap;\n  gap: 12px;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
