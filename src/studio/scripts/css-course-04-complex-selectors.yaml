@@ -1,0 +1,1918 @@
+# CSS course (Burmese), lesson 4 of 43: complex selectors (combinators,
+# compound selectors, pseudo-classes by state and by position, :has()).
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning tied to
+# what is on screen. Everything the learner sees (title, chapters, whiteboard
+# labels, the tea-shop UI) is already Burmese.
+#
+# Shape: board (recall lesson 3, the family tree of a menu card) while the dev
+# server installs → board (the four combinators) → descendant: header links
+# turn cream → child: only the card's own description slants, the nested
+# pairing note does not → next sibling: the owl adds gaps only between cards
+# → board (pseudo-class vs pseudo-element) → subsequent sibling + :checked: a
+# CSS-only "iced only" switch, clicked on and off → compound vs descendant
+# (featured card outline, every badge's text) → :first-child / :last-child →
+# :first-child fails and :first-of-type works in the about section → nth-child
+# stripes and the An+B board → :empty hides the stray note → :has() gives the
+# two cards with a badge a green border, then the :has() board → recap,
+# hand-off to the cascade (lesson 5).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every rule is
+# appended at the end of the file, so an unfinished selector, string or
+# bracket never swallows a later rule. Colour keywords typed keystroke by
+# keystroke (cornsilk, gold, khaki, wheat, seagreen) have no valid shorter
+# prefix. index.html is never edited, so the preview never reloads and the
+# checkbox state survives every CSS edit.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-04-complex-selectors
+  title: "CSS course 4: Selector တွေ အပိုင်း 2"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 4
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks (with lesson blocks: iced-toggle, pairing, a second badge, note) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <input type="checkbox" id="iced-only" data-report="#iced-status" data-testid="iced-only" />
+                <label for="iced-only">အအေးပဲ ပြပါ</label>
+                <p class="visually-hidden" id="iced-status" data-testid="iced-status"></p>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <div class="pairing"><p data-testid="pairing">အီကြာကွေးနဲ့ တွဲစားပါ</p></div>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                    <span class="badge" data-testid="badge-lime-juice">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+                <p class="note" data-testid="note"></p>
+              </section>
+
+              <!-- kit block: about (with a second paragraph) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+                <p>ဧည့်သည်တိုင်းကို မိသားစုလို ကြိုဆိုပါတယ်။</p>
+              </section>
+            </main>
+
+            <!-- kit block: kit-script -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: sections A, B and B2 of the course kit, plus the section C
+      # furniture this page uses — WITHOUT `.site-header a` (the lesson types
+      # the header link colour) and with `.menu-card` margin 0 (the owl adds
+      # the gaps). Section E pins the compact nav row, the pairing note, the
+      # dashed note box and the about section's top space: never typed, never
+      # shown, and none of it does what a typed rule does.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types
+          can focus on one idea. Lesson 4 keeps A, B, B2 and the parts of C its
+          page uses.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture (the parts this page uses) == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 4: the nav links in one row, so the header stays short. */
+        .nav ul {
+          display: flex;
+          gap: 16px;
+        }
+
+        /* Lesson 4: the pairing note nested one level deeper in the first card. */
+        .pairing {
+          padding-left: 8px;
+          border-left: 3px solid var(--tea-light);
+        }
+
+        .pairing p {
+          margin: 0;
+          font-size: 14px;
+        }
+
+        /* Lesson 4: the stray empty note, visible as a dashed box until :empty hides it. */
+        .note {
+          margin: 0;
+          padding: 12px;
+          border: 2px dashed var(--tea);
+          border-radius: var(--radius);
+        }
+
+        .about {
+          margin-top: 24px;
+        }
+      styles.css: ""
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — the family tree of one menu card. Blue = the list, green = the
+    # card (the parent in this picture), orange = its four children, red = the
+    # sibling relation, violet = ancestor / descendant (any depth).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 540,
+        height: 46,
+        text: "Element တွေ ဘယ်လို ဆက်စပ်နေလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-menu,
+        kind: rectangle,
+        x: 520,
+        y: 225,
+        width: 240,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-menu-label,
+        kind: text,
+        x: 560,
+        y: 234,
+        width: 170,
+        height: 36,
+        text: "ul · menu",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 620,
+        y: 285,
+        width: 40,
+        height: 46,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-relation,
+        kind: text,
+        x: 785,
+        y: 290,
+        width: 260,
+        height: 36,
+        text: "parent → child",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-card,
+        kind: rectangle,
+        x: 520,
+        y: 335,
+        width: 240,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-card-label,
+        kind: text,
+        x: 565,
+        y: 344,
+        width: 160,
+        height: 36,
+        text: "li · card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 620,
+        y: 395,
+        width: 40,
+        height: 46,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-h3,
+        kind: rectangle,
+        x: 290,
+        y: 448,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-h3-label,
+        kind: text,
+        x: 345,
+        y: 455,
+        width: 50,
+        height: 36,
+        text: "h3",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-p,
+        kind: rectangle,
+        x: 460,
+        y: 448,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-p-label,
+        kind: text,
+        x: 525,
+        y: 455,
+        width: 30,
+        height: 36,
+        text: "p",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-price,
+        kind: rectangle,
+        x: 630,
+        y: 448,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-price-label,
+        kind: text,
+        x: 670,
+        y: 455,
+        width: 80,
+        height: 36,
+        text: "span",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-badge,
+        kind: rectangle,
+        x: 800,
+        y: 448,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-badge-label,
+        kind: text,
+        x: 840,
+        y: 455,
+        width: 80,
+        height: 36,
+        text: "span",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-child-label,
+        kind: text,
+        x: 990,
+        y: 455,
+        width: 90,
+        height: 36,
+        text: "child",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-sibling-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 508,
+        width: 640,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-sibling-label,
+        kind: text,
+        x: 540,
+        y: 542,
+        width: 220,
+        height: 36,
+        text: "sibling တွေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-ancestor,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 780,
+        height: 36,
+        text: "ancestor → descendant · ဘယ်နှဆင့် ကွာကွာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — the four combinators: the pattern on the left, what it reaches
+    # on the right, one colour per combinator; violet = what a complex
+    # selector is.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Combinator လေးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-desc-code,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 170,
+        height: 40,
+        text: "A   B",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b-desc-text,
+        kind: text,
+        x: 510,
+        y: 235,
+        width: 560,
+        height: 36,
+        text: "A ထဲမှာ ဘယ်လောက် နက်နက် B",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-child-code,
+        kind: text,
+        x: 300,
+        y: 302,
+        width: 170,
+        height: 40,
+        text: "A > B",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: b-child-text,
+        kind: text,
+        x: 510,
+        y: 305,
+        width: 560,
+        height: 36,
+        text: "A ရဲ့ တိုက်ရိုက် child B",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-next-code,
+        kind: text,
+        x: 300,
+        y: 372,
+        width: 170,
+        height: 40,
+        text: "A + B",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b-next-text,
+        kind: text,
+        x: 510,
+        y: 375,
+        width: 560,
+        height: 36,
+        text: "A နောက်မှာ ကပ်လျက် sibling B",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-sub-code,
+        kind: text,
+        x: 300,
+        y: 442,
+        width: 170,
+        height: 40,
+        text: "A ~ B",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: b-sub-text,
+        kind: text,
+        x: 510,
+        y: 445,
+        width: 560,
+        height: 36,
+        text: "A နောက်က sibling B အားလုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-complex-1,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 760,
+        height: 36,
+        text: "combinator နဲ့ ဆက်ထားရင် complex selector",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-complex-2,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 760,
+        height: 36,
+        text: "ရွေးတာက ညာဘက်ဆုံးက element",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — pseudo-class (blue: one colon, a state or a position) vs
+    # pseudo-element (orange: two colons, a part); violet = where the course
+    # covers them in depth.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Pseudo-class နဲ့ pseudo-element",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-pc-head,
+        kind: text,
+        x: 300,
+        y: 238,
+        width: 420,
+        height: 40,
+        text: "pseudo-class   :",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: c-pc-what,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 640,
+        height: 36,
+        text: "element ရဲ့ အခြေအနေ ဒါမှမဟုတ် နေရာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-pc-ex,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 640,
+        height: 36,
+        text: ":checked   :first-child   :hover",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-pe-head,
+        kind: text,
+        x: 300,
+        y: 428,
+        width: 460,
+        height: 40,
+        text: "pseudo-element   ::",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: c-pe-what,
+        kind: text,
+        x: 300,
+        y: 482,
+        width: 640,
+        height: 36,
+        text: "element ရဲ့ အစိတ်အပိုင်း တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-pe-ex,
+        kind: text,
+        x: 300,
+        y: 532,
+        width: 560,
+        height: 36,
+        text: "::first-letter   ::before",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-later,
+        kind: text,
+        x: 300,
+        y: 602,
+        width: 560,
+        height: 36,
+        text: "lesson 26 နဲ့ 27 မှာ အသေးစိတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — the An+B table: n runs 0, 1, 2, 3 (ink); each formula in its
+    # own colour with its keyword; red = counting starts at 1; violet = the
+    # two relatives (of-type, last).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "nth-child နဲ့ An+B",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-n,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 420,
+        height: 36,
+        text: "n = 0, 1, 2, 3 …",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-even,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 380,
+        height: 36,
+        text: "2n → 0, 2, 4, 6",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-even-name,
+        kind: text,
+        x: 760,
+        y: 288,
+        width: 160,
+        height: 36,
+        text: "= even",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-odd,
+        kind: text,
+        x: 300,
+        y: 348,
+        width: 380,
+        height: 36,
+        text: "2n+1 → 1, 3, 5, 7",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-odd-name,
+        kind: text,
+        x: 760,
+        y: 348,
+        width: 160,
+        height: 36,
+        text: "= odd",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-3n,
+        kind: text,
+        x: 300,
+        y: 408,
+        width: 380,
+        height: 36,
+        text: "3n → 0, 3, 6, 9",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-3n-name,
+        kind: text,
+        x: 760,
+        y: 408,
+        width: 300,
+        height: 36,
+        text: "= သုံးခုမြောက် တိုင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-one,
+        kind: text,
+        x: 300,
+        y: 478,
+        width: 760,
+        height: 36,
+        text: "နေရာက 1 ကစ ရေတယ် · 0 ဆိုတဲ့ နေရာ မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-of-type,
+        kind: text,
+        x: 300,
+        y: 538,
+        width: 760,
+        height: 36,
+        text: "nth-of-type · tag တူတာတွေထဲမှာပဲ ရေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-last,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 760,
+        height: 36,
+        text: "nth-last-child · နောက်ဆုံးကနေ ပြန်ရေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — :has(): the card (green) with a badge inside (orange); blue =
+    # step 1, look inside; green circle = step 2, style the card; violet = a
+    # condition that starts with a combinator; red = the three rules.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "has · အထဲကို ကြည့်ပြီး အပြင်ကို ရွေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-card,
+        kind: rectangle,
+        x: 310,
+        y: 240,
+        width: 340,
+        height: 210,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: e-card-label,
+        kind: text,
+        x: 330,
+        y: 250,
+        width: 90,
+        height: 36,
+        text: "card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-badge,
+        kind: rectangle,
+        x: 470,
+        y: 375,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: e-badge-label,
+        kind: text,
+        x: 505,
+        y: 382,
+        width: 90,
+        height: 36,
+        text: "badge",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-look,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 295,
+        width: 50,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-look-label,
+        kind: text,
+        x: 700,
+        y: 290,
+        width: 360,
+        height: 36,
+        text: "① အထဲမှာ badge ရှိလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-style,
+        kind: freedraw,
+        stroke: circle,
+        x: 285,
+        y: 220,
+        width: 390,
+        height: 250,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-style-label,
+        kind: text,
+        x: 700,
+        y: 370,
+        width: 360,
+        height: 36,
+        text: "② ရှိရင် card ကို style",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-sibling,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 780,
+        height: 36,
+        text: "h2:has(+ p) · နောက်က sibling ကိုလည်း ကြည့်လို့ ရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule-1,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 780,
+        height: 36,
+        text: "has ထဲမှာ has မရ · pseudo-element မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule-2,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 780,
+        height: 36,
+        text: "တစ်ခု မမှန်ရင် rule တစ်ခုလုံး ပျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4104
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-tree
+    chapter: "Element တွေ ဘယ်လို ဆက်စပ်နေလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ element တွေကို tag နာမည်၊ class၊ ID နဲ့ attribute တွေကို ကြည့်ပြီး
+      ရွေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ element က ဘာရဲ့ အထဲမှာလဲ၊ ဘာရဲ့ နောက်မှာလဲ၊ ဘယ်နှခုမြောက်
+      နေရာမှာလဲ ဆိုတာနဲ့ ရွေးကြည့်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က
+      editor ထဲမှာ dev server ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။ [[mark:draw-menu]]
+      ဒီလို ရွေးဖို့ မိသားစုထဲမှာ ခေါ်သလို စကားလုံး တချို့ လိုပါတယ်။ HTML element တွေက တစ်ခုထဲမှာ
+      တစ်ခု ရှိနေလို့၊ မျိုးရိုးဇယားလို tree တစ်ခု ဖြစ်နေပါတယ်။ ဒါက သောက်စရာ list နဲ့ သူ့ထဲက card
+      တစ်ခုပါ။ [[mark:draw-relation]] list က card ရဲ့ parent ဖြစ်ပြီး၊ card က list ရဲ့ child ပါ။
+      မိဘနဲ့ သားသမီးလိုပါပဲ။ parent နဲ့ child က အမြဲ တစ်ဆင့်တည်းပဲ ကွာပါတယ်။ [[mark:draw-children]]
+      card မှာလည်း သူ့ကိုယ်ပိုင် child လေးခု ရှိပါတယ်။ နာမည်၊ အကြောင်း ရေးထားတဲ့ စာပိုဒ်၊ ဈေးနှုန်းနဲ့
+      badge ပါ။ [[mark:draw-siblings]] parent တူတဲ့ element တွေကို sibling လို့ ခေါ်ပါတယ်။
+      မောင်နှမတွေလိုပါပဲ။ ဒါကြောင့် ဒီ လေးခုက sibling တွေပါ။ [[mark:draw-ancestor]] ဘယ်နှဆင့်ပဲ
+      ကွာကွာ၊ အပြင်က element ကို ancestor၊ အထဲက element ကို descendant လို့ ခေါ်ပါတယ်။ ဥပမာ list က
+      badge ရဲ့ ancestor ဖြစ်ပြီး၊ badge က list ရဲ့ နှစ်ဆင့် အောက်က descendant ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: complex selectors"
+        url: "https://web.dev/learn/css/selectors#complex_selectors"
+      - title: "MDN — Combinators"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Combinators"
+      - title: "Selectors Level 4 — combinators"
+        url: "https://www.w3.org/TR/selectors-4/#combinators"
+    actions:
+      - id: open-tree-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the descendant scene, well over 40 s of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-menu
+        type: whiteboard.apply
+        at: { mark: draw-menu }
+        upsertIds: [a-menu, a-menu-label, a-card, a-card-label]
+        drawMs: 2000
+      - id: draw-relation
+        type: whiteboard.apply
+        at: { mark: draw-relation }
+        upsertIds: [a-arrow-1, a-relation]
+        drawMs: 1600
+      - id: draw-children
+        type: whiteboard.apply
+        at: { mark: draw-children }
+        upsertIds:
+          [
+            a-arrow-2,
+            a-h3,
+            a-h3-label,
+            a-p,
+            a-p-label,
+            a-price,
+            a-price-label,
+            a-badge,
+            a-badge-label,
+            a-child-label,
+          ]
+        drawMs: 3200
+      - id: draw-siblings
+        type: whiteboard.apply
+        at: { mark: draw-siblings }
+        upsertIds: [a-sibling-arrow, a-sibling-label]
+        drawMs: 1600
+      - id: draw-ancestor
+        type: whiteboard.apply
+        at: { mark: draw-ancestor }
+        upsertIds: [a-ancestor]
+        drawMs: 1600
+
+  - id: combinators-board
+    chapter: "Combinator လေးမျိုး"
+    narration: >
+      [[mark:open-combinators]] ဒီ ဆက်စပ်ပုံတွေကို CSS မှာ ရေးဖို့ selector နှစ်ခုကြားမှာ combinator
+      တစ်ခု ထည့်ပါတယ်။ combinator ဆိုတာ element နှစ်ခု ဘယ်လို ဆက်စပ်နေလဲ ဆိုတာ ပြောပြတဲ့ သင်္ကေတ
+      ဖြစ်ပြီး၊ CSS မှာ လေးမျိုး ရှိပါတယ်။ [[mark:draw-descendant]] ပထမ တစ်မျိုးက selector
+      နှစ်ခုကြားမှာ space တစ်ခုပဲ ခြားထားတာပါ။ A ထဲမှာ ဘယ်နှဆင့် နက်နက် ရှိတဲ့ B ကိုမဆို ရွေးပါတယ်။
+      [[mark:draw-child]] ဒုတိယ တစ်မျိုးက A ရဲ့ တိုက်ရိုက် child၊ တစ်ဆင့်တည်း အောက်က B ကိုပဲ
+      ရွေးပါတယ်။ [[mark:draw-next]] တတိယ တစ်မျိုးက A ရဲ့ နောက်မှာ ကပ်လျက် ရှိတဲ့ sibling B ကို
+      ရွေးပါတယ်။ [[mark:draw-subsequent]] နောက်ဆုံး တစ်မျိုးကတော့ ကပ်လျက် တစ်ခုတည်း မဟုတ်ဘဲ၊ A ရဲ့
+      နောက်မှာ ရှိတဲ့ sibling B အားလုံးကို ရွေးပါတယ်။ [[mark:draw-complex]] selector တွေကို ဒီလို
+      combinator နဲ့ ဆက်ထားရင် complex selector လို့ ခေါ်ပါတယ်။ complex selector က ညာဘက် အစွန်ဆုံးက
+      element ကို အမြဲ ရွေးပြီး၊ ဘယ်ဘက်က အပိုင်းတွေကတော့ အဲဒီ element ရဲ့ မိသားစုအကြောင်း စစ်တဲ့
+      အခြေအနေတွေပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: combinators"
+        url: "https://web.dev/learn/css/selectors#combinators"
+      - title: "MDN — CSS selector structure (complex selectors)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors/Selector_structure"
+      - title: "Selectors Level 4 — structure and terminology"
+        url: "https://www.w3.org/TR/selectors-4/#structure"
+    actions:
+      - id: open-combinators
+        type: whiteboard.apply
+        at: { mark: open-combinators }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-descendant
+        type: whiteboard.apply
+        at: { mark: draw-descendant }
+        upsertIds: [b-desc-code, b-desc-text]
+        drawMs: 1600
+      - id: draw-child
+        type: whiteboard.apply
+        at: { mark: draw-child }
+        upsertIds: [b-child-code, b-child-text]
+        drawMs: 1400
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: draw-next }
+        upsertIds: [b-next-code, b-next-text]
+        drawMs: 1400
+      - id: draw-subsequent
+        type: whiteboard.apply
+        at: { mark: draw-subsequent }
+        upsertIds: [b-sub-code, b-sub-text]
+        drawMs: 1400
+      - id: draw-complex
+        type: whiteboard.apply
+        at: { mark: draw-complex }
+        upsertIds: [b-complex-1, b-complex-2]
+        drawMs: 2000
+
+  - id: descendant
+    narration: >
+      [[mark:close-combinators]] လက်ဖက်ရည်ဆိုင်မှာ စမ်းကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့
+      HTML ဖိုင်ပါ။ header၊ သောက်စရာ menu နဲ့ ဆိုင်အကြောင်း အပိုင်း ပါပါတယ်။ [[mark:select-nav]]
+      header ထဲက link တွေကို ကြည့်ပါ။ link တစ်ခုစီက list item ထဲမှာ ရှိပြီး၊ list item က list ထဲမှာ၊
+      list က navigation ထဲမှာ၊ navigation က header ထဲမှာ ရှိပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS
+      ဖိုင်က အလွတ် ပြန်ဖြစ်နေပါတယ်။ ဆိုင်ရဲ့ အရောင်တွေကတော့ အရင်လိုပဲ base ဖိုင်ကနေ လာပါတယ်။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်သွားလို့၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။ ဆိုင်နာမည်
+      အောက်က link တွေကို ကြည့်ပါ။ အညိုရင့် header ပေါ်မှာ အညိုရောင် စာလုံး ဖြစ်နေလို့ ဖတ်ရ ခက်ပါတယ်။
+      [[mark:type-header-links]] header ထဲမှာ ရှိတဲ့ link အားလုံးကို ရွေးပြီး ခရင်မ်ရောင် ဖျော့ဖျော့
+      ပေးပါမယ်။ selector နှစ်ခုကြားမှာ space တစ်ခုပဲ ခြားထားတာကို သတိထား ကြည့်ပါ။
+      [[mark:after-header-links]] link သုံးခုလုံး ခရင်မ်ရောင် ဖြစ်သွားပြီး ဖတ်ရ လွယ်သွားပါပြီ။ ဒီ link
+      တွေက header ရဲ့ child မဟုတ်ဘဲ လေးဆင့် အောက်မှာ ရှိပါတယ်။ ဒါပေမဲ့ descendant combinator က
+      ဘယ်နှဆင့် နက်နက် ကိုက်လို့ သူတို့ဆီ ရောက်သွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: descendant combinator"
+        url: "https://web.dev/learn/css/selectors#descendant_combinator"
+      - title: "MDN — Descendant combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Descendant_combinator"
+    actions:
+      - id: close-combinators
+        type: whiteboard.apply
+        at: { mark: close-combinators }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-nav
+        type: editor.select
+        at: { mark: select-nav }
+        target:
+          {
+            file: index.html,
+            text: "<nav class=\"nav\" aria-label=\"ဆိုင်\">\n        <ul>\n          <li><a class=\"nav-link active\" href=\"#drinks\" data-testid=\"nav-drinks\">မီနူး</a></li>",
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-nav-link
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: nav-drinks }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-nav-link }
+      - id: type-header-links
+        type: editor.type
+        at: { mark: type-header-links }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".site-header a {\n  color: cornsilk;\n}\n"
+      - id: expect-nav-hours
+        type: expect.preview
+        at: { mark: after-header-links }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-hours }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: child
+    narration: >
+      [[mark:scroll-menu]] အခု သောက်စရာ menu ဆီ scroll ဆင်းကြည့်ရအောင်။ [[mark:open-index-card]] HTML
+      ထဲမှာ ပထမ card ကို ကြည့်ပါ။ [[mark:select-desc]] ဒီ အကြောင်း ရေးထားတဲ့ စာပိုဒ်က card ရဲ့
+      တိုက်ရိုက် child ပါ။ [[mark:select-pairing]] သူ့အောက်က မှတ်ချက် တိုတိုလေးလည်း စာပိုဒ်ပါပဲ။
+      ဒါပေမဲ့ နောက်ထပ် box တစ်ခုထဲမှာ ရှိလို့၊ card ရဲ့ child မဟုတ်ဘဲ child ရဲ့ child ဖြစ်နေပါတယ်။
+      [[mark:open-styles-child]] CSS ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-child]] ဒီ rule က menu card
+      ရဲ့ တိုက်ရိုက် child ဖြစ်တဲ့ စာပိုဒ်တွေကိုပဲ ရွေးပြီး၊ စာလုံးတွေကို စောင်းပေးပါတယ်။ ရိုက်နေတုန်း
+      preview ထဲက card တွေကို ကြည့်ထားပါ။ [[mark:after-child]] အကြောင်း ရေးထားတဲ့ စာပိုဒ်တိုင်း စောင်းသွားပေမယ့်၊ ပထမ card ထဲက
+      မှတ်ချက်ကတော့ တစ်ဆင့် ပိုနက်နေလို့ မတ်မတ်ပဲ ကျန်ပါတယ်။ ကြားမှာ space ပဲ ခြားထားရင် စာပိုဒ်
+      နှစ်ခုလုံး ကိုက်မှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: child combinator"
+        url: "https://web.dev/learn/css/selectors#child_combinator"
+      - title: "MDN — Child combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Child_combinator"
+    actions:
+      - id: scroll-menu
+        type: preview.scroll
+        at: { mark: scroll-menu }
+        top: 180
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-index-card
+        type: workspace.openFile
+        at: { mark: open-index-card }
+        path: index.html
+      - id: select-desc
+        type: editor.select
+        at: { mark: select-desc }
+        target: { file: index.html, text: '<p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>', occurrence: 1 }
+      - id: select-pairing
+        type: editor.select
+        at: { mark: select-pairing }
+        target:
+          {
+            file: index.html,
+            text: '<div class="pairing"><p data-testid="pairing">အီကြာကွေးနဲ့ တွဲစားပါ</p></div>',
+            occurrence: 1,
+          }
+      - id: open-styles-child
+        type: workspace.openFile
+        at: { mark: open-styles-child }
+        path: styles.css
+      - id: type-child
+        type: editor.type
+        at: { mark: type-child }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: cornsilk;\n}\n", occurrence: 1 }
+        text: "\n.menu-card > p {\n  font-style: italic;\n}\n"
+      - id: expect-pairing
+        type: expect.preview
+        at: { mark: after-child }
+        timeoutMs: 4000
+        target: { by: testId, value: pairing }
+        textContains: "အီကြာကွေးနဲ့ တွဲစားပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: owl
+    narration: >
+      အခု card တွေကိုယ်တိုင်ကို ကြည့်ပါ။ ဒီ lesson မှာ base ဖိုင်က card တွေကို margin မပေးထားလို့၊
+      တစ်ခုနဲ့ တစ်ခု ကပ်နေပါတယ်။ [[mark:type-owl]] ဒီ rule က card တွေကြားမှာ နေရာလွတ် ထည့်ပေးပါမယ်။
+      menu list ရဲ့ child တွေထဲက၊ တစ်ခုရဲ့ နောက်မှာ ကပ်လျက် ရှိတဲ့ child တိုင်းကို ရွေးပြီး၊
+      အပေါ်ဘက်မှာ နေရာလွတ် နည်းနည်း ပေးပါတယ်။ [[mark:after-owl]] အခု card နှစ်ခုတိုင်းကြားမှာ နေရာလွတ်
+      ရှိသွားပေမယ့်၊ ပထမ card ရဲ့ အပေါ်မှာတော့ နေရာလွတ် အပို မပေါ်ပါဘူး။ ပထမ card ရဲ့ ရှေ့မှာ sibling
+      မရှိလို့ မကိုက်တာပါ။ [[mark:select-owl]] selector ရဲ့ နောက်ဆုံးပိုင်းကို ကြည့်ပါ။ universal
+      selector၊ next-sibling combinator၊ ပြီးတော့ universal selector နောက်တစ်ခု ပါပါတယ်။ ဇီးကွက်ရဲ့
+      မျက်လုံး နှစ်လုံးနဲ့ နှုတ်သီးနဲ့ တူလို့၊ developer တွေက owl selector လို့ ခေါ်ကြပါတယ်။
+      [[mark:select-child-part]] ရှေ့က child combinator ကလည်း အရေးကြီးပါတယ်။ သူ မပါရင် ဒီ rule က card
+      တွေရဲ့ အထဲအထိ ရောက်သွားပြီး၊ ပထမ card ထဲက မှတ်ချက်လို element တွေကိုပါ အပေါ်မှာ နေရာလွတ်
+      ထည့်မိမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: next sibling combinator"
+        url: "https://web.dev/learn/css/selectors#next_sibling_combinator"
+      - title: "MDN — Next-sibling combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Next-sibling_combinator"
+      - title: "A List Apart — Axiomatic CSS and Lobotomized Owls"
+        url: "https://alistapart.com/article/axiomatic-css-and-lobotomized-owls/"
+    actions:
+      - id: type-owl
+        type: editor.type
+        at: { mark: type-owl }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-style: italic;\n}\n", occurrence: 1 }
+        text: "\n.menu > * + * {\n  margin-top: 12px;\n}\n"
+      - id: expect-menu
+        type: expect.preview
+        at: { mark: after-owl }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-owl
+        type: editor.select
+        at: { mark: select-owl }
+        target: { file: styles.css, text: "* + *", occurrence: 1 }
+      - id: select-child-part
+        type: editor.select
+        at: { mark: select-child-part }
+        target: { file: styles.css, text: ".menu >", occurrence: 1 }
+
+  - id: pseudo-board
+    chapter: "Pseudo-class နဲ့ pseudo-element"
+    narration: >
+      [[mark:open-pseudo]] နောက်ဆုံး combinator မတိုင်ခင်၊ selector အမျိုးအစား နောက်တစ်ခု သိထားရပါမယ်။
+      [[mark:draw-pseudo-class]] pseudo-class က colon တစ်ခုနဲ့ စပါတယ်။ pseudo-class ဆိုတာ element ရဲ့
+      အခြေအနေ ဒါမှမဟုတ် နေရာကို ကြည့်ပြီး ရွေးတဲ့ selector ပါ။ check လုပ်ထားတဲ့ checkbox၊ list ထဲက
+      ပထမဆုံး child၊ mouse pointer တင်ထားတဲ့ element စတာမျိုးပါ။ browser က ကိုယ့်အစား ထည့်ပေး
+      ဖြုတ်ပေးတဲ့ class တစ်ခုလို စဉ်းစားလို့ ရပါတယ်။ [[mark:draw-pseudo-element]] pseudo-element ကတော့
+      colon နှစ်ခုနဲ့ စပါတယ်။ သူက element တစ်ခုလုံးကို မရွေးဘဲ၊ element ရဲ့ အစိတ်အပိုင်း တစ်ခုကိုပဲ
+      style ပေးပါတယ်။ ပထမဆုံး စာလုံး၊ ဒါမှမဟုတ် content ရဲ့ ရှေ့မှာ CSS က ထည့်ပေးတဲ့ box အပို တစ်ခု
+      စတာမျိုးပါ။ [[mark:draw-later]] ဒီ lesson မှာ pseudo-class ပဲ သုံးပြီး၊ နှစ်မျိုးလုံးကို lesson
+      26 နဲ့ 27 မှာ အသေးစိတ် ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: pseudo-classes and pseudo-elements"
+        url: "https://web.dev/learn/css/selectors#pseudo-classes_and_pseudo-elements"
+      - title: "MDN — Pseudo-classes"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes"
+      - title: "MDN — Pseudo-elements"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-elements"
+    actions:
+      - id: open-pseudo
+        type: whiteboard.apply
+        at: { mark: open-pseudo }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-pseudo-class
+        type: whiteboard.apply
+        at: { mark: draw-pseudo-class }
+        upsertIds: [c-pc-head, c-pc-what, c-pc-ex]
+        drawMs: 2600
+      - id: draw-pseudo-element
+        type: whiteboard.apply
+        at: { mark: draw-pseudo-element }
+        upsertIds: [c-pe-head, c-pe-what, c-pe-ex]
+        drawMs: 2600
+      - id: draw-later
+        type: whiteboard.apply
+        at: { mark: draw-later }
+        upsertIds: [c-later]
+        drawMs: 1000
+
+  - id: checked-switch
+    chapter: "JavaScript မပါတဲ့ switch"
+    narration: >
+      [[mark:close-pseudo]] အခု JavaScript မပါဘဲ switch တစ်ခု လုပ်ကြည့်ရအောင်။
+      [[mark:open-index-toggle]] HTML ထဲမှာ သောက်စရာ list ရဲ့ အပေါ်ကို ကြည့်ပါ။
+      [[mark:select-checkbox]] အအေးပဲ ပြပါ ဆိုတဲ့ label ပါတဲ့ checkbox တစ်ခု ရှိပါတယ်။ checkbox၊ သူ့
+      label နဲ့ list သုံးခုလုံးက section တစ်ခုတည်းထဲမှာ ရှိလို့၊ parent တူတဲ့ sibling တွေ ဖြစ်ပါတယ်။
+      [[mark:open-styles-switch]] CSS ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-switch]] ဒီ rule က checkbox
+      ကနေ စပြီး၊ check လုပ်ထားတဲ့ အချိန်မှာပဲ ကိုက်ပါတယ်။ အဲဒါက checked ဆိုတဲ့ pseudo-class ပါ။
+      အဲဒီကနေ နောက်က sibling တွေထဲက menu list ဆီ သွားပြီး၊ list ထဲက ပူတယ်လို့ attribute မှာ
+      မှတ်ထားတဲ့ သောက်စရာ တိုင်းကို ဖျောက်ပါတယ်။ [[mark:after-switch]] checkbox ကို check မလုပ်ရသေးလို့
+      ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:click-on]] check လုပ်ကြည့်ရအောင်။ [[mark:after-click-on]] အပူ
+      သောက်စရာ နှစ်မျိုး ပျောက်သွားပြီး၊ အအေးတွေပဲ ကျန်ပါတော့တယ်။ [[mark:explain-subsequent]] ဒါက
+      subsequent-sibling combinator ရဲ့ အလုပ်ပါ။ checkbox နဲ့ list ကြားမှာ label ရှိနေလို့၊ next-sibling combinator နဲ့ဆိုရင် list ဆီ
+      မရောက်နိုင်ပါဘူး။ [[mark:click-off]] ပြန်ဖြုတ်ကြည့်ရအောင်။ [[mark:after-click-off]] အပူတွေ
+      ပြန်ပေါ်လာပါပြီ။ [[mark:only-forward]] ဦးတည်ရာကို သတိထား ကြည့်ပါ။ combinator တိုင်းက အထဲကို
+      ဆင်းတာ၊ ဒါမှမဟုတ် နောက်က sibling တွေဆီ ရှေ့ဆက်တာပဲ ရှိပါတယ်။ ဒါကြောင့် အကြာကြီးအထိ CSS မှာ
+      element ကို သူ့ထဲမှာ ဘာပါလဲ ဆိုတာနဲ့ ရွေးလို့ မရခဲ့ပါဘူး။ ဒါ ဘယ်လို ပြောင်းသွားလဲ ဆိုတာ lesson
+      အဆုံးမှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: subsequent-sibling combinator"
+        url: "https://web.dev/learn/css/selectors#subsequent-_sibling_combinator"
+      - title: "MDN — Subsequent-sibling combinator"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Subsequent-sibling_combinator"
+      - title: "MDN — :checked"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:checked"
+    actions:
+      - id: close-pseudo
+        type: whiteboard.apply
+        at: { mark: close-pseudo }
+        open: false
+      - id: open-index-toggle
+        type: workspace.openFile
+        at: { mark: open-index-toggle }
+        path: index.html
+      - id: select-checkbox
+        type: editor.select
+        at: { mark: select-checkbox }
+        target:
+          {
+            file: index.html,
+            text: "<input type=\"checkbox\" id=\"iced-only\" data-report=\"#iced-status\" data-testid=\"iced-only\" />\n        <label for=\"iced-only\">အအေးပဲ ပြပါ</label>",
+            occurrence: 1,
+          }
+      - id: open-styles-switch
+        type: workspace.openFile
+        at: { mark: open-styles-switch }
+        path: styles.css
+      - id: type-switch
+        type: editor.type
+        at: { mark: type-switch }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-top: 12px;\n}\n", occurrence: 1 }
+        text: "\n#iced-only:checked ~ .menu [data-temp=\"hot\"] {\n  display: none;\n}\n"
+      - id: click-on
+        type: preview.click
+        at: { mark: click-on }
+        target: { by: testId, value: iced-only }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-checked
+        type: expect.preview
+        at: { mark: after-click-on }
+        timeoutMs: 4000
+        target: { by: testId, value: iced-status }
+        textContains: "checked"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-off
+        type: preview.click
+        at: { mark: click-off }
+        target: { by: testId, value: iced-only }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-unchecked
+        type: expect.preview
+        at: { mark: after-click-off }
+        timeoutMs: 4000
+        target: { by: testId, value: iced-status }
+        textContains: "unchecked"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: compound
+    chapter: "Compound selector ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:type-compound]] အခု သေးသေးလေး ဖြစ်ပေမယ့် အများကြီး ကွာစေတဲ့ အချက် တစ်ခုကို ကြည့်ရအောင်။
+      ဒီ rule မှာ class selector နှစ်ခုကို ကြားမှာ ဘာမှ မခြားဘဲ ကပ်ရေးထားပါတယ်။
+      [[mark:after-compound]] လက်ဖက်ရည် card မှာပဲ ရွှေရောင် outline ပေါ်လာပါတယ်။ ကြားမှာ ဘာမှ
+      မခြားရင် class နှစ်ခုလုံး element တစ်ခုတည်းမှာ ရှိရပါမယ်။ menu card လည်း ဖြစ်၊ featured လည်း
+      ဖြစ်တဲ့ card ပါ။ ပြီးခဲ့တဲ့ lesson မှာ နာမည် ကြားခဲ့တဲ့ compound selector ဆိုတာ ဒါပါ။
+      [[mark:type-badge]] နောက် rule က
+      အတူတူနီးပါး ဖြစ်ပေမယ့်၊ class နှစ်ခုကြားမှာ space တစ်ခု ခြားထားပါတယ်။ [[mark:after-badge]] အခု
+      card ထဲက badge တိုင်းရဲ့ စာလုံးက ရွှေရောင် ဖြစ်သွားပါပြီ။ space ပါသွားတော့ descendant combinator
+      ပြန်ဖြစ်သွားပြီး၊ menu card ထဲမှာ ဘယ်နေရာ ရှိရှိ badge ကို ရွေးတာပါ။ [[mark:quiz]]
+      စစ်ကြည့်ရအောင်။ class နာမည် ရှေ့က အစက်ကရော combinator လား။ pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      မဟုတ်ပါဘူး။ အစက်က class selector ရဲ့ အစိတ်အပိုင်း ဖြစ်ပြီး၊ compound selector မှာ combinator လုံးဝ မပါပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: compound selectors"
+        url: "https://web.dev/learn/css/selectors#compound_selectors"
+      - title: "web.dev Learn CSS — Selectors: check your understanding"
+        url: "https://web.dev/learn/css/selectors#check_your_understanding_3"
+      - title: "MDN — CSS selector structure (compound selectors)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors/Selector_structure"
+    actions:
+      - id: type-compound
+        type: editor.type
+        at: { mark: type-compound }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  display: none;\n}\n", occurrence: 1 }
+        text: "\n.menu-card.featured {\n  outline: 3px solid gold;\n}\n"
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline: 3px solid gold;\n}\n", occurrence: 1 }
+        text: "\n.menu-card .badge {\n  color: gold;\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: first-last
+    chapter: "နေရာနဲ့ ရွေးကြည့်ရအောင်"
+    narration: >
+      [[mark:type-first-child]] အခု element ကို နေရာနဲ့ ရွေးကြည့်ရအောင်။ ဒီ rule က menu card ကို သူ့
+      parent ရဲ့ ပထမဆုံး child ဖြစ်မှသာ ရွေးပြီး၊ နောက်ခံကို အဝါရောင် ပေးပါတယ်။
+      [[mark:after-first-child]] ပထမ card ဖြစ်တဲ့ လက်ဖက်ရည် တစ်ခုတည်း အဝါရောင် ဖြစ်သွားပါပြီ။
+      [[mark:type-last-child]] last-child ကလည်း ဒီသဘောပါပဲ၊ နောက်ဆုံးဘက်ကနေ ကြည့်တာပါ။ နောက်ဆုံး card
+      ရဲ့ အောက်မှာ နေရာလွတ် နည်းနည်း ပေးကြည့်ရအောင်။ ဒါမှ list အောက်က box လေးနဲ့ ကပ်မနေတော့မှာပါ။
+      [[mark:after-last-child]] မျဉ်းပြတ် box လေးက နောက်ဆုံး card နဲ့ ခွာသွားပါပြီ။ [[mark:only-child]] sibling လုံးဝ
+      မရှိတဲ့ element အတွက် only-child လည်း ရှိပါတယ်။ card တစ်ခုတည်း ပါတဲ့ list ဆိုရင်၊ အဲဒီ card က
+      first-child၊ last-child နဲ့ only-child သုံးခုလုံးနဲ့ တစ်ပြိုင်နက် ကိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: first-child and last-child"
+        url: "https://web.dev/learn/css/pseudo-classes#first-child_and_last-child"
+      - title: "web.dev Learn CSS — Pseudo-classes: only-child"
+        url: "https://web.dev/learn/css/pseudo-classes#only-child"
+      - title: "MDN — :first-child"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:first-child"
+      - title: "MDN — :only-child"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:only-child"
+    actions:
+      - id: type-first-child
+        type: editor.type
+        at: { mark: type-first-child }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: gold;\n}\n", occurrence: 1 }
+        text: "\n.menu-card:first-child {\n  background: khaki;\n}\n"
+      - id: expect-first-card
+        type: expect.preview
+        at: { mark: after-first-child }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-last-child
+        type: editor.type
+        at: { mark: type-last-child }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: khaki;\n}\n", occurrence: 1 }
+        text: "\n.menu-card:last-child {\n  margin-bottom: 24px;\n}\n"
+
+  - id: of-type
+    narration: >
+      [[mark:scroll-about]] ဆိုင်အကြောင်း အပိုင်းဆီ scroll ဆင်းကြည့်ရအောင်။ [[mark:open-index-about]]
+      HTML ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။ [[mark:select-about]] ဒီ အပိုင်းက ခေါင်းစဉ်နဲ့ စပြီး၊ နောက်မှာ
+      စာပိုဒ် နှစ်ခု ပါပါတယ်။ ပြီးခဲ့တဲ့ lesson အစကလိုပဲ ပထမ စာပိုဒ်ကို စာလုံးထူ လုပ်ကြည့်ရအောင်။
+      [[mark:open-styles-about]] CSS ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-about-first-child]] first-child
+      နဲ့ အရင် စမ်းကြည့်ပါမယ်။ ဒီ selector က ဆိုင်အကြောင်း အပိုင်းထဲက စာပိုဒ် ဖြစ်ပြီး၊ parent ရဲ့
+      ပထမဆုံး child လည်း ဖြစ်တဲ့ element ကို ရှာပါတယ်။ [[mark:after-about-first-child]] ဘာမှ
+      မပြောင်းပါဘူး။ ပထမ child က ခေါင်းစဉ် ဖြစ်နေလို့၊ ပထမ child ဖြစ်တဲ့ စာပိုဒ် မရှိပါဘူး။
+      [[mark:type-first-of-type]] ဒီတစ်ခါ first-child နေရာမှာ first-of-type ကို
+      ထည့်ပြီး rule ကို ပြန်ရေးပါမယ်။ ကျန်တာ အကုန် အတူတူပါပဲ။ အပေါ်က rule ကိုတော့ နှိုင်းယှဉ်လို့
+      ရအောင် ချန်ထားပါမယ်။ [[mark:after-first-of-type]] အခု ပထမ စာပိုဒ်က စာလုံးထူ ဖြစ်သွားပါပြီ။
+      first-of-type က tag တူတဲ့ sibling တွေထဲမှာပဲ ရေတွက်လို့၊ ခေါင်းစဉ်ကို ကျော်သွားတာပါ။ ပြီးခဲ့တဲ့
+      lesson အစမှာ ရေးခဲ့တဲ့ selector က ဒါပါပဲ။ [[mark:of-type-family]] ဒီမှာ type ဆိုတာ class မဟုတ်ဘဲ tag နာမည်ကို
+      ပြောတာပါ။ last-of-type လည်း ရှိပြီး၊ sibling တွေထဲမှာ အဲဒီ tag နဲ့ တစ်ခုတည်းပဲ ရှိတဲ့ element
+      အတွက် only-of-type လည်း ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: first-of-type and last-of-type"
+        url: "https://web.dev/learn/css/pseudo-classes#first-of-type_and_last-of-type"
+      - title: "web.dev Learn CSS — Pseudo-classes: only-of-type"
+        url: "https://web.dev/learn/css/pseudo-classes#only-of-type"
+      - title: "MDN — :first-of-type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:first-of-type"
+      - title: "MDN — :only-of-type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:only-of-type"
+    actions:
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: scroll-about }
+        top: 900
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-index-about
+        type: workspace.openFile
+        at: { mark: open-index-about }
+        path: index.html
+      - id: select-about
+        type: editor.select
+        at: { mark: select-about }
+        target:
+          {
+            file: index.html,
+            text: "<h2>ဆိုင်အကြောင်း</h2>\n        <p class=\"story\">",
+            occurrence: 1,
+          }
+      - id: open-styles-about
+        type: workspace.openFile
+        at: { mark: open-styles-about }
+        path: styles.css
+      - id: type-about-first-child
+        type: editor.type
+        at: { mark: type-about-first-child }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-bottom: 24px;\n}\n", occurrence: 1 }
+        text: "\n.about p:first-child {\n  font-weight: bold;\n}\n"
+      - id: type-first-of-type
+        type: editor.type
+        at: { mark: type-first-of-type }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".about p:first-child {\n  font-weight: bold;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.about p:first-of-type {\n  font-weight: bold;\n}\n"
+      - id: expect-about
+        type: expect.preview
+        at: { mark: after-first-of-type }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: nth-child
+    narration: >
+      [[mark:scroll-menu-again]] menu ဆီ ပြန်တက်ပါမယ်။ [[mark:type-nth]] nth-child က sibling တွေထဲက
+      ဘယ်နှခုမြောက်လဲ ဆိုတာနဲ့ ရွေးပါတယ်။ even ဆိုတဲ့ keyword နဲ့ဆိုရင် ဒုတိယ၊ စတုတ္ထ စတဲ့ စုံဂဏန်း
+      card တွေကို ရွေးပြီး အညိုဖျော့ရောင် ပေးပါမယ်။ [[mark:after-nth]] card တွေ အရောင် တစ်လှည့်စီ
+      ပြောင်းသွားပါပြီ။ ပထမ card က first-child ကြောင့် အဝါ၊ ဒုတိယနဲ့ စတုတ္ထက အညိုဖျော့ ဖြစ်ပြီး၊
+      တတိယကတော့ အဖြူ ကျန်ပါတယ်။ [[mark:open-anb]] ကွင်းထဲမှာ keyword အစား ပုံသေနည်း သေးသေး တစ်ခုလည်း
+      ရေးလို့ ရပါတယ်။ [[mark:draw-n]] browser က n နေရာမှာ 0၊ 1၊ 2၊ 3 ဆိုပြီး အစဉ်လိုက် ထည့်တွက်ပါတယ်။
+      [[mark:draw-even]] n ကို နှစ်ဆ လုပ်ရင် 0၊ 2၊ 4၊ 6 ရလို့ even နဲ့ အတူတူပါပဲ။ [[mark:draw-odd]]
+      နှစ်ဆ လုပ်ပြီး တစ် ပေါင်းရင်တော့ 1၊ 3၊ 5၊ 7 ရလို့ odd နဲ့ တူပါတယ်။ [[mark:draw-3n]] n ကို သုံးဆ
+      လုပ်ရင် သုံးခုမြောက် တိုင်း ရပါတယ်။ [[mark:draw-one]] နေရာတွေကို 1 ကနေ စရေတွက်လို့ 0 ဆိုတဲ့
+      နေရာမှာ element မရှိပါဘူး။ 0 ထွက်ရင် ဘာမှ မရွေးပါဘူး။ [[mark:draw-of-type]] nth-of-type
+      ကလည်း ဒီလိုပဲ ရေတွက်ပေမယ့်၊ tag တူတဲ့ sibling တွေထဲမှာပဲ ရေပါတယ်။ [[mark:draw-last]]
+      nth-last-child နဲ့ nth-last-of-type ကတော့ နောက်ဆုံးကနေ ပြန်ရေတာ ဖြစ်လို့၊ nth-last-child ကို 1
+      ပေးရင် last-child နဲ့ အတူတူပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: nth-child and nth-of-type"
+        url: "https://web.dev/learn/css/pseudo-classes#nth-child_and_nth-of-type"
+      - title: "MDN — :nth-child"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:nth-child"
+      - title: "MDN — :nth-last-child"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:nth-last-child"
+      - title: "Selectors Level 4 — the An+B notation"
+        url: "https://www.w3.org/TR/selectors-4/#the-nth-child-pseudo"
+    actions:
+      - id: scroll-menu-again
+        type: preview.scroll
+        at: { mark: scroll-menu-again }
+        top: 180
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-nth
+        type: editor.type
+        at: { mark: type-nth }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".about p:first-of-type {\n  font-weight: bold;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.menu-card:nth-child(even) {\n  background: wheat;\n}\n"
+      - id: expect-falooda
+        type: expect.preview
+        at: { mark: after-nth }
+        timeoutMs: 4000
+        target: { by: testId, value: card-falooda }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-anb
+        type: whiteboard.apply
+        at: { mark: open-anb }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-n
+        type: whiteboard.apply
+        at: { mark: draw-n }
+        upsertIds: [d-n]
+        drawMs: 1000
+      - id: draw-even
+        type: whiteboard.apply
+        at: { mark: draw-even }
+        upsertIds: [d-even, d-even-name]
+        drawMs: 1400
+      - id: draw-odd
+        type: whiteboard.apply
+        at: { mark: draw-odd }
+        upsertIds: [d-odd, d-odd-name]
+        drawMs: 1400
+      - id: draw-3n
+        type: whiteboard.apply
+        at: { mark: draw-3n }
+        upsertIds: [d-3n, d-3n-name]
+        drawMs: 1400
+      - id: draw-one
+        type: whiteboard.apply
+        at: { mark: draw-one }
+        upsertIds: [d-one]
+        drawMs: 1200
+      - id: draw-of-type
+        type: whiteboard.apply
+        at: { mark: draw-of-type }
+        upsertIds: [d-of-type]
+        drawMs: 1200
+      - id: draw-last
+        type: whiteboard.apply
+        at: { mark: draw-last }
+        upsertIds: [d-last]
+        drawMs: 1200
+
+  - id: empty
+    chapter: "ဘာမှ မပါတဲ့ element ကို ရွေးကြည့်ရအောင်"
+    narration: >
+      [[mark:close-anb]] သောက်စရာ list အောက်က မျဉ်းပြတ် box လေးကို ကြည့်ပါ။ [[mark:open-index-note]]
+      HTML ထဲမှာ သူက ဘာမှ မပါတဲ့ စာပိုဒ်ပါ။ အရင်က အသိပေးစာ တစ်ခုခုက ကျန်ခဲ့တာ ဖြစ်နိုင်ပါတယ်။
+      [[mark:select-note]] ဒီလို ဘာမှ မရှိတဲ့ element ကို empty ဆိုတဲ့ pseudo-class နဲ့ ရွေးလို့
+      ရပါတယ်။ [[mark:open-styles-note]] CSS ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-empty]] ဒီ မျဉ်းပြတ်
+      box ကို အလွတ် ဖြစ်နေတုန်းမှာပဲ ဖျောက်ထားပါမယ်။ နောက်မှ ဆိုင်က စာ တစ်ခုခု ရေးထည့်လိုက်ရင် rule က
+      မကိုက်တော့ဘဲ box က ပြန်ပေါ်လာမှာပါ။ [[mark:after-empty]] မျဉ်းပြတ် box ပျောက်သွားပါပြီ။
+      [[mark:whitespace]] ဒါပေမဲ့ သတိထားပါ။ tag နှစ်ခုကြားမှာ space ဒါမှမဟုတ် စာကြောင်း ဆင်းတာ တစ်ခု
+      ရှိရင်တောင် content အဖြစ် တွက်လို့ empty မဖြစ်တော့ပါဘူး။ comment ကိုတော့ ထည့်မတွက်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: empty"
+        url: "https://web.dev/learn/css/pseudo-classes#empty"
+      - title: "MDN — :empty"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:empty"
+    actions:
+      - id: close-anb
+        type: whiteboard.apply
+        at: { mark: close-anb }
+        open: false
+      - id: open-index-note
+        type: workspace.openFile
+        at: { mark: open-index-note }
+        path: index.html
+      - id: select-note
+        type: editor.select
+        at: { mark: select-note }
+        target: { file: index.html, text: '<p class="note" data-testid="note"></p>', occurrence: 1 }
+      - id: open-styles-note
+        type: workspace.openFile
+        at: { mark: open-styles-note }
+        path: styles.css
+      - id: type-empty
+        type: editor.type
+        at: { mark: type-empty }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: wheat;\n}\n", occurrence: 1 }
+        text: "\n.note:empty {\n  display: none;\n}\n"
+      - id: expect-menu-after-empty
+        type: expect.preview
+        at: { mark: after-empty }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: has
+    chapter: "Card ကို သူ့ထဲမှာ ပါတာနဲ့ ရွေးကြည့်ရအောင်"
+    narration: >
+      [[mark:type-has]] အစောပိုင်းမှာ ပြောခဲ့တဲ့ အပြောင်းအလဲကို ကြည့်ရအောင်။ ဒီ rule က အထဲမှာ badge
+      ပါတဲ့ menu card ကို ရွေးပြီး၊ card ကို အစိမ်းရောင် border ပေးပါတယ်။ rule က style ပေးတာက card ကို
+      ဖြစ်ပေမယ့်၊ စစ်တဲ့ အခြေအနေကတော့ card ထဲမှာ ဘာပါလဲ ဆိုတာပါ။ [[mark:after-has]] card နှစ်ခုမှာ
+      အစိမ်းရောင် border ပေါ်လာပါပြီ။ အသစ် ဆိုတဲ့ badge ပါတဲ့ card နှစ်ခု ဖြစ်တဲ့ လက်ဖက်ရည်နဲ့
+      သံပုရာရည်ပါ။ [[mark:open-has]] has က ဘယ်လို အလုပ်လုပ်လဲ board ပေါ်မှာ ကြည့်ရအောင်။
+      [[mark:draw-has-look]] ပထမဆုံး၊ browser က card
+      တစ်ခုစီရဲ့ အထဲမှာ badge ရှိလား ရှာပါတယ်။ [[mark:draw-has-style]] တွေ့ရင် အပြင်ဘက် element
+      ဖြစ်တဲ့ card ကို style ပေးပါတယ်။ [[mark:draw-has-sibling]] has ထဲက အခြေအနေကို combinator နဲ့လည်း
+      စလို့ ရပါတယ်။ ဥပမာ နောက်မှာ စာပိုဒ် ကပ်လျက် ပါတဲ့ ခေါင်းစဉ်ကို ရွေးတာမျိုးပါ။
+      [[mark:draw-has-rules]] မှတ်ထားရမယ့် စည်းမျဉ်း သုံးခု ရှိပါတယ်။ has
+      ထဲမှာ has ထပ်ထည့်လို့ မရပါဘူး။ pseudo-element ကိုလည်း သူ့ထဲမှာ သုံးလို့ မရပါဘူး။ ပြီးတော့ သူ့ထဲက
+      selector list မှာ တစ်ခု မမှန်ရင် rule တစ်ခုလုံး အလုပ်မလုပ်တော့ပါဘူး။ [[mark:has-support]] has
+      ကို browser အဓိက အားလုံးမှာ အခု သုံးလို့ ရနေပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes: has"
+        url: "https://web.dev/learn/css/pseudo-classes#has"
+      - title: "MDN — :has()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+      - title: "Selectors Level 4 — the relational pseudo-class"
+        url: "https://www.w3.org/TR/selectors-4/#relational"
+      - title: "webstatus.dev — :has()"
+        url: "https://webstatus.dev/features/has"
+    actions:
+      - id: type-has
+        type: editor.type
+        at: { mark: type-has }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".note:empty {\n  display: none;\n}\n", occurrence: 1 }
+        text: "\n.menu-card:has(.badge) {\n  border: 2px solid seagreen;\n}\n"
+      - id: expect-lime-badge
+        type: expect.preview
+        at: { mark: after-has }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-lime-juice }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-has
+        type: whiteboard.apply
+        at: { mark: open-has }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-card, e-card-label, e-badge, e-badge-label]
+      - id: draw-has-look
+        type: whiteboard.apply
+        at: { mark: draw-has-look }
+        upsertIds: [e-look, e-look-label]
+        drawMs: 1600
+      - id: draw-has-style
+        type: whiteboard.apply
+        at: { mark: draw-has-style }
+        upsertIds: [e-style, e-style-label]
+        drawMs: 1800
+      - id: draw-has-sibling
+        type: whiteboard.apply
+        at: { mark: draw-has-sibling }
+        upsertIds: [e-sibling]
+        drawMs: 1400
+      - id: draw-has-rules
+        type: whiteboard.apply
+        at: { mark: draw-has-rules }
+        upsertIds: [e-rule-1, e-rule-2]
+        drawMs: 2000
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-has]] ဒါဆို ပြန်ချုပ်ရရင်၊ combinator တွေက element ကို မိသားစု ဆက်စပ်ပုံနဲ့
+      ရွေးပါတယ်။ compound selector က selector တွေကို element တစ်ခုတည်းပေါ်မှာ ပေါင်းစစ်ပါတယ်။ pseudo-class တွေက
+      checked လို အခြေအနေ၊ first-child နဲ့ nth-child လို နေရာ၊ empty လို အလွတ် ဖြစ်တာနဲ့ ရွေးပြီး၊ has
+      ကတော့ element ကို သူ့ထဲမှာ ဘာပါလဲ ဆိုတာနဲ့ ရွေးပါတယ်။ [[mark:practice]] လေ့ကျင့်ချင်ရင် CSS
+      Diner ကို ရှာကြည့်ပါ။ စားပွဲပေါ်က ပန်းကန်တွေကို selector ရေးပြီး ရွေးရတဲ့ အခမဲ့ game လေး
+      တစ်ခုပါ။ [[mark:next-lesson]] ပထမ card ထဲက badge ကို ကြည့်ပါ။ base ဖိုင်က သူ့ စာလုံးကို အဖြူ
+      ပေးထားပေမယ့်၊ ကိုယ့် rule က ရွှေရောင် ပေးထားပြီး ရွှေရောင်က နိုင်နေပါတယ်။ rule နှစ်ခုက element တစ်ခုတည်းကို
+      တန်ဖိုး မတူတာ ပေးရင် ဘယ်ဟာ နိုင်မလဲ။ အဲဒါကို ဆုံးဖြတ်ပေးတာက cascade ပါ။ နောက် lesson မှာတော့
+      cascade ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: resources"
+        url: "https://web.dev/learn/css/selectors#resources"
+      - title: "CSS Diner"
+        url: "https://flukeout.github.io/"
+      - title: "Selectors Explained"
+        url: "https://kittygiraudel.github.io/selectors-explained/"
+      - title: "MDN — CSS selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors"
+      - title: "web.dev Learn CSS — The cascade"
+        url: "https://web.dev/learn/css/the-cascade"
+    actions:
+      - id: close-has
+        type: whiteboard.apply
+        at: { mark: close-has }
+        open: false
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: practice }
+        path: styles.css
+        contains: ".site-header a {\n  color: cornsilk;\n}\n\n.menu-card > p {\n  font-style: italic;\n}\n\n.menu > * + * {\n  margin-top: 12px;\n}\n\n#iced-only:checked ~ .menu [data-temp=\"hot\"] {\n  display: none;\n}\n\n.menu-card.featured {\n  outline: 3px solid gold;\n}\n\n.menu-card .badge {\n  color: gold;\n}\n"
+      - id: expect-position-css
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".menu-card:first-child {\n  background: khaki;\n}\n\n.menu-card:last-child {\n  margin-bottom: 24px;\n}\n\n.about p:first-child {\n  font-weight: bold;\n}\n\n.about p:first-of-type {\n  font-weight: bold;\n}\n\n.menu-card:nth-child(even) {\n  background: wheat;\n}\n\n.note:empty {\n  display: none;\n}\n\n.menu-card:has(.badge) {\n  border: 2px solid seagreen;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
