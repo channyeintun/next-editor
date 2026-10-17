@@ -189,3 +189,147 @@ the glossary. These are the changes from the separately reviewed drafts:
     Burmese gloss, or get Burmese labels in the narration?
 19. Ko Aung skipped the 2 a.m. check on an earlier night, since he was away during the Thingyan
     stall. Does that fit the story spine and L14's callback to his settlement nights?
+
+## Module 2
+
+These are the Burmese voice scripts for the three Module 2 lessons (Agree and notice, deck SRE 2).
+They use the same layout as Module 1 (see "How to read a script") and were read together against
+the approved Module 1 scripts, the fact sheet, the story spine and the glossary. Nothing here has been
+voiced or rendered yet.
+
+| File                                | Lesson                              | Counted characters | ≈ min of speech |
+| ----------------------------------- | ----------------------------------- | ------------------ | --------------- |
+| `sre-06-slo-error-budget.md`        | 6 · SLO နဲ့ error budget            | 8,807              | 10.5            |
+| `sre-07-slo-from-the-users-side.md` | 7 · User ဘက်က ကြည့်တဲ့ SLO          | 8,799              | 10.5            |
+| `sre-08-observability.md`           | 8 · Monitoring ကနေ observability ဆီ | 8,784              | 10.5            |
+
+The budget is 8,400 characters ±5%, so each lesson must land between 7,980 and 8,820. All three sit
+near the top. Pauses, page changes and gaps between dialogs bring each lesson to about 11 rendered
+minutes. The module comes to 26,390 characters, about 31 minutes of speech. The recount command above
+covers these files too.
+
+**New on screen in Module 2:**
+
+- Pages also use K5 (four cards), K6 (a ladder: the chips in order, then a `(caption)` line), K7 (one
+  big number or formula, then one line) and K8 (the module map `m2_map`, in L06 only).
+- A page id with a letter suffix (`l06_p02b`, `l07_p04c`) is an extra page that keeps one page from
+  holding too long. Pages sit in the deck in script order.
+
+### What the consistency pass changed
+
+- **Openings.** Each lesson opens with one "Padauk so far" sentence that names what Padauk kept from
+  the lesson before:
+  - L06: the 30-minute blameless review after every incident, and Thiri as full-time SRE (L05).
+  - L07: Top-up's agreed SLOs and its error budget policy (L06).
+  - L08: the journey SLO and the SLOs for the top 10 merchants (L07). It now also says what a journey
+    SLO measures ("order တစ်ခုကို အစအဆုံး တိုင်းတဲ့"), because critical user journey is one of L08's
+    borrowed terms. It no longer reuses L03's opening pattern ("… ကတည်းက Padauk မှာ … ရှိလာပါပြီ").
+- **Same words everywhere.**
+  - "Padauk API" for the front door in L06–L08. L07 had "API gateway" (narration and l07_p02), which
+    sat too close to the "operator gateway".
+  - "operator gateway client" in L07 and L08. L08 had "shared gateway client"; its B4 step 1 label now
+    reads "gateway client က / dashboard".
+  - "လစာထုတ်ရက်" for payday all through L06. It had mixed it with "လစာရက်" (narration, l06_p02d and
+    l06_p06b).
+  - "အကြီးဆုံး merchant 10 ခု" in L07 and L08 (L08 had "ဆယ်ခု"). A story number stays in digits, as in
+    Module 1.
+  - "အစိမ်းရောင်" in the narration (L08 had one bare "အစိမ်း").
+  - "အလိုအလျောက် rollback", the glossary's own example (L08 had "အလိုလို rollback").
+  - "Eats သုံးတဲ့ payment service" in L07. The payment service belongs to Padauk, not to Eats, and L06
+    has the ledger team promising it an SLO.
+  - "ငွေဝင်ငွေထွက် စာရင်း၊ ledger" in L06, with the comma every other gloss uses.
+- **First use.**
+  - L08's This week no longer says "SRE အဖွဲ့". L08 never says "Site Reliability Engineering", and the
+    glossary wants the full phrase before the acronym in each lesson.
+  - L06 is on both quick paths, so learners may arrive without L03–L05. Its first mention of Ko Nay Lin
+    now says "CTO". For the same reason L08 now says "support က မစု".
+- **Story.**
+  - L06 answers L05's bridge question in Scene 4: not 100%, but airtime within 10 seconds for 99.5% of
+    top-ups and a refund within an hour (page l06_p03b "Top-up ရဲ့ အဖြေ"). Its hook now asks the
+    question in L05's exact words ("ဒါဆို" dropped).
+  - L06 Scene 8 drops "အကြွေးဆပ်သလို" (a reviewer question). In L01, paying back the loan is the good
+    habit, so calling a year-long freeze "paying off a debt" pulled against L01's image. This also saves
+    16 characters.
+  - L07's bridge now says "app က ဖုန်းဘေလ် ဝင်ကြောင်း ဘယ်တော့မှ မပြ", in the words of L08's hook.
+  - L08's in-country log rule now points back to L04's rule ("lesson 4 က စည်းမျဉ်းလိုပဲ … ဆိုပါစို့")
+    instead of repeating L04's sentence. It stays hypothetical.
+  - **Kept:** "top-up 20 သိန်း" in L06 (a reviewer question). The approved L01 and L08 count users as
+    "12 သိန်း", so a count in သိန်း is already the course's style.
+- **Less templated.**
+  - This week openers. L06 echoed L05 ("သေးသေးလေး … စလို့ရပါတယ်"), L07 echoed L02 ("စမ်းလုပ် … သုံးခု
+    ရှိပါတယ်") and L08 echoed L01 ("SRE အဖွဲ့ … မလိုဘဲ လုပ်ကြည့်လို့ရတာ သုံးခု"). Each now ties to its
+    own lesson.
+  - Recap openers. L07 and L08 both counted "အချက် N ခု", as L04 does. Both are reworded.
+  - L08's "ကဲ၊ စဉ်းစားကြည့်ပါ" before the question was L02's, word for word.
+  - L07's bridge opened "နောက် lesson မှာတော့", exactly like L01's. L07's answer and L06's both ran
+    on "… ဆိုတော့".
+  - L07 said "တိတ်တိတ်လေး" twice; the second is now "တဖြည်းဖြည်း".
+  - L08 had five definitions in "… လို့ ခေါ်ပါတယ်". Cardinality and defense in depth now use "… က …
+    ပါ".
+  - L07 Scene 1 now says "ဘယ်သူတွေကို ပျမ်းမျှခဲ့လဲ", the same words as its chapter label and l07_p01b.
+- **Bridges.** Each lesson's last question asks the same thing as the next lesson's cover:
+
+  | From | Bridge asks                                                     | Next cover asks                    |
+  | ---- | --------------------------------------------------------------- | ---------------------------------- |
+  | L05  | Thiri full-time; finance wants 100%: how reliable?              | Top-up ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ? |
+  | L06  | Eats: every SLO green, orders stuck: what did we forget?        | ဘာကို တိုင်းဖို့ မေ့ခဲ့လဲ?         |
+  | L07  | Top-up never confirms, refunds for top-ups that worked: inside? | system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?  |
+  | L08  | 2 a.m. alert into a muted 60-person Viber group: ဘယ်သူ ဖြေမလဲ?  | (L09) Who answers at 2 a.m.?       |
+
+  L09 is not written yet. Its cover question should end on the same "ဘယ်သူ ဖြေမလဲ?".
+
+### Open questions for Chan (Module 2)
+
+The numbers continue from Module 1, so each question has one number.
+
+**Whole module**
+
+20. **Deck size and pacing (decided, listed for information).** The scripts already carry the extra
+    pages that Module 1 decided to add at build time. Deck SRE 2 now plans 37 pages including `m2_map`
+    (L06 15, L07 14, L08 8), against the guide's 19. Deck SRE 1 was built with 61 pages for the same
+    reason and passed QA, so the size is fine and the extra pages stay. This answers the reviewer's question about
+    L06's seven added pages. The longest estimated holds are l07_p01 and l08_p01 at 35 s, l06_p04 at
+    33 s, l06_p01 and l07_p06 at 32 s, and l08_p03 at 31 s.
+21. **Pronunciation probe additions** (glossary 4.2–4.3): OpenTelemetry; Hyrum's; failover, cache;
+    SLI, SLA and NRC (SLA ends in a vowel); and these words not yet in 4.2: callback, cardinality,
+    observability, telemetry, saturation, synthetic, durability, Viber, and Padauk Eats (→ ပိတောက်
+    Eats).
+22. **"valid"** stays English in L06 (Scenes 2 and 10, the recap, notes.md and l06_p02: "valid ဖြစ်တဲ့
+    top-up"), but the glossary has no row for it. Keep it and add a row to glossary 2.2, or use a
+    Burmese word?
+23. **Name for an evidence-based alert** (L08). The script says "အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert" in
+    Scene 8, the recap and notes.md, and its chapter label reads "အထောက်အထား ခိုင်လုံမှ page ပို့". Glossary
+    2.3 has a row for it but no fixed wording. Keep the long name, or use something shorter such as
+    "သေချာမှ တက်တဲ့ alert"? Whichever you choose goes into the glossary.
+24. **Noise floor** (L07) is said only in Burmese, as "နောက်ခံ fail" (narration, l07_p04 and l07_p04b).
+    Keep it, or say "noise floor" in English and add it to the glossary?
+
+**Lesson 6**
+
+25. B1 step 3 shows 99.5% before Scene 4 agrees on it. The narration calls it "99.5 ရာခိုင်နှုန်းလို
+    ပစ်မှတ်", an example, and the curriculum's board spec has the number there. Is that OK, or should
+    the board leave the number out until the agreement?
+
+**Lesson 7**
+
+26. **Copyright caution (resolved, kept).** The bad-minute page uses 99.9% of 30 days = 43 bad minutes.
+    That is the standard "three nines" conversion found in nearly every SLO guide, and arithmetic is not
+    the book's expression; our noise numbers (3% and 5%) and the Eats story are our own. Hearing 43 in
+    L06 and again in L07 works as a callback, so the spec stays as it is.
+27. "SLO ကို တင်းတင်း ထားတာက service အရေးကြီးကြောင်း ပြတဲ့ တံဆိပ် မဟုတ်ပါဘူး" (Scene 9 and l07_p06b): does
+    "တံဆိပ်" sound natural for "a badge of importance", or would you say "ဂုဏ်ပြု တံဆိပ်" or the English
+    "badge"?
+28. The journey steps "ဟင်း ရွေး → Pay နှိပ် → ပြေစာ မြင်" appear in the narration and on l07_p02b and
+    l07_p02c. Is "ဟင်း ရွေး" what a Yangon food-app user would say, or would "အစားအသောက် ရွေး" (the
+    glossary's critical user journey line) or "menu ရွေး" be better?
+
+**Lesson 8**
+
+29. "NRC နံပါတ်" (the glossary's wording) or "မှတ်ပုံတင် နံပါတ်"? L04 said "မှတ်ပုံတင် အချက်အလက်", and
+    L08 now points back to L04's in-country rule, which favours "မှတ်ပုံတင်". It appears twice in Scene
+    7 and on l08_p03.
+30. For defense in depth, the narration and the B2 labels use "ကြိုကာ" for prevention and "ဖမ်း" for
+    detection. Do they sound natural, or would you prefer "ကြိုတား" and "ဖမ်းမိ"?
+31. To fit the budget, Scene 2 lost a line saying that even a newcomer like Ko Min could trace the
+    problem with connected data (about 40 characters). Do you want it back? L08 would then come to
+    about 8,825, just over the 8,820 ceiling, so a few characters would have to go elsewhere.
