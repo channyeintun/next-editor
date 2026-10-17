@@ -1,0 +1,2307 @@
+# CSS course (Burmese), lesson 43 of 43: Tailwind CSS, and the end of the course.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning. Everything
+# the learner sees (title, chapters, whiteboard labels, UI strings) is Burmese.
+#
+# Shape: board A (recall lesson 42; utility-first; each class is CSS already
+# learned) while pnpm installs Tailwind → board B (why teams like it, the cost,
+# not inline styles) → code tour (package.json, the Vite plugin,
+# webcontainer-fix.js in one sentence, the one @import line) → preview:
+# Preflight → board C (the four layers) → the first card built from utilities
+# typed into its class attribute → board D (spacing / text / colour scales) →
+# board E (class detection, no dynamic names, @source, only used CSS) →
+# aria-pressed variant on the favourite button + the attribute inserted →
+# hover/focus/disabled/group/peer/stacking explained → open: variant on the
+# hours <details> + a click → grid + sm:grid-cols-2 (nothing: 432 px < 640 px)
+# → board F (mobile-first, max-sm, container) → @xs:grid-cols-2 (two columns)
+# → board G (dark: is drawn, not shown) → @theme block (block insert) +
+# bg-tea-500 on the order button → arbitrary border colour on card 2 → the
+# components-layer .card loses to p-8, then an unlayered .card (block insert)
+# beats it → board C again with unlayered CSS on top → board H (repeat vs
+# extract, modern CSS underneath, one-liners) → board I (course map, 43
+# lessons) → board J (next steps, resources, credit; no next lesson).
+#
+# Live-preview safety (PLATFORM.md §5): no .css file is ever keystroke-typed
+# (the Tailwind plugin overlays every half-typed CSS state): src/style.css
+# gets two complete `block` inserts. Utility classes are typed into
+# index.html class attributes (each saved state reloads the page; Tailwind
+# ignores half-typed class names). webcontainer-fix.js (pinned, never typed)
+# makes Tailwind regenerate after HTML edits inside the WebContainer.
+# State shown live is attribute state that replays: aria-pressed (inserted
+# into the file) and <details open> (a click). hover:, focus:, dark: are
+# explained or drawn only (PLATFORM.md §3).
+#
+# Measured in headless Chrome at 432 × 720 with Vite 5.4.21 + Tailwind 4.3.3
+# (probe/stages.ts, same class strings): main content box 352 px (max-w-sm
+# minus p-4), so @xs (320 px) matches and @sm (384 px) / sm: (640 px) do not;
+# two columns are 170 px each, and flex-wrap puts card 1's price under its
+# name there. Card 2 padding 32 px (p-8 beats @layer components) → 4 px after
+# the unlayered rule. No console errors.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-43-tailwind
+  title: "CSS course 43: Tailwind CSS"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 43
+    entryFilePath: index.html
+    files:
+      package.json: |
+        {
+          "name": "css-course-tailwind",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "@tailwindcss/vite": "4.3.3",
+            "tailwindcss": "4.3.3",
+            "vite": "5.4.21"
+          }
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import tailwindcss from "@tailwindcss/vite";
+        import { rescanTailwind } from "./webcontainer-fix.js";
+
+        export default defineConfig({
+          plugins: [tailwindcss(), rescanTailwind()],
+        });
+      webcontainer-fix.js: |
+        // webcontainer-fix.js: in the browser's WebContainer, Tailwind does not notice
+        // classes typed into index.html unless the CSS file looks changed. This plugin
+        // touches the CSS file after an HTML/JS edit. On a real computer it does nothing useful.
+        import fs from "node:fs";
+        export function rescanTailwind() {
+          return {
+            name: "rescan-tailwind",
+            handleHotUpdate({ file, server }) {
+              if (!/\.(html|js|jsx|ts|tsx)$/.test(file)) return;
+              for (const mod of server.moduleGraph.idToModuleMap.values()) {
+                if (mod.file?.endsWith(".css")) {
+                  const now = new Date();
+                  try { fs.utimesSync(mod.file, now, now); } catch { fs.writeFileSync(mod.file, fs.readFileSync(mod.file)); }
+                  server.moduleGraph.invalidateModule(mod);
+                }
+              }
+            },
+          };
+        }
+      # index.html: the kit's Tailwind page (COURSE-KIT.md §8). The favourite
+      # button, the <details> and the order button carry a few pinned layout
+      # utilities so their colour changes show; the first card and the menu
+      # list start with empty class attributes.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/src/style.css" />
+          </head>
+          <body class="bg-amber-50 text-stone-900">
+            <main class="mx-auto max-w-sm p-4" data-testid="page">
+              <h1 class="text-2xl font-bold text-amber-900" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <div class="@container mt-4" data-testid="menu-wrap">
+                <ul class="" data-testid="menu-drinks" role="list">
+                  <li class="" data-testid="card-laphet-yay">
+                    <h3>လက်ဖက်ရည်</h3>
+                    <span>1,500 ကျပ်</span>
+                  </li>
+                  <li class="card p-8" data-testid="card-coffee">
+                    <h3>ကော်ဖီ</h3>
+                    <span>1,800 ကျပ်</span>
+                  </li>
+                </ul>
+              </div>
+              <button type="button" class="mt-4 rounded-full px-4 py-1" data-testid="favourite">ကြိုက်တယ်</button>
+              <details class="mt-4 rounded-lg p-3" data-testid="hours-details">
+                <summary data-testid="hours-summary">ဖွင့်ချိန်</summary>
+                <p>မနက် ၆ နာရီ မှ ည ၈ နာရီ</p>
+              </details>
+              <button type="button" class="order-btn mt-4 rounded-full px-4 py-1" data-testid="order-button">မှာမယ်</button>
+            </main>
+          </body>
+        </html>
+      src/style.css: |
+        @import "tailwindcss";
+
+        @layer components {
+          .card {
+            padding: 4px;
+          }
+        }
+
+  whiteboardAssets:
+    # Board A — what utility-first means. Blue = the way the course has
+    # written CSS so far, green = Tailwind's small classes, orange = each class
+    # is a declaration, violet = "CSS you already know".
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Utility-first ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-classic-h,
+        kind: text,
+        x: 300,
+        y: 234,
+        width: 620,
+        height: 36,
+        text: "အရင်က · class နာမည် ပေး၊ rule ရေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-classic-code,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 640,
+        height: 36,
+        text: 'class="menu-card"  +  .menu-card { … }',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-utility-h,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 620,
+        height: 36,
+        text: "Tailwind · class သေးသေးလေးတွေ ပေါင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-utility-code,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 560,
+        height: 36,
+        text: 'class="flex p-4 rounded-lg"',
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-map1,
+        kind: text,
+        x: 300,
+        y: 478,
+        width: 380,
+        height: 36,
+        text: "flex → display: flex",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-map2,
+        kind: text,
+        x: 300,
+        y: 528,
+        width: 380,
+        height: 36,
+        text: "p-4 → padding",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-map3,
+        kind: text,
+        x: 300,
+        y: 578,
+        width: 400,
+        height: 36,
+        text: "rounded-lg → border-radius",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-known,
+        kind: text,
+        x: 780,
+        y: 528,
+        width: 280,
+        height: 36,
+        text: "သိပြီးသား CSS",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-known-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 780,
+        y: 566,
+        width: 220,
+        height: 16,
+        strokeColor: "#6741d9",
+      }
+
+    # Board B — why teams choose it. Green = gains, red = the cost, violet =
+    # what an inline style attribute cannot do, blue = what utilities can.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "ဘာကြောင့် သုံးကြလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-pro-names,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 680,
+        height: 36,
+        text: "✓ class နာမည် မစဉ်းစားရ · ဖိုင် မပြောင်းရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-pro-dead,
+        kind: text,
+        x: 300,
+        y: 284,
+        width: 680,
+        height: 36,
+        text: "✓ element ဖျက်ရင် style ပါ ပျောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-pro-scale,
+        kind: text,
+        x: 300,
+        y: 336,
+        width: 680,
+        height: 36,
+        text: "✓ scale တစ်ခုတည်း · site တစ်ခုလုံး ညီ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-con,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "✗ class စာရင်း ရှည် · build step · နာမည်သစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-inline,
+        kind: text,
+        x: 300,
+        y: 484,
+        width: 700,
+        height: 36,
+        text: 'style="…"  ✗ hover · media query · scale',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-utility,
+        kind: text,
+        x: 300,
+        y: 536,
+        width: 700,
+        height: 36,
+        text: "utility  ✓ hover: · sm: · @container · dark:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-utility-l,
+        kind: text,
+        x: 300,
+        y: 588,
+        width: 560,
+        height: 36,
+        text: "stylesheet ထဲက rule အစစ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board C — the four layers @import "tailwindcss" declares (lesson 5),
+    # drawn as a stack: the higher, the stronger. Blue = theme, green = base
+    # (Preflight), orange = components, violet = utilities, red = unlayered CSS
+    # (added in the layer scene).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "Layer လေးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-unlayered,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 480,
+        height: 56,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: c-unlayered-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 420,
+        height: 36,
+        text: "layer ထဲ မပါတဲ့ CSS",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-unlayered-l,
+        kind: text,
+        x: 830,
+        y: 232,
+        width: 240,
+        height: 36,
+        text: "အားလုံးကို နိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-utilities,
+        kind: rectangle,
+        x: 300,
+        y: 296,
+        width: 480,
+        height: 56,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-utilities-t,
+        kind: text,
+        x: 320,
+        y: 306,
+        width: 420,
+        height: 36,
+        text: "utilities · p-4 · flex",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-components,
+        kind: rectangle,
+        x: 300,
+        y: 366,
+        width: 480,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-components-t,
+        kind: text,
+        x: 320,
+        y: 376,
+        width: 420,
+        height: 36,
+        text: "components · ကိုယ့် class",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-base,
+        kind: rectangle,
+        x: 300,
+        y: 436,
+        width: 480,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-base-t,
+        kind: text,
+        x: 320,
+        y: 446,
+        width: 420,
+        height: 36,
+        text: "base · Preflight",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-theme,
+        kind: rectangle,
+        x: 300,
+        y: 506,
+        width: 480,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-theme-t,
+        kind: text,
+        x: 320,
+        y: 516,
+        width: 420,
+        height: 36,
+        text: "theme · --color-* · --spacing",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-order,
+        kind: text,
+        x: 830,
+        y: 376,
+        width: 240,
+        height: 36,
+        text: "↑ နောက်က နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-order-l,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 600,
+        height: 36,
+        text: '@import "tailwindcss" → layer လေးခု',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board D — the scales. Blue = spacing, green = text size, orange = the
+    # colour palette, violet = the opacity modifier.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "Scale တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-spacing,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 460,
+        height: 36,
+        text: "--spacing: 0.25rem",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-p4,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 700,
+        height: 36,
+        text: "p-4 → calc(var(--spacing) * 4) = 16px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-p4-l,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 700,
+        height: 36,
+        text: "padding · margin · gap · width · height",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-text,
+        kind: text,
+        x: 300,
+        y: 412,
+        width: 700,
+        height: 36,
+        text: "text-2xl → font-size + line-height",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-color,
+        kind: text,
+        x: 300,
+        y: 484,
+        width: 640,
+        height: 36,
+        text: "amber-50 … amber-950 · OKLCH",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-alpha,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 760,
+        height: 36,
+        text: "bg-amber-700/50 → color-mix(… 50%, transparent)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — class detection. Blue = the source file, orange = the scan,
+    # green = generated CSS / the right way, red = the dynamic class name,
+    # violet = @source, blue = only used CSS.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Class တွေကို ရှာပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-file,
+        kind: rectangle,
+        x: 300,
+        y: 236,
+        width: 300,
+        height: 104,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-file-t,
+        kind: text,
+        x: 318,
+        y: 248,
+        width: 240,
+        height: 36,
+        text: "index.html",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-file-c,
+        kind: text,
+        x: 318,
+        y: 292,
+        width: 260,
+        height: 36,
+        text: 'class="p-4"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 630,
+        y: 270,
+        width: 140,
+        height: 32,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-scan-l,
+        kind: text,
+        x: 620,
+        y: 352,
+        width: 170,
+        height: 36,
+        text: "စာသားလို ဖတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-css,
+        kind: rectangle,
+        x: 800,
+        y: 236,
+        width: 280,
+        height: 104,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-css-t,
+        kind: text,
+        x: 818,
+        y: 270,
+        width: 250,
+        height: 36,
+        text: ".p-4 { padding }",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-bad,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 640,
+        height: 36,
+        text: '"bg-" + color → CSS မထွက် ✗',
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-good,
+        kind: text,
+        x: 300,
+        y: 472,
+        width: 640,
+        height: 36,
+        text: '"bg-amber-700" အပြည့် ရေး ✓',
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-source,
+        kind: text,
+        x: 300,
+        y: 542,
+        width: 680,
+        height: 36,
+        text: "@source → folder ဖတ် · ကျော် · inline()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-used,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 720,
+        height: 36,
+        text: "သုံးထားတဲ့ class · variable တွေပဲ ထွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board F — mobile-first breakpoints vs container variants. Blue = the
+    # breakpoint, red = why it does not match here, green = the phone style
+    # and the container match, violet = max-*, orange = the container.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Breakpoint နဲ့ container",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-sm,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 520,
+        height: 36,
+        text: "sm: → width ≥ 640px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-sm2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 640,
+        height: 36,
+        text: "md 768 · lg 1024 · xl 1280 · 2xl 1536",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-preview,
+        kind: text,
+        x: 300,
+        y: 332,
+        width: 520,
+        height: 36,
+        text: "preview ≈ 432px ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-mobile,
+        kind: text,
+        x: 300,
+        y: 384,
+        width: 720,
+        height: 36,
+        text: "prefix မပါ = ဖုန်း · prefix = ကျယ်လာမှ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-max,
+        kind: text,
+        x: 300,
+        y: 444,
+        width: 520,
+        height: 36,
+        text: "max-sm: → width < 640px",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-container,
+        kind: text,
+        x: 300,
+        y: 504,
+        width: 680,
+        height: 36,
+        text: "@container → container ကို မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-cmore,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 560,
+        height: 36,
+        text: "@max-xs: · @container/name",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-xs,
+        kind: text,
+        x: 300,
+        y: 604,
+        width: 700,
+        height: 36,
+        text: "@xs: → ≥ 320px · container ≈ 352px ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board G — dark: (drawn, never shown). Blue = the default media query,
+    # violet = the class-based custom variant, orange = the replay caveat.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "dark: variant",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-media,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 720,
+        height: 36,
+        text: "dark: → @media (prefers-color-scheme: dark)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-os,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 560,
+        height: 36,
+        text: "ကြည့်သူရဲ့ system setting",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-class,
+        kind: text,
+        x: 300,
+        y: 376,
+        width: 760,
+        height: 36,
+        text: "@custom-variant dark (&:where(.dark, .dark *))",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-class-l,
+        kind: text,
+        x: 300,
+        y: 428,
+        width: 560,
+        height: 36,
+        text: "html ပေါ်က class နဲ့ ပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-replay,
+        kind: text,
+        x: 300,
+        y: 512,
+        width: 720,
+        height: 36,
+        text: "preview မှာလည်း ကြည့်သူရဲ့ setting အတိုင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board H — repeat or extract. Green = first choice, blue = second
+    # choice, orange = inline style for data, violet = the modern CSS inside
+    # Tailwind's output, white = the one-liners.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Class တွေ ထပ်နေရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-loop,
+        kind: text,
+        x: 300,
+        y: 234,
+        width: 720,
+        height: 36,
+        text: "1. loop · component · partial",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-css,
+        kind: text,
+        x: 300,
+        y: 286,
+        width: 720,
+        height: 36,
+        text: "2. @layer components + @apply",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-inline,
+        kind: text,
+        x: 300,
+        y: 338,
+        width: 720,
+        height: 36,
+        text: "data က တန်ဖိုး → style attribute",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: h-modern-h,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 600,
+        height: 36,
+        text: "Tailwind ထုတ်တဲ့ CSS ထဲမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-modern,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 760,
+        height: 36,
+        text: "@layer · @property · color-mix · OKLCH",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-modern2,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 640,
+        height: 36,
+        text: "logical property · nesting",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-extras,
+        kind: text,
+        x: 300,
+        y: 596,
+        width: 720,
+        height: 36,
+        text: "Play CDN · version 4 = CSS ထဲမှာ config",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board I — the course map, one line per part of the course.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 640,
+        height: 46,
+        text: "Course တစ်ခုလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-p1,
+        kind: text,
+        x: 300,
+        y: 216,
+        width: 760,
+        height: 36,
+        text: "1–8 · အခြေခံ · selector · cascade · specificity",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-p2,
+        kind: text,
+        x: 300,
+        y: 264,
+        width: 760,
+        height: 36,
+        text: "9–12 · တန်ဖိုး · အရောင် · unit · custom property",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-p3,
+        kind: text,
+        x: 300,
+        y: 312,
+        width: 760,
+        height: 36,
+        text: "13–25 · Layout · flexbox · grid · query",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-p4,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 760,
+        height: 36,
+        text: "26–28 · pseudo-element · pseudo-class · focus",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-p5,
+        kind: text,
+        x: 300,
+        y: 408,
+        width: 760,
+        height: 36,
+        text: "29–31 · စာသားနဲ့ list",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-p6,
+        kind: text,
+        x: 300,
+        y: 456,
+        width: 760,
+        height: 36,
+        text: "32–37 · အလှဆင် · gradient · shadow · filter",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-p7,
+        kind: text,
+        x: 300,
+        y: 504,
+        width: 760,
+        height: 36,
+        text: "38–42 · Motion · anchor · popover",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-p8,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 760,
+        height: 36,
+        text: "43 · Tailwind CSS",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-p8-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 286,
+        y: 542,
+        width: 300,
+        height: 58,
+        strokeColor: "#f08c00",
+      }
+
+    # Board J — next steps. Green = build, blue = references, violet = the
+    # podcast, orange = Baseline, white = the credit.
+    - {
+        id: j-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "ရှေ့ဆက် ဘာလုပ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: j-build,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 720,
+        height: 36,
+        text: "ကိုယ့် website လေး ကိုယ်တိုင် ဆောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: j-build-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 274,
+        width: 480,
+        height: 16,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: j-mdn,
+        kind: text,
+        x: 300,
+        y: 318,
+        width: 640,
+        height: 36,
+        text: "MDN · developer.mozilla.org",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-webdev,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 640,
+        height: 36,
+        text: "web.dev/learn/css",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-podcast,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 640,
+        height: 36,
+        text: "The CSS Podcast",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: j-baseline,
+        kind: text,
+        x: 300,
+        y: 474,
+        width: 640,
+        height: 36,
+        text: "Baseline · webstatus.dev",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: j-credit,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 36,
+        text: "web.dev Learn CSS (CC BY 4.0) ကို အခြေခံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4143
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  # ------------------------------------------------------------------ 1
+  - id: utility-first
+    chapter: "Utility-first ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ view transition ကို ကြည့်ပြီး၊ ဒီ course ရဲ့ CSS သက်သက် အပိုင်း ပြီးသွားပါပြီ။ ဒီ
+      နောက်ဆုံး lesson မှာတော့ Tailwind CSS ကို ကြည့်ပြီး၊ course ကို အဆုံးသတ်ပါမယ်။ [[mark:start-server]]
+      board နောက်မှာ dev server ကို စနေပါပြီ။ ဒီတစ်ခါ Tailwind ကိုပါ install လုပ်ရလို့ တစ်မိနစ်လောက် ကြာပါမယ်။
+      [[mark:draw-classic]] အခုထိ ကိုယ်က element တစ်ခုကို menu card လိုမျိုး class နာမည် ပေးပြီး၊ CSS
+      ဖိုင်ထဲမှာ သူ့အတွက် rule တစ်ခု ရေးခဲ့ပါတယ်။ [[mark:draw-utility]] Tailwind CSS ကတော့ ပြောင်းပြန်ပါ။
+      property တစ်ခုလောက်ပဲ လုပ်တဲ့ utility class သေးသေးလေးတွေကို HTML ထဲမှာ တိုက်ရိုက် ပေါင်းသုံးတာပါ။ ဒီ
+      ရေးနည်းကို utility-first လို့ ခေါ်ပါတယ်။ [[mark:draw-map]] class တစ်ခုချင်းစီကလည်း သိပြီးသား CSS ပါပဲ။
+      တစ်ခုက flex container လုပ်ပေးတာ၊ တစ်ခုက padding ထည့်တာ၊ နောက်တစ်ခုက ထောင့်တွေကို ဝိုင်းပေးတာပါ။
+      [[mark:draw-known]] ဆိုတော့ ဒီ lesson က style ပေးနည်း အသစ် မဟုတ်ပါဘူး။ ဒီ course ရဲ့ CSS ကိုပဲ
+      နောက်တစ်နည်းနဲ့ ရေးတာပါ။
+    sources:
+      - title: "Tailwind CSS — Styling with utility classes"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes"
+      - title: "Tailwind CSS — Documentation"
+        url: "https://tailwindcss.com/docs"
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Cold pnpm install of Vite + Tailwind is 55–77 s in the WebContainer
+      # (PLATFORM.md §5); waitForReady sits on preview-opens, well over 90 s of
+      # narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 120000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-classic
+        type: whiteboard.apply
+        at: { mark: draw-classic }
+        upsertIds: [a-classic-h, a-classic-code]
+        drawMs: 2200
+      - id: draw-utility
+        type: whiteboard.apply
+        at: { mark: draw-utility }
+        upsertIds: [a-utility-h, a-utility-code]
+        drawMs: 2200
+      - id: draw-map
+        type: whiteboard.apply
+        at: { mark: draw-map }
+        upsertIds: [a-map1, a-map2, a-map3]
+        drawMs: 2600
+      - id: draw-known
+        type: whiteboard.apply
+        at: { mark: draw-known }
+        upsertIds: [a-known, a-known-line]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 2
+  - id: why-utilities
+    narration: >
+      [[mark:open-why]] team တွေက ဘာလို့ ကြိုက်ကြလဲ။ [[mark:draw-pro-names]] အသေးအမွှား တိုင်းအတွက် class
+      နာမည် စဉ်းစားစရာ မလိုသလို၊ ဖိုင်တွေကြား ပြောင်းနေစရာလည်း မလိုပါဘူး။ [[mark:draw-pro-dead]] style တွေက
+      element ပေါ်မှာပဲ ရှိလို့၊ element ကို ဖျက်ရင် style တွေပါ ပျောက်သွားလို့၊ မသုံးတော့တဲ့ CSS တွေ စုပုံ
+      မလာပါဘူး။ [[mark:draw-pro-scale]] အရွယ်အစားနဲ့ အရောင်တွေက scale တစ်ခုတည်းကနေ လာလို့၊ site တစ်ခုလုံး
+      ညီနေပါတယ်။ [[mark:draw-con]] ဒါပေမဲ့ class စာရင်း ရှည်တာ၊ build step လိုတာ၊ နာမည်သစ်တွေ မှတ်ရတာက
+      အားနည်းချက်ပါ။ [[mark:draw-inline]] utility က style attribute နဲ့လည်း မတူပါဘူး။ style attribute မှာ
+      hover style၊ media query၊ container query ရေးလို့ မရသလို scale လည်း မလိုက်ပါဘူး။
+      [[mark:draw-utility-yes]] utility တွေကတော့ အကုန် ရပါတယ်။ stylesheet ထဲက rule အစစ်တွေ ဖြစ်လို့ပါ။
+    sources:
+      - title: "Tailwind CSS — Styling with utility classes (why not inline styles)"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes#why-not-just-use-inline-styles"
+      - title: "Tailwind CSS — Styling with utility classes"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes"
+    actions:
+      - id: open-why
+        type: whiteboard.apply
+        at: { mark: open-why }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-pro-names
+        type: whiteboard.apply
+        at: { mark: draw-pro-names }
+        upsertIds: [b-pro-names]
+        drawMs: 1400
+      - id: draw-pro-dead
+        type: whiteboard.apply
+        at: { mark: draw-pro-dead }
+        upsertIds: [b-pro-dead]
+        drawMs: 1400
+      - id: draw-pro-scale
+        type: whiteboard.apply
+        at: { mark: draw-pro-scale }
+        upsertIds: [b-pro-scale]
+        drawMs: 1400
+      - id: draw-con
+        type: whiteboard.apply
+        at: { mark: draw-con }
+        upsertIds: [b-con]
+        drawMs: 1400
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds: [b-inline]
+        drawMs: 1400
+      - id: draw-utility-yes
+        type: whiteboard.apply
+        at: { mark: draw-utility-yes }
+        upsertIds: [b-utility, b-utility-l]
+        drawMs: 1800
+
+  # ------------------------------------------------------------------ 3
+  - id: setup-tour
+    chapter: "Vite project ထဲက Tailwind"
+    narration: >
+      [[mark:close-why]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-package]] ဒါက package ဖိုင် ဖြစ်ပါတယ်။
+      [[mark:select-deps]] Vite နဲ့အတူ package အသစ် နှစ်ခု ပါပါတယ်။ Tailwind ကိုယ်တိုင်နဲ့ Vite အတွက် သူ့
+      plugin ပါ။ [[mark:open-vite-config]] အခု Vite config ဖိုင်ပါ။ [[mark:select-plugin]] Tailwind plugin က
+      ကိုယ့် ဖိုင်တွေကို ဖတ်ပြီး CSS ကို ထုတ်ပေးပါတယ်။ [[mark:select-fix]] ဒုတိယ plugin က project ထဲက
+      ဖိုင်သေးလေး တစ်ခုပါ။ browser ထဲမှာ run နေတဲ့ ဒီ runtime မှာ ဖိုင်ပြင်တာကို Tailwind သိအောင် ကူညီရုံပါပဲ။
+      ကွန်ပျူတာ အစစ်မှာတော့ မလိုပါဘူး။ [[mark:open-style]] ဒါကတော့ ကိုယ့် CSS ဖိုင်ပါ။ [[mark:select-import]]
+      import စာကြောင်း တစ်ကြောင်းတည်းနဲ့ Tailwind တစ်ခုလုံး ပါလာပါတယ်။ [[mark:select-components]] အောက်မှာ
+      components layer ထဲက card rule တစ်ခု ရှိပါတယ်။ သူ့ကို နောက်မှ သုံးပါမယ်။ [[mark:preview-opens]] preview
+      ပွင့်လာပါပြီ။ သောက်စရာ နာမည်တွေက ဈေးနှုန်းထက် မကြီးသလို၊ list မှာလည်း bullet မပါပါဘူး။
+      [[mark:explain-preflight]] ဒါက Tailwind ရဲ့ base style ဖြစ်တဲ့ Preflight ကြောင့်ပါ။ သူက default margin
+      တွေကို ဖယ်ပြီး၊ ခေါင်းစဉ်တွေကို စာသား ရိုးရိုးလို ဖြစ်စေပါတယ်။ bullet တွေ ဖြုတ်ပြီး box sizing ကိုလည်း
+      border box ပေးပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Installing with Vite"
+        url: "https://tailwindcss.com/docs/installation/using-vite"
+      - title: "Tailwind CSS — Preflight"
+        url: "https://tailwindcss.com/docs/preflight"
+      - title: "Tailwind CSS — Upgrade guide (CSS-first configuration in v4)"
+        url: "https://tailwindcss.com/docs/upgrade-guide"
+    actions:
+      - id: close-why
+        type: whiteboard.apply
+        at: { mark: close-why }
+        open: false
+      - id: open-package
+        type: workspace.openFile
+        at: { mark: open-package }
+        path: package.json
+      - id: select-deps
+        type: editor.select
+        at: { mark: select-deps }
+        target:
+          {
+            file: package.json,
+            text: "\"@tailwindcss/vite\": \"4.3.3\",\n    \"tailwindcss\": \"4.3.3\",",
+            occurrence: 1,
+          }
+      - id: open-vite-config
+        type: workspace.openFile
+        at: { mark: open-vite-config }
+        path: vite.config.js
+      - id: select-plugin
+        type: editor.select
+        at: { mark: select-plugin }
+        target: { file: vite.config.js, text: "tailwindcss()", occurrence: 1 }
+      - id: select-fix
+        type: editor.select
+        at: { mark: select-fix }
+        target: { file: vite.config.js, text: "rescanTailwind()", occurrence: 1 }
+      - id: open-style
+        type: workspace.openFile
+        at: { mark: open-style }
+        path: src/style.css
+      - id: select-import
+        type: editor.select
+        at: { mark: select-import }
+        target: { file: src/style.css, text: '@import "tailwindcss";', occurrence: 1 }
+      - id: select-components
+        type: editor.select
+        at: { mark: select-components }
+        target: { file: src/style.css, text: "@layer components {", occurrence: 1 }
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-first-card-empty
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-first-card-empty }
+
+  # ------------------------------------------------------------------ 4
+  - id: layers-board
+    narration: >
+      [[mark:open-layers]] ဒီ style တွေက ဘယ်မှာ ရှိတာလဲ။ [[mark:draw-import-layers]] import စာကြောင်းက cascade
+      layer လေးခုကို အစဉ် ပုံသေနဲ့ သတ်မှတ်ပေးပါတယ်။ lesson 5 မှာလိုပဲ၊ နောက်က layer ထဲက rule က selector
+      ဘယ်လောက် ပေါ့ပေါ့ နိုင်ပါတယ်။ [[mark:draw-theme]] theme layer မှာ အရောင်၊ အရွယ်အစား စတဲ့ design token
+      တွေကို custom property အဖြစ် ထားပါတယ်။ [[mark:draw-base]] base layer မှာ Preflight ရှိပါတယ်။
+      [[mark:draw-components]] components layer က ခုနက card rule လို ကိုယ်ပိုင် class တွေအတွက်ပါ။
+      [[mark:draw-utilities]] utilities layer က နောက်ဆုံးမို့၊ utility တွေက သူ့အောက်က အားလုံးကို နိုင်ပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Functions and directives (@import, @layer)"
+        url: "https://tailwindcss.com/docs/functions-and-directives"
+      - title: "Tailwind CSS — Adding custom styles (using custom CSS, layers)"
+        url: "https://tailwindcss.com/docs/adding-custom-styles#using-custom-css"
+      - title: "MDN — @layer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@layer"
+    actions:
+      - id: open-layers
+        type: whiteboard.apply
+        at: { mark: open-layers }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-import-layers
+        type: whiteboard.apply
+        at: { mark: draw-import-layers }
+        upsertIds: [c-order-l, c-order]
+        drawMs: 1800
+      - id: draw-theme
+        type: whiteboard.apply
+        at: { mark: draw-theme }
+        upsertIds: [c-theme, c-theme-t]
+        drawMs: 1400
+      - id: draw-base
+        type: whiteboard.apply
+        at: { mark: draw-base }
+        upsertIds: [c-base, c-base-t]
+        drawMs: 1000
+      - id: draw-components
+        type: whiteboard.apply
+        at: { mark: draw-components }
+        upsertIds: [c-components, c-components-t]
+        drawMs: 1200
+      - id: draw-utilities
+        type: whiteboard.apply
+        at: { mark: draw-utilities }
+        upsertIds: [c-utilities, c-utilities-t]
+        drawMs: 1200
+
+  # ------------------------------------------------------------------ 5
+  - id: first-card
+    chapter: "Utility တိုင်းက CSS ပါ"
+    narration: >
+      [[mark:close-layers]] ပထမ card ကို utility တွေနဲ့ချည်းပဲ style ပေးကြည့်ရအောင်။ [[mark:open-index]] ဒါက
+      HTML ဖိုင်ပါ။ [[mark:select-body]] body tag ကို ကြည့်ပါ။ နောက်ခံ အရောင်လို utility တချို့ ပါပြီးသားပါ။
+      [[mark:select-card1]] ပထမ card ရဲ့ class က အလွတ်ပါ။ HTML ကို ပြင်တိုင်း preview ပြန်ပွင့်လို့၊
+      ရိုက်နေတုန်း မှိတ်တုတ်မှိတ်တုတ် ဖြစ်နေပါမယ်။ [[mark:type-flex]] card ကို item တွေ wrap ဖြစ်ခွင့် ရှိတဲ့
+      flex container လုပ်ပြီး၊ နာမည်နဲ့ ဈေးနှုန်းကို နှစ်ဖက် အစွန်းဆီ ပို့ပါမယ်။ CSS နဲ့ဆိုရင် display၊ flex
+      wrap နဲ့ justify content ပါ။ [[mark:after-flex]] ဈေးနှုန်းက ညာဘက် ရောက်သွားပါပြီ။ [[mark:type-padding]]
+      ဘက်တိုင်းမှာ padding ထည့်ပါမယ်။ [[mark:type-skin]] ပြီးရင် အဖြူရောင် နောက်ခံ၊ ဝါဖျော့ဖျော့ border
+      ပါးပါးနဲ့ ထောင့်ဝိုင်း ထည့်ပါမယ်။ CSS နဲ့ဆိုရင် နောက်ခံ အရောင်၊ border အထူနဲ့ အရောင်၊ ထောင့်ဝိုင်းတဲ့
+      property ပါ။ [[mark:after-skin]] card ပုံစံ ဖြစ်သွားပါပြီ။ CSS ဖိုင်ကိုတော့ လုံးဝ မပြင်ခဲ့ပါဘူး။
+    sources:
+      - title: "Tailwind CSS — Styling with utility classes"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes"
+      - title: "Tailwind CSS — display, flex-wrap, justify-content"
+        url: "https://tailwindcss.com/docs/justify-content"
+      - title: "Tailwind CSS — border-width (default 1px, currentColor in v4)"
+        url: "https://tailwindcss.com/docs/border-width"
+    actions:
+      - id: close-layers
+        type: whiteboard.apply
+        at: { mark: close-layers }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-body
+        type: editor.select
+        at: { mark: select-body }
+        target:
+          { file: index.html, text: '<body class="bg-amber-50 text-stone-900">', occurrence: 1 }
+      - id: select-card1
+        type: editor.select
+        at: { mark: select-card1 }
+        target:
+          { file: index.html, text: '<li class="" data-testid="card-laphet-yay">', occurrence: 1 }
+      - id: type-flex
+        type: editor.type
+        at: { mark: type-flex }
+        cadence: fast-explainer
+        target: { file: index.html, after: '<li class="', occurrence: 1 }
+        text: "flex flex-wrap justify-between"
+      - id: type-padding
+        type: editor.type
+        at: { mark: type-padding }
+        cadence: fast-explainer
+        target:
+          { file: index.html, after: '<li class="flex flex-wrap justify-between', occurrence: 1 }
+        text: " p-4"
+      - id: type-skin
+        type: editor.type
+        at: { mark: type-skin }
+        cadence: fast-explainer
+        target:
+          {
+            file: index.html,
+            after: '<li class="flex flex-wrap justify-between p-4',
+            occurrence: 1,
+          }
+        text: " bg-white border border-amber-200 rounded-lg"
+      - id: expect-card1
+        type: expect.preview
+        at: { mark: after-skin }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        attribute:
+          {
+            name: class,
+            value: "flex flex-wrap justify-between p-4 bg-white border border-amber-200 rounded-lg",
+          }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 6
+  - id: scales-board
+    narration: >
+      [[mark:open-scales]] ဒီ padding အရွယ်အစားက ဘယ်က လာတာလဲ။ [[mark:draw-spacing]] theme ထဲက spacing variable
+      က rem ရဲ့ လေးပုံ တစ်ပုံပါ။ [[mark:draw-p4]] spacing class က အဲဒီ တန်ဖိုးကို သူ့ ဂဏန်းနဲ့ calc သုံးပြီး
+      မြှောက်ပါတယ်။ 4 ဆိုရင် 1 rem၊ 16 pixel ရပါတယ်။ [[mark:draw-p4-uses]] padding၊ margin၊ gap၊ အကျယ်နဲ့
+      အမြင့်တွေက ဒီ scale ကိုပဲ သုံးကြပါတယ်။ [[mark:draw-text]] စာလုံး အရွယ် class က font size နဲ့ ကိုက်ညီတဲ့
+      line height ကို တစ်ခါတည်း ပေးပါတယ်။ [[mark:draw-color]] အရောင်တွေက အရမ်းဖျော့တဲ့ 50 ကနေ အရမ်းရင့်တဲ့ 950
+      အထိ အုပ်စုလိုက် ရှိပြီး၊ lesson 9 က OKLCH နဲ့ ရေးထားပါတယ်။ [[mark:draw-alpha]] အရောင် class နောက်က slash
+      နဲ့ ဂဏန်းက အရောင်ရဲ့ alpha ကို ပေးပြီး၊ Tailwind က color mix နဲ့ တွက်ပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Theme variables (--spacing and the default theme)"
+        url: "https://tailwindcss.com/docs/theme"
+      - title: "Tailwind CSS — padding (calc(var(--spacing) * n))"
+        url: "https://tailwindcss.com/docs/padding"
+      - title: "Tailwind CSS — font-size"
+        url: "https://tailwindcss.com/docs/font-size"
+      - title: "Tailwind CSS — Colors (OKLCH palette, opacity modifier)"
+        url: "https://tailwindcss.com/docs/colors"
+    actions:
+      - id: open-scales
+        type: whiteboard.apply
+        at: { mark: open-scales }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-spacing
+        type: whiteboard.apply
+        at: { mark: draw-spacing }
+        upsertIds: [d-spacing]
+        drawMs: 1000
+      - id: draw-p4
+        type: whiteboard.apply
+        at: { mark: draw-p4 }
+        upsertIds: [d-p4]
+        drawMs: 1600
+      - id: draw-p4-uses
+        type: whiteboard.apply
+        at: { mark: draw-p4-uses }
+        upsertIds: [d-p4-l]
+        drawMs: 1400
+      - id: draw-text
+        type: whiteboard.apply
+        at: { mark: draw-text }
+        upsertIds: [d-text]
+        drawMs: 1400
+      - id: draw-color
+        type: whiteboard.apply
+        at: { mark: draw-color }
+        upsertIds: [d-color]
+        drawMs: 1400
+      - id: draw-alpha
+        type: whiteboard.apply
+        at: { mark: draw-alpha }
+        upsertIds: [d-alpha]
+        drawMs: 1600
+
+  # ------------------------------------------------------------------ 7
+  - id: class-detection
+    chapter: "Tailwind က class တွေကို ဘယ်လို ရှာလဲ"
+    narration: >
+      [[mark:open-scan]] ဘယ် class တွေအတွက် CSS ထုတ်ရမလဲ၊ Tailwind က ဘယ်လို သိလဲ။ [[mark:draw-scan]]
+      ဖိုင်တွေကို စာသား ရိုးရိုးလို ဖတ်ပြီး၊ class နာမည်နဲ့ တူတဲ့ စကားလုံး မှန်သမျှကို စုပါတယ်။ ကိုယ့် code
+      ကိုတော့ ဘယ်တော့မှ run မကြည့်ပါဘူး။ [[mark:draw-css]] တကယ် ရှိတဲ့ utility နဲ့ ကိုက်တဲ့ စကားလုံးတွေအတွက်ပဲ
+      CSS ထုတ်ပါတယ်။ [[mark:draw-bad]] ဒါကြောင့် class နာမည်ကို အပိုင်းလိုက် ဆက်ပြီး မဖန်တီးပါနဲ့။ ဥပမာ
+      နောက်ခံ class ရဲ့ အစကို JavaScript variable ထဲက အရောင် နာမည်နဲ့ ဆက်ရင်၊ နာမည် အပြည့်က ဘယ်ဖိုင်မှာမှ
+      မရှိလို့ CSS မထွက်ပါဘူး။ [[mark:draw-good]] class တိုင်းကို အပြည့် ရေးပါ။ ဥပမာ state တစ်ခုစီနဲ့ class
+      အပြည့်ကို တွဲထားတဲ့ စာရင်း သုံးပါ။ [[mark:draw-source]] source at-rule နဲ့ Tailwind မဖတ်တဲ့ folder ကို
+      ဖတ်ခိုင်းလို့ ရသလို၊ မဖတ်စေချင်တဲ့ folder ကိုလည်း ကျော်ခိုင်းလို့ ရပါတယ်။ ဘယ်ဖိုင်မှာမှ မရှိတဲ့ class
+      ကိုလည်း CSS ထုတ်ခိုင်းလို့ ရပါတယ်။ [[mark:draw-used]] ပြီးတော့ ထွက်လာတဲ့ CSS ထဲမှာ ကိုယ် သုံးထားတဲ့
+      utility တွေနဲ့ သူတို့ လိုတဲ့ theme variable တွေပဲ ပါပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Detecting classes in source files"
+        url: "https://tailwindcss.com/docs/detecting-classes-in-source-files"
+      - title: "Tailwind CSS — Dynamic class names"
+        url: "https://tailwindcss.com/docs/detecting-classes-in-source-files#dynamic-class-names"
+      - title: "Tailwind CSS — Theme variables (only used variables are generated)"
+        url: "https://tailwindcss.com/docs/theme#generating-all-css-variables"
+    actions:
+      - id: open-scan
+        type: whiteboard.apply
+        at: { mark: open-scan }
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-scan
+        type: whiteboard.apply
+        at: { mark: draw-scan }
+        upsertIds: [e-file, e-file-t, e-file-c, e-arrow, e-scan-l]
+        drawMs: 2400
+      - id: draw-css
+        type: whiteboard.apply
+        at: { mark: draw-css }
+        upsertIds: [e-css, e-css-t]
+        drawMs: 1400
+      - id: draw-bad
+        type: whiteboard.apply
+        at: { mark: draw-bad }
+        upsertIds: [e-bad]
+        drawMs: 1400
+      - id: draw-good
+        type: whiteboard.apply
+        at: { mark: draw-good }
+        upsertIds: [e-good]
+        drawMs: 1400
+      - id: draw-source
+        type: whiteboard.apply
+        at: { mark: draw-source }
+        upsertIds: [e-source]
+        drawMs: 1400
+      - id: draw-used
+        type: whiteboard.apply
+        at: { mark: draw-used }
+        upsertIds: [e-used]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 8
+  - id: aria-variant
+    chapter: "Variant တွေ"
+    narration: >
+      [[mark:close-scan]] variant ဆိုတာ utility ရှေ့မှာ colon နဲ့ ဆုံးတဲ့ prefix ထည့်ပြီး၊ အခြေအနေ တစ်ခု
+      မှန်မှပဲ အလုပ်လုပ်စေတာပါ။ [[mark:select-fav]] ကြိုက်တယ် ခလုတ်ကို ကြည့်ပါ။ [[mark:type-fav]] သူ့ကို
+      မီးခိုးဖျော့ နောက်ခံ ပေးပါမယ်။ ပြီးတော့ aria pressed prefix ကို သုံးပြီး အစိမ်းရောင် နောက်ခံနဲ့
+      အဖြူရောင် စာလုံး ပေးပါမယ်။ ဒါပေမဲ့ ဒီ နှစ်ခုက ခလုတ်ကို နှိပ်ထားတယ်လို့ HTML က ပြောနေမှပဲ ပေါ်ပါမယ်။
+      [[mark:after-fav]] နောက်ခံ မီးခိုးရောင် ဖြစ်သွားရုံပါပဲ။ နှိပ်ထားတာ မဟုတ်သေးလို့ပါ။
+      [[mark:insert-pressed]] ခလုတ် နှိပ်တဲ့အခါ script က လုပ်သလိုပဲ၊ aria pressed attribute ကို true နဲ့
+      ထည့်ပါမယ်။ [[mark:after-pressed]] အခု အစိမ်းရောင် ဖြစ်သွားပါပြီ။ prefix က attribute selector
+      ဖြစ်သွားပြီး၊ ခလုတ်က အဲဒါနဲ့ ကိုက်လို့ပါ။ data attribute တွေအတွက်လည်း prefix ရှိပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Hover, focus, and other states (ARIA states)"
+        url: "https://tailwindcss.com/docs/hover-focus-and-other-states#aria-states"
+      - title: "MDN — aria-pressed"
+        url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-pressed"
+    actions:
+      - id: close-scan
+        type: whiteboard.apply
+        at: { mark: close-scan }
+        open: false
+      - id: select-fav
+        type: editor.select
+        at: { mark: select-fav }
+        target:
+          {
+            file: index.html,
+            text: '<button type="button" class="mt-4 rounded-full px-4 py-1" data-testid="favourite">',
+            occurrence: 1,
+          }
+      # emerald-700, not 600: white 16 px text on it is 5.4:1 (WCAG AA 4.5:1);
+      # on emerald-600 it would be 3.7:1.
+      - id: type-fav
+        type: editor.type
+        at: { mark: type-fav }
+        cadence: fast-explainer
+        target:
+          {
+            file: index.html,
+            after: '<button type="button" class="mt-4 rounded-full px-4 py-1',
+            occurrence: 1,
+          }
+        text: " bg-stone-200 aria-pressed:bg-emerald-700 aria-pressed:text-white"
+      - id: expect-fav-classes
+        type: expect.preview
+        at: { mark: after-fav }
+        timeoutMs: 5000
+        target: { by: testId, value: favourite }
+        attribute:
+          {
+            name: class,
+            value: "mt-4 rounded-full px-4 py-1 bg-stone-200 aria-pressed:bg-emerald-700 aria-pressed:text-white",
+          }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: insert-pressed
+        type: editor.type
+        at: { mark: insert-pressed }
+        cadence: block
+        target: { file: index.html, after: 'data-testid="favourite"', occurrence: 1 }
+        text: ' aria-pressed="true"'
+      - id: expect-pressed
+        type: expect.preview
+        at: { mark: after-pressed }
+        timeoutMs: 5000
+        target: { by: testId, value: favourite }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 9
+  - id: more-variants
+    narration: >
+      အသုံးအများဆုံး prefix တွေကတော့ lesson 27 နဲ့ 28 က pseudo-class တွေပါ။ hover၊ focus၊ focus visible၊
+      active၊ disabled နဲ့ ပထမ child ကို ရွေးတဲ့ first ပါ။ [[mark:explain-hover-media]] version 4 က hover
+      prefix ကို lesson 25 က hover media feature ထဲ ထည့်ပေးလို့၊ ဖုန်းမှာ နှိပ်ပြီးရင် hover style
+      ကပ်မကျန်တော့ပါဘူး။ [[mark:explain-group-peer]] group နဲ့ peer prefix က parent ဒါမှမဟုတ် ရှေ့က sibling
+      ရဲ့ အခြေအနေကို ကြည့်ပါတယ်။ [[mark:explain-stacking]] aria pressed နဲ့ hover လို prefix တွေကို
+      ဆင့်ရေးလို့ ရပြီး၊ CSS selector ရေးသလိုပဲ ဘယ်ကနေ ညာ အစဉ်အတိုင်း သက်ရောက်ပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Hover, focus, and other states"
+        url: "https://tailwindcss.com/docs/hover-focus-and-other-states"
+      - title: "Tailwind CSS — Styling based on parent and sibling state (group, peer)"
+        url: "https://tailwindcss.com/docs/hover-focus-and-other-states#styling-based-on-parent-state"
+      - title: "Tailwind CSS — Upgrade guide (hover styles on mobile, variant stacking order)"
+        url: "https://tailwindcss.com/docs/upgrade-guide#hover-styles-on-mobile"
+    actions: []
+
+  # ------------------------------------------------------------------ 10
+  - id: open-variant
+    narration: >
+      [[mark:select-details]] ဖွင့်ချိန်တွေက details element ထဲမှာ ရှိပါတယ်။ [[mark:type-open]] open prefix
+      နဲ့ ဝါဖျော့ဖျော့ နောက်ခံ ပေးပါမယ်။ ဒါပေမဲ့ ပွင့်နေတုန်းမှာပဲ ပေါ်ပါမယ်။ [[mark:click-summary]]
+      ဖွင့်ကြည့်ရအောင်။ [[mark:after-open]] browser က open attribute ထည့်လိုက်လို့ prefix နဲ့ ကိုက်သွားပြီး၊
+      ဖွင့်ချိန်တွေ ဝါဖျော့ဖျော့ နောက်ခံနဲ့ ပေါ်လာပါပြီ။ summary ပတ်လည်က မျဉ်းကတော့ focus ring ပါ။ lesson 28
+      မှာလိုပဲ focus ကို script နဲ့ ရွှေ့လို့ ပေါ်တာပါ။
+    sources:
+      - title: "Tailwind CSS — Hover, focus, and other states (open/closed state)"
+        url: "https://tailwindcss.com/docs/hover-focus-and-other-states#openclosed-state"
+      - title: "MDN — <details>: the open attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/details"
+    actions:
+      - id: select-details
+        type: editor.select
+        at: { mark: select-details }
+        target:
+          {
+            file: index.html,
+            text: '<details class="mt-4 rounded-lg p-3" data-testid="hours-details">',
+            occurrence: 1,
+          }
+      - id: type-open
+        type: editor.type
+        at: { mark: type-open }
+        cadence: fast-explainer
+        target: { file: index.html, after: '<details class="mt-4 rounded-lg p-3', occurrence: 1 }
+        text: " open:bg-amber-100"
+      - id: expect-details-class
+        type: expect.preview
+        at: { afterAction: type-open }
+        timeoutMs: 5000
+        target: { by: testId, value: hours-details }
+        attribute: { name: class, value: "mt-4 rounded-lg p-3 open:bg-amber-100" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-summary
+        type: preview.click
+        at: { mark: click-summary }
+        target: { by: testId, value: hours-summary }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-open
+        type: expect.preview
+        at: { mark: after-open }
+        timeoutMs: 5000
+        target: { by: testId, value: hours-details }
+        attribute: { name: open, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 11
+  - id: breakpoints
+    chapter: "Breakpoint နဲ့ container variant"
+    narration: >
+      [[mark:select-menu-list]] အခု menu list ပါ။ [[mark:type-grid]] list ကို gap နည်းနည်းနဲ့ grid လုပ်ပြီး၊
+      sm prefix နဲ့ column နှစ်ခု ပေးပါမယ်။ page ပြန်ပွင့်လို့ ဖွင့်ချိန်လည်း ပြန်ပိတ်သွားပါမယ်။
+      [[mark:after-grid]] column တစ်ခုတည်းပဲ ရှိပါသေးတယ်။ ဘာကြောင့်လဲ။ [[mark:open-breakpoints]] layout
+      ပြောင်းမယ့် အကျယ်ကို breakpoint လို့ ခေါ်ပြီး၊ breakpoint prefix တွေက mobile-first ပါ။ [[mark:draw-sm]]
+      sm prefix က 640 pixel နဲ့ အထက် ဖြစ်ပြီး၊ small ဆိုပေမယ့် screen သေးတာ မဟုတ်ပါဘူး။ md၊ lg၊ xl နဲ့ 2xl က
+      ပိုကျယ်တဲ့ screen တွေအတွက်ပါ။ [[mark:draw-preview]] ကိုယ့် preview က 432 pixel လောက်ပဲ ကျယ်လို့
+      အလုပ်မလုပ်တာပါ။ [[mark:draw-mobile]] prefix မပါတဲ့ class က ဖုန်းအတွက် style ဖြစ်ပြီး၊ screen ကျယ်လာမှ
+      breakpoint တွေက အဲဒီအပေါ်မှာ ထပ်ပေါင်းပါတယ်။ [[mark:draw-max]] screen ကျဉ်းမှပဲ လိုချင်ရင် ရှေ့မှာ max
+      ထည့်ပါ။ max sm ဆိုရင် 640 pixel ထက် ကျဉ်းတာပါ။ [[mark:draw-container]] ဒါပေမဲ့ card list လိုမျိုးက
+      screen ကို မဟုတ်ဘဲ သူ့ နေရာကို လိုက်သင့်ပါတယ်။ at sign နဲ့ စတဲ့ prefix က အနီးဆုံး container ကို
+      မေးပါတယ်။ max လည်း ရှိပြီး၊ နာမည်ပေးထားတဲ့ container ကိုလည်း ရွေးမေးလို့ ရပါတယ်။ [[mark:draw-xs]] xs
+      အရွယ်က 320 pixel ဖြစ်ပြီး၊ list ကို ပတ်ထားတဲ့ box က 352 pixel လောက် ရှိလို့ ကိုက်ပါမယ်။
+    sources:
+      - title: "Tailwind CSS — Responsive design (mobile-first breakpoints)"
+        url: "https://tailwindcss.com/docs/responsive-design#working-mobile-first"
+      - title: "Tailwind CSS — Responsive design (container queries)"
+        url: "https://tailwindcss.com/docs/responsive-design#container-queries"
+    actions:
+      - id: select-menu-list
+        type: editor.select
+        at: { mark: select-menu-list }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="" data-testid="menu-drinks" role="list">',
+            occurrence: 1,
+          }
+      - id: type-grid
+        type: editor.type
+        at: { mark: type-grid }
+        cadence: fast-explainer
+        target: { file: index.html, after: '<ul class="', occurrence: 1 }
+        text: "grid gap-3 sm:grid-cols-2"
+      - id: expect-grid
+        type: expect.preview
+        at: { mark: after-grid }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-drinks }
+        attribute: { name: class, value: "grid gap-3 sm:grid-cols-2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-breakpoints
+        type: whiteboard.apply
+        at: { mark: open-breakpoints }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-sm
+        type: whiteboard.apply
+        at: { mark: draw-sm }
+        upsertIds: [f-sm, f-sm2]
+        drawMs: 1200
+      - id: draw-preview
+        type: whiteboard.apply
+        at: { mark: draw-preview }
+        upsertIds: [f-preview]
+        drawMs: 1200
+      - id: draw-mobile
+        type: whiteboard.apply
+        at: { mark: draw-mobile }
+        upsertIds: [f-mobile]
+        drawMs: 1400
+      - id: draw-max
+        type: whiteboard.apply
+        at: { mark: draw-max }
+        upsertIds: [f-max]
+        drawMs: 1200
+      - id: draw-container
+        type: whiteboard.apply
+        at: { mark: draw-container }
+        upsertIds: [f-container, f-cmore]
+        drawMs: 1800
+      - id: draw-xs
+        type: whiteboard.apply
+        at: { mark: draw-xs }
+        upsertIds: [f-xs]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 12
+  - id: container-variant
+    narration: >
+      [[mark:close-breakpoints]] HTML ကို ပြန်သွားရအောင်။ [[mark:select-container]] wrapper ပေါ်က container
+      class က lesson 25 မှာလိုပဲ container type ကို inline size ပေးထားပါတယ်။ [[mark:type-xs]] ဒါကြောင့် xs
+      container prefix နဲ့ column နှစ်ခု ထည့်ပါမယ်။ [[mark:after-xs]] preview ကျဉ်းကျဉ်းထဲမှာ column နှစ်ခု
+      ဖြစ်သွားပါပြီ။ ကျဉ်းသွားတဲ့ ပထမ card မှာ flex wrap က ဈေးနှုန်းကို နာမည်အောက် ချပေးပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Responsive design (container queries, container sizes)"
+        url: "https://tailwindcss.com/docs/responsive-design#container-queries"
+      - title: "MDN — CSS container queries"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"
+    actions:
+      - id: close-breakpoints
+        type: whiteboard.apply
+        at: { mark: close-breakpoints }
+        open: false
+      - id: select-container
+        type: editor.select
+        at: { mark: select-container }
+        target: { file: index.html, text: "@container", occurrence: 1 }
+      - id: type-xs
+        type: editor.type
+        at: { mark: type-xs }
+        cadence: fast-explainer
+        target: { file: index.html, after: '<ul class="grid gap-3 sm:grid-cols-2', occurrence: 1 }
+        text: " @xs:grid-cols-2"
+      - id: expect-xs
+        type: expect.preview
+        at: { mark: after-xs }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-drinks }
+        attribute: { name: class, value: "grid gap-3 sm:grid-cols-2 @xs:grid-cols-2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 13
+  - id: dark-board
+    narration: >
+      [[mark:open-dark]] dark prefix ကိုလည်း တွေ့ရပါမယ်။ [[mark:draw-dark-media]] default အားဖြင့် သူက prefers
+      color scheme media query ကို သုံးလို့၊ ကြည့်သူရဲ့ system setting ကို လိုက်ပါတယ်။
+      [[mark:draw-dark-class]] custom variant at-rule နဲ့ dark prefix ကို html element ပေါ်က class ကို
+      လိုက်အောင် ပြောင်းလို့ ရပြီး၊ prefix အသစ်တွေလည်း ဖန်တီးလို့ ရပါတယ်။ [[mark:draw-dark-replay]] default
+      dark prefix က ဒီ preview မှာလည်း ကြည့်သူရဲ့ setting ကို လိုက်လို့၊ board ပေါ်မှာပဲ ပြတာပါ။
+    sources:
+      - title: "Tailwind CSS — Dark mode"
+        url: "https://tailwindcss.com/docs/dark-mode"
+      - title: "Tailwind CSS — Dark mode (toggling dark mode manually)"
+        url: "https://tailwindcss.com/docs/dark-mode#toggling-dark-mode-manually"
+      - title: "MDN — prefers-color-scheme"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme"
+    actions:
+      - id: open-dark
+        type: whiteboard.apply
+        at: { mark: open-dark }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-dark-media
+        type: whiteboard.apply
+        at: { mark: draw-dark-media }
+        upsertIds: [g-media, g-os]
+        drawMs: 2000
+      - id: draw-dark-class
+        type: whiteboard.apply
+        at: { mark: draw-dark-class }
+        upsertIds: [g-class, g-class-l]
+        drawMs: 2000
+      - id: draw-dark-replay
+        type: whiteboard.apply
+        at: { mark: draw-dark-replay }
+        upsertIds: [g-replay]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 14
+  - id: theme
+    chapter: "Theme နဲ့ arbitrary value"
+    narration: >
+      [[mark:close-dark]] ဆိုင်မှာ ကိုယ်ပိုင် လက်ဖက်ရည် အညိုရောင် ရှိပေမယ့်၊ default အရောင်တွေထဲမှာ မပါပါဘူး။
+      [[mark:open-style-theme]] CSS ဖိုင်ကို ဖွင့်ရအောင်။ [[mark:insert-theme]] theme block ထဲမှာ OKLCH နဲ့
+      ရေးထားတဲ့ အညိုရောင် tea 500 variable ကို ထည့်ပါမယ်။ [[mark:select-theme]] variable နာမည် အစက color
+      ဆိုတဲ့ အပိုင်းက Tailwind ကို အရောင် utility တွေ ထုတ်ခိုင်းပါတယ်။ [[mark:open-index-theme]] HTML ကို
+      ပြန်သွားရအောင်။ [[mark:type-tea]] မှာမယ် ခလုတ်ကို tea 500 နောက်ခံ ပေးပြီး၊ အပေါ်က စာလုံးကို အဖြူရောင်
+      ပေးပါမယ်။ [[mark:after-tea]] ခလုတ် လက်ဖက်ရည် အညို ဖြစ်သွားပါပြီ။ ဒီ နာမည်ကို အရောင် utility တိုင်းမှာ
+      သုံးနိုင်ပြီး၊ var နဲ့ ဖတ်လို့ရတဲ့ custom property လည်း ဖြစ်ပါတယ်။ [[mark:explain-override]] variable
+      အသစ် ထည့်ရင် theme ကို ချဲ့တာပါ။ default အုပ်စု တစ်ခုလုံးကို ဖယ်လို့ရသလို၊ sm breakpoint လို token
+      ကိုလည်း ပြန်သတ်မှတ်လို့ ရပါတယ်။ token က တခြား variable ကို ညွှန်းရင်တော့ inline option ထည့်ပါ။ ဒါမှ
+      utility သုံးတဲ့ element ပေါ်မှာ တွက်ပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Theme variables"
+        url: "https://tailwindcss.com/docs/theme"
+      - title: "Tailwind CSS — Theme variables (extending, overriding, inline)"
+        url: "https://tailwindcss.com/docs/theme#customizing-your-theme"
+      - title: "Tailwind CSS — Colors (customizing your colors)"
+        url: "https://tailwindcss.com/docs/colors#customizing-your-colors"
+    actions:
+      - id: close-dark
+        type: whiteboard.apply
+        at: { mark: close-dark }
+        open: false
+      - id: open-style-theme
+        type: workspace.openFile
+        at: { mark: open-style-theme }
+        path: src/style.css
+      # A complete block: with the Tailwind plugin, every half-typed CSS state
+      # would show an overlay (PLATFORM.md §5).
+      - id: insert-theme
+        type: editor.type
+        at: { mark: insert-theme }
+        cadence: block
+        target: { file: src/style.css, after: "@import \"tailwindcss\";\n", occurrence: 1 }
+        text: "\n@theme {\n  --color-tea-500: oklch(0.55 0.12 50);\n}\n"
+      - id: select-theme
+        type: editor.select
+        at: { mark: select-theme }
+        target: { file: src/style.css, text: "--color-tea-500", occurrence: 1 }
+      - id: open-index-theme
+        type: workspace.openFile
+        at: { mark: open-index-theme }
+        path: index.html
+      - id: type-tea
+        type: editor.type
+        at: { mark: type-tea }
+        cadence: fast-explainer
+        target:
+          { file: index.html, after: 'class="order-btn mt-4 rounded-full px-4 py-1', occurrence: 1 }
+        text: " bg-tea-500 text-white"
+      - id: expect-tea
+        type: expect.preview
+        at: { mark: after-tea }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        attribute:
+          { name: class, value: "order-btn mt-4 rounded-full px-4 py-1 bg-tea-500 text-white" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  # ------------------------------------------------------------------ 15
+  - id: arbitrary
+    narration: >
+      [[mark:type-arbitrary]] တစ်ခါပဲ သုံးမယ့် တန်ဖိုးအတွက် theme variable လုပ်ဖို့ မတန်ပါဘူး။ ဒုတိယ card ကို
+      ပိုထူတဲ့ border ပေးပြီး၊ အညိုရင့် အရောင် တစ်ခုကို square bracket ထဲမှာ အတိအကျ ရေးပေးပါမယ်။
+      [[mark:after-arbitrary]] ဒုတိယ card မှာ အညိုရင့် border ပေါ်လာပါပြီ။ ဒါက arbitrary value ပါ။ bracket ထဲက
+      တန်ဖိုးကို ဒီအတိုင်း သုံးတာပါ။ [[mark:explain-escapes]] round bracket ထဲက custom property ကိုတော့ var
+      နဲ့ ဖတ်ပေးပါတယ်။ square bracket ထဲမှာ declaration တစ်ခုလုံး ရေးရင် arbitrary property၊ selector ရေးရင်
+      arbitrary variant ဖြစ်ပါတယ်။ [[mark:explain-directives]] utility at-rule က prefix တိုင်းနဲ့ သုံးလို့ရတဲ့
+      ကိုယ်ပိုင် utility ကို ဖန်တီးပါတယ်။ apply က utility တွေကို၊ variant က prefix တွေကို ကိုယ့် rule ထဲမှာ
+      ယူသုံးခွင့် ပေးပါတယ်။ spacing function က spacing scale ကို၊ alpha function က အရောင်ရဲ့ alpha ကို
+      တွက်ပေးပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Adding custom styles (arbitrary values, properties, variants)"
+        url: "https://tailwindcss.com/docs/adding-custom-styles#using-arbitrary-values"
+      - title: "Tailwind CSS — Adding custom styles (@utility)"
+        url: "https://tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities"
+      - title: "Tailwind CSS — Functions and directives (@apply, @variant, --spacing(), --alpha())"
+        url: "https://tailwindcss.com/docs/functions-and-directives"
+    actions:
+      - id: type-arbitrary
+        type: editor.type
+        at: { mark: type-arbitrary }
+        cadence: fast-explainer
+        target: { file: index.html, after: '<li class="card p-8', occurrence: 1 }
+        text: " border-2 border-[#7a4a2a]"
+      - id: expect-arbitrary
+        type: expect.preview
+        at: { mark: after-arbitrary }
+        timeoutMs: 5000
+        target: { by: testId, value: card-coffee }
+        attribute: { name: class, value: "card p-8 border-2 border-[#7a4a2a]" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-arbitrary
+        type: editor.select
+        at: { mark: after-arbitrary }
+        target: { file: index.html, text: "border-[#7a4a2a]", occurrence: 1 }
+
+  # ------------------------------------------------------------------ 16
+  - id: unlayered-css
+    chapter: "Layer ထဲ မပါတဲ့ CSS"
+    narration: >
+      [[mark:select-card-p8]] ဒုတိယ card မှာ ကိုယ့် card class နဲ့ padding ကြီးကြီး ပေးတဲ့ utility ပါပါတယ်။
+      [[mark:open-style-layer]] အခု CSS ဖိုင်ပါ။ [[mark:select-card-rule]] card rule က components layer ထဲမှာ
+      padding သေးသေးလေး ပေးထားပါတယ်။ [[mark:explain-p8-wins]] ဒါပေမဲ့ utilities layer က components layer ရဲ့
+      နောက်မှာ ရှိလို့၊ preview မှာ padding ကြီးပဲ ပေါ်နေပါတယ်။ [[mark:insert-unlayered]] အခု အဲဒီ rule ကို
+      CSS အဟောင်းလိုမျိုး layer အပြင်ဘက်မှာ ထပ်ရေးပါမယ်။ [[mark:after-unlayered]] ဒုတိယ card ရဲ့ padding
+      သေးသွားပါပြီ။ layer ထဲ မပါတဲ့ CSS က layer အားလုံးကို နိုင်လို့၊ specificity ဘယ်လောက် ရှိရှိ utility
+      တိုင်းကိုလည်း နိုင်ပါတယ်။ [[mark:open-layers-again]] board ပေါ်မှာ သူက layer လေးခုလုံးရဲ့ အပေါ်မှာ
+      ရှိပါတယ်။ [[mark:explain-migrate]] ဒါကြောင့် Tailwind ကို ပြောင်းသုံးတဲ့အခါ CSS အဟောင်းကို components
+      layer ထဲ ထည့်ပါ။ [[mark:explain-conflicts]] သတိထားစရာ တစ်ခုက၊ property တစ်ခုတည်းအတွက် utility နှစ်ခု
+      ပေးရင်၊ class ထဲမှာ နောက်မှ ရေးတာ နိုင်တာ မဟုတ်ပါဘူး။ Tailwind stylesheet ထဲမှာ နောက်ကျတဲ့ တစ်ခုက
+      နိုင်လို့၊ element တစ်ခုမှာ အဲဒီလို နှစ်ခု မပေးပါနဲ့။ utility အဆုံးမှာ exclamation mark ထည့်ရင်
+      important ဖြစ်ပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Adding custom styles (using custom CSS, @layer components)"
+        url: "https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes"
+      - title: "Tailwind CSS — Styling with utility classes (managing style conflicts, important modifier)"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes#managing-style-conflicts"
+      - title: "CSS Cascading and Inheritance Level 5 — cascade layers (unlayered styles win)"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-layering"
+    actions:
+      - id: select-card-p8
+        type: editor.select
+        at: { mark: select-card-p8 }
+        target: { file: index.html, text: "card p-8", occurrence: 1 }
+      - id: open-style-layer
+        type: workspace.openFile
+        at: { mark: open-style-layer }
+        path: src/style.css
+      - id: select-card-rule
+        type: editor.select
+        at: { mark: select-card-rule }
+        target:
+          {
+            file: src/style.css,
+            text: "@layer components {\n  .card {\n    padding: 4px;\n  }\n}",
+            occurrence: 1,
+          }
+      - id: insert-unlayered
+        type: editor.type
+        at: { mark: insert-unlayered }
+        cadence: block
+        target: { file: src/style.css, after: "    padding: 4px;\n  }\n}\n", occurrence: 1 }
+        text: "\n.card {\n  padding: 4px;\n}\n"
+      # The padding itself is a computed style; the DOM fact is that card 2
+      # still carries p-8 while the unlayered rule wins (expect.file below
+      # pins the rule).
+      - id: expect-card2-still-p8
+        type: expect.preview
+        at: { mark: after-unlayered }
+        timeoutMs: 5000
+        target: { by: testId, value: card-coffee }
+        attribute: { name: class, value: "card p-8 border-2 border-[#7a4a2a]" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-layers-again
+        type: whiteboard.apply
+        at: { mark: open-layers-again }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            c-title,
+            c-order-l,
+            c-order,
+            c-theme,
+            c-theme-t,
+            c-base,
+            c-base-t,
+            c-components,
+            c-components-t,
+            c-utilities,
+            c-utilities-t,
+          ]
+      - id: draw-unlayered
+        type: whiteboard.apply
+        at: { mark: open-layers-again, offsetMs: 900 }
+        upsertIds: [c-unlayered, c-unlayered-t, c-unlayered-l]
+        drawMs: 1600
+      - id: expect-file-unlayered
+        type: expect.file
+        at: { afterAction: insert-unlayered }
+        path: src/style.css
+        contains: "  }\n}\n\n.card {\n  padding: 4px;\n}\n"
+
+  # ------------------------------------------------------------------ 17
+  - id: extract
+    chapter: "Class တွေ ထပ်နေရင်"
+    narration: >
+      [[mark:open-extract]] ခလုတ် ဆယ်ခုမှာ class ဆယ်ခု တူတူ လိုရင် ဘာလုပ်မလဲ။ [[mark:draw-loop]] loop၊
+      component ဒါမှမဟုတ် template partial ကနေ ထုတ်ပြပါ။ ဒါဆို class တွေကို တစ်ခါပဲ ရေးရပါတယ်။
+      [[mark:draw-css-class]] အဲဒီလို မလုပ်နိုင်ရင်တော့ components layer ထဲမှာ apply သုံးထားတဲ့ class တစ်ခု
+      ရေးလို့ ရပါတယ်။ [[mark:draw-inline-style]] data က လာတဲ့ တန်ဖိုးဆိုရင်တော့ style attribute ကို သုံးတာ
+      မှန်ပါတယ်။ [[mark:draw-modern]] ပြီးတော့ Tailwind ထုတ်ပေးတဲ့ CSS ထဲမှာ cascade layer၊ property at-rule၊
+      color mix၊ OKLCH၊ logical property နဲ့ nesting တွေ ပါပါတယ်။ ဒီ course မှာ သင်ခဲ့တဲ့ CSS တွေပါပဲ။
+      [[mark:draw-extras]] Play CDN က Tailwind ကို browser ထဲမှာ run ပေးပေမယ့် စမ်းကြည့်ဖို့ပဲ သုံးပါ။ version
+      3 မှာ JavaScript နဲ့ config လုပ်ခဲ့ပြီး၊ version 4 မှာ CSS ထဲမှာ လုပ်ပါတယ်။ အသစ်ထွက်တဲ့ version တွေမှာ
+      neutral အရောင်သစ်၊ logical spacing၊ scrollbar utility နဲ့ အမြင့်ပါ မေးတဲ့ container size တွေ ပါလာပါတယ်။
+    sources:
+      - title: "Tailwind CSS — Styling with utility classes (managing duplication)"
+        url: "https://tailwindcss.com/docs/styling-with-utility-classes#managing-duplication"
+      - title: "Tailwind CSS — Play CDN"
+        url: "https://tailwindcss.com/docs/installation/play-cdn"
+      - title: "Tailwind CSS v4.0 announcement (modern CSS features, CSS-first configuration)"
+        url: "https://tailwindcss.com/blog/tailwindcss-v4"
+      - title: "Tailwind CSS v4.3 announcement (v4.2 and v4.3 additions)"
+        url: "https://tailwindcss.com/blog/tailwindcss-v4-3"
+    actions:
+      - id: open-extract
+        type: whiteboard.apply
+        at: { mark: open-extract }
+        clear: true
+        upsertIds: [h-title]
+      - id: draw-loop
+        type: whiteboard.apply
+        at: { mark: draw-loop }
+        upsertIds: [h-loop]
+        drawMs: 1400
+      - id: draw-css-class
+        type: whiteboard.apply
+        at: { mark: draw-css-class }
+        upsertIds: [h-css]
+        drawMs: 1400
+      - id: draw-inline-style
+        type: whiteboard.apply
+        at: { mark: draw-inline-style }
+        upsertIds: [h-inline]
+        drawMs: 1400
+      - id: draw-modern
+        type: whiteboard.apply
+        at: { mark: draw-modern }
+        upsertIds: [h-modern-h, h-modern, h-modern2]
+        drawMs: 2400
+      - id: draw-extras
+        type: whiteboard.apply
+        at: { mark: draw-extras }
+        upsertIds: [h-extras]
+        drawMs: 1400
+
+  # ------------------------------------------------------------------ 18
+  - id: course-map
+    chapter: "Course တစ်ခုလုံး ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-map]] Tailwind နဲ့အတူ course လည်း ပြီးသွားပါပြီ။ ခုထိ လေ့လာခဲ့တာ ပြန်ကြည့်ရအောင်။
+      [[mark:map-p1]] CSS အခြေခံနဲ့ box model ကနေ စခဲ့ပြီး၊ selector၊ cascade၊ specificity၊ inheritance နဲ့
+      nesting ကို ကြည့်ခဲ့ပါတယ်။ [[mark:map-p2]] ပြီးတော့ အရောင်၊ unit၊ custom property နဲ့ function လို
+      တန်ဖိုးတွေပါ။ [[mark:map-p3]] အကြီးဆုံး အပိုင်းကတော့ flow layout ကနေ flexbox၊ grid နဲ့ container query
+      အထိ layout ပါ။ [[mark:map-p4]] ပြီးတော့ pseudo-element၊ pseudo-class နဲ့ focus ပါ။ [[mark:map-p5]]
+      ပြီးရင် စာသားနဲ့ list ပါ။ [[mark:map-p6]] gradient ကနေ blend mode အထိ အလှဆင်တဲ့ အပိုင်းပါ။
+      [[mark:map-p7]] motion၊ anchor positioning၊ popover နဲ့ dialog ပါ။ [[mark:map-p8]] ဒီ lesson ကတော့
+      အားလုံးပေါ် အခြေခံတဲ့ Tailwind ပါ။
+    sources:
+      - title: "web.dev — Learn CSS"
+        url: "https://web.dev/learn/css"
+      - title: "web.dev Learn CSS — Conclusion and next steps"
+        url: "https://web.dev/learn/css/conclusion"
+    actions:
+      - id: open-map
+        type: whiteboard.apply
+        at: { mark: open-map }
+        clear: true
+        upsertIds: [i-title]
+      - id: map-p1
+        type: whiteboard.apply
+        at: { mark: map-p1 }
+        upsertIds: [i-p1]
+        drawMs: 1400
+      - id: map-p2
+        type: whiteboard.apply
+        at: { mark: map-p2 }
+        upsertIds: [i-p2]
+        drawMs: 1400
+      - id: map-p3
+        type: whiteboard.apply
+        at: { mark: map-p3 }
+        upsertIds: [i-p3]
+        drawMs: 1400
+      - id: map-p4
+        type: whiteboard.apply
+        at: { mark: map-p4 }
+        upsertIds: [i-p4]
+        drawMs: 1400
+      - id: map-p5
+        type: whiteboard.apply
+        at: { mark: map-p5 }
+        upsertIds: [i-p5]
+        drawMs: 1000
+      - id: map-p6
+        type: whiteboard.apply
+        at: { mark: map-p6 }
+        upsertIds: [i-p6]
+        drawMs: 1400
+      - id: map-p7
+        type: whiteboard.apply
+        at: { mark: map-p7 }
+        upsertIds: [i-p7]
+        drawMs: 1400
+      - id: map-p8
+        type: whiteboard.apply
+        at: { mark: map-p8 }
+        upsertIds: [i-p8, i-p8-circle]
+        drawMs: 1600
+
+  # ------------------------------------------------------------------ 19
+  - id: next-steps
+    narration: >
+      [[mark:open-next]] နောက် ဘာလုပ်မလဲ။ [[mark:draw-build]] ကိုယ့် website လေး ဖြစ်ဖြစ်၊ ဒီ လက်ဖက်ရည်ဆိုင်
+      ဖြစ်ဖြစ် ကိုယ်တိုင် ဆောက်ကြည့်ပါ။ ပြီးရင် တစ်ပိုင်းကို Tailwind နဲ့ ပြန်ရေးကြည့်ပါ။ lesson တိုင်းကို
+      pause လုပ်ပြီး code ပြင်လို့ ရပါတယ်။ [[mark:draw-mdn]] property တစ်ခုရဲ့ အသေးစိတ်အတွက် MDN ကို ကြည့်ပါ။
+      [[mark:draw-webdev]] web.dev မှာ Learn CSS course ရှိပါတယ်။ [[mark:draw-podcast]] CSS Podcast က episode
+      တစ်ခုမှာ topic တစ်ခုစီ ရှင်းပြပါတယ်။ [[mark:draw-baseline]] feature အသစ် မသုံးခင်မှာ၊ browser အဓိက
+      အားလုံးမှာ ရနေပြီလား သိဖို့ Baseline status ကို စစ်ကြည့်ပါ။ [[mark:draw-credit]] ဒီ course ကို Creative
+      Commons license နဲ့ မျှဝေထားတဲ့ web.dev ရဲ့ Learn CSS ကို အခြေခံပြီး ဖန်တီးထားပါတယ်။ CSS ကို အဆုံးထိ
+      အတူတူ လေ့လာခဲ့တဲ့အတွက် ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - title: "web.dev Learn CSS — Conclusion and next steps (additional resources)"
+        url: "https://web.dev/learn/css/conclusion#additional_resources"
+      - title: "MDN — CSS"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS"
+      - title: "The CSS Podcast"
+        url: "https://thecsspodcast.libsyn.com/"
+      - title: "web.dev — Baseline"
+        url: "https://web.dev/baseline"
+      - title: "Google Developers site policies (web.dev content under CC BY 4.0)"
+        url: "https://developers.google.com/site-policies"
+    actions:
+      - id: open-next
+        type: whiteboard.apply
+        at: { mark: open-next }
+        clear: true
+        upsertIds: [j-title]
+      - id: draw-build
+        type: whiteboard.apply
+        at: { mark: draw-build }
+        upsertIds: [j-build, j-build-line]
+        drawMs: 1800
+      - id: draw-mdn
+        type: whiteboard.apply
+        at: { mark: draw-mdn }
+        upsertIds: [j-mdn]
+        drawMs: 1200
+      - id: draw-webdev
+        type: whiteboard.apply
+        at: { mark: draw-webdev }
+        upsertIds: [j-webdev]
+        drawMs: 1200
+      - id: draw-podcast
+        type: whiteboard.apply
+        at: { mark: draw-podcast }
+        upsertIds: [j-podcast]
+        drawMs: 1000
+      - id: draw-baseline
+        type: whiteboard.apply
+        at: { mark: draw-baseline }
+        upsertIds: [j-baseline]
+        drawMs: 1200
+      - id: draw-credit
+        type: whiteboard.apply
+        at: { mark: draw-credit }
+        upsertIds: [j-credit]
+        drawMs: 1400
+      - id: expect-final-html
+        type: expect.file
+        at: { afterAction: draw-credit }
+        path: index.html
+        contains: '<button type="button" class="mt-4 rounded-full px-4 py-1 bg-stone-200 aria-pressed:bg-emerald-700 aria-pressed:text-white" data-testid="favourite" aria-pressed="true">'
+      - id: expect-final-theme
+        type: expect.file
+        at: { afterAction: expect-final-html }
+        path: src/style.css
+        contains: "@theme {\n  --color-tea-500: oklch(0.55 0.12 50);\n}"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
