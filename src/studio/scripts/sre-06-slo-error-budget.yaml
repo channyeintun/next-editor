@@ -1,0 +1,1326 @@
+# SRE from zero, lesson 6: SLOs and error budgets (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-06-slo-error-budget.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-06-slo-error-budget.md \
+#     src/studio/scripts/sre-06-slo-error-budget.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Four marks were added at existing sentence ends; they add no spoken text:
+# b1-s1b and b2-s4b split a board step so no step adds more than three
+# labelled elements (B1's four-box flow, B2's stacked bar), burn-rate-named
+# only splits the burn-rate page's 463-character dialog in two (no action),
+# and ask-question (recap) carries the question-line select that makes the
+# ⟪pause 3s⟫ real silence. No page or board step holds longer than ~34 s at
+# 70 ms/char, so no pacing pages were needed.
+#
+# Boards (P1 flow then P5 bars, P5 bars, P3 ring). Colour jobs: #1e1e1e ink
+# (paints white) for titles, arrows, axes and notes; violet the request flow
+# and the result; blue the thing named and the main data series; green
+# healthy; red failure or budget spent; orange the threshold, and the
+# orange bar and segment the voice script asks for. A label on two lines is
+# two text assets, one per line: the overflow rule counts a whole text's
+# length, so one "\n" label would need the width of both lines.
+#
+# Deck pages: deck "Next Editor · SRE 2 · Agree and notice". The /pub URL
+# below is a placeholder until Chan publishes the deck; the Director's
+# unreachable-deck warning is expected until then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-06-slo-error-budget.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-06-slo-error-budget.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-06-slo-error-budget.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-06-slo-error-budget
+  title: "SRE from zero 6: SLO နဲ့ error budget"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SLO နဲ့ error budget
+
+        - SLI — valid ဖြစ်တာထဲက ကောင်းတာ %
+        - SLO — SLI အတွက် ပစ်မှတ် + window
+        - SLA — မမီရင် လျော်ရတဲ့ customer ကတိ
+        - error budget — SLO ခွင့်ပြုထားတဲ့ ပျက်ခွင့်
+        - burn rate — budget ကို ခွင့်ပြုနှုန်းထက် ဘယ်နှဆ မြန်မြန် သုံးနေလဲ
+        - budget policy — budget နည်းရင်၊ ကုန်ရင် ဘာလုပ်မလဲ ကြိုရေးထားတဲ့ စည်းမျဉ်း
+
+        မေးခွန်း: budget က တစ်လကို fail ဖြစ်ခွင့် top-up 10,000။ မနေ့က 1,000 fail ဖြစ်ခဲ့ရင် မနေ့ရဲ့ burn rate ဘယ်လောက်လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SLO နဲ့ error budget</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 6</p>
+              <h1>SLO နဲ့ error budget</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l06-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p01
+    - id: m2-map
+      contentType: google
+      name: Module 2 map
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: m2_map
+    - id: l06-p02
+      contentType: google
+      name: From number to promise
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p02
+    - id: l06-p02b
+      contentType: google
+      name: SLO, target and window
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p02b
+    - id: l06-p02c
+      contentType: google
+      name: SLA and internal SLOs
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p02c
+    - id: l06-p02d
+      contentType: google
+      name: Why Top-up first
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p02d
+    - id: l06-p03
+      contentType: google
+      name: First SLOs, few and agreed
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p03
+    - id: l06-p03b
+      contentType: google
+      name: Top-up's answer
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p03b
+    - id: l06-p03c
+      contentType: google
+      name: Choosing a target
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p03c
+    - id: l06-p04
+      contentType: google
+      name: Burn rate
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p04
+    - id: l06-p05
+      contentType: google
+      name: Error budget policy
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p05
+    - id: l06-p05b
+      contentType: google
+      name: Day 6
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p05b
+    - id: l06-p06
+      contentType: google
+      name: Rolling out SLOs
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p06
+    - id: l06-p06b
+      contentType: google
+      name: The first win
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p06b
+    - id: l06-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTsLY-k4iJIy1_51OGMEP-fQyRLCzxkFVy9dkZaKV6aJagL8xA5gwrY-uoRWzw-SWnL7QCLuer5rClc/pub"
+      pageId: l06_p07
+  whiteboardAssets:
+    # ---- Board B1, steps 1-4: Top-up's happy path, a four-box flow (P1) -----
+    - {
+        id: l06-b1-r1,
+        kind: rectangle,
+        x: 255,
+        y: 230,
+        width: 150,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l06-b1-r1-t1,
+        kind: text,
+        x: 267,
+        y: 240,
+        width: 100,
+        height: 35,
+        text: "Top-up",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-r1-t2,
+        kind: text,
+        x: 267,
+        y: 275,
+        width: 85,
+        height: 35,
+        text: "နှိပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 410,
+        y: 255,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b1-r2,
+        kind: rectangle,
+        x: 460,
+        y: 230,
+        width: 190,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l06-b1-r2-t,
+        kind: text,
+        x: 472,
+        y: 257,
+        width: 165,
+        height: 35,
+        text: "Padauk API",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 255,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b1-r3,
+        kind: rectangle,
+        x: 705,
+        y: 230,
+        width: 160,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l06-b1-r3-t1,
+        kind: text,
+        x: 717,
+        y: 240,
+        width: 130,
+        height: 35,
+        text: "operator",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-r3-t2,
+        kind: text,
+        x: 717,
+        y: 275,
+        width: 115,
+        height: 35,
+        text: "gateway",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 870,
+        y: 255,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b1-r4,
+        kind: rectangle,
+        x: 920,
+        y: 230,
+        width: 175,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l06-b1-r4-t1,
+        kind: text,
+        x: 932,
+        y: 240,
+        width: 145,
+        height: 35,
+        text: "ဖုန်းဘေလ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-r4-t2,
+        kind: text,
+        x: 932,
+        y: 275,
+        width: 50,
+        height: 35,
+        text: "ဝင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-good-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 990,
+        y: 324,
+        width: 30,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b1-good,
+        kind: rectangle,
+        x: 770,
+        y: 370,
+        width: 325,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l06-b1-good-t1,
+        kind: text,
+        x: 782,
+        y: 380,
+        width: 300,
+        height: 35,
+        text: "ကောင်း = စက္ကန့် 10",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-good-t2,
+        kind: text,
+        x: 782,
+        y: 415,
+        width: 160,
+        height: 35,
+        text: "အတွင်း ဝင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-what-good,
+        kind: text,
+        x: 260,
+        y: 375,
+        width: 405,
+        height: 35,
+        text: "ဘာက ကောင်းလဲ: ≤ 10 စက္ကန့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-how-often,
+        kind: text,
+        x: 260,
+        y: 425,
+        width: 345,
+        height: 35,
+        text: "ဘယ်လောက် မကြာခဏ: 99.5%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-settle-t1,
+        kind: text,
+        x: 280,
+        y: 510,
+        width: 360,
+        height: 35,
+        text: "settlement: မနက် 6 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-settle-t2,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 330,
+        height: 35,
+        text: "စာကြောင်းတိုင်း ကိုက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-ledger-t1,
+        kind: text,
+        x: 690,
+        y: 510,
+        width: 285,
+        height: 35,
+        text: "ledger: durability",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-ledger-t2,
+        kind: text,
+        x: 690,
+        y: 545,
+        width: 190,
+        height: 35,
+        text: "nine ပိုများ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B1, step 5 (cleared): Top-up's month, two bars (P5) ----------
+    - {
+        id: l06-b1-m-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "Top-up ရဲ့ တစ်လ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l06-b1-m-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 548,
+        width: 600,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b1-m-g-t,
+        kind: text,
+        x: 300,
+        y: 215,
+        width: 240,
+        height: 35,
+        text: "တစ်လလုံး: 99.6%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-m-g,
+        kind: rectangle,
+        x: 360,
+        y: 262,
+        width: 120,
+        height: 310,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l06-b1-m-r-t,
+        kind: text,
+        x: 600,
+        y: 405,
+        width: 210,
+        height: 35,
+        text: "လစာထုတ်ရက်တွေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b1-m-r,
+        kind: rectangle,
+        x: 640,
+        y: 452,
+        width: 120,
+        height: 120,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    # ---- Board B2: this month's budget and three burn rates (P5) ------------
+    # Every bar is drawn to one scale: the full 780 px is the month's budget of
+    # 10,000 failed top-ups, so a bar's length is the share of the budget spent
+    # (burn 0.5 by month end, 1.5 in three days, 50 in one hour; the stacked
+    # bar's 7,500 + 5 × 500 fills the whole budget).
+    - {
+        id: l06-b2-budget-t,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 625,
+        height: 35,
+        text: "ဒီလ budget: fail ဖြစ်ခွင့် top-up 10,000",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-budget,
+        kind: rectangle,
+        x: 280,
+        y: 202,
+        width: 780,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l06-b2-note,
+        kind: text,
+        x: 280,
+        y: 250,
+        width: 255,
+        height: 35,
+        text: "20 သိန်းရဲ့ 0.5%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-g,
+        kind: rectangle,
+        x: 280,
+        y: 305,
+        width: 390,
+        height: 36,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l06-b2-g-t,
+        kind: text,
+        x: 685,
+        y: 306,
+        width: 360,
+        height: 35,
+        text: "burn 0.5: လကုန်မှာ ကျန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-o,
+        kind: rectangle,
+        x: 280,
+        y: 355,
+        width: 117,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l06-b2-o-t,
+        kind: text,
+        x: 412,
+        y: 356,
+        width: 485,
+        height: 35,
+        text: "burn 1.5: 3 ရက်မှာ 15% → ticket",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-r,
+        kind: rectangle,
+        x: 280,
+        y: 405,
+        width: 55,
+        height: 36,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l06-b2-r-t,
+        kind: text,
+        x: 350,
+        y: 406,
+        width: 440,
+        height: 35,
+        text: "burn 50: 1 နာရီမှာ 7% → page",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-month,
+        kind: text,
+        x: 280,
+        y: 465,
+        width: 60,
+        height: 35,
+        text: "ဒီလ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-s-r,
+        kind: rectangle,
+        x: 280,
+        y: 505,
+        width: 585,
+        height: 40,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l06-b2-s-r-t,
+        kind: text,
+        x: 285,
+        y: 553,
+        width: 205,
+        height: 35,
+        text: "လစာညနေ: 7,500",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-s-o,
+        kind: rectangle,
+        x: 865,
+        y: 505,
+        width: 195,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l06-b2-s-o-t,
+        kind: text,
+        x: 720,
+        y: 553,
+        width: 375,
+        height: 35,
+        text: "ယိုစိမ့်: တစ်နေ့ 500 × 5",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b2-end,
+        kind: text,
+        x: 795,
+        y: 465,
+        width: 300,
+        height: 35,
+        text: "6 ရက်မြောက်နေ့ ကုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B3: the budget loop, a ring (P3) -----------------------------
+    - {
+        id: l06-b3-ring,
+        kind: ellipse,
+        x: 430,
+        y: 220,
+        width: 560,
+        height: 360,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b3-arrow-top,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 800,
+        y: 222,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b3-arrow-right,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 940,
+        y: 462,
+        width: 30,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l06-b3-measure,
+        kind: rectangle,
+        x: 640,
+        y: 190,
+        width: 140,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l06-b3-measure-t,
+        kind: text,
+        x: 655,
+        y: 202,
+        width: 100,
+        height: 35,
+        text: "တိုင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-budget,
+        kind: rectangle,
+        x: 890,
+        y: 352,
+        width: 200,
+        height: 95,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l06-b3-budget-t1,
+        kind: text,
+        x: 905,
+        y: 362,
+        width: 100,
+        height: 35,
+        text: "budget",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-budget-t2,
+        kind: text,
+        x: 905,
+        y: 397,
+        width: 175,
+        height: 35,
+        text: "ကျန်သေးလား?",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-ship,
+        kind: rectangle,
+        x: 595,
+        y: 550,
+        width: 230,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l06-b3-ship-t,
+        kind: text,
+        x: 610,
+        y: 562,
+        width: 205,
+        height: 35,
+        text: "ထုတ်၊ စမ်းသပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-fix,
+        kind: rectangle,
+        x: 285,
+        y: 352,
+        width: 290,
+        height: 95,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l06-b3-fix-t1,
+        kind: text,
+        x: 298,
+        y: 362,
+        width: 265,
+        height: 35,
+        text: "ငြိမ်အောင် ထိန်း၊",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-fix-t2,
+        kind: text,
+        x: 298,
+        y: 397,
+        width: 65,
+        height: 35,
+        text: "ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-sprint,
+        kind: text,
+        x: 580,
+        y: 290,
+        width: 265,
+        height: 35,
+        text: "sprint တိုင်း စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-release-t1,
+        kind: text,
+        x: 600,
+        y: 440,
+        width: 220,
+        height: 35,
+        text: "ရက်စွဲ မဟုတ်ဘဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l06-b3-release-t2,
+        kind: text,
+        x: 600,
+        y: 475,
+        width: 280,
+        height: 35,
+        text: "budget နဲ့ release",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2606
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Top-up ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ
+    narration: >
+      [[mark:show-p01]] Padauk မှာ incident တိုင်း ပြီးရင် ဘာက ဖြစ်စေခဲ့လဲ ရှာတဲ့ မိနစ် ၃၀ ကြာ blameless review လုပ်တာ အလေ့အထ ဖြစ်နေပြီး၊ မသီရိကလည်း အချိန်ပြည့် Site Reliability Engineer၊ SRE ဖြစ်လာပါပြီ။
+      သူ့ ပထမ တာဝန်ဖြစ်တဲ့ Top-up ကို ဘယ်လောက် စိတ်ချရအောင် လုပ်ရမလဲ မေးကြည့်တော့ engineer တွေက အခု အတိုင်းဆို ရပြီ၊ finance အဖွဲ့က ၁၀၀ ရာခိုင်နှုန်း လိုတယ်လို့ ဖြေကြပြီး user တွေကတော့ ငွေ နှစ်ခါ မဖြတ်ဖို့ပဲ လိုချင်ကြပါတယ်။ Top-up က တကယ်တော့ ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ?
+      [[mark:show-map]] ဒီ မေးခွန်းနဲ့ Module ၂ ကို စပါမယ်၊ reliability loop ရဲ့ သဘောတူတဲ့ အဆင့်နဲ့ သတိထားမိတဲ့ အဆင့်အကြောင်းပါ။ Padauk မှာလည်း engineer ၄၀ လောက် ရှိလာပြီး ရန်ကုန်မှာ အစားအသောက် ပို့ပေးတဲ့ Eats ကို စဖွင့်ထားပါပြီ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l06-p01,
+        }
+      # Module 2 opens: the module map advances in place from the cover.
+      - { id: show-map, type: slide.show, at: { mark: show-map }, slideId: m2-map }
+
+  - id: number-to-promise
+    chapter: SLI၊ SLO၊ SLA
+    narration: >
+      [[mark:show-p02]] engineer တွေရဲ့ dashboard မှာ မနေ့က fail ဖြစ်တဲ့ top-up ၃၀၀ လို့ ပြနေပေမဲ့ ဘယ်နှခုထဲက ၃၀၀ လဲ မသိရင် များလား နည်းလား ပြောလို့ မရပါဘူး။ ဒီလို အရေအတွက် အကြမ်းကို metric လို့ ခေါ်ပါတယ်။
+      မသီရိကတော့ valid ဖြစ်တဲ့ top-up အားလုံးထဲက ကောင်းတာ ဘယ်နှ ရာခိုင်နှုန်းလဲ တွက်ပြီး၊ wallet ထဲ ငွေ မလောက်တာလို user ဘက်က အမှားကိုတော့ မရေတွက်ပါဘူး။ user ကြုံရတာကို ပြတဲ့ ဒီ ရာခိုင်နှုန်းက service level indicator၊ SLI ပါ။
+      [[mark:show-p02b]] finance ရဲ့ ၁၀၀ ရာခိုင်နှုန်းကိုလည်း ဒီနေ့လား၊ ဒီလလား၊ ထာဝရလား မသိရင် မီလား မမီလား ပြောလို့ မရပါဘူး။ ဒါကြောင့် ပစ်မှတ်ကို ရက် ၃၀ လို တိုင်းမယ့် ကာလ၊ window နဲ့ တွဲထားမှ service level objective၊ SLO ဖြစ်ပါတယ်။
+      [[mark:show-p02c]] customer နဲ့ စာချုပ်ထဲမှာ ကတိပေးထားပြီး မမီရင် လျော်ကြေး ပေးရတာကတော့ service level agreement၊ SLA ပါ၊ SLO ထက် လျော့ထားလေ့ ရှိပါတယ်။ ဒါပေမဲ့ ပထမဆုံး SLO အများစုက ငွေဝင်ငွေထွက် စာရင်း၊ ledger ကို ထိန်းတဲ့ အဖွဲ့က payment service ကို ပေးတဲ့ ကတိလို အဖွဲ့ချင်းကြား ကတိတွေပါ။ မမီရင် ငွေ မလျော်ရပေမဲ့ feature အစား ပြင်ဖို့ engineering အချိန် ပေးရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+      - {
+          title: "SRE fundamentals: SLAs vs SLOs vs SLIs (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-fundamentals-slis-slas-and-slos",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l06-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l06-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l06-p02c }
+
+  - id: first-sli
+    chapter: ပထမဆုံး SLI
+    narration: >
+      [[mark:show-p02d]] မသီရိက SLO ကို ရှိပြီးသား service တစ်ခုမှာ အရင် စမ်းဖို့ Top-up ကို ရွေးပါတယ်။ လစာထုတ်ရက်တွေမှာ user တွေ အထိနာဆုံးက Top-up ဖြစ်ပြီး အဖွဲ့ကလည်း စမ်းချင်နေတယ်၊ code ကလည်း Padauk ကိုယ်ပိုင်ပါ။ refund ကို လက်နဲ့ ပြန်အမ်းရတာက ပိုကြီးတဲ့ ပြဿနာလားလို့ CTO ကိုနေလင်း မေးတော့ မစခင် စစ်ကြည့်ကြပြီး refund အများစုက fail ဖြစ်တဲ့ top-up တွေကနေ လာတာ တွေ့ရပါတယ်။
+      [[mark:close-p02d]] [[mark:b1-s1]] Top-up ရဲ့ အရေးအကြီးဆုံး user လုပ်ဆောင်ချက်က ဖုန်းဘေလ် ဖြည့်တာပါ။ [[mark:b1-s1b]] ခလုတ် တစ်ချက်ပဲ နှိပ်ရပေမဲ့ နောက်ကွယ်မှာ Padauk API နဲ့ ဖုန်းကုမ္ပဏီတွေဆီ ချိတ်တဲ့ operator gateway ကို ဖြတ်ပြီးမှ ဝင်ပါတယ်။ မသီရိက ပြဿနာ မရှိရင် သွားတဲ့ ဒီ ပုံမှန် လမ်း၊ happy path ကို အဝင်ပေါက် Padauk API မှာပဲ တိုင်းပါတယ်၊ အကြမ်းဖျင်း ဖြစ်ပေမဲ့ user ဘယ်လောက် အဆင်ပြေလဲ စမြင်ရပါပြီ။
+      [[mark:b1-s2]] ဘယ် top-up ကို ကောင်းတယ်လို့ ရေတွက်မလဲ? မစုတို့ support အဖွဲ့ရဲ့ data အရ စက္ကန့် ၄၀ လောက် စောင့်ရတဲ့ user တွေက ငွေ ဖြတ်ပြီးပြီလား မသိလို့ ထပ်နှိပ်ကြပါတယ်။ ဒါကြောင့် ဖုန်းဘေလ် ဝင်ရုံနဲ့ မလုံလောက်ဘဲ စက္ကန့် ၁၀ အတွင်း ဝင်မှ ကောင်းတယ်လို့ ရေတွက်ပါတယ်။
+      [[mark:b1-s3]] ဒီမှာ ကောင်းတာနဲ့ မကောင်းတာကို ခွဲတဲ့ မျဉ်း၊ threshold နှစ်ခု ပါပါတယ်။ စက္ကန့် ၁၀ က top-up တစ်ခုချင်း ကောင်းလား ခွဲပေးပြီး၊ ၉၉.၅ ရာခိုင်နှုန်းလို ပစ်မှတ်ကတော့ ကောင်းတာ ဘယ်လောက် မကြာခဏ ဖြစ်ရမလဲ သတ်မှတ်ပါတယ်။ ဒါကြောင့် latency SLO က စက္ကန့် ၁၀ မဟုတ်ဘဲ ရာခိုင်နှုန်း တစ်ခုပါ။
+      [[mark:b1-s4]] ဒါပေမဲ့ system အမျိုးအစား မတူရင် SLI လည်း မတူပါဘူး။ merchant တွေဆီ ငွေလွှဲတဲ့ settlement job အတွက် အရေးကြီးတာက မြန်တာ မဟုတ်ဘဲ မနက် ၆ နာရီ မတိုင်ခင် ဖိုင် အဆင်သင့် ဖြစ်ဖို့နဲ့ စာကြောင်းတိုင်း စာရင်းနဲ့ ကိုက်ဖို့ပါ။ ledger မှာတော့ ရေးပြီးသား ငွေလွှဲ တစ်ခုမှ မပျောက်ရဘူး ဆိုတဲ့ durability SLO ကို nine အများကြီးနဲ့ သီးသန့် ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+    actions:
+      - { id: show-p02d, type: slide.show, at: { mark: show-p02d }, slideId: l06-p02d }
+      - { id: close-p02d, type: slide.close, at: { mark: close-p02d, offsetMs: -400 } }
+      # Step 1 is split in two so no step adds more than three boxes: the tap
+      # first, then the path behind it as the narration walks it.
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l06-b1-r1, l06-b1-r1-t1, l06-b1-r1-t2],
+          drawMs: 900,
+        }
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [
+            l06-b1-a1,
+            l06-b1-r2,
+            l06-b1-r2-t,
+            l06-b1-a2,
+            l06-b1-r3,
+            l06-b1-r3-t1,
+            l06-b1-r3-t2,
+            l06-b1-a3,
+            l06-b1-r4,
+            l06-b1-r4-t1,
+            l06-b1-r4-t2,
+          ]
+        drawMs: 2600
+      - {
+          id: b1-s2,
+          type: whiteboard.apply,
+          at: { mark: b1-s2 },
+          upsertIds: [l06-b1-good-a, l06-b1-good, l06-b1-good-t1, l06-b1-good-t2],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l06-b1-what-good, l06-b1-how-often],
+          drawMs: 1400,
+        }
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l06-b1-settle-t1, l06-b1-settle-t2, l06-b1-ledger-t1, l06-b1-ledger-t2]
+        drawMs: 1800
+
+  - id: agreement
+    chapter: ပစ်မှတ်ကို ဘယ်သူ ဆုံးဖြတ်လဲ
+    narration: >
+      [[mark:b1-s5]] တစ်လလုံး တိုင်းကြည့်တော့ Top-up က ၉၉.၆ ရာခိုင်နှုန်းလောက် ရှိပေမဲ့ လစာထုတ်ရက်တွေမှာတော့ အများကြီး ကျနေတာ တွေ့ရပါတယ်။ ဒီ ကိန်းဂဏန်းနဲ့ ကိုနေလင်း၊ product manager မနှင်း၊ မစုနဲ့ မသီရိ ဆွေးနွေးကြပါတယ်။ engineer တွေက ၉၉.၆ ဆို ရပြီ၊ ကိုနေလင်းက ၁၀၀ မှ ရမယ် ဆိုတော့ ဆွေးနွေးပွဲက အဖြေ မထွက်ပါဘူး။
+      [[mark:close-b1]] [[mark:show-p03]] မသီရိက ပစ်မှတ် မမီလို့ feature နောက်ကျရင် လက်ခံရမှာ business ဘက်မို့ ပစ်မှတ်ကို မနှင်းတို့ဘက်က ပိုင်ရမယ်လို့ ပြောပါတယ်။ မစုရဲ့ data ကလည်း user တွေ အတိုင်ကြားဆုံးက ငွေဖြတ်ပြီး ဖုန်းဘေလ် မဝင်တာလို့ ပြလို့ refund ကတိကိုပါ ထည့်ကြပြီး၊ refund ချိန်ကို တိုင်းမယ့် metric မရှိသေးပေမဲ့ အရင် သဘောတူလိုက်ကြပါတယ်။
+      [[mark:show-p03b]] ဒီလိုနဲ့ ၁၀၀ ရာခိုင်နှုန်း မဟုတ်ဘဲ top-up တွေရဲ့ ၉၉.၅ ရာခိုင်နှုန်းမှာ ဖုန်းဘေလ် စက္ကန့် ၁၀ အတွင်း ဝင်ရမယ်၊ မဝင်ရင် တစ်နာရီအတွင်း refund ပြန်ပေးရမယ်လို့ သဘောတူကြပါတယ်။ SLO ကို ဒီ နှစ်ခုပဲ ထားပါတယ်၊ နည်းလေ အာရုံ မပျံ့လေပါ။
+      [[mark:show-p03c]] ပစ်မှတ် ရွေးတဲ့အခါ ၉၉.၉ ရာခိုင်နှုန်း၊ nine သုံးလုံးကို မှတ်တိုင်လို ထားပြီး တင်းမလား လျော့မလား ရွေးကြတာ များပါတယ်။ Top-up က မထိန်းနိုင်တဲ့ ဖုန်းကုမ္ပဏီတွေအပေါ် မှီနေလို့ လျော့တဲ့ဘက်ကို ရွေးပါတယ်။ ဒီနေ့ ရနေတဲ့ ၉၉.၆ ကို ကတိအဖြစ် ကူးချရင်တော့ user တကယ် ဘာလိုလဲ ဆိုတဲ့ မေးခွန်းကို ကျော်သွားပါမယ်။ ပစ်မှတ်ကိုလည်း အနည်းဆုံး တစ်နှစ် တစ်ခါ ပြန်သုံးသပ်ပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+    actions:
+      # B1 step 5 wipes the flow (the board stays open): the title lands at
+      # once, then the two bars are drawn.
+      - {
+          id: b1-s5,
+          type: whiteboard.apply,
+          at: { mark: b1-s5 },
+          clear: true,
+          upsertIds: [l06-b1-m-title],
+        }
+      - id: b1-s5-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s5 }
+        upsertIds: [l06-b1-m-axis, l06-b1-m-g-t, l06-b1-m-g, l06-b1-m-r-t, l06-b1-m-r]
+        drawMs: 2200
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l06-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l06-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l06-p03c }
+
+  - id: burn-rate
+    chapter: Burn rate နဲ့ error budget
+    narration: >
+      [[mark:show-p04]] SLO စပြီး ပထမဆုံး လစာထုတ်ရက် ညနေမှာ fail ဖြစ်တဲ့ top-up တွေ တက်လာပါတယ်။ on-call ကျနေတဲ့သူကို အခု ခေါ်ရမလား၊ မနက်မှ ကြည့်ရမလား? အဖြေက lesson ၃ က SLO ခွင့်ပြုထားတဲ့ ပျက်ခွင့်၊ error budget ကို ဘယ်လောက် မြန်မြန် သုံးနေလဲ ဆိုတာပါ။
+      [[mark:burn-rate-named]] ဒီ အမြန်နှုန်းကို burn rate လို့ ခေါ်ပြီး ခွင့်ပြုနှုန်းထက် ဘယ်နှဆ မြန်မြန် ပျက်နေလဲ ဆိုတာပါ။ Top-up မှာ ၀.၅ ရာခိုင်နှုန်း fail ရင် burn rate ၁ မို့ budget က တစ်လ ခံပြီး၊ ၅ ရာခိုင်နှုန်း fail ရင်တော့ burn rate ၁၀ မို့ ၃ ရက်နဲ့ ကုန်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Alerting on SLOs",
+          url: "https://sre.google/workbook/alerting-on-slos/",
+        }
+    actions:
+      # Advances in place from l06_p03c. burn-rate-named has no action: it only
+      # splits this page's narration into two dialogs under 450 characters.
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l06-p04 }
+
+  - id: budget
+    narration: >
+      [[mark:close-p04]] [[mark:b2-s1]] တစ်လ top-up ၂၀ သိန်းလောက်ရဲ့ ၀.၅ ရာခိုင်နှုန်းမို့ ဒီလ budget က fail ဖြစ်ခွင့် ရှိတဲ့ top-up ၁၀၀၀၀ ပါ။ Wallet ရဲ့ ငွေလွှဲတာကတော့ ရက် ၃၀ မှာ ၉၉.၉ ရာခိုင်နှုန်းမို့ လုံးဝ ပျက်နေရင် budget က ၄၃ မိနစ်လောက်ပဲ ခံပါတယ်။
+      [[mark:b2-s2]] ဒီ bar တွေက ခုနက မေးခွန်းကို ဖြေပေးပါတယ်။ burn rate ၀.၅ ဆိုရင် လကုန်မှာ budget ကျန်ပါသေးတယ်။ ၁.၅ ဆိုရင်တော့ ၃ ရက်မှာ budget ရဲ့ ၁၅ ရာခိုင်နှုန်း ကုန်လို့ လူ မနှိုးဘဲ အလုပ်ချိန်ထဲ ကြည့်မယ့် ticket ဖွင့်ပါတယ်။
+      [[mark:b2-s3]] burn rate ၅၀ ဆိုရင်တော့ တစ်နာရီမှာ ၇ ရာခိုင်နှုန်း ကုန်လို့ on-call ကျနေတဲ့သူဆီ page ပို့ပြီး ချက်ချင်း နှိုးပါတယ်။ ဒီ alert တွေကို SLO ကနေ အလိုအလျောက် ထုတ်ပါတယ်၊ တစ်နာရီမှာ ၂ ရာခိုင်နှုန်းလောက် ကုန်ရင် page၊ ၃ ရက်မှာ ၁၀ ရာခိုင်နှုန်းလောက် ကုန်ရင် ticket ပါ။ window အရှည်နဲ့ အတို နှစ်ခုလုံး စစ်လို့ user ပြန်ကောင်းတာနဲ့ alert လည်း ငြိမ်သွားပါတယ်။
+      [[mark:b2-s4]] ခုနက ညနေမှာတော့ Operator တစ်ခု နှေးသွားလို့ top-up ၇၅၀၀ fail ဖြစ်ပြီး page ဝင်လာပါတယ်။ [[mark:b2-s4b]] နောက်တော့ တစ်နေ့ ၅၀၀ စီ တိတ်တိတ်လေး ယိုစိမ့်နေတဲ့ ပြဿနာ ပေါ်လာပါတယ်၊ ဒါက burn rate ၁.၅ နှုန်းမို့ ticket ထွက်လာပေမဲ့ အကြောင်းရင်း ရှာနေတုန်း ၅ ရက် ဆက်ယိုတော့ ၆ ရက်မြောက်နေ့မှာ budget ကုန်သွားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Alerting on SLOs",
+          url: "https://sre.google/workbook/alerting-on-slos/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04, offsetMs: -400 } }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l06-b2-budget-t, l06-b2-budget, l06-b2-note],
+          drawMs: 1600,
+        }
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l06-b2-g, l06-b2-g-t, l06-b2-o, l06-b2-o-t],
+          drawMs: 2000,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l06-b2-r, l06-b2-r-t],
+          drawMs: 1000,
+        }
+      # Step 4 is split in two (at most three new elements per step): the
+      # payday evening, then the slow leak that ends the budget on day 6.
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l06-b2-month, l06-b2-s-r, l06-b2-s-r-t],
+          drawMs: 1500,
+        }
+      - {
+          id: b2-s4b,
+          type: whiteboard.apply,
+          at: { mark: b2-s4b },
+          upsertIds: [l06-b2-s-o, l06-b2-s-o-t, l06-b2-end],
+          drawMs: 1800,
+        }
+
+  - id: budget-loop
+    chapter: Budget က ဆုံးဖြတ်ပေးတယ်
+    narration: >
+      [[mark:b3-s1]] SLO မရှိခင်က အစည်းအဝေး တိုင်းမှာ promo feature အရင် ထုတ်မလား၊ Operator တစ်ခု ပျက်ရင် နောက်တစ်ခုကို ပြောင်းသုံးတဲ့ failover ကို အရင် ပြင်မလား ငြင်းကြရပါတယ်။ အခုတော့ SLI ကို တိုင်းပြီး budget ကျန်သေးလား ကြည့်တာက ဆုံးဖြတ်ပေးပါတယ်။
+      [[mark:b3-s2]] budget ကျန်သေးရင် feature ထုတ်တာ၊ user နည်းနည်းနဲ့ စမ်းသပ်တာလို risk တွေ ယူပြီး၊ နည်းလာရင် system ကို ငြိမ်အောင် ထိန်းပြီး ပြင်ပါတယ်။ နှစ်ဖက်လုံး ကြိုသဘောတူထားတဲ့ စည်းမို့ ငြင်းစရာ မလိုတော့ပါဘူး။ ပြောင်းတာလည်း ခလုတ် ဖွင့်ပိတ်သလို မဟုတ်ဘဲ budget နည်းလာလေ ပြင်တဲ့ အလုပ် များလာလေပါ။
+      [[mark:b3-s3]] ဒါကြောင့် Top-up အဖွဲ့က sprint တိုင်း budget ကို ကြည့်ပြီး ပြင်တဲ့ အလုပ် ဘယ်လောက် ထည့်မလဲ ဆုံးဖြတ်ပြီး၊ release ကိုလည်း အပတ်တိုင်း ပုံသေ နေ့အစား budget ကြည့်ပြီးမှ ထုတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Example Error Budget Policy",
+          url: "https://sre.google/workbook/error-budget-policy/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+    actions:
+      # B3 is a new board, so it opens with open + clear like every new board
+      # (the panel is still open from B2): the ring is furniture and lands at
+      # once, then the first two nodes are drawn onto it.
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l06-b3-ring, l06-b3-arrow-top, l06-b3-arrow-right],
+        }
+      - id: b3-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds:
+          [l06-b3-measure, l06-b3-measure-t, l06-b3-budget, l06-b3-budget-t1, l06-b3-budget-t2]
+        drawMs: 1600
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l06-b3-ship, l06-b3-ship-t, l06-b3-fix, l06-b3-fix-t1, l06-b3-fix-t2]
+        drawMs: 1800
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l06-b3-sprint, l06-b3-release-t1, l06-b3-release-t2],
+          drawMs: 1500,
+        }
+
+  - id: policy
+    chapter: Error budget policy
+    narration: >
+      [[mark:close-b3]] [[mark:show-p05]] ၆ ရက်မြောက်နေ့မှာ budget ကုန်တော့ ဘာလုပ်ရမလဲ ဆိုတာ error budget policy ထဲမှာ ကြိုရေးထားပြီးသားပါ။ budget ကျန်သေးရင် စီစဉ်ထားသလို ထုတ်တယ်၊ နည်းလာရင် rollout ကို ဖြည်းဖြည်း လုပ်ပြီး ပြင်တာ ပိုထည့်တယ်၊ ကုန်ရင်တော့ ပြင်ဆင်မှုနဲ့ security patch တွေပဲ ထုတ်ပါတယ်။
+      [[mark:show-p05b]] ဒါကြောင့် promo feature က နောက်လကို ရွှေ့သွားပေမဲ့ failover ပြင်တာကတော့ ဆက်လုပ်ပါတယ်။ ခြွင်းချက် ပေးမယ့် အခြေအနေနဲ့ ဆုံးဖြတ်မယ့်သူကိုလည်း စာနဲ့ ရေးထားပါတယ်။ budget ကို အများကြီး ကျော်ရင်တောင် feature တွေကို တစ်နှစ်လုံး ရပ်မထားဘဲ လတိုင်း budget ပြန်စပြီး ပြင်ဆင်မှုကို ဆက်လုပ်ပါတယ်။ ပထမဆုံး ကျော်တာကိုလည်း lesson ၅ လို blameless review နဲ့ ပြန်ကြည့်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Example Error Budget Policy",
+          url: "https://sre.google/workbook/error-budget-policy/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l06-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l06-p05b }
+
+  - id: next-team
+    chapter: SLO ကို ဘယ်လို ချဲ့မလဲ
+    narration: >
+      [[mark:show-p06]] Top-up ပြီးရင် တခြား အဖွဲ့တွေဆီ ဘယ်လို ချဲ့မလဲ? metric မရှိသေးတဲ့ အဖွဲ့မှာ request အရေအတွက်၊ error၊ ကြာချိန်လို ယေဘုယျ ကိန်းဂဏန်းနဲ့ စပြီး user နဲ့ ပိုကိုက်တဲ့ SLI ကို နောက်မှ လဲပါတယ်။ အားလုံးကို တစ်ခါတည်း မလုပ်ဘဲ user နှိပ်တဲ့ အပိုင်းကနေ စပြီး နောက်မှ မျှသုံးတဲ့ အပိုင်းတွေကို ထည့်ပါတယ်။ CTO memo တစ်စောင်နဲ့လည်း မရလို့ မသီရိကိုယ်တိုင် အဖွဲ့တိုင်းနဲ့ ထိုင်ကူပါတယ်။
+      [[mark:show-p06b]] ပထမလမှာ အဖွဲ့တိုင်း နှေးသွားတတ်ပေမဲ့ လကုန်မှာ ကုမ္ပဏီ တစ်ခုလုံး စုတဲ့ အစည်းအဝေးမှာ ကိုနေလင်းက Top-up အဖွဲ့ကို နာမည်တပ် ချီးကျူးပါတယ်။ ပြီးခဲ့တဲ့လ outage ကြောင့် မဟုတ်ဘဲ လစာထုတ်ရက်မှာ user တွေ ယုံကြည်ဖို့ လုပ်တာလို့ ရှင်းပြတော့ Eats အဖွဲ့က နောက်ထပ် သူတို့ကို လုပ်ပေးဖို့ တောင်းလာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "Product-Focused Reliability for SRE (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/",
+        }
+      - {
+          title: "Tom Wilkie: The RED Method (Grafana blog)",
+          url: "https://grafana.com/blog/the-red-method-how-to-instrument-your-services/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l06-p06 }
+      - { id: show-p06b, type: slide.show, at: { mark: show-p06b }, slideId: l06-p06b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] Padauk လိုပဲ ကိုယ့် product မှာလည်း ဒီအပတ် စမ်းကြည့်နိုင်ပါတယ်။ အရေးအကြီးဆုံး လုပ်ဆောင်ချက် တစ်ခုအတွက် ဘာက ကောင်းလဲ၊ ဘာက valid လဲ ဆိုတဲ့ SLI ကို ချရေးပါ။ product manager နဲ့ ပထမ ပစ်မှတ်ကို သဘောတူပါ။ ပြီးတော့ budget ကျန်ရင်၊ နည်းရင်၊ ကုန်ရင် ဘာလုပ်မလဲ ဆိုတဲ့ သုံးကြောင်း policy ရေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Implementing SLOs",
+          url: "https://sre.google/workbook/implementing-slos/",
+        }
+      - {
+          title: "Workbook: Example Error Budget Policy",
+          url: "https://sre.google/workbook/error-budget-policy/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l06-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] Top-up ကနေ ရလာတဲ့ စကားလုံးတွေကို ပြန်ကြည့်ရအောင်။ [[mark:sel-sli]] SLI က valid ဖြစ်တာထဲက ကောင်းတာ ရာခိုင်နှုန်းဖြစ်ပြီး၊ [[mark:sel-slo]] SLO က အဲဒီအတွက် ပစ်မှတ်နဲ့ window ပါ။ [[mark:sel-sla]] SLA ကတော့ မမီရင် လျော်ကြေး ပေးရတဲ့ customer ကတိပါ။
+      [[mark:sel-budget]] error budget က SLO ခွင့်ပြုထားတဲ့ ပျက်ခွင့်ဖြစ်ပြီး၊ [[mark:sel-burn]] burn rate က အဲဒါကို ခွင့်ပြုနှုန်းထက် ဘယ်နှဆ မြန်မြန် သုံးနေလဲ ဆိုတာပါ။ [[mark:sel-policy]] budget policy ကတော့ budget နည်းရင်၊ ကုန်ရင် ဘာလုပ်မလဲ ကြိုရေးထားတဲ့ စည်းမျဉ်းပါ။
+      [[mark:sel-question]] ကဲ၊ တွက်ကြည့်ရအောင်။ Top-up ရဲ့ budget က တစ်လကို fail ဖြစ်ခွင့် top-up ၁၀၀၀၀ ပါ။ [[mark:ask-question]] မနေ့က ၁၀၀၀ fail ဖြစ်ခဲ့ရင် မနေ့ရဲ့ burn rate က ဘယ်လောက်လဲ?
+      [[mark:pause-question]] တစ်ရက်ကို ခွင့်ပြုတာ ၃၃၃ လောက်ဆိုတော့ ၁၀၀၀ က အဲဒီရဲ့ ၃ ဆဖြစ်လို့ burn rate ၃ လောက်ပါ။ နောက်တော့ Eats မှာ SLO တွေ အားလုံး အစိမ်းရောင် ပြနေရက်နဲ့ order တွေ ရပ်နေပါတယ်။ ဘာကို တိုင်းဖို့ မေ့ခဲ့လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Service Level Objectives",
+          url: "https://sre.google/sre-book/service-level-objectives/",
+        }
+      - {
+          title: "Workbook: Alerting on SLOs",
+          url: "https://sre.google/workbook/alerting-on-slos/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-sli,
+          type: editor.select,
+          at: { mark: sel-sli },
+          target: { file: notes.md, text: "SLI", occurrence: 1 },
+        }
+      # occurrence 2: the first "SLO" and "error budget" are in the title line.
+      - {
+          id: sel-slo,
+          type: editor.select,
+          at: { mark: sel-slo },
+          target: { file: notes.md, text: "SLO", occurrence: 2 },
+        }
+      - {
+          id: sel-sla,
+          type: editor.select,
+          at: { mark: sel-sla },
+          target: { file: notes.md, text: "SLA", occurrence: 1 },
+        }
+      - {
+          id: sel-budget,
+          type: editor.select,
+          at: { mark: sel-budget },
+          target: { file: notes.md, text: "error budget", occurrence: 2 },
+        }
+      - {
+          id: sel-burn,
+          type: editor.select,
+          at: { mark: sel-burn },
+          target: { file: notes.md, text: "burn rate", occurrence: 1 },
+        }
+      - {
+          id: sel-policy,
+          type: editor.select,
+          at: { mark: sel-policy },
+          target: { file: notes.md, text: "budget policy", occurrence: 1 },
+        }
+      # ⟪select မေးခွန်း⟫: the question line's first sentence (the budget) is swept as
+      # the narration reads it.
+      - {
+          id: sel-question,
+          type: editor.select,
+          at: { mark: sel-question },
+          target:
+            {
+              file: notes.md,
+              text: "မေးခွန်း: budget က တစ်လကို fail ဖြစ်ခွင့် top-up 10,000။",
+              occurrence: 1,
+            },
+        }
+      # ⟪pause 3s⟫, as the Module 1 reviewers fixed it: the question's second sentence is
+      # swept after it is asked, and the answer at pause-question waits for the drag (the
+      # scheduler holds the next dialog until a select anchored to an earlier dialog
+      # finishes). ask-question, one more mark at an existing sentence end, makes the
+      # question its own short dialog so the offset tracks its end at any speaking rate.
+      # 4950 ms leaves about 2.8 / 2.0 / 0.5 s of quiet after the question at 55 / 70 / 95 ms
+      # per character; 5000 trips compile-check's 2.5 s inserted-silence warning at 55.
+      - {
+          id: pause-question,
+          type: editor.select,
+          at: { mark: ask-question, offsetMs: 4950 },
+          target:
+            {
+              file: notes.md,
+              text: "မနေ့က 1,000 fail ဖြစ်ခဲ့ရင် မနေ့ရဲ့ burn rate ဘယ်လောက်လဲ?",
+              occurrence: 1,
+            },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
