@@ -1,0 +1,2062 @@
+# CSS course (Burmese), lesson 26 of 43: pseudo-elements.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese.
+#
+# Shape: board (recall lesson 25; what a pseudo-element is: parts the browser
+# makes) → board (one colon vs two, the four legacy spellings, last in the
+# selector) → code tour (prices hold only the number, the English quote, the
+# hours list) → ::before star on today's special → ::after " ကျပ်" on every
+# price; the HTML still holds only the number → board (before/after are the
+# first/last child INSIDE the box; no content, no box; inline) → content values
+# (empty string, counter, url, attr) → attr() rule for the one price with a
+# data-unit attribute (wins by specificity) → alt text "★ " / "" (no visible
+# change; old browsers skip the line) → h2::after bar typed WITHOUT content
+# (nothing appears) → content: "" added (the bar appears) → replaced elements
+# → drop cap built in four visible steps on the English quote → board
+# (Burmese clusters) → ::first-line bold; max-width makes the bold part
+# shorter → board (allowed properties, block containers only) → ::marker on
+# the hours bullets → board (marker box, UA defaults, allowed properties) →
+# summary::marker + / − and a click that opens the question → ::placeholder
+# + the real label → ::selection (code only; try it live) → quiz board +
+# recap, hand-off to pseudo-classes (lesson 27).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Unit-less lengths are invalid until the unit lands ("2.6" → "2.6em",
+# "260" → "260px"), so no half-typed width flashes. Two inserts land inside an
+# existing rule and pass through an unclosed string for a moment (the alt
+# text and content: ""): the browser drops that declaration (and the one after
+# it) until the quote closes — a sub-second flicker, never narrated.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# document 1252 tall at start; the bars add 7 px per heading (about at 519,
+# quote at 572, hours at 719 → 748 after max-width, form at 944 after the
+# question opens; document 1349, max scroll 629). Drop cap: font-size makes the
+# first line tall (quote 104 tall); float wraps the text but the letter hangs
+# into the Burmese paragraph; line-height 1 closes it (quote 58). The bold
+# first line runs past the first full stop at 400 px and stops mid-sentence at
+# 260 px. Clicking the summary opens the details (open="") and focuses it.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-26-pseudo-elements
+  title: "CSS course 26: Pseudo-element တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 26
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit's drinks block (prices hold the number only; the
+      # falooda price carries data-unit for the attr() demo), an about section
+      # with the English quote (lang="en") and a Burmese sentence, the kit's
+      # hours block plus the faq question, and the kit's order form. No
+      # kit.js: the only click opens a <details>, which needs no script.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: drinks (prices hold the number only; CSS adds the unit) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price" data-unit="ကျပ်၊ ခွက်ကြီး" data-testid="price-falooda">3,000</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: quote (an English opening for the drop cap) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="quote" lang="en" data-testid="quote">Since 1998, the first cup of the day is ours. Sit down, order your usual, and stay a while.</p>
+                <p>၁၉၉၈ ခုနှစ်ကတည်းက မနက်တိုင်းရဲ့ ပထမဆုံး လက်ဖက်ရည်ခွက်ကို ဒီမှာ ဖျော်ပေးခဲ့ပါတယ်။</p>
+              </section>
+
+              <!-- kit block: hours (a list with the default bullets) + lesson block: faq -->
+              <section class="hours" id="hours" data-testid="hours">
+                <h2>ဖွင့်ချိန်</h2>
+                <ul class="hours-list">
+                  <li>တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ</li>
+                  <li>စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ</li>
+                </ul>
+                <details data-testid="faq">
+                  <summary data-testid="faq-summary">ပိတ်ရက် ရှိလား</summary>
+                  <p>ပိတ်ရက် မရှိပါဘူး။ နေ့တိုင်း ဖွင့်ပါတယ်။</p>
+                </details>
+              </section>
+
+              <!-- kit block: order-form -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ ကိုအောင်" data-testid="input-name" />
+                <label for="phone">ဖုန်း</label>
+                <input id="phone" name="phone" type="tel" required pattern="09[0-9]{7,9}" placeholder="09…" data-testid="input-phone" />
+                <label for="cups">ခွက်ရေ</label>
+                <input id="cups" name="cups" type="number" min="1" max="10" value="1" data-testid="input-cups" />
+                <label class="extra"><input type="checkbox" name="milk" data-report="#milk-status" data-testid="check-milk" /> နို့ဆီ အပို</label>
+                <p class="visually-hidden" id="milk-status" data-testid="milk-status"></p>
+                <button class="order-btn" type="button" data-testid="order-button" data-say="မှာပြီးပါပြီ" data-target="#order-status">မှာမယ်</button>
+                <p class="order-status" id="order-status" data-testid="order-status" aria-live="polite"></p>
+              </form>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E only spaces the
+      # sections and the question box. No pseudo-element, list-style, float or
+      # placeholder rule.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 26 keeps A, B, B2 and C; section E only spaces the sections and the
+          question box. Every pseudo-element rule is typed during the lesson.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 26: space between the sections and around the question box. No
+           pseudo-element, list-style, float or placeholder rule lives here. */
+        .about,
+        .hours,
+        .order-form {
+          margin-top: 16px;
+        }
+
+        details {
+          margin-top: 8px;
+        }
+
+        details p {
+          margin: 0;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — what a pseudo-element is. Blue = parts of the text, violet =
+    # the marker, orange = the extra boxes, green = who makes them.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Pseudo-element ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-letter,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 620,
+        height: 36,
+        text: "::first-letter → ပထမ စာလုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-line,
+        kind: text,
+        x: 300,
+        y: 296,
+        width: 620,
+        height: 36,
+        text: "::first-line → ပထမ စာကြောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-marker,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 620,
+        height: 36,
+        text: "::marker → list ရဲ့ အမှတ်အသား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-extra,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 620,
+        height: 36,
+        text: "::before · ::after → box အပို",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-browser,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 660,
+        height: 36,
+        text: "browser က ဖန်တီး · HTML ထဲမှာ မရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-browser-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 548,
+        width: 520,
+        height: 16,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board B — one colon or two. Green = pseudo-class (state), violet =
+    # pseudo-element (part), orange = the four legacy spellings, blue = the
+    # newer ones, green/red = the "last in the selector" rule.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Colon တစ်ခု · Colon နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-class,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 640,
+        height: 36,
+        text: ":hover → အခြေအနေ · pseudo-class",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-elem,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 700,
+        height: 36,
+        text: "::before → အစိတ်အပိုင်း · pseudo-element",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-legacy,
+        kind: text,
+        x: 300,
+        y: 362,
+        width: 700,
+        height: 36,
+        text: ":before :after :first-letter :first-line ✓",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-legacy-l,
+        kind: text,
+        x: 300,
+        y: 406,
+        width: 520,
+        height: 36,
+        text: "colon တစ်ခု · အဟောင်း လေးခုပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-new,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 720,
+        height: 36,
+        text: "::marker · ::placeholder → colon နှစ်ခုပဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-last-ok,
+        kind: text,
+        x: 300,
+        y: 536,
+        width: 320,
+        height: 36,
+        text: "a:hover::before ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-last-bad,
+        kind: text,
+        x: 680,
+        y: 536,
+        width: 330,
+        height: 36,
+        text: "a::before:hover ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-last-l,
+        kind: text,
+        x: 300,
+        y: 594,
+        width: 520,
+        height: 36,
+        text: "pseudo-element → selector ရဲ့ အဆုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C — where ::before and ::after live. Blue = the element's box,
+    # orange = ::before (first child), green = ::after (last child), red = no
+    # content no box, violet = inline by default.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Before နဲ့ after ဘယ်မှာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 300,
+        y: 236,
+        width: 640,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-box-l,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 460,
+        height: 36,
+        text: "h3 · element ရဲ့ box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-before,
+        kind: rectangle,
+        x: 324,
+        y: 262,
+        width: 160,
+        height: 68,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-before-t,
+        kind: text,
+        x: 340,
+        y: 278,
+        width: 130,
+        height: 36,
+        text: "::before",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-content,
+        kind: text,
+        x: 510,
+        y: 278,
+        width: 190,
+        height: 36,
+        text: "လက်ဖက်ရည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-after,
+        kind: rectangle,
+        x: 748,
+        y: 262,
+        width: 168,
+        height: 68,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-after-t,
+        kind: text,
+        x: 772,
+        y: 278,
+        width: 120,
+        height: 36,
+        text: "::after",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-first,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 240,
+        height: 36,
+        text: "ပထမ child",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-last,
+        kind: text,
+        x: 640,
+        y: 440,
+        width: 300,
+        height: 36,
+        text: "နောက်ဆုံး child",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-rule,
+        kind: text,
+        x: 300,
+        y: 516,
+        width: 520,
+        height: 36,
+        text: "content မရှိ → box မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-inline,
+        kind: text,
+        x: 300,
+        y: 576,
+        width: 360,
+        height: 36,
+        text: "default · inline",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — a drop cap on English vs Burmese. Green = works, red = breaks
+    # the syllable, orange = no capitals, blue = the advice.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Drop cap နဲ့ မြန်မာစာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-en-big,
+        kind: text,
+        x: 300,
+        y: 226,
+        width: 60,
+        height: 90,
+        text: "S",
+        strokeColor: "#2f9e44",
+        fontSize: 72,
+      }
+    - {
+        id: d-en-rest,
+        kind: text,
+        x: 370,
+        y: 266,
+        width: 400,
+        height: 36,
+        text: "ince 1998, the first cup…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-en-ok,
+        kind: text,
+        x: 860,
+        y: 266,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-my-big,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 110,
+        height: 110,
+        text: "မြ",
+        strokeColor: "#e03131",
+        fontSize: 72,
+      }
+    - {
+        id: d-my-rest,
+        kind: text,
+        x: 420,
+        y: 396,
+        width: 120,
+        height: 46,
+        text: "န်မာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-my-bad,
+        kind: text,
+        x: 620,
+        y: 400,
+        width: 340,
+        height: 36,
+        text: "✗ syllable ကွဲသွား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-no-caps,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 520,
+        height: 36,
+        text: "မြန်မာစာ · capital letter မရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 700,
+        height: 36,
+        text: "drop cap → အင်္ဂလိပ်စာ · ဂဏန်း · သင်္ကေတ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board E — what ::first-letter and ::first-line accept. Blue =
+    # first-letter, green = first-line, red = not allowed, orange = which
+    # boxes they work on.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "သုံးလို့ရတဲ့ property တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-fl-h,
+        kind: text,
+        x: 300,
+        y: 234,
+        width: 300,
+        height: 36,
+        text: "::first-letter",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-fl,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 600,
+        height: 36,
+        text: "font · color · background · float",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-fl-2,
+        kind: text,
+        x: 300,
+        y: 318,
+        width: 600,
+        height: 36,
+        text: "margin · padding · border ✓",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-fli-h,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 300,
+        height: 36,
+        text: "::first-line",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-fli,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 600,
+        height: 36,
+        text: "font · color · background · text",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-fli-no,
+        kind: text,
+        x: 300,
+        y: 474,
+        width: 600,
+        height: 36,
+        text: "margin · padding · border ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-block,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 700,
+        height: 36,
+        text: "စာပိုဒ် · list item ✓   span ✗",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board F — the marker box. Blue = the list item, violet = the marker,
+    # orange = a ::before box after it, green = the browser's defaults, red =
+    # not allowed.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Marker box",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: f-li, kind: rectangle, x: 400, y: 236, width: 620, height: 84, strokeColor: "#1971c2" }
+    - {
+        id: f-marker,
+        kind: rectangle,
+        x: 300,
+        y: 252,
+        width: 76,
+        height: 52,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: f-marker-t,
+        kind: text,
+        x: 326,
+        y: 256,
+        width: 30,
+        height: 46,
+        text: "•",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: f-marker-l,
+        kind: text,
+        x: 300,
+        y: 334,
+        width: 160,
+        height: 36,
+        text: "::marker",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-before,
+        kind: rectangle,
+        x: 420,
+        y: 252,
+        width: 150,
+        height: 52,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-before-t,
+        kind: text,
+        x: 432,
+        y: 260,
+        width: 126,
+        height: 36,
+        text: "::before",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-text,
+        kind: text,
+        x: 600,
+        y: 260,
+        width: 300,
+        height: 36,
+        text: "တနင်္လာ မှ သောကြာ…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-ua,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 600,
+        height: 36,
+        text: "default · နံပါတ်တွေ အကျယ် တူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-allow,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 720,
+        height: 36,
+        text: "color · font · content · white-space · animation ✓",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-deny,
+        kind: text,
+        x: 300,
+        y: 536,
+        width: 560,
+        height: 36,
+        text: "background · padding · margin ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board G — the closing quiz. White = the options, green ✓, orange = the
+    # pseudo-class, red = does not exist, blue/violet = two last facts.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "ဘယ်ဟာ pseudo-element လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-o1,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 260,
+        height: 36,
+        text: "::before",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-o2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 260,
+        height: 36,
+        text: "::marker",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-o3,
+        kind: text,
+        x: 300,
+        y: 344,
+        width: 260,
+        height: 36,
+        text: ":active",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-o4,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 300,
+        height: 36,
+        text: "::first-paragraph",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a1,
+        kind: text,
+        x: 640,
+        y: 236,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-a2,
+        kind: text,
+        x: 640,
+        y: 290,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-a3,
+        kind: text,
+        x: 640,
+        y: 344,
+        width: 380,
+        height: 36,
+        text: "pseudo-class · အခြေအနေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-a4,
+        kind: text,
+        x: 640,
+        y: 398,
+        width: 200,
+        height: 36,
+        text: "✗ မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-spec,
+        kind: text,
+        x: 300,
+        y: 484,
+        width: 680,
+        height: 36,
+        text: "specificity → element နာမည် တစ်ခုလို",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-dom,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 640,
+        height: 36,
+        text: "DOM ထဲ မရှိ · getComputedStyle ✓",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4126
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: pseudo-intro
+    chapter: "Pseudo-element ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ media query နဲ့ container query ကို ကြည့်ပြီး၊ course ရဲ့ layout အပိုင်း
+      ပြီးသွားပါပြီ။ ဒီ lesson ကစပြီး element တွေရဲ့ အစိတ်အပိုင်းနဲ့ အခြေအနေတွေကို ကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-parts]] pseudo-element ဆိုတာ HTML ထဲမှာ သူ့အတွက် tag သီးသန့် မရှိတဲ့ element ရဲ့
+      အစိတ်အပိုင်း တစ်ခုကို style ပေးတာပါ။ စာပိုဒ် တစ်ခုရဲ့ ပထမ စာလုံး၊ ဒါမှမဟုတ် ပထမ စာကြောင်း
+      စတာမျိုးပါ။ [[mark:draw-marker]] list item ရဲ့ ရှေ့က အစက်လေးကလည်း pseudo-element တစ်ခုပါ။
+      [[mark:draw-extra]] before နဲ့ after ကတော့ element ထဲကို box အပို တစ်ခုလုံး ထည့်ပေးပါတယ်။
+      [[mark:draw-browser]] ဒီ အစိတ်အပိုင်းတွေကို HTML ထဲမှာ ရေးစရာ မလိုပါဘူး။ browser က ဖန်တီးပေးပြီး၊
+      ကိုယ့် CSS က style ပေးတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements"
+        url: "https://web.dev/learn/css/pseudo-elements"
+      - title: "MDN — Pseudo-elements"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-elements"
+      - title: "CSS Pseudo-Elements Module Level 4"
+        url: "https://www.w3.org/TR/css-pseudo-4/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-parts
+        type: whiteboard.apply
+        at: { mark: draw-parts }
+        upsertIds: [a-letter, a-line]
+        drawMs: 2000
+      - id: draw-marker
+        type: whiteboard.apply
+        at: { mark: draw-marker }
+        upsertIds: [a-marker]
+        drawMs: 1200
+      - id: draw-extra
+        type: whiteboard.apply
+        at: { mark: draw-extra }
+        upsertIds: [a-extra]
+        drawMs: 1200
+      - id: draw-browser
+        type: whiteboard.apply
+        at: { mark: draw-browser }
+        upsertIds: [a-browser, a-browser-line]
+        drawMs: 1600
+
+  - id: colons
+    narration: >
+      [[mark:open-colons]] pseudo အုပ်စု နှစ်ခုကို ဘယ်လို ခွဲရလဲ ဆိုတာ lesson 4 မှာ ကြည့်ခဲ့ပါတယ်။
+      [[mark:draw-class]] pseudo-class က colon တစ်ခုနဲ့ စပြီး၊ element ရဲ့ အခြေအနေကို ကြည့်ပြီး ရွေးပါတယ်။
+      mouse pointer တင်ထားတဲ့ link လိုမျိုးပါ။ [[mark:draw-element]] pseudo-element ကတော့ colon နှစ်ခုနဲ့
+      စပြီး၊ element ရဲ့ အစိတ်အပိုင်း တစ်ခုကို ရွေးပါတယ်။ [[mark:draw-legacy]] အဟောင်းဆုံး pseudo-element
+      လေးခုကို အရင်က colon တစ်ခုနဲ့ ရေးခဲ့ကြလို့၊ အဲဒီ လေးခုအတွက်ပဲ browser တွေက ရေးနည်း အဟောင်းကို အခုထိ
+      လက်ခံနေပါသေးတယ်။ [[mark:draw-new]] marker၊ placeholder လို အသစ်တွေကတော့ colon နှစ်ခုနဲ့မှ အလုပ်လုပ်လို့၊
+      အမြဲ နှစ်ခု ရေးပါ။ [[mark:draw-last-ok]] နောက် စည်းမျဉ်း တစ်ခုက၊ pseudo-element ကို selector ရဲ့
+      အဆုံးဆုံးမှာ ရေးရပါတယ်။ mouse တင်ထားတဲ့ link ရဲ့ before box ဆိုရင် မှန်ပါတယ်။ [[mark:draw-last-bad]]
+      before box ရဲ့ နောက်မှာ hover ထပ်ရေးရင်တော့ အလုပ်မလုပ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Selectors: pseudo-classes and pseudo-elements"
+        url: "https://web.dev/learn/css/selectors#pseudo-element"
+      - title: "MDN — Pseudo-elements (syntax, single-colon legacy)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-elements#syntax"
+      - title: "Selectors Level 4 — pseudo-elements"
+        url: "https://www.w3.org/TR/selectors-4/#pseudo-elements"
+    actions:
+      - id: open-colons
+        type: whiteboard.apply
+        at: { mark: open-colons }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [b-class]
+        drawMs: 1400
+      - id: draw-element
+        type: whiteboard.apply
+        at: { mark: draw-element }
+        upsertIds: [b-elem]
+        drawMs: 1400
+      - id: draw-legacy
+        type: whiteboard.apply
+        at: { mark: draw-legacy }
+        upsertIds: [b-legacy, b-legacy-l]
+        drawMs: 2000
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [b-new]
+        drawMs: 1400
+      - id: draw-last-ok
+        type: whiteboard.apply
+        at: { mark: draw-last-ok }
+        upsertIds: [b-last-l, b-last-ok]
+        drawMs: 1800
+      - id: draw-last-bad
+        type: whiteboard.apply
+        at: { mark: draw-last-bad }
+        upsertIds: [b-last-bad]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-colons]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-price]] ပထမ ဈေးနှုန်းကို ကြည့်ပါ။ HTML ထဲမှာ ဂဏန်းပဲ ပါပြီး၊ ကျပ် ဆိုတဲ့ စကားလုံး
+      မပါပါဘူး။ [[mark:select-quote]] အောက်မှာ ဆိုင်အကြောင်း ရေးထားတဲ့ အင်္ဂလိပ် စာပိုဒ် တစ်ခု ရှိပါတယ်။
+      [[mark:select-hours]] ပြီးတော့ ဖွင့်ချိန် list၊ ဖွင့်လိုက် ပိတ်လိုက် လုပ်လို့ရတဲ့ မေးခွန်း တစ်ခုနဲ့
+      အော်ဒါ form ရှိပါတယ်။ [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview
+      ပွင့်လာပါပြီ။ card တွေထဲက ဈေးနှုန်းတွေမှာ ဂဏန်းပဲ ပေါ်နေပြီး၊ ကျပ် မပါသေးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements"
+        url: "https://web.dev/learn/css/pseudo-elements"
+      - title: "MDN — data-* attributes"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/data-*"
+    actions:
+      - id: close-colons
+        type: whiteboard.apply
+        at: { mark: close-colons }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-price
+        type: editor.select
+        at: { mark: select-price }
+        target:
+          {
+            file: index.html,
+            text: '<span class="price" data-testid="price-laphet-yay">1,500</span>',
+            occurrence: 1,
+          }
+      - id: select-quote
+        type: editor.select
+        at: { mark: select-quote }
+        target:
+          {
+            file: index.html,
+            text: '<p class="quote" lang="en" data-testid="quote">',
+            occurrence: 1,
+          }
+      - id: select-hours
+        type: editor.select
+        at: { mark: select-hours }
+        target: { file: index.html, text: '<ul class="hours-list">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-special
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-price-start
+        type: expect.preview
+        at: { afterAction: expect-special }
+        timeoutMs: 5000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-price-start }
+
+  - id: before-after
+    chapter: "Before နဲ့ after"
+    narration: >
+      [[mark:type-star]] လက်ဖက်ရည် card ကနေ စကြည့်ရအောင်။ အထူး card ဖြစ်တဲ့ ဒီ card ထဲက နာမည်ကိုပဲ
+      ရွေးပြီး၊ သူ့ before box ရဲ့ content အဖြစ် ကြယ်ပွင့် တစ်ပွင့်ကို ရွှေရောင်နဲ့ ပေးပါမယ်။ ရိုက်နေတုန်း
+      ပထမ card ကို လိုက်ကြည့်ပါ။ [[mark:after-star]] လက်ဖက်ရည် ဆိုတဲ့ နာမည်ရဲ့ ရှေ့မှာ ရွှေရောင် ကြယ်လေး
+      ပေါ်လာပါပြီ။ HTML ကိုတော့ လုံးဝ မပြင်ခဲ့ပါဘူး။ [[mark:type-unit]] အခု ဈေးနှုန်း တိုင်းမှာ ကျပ်
+      ထည့်ပါမယ်။ ဒီတစ်ခါ after box ကို သုံးပြီး၊ content အဖြစ် နေရာလွတ် တစ်ခုနဲ့ ကျပ် ဆိုတဲ့ စကားလုံးကို
+      ပေးပါမယ်။ [[mark:after-unit]] ဈေးနှုန်း လေးခုလုံး ကျပ်နဲ့ ဆုံးသွားပါပြီ။ [[mark:open-index-price]]
+      ဒါပေမဲ့ HTML ကို ပြန်ကြည့်ပါ။ [[mark:select-number]] ဒီ ဈေးနှုန်းမှာ ဂဏန်းပဲ ရှိပါသေးတယ်။ ကျပ်
+      ဆိုတာက CSS ထဲမှာပဲ ရှိပြီး၊ HTML မှာ မပါပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "MDN — ::before"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::before"
+      - title: "MDN — ::after"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::after"
+    actions:
+      - id: type-star
+        type: editor.type
+        at: { mark: type-star }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".featured .name::before {\n  content: \"★ \";\n  color: goldenrod;\n}\n"
+      - id: expect-star
+        type: expect.preview
+        at: { mark: after-star }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-unit
+        type: editor.type
+        at: { mark: type-unit }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: goldenrod;\n}\n", occurrence: 1 }
+        text: "\n.price::after {\n  content: \" ကျပ်\";\n}\n"
+      # The DOM text is unchanged: generated content is not part of it.
+      - id: expect-unit
+        type: expect.preview
+        at: { mark: after-unit }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-index-price
+        type: workspace.openFile
+        at: { mark: open-index-price }
+        path: index.html
+      - id: select-number
+        type: editor.select
+        at: { mark: select-number }
+        target: { file: index.html, text: "1,500", occurrence: 1 }
+
+  - id: inside-box
+    narration: >
+      [[mark:open-box]] ဒီ box တွေက တကယ် ဘယ်မှာ ရောက်သွားတာလဲ။ [[mark:draw-element-box]] ဒါက လက်ဖက်ရည်
+      နာမည်ရဲ့ box ပါ။ [[mark:draw-before-box]] before က box ရဲ့ အထဲမှာ၊ စာသားရဲ့ ရှေ့မှာ ပထမဆုံး child
+      အဖြစ် ဝင်ပါတယ်။ [[mark:draw-after-box]] after ကလည်း အထဲမှာပဲ၊ အဆုံးမှာ နောက်ဆုံး child အဖြစ်
+      ဝင်ပါတယ်။ ဘယ်တစ်ခုမှ element ရဲ့ အပြင်ကို မထွက်ပါဘူး။ [[mark:draw-content-rule]] ပြီးတော့
+      နှစ်ခုလုံးက content ပေးထားမှပဲ ပေါ်လာပါတယ်။ content မပေးရင် box လုံးဝ မရှိပါဘူး။
+      [[mark:draw-inline]] ရှိလာပြီဆိုရင်တော့ default အားဖြင့် span လိုပဲ inline ဖြစ်ပြီး၊ ကြိုက်တဲ့ CSS
+      ကို ပေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "CSS Pseudo-Elements Module Level 4 — generated content"
+        url: "https://www.w3.org/TR/css-pseudo-4/#generated-content"
+    actions:
+      - id: open-box
+        type: whiteboard.apply
+        at: { mark: open-box }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-element-box
+        type: whiteboard.apply
+        at: { mark: draw-element-box }
+        upsertIds: [c-box, c-box-l, c-content]
+        drawMs: 1600
+      - id: draw-before-box
+        type: whiteboard.apply
+        at: { mark: draw-before-box }
+        upsertIds: [c-before, c-before-t, c-first]
+        drawMs: 1800
+      - id: draw-after-box
+        type: whiteboard.apply
+        at: { mark: draw-after-box }
+        upsertIds: [c-after, c-after-t, c-last]
+        drawMs: 1800
+      - id: draw-content-rule
+        type: whiteboard.apply
+        at: { mark: draw-content-rule }
+        upsertIds: [c-rule]
+        drawMs: 1400
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds: [c-inline]
+        drawMs: 1000
+
+  - id: content-values
+    chapter: "Content ထဲ ဘာထည့်လို့ ရလဲ"
+    narration: >
+      [[mark:close-box]] content ထဲကို စာသား အပြင် တခြားဟာတွေလည်း ထည့်လို့ ရပါတယ်။ string အလွတ် ပေးရင် box
+      အလွတ် တစ်ခု ရပြီး၊ ဒါကို ခဏနေရင် သုံးပါမယ်။ counter က နံပါတ် တပ်ပေးပြီး၊ lesson 29 မှာ ကြည့်ပါမယ်။ url
+      နဲ့ ပုံ ထည့်လို့ ရပေမယ့်၊ ပုံက မူလ အရွယ်အတိုင်း ပေါ်ပြီး ချုံ့ချဲ့လို့ မရပါဘူး။
+      [[mark:select-data-unit]] ဖာလူဒါ ဈေးနှုန်းမှာ ပါတဲ့ ဒီ data attribute ကို ကြည့်ပါ။ ခွက်ကြီး ဈေးနှုန်း
+      ဖြစ်တယ်လို့ ပြောထားပါတယ်။ lesson 12 မှာ တွေ့ခဲ့တဲ့ attr က element ရဲ့ HTML attribute ကို ဖတ်ပါတယ်။
+      [[mark:open-styles-attr]] CSS ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-attr]] ဒီ attribute ပါတဲ့
+      ဈေးနှုန်းတွေအတွက် rule တစ်ခု ရေးပါမယ်။ သူ့ content က နေရာလွတ် တစ်ခု ပြီးရင် attribute ထဲက စာသားပါ။
+      ဖာလူဒါ ဈေးနှုန်းကို လိုက်ကြည့်ပါ။ [[mark:after-attr]] ဖာလူဒါမှာ ကျပ်၊ ခွက်ကြီး လို့ ပေါ်လာပါပြီ။
+      attribute ထဲက စာကို ယူလာတာပါ။ [[mark:select-attr-selector]] ဒီ selector ကို ကြည့်ပါ။ ဒီ rule က ဈေးနှုန်း
+      အားလုံးရဲ့ rule ကို specificity နဲ့ နိုင်ပါတယ်။ နှစ်ခုလုံးမှာ element နာမည်လို ရေတွက်တဲ့ pseudo-element
+      ပါပေမယ့်၊ သူ့မှာ attribute selector ပိုပါလို့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: content values"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "MDN — content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/content"
+      - title: "MDN — attr()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/attr"
+      - title: "Selectors Level 4 — specificity (a pseudo-element counts like a type selector)"
+        url: "https://www.w3.org/TR/selectors-4/#specificity-rules"
+    actions:
+      - id: close-box
+        type: whiteboard.apply
+        at: { mark: close-box }
+        open: false
+      - id: select-data-unit
+        type: editor.select
+        at: { mark: select-data-unit }
+        target: { file: index.html, text: 'data-unit="ကျပ်၊ ခွက်ကြီး"', occurrence: 1 }
+      - id: open-styles-attr
+        type: workspace.openFile
+        at: { mark: open-styles-attr }
+        path: styles.css
+      - id: type-attr
+        type: editor.type
+        at: { mark: type-attr }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  content: \" ကျပ်\";\n}\n", occurrence: 1 }
+        text: "\n.price[data-unit]::after {\n  content: \" \" attr(data-unit);\n}\n"
+      - id: expect-attr
+        type: expect.preview
+        at: { mark: after-attr }
+        timeoutMs: 4000
+        target: { by: testId, value: price-falooda }
+        attribute: { name: data-unit, value: "ကျပ်၊ ခွက်ကြီး" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-attr-selector
+        type: editor.select
+        at: { mark: select-attr-selector }
+        target: { file: styles.css, text: ".price[data-unit]::after", occurrence: 1 }
+
+  - id: alt-text
+    narration: >
+      screen reader အများစုက CSS က ထည့်တဲ့ စာကိုလည်း အသံထွက် ဖတ်ပါတယ်။ ဒါကြောင့် ကြယ်ကို black star လို့
+      မလိုအပ်ဘဲ ဖတ်ပါလိမ့်မယ်။ [[mark:type-alt]] အလှအတွက်ပဲ ထည့်ထားတဲ့ ကြယ်ဆိုရင်၊ သူ့ content ကို အောက်မှာ
+      ထပ်ရေးပြီး၊ ကြယ်ရဲ့ နောက်မှာ slash တစ်ခုနဲ့ string အလွတ် တစ်ခု ထည့်ပါ။ [[mark:after-alt]] slash နောက်က
+      အပိုင်းက screen reader အတွက် alt text ပါ။ အလွတ်ဆိုရင် မဖတ်ပါနဲ့လို့ ပြောတာပါ။ preview ထဲမှာတော့ ဘာမှ
+      မပြောင်းပါဘူး။ [[mark:select-alt]] ဒီ declaration ကို ကြည့်ပါ။ slash ကို နားမလည်တဲ့ browser အဟောင်းက
+      lesson 1 မှာလိုပဲ ဒါကို ကျော်ပြီး၊ အပေါ်က တစ်ခုကို ဆက်သုံးပါတယ်။ [[mark:explain-a11y-rule]] ဆိုတော့၊
+      ဈေးနှုန်း၊ ခွက်အရွယ်လို မပါမဖြစ် အချက်အလက်ကို HTML စာသားထဲမှာ ထားပါ။ ခွက်ကြီးကို CSS နဲ့ ထည့်ခဲ့တာ attr
+      ကို ပြဖို့ပဲပါ။ CSS content ကိုတော့ ကျပ်လို အပိုလေးတွေ၊ အလှဆင် icon တွေမှာ သုံးပါ။
+    sources:
+      - title: "MDN — content: alternative text"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/content#alternative_text_string_counter"
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after (accessibility)"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "CSS Generated Content Module Level 3 — alternative text for content"
+        url: "https://www.w3.org/TR/css-content-3/#content-property"
+    actions:
+      - id: type-alt
+        type: editor.type
+        at: { mark: type-alt }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  content: \"★ \";\n", occurrence: 1 }
+        text: "  content: \"★ \" / \"\";\n"
+      - id: select-alt
+        type: editor.select
+        at: { mark: select-alt }
+        target: { file: styles.css, text: 'content: "★ " / "";', occurrence: 1 }
+
+  - id: empty-box
+    narration: >
+      [[mark:type-bar]] အခု box အလွတ်ကနေ ပုံသဏ္ဌာန် တစ်ခု လုပ်ကြည့်ရအောင်။ ခေါင်းစဉ် တိုင်းမှာ after box
+      တစ်ခု ထည့်ပါမယ်။ သူ့ကို block ဖြစ်စေပြီး အကျယ် 48 pixel၊ အမြင့် 3 pixel၊ အညိုရောင် နောက်ခံနဲ့
+      အပေါ်မှာ နေရာလွတ် နည်းနည်း ပေးပါမယ်။ [[mark:after-bar-nothing]] အပေါ်ဆုံး ခေါင်းစဉ်ကို ကြည့်ပါ။ ဘာမှ
+      မပေါ်လာပါဘူး။ ဒီ rule မှာ content မပါသေးလို့ပါ။ [[mark:type-content-empty]] content အဖြစ် string
+      အလွတ် တစ်ခု ထည့်ပါမယ်။ [[mark:after-bar]] ခေါင်းစဉ် အောက်မှာ အညိုရောင် မျဉ်းတိုလေး ပေါ်လာပါပြီ။
+      string အလွတ်က box ကို ဖန်တီးပြီး၊ display block က သူ့ကို စာကြောင်း သီးသန့်မှာ ထားပေးပါတယ်။
+      အရွယ်အစားနဲ့ နောက်ခံကတော့ မျဉ်း ဖြစ်အောင် လုပ်ပေးတာပါ။ [[mark:explain-replaced]] ကန့်သတ်ချက်
+      တစ်ခုလည်း ရှိပါတယ်။ ပုံ၊ input လို element တွေက ပြစရာကို document အပြင်ကနေ ယူလာလို့ replaced element
+      လို့ ခေါ်ပြီး၊ သူတို့မှာ before နဲ့ after box မရပါဘူး။ checkbox ကတော့ တချို့ browser တွေမှာ ရပေမယ့်
+      အားမကိုးပါနဲ့။ လိုရင် element ကို wrapper တစ်ခုနဲ့ ထုပ်ပြီး၊ pseudo-element ကို wrapper မှာ ပေးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "MDN — Replaced elements"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Replaced_element"
+      - title: "MDN — content (none and normal create no box)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/content#values"
+    actions:
+      - id: type-bar
+        type: editor.type
+        at: { mark: type-bar }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  content: \" \" attr(data-unit);\n}\n", occurrence: 1 }
+        text: "\nh2::after {\n  display: block;\n  width: 48px;\n  height: 3px;\n  background: sienna;\n  margin-top: 4px;\n}\n"
+      - id: type-content-empty
+        type: editor.type
+        at: { mark: type-content-empty }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "h2::after {\n", occurrence: 1 }
+        text: "  content: \"\";\n"
+      - id: expect-bar
+        type: expect.preview
+        at: { mark: after-bar }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: drop-cap
+    chapter: "First letter နဲ့ first line"
+    narration: >
+      [[mark:scroll-quote]] အင်္ဂလိပ် စာပိုဒ်ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-fl-size]] drop cap
+      လုပ်ကြည့်ပါမယ်။ drop cap ဆိုတာ မဂ္ဂဇင်းတွေမှာ တွေ့ရသလို၊ စာပိုဒ်ရဲ့ ပထမ စာလုံးကို ကြီးကြီး လုပ်ပြီး
+      ဘေးမှာ စာတွေ ပတ်စီးစေတာပါ။ အရင်ဆုံး first letter ကို စာလုံး အရွယ်ရဲ့ နှစ်ဆကျော် font size ပေးပါမယ်။
+      [[mark:after-fl-size]] S စာလုံး ကြီးသွားပေမယ့်၊ ပထမ စာကြောင်းထဲမှာပဲ ရှိနေလို့ အဲဒီ စာကြောင်း အရမ်း
+      မြင့်သွားပါတယ်။ [[mark:type-fl-float]] lesson 13 က ခွက်ပုံလိုပဲ၊ သူ့ကို ဘယ်ဘက်ကို float လုပ်ပါမယ်။
+      [[mark:after-fl-float]] စာတွေက စာလုံးကြီး ပတ်လည်မှာ စီးသွားပါပြီ။ ဒါပေမဲ့ စာလုံးက မြင့်လွန်းလို့ အောက်က
+      မြန်မာ စာပိုဒ်ထဲအထိ ဝင်ပြီး၊ သူ့ ပထမ စာကြောင်းကို ညာဘက် တွန်းထားပါတယ်။ [[mark:type-fl-lh]] line height
+      ကို 1 ပေးရင်၊ သူ့ စာကြောင်း အမြင့်က စာလုံး အမြင့်လောက်ပဲ ဖြစ်သွားပါမယ်။ [[mark:after-fl-lh]] နောက်
+      စာပိုဒ်ထဲ မဝင်တော့ပါဘူး။ [[mark:type-fl-margin]] နောက်ဆုံး၊ စာလုံးကြီးရဲ့ inline end ဘက်မှာ နေရာလွတ်
+      နည်းနည်း ထည့်ပါမယ်။ lesson 21 မှာ ကြည့်ခဲ့သလို၊ အင်္ဂလိပ်စာမှာ ညာဘက်ပါ။ [[mark:after-fl-margin]] အခုတော့
+      drop cap အစစ် ဖြစ်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements (the drop-cap example)"
+        url: "https://web.dev/learn/css/pseudo-elements"
+      - title: "MDN — ::first-letter"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::first-letter"
+      - title: "MDN — margin-inline-end"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline-end"
+    actions:
+      - id: scroll-quote
+        type: preview.scroll
+        at: { mark: scroll-quote }
+        timeoutMs: 5000
+        top: 505
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-quote
+        type: expect.preview
+        at: { afterAction: scroll-quote }
+        timeoutMs: 4000
+        target: { by: testId, value: quote }
+        textContains: "Since 1998"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-fl-size
+        type: editor.type
+        at: { mark: type-fl-size }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-top: 4px;\n}\n", occurrence: 1 }
+        text: "\n.quote::first-letter {\n  font-size: 2.6em;\n}\n"
+      - id: type-fl-float
+        type: editor.type
+        at: { mark: type-fl-float }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-size: 2.6em;\n", occurrence: 1 }
+        text: "  float: left;\n"
+      - id: type-fl-lh
+        type: editor.type
+        at: { mark: type-fl-lh }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  float: left;\n", occurrence: 1 }
+        text: "  line-height: 1;\n"
+      - id: type-fl-margin
+        type: editor.type
+        at: { mark: type-fl-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  line-height: 1;\n", occurrence: 1 }
+        text: "  margin-inline-end: 6px;\n"
+
+  - id: cluster-board
+    narration: >
+      [[mark:open-cluster]] ဘာလို့ အင်္ဂလိပ် စာပိုဒ်ကို သုံးရတာလဲ။ [[mark:draw-cluster-en]] အင်္ဂလိပ်စာမှာ
+      ပထမ စာလုံးဆိုတာ စာလုံး တစ်လုံးတည်းပါ။ [[mark:draw-cluster-my]] မြန်မာ syllable တစ်ခုကတော့ ဗျည်း
+      တစ်လုံးမှာ ဗျည်းတွဲ၊ သရ၊ အသတ် စတဲ့ သင်္ကေတတွေ ပေါင်းထားတာပါ။ first letter က ရှေ့ဆုံး ဗျည်းနဲ့ သူ့မှာ
+      တွဲကပ်နေတဲ့ သင်္ကေတကိုပဲ ယူလို့၊ ကျန်တဲ့ အပိုင်းက သေးသေးပဲ ကျန်ပြီး syllable ကွဲသွားပါတယ်။
+      [[mark:draw-no-caps]] မြန်မာစာမှာ capital letter လည်း မရှိပါဘူး။ [[mark:draw-cluster-rule]]
+      ဒါကြောင့် drop cap ကို အင်္ဂလိပ်စာ၊ ဂဏန်း ဒါမှမဟုတ် အလှဆင် သင်္ကေတမှာပဲ သုံးပြီး၊ မြန်မာစာမှာ
+      မသုံးပါနဲ့။
+    sources:
+      - title: "MDN — ::first-letter (what counts as the first letter)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::first-letter"
+      - title: "CSS Pseudo-Elements Module Level 4 — first-letter and typographic letter units"
+        url: "https://www.w3.org/TR/css-pseudo-4/#first-letter-pseudo"
+      - title: "web.dev Learn CSS — Typography"
+        url: "https://web.dev/learn/css/typography"
+    actions:
+      - id: open-cluster
+        type: whiteboard.apply
+        at: { mark: open-cluster }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-cluster-en
+        type: whiteboard.apply
+        at: { mark: draw-cluster-en }
+        upsertIds: [d-en-big, d-en-rest, d-en-ok]
+        drawMs: 1600
+      - id: draw-cluster-my
+        type: whiteboard.apply
+        at: { mark: draw-cluster-my }
+        upsertIds: [d-my-big, d-my-rest, d-my-bad]
+        drawMs: 2000
+      - id: draw-no-caps
+        type: whiteboard.apply
+        at: { mark: draw-no-caps }
+        upsertIds: [d-no-caps]
+        drawMs: 1200
+      - id: draw-cluster-rule
+        type: whiteboard.apply
+        at: { mark: draw-cluster-rule }
+        upsertIds: [d-rule]
+        drawMs: 1400
+
+  - id: first-line
+    narration: >
+      [[mark:close-cluster]] အခု first line ကို ကြည့်ရအောင်။ [[mark:type-first-line]] မဂ္ဂဇင်း
+      ဆောင်းပါးတွေ စလေ့ရှိသလို၊ စာပိုဒ်ရဲ့ ပထမ စာကြောင်းကို စာလုံးထူ အညိုရောင် ပေးပါမယ်။ စာလုံးထူက
+      ပိုကျယ်လို့ စာကြောင်း တစ်ကြောင်းမှာ ဆံ့တဲ့ စကားလုံး နည်းသွားနိုင်ပါတယ်။ စာလုံးထူ ဘယ်မှာ ဆုံးလဲ
+      သတိထား ကြည့်ပါ။ [[mark:after-first-line]] စာလုံးထူက ဝါကျ အဆုံးမှာ မဟုတ်ဘဲ စာကြောင်း အဆုံးမှာ
+      ရပ်ပါတယ်။ first line ဆိုတာ screen ပေါ်မှာ တကယ် ပေါ်နေတဲ့ ပထမ စာကြောင်း တစ်ကြောင်းပါ။ စာလုံးကြီးကလည်း
+      အဲဒီ စာကြောင်းထဲ ပါလို့ ထူပြီး အညိုရောင် ဖြစ်သွားပါတယ်။ [[mark:type-max-width]] ဒါကို သက်သေပြဖို့
+      စာပိုဒ်ကို max width နဲ့ ပိုကျဉ်းအောင် လုပ်ကြည့်ရအောင်။ [[mark:after-max-width]] စာကြောင်းတွေ
+      တိုသွားလို့ စာလုံးထူ ဖြစ်နေတဲ့ စကားလုံးတွေ နည်းသွားပါပြီ။ HTML က မပြောင်းပါဘူး။ browser က ပထမ
+      စာကြောင်းကို ပြန်တွက်လိုက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::first-line"
+        url: "https://web.dev/learn/css/pseudo-elements#first-line"
+      - title: "MDN — ::first-line"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::first-line"
+    actions:
+      - id: close-cluster
+        type: whiteboard.apply
+        at: { mark: close-cluster }
+        open: false
+      - id: type-first-line
+        type: editor.type
+        at: { mark: type-first-line }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-inline-end: 6px;\n}\n", occurrence: 1 }
+        text: "\n.quote::first-line {\n  font-weight: bold;\n  color: sienna;\n}\n"
+      - id: type-max-width
+        type: editor.type
+        at: { mark: type-max-width }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: sienna;\n}\n", occurrence: 1 }
+        text: "\n.quote {\n  max-width: 260px;\n}\n"
+      - id: expect-max-width
+        type: expect.preview
+        at: { mark: after-max-width }
+        timeoutMs: 4000
+        target: { by: testId, value: quote }
+        textContains: "stay a while"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: allowed-board
+    narration: >
+      [[mark:open-allowed]] ဒီ အစိတ်အပိုင်း နှစ်ခုက property တချို့ကိုပဲ လက်ခံပါတယ်။
+      [[mark:draw-allowed-fl]] first letter က box သေးသေး တစ်ခုလိုပါ။ font၊ အရောင်၊ နောက်ခံ၊ float အပြင်
+      margin၊ padding၊ border ကိုပါ လက်ခံပါတယ်။ [[mark:draw-allowed-fli]] first line ကတော့ font၊ အရောင်၊
+      နောက်ခံနဲ့ စာသား property တွေကို လက်ခံပါတယ်။ [[mark:draw-allowed-fli-no]] ဒါပေမဲ့ margin၊ padding၊
+      border တော့ မရပါဘူး။ စာကြောင်းက box တစ်ခု မဟုတ်ဘဲ စာပိုဒ်ရဲ့ စာသား တစ်ပိုင်းပဲ ဖြစ်လို့ပါ။
+      [[mark:draw-block]] ပြီးတော့ နှစ်ခုလုံးက စာပိုဒ်၊ list item လို block ဆန်တဲ့ box တွေမှာပဲ
+      အလုပ်လုပ်ပြီး၊ span လို inline element မှာ မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::first-letter and ::first-line"
+        url: "https://web.dev/learn/css/pseudo-elements#first-letter"
+      - title: "MDN — ::first-letter (allowable properties)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::first-letter#allowable_properties"
+      - title: "MDN — ::first-line (allowable properties)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::first-line#allowable_properties"
+    actions:
+      - id: open-allowed
+        type: whiteboard.apply
+        at: { mark: open-allowed }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-allowed-fl
+        type: whiteboard.apply
+        at: { mark: draw-allowed-fl }
+        upsertIds: [e-fl-h, e-fl, e-fl-2]
+        drawMs: 2200
+      - id: draw-allowed-fli
+        type: whiteboard.apply
+        at: { mark: draw-allowed-fli }
+        upsertIds: [e-fli-h, e-fli]
+        drawMs: 1600
+      - id: draw-allowed-fli-no
+        type: whiteboard.apply
+        at: { mark: draw-allowed-fli-no }
+        upsertIds: [e-fli-no]
+        drawMs: 1200
+      - id: draw-block
+        type: whiteboard.apply
+        at: { mark: draw-block }
+        upsertIds: [e-block]
+        drawMs: 1400
+
+  - id: list-marker
+    chapter: "List ရဲ့ marker တွေ"
+    narration: >
+      [[mark:close-allowed]] နောက်တစ်ခုက list အစက်တွေပါ။ [[mark:scroll-hours]] ဖွင့်ချိန်တွေဆီ
+      ဆင်းကြည့်ရအောင်။ [[mark:type-marker]] marker ဆိုတာ list item တစ်ခုစီရဲ့ ရှေ့မှာ ပေါ်တဲ့ အစက်
+      ဒါမှမဟုတ် နံပါတ်ပါ။ colon နှစ်ခုနောက်မှာ marker လို့ ရေးပြီး ရွေးပါတယ်။ အစက်တွေကို အညိုရောင် ပေးပြီး
+      နည်းနည်း ကြီးအောင် လုပ်ပါမယ်။ အစက် နှစ်ခုကို လိုက်ကြည့်ပါ။ [[mark:after-marker]] အစက်တွေ အညိုရောင်
+      ဖြစ်ပြီး ကြီးလာပေမယ့်၊ စာသားရဲ့ အရောင်နဲ့ အရွယ်အစားကတော့ မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::marker"
+        url: "https://web.dev/learn/css/pseudo-elements#marker"
+      - title: "web.dev Learn CSS — Lists: ::marker"
+        url: "https://web.dev/learn/css/lists#marker_pseudo-element"
+      - title: "MDN — ::marker"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker"
+    actions:
+      - id: close-allowed
+        type: whiteboard.apply
+        at: { mark: close-allowed }
+        open: false
+      - id: scroll-hours
+        type: preview.scroll
+        at: { mark: scroll-hours }
+        timeoutMs: 5000
+        top: 700
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hours
+        type: expect.preview
+        at: { afterAction: scroll-hours }
+        timeoutMs: 4000
+        target: { by: testId, value: hours }
+        textContains: "တနင်္လာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-marker
+        type: editor.type
+        at: { mark: type-marker }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  max-width: 260px;\n}\n", occurrence: 1 }
+        text: "\n.hours-list li::marker {\n  color: sienna;\n  font-size: 1.3em;\n}\n"
+
+  - id: marker-board
+    narration: >
+      [[mark:open-marker-box]] marker က ဘယ်မှာ ရှိတာလဲ။ [[mark:draw-marker-box]] list item တိုင်းမှာ သူ့
+      content ရဲ့ ရှေ့မှာ marker box တစ်ခု ရှိပါတယ်။ [[mark:draw-marker-before]] list item မှာ before box
+      ပါ ရှိနေရင်တောင်၊ marker က သူ့ရှေ့မှာပဲ ရှိပါတယ်။ [[mark:draw-marker-ua]] browser က marker တွေကို
+      default style တချို့လည်း ပေးထားပါတယ်။ ဥပမာ၊ နံပါတ်တပ် list မှာ ဂဏန်းတိုင်း အကျယ် တူလို့ နံပါတ်တွေ
+      တန်းညီနေပါတယ်။ [[mark:draw-allowed-marker]] first letter၊ first line တို့လိုပဲ marker ကလည်း အရောင်၊
+      font၊ content၊ white space နဲ့ animation လို property နည်းနည်းပဲ လက်ခံပါတယ်။
+      [[mark:draw-allowed-marker-no]] နောက်ခံ၊ padding၊ margin တွေကိုတော့ ပေးလို့ မရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Lists: ::marker"
+        url: "https://web.dev/learn/css/lists#marker_box"
+      - title: "CSS Lists and Counters Module Level 3 — the marker box"
+        url: "https://www.w3.org/TR/css-lists-3/#marker-pseudo"
+      - title: "MDN — ::marker (allowable properties)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker#allowable_properties"
+    actions:
+      - id: open-marker-box
+        type: whiteboard.apply
+        at: { mark: open-marker-box }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-marker-box
+        type: whiteboard.apply
+        at: { mark: draw-marker-box }
+        upsertIds: [f-li, f-text, f-marker, f-marker-t, f-marker-l]
+        drawMs: 2200
+      - id: draw-marker-before
+        type: whiteboard.apply
+        at: { mark: draw-marker-before }
+        upsertIds: [f-before, f-before-t]
+        drawMs: 1400
+      - id: draw-marker-ua
+        type: whiteboard.apply
+        at: { mark: draw-marker-ua }
+        upsertIds: [f-ua]
+        drawMs: 1400
+      - id: draw-allowed-marker
+        type: whiteboard.apply
+        at: { mark: draw-allowed-marker }
+        upsertIds: [f-allow]
+        drawMs: 1600
+      - id: draw-allowed-marker-no
+        type: whiteboard.apply
+        at: { mark: draw-allowed-marker-no }
+        upsertIds: [f-deny]
+        drawMs: 1200
+
+  - id: summary-marker
+    narration: >
+      [[mark:close-marker-board]] marker က list မှာပဲ ရှိတာ မဟုတ်ပါဘူး။ ဖွင့်ချိန်တွေ အောက်က မေးခွန်းမှာ တြိဂံ
+      ပုံလေး ရှိပြီး၊ အဲဒီ တြိဂံက summary ရဲ့ marker ပါ။ [[mark:type-summary-plus]] marker ရဲ့ content ကို
+      သုံးပြီး အဲဒီ တြိဂံကို အပေါင်း လက္ခဏာ ပြောင်းကြည့်ရအောင်။ [[mark:after-summary-plus]] တြိဂံက အပေါင်း
+      ဖြစ်သွားပါပြီ။ [[mark:type-summary-minus]] ပြီးတော့ details ပွင့်နေတဲ့ အချိန်အတွက် rule နောက်တစ်ခု
+      ရေးပါမယ်။ ပွင့်နေရင် details မှာ open attribute ပါလာပြီး၊ ဒီ rule က အနှုတ် လက္ခဏာ ပေးပါတယ်။
+      [[mark:select-open]] selector ထဲက ဒီ open attribute ကို ကြည့်ပါ။ [[mark:click-summary]] မေးခွန်းကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-click]] မေးခွန်း ပွင့်ပြီး အဖြေ ပေါ်လာပါပြီ။ အပေါင်းလည်း အနှုတ်
+      ဖြစ်သွားပါတယ်။ ပတ်လည်က မျဉ်းကတော့ keyboard focus ကို ပြတဲ့ မျဉ်း ဖြစ်ပြီး၊ lesson 28 မှာ ကြည့်ပါမယ်။
+      [[mark:explain-safari]] Safari ကတော့ marker မှာ အရောင်နဲ့ အရွယ်အစားကိုပဲ ပြောင်းခွင့် ပေးပြီး content
+      ကို မသုံးပါဘူး။ ဒါကြောင့် Safari နဲ့ ကြည့်ရင် ဒီမှာ ပုံမှန် တြိဂံပဲ မြင်ရပါမယ်။ list အစက်အတွက်တော့ list
+      style type မှာ string ပေးရင် browser တိုင်းမှာ ရပြီး၊ lesson 29 မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::marker (summary)"
+        url: "https://web.dev/learn/css/pseudo-elements#marker"
+      - title: "MDN — ::marker (browser compatibility)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker#browser_compatibility"
+      - title: "MDN — <details> (the open attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details#open"
+      - title: "MDN — list-style-type (string values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-type"
+    actions:
+      - id: close-marker-board
+        type: whiteboard.apply
+        at: { mark: close-marker-board }
+        open: false
+      - id: type-summary-plus
+        type: editor.type
+        at: { mark: type-summary-plus }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-size: 1.3em;\n}\n", occurrence: 1 }
+        text: "\nsummary::marker {\n  content: \"+ \";\n}\n"
+      - id: expect-summary
+        type: expect.preview
+        at: { mark: after-summary-plus }
+        timeoutMs: 4000
+        target: { by: testId, value: faq-summary }
+        textContains: "ပိတ်ရက် ရှိလား"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-summary-minus
+        type: editor.type
+        at: { mark: type-summary-minus }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  content: \"+ \";\n}\n", occurrence: 1 }
+        text: "\ndetails[open] summary::marker {\n  content: \"− \";\n}\n"
+      - id: select-open
+        type: editor.select
+        at: { mark: select-open }
+        target: { file: styles.css, text: "details[open]", occurrence: 1 }
+      - id: click-summary
+        type: preview.click
+        at: { mark: click-summary }
+        timeoutMs: 5000
+        target: { by: testId, value: faq-summary }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      # The open attribute appears (empty string); absent before the click.
+      - id: expect-open
+        type: expect.preview
+        at: { mark: after-click }
+        timeoutMs: 4000
+        target: { by: testId, value: faq }
+        attribute: { name: open, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-answer
+        type: expect.preview
+        at: { afterAction: expect-open }
+        timeoutMs: 4000
+        target: { by: testId, value: faq }
+        textContains: "နေ့တိုင်း ဖွင့်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: placeholder
+    chapter: "Placeholder နဲ့ selection"
+    narration: >
+      [[mark:scroll-form]] အော်ဒါ form ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-placeholder]] field အလွတ်ထဲမှာ
+      ဖျော့ဖျော့ ပေါ်နေပြီး ဘာရိုက်ရမလဲ ညွှန်ပေးတဲ့ စာကို placeholder လို့ ခေါ်ပါတယ်။ အဲဒီ စာတွေကို ဆိုင်ရဲ့
+      အညိုမှိန် အရောင် ပေးပြီး၊ စာလုံး စောင်းအောင် လုပ်ပါမယ်။ နာမည်နဲ့ ဖုန်း field နှစ်ခုကို လိုက်ကြည့်ပါ။
+      [[mark:after-placeholder]] placeholder စာ နှစ်ခုလုံး အညိုမှိန်နဲ့ စောင်းသွားပါပြီ။
+      [[mark:open-index-label]] HTML ဖိုင်ကို ပြန်ကြည့်ရအောင်။ [[mark:select-label]] ဒီ label ကို ကြည့်ပါ။
+      field တိုင်းမှာ label အစစ် ရှိပါတယ်။ placeholder ကတော့ ညွှန်ပေးတဲ့ စာ သက်သက်ပါ။ စာ စရိုက်တာနဲ့
+      ပျောက်သွားပြီး၊ ဖတ်ရခက်လောက်အောင် ဖျော့နေတတ်လို့ label အစား ဘယ်တော့မှ မသုံးပါနဲ့။
+      [[mark:explain-placeholder-shown]] placeholder pseudo-element ကတော့ အဲဒီ စာကိုယ်တိုင်ကို style ပေးတာပါ။
+      နောက် lesson မှာတော့ အဲဒီ စာ ပေါ်နေတဲ့ အခြေအနေကို ရွေးတဲ့ pseudo-class ကို တွေ့ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::placeholder"
+        url: "https://web.dev/learn/css/pseudo-elements#placeholder"
+      - title: "MDN — ::placeholder (accessibility)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::placeholder#accessibility"
+      - title: "MDN — <label>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label"
+    actions:
+      - id: scroll-form
+        type: preview.scroll
+        at: { mark: scroll-form }
+        timeoutMs: 5000
+        top: 900
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-placeholder
+        type: editor.type
+        at: { mark: type-placeholder }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  content: \"− \";\n}\n", occurrence: 1 }
+        text: "\ninput::placeholder {\n  color: var(--muted);\n  font-style: italic;\n}\n"
+      - id: expect-placeholder
+        type: expect.preview
+        at: { mark: after-placeholder }
+        timeoutMs: 4000
+        target: { by: testId, value: input-name }
+        attribute: { name: placeholder, value: "ဥပမာ ကိုအောင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-index-label
+        type: workspace.openFile
+        at: { mark: open-index-label }
+        path: index.html
+      - id: select-label
+        type: editor.select
+        at: { mark: select-label }
+        target: { file: index.html, text: '<label for="name">နာမည်</label>', occurrence: 1 }
+
+  - id: selection
+    narration: >
+      [[mark:open-styles-selection]] နောက်ဆုံးအနေနဲ့ mouse နဲ့ ရွေးလိုက်တဲ့ စာကို ကြည့်ရအောင်။
+      [[mark:type-selection]] ရွေးထားတဲ့ စာတွေကို ရွှေရောင် နောက်ခံ ပေးပါမယ်။ colon နှစ်ခုရဲ့ ရှေ့မှာ
+      selector မရေးထားလို့ ဒီ rule က page တစ်ခုလုံးမှာ သက်ရောက်ပါတယ်။ [[mark:after-selection]] preview မှာ
+      ဘာမှ မပြောင်းပါဘူး။ ဘာစာမှ ရွေးမထားသလို၊ lesson ထဲမှာလည်း စာ ရွေးပြလို့ မရလို့ပါ။ lesson ကို pause
+      လုပ်ပြီး project ကို run ကြည့်ပါ၊ preview ထဲက စာကို ရွေးရင် ရွှေရောင် နောက်ခံကို မြင်ရပါမယ်။
+      [[mark:explain-selection-props]] selection က အရောင်၊ နောက်ခံ အရောင်၊ text decoration နဲ့ text shadow
+      လောက်ပဲ လက်ခံပါတယ်။ ရွေးထားတဲ့ စာနဲ့ နောက်ခံကြားမှာ contrast လုံလောက်အောင် ထားပါ။ iPhone ပေါ်က
+      Safari မှာတော့ အလုပ်မလုပ်ပါဘူး။ [[mark:explain-others]] နောက်ထပ် နှစ်ခုကိုလည်း နာမည်လောက် သိထားပါ။
+      backdrop က dialog နောက်က page ကို ဖုံးတဲ့ အလွှာ ဖြစ်ပြီး၊ lesson 41 မှာ ကြည့်ပါမယ်။ cue ကတော့ video
+      ရဲ့ စာတန်းထိုးကို style ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: ::selection and ::cue"
+        url: "https://web.dev/learn/css/pseudo-elements#selection"
+      - title: "MDN — ::selection"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::selection"
+      - title: "MDN — ::cue"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::cue"
+      - title: "MDN — ::backdrop"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::backdrop"
+    actions:
+      - id: open-styles-selection
+        type: workspace.openFile
+        at: { mark: open-styles-selection }
+        path: styles.css
+      - id: type-selection
+        type: editor.type
+        at: { mark: type-selection }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-style: italic;\n}\n", occurrence: 1 }
+        text: "\n::selection {\n  background: gold;\n}\n"
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ ဒီထဲက ဘယ်ဟာတွေက pseudo-element လဲ။
+      [[mark:quiz-answer]] before နဲ့ marker ပါ။ active က နှိပ်နေတုန်း အခြေအနေကို ရွေးလို့ pseudo-class ပါ။
+      first paragraph ဆိုတာကတော့ လုံးဝ မရှိပါဘူး။ [[mark:draw-spec]] နောက်ဆုံး အချက် နှစ်ခုပါ။ specificity မှာ
+      pseudo-element ကို element နာမည် တစ်ခုလို ရေတွက်ပါတယ်။ [[mark:draw-dom]] ပြီးတော့ DOM ထဲမှာ မရှိလို့
+      JavaScript နဲ့ ရွေးလို့ မရပေမယ့်၊ getComputedStyle နဲ့ သူ့ style တွေကို ဖတ်လို့ ရပါတယ်။ [[mark:recap]]
+      ဒါဆို ပြန်ချုပ်ရရင်၊ pseudo-element တွေက browser ဖန်တီးတဲ့ အစိတ်အပိုင်းတွေ ဖြစ်ပြီး၊ selector အဆုံးမှာ
+      colon နှစ်ခုနဲ့ ရေးပါတယ်။ before နဲ့ after မှာ content လိုပါတယ်။ first letter နဲ့ first line က စာသားကို၊
+      marker က list အစက်ကို၊ placeholder က field ထဲက ဖျော့ဖျော့ စာကို၊ selection က ရွေးထားတဲ့ စာကို style
+      ပေးပါတယ်။ file input ခလုတ်အတွက် pseudo-element လို အသစ်တွေလည်း ဆက် ထွက်လာနေပါတယ်။ [[mark:next-lesson]]
+      နောက် lesson မှာတော့ colon တစ်ခုနဲ့ ရေးတဲ့ pseudo-class တွေကို ကြည့်သွားပါမယ်။ mouse တင်ထားတာ၊ check
+      လုပ်ထားတာ၊ disabled ဖြစ်နေတာလို အခြေအနေကို ကြည့်ပြီး style ပေးတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-elements: check your understanding"
+        url: "https://web.dev/learn/css/pseudo-elements#check_your_understanding"
+      - title: "MDN — Window.getComputedStyle() (pseudoElt)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/getComputedStyle#pseudoelt"
+      - title: "MDN — ::file-selector-button"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::file-selector-button"
+      - title: "web.dev Learn CSS — Pseudo-classes (next lesson)"
+        url: "https://web.dev/learn/css/pseudo-classes"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [g-title, g-o1, g-o2, g-o3, g-o4]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [g-a1, g-a2, g-a3, g-a4]
+        drawMs: 2400
+      - id: draw-spec
+        type: whiteboard.apply
+        at: { mark: draw-spec }
+        upsertIds: [g-spec]
+        drawMs: 1400
+      - id: draw-dom
+        type: whiteboard.apply
+        at: { mark: draw-dom }
+        upsertIds: [g-dom]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".featured .name::before {\n  content: \"★ \";\n  content: \"★ \" / \"\";\n  color: goldenrod;\n}\n\n.price::after {\n  content: \" ကျပ်\";\n}\n\n.price[data-unit]::after {\n  content: \" \" attr(data-unit);\n}\n\nh2::after {\n  content: \"\";\n  display: block;\n  width: 48px;\n  height: 3px;\n  background: sienna;\n  margin-top: 4px;\n}\n\n.quote::first-letter {\n  font-size: 2.6em;\n  float: left;\n  line-height: 1;\n  margin-inline-end: 6px;\n}\n\n.quote::first-line {\n  font-weight: bold;\n  color: sienna;\n}\n\n.quote {\n  max-width: 260px;\n}\n\n.hours-list li::marker {\n  color: sienna;\n  font-size: 1.3em;\n}\n\nsummary::marker {\n  content: \"+ \";\n}\n\ndetails[open] summary::marker {\n  content: \"− \";\n}\n\ninput::placeholder {\n  color: var(--muted);\n  font-style: italic;\n}\n\n::selection {\n  background: gold;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
