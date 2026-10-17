@@ -1,0 +1,2184 @@
+# CSS course (Burmese), lesson 37 of 43: blend modes.
+#
+# Narration is Burmese (voice-script.md next to this file; DESIGN.md is the
+# span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 36; the goal: a black-and-white photo + a gold
+# layer + a dark blue layer = a duotone) → board (backdrop and source; the
+# overlap is where the blend mode decides; channels 0–100 %; multiply
+# 80 % × 50 % = 40 %; screen 80 %, 50 % → 90 %) → code tour (cream header with
+# an inline SVG logo on an exact white square, the split banner with a white
+# heading, a grey photo with an empty layer, a plain banner, the striped stage
+# with a card and an overhanging circle, a second photo) → the logo: multiply
+# (white square gone), screen (square back, black stem gone), multiply again
+# → board (12 separable modes in four groups) → the split banner's heading:
+# difference (light over dark, dark over light); exclusion explained → the
+# empty layer: teal (normal covers the photo), then color (a teal tint that
+# keeps the photo's light and shadow) → board (non-separable: which of hue /
+# saturation / luminosity comes from the source) → the plain banner: tan +
+# leaf tile + teal→orange gradient (line by line), background-blend-mode
+# multiply → screen → overlay → the circle: multiply (stripes show through
+# its outer half), the card: isolation: isolate (only the card is mixed in);
+# stacking contexts → the duotone: grayscale photo, positioned figure,
+# ::before/::after layers (z-index 1 over the filtered photo), gold multiply,
+# navy screen → quiz + recap, hand-off to transitions (lesson 38).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload, no
+# HTML edit, no click, no kit.js. The leaf tile comes from the pinned
+# images.css (a data: URI in a custom property, read with var()). Every
+# keystroke edit is paren-free keywords; the two edits with "(" (the banner's
+# layers and the duotone's grayscale filter) are line-by-line, so every
+# revealed line is balanced. Until a typed declaration is complete it is
+# invalid and the previous one keeps painting.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors as
+# this file, screenshots in probe/): header 0–144 (logo 64 × 64 at 16,16),
+# split banner 160–266 (heading 44 px), tint photo 282–532 (400 × 250),
+# pattern banner 548–668, striped stage 684–846 (card 224 × 136, circle
+# 96 px hanging 48 px off the card's right edge), duotone photo 862–1112;
+# document 1152 tall, so a scroll to 2000 clamps to 432 and shows the pattern
+# banner, the stage and the duotone photo together.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-37-blend-modes
+  title: "CSS course 37: Blend mode"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 37
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (cream in this lesson, nav and tagline left
+      # out; the logo is an inline SVG with an exact #fff square, because the
+      # recorder re-encodes <img> pixels) and the lesson blocks split-banner,
+      # tint, pattern-banner, iso and duotone. images.css is linked before
+      # styles.css. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/images.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (cream in this lesson; nav left out). The logo is an
+                 inline SVG with an exact white square behind the leaf. -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <div class="logo" data-testid="logo">
+                <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="လက်ဖက်ရွက် logo">
+                  <rect width="64" height="64" fill="#fff" />
+                  <path d="M12 52C12 28 28 12 52 12c0 24-16 40-40 40z" fill="#2f6b3a" />
+                  <path d="M14 50L44 20" stroke="#000" stroke-width="4" stroke-linecap="round" />
+                </svg>
+              </div>
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+            </header>
+
+            <main class="page" id="main">
+              <!-- lesson block: split-banner (half dark, half light; a white heading) -->
+              <section class="split-banner" data-testid="split-banner">
+                <h2 data-testid="split-heading">လက်ဖက်ရည်</h2>
+              </section>
+
+              <!-- lesson block: tint (a grey photo with an empty layer over it) -->
+              <figure class="tint" data-testid="tint">
+                <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" data-testid="tint-photo" />
+                <div class="overlay" data-testid="tint-overlay"></div>
+              </figure>
+
+              <!-- lesson block: pattern-banner (no background yet) -->
+              <section class="pattern-banner" data-testid="pattern-banner">
+                <p>ယနေ့အထူး</p>
+              </section>
+
+              <!-- lesson block: iso (a striped stage; a card with a circle that hangs off its edge) -->
+              <div class="stage iso" data-testid="iso">
+                <div class="card" data-testid="iso-card">
+                  <span class="circle" data-testid="iso-circle"></span>
+                </div>
+              </div>
+
+              <!-- lesson block: duotone -->
+              <figure class="duo" data-testid="duo">
+                <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" data-testid="duo-photo" />
+              </figure>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2, C and D; the header is cream with ink
+      # text. Section E pins the lesson blocks (the split banner's hard-stop
+      # gradient and white heading, the pre-greyed tint photo and its empty
+      # absolutely positioned layer, the plain pattern banner, the striped
+      # stage with its card and overhanging circle, the duotone figure).
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 37 keeps A, B, B2, C and D; the header is cream instead of dark (the
+          logo blends with it). Section E pins the lesson blocks: the split banner, the
+          grey photo and its empty layer, the plain pattern banner, the striped stage
+          with its card and circle, and the duotone figure. No blend mode, isolation
+          or filter on anything the lesson types (only the first photo is pre-greyed).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: #f0dcb8;
+          color: var(--ink);
+        }
+
+        .site-header a {
+          color: var(--ink);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 37: the blocks the blend modes are typed onto. */
+        .logo {
+          width: 64px;
+          margin-bottom: 4px;
+        }
+
+        .logo svg {
+          display: block;
+        }
+
+        .split-banner {
+          margin: 16px 0;
+          padding: 20px 16px;
+          border-radius: var(--radius);
+          background: linear-gradient(90deg, var(--tea-dark) 50%, var(--cream) 50%);
+          text-align: center;
+        }
+
+        .split-banner h2 {
+          margin: 0;
+          color: #fff;
+          font-size: 44px;
+        }
+
+        .tint,
+        .duo {
+          margin: 16px 0;
+        }
+
+        .tint {
+          position: relative;
+        }
+
+        .tint img,
+        .duo img {
+          display: block;
+          width: 100%;
+          height: auto;
+        }
+
+        .tint img {
+          filter: grayscale(1);
+        }
+
+        .tint .overlay {
+          position: absolute;
+          inset: 0;
+        }
+
+        .pattern-banner {
+          margin: 16px 0;
+          padding: 16px;
+          min-height: 120px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          color: #fff;
+          font-size: 24px;
+          font-weight: 700;
+        }
+
+        .pattern-banner p {
+          margin: 0;
+        }
+
+        .iso {
+          background: repeating-linear-gradient(45deg, var(--tea-light) 0 12px, var(--cream) 12px 24px);
+        }
+
+        .iso .card {
+          position: relative;
+          width: 60%;
+          height: 136px;
+          border-radius: var(--radius);
+          background: #9fd3e6;
+        }
+
+        .iso .circle {
+          position: absolute;
+          top: 20px;
+          right: -48px;
+          width: 96px;
+          height: 96px;
+          border-radius: 50%;
+          background: #f59e0b;
+        }
+      # images.css: pinned, never typed; only the leaf tile (48 × 48, as in
+      # lesson 33).
+      images.css: |
+        /*
+          images.css: pinned, never typed, linked only by lessons that need background
+          or mask images (33 backgrounds, 37 blend modes, optionally 35 masks).
+          Images are data: URIs inside custom properties, so a lesson's styles.css can
+          write background-image: var(--leaf-tile) and never contains url( itself:
+          url( in a typed file makes Vite run postcss on every keystroke, which shows
+          its error overlay on half-typed states (PLATFORM.md section 2).
+          Lesson 37 keeps only the leaf tile, drawn at 48 x 48 as in lesson 33.
+        */
+        :root {
+          --leaf-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath d='M5 19C5 10 11 5 19 5c0 8-5 14-14 14z' fill='%232f6b3a' fill-opacity='0.35'/%3E%3Cpath d='M6 18L17 7' stroke='%232f6b3a' stroke-opacity='0.5' stroke-width='1'/%3E%3C/svg%3E");
+        }
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the goal. Black = the grey photo, orange = gold, blue = dark
+    # blue, violet = the duotone; blue/orange = which tone becomes which
+    # colour; green = the recipe.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Duotone · နှစ်ရောင်တည်း ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-photo,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 140,
+        height: 100,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ced4da",
+      }
+    - {
+        id: a-photo-l,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 160,
+        height: 36,
+        text: "အဖြူအမည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-plus-1,
+        kind: text,
+        x: 448,
+        y: 270,
+        width: 30,
+        height: 40,
+        text: "+",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: a-gold,
+        kind: rectangle,
+        x: 490,
+        y: 240,
+        width: 140,
+        height: 100,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-gold-l,
+        kind: text,
+        x: 490,
+        y: 355,
+        width: 160,
+        height: 36,
+        text: "ရွှေရောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-plus-2,
+        kind: text,
+        x: 648,
+        y: 270,
+        width: 30,
+        height: 40,
+        text: "+",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: a-blue,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 140,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: a-blue-l,
+        kind: text,
+        x: 690,
+        y: 355,
+        width: 160,
+        height: 36,
+        text: "အပြာရင့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 842,
+        y: 275,
+        width: 44,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-result,
+        kind: rectangle,
+        x: 900,
+        y: 240,
+        width: 140,
+        height: 100,
+        strokeColor: "#6741d9",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: a-result-dark,
+        kind: rectangle,
+        x: 900,
+        y: 290,
+        width: 140,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: a-result-l,
+        kind: text,
+        x: 900,
+        y: 355,
+        width: 160,
+        height: 36,
+        text: "duotone",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-dark,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 440,
+        height: 36,
+        text: "အမှောင်ပိုင်း → အပြာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-light,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 480,
+        height: 36,
+        text: "အလင်းပိုင်း → ရွှေရောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-recipe,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 700,
+        height: 36,
+        text: "filter + pseudo-element + blend mode",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board B — source over backdrop, channel arithmetic. Blue = backdrop,
+    # orange = source, red = the overlap, violet = channels, green = multiply,
+    # black = screen.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "Source နဲ့ backdrop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-backdrop-l,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 360,
+        height: 36,
+        text: "backdrop · နောက်က",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-backdrop,
+        kind: rectangle,
+        x: 300,
+        y: 265,
+        width: 280,
+        height: 150,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: b-source,
+        kind: rectangle,
+        x: 440,
+        y: 335,
+        width: 280,
+        height: 150,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: b-source-l,
+        kind: text,
+        x: 760,
+        y: 440,
+        width: 300,
+        height: 36,
+        text: "source · အပေါ်က",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-overlap,
+        kind: freedraw,
+        stroke: circle,
+        x: 420,
+        y: 320,
+        width: 190,
+        height: 115,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-overlap-l,
+        kind: text,
+        x: 760,
+        y: 360,
+        width: 300,
+        height: 36,
+        text: "← blend mode",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-rgb,
+        kind: text,
+        x: 760,
+        y: 270,
+        width: 300,
+        height: 36,
+        text: "R · G · B တစ်ခုစီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-multiply,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 36,
+        text: "multiply · 80% × 50% = 40%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-screen,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 560,
+        height: 36,
+        text: "screen · 80% , 50% → 90%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C — the eleven separable modes besides normal, in four groups. Blue = darkening,
+    # orange = lightening, green = contrast, red = inversion.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Separable mode · အုပ်စု လေးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-dark-box,
+        kind: rectangle,
+        x: 285,
+        y: 220,
+        width: 360,
+        height: 180,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-dark-h,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 240,
+        height: 36,
+        text: "ပိုမှောင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-dark-1,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 240,
+        height: 36,
+        text: "multiply",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-dark-2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 240,
+        height: 36,
+        text: "darken",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-dark-3,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 240,
+        height: 36,
+        text: "color-burn",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-box,
+        kind: rectangle,
+        x: 685,
+        y: 220,
+        width: 360,
+        height: 180,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-light-h,
+        kind: text,
+        x: 700,
+        y: 230,
+        width: 240,
+        height: 36,
+        text: "ပိုလင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-1,
+        kind: text,
+        x: 700,
+        y: 275,
+        width: 240,
+        height: 36,
+        text: "screen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-2,
+        kind: text,
+        x: 700,
+        y: 315,
+        width: 240,
+        height: 36,
+        text: "lighten",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-3,
+        kind: text,
+        x: 700,
+        y: 355,
+        width: 240,
+        height: 36,
+        text: "color-dodge",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-contrast-box,
+        kind: rectangle,
+        x: 285,
+        y: 420,
+        width: 360,
+        height: 180,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-contrast-h,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 240,
+        height: 36,
+        text: "contrast",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-contrast-1,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 240,
+        height: 36,
+        text: "overlay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-contrast-2,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 240,
+        height: 36,
+        text: "soft-light",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-contrast-3,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 240,
+        height: 36,
+        text: "hard-light",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-invert-box,
+        kind: rectangle,
+        x: 685,
+        y: 420,
+        width: 360,
+        height: 180,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-invert-h,
+        kind: text,
+        x: 700,
+        y: 430,
+        width: 240,
+        height: 36,
+        text: "ပြောင်းပြန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-invert-1,
+        kind: text,
+        x: 700,
+        y: 475,
+        width: 240,
+        height: 36,
+        text: "difference",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-invert-2,
+        kind: text,
+        x: 700,
+        y: 515,
+        width: 240,
+        height: 36,
+        text: "exclusion",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board D — the four non-separable modes: which of hue, saturation and
+    # luminosity comes from the source (orange) or the backdrop (blue).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Non-separable mode လေးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-col-hue,
+        kind: text,
+        x: 520,
+        y: 225,
+        width: 120,
+        height: 36,
+        text: "hue",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-col-sat,
+        kind: text,
+        x: 700,
+        y: 225,
+        width: 170,
+        height: 36,
+        text: "saturation",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-col-lum,
+        kind: text,
+        x: 910,
+        y: 225,
+        width: 170,
+        height: 36,
+        text: "luminosity",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-leg-s,
+        kind: rectangle,
+        x: 300,
+        y: 560,
+        width: 40,
+        height: 30,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-leg-s-l,
+        kind: text,
+        x: 355,
+        y: 556,
+        width: 200,
+        height: 36,
+        text: "source က",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-leg-b,
+        kind: rectangle,
+        x: 620,
+        y: 560,
+        width: 40,
+        height: 30,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-leg-b-l,
+        kind: text,
+        x: 675,
+        y: 556,
+        width: 240,
+        height: 36,
+        text: "backdrop က",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-row-hue,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 180,
+        height: 36,
+        text: "hue",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-hue-1,
+        kind: rectangle,
+        x: 520,
+        y: 282,
+        width: 120,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-hue-2,
+        kind: rectangle,
+        x: 710,
+        y: 282,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-hue-3,
+        kind: rectangle,
+        x: 920,
+        y: 282,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-row-sat,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 180,
+        height: 36,
+        text: "saturation",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sat-1,
+        kind: rectangle,
+        x: 520,
+        y: 342,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-sat-2,
+        kind: rectangle,
+        x: 710,
+        y: 342,
+        width: 120,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-sat-3,
+        kind: rectangle,
+        x: 920,
+        y: 342,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-row-color,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 180,
+        height: 36,
+        text: "color",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-color-1,
+        kind: rectangle,
+        x: 520,
+        y: 402,
+        width: 120,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-color-2,
+        kind: rectangle,
+        x: 710,
+        y: 402,
+        width: 120,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: d-color-3,
+        kind: rectangle,
+        x: 920,
+        y: 402,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-row-lum,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 180,
+        height: 36,
+        text: "luminosity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-lum-1,
+        kind: rectangle,
+        x: 520,
+        y: 462,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-lum-2,
+        kind: rectangle,
+        x: 710,
+        y: 462,
+        width: 120,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: d-lum-3,
+        kind: rectangle,
+        x: 920,
+        y: 462,
+        width: 120,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+
+    # Board E — the closing quiz. Blue = questions, green = answers, red =
+    # the two names that are not blend modes (struck through).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-q1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 700,
+        height: 40,
+        text: "ဘယ်ဟာတွေက blend mode လဲ",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-real,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 700,
+        height: 36,
+        text: "difference · lighten · multiply · overlay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-fake,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 280,
+        height: 36,
+        text: "brighten · dullen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-check,
+        kind: freedraw,
+        stroke: underline,
+        x: 295,
+        y: 300,
+        width: 600,
+        height: 26,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 295,
+        y: 335,
+        width: 260,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-q2,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 700,
+        height: 40,
+        text: "R · G · B တစ်ခုစီ တွက်တဲ့ mode",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-a2,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 700,
+        height: 36,
+        text: "separable mode · multiply · screen …",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4137
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: blend-intro
+    chapter: "Blend mode ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ filter နဲ့ ဓာတ်ပုံကို မီးခိုးရောင် ဖြစ်အောင်၊ ဝါးအောင်၊
+      ဓာတ်ပုံဟောင်းလို ဖြစ်အောင် ပြောင်းခဲ့ပါတယ်။ ဒီ lesson မှာတော့ element ရဲ့
+      အရောင်တွေကို သူ့ နောက်က အလွှာတွေနဲ့ ရောပေးတဲ့ blend mode ကို ကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-goal-photo]] ဒီနေ့ လုပ်မယ့် ပုံကို အရင် ကြည့်ရအောင်။ အဖြူအမည်း
+      ဓာတ်ပုံ တစ်ပုံကနေ စပါမယ်။ [[mark:draw-goal-layers]] သူ့အပေါ်မှာ ရွှေရောင် အလွှာနဲ့
+      အပြာရင့် အလွှာ ထပ်တင်ပါမယ်။ [[mark:draw-goal-result]] ရလာတာက duotone ပါ။ အရောင်
+      နှစ်ရောင်တည်းနဲ့ ပြတဲ့ ဓာတ်ပုံပါ။ [[mark:draw-goal-rule]] အမှောင်ပိုင်းတွေက အပြာ၊
+      အလင်းပိုင်းတွေက ရွှေရောင် ဖြစ်သွားပါတယ်။ [[mark:draw-goal-recipe]] ဒါကို lesson
+      အဆုံးမှာ သုံးမျိုး ပေါင်းပြီး လုပ်ပါမယ်။ ပြီးခဲ့တဲ့ lesson က filter၊ lesson 26 က
+      pseudo-element နဲ့ ဒီနေ့ သင်မယ့် blend mode ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes (duotone)"
+        url: "https://web.dev/learn/css/blend-modes"
+      - title: "MDN — mix-blend-mode"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mix-blend-mode"
+    actions:
+      - id: open-goal-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-goal-photo
+        type: whiteboard.apply
+        at: { mark: draw-goal-photo }
+        upsertIds: [a-photo, a-photo-l]
+        drawMs: 1200
+      - id: draw-goal-layers
+        type: whiteboard.apply
+        at: { mark: draw-goal-layers }
+        upsertIds: [a-plus-1, a-gold, a-gold-l, a-plus-2, a-blue, a-blue-l]
+        drawMs: 2400
+      - id: draw-goal-result
+        type: whiteboard.apply
+        at: { mark: draw-goal-result }
+        upsertIds: [a-arrow, a-result, a-result-dark, a-result-l]
+        drawMs: 1800
+      - id: draw-goal-rule
+        type: whiteboard.apply
+        at: { mark: draw-goal-rule }
+        upsertIds: [a-dark, a-light]
+        drawMs: 2000
+      - id: draw-goal-recipe
+        type: whiteboard.apply
+        at: { mark: draw-goal-recipe }
+        upsertIds: [a-recipe]
+        drawMs: 1600
+
+  - id: source-backdrop
+    narration: >
+      [[mark:open-layers]] ဒါဆို အရောင် ရောတယ် ဆိုတာ ဘာလဲ။ [[mark:draw-backdrop]] backdrop
+      ဆိုတာ element ရဲ့ နောက်မှာ ဆွဲပြီးသား အရာ အားလုံးပါ။ [[mark:draw-source]] source က
+      အပေါ်က element ကိုယ်တိုင်ပါ။ [[mark:circle-overlap]] blend mode ဆိုတာ အလွှာ နှစ်ခု
+      ထပ်နေတဲ့အခါ အပေါ်က အရောင်နဲ့ အောက်က အရောင်ကို ဘယ်လို ရောမလဲ ဆိုတာပါ။ default ဖြစ်တဲ့
+      normal mode မှာတော့ source က backdrop ကို ဖုံးလိုက်ပါတယ်။ အခုထိ မြင်ခဲ့တာ အဲဒါပါ။
+      [[mark:draw-channels]] blend mode အများစုက အနီ၊ အစိမ်း၊ အပြာ channel တစ်ခုစီကို
+      သီးသန့် တွက်ပါတယ်။ တစ်ခုစီမှာ 0 ကနေ 100 ရာခိုင်နှုန်းအထိ ပမာဏ ရှိပါတယ်။
+      [[mark:draw-multiply]] multiply mode က ပမာဏ နှစ်ခုကို မြှောက်ပါတယ်။ 80
+      ရာခိုင်နှုန်းကို တစ်ဝက်နဲ့ မြှောက်တော့ 40 ရာခိုင်နှုန်း ရပါတယ်။ 100 ထက် မကျော်တဲ့
+      ပမာဏနဲ့ မြှောက်လို့၊ ရလဒ်က ဘယ်အလွှာထက်မှ ပိုမလင်းပါဘူး။ အဖြူနဲ့ မြှောက်ရင်တော့
+      backdrop ဒီအတိုင်း ကျန်ပါတယ်။ [[mark:draw-screen]] screen mode က ပြောင်းပြန်ပါ။
+      အဖြူနဲ့ ဘယ်လောက် ကွာလဲ ဆိုတာကို မြှောက်ပါတယ်။ 80 က အဖြူနဲ့ 20 ကွာပြီး၊ 50 က 50
+      ကွာပါတယ်။ ကွာတာ နှစ်ခုကို မြှောက်တော့ 10 ပဲ ကွာလို့ 90 ရာခိုင်နှုန်း ရပါတယ်။
+      ဒါကြောင့် ပိုလင်းဖို့ပဲ ရှိပြီး၊ အမည်းနဲ့ဆိုရင် backdrop ကို မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: what is a blend mode?"
+        url: "https://web.dev/learn/css/blend-modes#what_is_a_blend_mode"
+      - title: "Compositing and Blending Level 1 — blending (source, backdrop, formulas)"
+        url: "https://drafts.fxtf.org/compositing-1/#blending"
+      - title: "MDN — <blend-mode> (normal, multiply, screen)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/blend-mode"
+    actions:
+      - id: open-layers-board
+        type: whiteboard.apply
+        at: { mark: open-layers }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-backdrop
+        type: whiteboard.apply
+        at: { mark: draw-backdrop }
+        upsertIds: [b-backdrop, b-backdrop-l]
+        drawMs: 1600
+      - id: draw-source
+        type: whiteboard.apply
+        at: { mark: draw-source }
+        upsertIds: [b-source, b-source-l]
+        drawMs: 1400
+      - id: circle-overlap
+        type: whiteboard.apply
+        at: { mark: circle-overlap }
+        upsertIds: [b-overlap, b-overlap-l]
+        drawMs: 1600
+      - id: draw-channels
+        type: whiteboard.apply
+        at: { mark: draw-channels }
+        upsertIds: [b-rgb]
+        drawMs: 1400
+      - id: draw-multiply
+        type: whiteboard.apply
+        at: { mark: draw-multiply }
+        upsertIds: [b-multiply]
+        drawMs: 1800
+      - id: draw-screen
+        type: whiteboard.apply
+        at: { mark: draw-screen }
+        upsertIds: [b-screen]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-layers]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-logo]] header ထဲက logo က SVG ပုံ တစ်ခုပါ။ ဒီ အဖြူရောင် စတုရန်းပေါ်မှာ
+      အရွက် တစ်ရွက်နဲ့ အမည်းရောင် အညှာ ရှိပါတယ်။ [[mark:select-split]] သူ့အောက်မှာ
+      ဘယ်တစ်ခြမ်း မှောင်ပြီး ညာတစ်ခြမ်း လင်းနေတဲ့ banner ရှိပြီး၊ အဖြူရောင် ခေါင်းစဉ်
+      အကြီးကြီး ပါပါတယ်။ [[mark:select-tint]] ပြီးတော့ ဓာတ်ပုံ တစ်ပုံနဲ့ သူ့ကို အတိအကျ
+      ဖုံးထားတဲ့ အလွှာ အလွတ် ရှိပါတယ်။ [[mark:select-pattern]] နောက်ခံ မရှိသေးတဲ့ banner
+      လည်း ရှိပါတယ်။ [[mark:select-iso]] အစင်းကြောင်း box ထဲမှာ အပြာဖျော့ရောင် card နဲ့၊
+      card အစွန်းက ထွက်နေတဲ့ လိမ္မော်ရောင် စက်ဝိုင်း ရှိပါတယ်။ [[mark:select-duo]]
+      နောက်ဆုံးက duotone အတွက် ဒုတိယ ဓာတ်ပုံပါ။ [[mark:open-styles]] CSS ဖိုင်က အလွတ်ပါ။
+      ပထမ ဓာတ်ပုံကိုတော့ base CSS ဖိုင်ထဲမှာ grayscale filter နဲ့ မီးခိုးရောင်
+      လုပ်ထားပြီးသားပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ header ကို ကြည့်ပါ၊
+      အရွက် နောက်က အဖြူရောင် စတုရန်းက နို့နှစ်ရောင်ပေါ်မှာ ထင်ထင်ရှားရှား ပေါ်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes"
+        url: "https://web.dev/learn/css/blend-modes"
+      - title: "MDN — filter: grayscale()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/grayscale"
+    actions:
+      - id: close-layers-board
+        type: whiteboard.apply
+        at: { mark: close-layers }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-logo
+        type: editor.select
+        at: { mark: select-logo }
+        target:
+          { file: index.html, text: '<rect width="64" height="64" fill="#fff" />', occurrence: 1 }
+      - id: select-split
+        type: editor.select
+        at: { mark: select-split }
+        target:
+          {
+            file: index.html,
+            text: '<section class="split-banner" data-testid="split-banner">',
+            occurrence: 1,
+          }
+      - id: select-tint
+        type: editor.select
+        at: { mark: select-tint }
+        target:
+          {
+            file: index.html,
+            text: '<div class="overlay" data-testid="tint-overlay"></div>',
+            occurrence: 1,
+          }
+      - id: select-pattern
+        type: editor.select
+        at: { mark: select-pattern }
+        target:
+          {
+            file: index.html,
+            text: '<section class="pattern-banner" data-testid="pattern-banner">',
+            occurrence: 1,
+          }
+      - id: select-iso
+        type: editor.select
+        at: { mark: select-iso }
+        target:
+          {
+            file: index.html,
+            text: '<span class="circle" data-testid="iso-circle"></span>',
+            occurrence: 1,
+          }
+      - id: select-duo
+        type: editor.select
+        at: { mark: select-duo }
+        target: { file: index.html, text: '<figure class="duo" data-testid="duo">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-logo
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: logo }
+        attribute: { name: class, value: logo }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-logo }
+
+  - id: multiply
+    chapter: "Logo ကို header နဲ့ ရောကြည့်ရအောင်"
+    narration: >
+      [[mark:type-multiply]] logo ကို နောက်က header နဲ့ ရောကြည့်ရအောင်။ အဖြူရောင် စတုရန်းကို လိုက်ကြည့်ပါ။ logo အတွက် rule
+      အသစ်မှာ mix blend mode ကို multiply ပေးပါမယ်။ [[mark:after-multiply]] စတုရန်း ပျောက်သွားလို့ အရွက်ကို
+      နို့နှစ်ရောင်ပေါ်မှာ တိုက်ရိုက် မြင်ရပါပြီ။ [[mark:explain-multiply]] ဒီ multiply
+      ကို ကြည့်ပါ။ အဖြူက 100 ရာခိုင်နှုန်း ဖြစ်လို့၊ နို့နှစ်ရောင်ကို အဖြူနဲ့ မြှောက်တော့
+      ဒီအတိုင်း ကျန်ပါတယ်။ အရွက်နဲ့ အမည်းရောင် အညှာကတော့ ပိုမှောင်ဖို့ပဲ ရှိပေမယ့်၊
+      မူလကတည်းက မှောင်နေလို့ သိပ် မပြောင်းပါဘူး။ [[mark:explain-mix]] mix blend mode က element တစ်ခုလုံးကို သူ့ နောက်က အရာနဲ့ ရောပါတယ်။ content၊ နောက်ခံ၊ border နဲ့ child တွေကို တစ်စုတည်း ပေါင်းပြီးမှ ရောလို့၊ ဒီ property က child တွေဆီ inherit မဖြစ်ပါဘူး။ initial value က normal ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: multiply"
+        url: "https://web.dev/learn/css/blend-modes#multiply"
+      - title: "MDN — mix-blend-mode (initial normal, not inherited)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/mix-blend-mode"
+      - title: "Compositing and Blending Level 1 — mix-blend-mode"
+        url: "https://drafts.fxtf.org/compositing-1/#mix-blend-mode"
+    actions:
+      - id: type-multiply
+        type: editor.type
+        at: { mark: type-multiply }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".logo {\n  mix-blend-mode: multiply;\n}\n"
+      - id: expect-multiply
+        type: expect.preview
+        at: { mark: after-multiply }
+        timeoutMs: 4000
+        target: { by: testId, value: logo }
+        attribute: { name: class, value: logo }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-multiply
+        type: editor.select
+        at: { mark: explain-multiply }
+        target: { file: styles.css, text: "mix-blend-mode: multiply;", occurrence: 1 }
+
+  - id: screen
+    narration: >
+      [[mark:type-screen]] အခု ပြောင်းပြန် စမ်းကြည့်ရအောင်။ အောက်မှာ screen mode ကို
+      ရေးပါမယ်။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။ [[mark:after-screen]] အဖြူရောင်
+      စတုရန်း ပြန်ပေါ်လာပါပြီ။ အဖြူထက် ပိုလင်းတာ မရှိလို့ပါ။ ဒါပေမဲ့ အမည်းရောင် အညှာ
+      ပျောက်သွားပြီး၊ အရွက်လည်း ဖျော့သွားပါတယ်။ [[mark:explain-screen]] ဒီ screen mode ကို
+      ကြည့်ပါ။ အမည်းက အလင်း ဘာမှ မထည့်လို့ ပျောက်သွားပြီး၊ ကျန်တဲ့ အရောင်တွေ အားလုံး
+      ပိုလင်းလာပါတယ်။ projector နှစ်လုံးကို နေရာ တစ်ခုတည်းပေါ် ထိုးထားသလိုပါ။
+      [[mark:type-remultiply]] နို့နှစ်ရောင် header ပေါ်က logo အတွက်တော့ multiply က
+      ပိုသင့်တော်ပါတယ်။ ဒါကြောင့် အောက်ဆုံးမှာ ပြန်ထည့်ပါမယ်။ [[mark:after-remultiply]]
+      အဖြူရောင် စတုရန်း ထပ်ပျောက်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: screen"
+        url: "https://web.dev/learn/css/blend-modes#screen"
+      - title: "MDN — <blend-mode>: screen"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/blend-mode#screen"
+    actions:
+      - id: type-screen
+        type: editor.type
+        at: { mark: type-screen }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  mix-blend-mode: multiply;\n", occurrence: 1 }
+        text: "  mix-blend-mode: screen;\n"
+      - id: expect-screen
+        type: expect.preview
+        at: { mark: after-screen }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-screen
+        type: editor.select
+        at: { mark: explain-screen }
+        target: { file: styles.css, text: "mix-blend-mode: screen;", occurrence: 1 }
+      - id: type-remultiply
+        type: editor.type
+        at: { mark: type-remultiply }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  mix-blend-mode: screen;\n", occurrence: 1 }
+        text: "  mix-blend-mode: multiply;\n"
+      - id: expect-remultiply
+        type: expect.preview
+        at: { mark: after-remultiply }
+        timeoutMs: 4000
+        target: { by: testId, value: logo }
+        attribute: { name: class, value: logo }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: separable-groups
+    chapter: "Separable mode တွေ"
+    narration: >
+      [[mark:open-groups]] multiply နဲ့ screen mode က separable mode တွေထဲက နှစ်ခုပါ။
+      separable ဆိုတာ channel တစ်ခုစီကို တွက်နည်း တစ်ခုတည်းနဲ့ သီးခြားစီ တွက်တာပါ။ normal
+      ကလွဲရင် ဒီလို mode ဆယ့်တစ်ခု ရှိပြီး၊ အုပ်စု လေးခု ခွဲလို့ ရပါတယ်။
+      [[mark:draw-darken]] ပိုမှောင်စေတဲ့ အုပ်စုမှာ multiply ပါပါတယ်။ darken က channel
+      တစ်ခုစီမှာ ပိုမှောင်တဲ့ တန်ဖိုးကို ယူပြီး၊ color burn ကတော့ backdrop ကို multiply
+      ထက် ပိုပြင်းပြင်း မှောင်စေလို့ contrast ပိုများပါတယ်။ သုံးခုလုံးမှာ source က
+      အဖြူဆိုရင် ဘာမှ မပြောင်းပါဘူး။ [[mark:draw-lighten]] ပိုလင်းစေတဲ့ အုပ်စုကတော့
+      အဲဒီရဲ့ ပြောင်းပြန်ပါ။ screen mode ပါပြီး၊ lighten က channel တစ်ခုစီမှာ ပိုလင်းတဲ့
+      တန်ဖိုးကို ယူပါတယ်။ color dodge ကတော့ backdrop ကို အရမ်း လင်းစေလို့ အလင်းပိုင်းတွေ
+      အဖြူ ဖြစ်သွားနိုင်ပါတယ်။ ဒီမှာတော့ source က အမည်းဆိုရင် ဘာမှ မပြောင်းပါဘူး။
+      [[mark:explain-per-channel]] darken နဲ့ lighten က channel တစ်ခုချင်းစီ ရွေးလို့၊
+      ရလဒ်က အလွှာ နှစ်ခုလုံးမှာ မရှိတဲ့ အရောင် ဖြစ်နိုင်ပါတယ်။ [[mark:draw-contrast]]
+      contrast အုပ်စုကတော့ multiply ရော screen mode ပါ သုံးပါတယ်။ overlay က backdrop
+      မှောင်တဲ့ နေရာမှာ multiply လုပ်ပြီး၊ လင်းတဲ့ နေရာမှာ screen mode လုပ်လို့ contrast
+      တက်ပါတယ်။ hard light ကလည်း ဒီလိုပဲ ရွေးပေမယ့်၊ backdrop အစား source ကို ကြည့်ပြီး
+      ရွေးပါတယ်။ soft light ကတော့ အဲဒီ သဘောကို ပိုပျော့အောင် လုပ်ထားလို့၊ အလင်း ပျော့ပျော့
+      ထိုးထားသလိုပါ။ [[mark:draw-invert]] နောက်ဆုံး အုပ်စုက အရောင်ကို ပြောင်းပြန်
+      လှန်နိုင်တဲ့ difference နဲ့ exclusion ပါ။ difference ကို preview ထဲမှာ
+      စမ်းကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: separable blend modes"
+        url: "https://web.dev/learn/css/blend-modes#separable_blend_modes"
+      - title: "MDN — <blend-mode> (all values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/blend-mode"
+      - title: "Compositing and Blending Level 1 — separable blend modes"
+        url: "https://drafts.fxtf.org/compositing-1/#blendingseparable"
+    actions:
+      - id: open-groups-board
+        type: whiteboard.apply
+        at: { mark: open-groups }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-darken
+        type: whiteboard.apply
+        at: { mark: draw-darken }
+        upsertIds: [c-dark-box, c-dark-h, c-dark-1, c-dark-2, c-dark-3]
+        drawMs: 2400
+      - id: draw-lighten
+        type: whiteboard.apply
+        at: { mark: draw-lighten }
+        upsertIds: [c-light-box, c-light-h, c-light-1, c-light-2, c-light-3]
+        drawMs: 2400
+      - id: draw-contrast
+        type: whiteboard.apply
+        at: { mark: draw-contrast }
+        upsertIds: [c-contrast-box, c-contrast-h, c-contrast-1, c-contrast-2, c-contrast-3]
+        drawMs: 2400
+      - id: draw-invert
+        type: whiteboard.apply
+        at: { mark: draw-invert }
+        upsertIds: [c-invert-box, c-invert-h, c-invert-1, c-invert-2]
+        drawMs: 2000
+
+  - id: difference
+    narration: >
+      [[mark:close-groups]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-difference]] banner ထဲက
+      ခေါင်းစဉ်က အဖြူရောင် ဖြစ်လို့၊ လင်းတဲ့ တစ်ခြမ်းပေါ်မှာ မမြင်သလောက် ဖြစ်နေပါတယ်။ rule
+      အသစ် တစ်ခုနဲ့ ခေါင်းစဉ်ကို difference mode ပေးပါမယ်။ [[mark:after-difference]] အခု
+      ခေါင်းစဉ်က မှောင်တဲ့ တစ်ခြမ်းပေါ်မှာ လင်းပြီး၊ လင်းတဲ့ တစ်ခြမ်းပေါ်မှာ မှောင်နေလို့
+      စာလုံးတိုင်း ဖတ်လို့ ရပါပြီ။ [[mark:explain-difference]] ဒီ difference ကို ကြည့်ပါ။
+      channel တစ်ခုစီမှာ လင်းတဲ့ တန်ဖိုးထဲက မှောင်တဲ့ တန်ဖိုးကို နှုတ်ပါတယ်။ ဒါကြောင့်
+      source က အဖြူဆိုရင် နောက်က အရောင်ကို ပြောင်းပြန် လှန်ပြီး၊ အမည်းဆိုရင် ဘာမှ
+      မပြောင်းပါဘူး။ အရောင် တူတူ နှစ်ခုဆိုရင်တော့ အမည်း ရပါတယ်။ [[mark:explain-exclusion]]
+      exclusion ကလည်း ဒီလိုပဲ အလုပ်လုပ်ပေမယ့် contrast နည်းလို့၊ ရလဒ်က ပိုမှိုင်းပြီး
+      မီးခိုးရောင် သန်းပါတယ်။ ဒီ အဖြူရောင် ခေါင်းစဉ်မှာတော့ နှစ်ခုလုံးက ရလဒ် အတိအကျ
+      တူပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: difference"
+        url: "https://web.dev/learn/css/blend-modes#difference"
+      - title: "web.dev Learn CSS — Blend modes: exclusion"
+        url: "https://web.dev/learn/css/blend-modes#exclusion"
+      - title: "Compositing and Blending Level 1 — difference and exclusion formulas"
+        url: "https://drafts.fxtf.org/compositing-1/#blenddifference"
+    actions:
+      - id: close-groups-board
+        type: whiteboard.apply
+        at: { mark: close-groups }
+        open: false
+      - id: type-difference
+        type: editor.type
+        at: { mark: type-difference }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  mix-blend-mode: multiply;\n}\n", occurrence: 1 }
+        text: "\n.split-banner h2 {\n  mix-blend-mode: difference;\n}\n"
+      - id: expect-difference
+        type: expect.preview
+        at: { mark: after-difference }
+        timeoutMs: 4000
+        target: { by: testId, value: split-heading }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-difference
+        type: editor.select
+        at: { mark: explain-difference }
+        target: { file: styles.css, text: "mix-blend-mode: difference;", occurrence: 1 }
+
+  - id: color-tint
+    chapter: "Non-separable mode တွေ"
+    narration: >
+      [[mark:type-teal]] အခု မီးခိုးရောင် ဓာတ်ပုံဆီ သွားရအောင်။ ဓာတ်ပုံကို လိုက်ကြည့်ပါ။ ပထမဆုံး သူ့အပေါ်က အလွှာ အလွတ်ကို အစိမ်းပြာရောင် နောက်ခံ ပေးပါမယ်။
+      [[mark:after-teal]] normal mode ဖြစ်လို့ အစိမ်းပြာရောင်က ဓာတ်ပုံ တစ်ပုံလုံးကို
+      ဖုံးထားပါတယ်။ [[mark:type-color]] အခု အောက်မှာ အလွှာကို color ဆိုတဲ့ blend mode
+      ပေးကြည့်ပါမယ်။ [[mark:after-color]] ဓာတ်ပုံ ပြန်ပေါ်လာပြီး အစိမ်းပြာရောင်
+      သန်းသွားပါပြီ။ အလင်းနဲ့ အမှောင်တွေလည်း မပျောက်ပါဘူး။ [[mark:explain-color]] ဒီ color
+      mode ကို ကြည့်ပါ။ သူက hue နဲ့ saturation ကို အစိမ်းပြာရောင် အလွှာကနေ ယူပြီး၊
+      အလင်းအမှောင်ကိုတော့ နောက်က ဓာတ်ပုံကနေ ယူပါတယ်။ ဒါကြောင့် ပြတင်းပေါက်နဲ့ ခွက်တွေက
+      လင်းနေဆဲ ဖြစ်ပြီး၊ ကြမ်းပြင်က မှောင်နေဆဲပါ။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: color"
+        url: "https://web.dev/learn/css/blend-modes#color"
+      - title: "MDN — <blend-mode>: color"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/blend-mode#color"
+    actions:
+      - id: type-teal
+        type: editor.type
+        at: { mark: type-teal }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  mix-blend-mode: difference;\n}\n", occurrence: 1 }
+        text: "\n.tint .overlay {\n  background: teal;\n}\n"
+      - id: expect-teal
+        type: expect.preview
+        at: { mark: after-teal }
+        timeoutMs: 4000
+        target: { by: testId, value: tint-overlay }
+        attribute: { name: class, value: overlay }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-color
+        type: editor.type
+        at: { mark: type-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: teal;\n", occurrence: 1 }
+        text: "  mix-blend-mode: color;\n"
+      - id: expect-color
+        type: expect.preview
+        at: { mark: after-color }
+        timeoutMs: 4000
+        target: { by: testId, value: tint-photo }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-color
+        type: editor.select
+        at: { mark: explain-color }
+        target: { file: styles.css, text: "mix-blend-mode: color;", occurrence: 1 }
+
+  - id: non-separable
+    narration: >
+      [[mark:open-hsl]] color mode က non-separable mode လေးခုထဲက တစ်ခုပါ။ non-separable
+      ဆိုတာ အနီ၊ အစိမ်း၊ အပြာ ခွဲမတွက်ဘဲ၊ အရောင်ကို hue၊ saturation နဲ့ ဘယ်လောက် လင်းလဲ
+      ဆိုတဲ့ luminosity ဆိုပြီး ခွဲကြည့်တာပါ။ lesson 9 မှာ တွေ့ခဲ့တဲ့ HSL နဲ့ ဆင်ပါတယ်။
+      [[mark:draw-legend]] ဇယားထဲမှာ လိမ္မော်ရောင် အကွက်က source ကနေ ယူတဲ့ တန်ဖိုး၊
+      အပြာရောင် အကွက်က backdrop ကနေ ယူတဲ့ တန်ဖိုးပါ။ [[mark:draw-hue]] hue mode က source
+      ရဲ့ hue ကိုပဲ ယူပါတယ်။ [[mark:draw-saturation]] saturation mode က source ရဲ့
+      saturation ကိုပဲ ယူလို့၊ မီးခိုးရောင် source က backdrop ကို အရောင် ပျောက်စေပါတယ်။
+      [[mark:draw-color]] color mode က hue နဲ့ saturation နှစ်ခုလုံးကို ယူပါတယ်။ ခုနက
+      စမ်းခဲ့တာ ဒါပါ။ [[mark:draw-luminosity]] luminosity mode ကတော့ color ရဲ့
+      ပြောင်းပြန်ပါ။ source ရဲ့ luminosity ကို ယူပြီး၊ backdrop ရဲ့ hue နဲ့ saturation ကို
+      ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: non-separable blend modes"
+        url: "https://web.dev/learn/css/blend-modes#non-separable_blend_modes"
+      - title: "Compositing and Blending Level 1 — non-separable blend modes"
+        url: "https://drafts.fxtf.org/compositing-1/#blendingnonseparable"
+      - title: "MDN — <blend-mode>: hue, saturation, color, luminosity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/blend-mode"
+    actions:
+      - id: open-hsl-board
+        type: whiteboard.apply
+        at: { mark: open-hsl }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-col-hue, d-col-sat, d-col-lum]
+      - id: draw-legend
+        type: whiteboard.apply
+        at: { mark: draw-legend }
+        upsertIds: [d-leg-s, d-leg-s-l, d-leg-b, d-leg-b-l]
+        drawMs: 1600
+      - id: draw-hue
+        type: whiteboard.apply
+        at: { mark: draw-hue }
+        upsertIds: [d-row-hue, d-hue-1, d-hue-2, d-hue-3]
+        drawMs: 1200
+      - id: draw-saturation
+        type: whiteboard.apply
+        at: { mark: draw-saturation }
+        upsertIds: [d-row-sat, d-sat-1, d-sat-2, d-sat-3]
+        drawMs: 1200
+      - id: draw-color
+        type: whiteboard.apply
+        at: { mark: draw-color }
+        upsertIds: [d-row-color, d-color-1, d-color-2, d-color-3]
+        drawMs: 1200
+      - id: draw-luminosity
+        type: whiteboard.apply
+        at: { mark: draw-luminosity }
+        upsertIds: [d-row-lum, d-lum-1, d-lum-2, d-lum-3]
+        drawMs: 1200
+
+  - id: background-blend
+    chapter: "Background blend mode"
+    narration: >
+      [[mark:close-hsl]] editor ထဲ ပြန်သွားရအောင်။ [[mark:scroll-end]] နောက်ခံ မရှိတဲ့
+      banner ဆီ ဆင်းသွားရအောင်။ [[mark:type-pattern]] rule အသစ်နဲ့ သူ့ကို lesson 33 လို
+      နောက်ခံ အလွှာတွေ ပေးပါမယ်။ အောက်ဆုံးမှာ အညိုဖျော့ရောင်၊ သူ့အပေါ်မှာ images CSS
+      ဖိုင်ထဲက လက်ဖက်ရွက် ပုံ၊ အပေါ်ဆုံးမှာ အစိမ်းပြာကနေ လိမ္မော်ရောင် ကူးတဲ့ gradient ပါ။
+      [[mark:after-pattern]] အပေါ်ဆုံး အလွှာက ကျန်တာတွေကို ဖုံးထားလို့ gradient ကိုပဲ
+      မြင်ရပါတယ်။ [[mark:type-bg-multiply]] အခု သူ့အောက်မှာ background blend mode ကို
+      multiply နဲ့ ထည့်ကြည့်ရအောင်။ [[mark:after-bg-multiply]] gradient က
+      ပိုမှောင်သွားပြီး၊ လက်ဖက်ရွက်တွေ ဖောက်ပေါ်လာပါပြီ။ အဖြူရောင် စာသားကတော့
+      မပြောင်းပါဘူး။ [[mark:explain-bg]] ဒီ background blend mode ကို ကြည့်ပါ။ သူက element
+      ကိုယ်တိုင်ရဲ့ နောက်ခံ အလွှာတွေကို အချင်းချင်း ရောပေးတာပါ။ နောက်ခံ အရောင်လည်း
+      ပါပါတယ်။ element ရဲ့ နောက်က ဘာနဲ့မှ မရောပါဘူး။ အဲဒါက mix blend mode ရဲ့ အလုပ်ပါ။
+      [[mark:explain-bg-list]] အလွှာ အများကြီး ရှိရင်၊ comma ခြားထားတဲ့ စာရင်းနဲ့ အလွှာ
+      တစ်ခုစီကို mode ကိုယ်စီ ပေးလို့ ရပါတယ်။ [[mark:type-bg-screen]] အခု အောက်မှာ screen
+      mode ကို ထပ်ထည့်ပါမယ်။ banner ကို ဆက်ပြီး လိုက်ကြည့်ပါ။ [[mark:after-bg-screen]]
+      အကုန် ဖျော့သွားလို့ အဖြူရောင် စာသားကို ဖတ်ရ ခက်သွားပါပြီ။ [[mark:type-bg-overlay]]
+      နောက်ဆုံးအနေနဲ့ contrast အုပ်စုထဲက overlay mode ကို အောက်မှာ ထည့်ကြည့်ပါမယ်။
+      [[mark:after-bg-overlay]] overlay က အောက်က အလွှာတွေရဲ့ အလင်းနဲ့ အမှောင်ကို
+      ထိန်းထားပါတယ်။ အညိုဖျော့ရောင်က လင်းနေလို့ gradient တစ်ခုလုံး လင်းလာပြီး၊ လက်ဖက်ရွက်တွေက နောက်ခံထက် နည်းနည်းပဲ မှောင်လို့ ဖျော့ဖျော့ ပေါ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: browser compatibility (background-blend-mode)"
+        url: "https://web.dev/learn/css/blend-modes#browser_compatibility"
+      - title: "web.dev Learn CSS — Backgrounds"
+        url: "https://web.dev/learn/css/backgrounds"
+      - title: "MDN — background-blend-mode (own layers only; one value per layer)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-blend-mode"
+      - title: "MDN — Using multiple backgrounds"
+        url: "https://developer.mozilla.org/docs/Web/CSS/CSS_backgrounds_and_borders/Using_multiple_backgrounds"
+    actions:
+      - id: close-hsl-board
+        type: whiteboard.apply
+        at: { mark: close-hsl }
+        open: false
+      - id: scroll-end
+        type: preview.scroll
+        at: { mark: scroll-end }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: every revealed line has balanced parentheses.
+      - id: type-pattern
+        type: editor.type
+        at: { mark: type-pattern }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  mix-blend-mode: color;\n}\n", occurrence: 1 }
+        text: "\n.pattern-banner {\n  background-color: tan;\n  background-image: linear-gradient(teal, orange), var(--leaf-tile);\n}\n"
+      - id: expect-pattern
+        type: expect.preview
+        at: { mark: after-pattern }
+        timeoutMs: 4000
+        target: { by: testId, value: pattern-banner }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bg-multiply
+        type: editor.type
+        at: { mark: type-bg-multiply }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "var(--leaf-tile);\n", occurrence: 1 }
+        text: "  background-blend-mode: multiply;\n"
+      - id: expect-bg-multiply
+        type: expect.preview
+        at: { mark: after-bg-multiply }
+        timeoutMs: 4000
+        target: { by: testId, value: pattern-banner }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-bg
+        type: editor.select
+        at: { mark: explain-bg }
+        target: { file: styles.css, text: "background-blend-mode: multiply;", occurrence: 1 }
+      - id: type-bg-screen
+        type: editor.type
+        at: { mark: type-bg-screen }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-blend-mode: multiply;\n", occurrence: 1 }
+        text: "  background-blend-mode: screen;\n"
+      - id: type-bg-overlay
+        type: editor.type
+        at: { mark: type-bg-overlay }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-blend-mode: screen;\n", occurrence: 1 }
+        text: "  background-blend-mode: overlay;\n"
+      - id: expect-bg-overlay
+        type: expect.preview
+        at: { mark: after-bg-overlay }
+        timeoutMs: 4000
+        target: { by: testId, value: pattern-banner }
+        textContains: "ယနေ့အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: isolation
+    chapter: "Isolation"
+    narration: >
+      [[mark:type-circle]] banner အောက်မှာ အစင်းကြောင်း box ရှိပါတယ်။ လိမ္မော်ရောင်
+      စက်ဝိုင်းရဲ့ mix blend mode ကို multiply ပေးပါမယ်။ သူ့ ညာဘက် တစ်ခြမ်းကို
+      လိုက်ကြည့်ပါ။ [[mark:after-circle]] card ပေါ်မှာတော့ စက်ဝိုင်းက အပြာနဲ့ ရောပြီး
+      သံလွင်ရောင် ဖြစ်သွားပါတယ်။ card အပြင်ကို ထွက်နေတဲ့ တစ်ခြမ်းကတော့ အစင်းကြောင်းတွေနဲ့
+      ရောလို့၊ သူ့ထဲမှာ အစင်းတွေကို ဖောက်မြင်ရပါတယ်။ [[mark:type-isolate]] စက်ဝိုင်းကို
+      အစင်းတွေနဲ့ မရောစေဘဲ၊ သူ့ card နဲ့ပဲ ရောစေချင်ရင် ဘယ်လို လုပ်မလဲ။ card အတွက် rule
+      အသစ်မှာ isolation property ကို ထည့်ပါမယ်။ [[mark:after-isolate]] စက်ဝိုင်းထဲက
+      အစင်းတွေ ပျောက်သွားပါပြီ။ card ပေါ်က တစ်ခြမ်းက ရောနေဆဲ ဖြစ်ပေမယ့်၊ အပြင်ဘက်
+      တစ်ခြမ်းကတော့ လိမ္မော်ရောင် သက်သက် ပြန်ဖြစ်သွားပါတယ်။ [[mark:explain-isolate]] ဒီ
+      isolation ကို ကြည့်ပါ။ သူက card ကို stacking context အသစ် ဖြစ်စေလို့၊ blend mode က card အပြင်ကို မရောက်ပါဘူး။ lesson 23 က ပုံနဲ့ ပြောရရင်၊ card က ကိုယ်ပိုင် folder
+      ဖြစ်သွားတာပါ။ blend mode က folder တစ်ခုတည်းထဲက အရာတွေနဲ့ပဲ ရောလို့၊ စက်ဝိုင်းက
+      အစင်းတွေကို မမြင်တော့ပါဘူး။ [[mark:explain-not-off]] isolation က ရောတာကို ပိတ်တာ
+      မဟုတ်ပါဘူး။ card ထဲမှာပဲ ရောအောင် ထိန်းထားတာပါ။ [[mark:explain-contexts]] stacking
+      context ဖြစ်စေတဲ့ ဘယ်အရာမဆို ဒီလိုပဲ လုပ်ပါတယ်။ opacity 1 ထက် နည်းတာ၊ transform
+      ဒါမှမဟုတ် filter ပါတာ၊ position ပေးထားတဲ့ box မှာ z-index ပါတာ၊ normal မဟုတ်တဲ့
+      blend mode ကိုယ်တိုင် စတာတွေပါ။ ဒါကြောင့် blend mode က page နဲ့ မရောဘူး ဆိုရင်၊
+      parent တွေမှာ ဒီထဲက တစ်ခုခု ရှိနေလား စစ်ကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: the isolation property"
+        url: "https://web.dev/learn/css/blend-modes#the_isolation_property"
+      - title: "MDN — isolation"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/isolation"
+      - title: "web.dev Learn CSS — Z-index and stacking contexts"
+        url: "https://web.dev/learn/css/z-index"
+      - title: "MDN — Stacking context (what creates one)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_positioned_layout/Stacking_context"
+    actions:
+      - id: type-circle
+        type: editor.type
+        at: { mark: type-circle }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-blend-mode: overlay;\n}\n", occurrence: 1 }
+        text: "\n.iso .circle {\n  mix-blend-mode: multiply;\n}\n"
+      - id: expect-circle
+        type: expect.preview
+        at: { mark: after-circle }
+        timeoutMs: 4000
+        target: { by: testId, value: iso-circle }
+        attribute: { name: class, value: circle }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-isolate
+        type: editor.type
+        at: { mark: type-isolate }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "\n.iso .circle {\n  mix-blend-mode: multiply;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.iso .card {\n  isolation: isolate;\n}\n"
+      - id: expect-isolate
+        type: expect.preview
+        at: { mark: after-isolate }
+        timeoutMs: 4000
+        target: { by: testId, value: iso-card }
+        attribute: { name: class, value: card }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-isolate
+        type: editor.select
+        at: { mark: explain-isolate }
+        target: { file: styles.css, text: "isolation: isolate;", occurrence: 1 }
+
+  - id: duotone
+    chapter: "Duotone ပုံ လုပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:type-duo-base]] နောက်ဆုံးအနေနဲ့ lesson အစက duotone ကို လုပ်ကြည့်ရအောင်။ rule
+      သုံးခုကို တစ်ကြောင်းချင်း ထည့်ပါမယ်။ ပြီးခဲ့တဲ့ lesson က grayscale filter ကို
+      ဓာတ်ပုံမှာ ပေးပြီး၊ အလွှာတွေ သူ့ပေါ် တင်နိုင်အောင် figure ကို position ပေးပါမယ်။
+      before နဲ့ after pseudo-element တွေမှာ content ကို အလွတ် ပေးပြီး၊ figure ကို
+      အစွန်းအထိ ဖုံးအောင် လုပ်ပါမယ်။ lesson 26 အတိုင်း content မပေးရင် box မရှိလို့ပါ။
+      [[mark:after-duo-base]] ဓာတ်ပုံ မီးခိုးရောင် ဖြစ်သွားပါပြီ။ အလွှာ နှစ်ခုက နောက်ခံ
+      မရှိသေးလို့ မမြင်ရပါဘူး။ [[mark:explain-z]] ဒီ z-index ကို ကြည့်ပါ။ filter က
+      ဓာတ်ပုံကို stacking context ဖြစ်စေပါတယ်။ lesson 23 မှာ တွေ့ခဲ့သလို၊ stacking context
+      တွေကို position ပေးထားတဲ့ box တွေနဲ့ အတူ HTML အစဉ်အတိုင်း ဆွဲပါတယ်။ before အလွှာက
+      အစဉ်မှာ ဓာတ်ပုံထက် အရင် ရောက်လို့၊ ဒီအတိုင်းဆိုရင် ဓာတ်ပုံက သူ့ကို ဖုံးသွားမှာပါ။
+      z-index 1 ပေးထားလို့ အလွှာ နှစ်ခုလုံး ဓာတ်ပုံရဲ့ အပေါ်မှာ ရှိနေတာပါ။
+      [[mark:type-duo-gold]] အခု အောက်က အလွှာ ဖြစ်တဲ့ before ကို ရွှေရောင် နောက်ခံနဲ့
+      multiply ပေးပါမယ်။ [[mark:after-duo-gold]] အလင်းပိုင်းတွေ ရွှေရောင် ဖြစ်သွားပြီး၊
+      အမှောင်ပိုင်းတွေက မှောင်နေဆဲပါ။ [[mark:type-duo-blue]] ပြီးတော့ အပေါ်က after
+      အလွှာကို အပြာရင့် နောက်ခံနဲ့ screen mode ပေးပါမယ်။ [[mark:after-duo-blue]] အခု
+      အမှောင်ပိုင်းတွေ အပြာ ဖြစ်ပြီး၊ အလင်းပိုင်းတွေက ရွှေရောင် ဖျော့ဖျော့ ဖြစ်သွားပါပြီ။
+      အလွှာ အစဉ်က အရေးကြီးပါတယ်။ multiply ကို နောက်ဆုံးမှ ထားရင်၊ အပြာ ဖြစ်နေတဲ့
+      အမှောင်ပိုင်းတွေ ပြန်မည်းသွားပါလိမ့်မယ်။ ဒါက filter တစ်ခု၊ pseudo-element နှစ်ခု၊
+      blend mode နှစ်ခုနဲ့ လုပ်ထားတဲ့ duotone ဖြစ်ပြီး၊ HTML မှာတော့ ပုံ တစ်ပုံပဲ
+      ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes (duotone with pseudo-elements)"
+        url: "https://web.dev/learn/css/blend-modes"
+      - title: "web.dev Learn CSS — Filters"
+        url: "https://web.dev/learn/css/filters"
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+      - title: "MDN — Stacking context (filter creates one; painting order)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_positioned_layout/Stacking_context"
+    actions:
+      - id: type-duo-base
+        type: editor.type
+        at: { mark: type-duo-base }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  isolation: isolate;\n}\n", occurrence: 1 }
+        text: "\n.duo img {\n  filter: grayscale(1);\n}\n\n.duo {\n  position: relative;\n}\n\n.duo::before,\n.duo::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n}\n"
+      - id: expect-duo-base
+        type: expect.preview
+        at: { mark: after-duo-base }
+        timeoutMs: 4000
+        target: { by: testId, value: duo-photo }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-z
+        type: editor.select
+        at: { mark: explain-z }
+        target: { file: styles.css, text: "z-index: 1;", occurrence: 1 }
+      - id: type-duo-gold
+        type: editor.type
+        at: { mark: type-duo-gold }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.duo::before {\n  background: gold;\n  mix-blend-mode: multiply;\n}\n"
+      - id: expect-duo-gold
+        type: expect.preview
+        at: { mark: after-duo-gold }
+        timeoutMs: 4000
+        target: { by: testId, value: duo }
+        attribute: { name: class, value: duo }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-duo-blue
+        type: editor.type
+        at: { mark: type-duo-blue }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  background: gold;\n  mix-blend-mode: multiply;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.duo::after {\n  background: navy;\n  mix-blend-mode: screen;\n}\n"
+      - id: expect-duo-blue
+        type: expect.preview
+        at: { mark: after-duo-blue }
+        timeoutMs: 4000
+        target: { by: testId, value: duo-photo }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း နှစ်ခု မေးကြည့်ရအောင်။ ဒီထဲက ဘယ်ဟာတွေက blend
+      mode လဲ။ [[mark:quiz-1]] difference၊ lighten၊ multiply နဲ့ overlay က blend mode
+      တွေပါ။ brighten နဲ့ dullen ဆိုတဲ့ mode မရှိပါဘူး။ [[mark:ask-quiz-2]] channel
+      တစ်ခုစီကို သီးခြားစီ တွက်တဲ့ mode တွေကို ဘယ်လို ခေါ်လဲ။ [[mark:quiz-2]] multiply၊
+      screen mode လို separable mode တွေပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ blend mode
+      က source ကို backdrop နဲ့ ဘယ်လို ရောမလဲ ဆိုတာ ဆုံးဖြတ်ပါတယ်။ mix blend mode က
+      element တစ်ခုလုံးကို သူ့ နောက်က အရာနဲ့ ရောပြီး၊ background blend mode ကတော့ element
+      ကိုယ်ပိုင် နောက်ခံ အလွှာတွေကိုပဲ ရောပါတယ်။ isolation က ရောတာကို stacking context
+      တစ်ခုထဲမှာပဲ ထိန်းထားပါတယ်။ ဒီ property တွေကို browser အဓိက အားလုံးမှာ သုံးလို့ ရတာ
+      နှစ်တွေ ကြာနေပါပြီ။ [[mark:next-lesson]] ဒါနဲ့ course ရဲ့ အလှဆင်တဲ့ အပိုင်း
+      ပြီးပါပြီ။ နောက် lesson မှာတော့ page ပေါ်က အရာတွေ လှုပ်ရှားလာအောင် လုပ်ပါမယ်။
+      တန်ဖိုး တစ်ခု ပြောင်းတဲ့အခါ ချက်ချင်း မခုန်ဘဲ ဖြည်းဖြည်း ပြောင်းစေတဲ့ transition ကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Blend modes: check your understanding"
+        url: "https://web.dev/learn/css/blend-modes#check_your_understanding"
+      - title: "webstatus.dev — mix-blend-mode (Baseline widely available)"
+        url: "https://webstatus.dev/features/mix-blend-mode"
+      - title: "MDN — background-blend-mode (browser compatibility)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-blend-mode#browser_compatibility"
+      - title: "web.dev Learn CSS — Transitions (next lesson)"
+        url: "https://web.dev/learn/css/transitions"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-q1, e-real, e-fake]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [e-check, e-strike]
+        drawMs: 1600
+      - id: draw-ask-quiz-2
+        type: whiteboard.apply
+        at: { mark: ask-quiz-2 }
+        upsertIds: [e-q2]
+        drawMs: 1400
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [e-a2]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".logo {\n  mix-blend-mode: multiply;\n  mix-blend-mode: screen;\n  mix-blend-mode: multiply;\n}\n\n.split-banner h2 {\n  mix-blend-mode: difference;\n}\n\n.tint .overlay {\n  background: teal;\n  mix-blend-mode: color;\n}\n\n.pattern-banner {\n  background-color: tan;\n  background-image: linear-gradient(teal, orange), var(--leaf-tile);\n  background-blend-mode: multiply;\n  background-blend-mode: screen;\n  background-blend-mode: overlay;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".iso .circle {\n  mix-blend-mode: multiply;\n}\n\n.iso .card {\n  isolation: isolate;\n}\n\n.duo img {\n  filter: grayscale(1);\n}\n\n.duo {\n  position: relative;\n}\n\n.duo::before,\n.duo::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n}\n\n.duo::before {\n  background: gold;\n  mix-blend-mode: multiply;\n}\n\n.duo::after {\n  background: navy;\n  mix-blend-mode: screen;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
