@@ -1,0 +1,2070 @@
+# CSS course (Burmese), lesson 21 of 43: logical properties.
+#
+# Narration is Burmese (written from the English draft span by span, then
+# edited; voice-script.md next to this file is the same text with marks).
+# Every [[mark:…]] sits where its action begins, at a sentence end or after
+# ၊; each span carries one piece of meaning. Everything the learner sees
+# (title, chapters, whiteboard labels, UI strings) is Burmese.
+#
+# Shape: board A (recall lessons 20 / 15; physical vs logical names of one
+# box's sides; inline and block directions) → board B (the axes in
+# Burmese/English, Arabic and vertical Japanese) → code tour (side label, the
+# mini card, the same card inside dir="rtl"; lang does not set direction) →
+# the icon gap: margin-right is right in LTR and wrong in RTL, fixed with
+# margin-inline-end → board C (physical → logical mapping) → about box
+# max-inline-size + margin-inline auto → prices text-align end → card
+# padding-block, two-value padding-inline (start, end), margin-block-end →
+# quote border-inline-start + padding-inline-start → board D (corner names:
+# block word first) → border-start-end-radius, the badge with
+# inset-block-start / inset-inline-end → side label writing-mode vertical-rl,
+# text-orientation upright, inline-size (now the height), text-align end (now
+# the bottom) → board E (vi / vb, physical still right for a shadow) → quiz
+# and recap, hand-off to spacing (lesson 22).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload
+# (RTL comes from a pinned dir attribute, so no HTML edit). New rules are
+# appended at the END of styles.css; later declarations are inserted inside
+# an existing rule. Keystroke-typed values have no misleading valid prefix
+# ("8", "8p", "32c", "au", "e", "vertical-r", "upri" are all invalid until
+# complete). Two lines are line-by-line because they DO have a valid prefix:
+# "padding-inline: 16px" (before " 48px") and "border-inline-start: 6px
+# solid" (before " seagreen" — a brown bar would flash, then vanish).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): see DESIGN.md.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-21-logical-properties
+  title: "CSS course 21: Logical property တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 21
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit hero with the lesson's side-label block beside its
+      # text, the lesson's rtl-pair block (the same mini card twice, the
+      # second inside dir="rtl"; prices wrapped in <bdi> so "1,500 ကျပ်" keeps
+      # its order inside the right-to-left box), and the kit about block. No
+      # kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero, with the lesson's side-label block beside its text -->
+              <section class="hero" data-testid="hero">
+                <span class="side-label" lang="en" data-testid="side-label">MENU</span>
+                <div class="hero-text">
+                  <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                  <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                </div>
+              </section>
+
+              <!-- lesson block: rtl-pair (the same mini card twice; the second one inside dir="rtl") -->
+              <section class="specials" id="specials">
+                <h2>ယနေ့အထူး</h2>
+                <article class="mini" data-testid="mini-ltr">
+                  <span class="badge" data-testid="badge-ltr">အသစ်</span>
+                  <h3 class="name">လက်ဖက်ရည်</h3>
+                  <p class="price" data-testid="price-ltr"><bdi>1,500 ကျပ်</bdi></p>
+                  <p class="quote">မနက်တိုင်း အသစ်ဖျော်ပါတယ်</p>
+                  <button class="order-btn" type="button" data-testid="order-ltr"><img class="icon" src="/cup.svg" width="20" height="20" alt="" />မှာမယ်</button>
+                </article>
+                <div dir="rtl" data-testid="rtl-box">
+                  <article class="mini" data-testid="mini-rtl">
+                    <span class="badge" data-testid="badge-rtl">အသစ်</span>
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="price" data-testid="price-rtl"><bdi>1,500 ကျပ်</bdi></p>
+                    <p class="quote">မနက်တိုင်း အသစ်ဖျော်ပါတယ်</p>
+                    <button class="order-btn" type="button" data-testid="order-rtl"><img class="icon" src="/cup.svg" width="20" height="20" alt="" />မှာမယ်</button>
+                  </article>
+                </div>
+              </section>
+
+              <!-- kit block: about -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E lays the hero out
+      # beside the side label and styles the mini cards (position: relative
+      # per the start state; no padding, no radius) and the about box. No
+      # logical property, writing-mode or text-align anywhere in it.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 21 keeps A, B, B2 and C; section E lays the hero out beside its side
+          label and gives the mini cards and the about box their look. Every logical
+          property, writing-mode and text-align declaration is typed.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 21: the side label sits beside the hero's text. */
+        .hero {
+          display: flex;
+          gap: 16px;
+          align-items: flex-start;
+        }
+
+        .side-label {
+          padding: 4px 8px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-weight: 700;
+          letter-spacing: 2px;
+          line-height: 1.5;
+        }
+
+        /* The mini card is the badge's containing block (curriculum start state).
+           No padding, no radius: the lesson types them. */
+        .mini {
+          position: relative;
+          background: #fff;
+          border: 1px solid var(--line);
+        }
+
+        .mini p {
+          margin: 0;
+        }
+
+        .mini .quote {
+          background: var(--cream);
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        /* A light button, so the brown cup icon shows on it. */
+        .mini .order-btn {
+          display: inline-flex;
+          align-items: center;
+          margin: 8px 0;
+          border: 1px solid var(--line);
+          background: var(--paper);
+          color: var(--ink);
+        }
+
+        .about {
+          padding: 12px 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .about .story {
+          margin: 0;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — one box, two sets of names. Orange = physical (outside the
+    # box), blue = block names and arrow, green = inline names and arrow.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 480,
+        height: 46,
+        text: "ဘက်တွေရဲ့ နာမည် နှစ်မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-box,
+        kind: rectangle,
+        x: 380,
+        y: 250,
+        width: 560,
+        height: 180,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-top,
+        kind: text,
+        x: 635,
+        y: 205,
+        width: 60,
+        height: 36,
+        text: "top",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-bottom,
+        kind: text,
+        x: 615,
+        y: 440,
+        width: 100,
+        height: 36,
+        text: "bottom",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-left,
+        kind: text,
+        x: 280,
+        y: 322,
+        width: 64,
+        height: 36,
+        text: "left",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-right,
+        kind: text,
+        x: 975,
+        y: 322,
+        width: 84,
+        height: 36,
+        text: "right",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-phys-note,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 560,
+        height: 36,
+        text: "physical · screen အတိုင်း၊ မပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-bstart,
+        kind: text,
+        x: 570,
+        y: 258,
+        width: 190,
+        height: 36,
+        text: "block-start",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-bend,
+        kind: text,
+        x: 585,
+        y: 386,
+        width: 160,
+        height: 36,
+        text: "block-end",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-istart,
+        kind: text,
+        x: 395,
+        y: 322,
+        width: 200,
+        height: 36,
+        text: "inline-start",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-iend,
+        kind: text,
+        x: 755,
+        y: 322,
+        width: 170,
+        height: 36,
+        text: "inline-end",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-iarrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 326,
+        width: 100,
+        height: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-inline-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 600,
+        height: 36,
+        text: "inline · စာလုံးတွေ စီသွားတဲ့ ဘက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-barrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 661,
+        y: 296,
+        width: 28,
+        height: 86,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-block-note,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 640,
+        height: 36,
+        text: "block · စာကြောင်းတွေ ဆင့်သွားတဲ့ ဘက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board B — the two axes in three writing systems. Violet = a writing
+    # system's frame, white bars = lines of text, green = inline, blue =
+    # block, orange = what sets it in HTML/CSS, red = the rule.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 420,
+        height: 46,
+        text: "ဘာသာစကား သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-t1,
+        kind: text,
+        x: 260,
+        y: 205,
+        width: 240,
+        height: 36,
+        text: "မြန်မာ · English",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: b-f1, kind: rectangle, x: 260, y: 250, width: 230, height: 220, strokeColor: "#6741d9" }
+    - { id: b-l1, kind: rectangle, x: 275, y: 270, width: 190, height: 16, strokeColor: "#1e1e1e" }
+    - { id: b-l2, kind: rectangle, x: 275, y: 300, width: 190, height: 16, strokeColor: "#1e1e1e" }
+    - { id: b-l3, kind: rectangle, x: 275, y: 330, width: 120, height: 16, strokeColor: "#1e1e1e" }
+    - {
+        id: b-l-in,
+        kind: text,
+        x: 275,
+        y: 380,
+        width: 130,
+        height: 36,
+        text: "inline →",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-bl,
+        kind: text,
+        x: 275,
+        y: 420,
+        width: 120,
+        height: 36,
+        text: "block ↓",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c1,
+        kind: text,
+        x: 260,
+        y: 485,
+        width: 200,
+        height: 36,
+        text: "horizontal-tb",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-t2,
+        kind: text,
+        x: 550,
+        y: 205,
+        width: 120,
+        height: 36,
+        text: "Arabic",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: b-f2, kind: rectangle, x: 550, y: 250, width: 230, height: 220, strokeColor: "#6741d9" }
+    - { id: b-r1, kind: rectangle, x: 575, y: 270, width: 190, height: 16, strokeColor: "#1e1e1e" }
+    - { id: b-r2, kind: rectangle, x: 575, y: 300, width: 190, height: 16, strokeColor: "#1e1e1e" }
+    - { id: b-r3, kind: rectangle, x: 645, y: 330, width: 120, height: 16, strokeColor: "#1e1e1e" }
+    - {
+        id: b-r-in,
+        kind: text,
+        x: 635,
+        y: 380,
+        width: 130,
+        height: 36,
+        text: "← inline",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r-bl,
+        kind: text,
+        x: 645,
+        y: 420,
+        width: 120,
+        height: 36,
+        text: "block ↓",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: text,
+        x: 550,
+        y: 485,
+        width: 130,
+        height: 36,
+        text: 'dir="rtl"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-t3,
+        kind: text,
+        x: 840,
+        y: 205,
+        width: 140,
+        height: 36,
+        text: "ဂျပန်စာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: b-f3, kind: rectangle, x: 840, y: 250, width: 230, height: 220, strokeColor: "#6741d9" }
+    - { id: b-v1, kind: rectangle, x: 1036, y: 262, width: 16, height: 105, strokeColor: "#1e1e1e" }
+    - { id: b-v2, kind: rectangle, x: 1006, y: 262, width: 16, height: 105, strokeColor: "#1e1e1e" }
+    - { id: b-v3, kind: rectangle, x: 976, y: 262, width: 16, height: 65, strokeColor: "#1e1e1e" }
+    - {
+        id: b-v-in,
+        kind: text,
+        x: 855,
+        y: 380,
+        width: 130,
+        height: 36,
+        text: "inline ↓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-v-bl,
+        kind: text,
+        x: 855,
+        y: 420,
+        width: 120,
+        height: 36,
+        text: "← block",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-c3,
+        kind: text,
+        x: 840,
+        y: 485,
+        width: 170,
+        height: 36,
+        text: "vertical-rl",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-rule,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 660,
+        height: 36,
+        text: "logical property က arrow တွေကို လိုက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — the mapping for horizontal left-to-right text. Orange =
+    # physical names, blue = their logical twins, red = the rule.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 420,
+        height: 46,
+        text: "Physical → logical",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-note,
+        kind: text,
+        x: 300,
+        y: 205,
+        width: 460,
+        height: 36,
+        text: "မြန်မာ · English စာမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-p1,
+        kind: text,
+        x: 300,
+        y: 255,
+        width: 260,
+        height: 36,
+        text: "margin-top →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 680,
+        y: 255,
+        width: 300,
+        height: 36,
+        text: "margin-block-start",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 280,
+        height: 36,
+        text: "margin-right →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 680,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "margin-inline-end",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p3,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 160,
+        height: 36,
+        text: "width →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        x: 680,
+        y: 355,
+        width: 200,
+        height: 36,
+        text: "inline-size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p4,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 160,
+        height: 36,
+        text: "height →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l4,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 200,
+        height: 36,
+        text: "block-size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p5,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 240,
+        height: 36,
+        text: "max-width →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l5,
+        kind: text,
+        x: 680,
+        y: 445,
+        width: 260,
+        height: 36,
+        text: "max-inline-size",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p6,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 140,
+        height: 36,
+        text: "left →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l6,
+        kind: text,
+        x: 680,
+        y: 500,
+        width: 300,
+        height: 36,
+        text: "inset-inline-start",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-p7,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 320,
+        height: 36,
+        text: "text-align: right →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l7,
+        kind: text,
+        x: 680,
+        y: 550,
+        width: 260,
+        height: 36,
+        text: "text-align: end",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-rule,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 520,
+        height: 36,
+        text: "rtl မှာ inline-start = ညာဘက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board D — corner names. White = the box, orange = the corner we type,
+    # blue = the block word, green = the inline word.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 420,
+        height: 46,
+        text: "ထောင့် လေးခုရဲ့ နာမည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-box,
+        kind: rectangle,
+        x: 450,
+        y: 265,
+        width: 340,
+        height: 170,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-ss,
+        kind: text,
+        x: 300,
+        y: 220,
+        width: 170,
+        height: 36,
+        text: "start-start",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-se,
+        kind: text,
+        x: 720,
+        y: 220,
+        width: 150,
+        height: 36,
+        text: "start-end",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-es,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 150,
+        height: 36,
+        text: "end-start",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-ee,
+        kind: text,
+        x: 740,
+        y: 445,
+        width: 130,
+        height: 36,
+        text: "end-end",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-se-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 705,
+        y: 206,
+        width: 180,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-code,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 400,
+        height: 36,
+        text: "border-start-end-radius",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-first,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 560,
+        height: 36,
+        text: "ပထမ = block ဘက် · start = အပေါ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-second,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 560,
+        height: 36,
+        text: "ဒုတိယ = inline ဘက် · end = ညာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board E — vi / vb and when physical is right. Green = inline, blue =
+    # block, violet = the root rule, red = the shadow (physical on purpose).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 420,
+        height: 46,
+        text: "vi · vb နဲ့ physical",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-vi,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 620,
+        height: 36,
+        text: "1vi = viewport ရဲ့ inline ဘက် 1%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-vb,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 620,
+        height: 36,
+        text: "1vb = viewport ရဲ့ block ဘက် 1%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-same,
+        kind: text,
+        x: 300,
+        y: 325,
+        width: 520,
+        height: 36,
+        text: "ဒီ page မှာ vi = vw · vb = vh",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-root,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 640,
+        height: 36,
+        text: "root element ရဲ့ writing mode ကို လိုက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-shadow,
+        kind: rectangle,
+        x: 314,
+        y: 466,
+        width: 190,
+        height: 96,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: e-card,
+        kind: rectangle,
+        x: 300,
+        y: 452,
+        width: 190,
+        height: 96,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: e-shadow-l,
+        kind: text,
+        x: 560,
+        y: 465,
+        width: 480,
+        height: 36,
+        text: "အရိပ် အောက်ကို ကျ → physical",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-ok,
+        kind: text,
+        x: 560,
+        y: 515,
+        width: 480,
+        height: 36,
+        text: "physical လည်း သုံးလို့ ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 420,
+        height: 40,
+        text: 'dir="rtl" box ထဲမှာ',
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-q2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 640,
+        height: 40,
+        text: "margin-inline-start က ဘယ်ဘက်လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 160,
+        height: 46,
+        text: "ညာဘက်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: f-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 500,
+        y: 356,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 560,
+        height: 36,
+        text: "inline-start = စာ စတဲ့ ဘက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4121
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Logical property ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ grid ထဲမှာ ဘယ်၊ ညာ အစား start နဲ့ end ကို သုံးခဲ့ပါတယ်။ ဒီ lesson က အဲဒီ
+      နာမည်တွေ အကြောင်းပါ။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
+      စနေပါပြီ။ [[mark:draw-box]] box တိုင်းမှာ ဘက် လေးဘက် ရှိပြီး၊ CSS က နာမည် နှစ်မျိုးနဲ့ ခေါ်ပါတယ်။
+      [[mark:draw-physical]] ပထမ နည်းက physical ပါ။ အပေါ်၊ ညာ၊ အောက်၊ ဘယ် ဆိုတဲ့ နာမည်တွေက screen ကို
+      လိုက်တာ ဖြစ်လို့၊ ဘာသာစကား ဘာပဲ ဖြစ်ဖြစ် ဘယ်ဘက်က အမြဲ ဘယ်ဘက်ပါပဲ။ [[mark:draw-logical]] ဒုတိယ နည်းက
+      logical ပါ။ စာ ရေးသွားတဲ့ ဦးတည်ရာကို ကြည့်ပြီး နာမည်ပေးတာပါ။ ဘက်တွေကို block start နဲ့ block end၊
+      inline start နဲ့ inline end လို့ ခေါ်ပါတယ်။ [[mark:draw-inline]] lesson 13 မှာ ပြောခဲ့သလို၊ inline
+      direction ဆိုတာ စာကြောင်း တစ်ကြောင်းထဲမှာ စာလုံးတွေ စီသွားတဲ့ ဘက်ပါ။ မြန်မာစာနဲ့ အင်္ဂလိပ်စာမှာ
+      ဘယ်ကနေ ညာ ဖြစ်လို့ inline start က ဘယ်ဘက်ပါ။ [[mark:draw-block]] block direction ကတော့ စာကြောင်းတွေ
+      ဆင့်သွားတဲ့ ဘက်ပါ။ မြန်မာစာမှာ အပေါ်ကနေ အောက် ဖြစ်လို့ block start က အပေါ်ဘက်ပါ။ [[mark:why]] ဒီ
+      နာမည်တွေကို သုံးတဲ့ property တွေက logical property ပါ။ screen အစား စာ ရေးတဲ့ ဦးတည်ရာကို လိုက်လို့၊
+      ဘာသာစကား တိုင်းအတွက် CSS ဖိုင် တစ်ခုတည်းနဲ့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties"
+        url: "https://web.dev/learn/css/logical-properties"
+      - title: "web.dev Learn CSS — Logical properties: terminology"
+        url: "https://web.dev/learn/css/logical-properties#terminology"
+      - title: "MDN — Basic concepts of logical properties and values"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values/Basic_concepts_of_logical_properties_and_values"
+      - title: "CSS Logical Properties and Values Level 1"
+        url: "https://drafts.csswg.org/css-logical/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-box
+        type: whiteboard.apply
+        at: { mark: draw-box }
+        upsertIds: [a-box]
+        drawMs: 1200
+      - id: draw-physical
+        type: whiteboard.apply
+        at: { mark: draw-physical }
+        upsertIds: [a-top, a-right, a-bottom, a-left, a-phys-note]
+        drawMs: 3200
+      - id: draw-logical
+        type: whiteboard.apply
+        at: { mark: draw-logical }
+        upsertIds: [a-bstart, a-bend, a-istart, a-iend]
+        drawMs: 3000
+      - id: draw-inline
+        type: whiteboard.apply
+        at: { mark: draw-inline }
+        upsertIds: [a-iarrow, a-inline-note]
+        drawMs: 2400
+      - id: draw-block
+        type: whiteboard.apply
+        at: { mark: draw-block }
+        upsertIds: [a-barrow, a-block-note]
+        drawMs: 2400
+
+  - id: three-modes
+    narration: >
+      [[mark:open-modes]] ဘာသာစကား သုံးမျိုး ယှဉ်ကြည့်ရအောင်။ [[mark:draw-ltr]] ဘယ်ဘက်ဆုံး ပုံက
+      မြန်မာစာနဲ့ အင်္ဂလိပ်စာပါ။ default ဖြစ်တဲ့ အလျားလိုက် writing mode မှာ စာလုံးတွေက ဘယ်ကနေ ညာ၊
+      စာကြောင်းတွေက အပေါ်ကနေ အောက်ကို သွားပါတယ်။ [[mark:draw-rtl]] Arabic နဲ့ Hebrew ကိုတော့ ညာကနေ ဘယ်
+      ရေးပါတယ်။ inline direction ပြောင်းပြန် ဖြစ်သွားလို့ inline start က ညာဘက်ကို ရောက်သွားပါတယ်။
+      စာကြောင်းတွေကတော့ အောက်ကို ဆင့်သွားတုန်းပါ။ [[mark:draw-vertical]] ဂျပန်စာကို ဒေါင်လိုက်
+      စာကြောင်းတွေနဲ့လည်း ရေးလို့ ရပါတယ်။ စာလုံးတွေက အပေါ်ကနေ အောက်ကို သွားပြီး၊ စာကြောင်းတွေက ညာကနေ
+      ဘယ်ကို ဆင့်လို့ ဦးတည်ရာ နှစ်ခုလုံး လှည့်သွားပါတယ်။ [[mark:draw-rule]] သုံးမျိုးလုံးမှာ ဘယ်ဘက်က
+      မပြောင်းပါဘူး။ inline start ကတော့ arrow တွေနဲ့အတူ လိုက်ပြောင်းလို့၊ အဲဒီဘက်က margin ဖြစ်ဖြစ် border
+      ဖြစ်ဖြစ် ဘာသာစကား တိုင်းမှာ မှန်တဲ့ နေရာ ရောက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: block flow and inline flow"
+        url: "https://web.dev/learn/css/logical-properties#block_flow"
+      - title: "MDN — writing-mode"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/writing-mode"
+      - title: "CSS Writing Modes Level 4 — block flow direction and inline base direction"
+        url: "https://drafts.csswg.org/css-writing-modes/#block-flow"
+    actions:
+      - id: open-modes-board
+        type: whiteboard.apply
+        at: { mark: open-modes }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-ltr
+        type: whiteboard.apply
+        at: { mark: draw-ltr }
+        upsertIds: [b-t1, b-f1, b-l1, b-l2, b-l3, b-l-in, b-l-bl, b-c1]
+        drawMs: 3200
+      - id: draw-rtl
+        type: whiteboard.apply
+        at: { mark: draw-rtl }
+        upsertIds: [b-t2, b-f2, b-r1, b-r2, b-r3, b-r-in, b-r-bl, b-c2]
+        drawMs: 3200
+      - id: draw-vertical
+        type: whiteboard.apply
+        at: { mark: draw-vertical }
+        upsertIds: [b-t3, b-f3, b-v1, b-v2, b-v3, b-v-in, b-v-bl, b-c3]
+        drawMs: 3200
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [b-rule]
+        drawMs: 1600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-modes]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-side-label]] မင်္ဂလာပါ ခေါင်းစဉ်ရဲ့ ဘေးမှာ အင်္ဂလိပ်လို MENU လို့ ရေးထားတဲ့ label လေး
+      ရှိပါတယ်။ lesson အဆုံးနားမှာ သူ့ကို ဒေါင်လိုက် ရေးကြည့်ပါမယ်။ [[mark:select-mini]] သူ့အောက်မှာ
+      ယနေ့အထူး card သေးသေးလေး တစ်ခု ရှိပါတယ်။ သူ့ထဲမှာ badge၊ နာမည်၊ ဈေးနှုန်း၊ quote တစ်ကြောင်းနဲ့
+      ခွက်ပုံ icon ပါတဲ့ မှာမယ် ခလုတ် ပါပါတယ်။ [[mark:select-rtl]] အဲဒီ card ကိုပဲ နောက်တစ်ခါ
+      ထပ်ထည့်ထားပြီး၊ lesson 15 မှာလိုပဲ ညာကနေ ဘယ် ရေးဖို့ dir attribute ပေးထားတဲ့ box ထဲမှာ ရှိပါတယ်။
+      စာသားက မြန်မာစာ ဖြစ်နေတုန်းမို့ ဖတ်လို့ ရပါတယ်။ [[mark:select-lang]] အပေါ်က lang attribute ကတော့
+      page က ဘာ ဘာသာစကားလဲ ဆိုတာကိုပဲ ပြောတာ ဖြစ်ပြီး၊ စာ ရေးတဲ့ ဦးတည်ရာကို မပြောင်းပါဘူး။ CSS မှာလည်း
+      direction ဆိုတဲ့ property ရှိပေမယ့်၊ ဦးတည်ရာက style မဟုတ်ဘဲ content ရဲ့ အစိတ်အပိုင်း ဖြစ်လို့၊ HTML
+      ရဲ့ dir attribute နဲ့ ပေးတာက ပိုမှန်ပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ CSS တစ်ကြောင်းမှ မရေးရသေးပေမယ့်၊ ဒုတိယ card ရဲ့ badge၊
+      နာမည်နဲ့ ခလုတ်က ညာဘက်မှာ ရှိနေပါတယ်။ browser က content ကို start ဘက်ကနေ စပြီး စီလို့ပါ။
+    sources:
+      - title: "MDN — dir global attribute"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/dir"
+      - title: "W3C Internationalization — Structural markup and right-to-left text in HTML"
+        url: "https://www.w3.org/International/questions/qa-html-dir"
+      - title: "MDN — direction (use the dir attribute in HTML)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/direction"
+      - title: "web.dev Learn CSS — Typography: changing the direction of text"
+        url: "https://web.dev/learn/css/typography"
+    actions:
+      - id: close-modes-board
+        type: whiteboard.apply
+        at: { mark: close-modes }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-side-label
+        type: editor.select
+        at: { mark: select-side-label }
+        target:
+          {
+            file: index.html,
+            text: '<span class="side-label" lang="en" data-testid="side-label">MENU</span>',
+            occurrence: 1,
+          }
+      - id: select-mini
+        type: editor.select
+        at: { mark: select-mini }
+        target:
+          { file: index.html, text: '<article class="mini" data-testid="mini-ltr">', occurrence: 1 }
+      - id: select-rtl
+        type: editor.select
+        at: { mark: select-rtl }
+        target: { file: index.html, text: '<div dir="rtl" data-testid="rtl-box">', occurrence: 1 }
+      - id: select-lang
+        type: editor.select
+        at: { mark: select-lang }
+        target: { file: index.html, text: 'lang="my"', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-rtl-box
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: rtl-box }
+        attribute: { name: dir, value: rtl }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-mini-rtl
+        type: expect.preview
+        at: { afterAction: expect-rtl-box }
+        timeoutMs: 5000
+        target: { by: testId, value: mini-rtl }
+        textContains: "မနက်တိုင်း အသစ်ဖျော်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-side-label
+        type: expect.preview
+        at: { afterAction: expect-mini-rtl }
+        timeoutMs: 5000
+        target: { by: testId, value: side-label }
+        textContains: "MENU"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-side-label }
+
+  - id: icon-gap
+    chapter: "Icon နဲ့ စာကြားက နေရာလွတ်"
+    narration: >
+      [[mark:scroll-cards]] မှာမယ် ခလုတ်တွေကနေ စကြည့်ရအောင်။ ခွက်ပုံ icon က စာနဲ့ ကပ်နေလို့ နေရာလွတ်
+      နည်းနည်း လိုပါတယ်။ [[mark:type-icon]] ပုံမှန်ဆိုရင် icon ရဲ့ ညာဘက်မှာ margin ပေးကြပါတယ်။ ဒီမှာလည်း 8
+      pixel ပေးလိုက်ပါမယ်။ [[mark:after-icon]] ပထမ card မှာ ခွက်နဲ့ စာကြားမှာ နေရာလွတ် ပေါ်လာပါပြီ။
+      [[mark:look-rtl-icon]] ဒါပေမဲ့ ဒုတိယ card ကို ကြည့်ပါ။ ညာကနေ ဘယ် ရေးတဲ့အတွက် icon က စာရဲ့ ညာဘက်ကို
+      ရောက်နေပါတယ်။ ဒါကြောင့် ညာဘက် margin က ခလုတ် အစွန်းဘက်မှာ ရောက်နေပြီး၊ ခွက်က စာနဲ့ ကပ်နေတုန်းပါ။
+      [[mark:type-fix]] logical margin နဲ့ ပြင်ကြည့်ရအောင်။ ညာဘက် margin ကို သုည ပြန်ပေးပြီး၊ inline end
+      ဘက်မှာ margin ထည့်ပါမယ်။ inline end ဆိုတာ စာ ရေးတဲ့ ဦးတည်ရာ ဘာပဲ ဖြစ်ဖြစ်၊ icon ပြီးလို့ စာ
+      ဆက်လာမယ့် ဘက်ပါ။ [[mark:after-fix]] အခု ခလုတ် နှစ်ခုလုံးမှာ နေရာလွတ်က မှန်တဲ့ နေရာ ရောက်ပါပြီ။
+      [[mark:select-inline-end]] ဒီ margin inline end declaration ကို ကြည့်ပါ။ declaration တစ်ခုတည်းနဲ့
+      ဦးတည်ရာ နှစ်မျိုးလုံးမှာ မှန်ပါတယ်။ တကယ့် code မှာဆိုရင် margin right နှစ်ကြောင်းကို ဖျက်ပြီး ဒီ
+      တစ်ကြောင်းပဲ ထားပါ။ flex container ဖြစ်တဲ့ ခလုတ်မှာ gap ပေးရင်လည်း ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: solving the icon issue"
+        url: "https://web.dev/learn/css/logical-properties#solving_the_icon_issue"
+      - title: "MDN — margin-inline-end"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline-end"
+      - title: "MDN — gap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
+    actions:
+      - id: scroll-cards
+        type: preview.scroll
+        at: { mark: scroll-cards }
+        timeoutMs: 5000
+        top: 140
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-icon
+        type: editor.type
+        at: { mark: type-icon }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".icon {\n  margin-right: 8px;\n}\n"
+      - id: expect-icon
+        type: expect.preview
+        at: { mark: after-icon }
+        timeoutMs: 4000
+        target: { by: testId, value: order-ltr }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-right: 8px;\n", occurrence: 1 }
+        text: "  margin-right: 0;\n  margin-inline-end: 8px;\n"
+      - id: expect-fix
+        type: expect.preview
+        at: { mark: after-fix }
+        timeoutMs: 4000
+        target: { by: testId, value: order-rtl }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-inline-end
+        type: editor.select
+        at: { mark: select-inline-end }
+        target: { file: styles.css, text: "margin-inline-end: 8px;", occurrence: 1 }
+
+  - id: mapping
+    chapter: "Physical နာမည်ကနေ logical နာမည်"
+    narration: >
+      [[mark:open-map]] physical property အများစုမှာ logical ပုံစံ ရှိပြီး၊ နာမည်တွေက စည်းမျဉ်း
+      တစ်ခုတည်းကို လိုက်ပါတယ်။ [[mark:draw-map-margin]] အပေါ်နဲ့ အောက်က block start နဲ့ block end
+      ဖြစ်ပြီး၊ ဘယ်နဲ့ ညာက inline start နဲ့ inline end ဖြစ်ပါတယ်။ ဒါကြောင့် အပေါ်ဘက် margin က margin block
+      start ဖြစ်ပြီး၊ ခုနက လဲလိုက်တဲ့ ညာဘက် margin က margin inline end ပါ။ [[mark:draw-map-size]]
+      အကျယ်ဆိုတာ inline direction အတိုင်း တိုင်းတဲ့ အရွယ်အစား ဖြစ်လို့ inline size ဖြစ်ပါတယ်။ အမြင့်က
+      block size ဖြစ်ပြီး၊ အကျယ် အများဆုံးက max inline size ပါ။ [[mark:draw-map-inset]] position ပေးထားတဲ့
+      box ရဲ့ offset တွေမှာတော့ နာမည်ရှေ့မှာ inset ပါလို့၊ ဘယ်ဘက် offset က inset inline start ပါ။
+      [[mark:draw-map-align]] တချို့ တန်ဖိုးတွေလည်း ပြောင်းပါတယ်။ text align မှာ ညာဘက် အစား end ကို
+      သုံးပါတယ်။ [[mark:draw-map-rule]] ဒီ ဇယားက ကိုယ့် page လို ဘယ်ကနေ ညာ ရေးတဲ့ page အတွက်ပါ။ ညာကနေ ဘယ်
+      ရေးရင် inline start က ညာဘက် ဖြစ်ပြီး၊ ဒေါင်လိုက် စာမှာဆိုရင် inline size က အမြင့် ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: flow relative"
+        url: "https://web.dev/learn/css/logical-properties#flow_relative"
+      - title: "web.dev Learn CSS — Logical properties: sizing"
+        url: "https://web.dev/learn/css/logical-properties#sizing"
+      - title: "web.dev Learn CSS — Logical properties: start and end"
+        url: "https://web.dev/learn/css/logical-properties#start_and_end"
+      - title: "MDN — Logical properties for margins, borders and padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values/Margins_borders_padding"
+    actions:
+      - id: open-map-board
+        type: whiteboard.apply
+        at: { mark: open-map }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-note]
+      - id: draw-map-margin
+        type: whiteboard.apply
+        at: { mark: draw-map-margin }
+        upsertIds: [c-p1, c-l1, c-p2, c-l2]
+        drawMs: 2800
+      - id: draw-map-size
+        type: whiteboard.apply
+        at: { mark: draw-map-size }
+        upsertIds: [c-p3, c-l3, c-p4, c-l4, c-p5, c-l5]
+        drawMs: 3600
+      - id: draw-map-inset
+        type: whiteboard.apply
+        at: { mark: draw-map-inset }
+        upsertIds: [c-p6, c-l6]
+        drawMs: 1600
+      - id: draw-map-align
+        type: whiteboard.apply
+        at: { mark: draw-map-align }
+        upsertIds: [c-p7, c-l7]
+        drawMs: 1600
+      - id: draw-map-rule
+        type: whiteboard.apply
+        at: { mark: draw-map-rule }
+        upsertIds: [c-rule]
+        drawMs: 2000
+
+  - id: sizing
+    chapter: "အရွယ်အစားနဲ့ text align"
+    narration: >
+      [[mark:close-map]] editor ထဲ ပြန်ရအောင်။ [[mark:scroll-about]] အောက်ဆုံးက ဆိုင်အကြောင်း box က
+      preview တစ်ခုလုံး ပြည့်အောင် ကျယ်နေပါတယ်။ [[mark:type-about]] စာကြောင်း ရှည်ရင် ဖတ်ရ ပင်ပန်းလို့ box
+      ရဲ့ အကျယ်ကို ကန့်သတ်ပါမယ်။ max inline size ကို 32 ch ပေးပြီး၊ inline ဘက် နှစ်ဘက်လုံးမှာ margin ကို
+      auto ပေးပါမယ်။ [[mark:after-about]] box ကျဉ်းသွားပါပြီ။ auto margin နှစ်ခုက ကျန်တဲ့ နေရာလွတ်ကို တူတူ
+      ခွဲယူလို့ box က အလယ်ကို ရောက်နေပါတယ်။ [[mark:select-max-inline]] ဒီ max inline size ကို ကြည့်ပါ။
+      lesson 10 က အကျယ် အများဆုံးနဲ့ တူပေမယ့်၊ inline direction အတိုင်း တိုင်းတာပါ။
+      [[mark:select-margin-inline]] margin inline က inline ဘက် နှစ်ဘက်လုံးကို တစ်ခါတည်း ပေးတဲ့ shorthand
+      ပါ။ [[mark:explain-block-size]] block size ကတော့ logical အမြင့်ပါ။ နှစ်ခုလုံးမှာ min block size လို
+      min နဲ့ max ပါတဲ့ ပုံစံတွေ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: sizing"
+        url: "https://web.dev/learn/css/logical-properties#sizing"
+      - title: "MDN — Logical properties for sizing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_logical_properties_and_values/Sizing"
+      - title: "MDN — inline-size"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/inline-size"
+      - title: "MDN — margin-inline"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline"
+    actions:
+      - id: close-map-board
+        type: whiteboard.apply
+        at: { mark: close-map }
+        open: false
+      # The browser clamps to the maximum scroll, so the about box is in view
+      # at the bottom at any preview height.
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: scroll-about }
+        timeoutMs: 5000
+        top: 700
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-about
+        type: editor.type
+        at: { mark: type-about }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-inline-end: 8px;\n}\n", occurrence: 1 }
+        text: "\n.about {\n  max-inline-size: 32ch;\n  margin-inline: auto;\n}\n"
+      - id: expect-about
+        type: expect.preview
+        at: { mark: after-about }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-max-inline
+        type: editor.select
+        at: { mark: select-max-inline }
+        target: { file: styles.css, text: "max-inline-size: 32ch;", occurrence: 1 }
+      - id: select-margin-inline
+        type: editor.select
+        at: { mark: select-margin-inline }
+        target: { file: styles.css, text: "margin-inline: auto;", occurrence: 1 }
+
+  - id: text-align
+    narration: >
+      [[mark:scroll-cards-2]] အခု ဈေးနှုန်းတွေပါ။ default အားဖြင့် စာက start ဘက်ကို ကပ်နေလို့၊ ညာကနေ ဘယ်
+      card မှာ ဈေးနှုန်းက ညာဘက်မှာ ရှိနေပါတယ်။ [[mark:type-price]] ဈေးနှုန်းကို card ရဲ့ ဟိုဘက် အစွန်မှာ
+      ထားချင်လို့၊ စာကို end ဘက်ကို ကပ်ပေးပါမယ်။ [[mark:after-price]] ပထမ ဈေးနှုန်းက ညာဘက်ကို၊ ဒုတိယ
+      ဈေးနှုန်းက ဘယ်ဘက်ကို ရွှေ့သွားပါပြီ။ နှစ်ခုလုံး သူ့ စာကြောင်းရဲ့ end မှာ ရှိပါတယ်။
+      [[mark:select-align-end]] ဒီ text align ကို ကြည့်ပါ။ end အစား ညာဘက်လို့ ပေးရင် ဈေးနှုန်း နှစ်ခုလုံး
+      ညာဘက် ရောက်ပြီး၊ ဒုတိယ card မှာ နေရာ မှားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: start and end"
+        url: "https://web.dev/learn/css/logical-properties#start_and_end"
+      - title: "MDN — text-align"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-align"
+    actions:
+      - id: scroll-cards-2
+        type: preview.scroll
+        at: { mark: scroll-cards-2 }
+        timeoutMs: 5000
+        top: 140
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-price
+        type: editor.type
+        at: { mark: type-price }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-inline: auto;\n}\n", occurrence: 1 }
+        text: "\n.mini .price {\n  text-align: end;\n}\n"
+      - id: expect-price
+        type: expect.preview
+        at: { mark: after-price }
+        timeoutMs: 4000
+        target: { by: testId, value: price-rtl }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-align-end
+        type: editor.select
+        at: { mark: select-align-end }
+        target: { file: styles.css, text: "text-align: end;", occurrence: 1 }
+
+  - id: spacing
+    chapter: "Margin၊ padding နဲ့ border"
+    narration: >
+      [[mark:type-pad-block]] card တွေမှာ padding မရှိသေးလို့ စာတွေက ဘောင်နဲ့ ကပ်နေပါတယ်။ ဒါကြောင့် block
+      ဘက် နှစ်ဘက်မှာ 8 pixel padding ထည့်ပါမယ်။ ဒီမှာ block ဘက်ဆိုတာ အပေါ်နဲ့ အောက်ပါ။
+      [[mark:after-pad-block]] badge ရဲ့ အပေါ်နဲ့ ခလုတ်ရဲ့ အောက်မှာ နေရာလွတ် နည်းနည်း ပေါ်လာပါပြီ။
+      [[mark:type-pad-inline]] ပြီးတော့ inline ဘက်မှာ padding ကို တန်ဖိုး နှစ်ခုနဲ့ ပေးပါမယ်။ logical
+      shorthand မှာ ပထမ တန်ဖိုးက start၊ ဒုတိယက end ဖြစ်လို့၊ start မှာ 16 pixel၊ end မှာ 48 ရပါမယ်။
+      [[mark:after-pad-inline]] quote ရဲ့ နောက်ခံ အရောင်ကို ကြည့်ပါ။ နေရာလွတ် ပိုကျယ်တဲ့ ဘက်က ပထမ card မှာ
+      ညာဘက်၊ ဒုတိယ card မှာ ဘယ်ဘက် ဖြစ်ပါတယ်။ အဲဒါက end ဘက်ဖြစ်ပြီး badge ကို နောက်မှ ထားမယ့် နေရာပါ။
+      [[mark:select-two-values]] ဒီ padding inline ကို ကြည့်ပါ။ physical padding မှာ တန်ဖိုး နှစ်ခု ပေးရင်
+      ပထမက အပေါ်အောက်၊ ဒုတိယက ဘယ်ညာ ဖြစ်လို့ မရောပါနဲ့။ [[mark:type-margin-end]] အခု card နှစ်ခု
+      ခွာသွားအောင် block end ဘက်မှာ margin ထည့်ပေးပါမယ်။ [[mark:after-margin-end]] block direction က card
+      နှစ်ခုလုံးမှာ တူလို့၊ နေရာလွတ်က card တိုင်းရဲ့ အောက်မှာ ရှိပါတယ်။ [[mark:explain-longhands]] ဘက်
+      တစ်ဘက်စီအတွက်လည်း longhand ကိုယ်စီ ရှိပါတယ်။ margin block start၊ margin block end၊ margin inline
+      start နဲ့ margin inline end ဖြစ်ပြီး၊ padding မှာလည်း ဒီ လေးခု ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: spacing and positioning"
+        url: "https://web.dev/learn/css/logical-properties#spacing_and_positioning"
+      - title: "web.dev Learn CSS — Spacing: margin and padding"
+        url: "https://web.dev/learn/css/spacing"
+      - title: "MDN — padding-inline (two values: start, end)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding-inline"
+      - title: "MDN — margin-block-end"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-block-end"
+    actions:
+      - id: type-pad-block
+        type: editor.type
+        at: { mark: type-pad-block }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-align: end;\n}\n", occurrence: 1 }
+        text: "\n.mini {\n  padding-block: 8px;\n}\n"
+      - id: expect-pad-block
+        type: expect.preview
+        at: { mark: after-pad-block }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-ltr }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: keystroke typing would pass through the valid
+      # "padding-inline: 16px" and flash 16 on both sides, then nothing.
+      - id: type-pad-inline
+        type: editor.type
+        at: { mark: type-pad-inline }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  padding-block: 8px;\n", occurrence: 1 }
+        text: "  padding-inline: 16px 48px;\n"
+      - id: expect-pad-inline
+        type: expect.preview
+        at: { mark: after-pad-inline }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-rtl }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-two-values
+        type: editor.select
+        at: { mark: select-two-values }
+        target: { file: styles.css, text: "padding-inline: 16px 48px;", occurrence: 1 }
+      - id: type-margin-end
+        type: editor.type
+        at: { mark: type-margin-end }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding-inline: 16px 48px;\n", occurrence: 1 }
+        text: "  margin-block-end: 12px;\n"
+      - id: expect-margin-end
+        type: expect.preview
+        at: { mark: after-margin-end }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-rtl }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: borders
+    narration: >
+      [[mark:type-border]] အခု quote ကို ပိုထင်ရှားအောင်၊ သူ့ inline start ဘက်မှာ 6 pixel ထူတဲ့
+      အစိမ်းရောင် မျဉ်းဖြောင့် border ထည့်ပါမယ်။ [[mark:after-border]] ပထမ quote မှာ မျဉ်းက ဘယ်ဘက်မှာ၊
+      ဒုတိယ quote မှာ ညာဘက်မှာ ရှိပါတယ်။ နှစ်ခုလုံးမှာ စာ စဖတ်တဲ့ ဘက်ပါ။ [[mark:type-quote-pad]] စာက
+      မျဉ်းနဲ့ ကပ်နေလို့၊ မျဉ်း ရှိတဲ့ inline start ဘက်မှာပဲ padding ထည့်ပါမယ်။ [[mark:after-quote-pad]]
+      အခု quote နှစ်ခုလုံးမှာ မျဉ်းနဲ့ စာကြား နေရာလွတ် ရှိပါပြီ။ [[mark:select-border]] ဒီ border inline
+      start declaration ကို ကြည့်ပါ။ border inline က inline ဘက် နှစ်ဘက်လုံး၊ ကိုယ့် page မှာ ဘယ်နဲ့ ညာကို
+      ပေးပြီး၊ border block က အပေါ်နဲ့ အောက်ကို ပေးပါတယ်။ ဘက် တစ်ဘက်စီရဲ့ အထူ၊ မျဉ်းပုံစံ၊ အရောင်ကိုလည်း
+      border inline start color လို longhand တွေနဲ့ ပေးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: borders"
+        url: "https://web.dev/learn/css/logical-properties#borders"
+      - title: "web.dev Learn CSS — Borders: logical properties"
+        url: "https://web.dev/learn/css/borders#logical_properties"
+      - title: "MDN — border-inline"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-inline"
+      - title: "MDN — border-block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-block"
+    actions:
+      # line-by-line: keystroke typing would pass through the valid
+      # "6px solid" (a brown bar) before the colour lands.
+      - id: type-border
+        type: editor.type
+        at: { mark: type-border }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  margin-block-end: 12px;\n}\n", occurrence: 1 }
+        text: "\n.quote {\n  border-inline-start: 6px solid seagreen;\n}\n"
+      - id: expect-border
+        type: expect.preview
+        at: { mark: after-border }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-ltr }
+        textContains: "မနက်တိုင်း အသစ်ဖျော်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-quote-pad
+        type: editor.type
+        at: { mark: type-quote-pad }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  border-inline-start: 6px solid seagreen;\n", occurrence: 1 }
+        text: "  padding-inline-start: 12px;\n"
+      - id: expect-quote-pad
+        type: expect.preview
+        at: { mark: after-quote-pad }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-rtl }
+        textContains: "မနက်တိုင်း အသစ်ဖျော်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-border
+        type: editor.select
+        at: { mark: select-border }
+        target:
+          { file: styles.css, text: "border-inline-start: 6px solid seagreen;", occurrence: 1 }
+
+  - id: corners
+    chapter: "ထောင့်တွေနဲ့ inset"
+    narration: >
+      [[mark:open-corners]] ထောင့်က ဘက် နှစ်ဘက် ဆုံတဲ့ နေရာ ဖြစ်လို့၊ logical နာမည်မှာ စကားလုံး နှစ်လုံး
+      လိုပါတယ်။ [[mark:draw-corner-box]] ဒါက ဘယ်ကနေ ညာ ရေးတဲ့ page ပေါ်က box ပါ။
+      [[mark:draw-corner-names]] ထောင့် နာမည်မှာ block ဘက်က စကားလုံးကို အရင်၊ inline ဘက်က စကားလုံးကို
+      နောက်မှ ရေးပါတယ်။ ဘယ်ဘက် အပေါ်ထောင့်က start start၊ ညာဘက် အပေါ်က start end၊ ဘယ်ဘက် အောက်က end start၊
+      ညာဘက် အောက်က end end ပါ။ [[mark:draw-corner-rule]] ဒါကြောင့် border start end radius က ဒီမှာ ညာဘက်
+      အပေါ်ထောင့်ကို ဝိုင်းပြီး၊ ညာကနေ ဘယ် box မှာတော့ ဘယ်ဘက် အပေါ်ထောင့်ကို ဝိုင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Borders: border radius"
+        url: "https://web.dev/learn/css/borders#border_radius"
+      - title: "MDN — border-start-end-radius"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-start-end-radius"
+      - title: "CSS Logical Properties Level 1 — flow-relative corner rounding"
+        url: "https://drafts.csswg.org/css-logical/#border-radius-properties"
+    actions:
+      - id: open-corners-board
+        type: whiteboard.apply
+        at: { mark: open-corners }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-corner-box
+        type: whiteboard.apply
+        at: { mark: draw-corner-box }
+        upsertIds: [d-box]
+        drawMs: 1200
+      - id: draw-corner-names
+        type: whiteboard.apply
+        at: { mark: draw-corner-names }
+        upsertIds: [d-ss, d-se, d-es, d-ee]
+        drawMs: 3200
+      - id: draw-corner-rule
+        type: whiteboard.apply
+        at: { mark: draw-corner-rule }
+        upsertIds: [d-se-ring, d-code, d-first, d-second]
+        drawMs: 3600
+
+  - id: radius-badge
+    narration: >
+      [[mark:close-corners]] card တွေမှာ စမ်းကြည့်ရအောင်။ [[mark:type-radius]] အရင်ဆုံး card တိုင်းရဲ့
+      start end ထောင့်ကို 16 pixel နဲ့ ဝိုင်းပေးပါမယ်။ [[mark:after-radius]] ပထမ card မှာ ညာဘက်
+      အပေါ်ထောင့် ဝိုင်းသွားပြီး၊ ဒုတိယ card မှာတော့ ဘယ်ဘက် အပေါ်ထောင့် ဝိုင်းသွားပါတယ်။
+      [[mark:type-badge]] နောက်တစ်ခုက badge ပါ။ position ကို absolute ပေးလိုက်ရင် badge က flow ထဲက
+      ထွက်သွားပါတယ်။ base ဖိုင်က card ကို relative ပေးထားလို့၊ badge ကို သူ့ card ထဲမှာ နေရာချပါတယ်။
+      ပြီးတော့ block start ဘက်ကနေ 8 pixel၊ inline end ဘက်ကနေ 8 pixel ခွာပါမယ်။ [[mark:after-badge]] badge
+      နှစ်ခုလုံး end ဘက်က အပေါ်ထောင့်ကို ရောက်သွားပါပြီ။ ပထမ card မှာ ညာဘက် အပေါ်၊ ဒုတိယ card မှာ ဘယ်ဘက်
+      အပေါ်ပါ။ [[mark:select-insets]] ဒီ inset နှစ်ခုကို ကြည့်ပါ။ inset block က block ဘက် နှစ်ဘက်လုံး၊
+      inset inline က inline ဘက် နှစ်ဘက်လုံးကို ပေးတဲ့ shorthand တွေပါ။ တန်ဖိုး တစ်ခု ဒါမှမဟုတ် start နဲ့
+      end အတွက် နှစ်ခု ပေးလို့ ရပါတယ်။ lesson 14 က inset တစ်လုံးတည်းကတော့ physical ဖြစ်ပြီး၊ သူ့ တန်ဖိုး
+      လေးခုက အပေါ်၊ ညာ၊ အောက်၊ ဘယ် အစဉ်နဲ့ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: spacing and positioning"
+        url: "https://web.dev/learn/css/logical-properties#spacing_and_positioning"
+      - title: "MDN — inset-block"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/inset-block"
+      - title: "MDN — inset (a physical shorthand)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/inset"
+      - title: "MDN — border-start-end-radius"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-start-end-radius"
+    actions:
+      - id: close-corners-board
+        type: whiteboard.apply
+        at: { mark: close-corners }
+        open: false
+      - id: type-radius
+        type: editor.type
+        at: { mark: type-radius }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-block-end: 12px;\n", occurrence: 1 }
+        text: "  border-start-end-radius: 16px;\n"
+      - id: expect-radius
+        type: expect.preview
+        at: { mark: after-radius }
+        timeoutMs: 4000
+        target: { by: testId, value: mini-ltr }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding-inline-start: 12px;\n}\n", occurrence: 1 }
+        text: "\n.mini .badge {\n  position: absolute;\n  inset-block-start: 8px;\n  inset-inline-end: 8px;\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-rtl }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-insets
+        type: editor.select
+        at: { mark: select-insets }
+        target:
+          {
+            file: styles.css,
+            text: "inset-block-start: 8px;\n  inset-inline-end: 8px;",
+            occurrence: 1,
+          }
+
+  - id: vertical
+    chapter: "စာကို ဒေါင်လိုက် ရေးကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-top]] page ရဲ့ အပေါ်ဆုံးက MENU label ဆီ ပြန်သွားရအောင်။ [[mark:type-vertical]] label
+      ကို ဒေါင်လိုက် writing mode ပေးပါမယ်။ ဒီ vertical၊ ညာကနေ ဘယ် ဆိုတဲ့ တန်ဖိုးက ဂျပန်စာ ရေးတဲ့ ပုံစံပါ။
+      [[mark:after-vertical]] label က ဒေါင်လိုက် ဖြစ်သွားပြီး အပေါ်ကနေ အောက် ဖတ်ရပါပြီ။
+      [[mark:select-writing-mode]] ဒီ writing mode တန်ဖိုးကို ကြည့်ပါ။ vertical ဆိုတော့ စာကြောင်းတိုင်း
+      အောက်ကို ဆင်းပြီး၊ ညာကနေ ဘယ် ဆိုတော့ နောက် စာကြောင်း ရှိရင် ဘယ်ဘက်မှာ လာပါမယ်။ vertical၊ ဘယ်ကနေ ညာ
+      ဆိုတဲ့ တန်ဖိုး ပေးရင်တော့ နောက် စာကြောင်းက ညာဘက်မှာ လာပါမယ်။ [[mark:explain-orientation]] စာလုံးတွေ
+      ဘေးစောင်း လဲနေတာက text orientation ကြောင့်ပါ။ သူ့ default ဖြစ်တဲ့ mixed က တရုတ်စာ၊ ဂျပန်စာ
+      စာလုံးတွေကို ထောင်ထားပြီး၊ တခြား စာတွေကိုတော့ ဘေးစောင်း လှည့်ထားပါတယ်။ [[mark:type-upright]] အခု
+      text orientation ကို upright ပေးပြီး၊ စာလုံးတိုင်းကို မတ်မတ် ထောင်လိုက်ပါမယ်။ [[mark:after-upright]]
+      စာလုံးတွေက တစ်လုံးအောက် တစ်လုံး ဆင့်နေပါပြီ။ တတိယ တန်ဖိုး ဖြစ်တဲ့ sideways ကတော့ ဂျပန်စာ
+      စာလုံးတွေကိုပါ ဘေးစောင်း လှည့်ပါတယ်။ [[mark:type-inline-size]] အခု label ကို inline size 180 pixel
+      ပေးပြီး၊ ကျယ်လာမလား၊ မြင့်လာမလား ကြည့်ရအောင်။ [[mark:after-inline-size]] မြင့်လာပါတယ်။ ဒေါင်လိုက်
+      စာမှာ inline direction က အောက်ကို ဆင်းလို့ပါ။ စာလုံးတွေကတော့ inline start ဖြစ်တဲ့ အပေါ်ဘက်မှာ
+      ရှိနေပါတယ်။ [[mark:type-label-end]] ဈေးနှုန်းတွေမှာ လုပ်ခဲ့သလိုပဲ၊ label ရဲ့ စာကို end ဘက်ကို
+      ကပ်ပေးပါမယ်။ [[mark:after-label-end]] စာလုံးတွေက ဒေါင်လိုက် စာကြောင်းရဲ့ end ဖြစ်တဲ့ အောက်ဘက်ကို
+      ရောက်သွားပါပြီ။ [[mark:explain-english]] ဒီမှာ အင်္ဂလိပ် စကားလုံးကို တမင် သုံးထားတာပါ။
+      မြန်မာစာဆိုရင် default မှာ ဘေးစောင်း လှည့်သွားပြီး၊ upright ပေးရင်လည်း ဗျည်းနဲ့ သရတွေ
+      ကွဲထွက်သွားလို့ပါ။ chart တွေရဲ့ ဒေါင်လိုက် axis မှာ ဒီလို label မျိုး တွေ့ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: using logical properties pragmatically"
+        url: "https://web.dev/learn/css/logical-properties#using_logical_properties_pragmatically"
+      - title: "MDN — writing-mode"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/writing-mode"
+      - title: "MDN — text-orientation"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-orientation"
+      - title: "MDN — Text styling fundamentals: writing mode and orientation"
+        url: "https://developer.mozilla.org/docs/Learn_web_development/Core/Text_styling/Fundamentals"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-vertical
+        type: editor.type
+        at: { mark: type-vertical }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  inset-inline-end: 8px;\n}\n", occurrence: 1 }
+        text: "\n.side-label {\n  writing-mode: vertical-rl;\n}\n"
+      - id: expect-vertical
+        type: expect.preview
+        at: { mark: after-vertical }
+        timeoutMs: 4000
+        target: { by: testId, value: side-label }
+        textContains: "MENU"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-writing-mode
+        type: editor.select
+        at: { mark: select-writing-mode }
+        target: { file: styles.css, text: "writing-mode: vertical-rl;", occurrence: 1 }
+      - id: type-upright
+        type: editor.type
+        at: { mark: type-upright }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  writing-mode: vertical-rl;\n", occurrence: 1 }
+        text: "  text-orientation: upright;\n"
+      - id: expect-upright
+        type: expect.preview
+        at: { mark: after-upright }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "MENU"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-inline-size
+        type: editor.type
+        at: { mark: type-inline-size }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-orientation: upright;\n", occurrence: 1 }
+        text: "  inline-size: 180px;\n"
+      - id: expect-inline-size
+        type: expect.preview
+        at: { mark: after-inline-size }
+        timeoutMs: 4000
+        target: { by: testId, value: side-label }
+        textContains: "MENU"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-label-end
+        type: editor.type
+        at: { mark: type-label-end }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  inline-size: 180px;\n", occurrence: 1 }
+        text: "  text-align: end;\n"
+      - id: expect-label-end
+        type: expect.preview
+        at: { mark: after-label-end }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: units-physical
+    chapter: "vi၊ vb နဲ့ physical property"
+    narration: >
+      [[mark:open-units]] မပြီးခင် အချက် နှစ်ခု ကျန်ပါသေးတယ်။ [[mark:draw-vi-vb]] vw နဲ့ vh ကို lesson 10
+      မှာ တွေ့ခဲ့ပါပြီ။ သူတို့ရဲ့ logical ပုံစံက vi နဲ့ vb ပါ။ 1 vi က viewport ရဲ့ inline direction
+      အရွယ်ရဲ့ 1 ရာခိုင်နှုန်း၊ 1 vb က block direction အရွယ်ရဲ့ 1 ရာခိုင်နှုန်းပါ။ [[mark:draw-same]]
+      ကိုယ့် အလျားလိုက် page မှာ vi က vw နဲ့၊ vb က vh နဲ့ တူပါတယ်။ [[mark:draw-root]] ဒီ unit တွေက
+      သုံးထားတဲ့ element ကို မလိုက်ဘဲ၊ root element ရဲ့ writing mode ကို လိုက်ပါတယ်။ ဒါကြောင့် ဒေါင်လိုက်
+      label ထဲမှာ သုံးရင်တောင် မပြောင်းပါဘူး။ [[mark:draw-shadow]] physical property တွေကလည်း ဆက်ပြီး
+      အလုပ်လုပ်ပါတယ်။ တစ်ခါတလေ သူတို့က ပိုတောင် မှန်ပါသေးတယ်။ အရိပ်က အောက်ကို ကျတာ အလင်းက အပေါ်က လာလို့
+      ဖြစ်ပြီး၊ ဘာသာစကားကြောင့် မဟုတ်ပါဘူး။ box shadow မှာတော့ logical ပုံစံ မရှိပါဘူး။ [[mark:draw-ok]]
+      ဒါကြောင့် စာကို လိုက်ရမယ့် အရာဆိုရင် logical property၊ screen ကို လိုက်ရမယ့် အရာဆိုရင် physical
+      property ကို သုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: units"
+        url: "https://web.dev/learn/css/logical-properties#units"
+      - title: "MDN — viewport-percentage lengths (vi, vb)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length#relative_length_units_based_on_viewport"
+      - title: "CSS Values and Units Level 4 — viewport-percentage lengths"
+        url: "https://drafts.csswg.org/css-values-4/#viewport-relative-lengths"
+      - title: "web.dev Learn CSS — Logical properties: using logical properties pragmatically"
+        url: "https://web.dev/learn/css/logical-properties#using_logical_properties_pragmatically"
+    actions:
+      - id: open-units-board
+        type: whiteboard.apply
+        at: { mark: open-units }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-vi-vb
+        type: whiteboard.apply
+        at: { mark: draw-vi-vb }
+        upsertIds: [e-vi, e-vb]
+        drawMs: 3000
+      - id: draw-same
+        type: whiteboard.apply
+        at: { mark: draw-same }
+        upsertIds: [e-same]
+        drawMs: 1600
+      - id: draw-root
+        type: whiteboard.apply
+        at: { mark: draw-root }
+        upsertIds: [e-root]
+        drawMs: 1800
+      - id: draw-shadow
+        type: whiteboard.apply
+        at: { mark: draw-shadow }
+        upsertIds: [e-shadow, e-card, e-shadow-l]
+        drawMs: 2800
+      - id: draw-ok
+        type: whiteboard.apply
+        at: { mark: draw-ok }
+        upsertIds: [e-ok]
+        drawMs: 1600
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း တစ်ခုပါ။ ညာကနေ ဘယ် ရေးဖို့ dir attribute ပေးထားတဲ့ box ထဲမှာ margin
+      inline start က ဘယ်ဘက်မှာလား၊ ညာဘက်မှာလား။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေက ညာဘက်ပါ။
+      inline start ဆိုတာ စာကြောင်း စတဲ့ နေရာ ဖြစ်ပြီး၊ ညာကနေ ဘယ် ရေးတဲ့ စာက ညာဘက်ကနေ စလို့ပါ။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ logical property တွေက ဘက်တွေကို စာ ရေးတဲ့ ဦးတည်ရာနဲ့
+      နာမည်ပေးပါတယ်။ block က စာကြောင်းတွေ ဆင့်သွားတဲ့ ဘက်၊ inline က စာလုံးတွေ စီသွားတဲ့ ဘက် ဖြစ်ပြီး၊
+      နှစ်ခုလုံးမှာ start နဲ့ end ရှိပါတယ်။ dir attribute က inline direction ကို သတ်မှတ်ပြီး၊ writing mode
+      က နှစ်ခုလုံးကို လှည့်နိုင်ပါတယ်။ margin၊ padding၊ border၊ ထောင့်၊ inset၊ အရွယ်အစားနဲ့ text align မှာ
+      logical ပုံစံ ရှိပြီး၊ တန်ဖိုး နှစ်ခု ပါတဲ့ shorthand က start ပြီးမှ end ပါ။ [[mark:next-lesson]]
+      နောက် lesson မှာတော့ ဒီ နာမည်တွေကို သုံးပြီး၊ နေရာလွတ် တစ်ခုစီအတွက် margin၊ padding နဲ့ gap ထဲက
+      ဘာကို ရွေးရမလဲ ဆိုတာ ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Logical properties: check your understanding"
+        url: "https://web.dev/learn/css/logical-properties#check_your_understanding"
+      - title: "MDN — margin-inline-start"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline-start"
+      - title: "web.dev Learn CSS — Spacing (next lesson)"
+        url: "https://web.dev/learn/css/spacing"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q1, f-q2]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a, f-a-check, f-rule]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".icon {\n  margin-right: 8px;\n  margin-right: 0;\n  margin-inline-end: 8px;\n}\n\n.about {\n  max-inline-size: 32ch;\n  margin-inline: auto;\n}\n\n.mini .price {\n  text-align: end;\n}\n\n.mini {\n  padding-block: 8px;\n  padding-inline: 16px 48px;\n  margin-block-end: 12px;\n  border-start-end-radius: 16px;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "\n.quote {\n  border-inline-start: 6px solid seagreen;\n  padding-inline-start: 12px;\n}\n\n.mini .badge {\n  position: absolute;\n  inset-block-start: 8px;\n  inset-inline-end: 8px;\n}\n\n.side-label {\n  writing-mode: vertical-rl;\n  text-orientation: upright;\n  inline-size: 180px;\n  text-align: end;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
