@@ -1,0 +1,2329 @@
+# CSS course (Burmese), lesson 17 of 43: flexbox part 3, alignment.
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 16; justify = main axis, align = cross axis; the
+# two groups, distributing space vs aligning items; Box Alignment shared with
+# grid) → code tour (header nav, hero, chips, tags, drinks, wide chips; empty
+# styles.css) → the chips: flex + justify-content flex-end, center,
+# space-between, space-around, space-evenly (later declarations) → board
+# (where the gaps go) → chips flex: 1: no free space, justify-content does
+# nothing → the tag box: flex + wrap + gap + height (lines stretch), then
+# align-content flex-start / center / space-between, then place-content:
+# center end → board (lines; nowrap = one line; the line is the cross-axis
+# space) → the drinks cards: flex row (equal heights = stretch), align-items
+# flex-start / center, baseline named → align-self: flex-end on the featured
+# card → board (no justify-self; an auto margin takes the free space) → nav
+# last item margin-left: auto → the hero: flex column (the button stretches
+# across), justify-content: center (nothing), min-height: 240px (vertical
+# middle), align-items: center (both ways); margin: auto and block-layout
+# align-content as sentences → the wide English chips: justify-content:
+# center pushes the first chip out of reach, safe center keeps it; flex-start vs start →
+# quiz (column: which property centres left to right) and recap, hand-off to
+# grid (lesson 18).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Every rule is appended at the END of styles.css (an unclosed "{" typed in
+# the middle would swallow the rules after it); only single declarations are
+# inserted inside an existing rule. Keystroke-typed values have no valid
+# prefix: every alignment keyword (flex-end, center, space-*, flex-start,
+# safe center), "margin-left: auto", "min-height: 240px" (a unitless 2 / 24 /
+# 240 is invalid) and "flex: 1" (complete at its first character). Three inserts
+# would flash a wrong intermediate layout if typed key by key, so they land as
+# line-by-line or block: the tag box (display flex before wrap squeezes eight
+# tags into one line), the cards (display flex before flex 1), the hero
+# column (display flex before the direction makes a row), and place-content
+# (its prefix "center" is valid on its own); the wide-chips rule is
+# line-by-line (narration summarises it).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): chips 60/65/63/51
+# with 161 px free (flex-end → right; center; between; around edges 20 inner
+# 40; evenly 32 each; flex 1 → 100 × 4); tags wrap into three lines whose tags
+# stretch to 63 px, flex-start → 35 px packed at the top, center, between,
+# place-content center end → lines centred, tags at the right end; cards
+# 133/126/126 × 282 stretched → flex-start 159/282/131 → center → the
+# featured card's align-self flex-end moves it 61 px down; nav last link x 120
+# → 360; hero column: button 88 → 368 wide, min-height 240 moves the content 46
+# px down, align-items center centres it; wide chips: center → first chip at
+# x −217 (wholly out of view, the second one cut at the left edge,
+# scrollLeft 0), safe center → x 16.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-17-flex-alignment
+  title: "CSS course 17: Flexbox အပိုင်း 3၊ alignment"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 17
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (its nav list is already a flex row, base.css
+      # section E) and hero, the tea-strength chips, a box of eight drink tags,
+      # the kit drinks block with three cards (the coffee card's description is
+      # lengthened so it is the tallest; the falooda card is left out) and a row
+      # of six long English chips. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (the nav list is already a flex row, base.css section E) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul data-testid="nav-list">
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#tags" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#main" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#drinks" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- lesson block: chips (the tea-strength row, its edges dashed) -->
+              <section class="lab" data-testid="strengths">
+                <h2>လက်ဖက်ရည် အရသာ</h2>
+                <div class="chips demo" data-testid="chips">
+                  <span class="chip">ချိုဆိမ့်</span>
+                  <span class="chip">ပေါ့ဆိမ့်</span>
+                  <span class="chip">ကျဆိမ့်</span>
+                  <span class="chip">နို့စိမ်း</span>
+                </div>
+              </section>
+
+              <!-- lesson block: tags (eight tea-type tags in one box) -->
+              <section class="lab" id="tags" data-testid="tags-lab">
+                <h2>ဘာသောက်မလဲ</h2>
+                <div class="tags demo" data-testid="tags">
+                  <span class="tag">လက်ဖက်ရည်</span>
+                  <span class="tag">ရေနွေးကြမ်း</span>
+                  <span class="tag">ကော်ဖီ</span>
+                  <span class="tag">နို့စိမ်း</span>
+                  <span class="tag">ချိုဆိမ့်</span>
+                  <span class="tag">ပေါ့ဆိမ့်</span>
+                  <span class="tag">ကျဆိမ့်</span>
+                  <span class="tag">ဖာလူဒါ</span>
+                </div>
+              </section>
+
+              <!-- kit block: drinks (three cards; the coffee card has the longest description) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ၊ ပူပူ ဒါမှမဟုတ် အေးအေး၊ သကြား နည်းနည်း ဒါမှမဟုတ် များများ ကြိုက်သလို</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: wide-chips (six English labels, wider than the page together) -->
+              <section class="lab" data-testid="wide-lab">
+                <h2>အင်္ဂလိပ်လို</h2>
+                <div class="wide-chips demo" lang="en" data-testid="wide-chips">
+                  <span class="chip">Sweet and creamy</span>
+                  <span class="chip">Light and creamy</span>
+                  <span class="chip">Strong and creamy</span>
+                  <span class="chip">Fresh milk tea</span>
+                  <span class="chip">Plain green tea</span>
+                  <span class="chip">Iced lemon tea</span>
+                </div>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2, C (cards with no margin) and D of the course
+      # kit; section E makes the nav list a flex row and styles the demo boxes.
+      # No alignment declaration anywhere: every one in this lesson is typed.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 17 keeps A, B, B2, C (cards with no margin, so a flex row of cards
+          has nothing but the typed gap between them) and D; section E makes the nav
+          list a flex row (lesson 15 typed it) and gives the demo boxes their look.
+          It contains no alignment declaration at all: every justify, align and
+          place property in this lesson is typed.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 17: the nav row from lesson 15, and the look of the demo boxes. */
+        .nav ul {
+          display: flex;
+          gap: 16px;
+        }
+
+        .hero p {
+          margin: 0 0 8px;
+        }
+
+        .lab {
+          margin: 16px 0;
+        }
+
+        .lab h2 {
+          font-size: 17px;
+        }
+
+        .chip,
+        .tag {
+          padding: 2px 12px;
+          background: var(--cream);
+          border: 1px solid var(--tea-light);
+          border-radius: 999px;
+          text-align: center;
+        }
+
+        /* Small chips, so the row keeps plenty of free space to share out. */
+        .chips .chip {
+          padding: 0 8px;
+          font-size: 14px;
+        }
+
+        .tags {
+          padding: 8px;
+          background: #fff;
+        }
+
+        .wide-chips {
+          overflow-x: auto;
+          padding: 8px 0;
+        }
+
+        .wide-chips .chip {
+          white-space: nowrap;
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the alignment overview. Blue = main axis / justify, orange =
+    # cross axis / align, green = the space-distribution group, violet = the
+    # item-alignment group.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Flexbox alignment",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-box,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 380,
+        height: 190,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-item1,
+        kind: rectangle,
+        x: 316,
+        y: 251,
+        width: 60,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-item2,
+        kind: rectangle,
+        x: 386,
+        y: 251,
+        width: 60,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-item3,
+        kind: rectangle,
+        x: 456,
+        y: 251,
+        width: 60,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-free,
+        kind: text,
+        x: 530,
+        y: 263,
+        width: 120,
+        height: 36,
+        text: "နေရာလွတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-main-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 438,
+        width: 380,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-main-label,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 330,
+        height: 36,
+        text: "main axis → justify",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-cross-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 712,
+        y: 235,
+        width: 30,
+        height: 190,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-cross-label,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 330,
+        height: 36,
+        text: "cross axis → align",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-g1-box,
+        kind: rectangle,
+        x: 770,
+        y: 225,
+        width: 330,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-g1-title,
+        kind: text,
+        x: 785,
+        y: 235,
+        width: 260,
+        height: 36,
+        text: "နေရာလွတ် ခွဲဝေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-jc,
+        kind: text,
+        x: 785,
+        y: 280,
+        width: 230,
+        height: 36,
+        text: "justify-content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ac,
+        kind: text,
+        x: 785,
+        y: 325,
+        width: 210,
+        height: 36,
+        text: "align-content",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-g2-box,
+        kind: rectangle,
+        x: 770,
+        y: 395,
+        width: 330,
+        height: 150,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-g2-title,
+        kind: text,
+        x: 785,
+        y: 405,
+        width: 260,
+        height: 36,
+        text: "item တွေကို ညှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-ai,
+        kind: text,
+        x: 785,
+        y: 450,
+        width: 290,
+        height: 36,
+        text: "align-items · အားလုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-as,
+        kind: text,
+        x: 785,
+        y: 495,
+        width: 290,
+        height: 36,
+        text: "align-self · တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-spec,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 620,
+        height: 36,
+        text: "Box Alignment · flexbox ရော grid ပါ သုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B — where the free space goes. Blue = the items, violet = the
+    # value names, green = where the gaps go.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "နေရာလွတ် ဘယ်ကို ရောက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-btw-k,
+        kind: text,
+        x: 300,
+        y: 237,
+        width: 220,
+        height: 36,
+        text: "space-between",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-btw-bar,
+        kind: rectangle,
+        x: 540,
+        y: 230,
+        width: 520,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-btw-1,
+        kind: rectangle,
+        x: 540,
+        y: 238,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-btw-2,
+        kind: rectangle,
+        x: 770,
+        y: 238,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-btw-3,
+        kind: rectangle,
+        x: 1000,
+        y: 238,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-btw-note,
+        kind: text,
+        x: 540,
+        y: 287,
+        width: 420,
+        height: 36,
+        text: "အစွန်းမှာ 0 · ကြားမှာ ညီညီ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-aro-k,
+        kind: text,
+        x: 300,
+        y: 357,
+        width: 220,
+        height: 36,
+        text: "space-around",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-aro-bar,
+        kind: rectangle,
+        x: 540,
+        y: 350,
+        width: 520,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-aro-1,
+        kind: rectangle,
+        x: 597,
+        y: 358,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-aro-2,
+        kind: rectangle,
+        x: 770,
+        y: 358,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-aro-3,
+        kind: rectangle,
+        x: 943,
+        y: 358,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-aro-note,
+        kind: text,
+        x: 540,
+        y: 407,
+        width: 460,
+        height: 36,
+        text: "အစွန်း = ကြားရဲ့ တစ်ဝက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-eve-k,
+        kind: text,
+        x: 300,
+        y: 477,
+        width: 220,
+        height: 36,
+        text: "space-evenly",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-eve-bar,
+        kind: rectangle,
+        x: 540,
+        y: 470,
+        width: 520,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-eve-1,
+        kind: rectangle,
+        x: 625,
+        y: 478,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-eve-2,
+        kind: rectangle,
+        x: 770,
+        y: 478,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-eve-3,
+        kind: rectangle,
+        x: 915,
+        y: 478,
+        width: 60,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-eve-note,
+        kind: text,
+        x: 540,
+        y: 527,
+        width: 420,
+        height: 36,
+        text: "နေရာလွတ် အားလုံး တူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — flex lines. Orange = a flex line, blue = the items, green =
+    # works, red = does nothing, violet = the next properties.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Flex line နဲ့ align-content",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-wrap-k,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 120,
+        height: 36,
+        text: "wrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-wrap-box,
+        kind: rectangle,
+        x: 300,
+        y: 265,
+        width: 300,
+        height: 240,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-l1, kind: rectangle, x: 310, y: 300, width: 280, height: 46, strokeColor: "#f08c00" }
+    - {
+        id: c-l1-a,
+        kind: rectangle,
+        x: 318,
+        y: 306,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-l1-b,
+        kind: rectangle,
+        x: 406,
+        y: 306,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-l1-c,
+        kind: rectangle,
+        x: 494,
+        y: 306,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - { id: c-l2, kind: rectangle, x: 310, y: 362, width: 280, height: 46, strokeColor: "#f08c00" }
+    - {
+        id: c-l2-a,
+        kind: rectangle,
+        x: 318,
+        y: 368,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-l2-b,
+        kind: rectangle,
+        x: 406,
+        y: 368,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - { id: c-l3, kind: rectangle, x: 310, y: 424, width: 280, height: 46, strokeColor: "#f08c00" }
+    - {
+        id: c-l3-a,
+        kind: rectangle,
+        x: 318,
+        y: 430,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-wrap-note,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 330,
+        height: 36,
+        text: "line တွေကြား ခွဲဝေ ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap-k,
+        kind: text,
+        x: 700,
+        y: 222,
+        width: 140,
+        height: 36,
+        text: "nowrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap-box,
+        kind: rectangle,
+        x: 700,
+        y: 265,
+        width: 360,
+        height: 240,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-one-line,
+        kind: rectangle,
+        x: 710,
+        y: 275,
+        width: 340,
+        height: 220,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-n-a,
+        kind: rectangle,
+        x: 720,
+        y: 285,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-n-b,
+        kind: rectangle,
+        x: 808,
+        y: 285,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-n-c,
+        kind: rectangle,
+        x: 896,
+        y: 285,
+        width: 80,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-nowrap-note,
+        kind: text,
+        x: 700,
+        y: 520,
+        width: 360,
+        height: 36,
+        text: "နေရာလွတ် မကျန် ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-items-note,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 560,
+        height: 36,
+        text: "align-items · line ထဲမှာ ညှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — no justify-self; an auto margin takes the free space. Blue =
+    # the items, green = free space, red = not in flexbox.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Justify-self ဘာလို့ မရှိလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-bar1,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 600,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-g1,
+        kind: rectangle,
+        x: 310,
+        y: 245,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-g2,
+        kind: rectangle,
+        x: 388,
+        y: 245,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-g3,
+        kind: rectangle,
+        x: 466,
+        y: 245,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-free1,
+        kind: rectangle,
+        x: 546,
+        y: 245,
+        width: 344,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-group-note,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 560,
+        height: 36,
+        text: "main axis မှာ အုပ်စုလိုက် ရွေ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-js,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 190,
+        height: 36,
+        text: "justify-self",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-js-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 296,
+        y: 372,
+        width: 180,
+        height: 32,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-js-note,
+        kind: text,
+        x: 540,
+        y: 370,
+        width: 360,
+        height: 36,
+        text: "flexbox မှာ အလုပ်မလုပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-bar2,
+        kind: rectangle,
+        x: 300,
+        y: 450,
+        width: 600,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-n1,
+        kind: rectangle,
+        x: 310,
+        y: 460,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-n2,
+        kind: rectangle,
+        x: 388,
+        y: 460,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-margin,
+        kind: rectangle,
+        x: 468,
+        y: 460,
+        width: 334,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-margin-l,
+        kind: text,
+        x: 560,
+        y: 462,
+        width: 160,
+        height: 36,
+        text: "margin auto",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-n3,
+        kind: rectangle,
+        x: 810,
+        y: 460,
+        width: 80,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-margin-note,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 600,
+        height: 36,
+        text: "auto margin က နေရာလွတ် အကုန် ယူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz: a column container. Blue = main axis /
+    # justify, orange = cross axis / align, green = the answer is right.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-box,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 220,
+        height: 290,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-i1,
+        kind: rectangle,
+        x: 330,
+        y: 250,
+        width: 90,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: f-i2,
+        kind: rectangle,
+        x: 330,
+        y: 315,
+        width: 90,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: f-i3,
+        kind: rectangle,
+        x: 330,
+        y: 380,
+        width: 90,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: f-dir,
+        kind: text,
+        x: 330,
+        y: 465,
+        width: 160,
+        height: 36,
+        text: "column",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-main-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 540,
+        y: 230,
+        width: 30,
+        height: 290,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-main-l,
+        kind: text,
+        x: 580,
+        y: 360,
+        width: 80,
+        height: 36,
+        text: "main",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-cross-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 535,
+        width: 220,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-cross-l,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 90,
+        height: 36,
+        text: "cross",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-q,
+        kind: text,
+        x: 700,
+        y: 240,
+        width: 380,
+        height: 36,
+        text: "ဘယ်ညာ အလယ်ပို့ချင်ရင် → ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 300,
+        height: 40,
+        text: "align-items",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: f-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 295,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-a2,
+        kind: text,
+        x: 700,
+        y: 390,
+        width: 380,
+        height: 36,
+        text: "အပေါ်အောက် → justify-content",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4117
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: alignment-overview
+    chapter: "Flexbox alignment ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ flex item တွေရဲ့ အရွယ်အစားကို ကြည့်ခဲ့ပါတယ်။ ဒါပေမဲ့ container ထဲမှာ
+      ဘယ်နေရာမှာ ရှိရမလဲ ဆိုတာ မဆုံးဖြတ်ရသေးပါဘူး။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
+      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-box]] ဒီ lesson ရဲ့ အကြောင်းအရာက alignment ပါ။
+      item တွေကို အစ၊ အလယ်၊ အဆုံး ဘယ်မှာ ထားမလဲ ညှိတာပါ။ ဒီ flex container မှာ item သုံးခုက အစမှာ
+      ရှိပြီး၊ နေရာလွတ် ကျန်ပါတယ်။ [[mark:draw-main]] item တွေက main axis တစ်လျှောက် တန်းစီပါတယ်။
+      flexbox မှာ justify နဲ့ စတဲ့ property တွေက main axis အတွက်ပါ။ [[mark:draw-cross]] cross axis
+      ကတော့ main axis ကို ထောင့်မှန်ကျ ဖြတ်သွားပါတယ်။ align နဲ့ စတဲ့ property တွေကတော့ cross axis
+      ပေါ်မှာ အလုပ်လုပ်ပါတယ်။ [[mark:draw-space-group]] ဒီ property တွေကို အုပ်စု နှစ်စု ခွဲလို့
+      ရပါတယ်။ ပထမ အုပ်စုက နေရာလွတ်ကို ခွဲဝေပါတယ်။ justify content က main axis တစ်လျှောက်၊ align
+      content က wrap ဖြစ်နေတဲ့ line တွေကြားမှာ ခွဲဝေပါတယ်။ [[mark:draw-items-group]] ဒုတိယ အုပ်စုကတော့
+      item တွေကို cross axis ပေါ်မှာ နေရာချပါတယ်။ container မှာ ပေးတဲ့ align items က item အားလုံးကို
+      တစ်ပြိုင်နက် ရွှေ့ပါတယ်။ item တစ်ခုမှာ ပေးတဲ့ align self ကတော့ အဲဒီ item ကိုပဲ ရွှေ့ပါတယ်။
+      [[mark:draw-spec]] ဒီ property တွေက အခု Box Alignment ဆိုတဲ့ specification ထဲမှာ ရှိပြီး၊ grid
+      ကလည်း ဒါတွေကိုပဲ သုံးပါတယ်။ ဒါကြောင့် ဒီမှာ သင်တာက grid မှာလည်း အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: flexbox alignment overview"
+        url: "https://web.dev/learn/css/flexbox#flexbox_alignment_overview"
+      - title: "MDN — Aligning items in a flex container"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Aligning_items_in_a_flex_container"
+      - title: "CSS Box Alignment Module Level 3"
+        url: "https://www.w3.org/TR/css-align-3/"
+      - title: "MDN — Main axis"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Main_Axis"
+      - title: "MDN — Cross axis"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Cross_Axis"
+    actions:
+      - id: open-overview-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-box
+        type: whiteboard.apply
+        at: { mark: draw-box }
+        upsertIds: [a-box, a-item1, a-item2, a-item3, a-free]
+        drawMs: 2400
+      - id: draw-main
+        type: whiteboard.apply
+        at: { mark: draw-main }
+        upsertIds: [a-main-arrow, a-main-label]
+        drawMs: 1800
+      - id: draw-cross
+        type: whiteboard.apply
+        at: { mark: draw-cross }
+        upsertIds: [a-cross-arrow, a-cross-label]
+        drawMs: 1800
+      - id: draw-space-group
+        type: whiteboard.apply
+        at: { mark: draw-space-group }
+        upsertIds: [a-g1-box, a-g1-title, a-jc, a-ac]
+        drawMs: 2800
+      - id: draw-items-group
+        type: whiteboard.apply
+        at: { mark: draw-items-group }
+        upsertIds: [a-g2-box, a-g2-title, a-ai, a-as]
+        drawMs: 2800
+      - id: draw-spec
+        type: whiteboard.apply
+        at: { mark: draw-spec }
+        upsertIds: [a-spec]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-overview]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက ဆိုင်ရဲ့ HTML ဖိုင်ပါ။
+      စမ်းစရာ row တချို့ ထပ်ထည့်ထားပါတယ်။ [[mark:select-nav]] အပေါ်ဆုံးက navigation list က lesson 15
+      ကတည်းက flex row ဖြစ်နေပြီးသားပါ။ [[mark:select-hero-html]] ကြိုဆိုတဲ့ အပိုင်းမှာ ခေါင်းစဉ်၊
+      စာကြောင်း တစ်ကြောင်းနဲ့ မှာယူဖို့ ခလုတ် ပါပါတယ်။ [[mark:select-chips]] ပြီးတော့ လက်ဖက်ရည် အရသာ
+      chip တွေပါ။ [[mark:select-tags]] သောက်စရာ tag ရှစ်ခု ပါတဲ့ box ပါ။ [[mark:select-cards]]
+      ပြီးတော့ သောက်စရာ card သုံးခုပါ။ ကော်ဖီ card မှာ စာသား အရှည်ဆုံး ပါပါတယ်။ [[mark:select-wide]]
+      အောက်ဆုံးမှာ အင်္ဂလိပ် စာသား ရှည်ရှည် ပါတဲ့ chip ခြောက်ခု ရှိပြီး၊ စုလိုက်ရင် page ထက်
+      ကျယ်ပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ [[mark:preview-opens]] dev server
+      အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox"
+        url: "https://web.dev/learn/css/flexbox"
+      - title: "MDN — Basic concepts of flexbox"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox"
+    actions:
+      - id: close-overview-board
+        type: whiteboard.apply
+        at: { mark: close-overview }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-nav
+        type: editor.select
+        at: { mark: select-nav }
+        target: { file: index.html, text: '<ul data-testid="nav-list">', occurrence: 1 }
+      - id: select-hero-html
+        type: editor.select
+        at: { mark: select-hero-html }
+        target:
+          { file: index.html, text: '<section class="hero" data-testid="hero">', occurrence: 1 }
+      - id: select-chips
+        type: editor.select
+        at: { mark: select-chips }
+        target:
+          { file: index.html, text: '<div class="chips demo" data-testid="chips">', occurrence: 1 }
+      - id: select-tags
+        type: editor.select
+        at: { mark: select-tags }
+        target:
+          { file: index.html, text: '<div class="tags demo" data-testid="tags">', occurrence: 1 }
+      - id: select-cards
+        type: editor.select
+        at: { mark: select-cards }
+        target:
+          { file: index.html, text: '<ul class="menu" data-testid="menu-drinks">', occurrence: 1 }
+      - id: select-wide
+        type: editor.select
+        at: { mark: select-wide }
+        target:
+          {
+            file: index.html,
+            text: '<div class="wide-chips demo" lang="en" data-testid="wide-chips">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-chips
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: chips }
+        textContains: "နို့စိမ်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-chips }
+
+  - id: justify-content
+    chapter: "Main axis ပေါ်က နေရာလွတ်"
+    narration: >
+      [[mark:scroll-chips]] chip တွေကနေ စကြည့်ရအောင်။ [[mark:type-chips]] သူတို့ရဲ့ row ကို flex
+      container လုပ်ပြီး၊ justify content ကို flex end ပေးပါမယ်။ flex end ဆိုတာ main axis ရဲ့ အဆုံးပါ။
+      ရိုက်လို့ ပြီးခါနီးမှာ chip တွေကို သတိထား ကြည့်ပါ။ [[mark:after-chips]] chip လေးခုလုံး ညာဘက်
+      အစွန်းကို ရောက်သွားပြီး၊ နေရာလွတ်က row ရဲ့ အစမှာ ရောက်နေပါပြီ။ [[mark:explain-default]] ဒါ
+      မရေးခင်က justify content က normal ပါ။ flexbox မှာ normal က flex start လို အလုပ်လုပ်လို့၊ item
+      တွေ အစမှာ ရှိပြီး နေရာလွတ်က အဆုံးမှာ ကျန်ပါတယ်။ [[mark:type-center]] သူ့ အောက်မှာ justify
+      content ကို center နဲ့ ထပ်ရေးပါမယ်။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။
+      [[mark:after-center]] chip တွေ အလယ်ကို ရောက်သွားပြီး၊ ဘေး နှစ်ဘက်မှာ နေရာလွတ် တူတူ ကျန်ပါတယ်။
+      [[mark:type-between]] နောက်တစ်ခုက space between ပါ။ သူက chip တွေကို row တစ်ခုလုံးမှာ
+      ဖြန့်ပေးပါတယ်။ [[mark:after-between]] ပထမ chip က အစမှာ ကပ်ပြီး၊ နောက်ဆုံး chip က အဆုံးမှာ
+      ကပ်ပါတယ်။ နေရာလွတ် အားလုံးကတော့ chip တွေကြားမှာ အညီအမျှ ခွဲသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space on the main axis"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_on_the_main_axis"
+      - title: "MDN — justify-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content"
+    actions:
+      - id: scroll-chips
+        type: preview.scroll
+        at: { mark: scroll-chips }
+        timeoutMs: 5000
+        top: 340
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-chips
+        type: editor.type
+        at: { mark: type-chips }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".chips {\n  display: flex;\n  justify-content: flex-end;\n}\n"
+      - id: expect-chips-end
+        type: expect.preview
+        at: { mark: after-chips }
+        timeoutMs: 4000
+        target: { by: testId, value: chips }
+        textContains: "ချိုဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-center
+        type: editor.type
+        at: { mark: type-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-content: flex-end;\n", occurrence: 1 }
+        text: "  justify-content: center;\n"
+      - id: type-between
+        type: editor.type
+        at: { mark: type-between }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-content: center;\n", occurrence: 1 }
+        text: "  justify-content: space-between;\n"
+
+  - id: space-around
+    narration: >
+      [[mark:type-around]] အခု space around ပါ။ သူက chip တိုင်းရဲ့ ဘေး နှစ်ဘက်စလုံးမှာ နေရာ တူတူ
+      ပေးပါတယ်။ [[mark:after-around]] chip တွေက အစွန်း နှစ်ဘက်ကနေ အထဲကို နည်းနည်း ဝင်လာပါတယ်။
+      [[mark:type-evenly]] နောက်ဆုံး space evenly က နေရာလွတ် အားလုံးကို အရွယ် တူအောင် လုပ်ပေးပါတယ်။
+      [[mark:after-evenly]] အစွန်း နှစ်ဘက်က နေရာလွတ် နည်းနည်း ထပ်ကြီးလာပြီး၊ အခု နေရာလွတ် ငါးခုလုံး
+      တူသွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space on the main axis"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_on_the_main_axis"
+      - title: "MDN — justify-content: space-around and space-evenly"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content#values"
+    actions:
+      - id: type-around
+        type: editor.type
+        at: { mark: type-around }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-content: space-between;\n", occurrence: 1 }
+        text: "  justify-content: space-around;\n"
+      - id: type-evenly
+        type: editor.type
+        at: { mark: type-evenly }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-content: space-around;\n", occurrence: 1 }
+        text: "  justify-content: space-evenly;\n"
+      - id: expect-chips-evenly
+        type: expect.preview
+        at: { mark: after-evenly }
+        timeoutMs: 4000
+        target: { by: testId, value: chips }
+        textContains: "ပေါ့ဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: gaps-board
+    narration: >
+      [[mark:open-gaps-board]] နောက်ဆုံး သုံးခုကို board ပေါ်မှာ ယှဉ်ကြည့်ရအောင်။
+      [[mark:draw-between]] space between က အစွန်း နှစ်ဘက်မှာ ဘာမှ မထားဘဲ၊ item တွေကြားက
+      နေရာလွတ်တွေကို တူအောင် လုပ်ပါတယ်။ [[mark:draw-around]] space around က item တိုင်းရဲ့ ဘေး
+      နှစ်ဘက်မှာ နေရာ တူတူ ပေးပါတယ်။ item နှစ်ခုကြားမှာတော့ နှစ်ခုလုံးရဲ့ နေရာ ပေါင်းမိလို့၊ အစွန်းက
+      နေရာလွတ်က ကြားက နေရာလွတ်ရဲ့ တစ်ဝက်ပဲ ရှိပါတယ်။ [[mark:draw-evenly]] space evenly ကတော့ အစွန်း
+      နှစ်ဘက် အပါအဝင် နေရာလွတ် အားလုံးကို တူအောင် လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space on the main axis"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_on_the_main_axis"
+      - title: "CSS Box Alignment Module Level 3 — distributed alignment"
+        url: "https://www.w3.org/TR/css-align-3/#distribution-values"
+    actions:
+      - id: open-gaps-board
+        type: whiteboard.apply
+        at: { mark: open-gaps-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-between
+        type: whiteboard.apply
+        at: { mark: draw-between }
+        upsertIds: [b-btw-k, b-btw-bar, b-btw-1, b-btw-2, b-btw-3, b-btw-note]
+        drawMs: 2800
+      - id: draw-around
+        type: whiteboard.apply
+        at: { mark: draw-around }
+        upsertIds: [b-aro-k, b-aro-bar, b-aro-1, b-aro-2, b-aro-3, b-aro-note]
+        drawMs: 2800
+      - id: draw-evenly
+        type: whiteboard.apply
+        at: { mark: draw-evenly }
+        upsertIds: [b-eve-k, b-eve-bar, b-eve-1, b-eve-2, b-eve-3, b-eve-note]
+        drawMs: 2800
+
+  - id: no-free-space
+    narration: >
+      [[mark:close-gaps-board]] ဒါတွေ အကုန်လုံး အလုပ်လုပ်ဖို့ နေရာလွတ် ရှိရပါမယ်။
+      [[mark:type-chip-flex]] ပြီးခဲ့တဲ့ lesson က flex 1 ကို chip တိုင်းမှာ ပေးကြည့်ရအောင်။ ဒါဆို chip
+      တွေ ကြီးလာပြီး row ကို အညီအမျှ ခွဲယူပါမယ်။ [[mark:after-chip-flex]] chip တွေ row တစ်ခုလုံး
+      ပြည့်သွားပြီး၊ ကြားက နေရာလွတ် ပျောက်သွားပါပြီ။ [[mark:select-evenly]] ဒီ justify content ကို
+      ကြည့်ပါ။ space evenly ဖြစ်နေတုန်းပါ။ ဒါပေမဲ့ ခွဲဝေစရာ နေရာလွတ် မကျန်တော့ပါဘူး။ ဒါကြောင့် justify
+      content ဘာမှ မလုပ်သလို ဖြစ်နေရင်၊ item တွေ grow နဲ့ ကြီးနေသလား စစ်ကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space on the main axis"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_on_the_main_axis"
+      - title: "MDN — flex"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex"
+    actions:
+      - id: close-gaps-board
+        type: whiteboard.apply
+        at: { mark: close-gaps-board }
+        open: false
+      - id: type-chip-flex
+        type: editor.type
+        at: { mark: type-chip-flex }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  justify-content: space-evenly;\n}\n", occurrence: 1 }
+        text: "\n.chips .chip {\n  flex: 1;\n}\n"
+      - id: expect-chip-flex
+        type: expect.preview
+        at: { mark: after-chip-flex }
+        timeoutMs: 4000
+        target: { by: testId, value: chips }
+        textContains: "ကျဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-evenly
+        type: editor.select
+        at: { mark: select-evenly }
+        target: { file: styles.css, text: "justify-content: space-evenly;", occurrence: 1 }
+
+  - id: align-content
+    chapter: "Wrap ဖြစ်တဲ့ line တွေကြားက နေရာလွတ်"
+    narration: >
+      အခု tag box ကို ကြည့်ရအောင်။ [[mark:type-tags]] သူ့ကို wrap လုပ်ခွင့် ရှိတဲ့ flex container
+      လုပ်ပြီး gap ထည့်ပါမယ်။ ပြီးတော့ line တွေ လိုတာထက် ပိုမြင့်အောင် အမြင့် ပုံသေ ပေးပါမယ်။
+      [[mark:after-tags]] tag တွေက wrap ဖြစ်ပြီး line တချို့ ခွဲသွားပါတယ်။ line တွေက box ရဲ့ အမြင့်
+      တစ်ခုလုံးမှာ ဖြန့်နေပြီး၊ tag တွေတောင် ပိုမြင့်လာပါတယ်။ [[mark:explain-ac-default]] ဒါက align
+      content ရဲ့ initial value ဖြစ်တဲ့ normal ကြောင့်ပါ။ flexbox မှာ သူက stretch လို အလုပ်လုပ်လို့၊
+      line တွေက အပို အမြင့်ကို ခွဲယူပြီး tag တွေလည်း လိုက်ဆန့်ပါတယ်။ [[mark:type-ac-start]] အဲဒီအစား
+      flex start နဲ့ line တွေကို cross axis ရဲ့ အစမှာ စုထားကြည့်ရအောင်။ [[mark:after-ac-start]] line
+      တွေ အပေါ်ဆုံးကို ရောက်သွားပြီး၊ tag တွေလည်း ပုံမှန် အမြင့် ပြန်ရပါတယ်။ ကျန်တဲ့ နေရာက အောက်ခြေမှာ
+      ရှိပါတယ်။ [[mark:type-ac-center]] နောက်တစ်ခုက center ပါ။ သူက line တွေကို အလယ်မှာ စုပေးပါတယ်။
+      [[mark:after-ac-center]] အခု line တွေ အလယ်မှာ စုနေပါပြီ။ [[mark:type-ac-between]] chip
+      တွေမှာလိုပဲ space between နဲ့ line တွေကို ဖြန့်ကြည့်ရအောင်။ [[mark:after-ac-between]] ပထမ line က
+      အပေါ်ဆုံး၊ နောက်ဆုံး line က အောက်ဆုံး ရောက်ပြီး၊ နေရာလွတ်က သူတို့ကြားမှာ ရှိပါတယ်။ တန်ဖိုးတွေက
+      justify content နဲ့ တူပေမယ့်၊ cross axis ပေါ်မှာ line တွေကြား အလုပ်လုပ်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space between flex lines"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_between_flex_lines"
+      - title: "MDN — align-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-content"
+    actions:
+      # block: typed key by key, "display: flex" before "flex-wrap: wrap" would
+      # squeeze the eight tags into one line for a few seconds.
+      - id: type-tags
+        type: editor.type
+        at: { mark: type-tags }
+        cadence: block
+        target: { file: styles.css, after: "  flex: 1;\n}\n", occurrence: 1 }
+        text: "\n.tags {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  height: 220px;\n}\n"
+      - id: expect-tags
+        type: expect.preview
+        at: { mark: after-tags }
+        timeoutMs: 4000
+        target: { by: testId, value: tags }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-ac-start
+        type: editor.type
+        at: { mark: type-ac-start }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  height: 220px;\n", occurrence: 1 }
+        text: "  align-content: flex-start;\n"
+      - id: type-ac-center
+        type: editor.type
+        at: { mark: type-ac-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  align-content: flex-start;\n", occurrence: 1 }
+        text: "  align-content: center;\n"
+      - id: type-ac-between
+        type: editor.type
+        at: { mark: type-ac-between }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  align-content: center;\n", occurrence: 1 }
+        text: "  align-content: space-between;\n"
+
+  - id: place-content
+    narration: >
+      [[mark:type-place]] နေရာလွတ် ခွဲဝေတဲ့ property နှစ်ခုကို place content ဆိုတဲ့ shorthand နဲ့
+      တစ်ကြောင်းတည်း ပေးလို့ ရပါတယ်။ ပထမ တန်ဖိုးက align content အတွက်၊ ဒုတိယ တန်ဖိုးက justify content
+      အတွက်ပါ။ center နဲ့ end ကို ပေးပါမယ်။ [[mark:after-place]] line တွေက box ရဲ့ အလယ်ကို
+      ပြန်ရောက်ပြီး၊ line တစ်ကြောင်းစီထဲမှာ tag တွေက ညာဘက် အဆုံးကို ရွေ့သွားပါတယ်။
+      [[mark:select-place]] ဒီ place content ကို ကြည့်ပါ။ တန်ဖိုး တစ်ခုပဲ ပေးရင် property နှစ်ခုလုံးက
+      အဲဒီ တန်ဖိုးကို ရပါတယ်။ နှစ်ခု ပေးရင်တော့ cross axis အရင်၊ main axis နောက်မှ ဆိုတာ မှတ်ထားပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: the place-content shorthand"
+        url: "https://web.dev/learn/css/flexbox#the_place-content_shorthand"
+      - title: "MDN — place-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/place-content"
+    actions:
+      # line-by-line: typed key by key, its valid prefix "center" would centre
+      # the tags on both axes for a moment before "end" lands.
+      - id: type-place
+        type: editor.type
+        at: { mark: type-place }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  align-content: space-between;\n", occurrence: 1 }
+        text: "  place-content: center end;\n"
+      - id: expect-place
+        type: expect.preview
+        at: { mark: after-place }
+        timeoutMs: 4000
+        target: { by: testId, value: tags }
+        textContains: "ရေနွေးကြမ်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-place
+        type: editor.select
+        at: { mark: select-place }
+        target: { file: styles.css, text: "place-content: center end;", occurrence: 1 }
+
+  - id: lines-board
+    narration: >
+      [[mark:open-lines-board]] align content မှာ နောက်ထပ် လိုတာ တစ်ခုက wrap ပါ။ [[mark:draw-wrap]]
+      ကိုယ့် tag box မှာ wrap ဖြစ်လို့ flex line တချို့ ရပြီး၊ သူတို့ ပတ်လည်မှာ အပို အမြင့် ရှိပါတယ်။
+      align content က အဲဒါကို ခွဲဝေတာပါ။ [[mark:draw-nowrap]] wrap မလုပ်ရင်တော့ line တစ်ကြောင်းတည်းက
+      container အမြင့် အပြည့် ယူထားပါတယ်။ line နဲ့ container ကြားမှာ နေရာလွတ် မကျန်လို့၊ box
+      မြင့်နေရင်တောင် align content က ဘာမှ မလုပ်ပါဘူး။ [[mark:draw-items-note]] နောက် property
+      နှစ်ခုအတွက်လည်း line က အရေးကြီးပါတယ်။ align items နဲ့ align self က item တွေကို သူတို့ line ထဲမှာ
+      ရွှေ့တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: distributing space between flex lines"
+        url: "https://web.dev/learn/css/flexbox#distributing_space_between_flex_lines"
+      - title: "web.dev Learn CSS — Flexbox: aligning items on the cross axis"
+        url: "https://web.dev/learn/css/flexbox#aligning_items_on_the_cross-axis"
+      - title: "CSS Flexible Box Layout Module Level 1 — flex lines"
+        url: "https://www.w3.org/TR/css-flexbox-1/#flex-lines"
+    actions:
+      - id: open-lines-board
+        type: whiteboard.apply
+        at: { mark: open-lines-board }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-wrap
+        type: whiteboard.apply
+        at: { mark: draw-wrap }
+        upsertIds:
+          [
+            c-wrap-k,
+            c-wrap-box,
+            c-l1,
+            c-l1-a,
+            c-l1-b,
+            c-l1-c,
+            c-l2,
+            c-l2-a,
+            c-l2-b,
+            c-l3,
+            c-l3-a,
+            c-wrap-note,
+          ]
+        drawMs: 3600
+      - id: draw-nowrap
+        type: whiteboard.apply
+        at: { mark: draw-nowrap }
+        upsertIds: [c-nowrap-k, c-nowrap-box, c-one-line, c-n-a, c-n-b, c-n-c, c-nowrap-note]
+        drawMs: 3200
+      - id: draw-items-note
+        type: whiteboard.apply
+        at: { mark: draw-items-note }
+        upsertIds: [c-items-note]
+        drawMs: 1600
+
+  - id: stretch
+    chapter: "Cross axis ပေါ်မှာ item တွေကို ညှိကြည့်ရအောင်"
+    narration: >
+      [[mark:close-lines-board]] menu ကို ဆက်ကြည့်ရအောင်။ [[mark:scroll-cards]] card သုံးခုက
+      အပေါ်အောက် ဆင့်နေတုန်းပါ။ [[mark:type-cards]] list ကို gap နည်းနည်းနဲ့ flex row လုပ်ပါမယ်။
+      ပြီးခဲ့တဲ့ lesson မှာလိုပဲ card တိုင်းကို flex 1 ပေးပြီး row ကို ခွဲယူခိုင်းပါမယ်။
+      [[mark:after-cards]] card တွေ ဘေးချင်းကပ် ဖြစ်သွားပြီး၊ ကော်ဖီ card မှာ စာသား အများကြီး
+      ပိုပါပေမယ့် သုံးခုလုံး အမြင့် တူနေပါတယ်။ [[mark:explain-stretch]] card တွေ အမြင့် တူနေတာလည်း
+      default ကြောင့်ပါ။ align items ရဲ့ initial value က normal ဖြစ်ပြီး stretch လို အလုပ်လုပ်လို့၊
+      item တိုင်းက သူ့ line ရဲ့ အမြင့် အပြည့်ထိ ဆန့်ပါတယ်။ ဒါပေမဲ့ item ရဲ့ အမြင့်က auto ဖြစ်မှ
+      ဆန့်ပြီး၊ အမြင့် ပုံသေ ပေးထားရင် မဆန့်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: aligning items on the cross axis"
+        url: "https://web.dev/learn/css/flexbox#aligning_items_on_the_cross-axis"
+      - title: "MDN — align-items: stretch"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-items#stretch"
+    actions:
+      - id: close-lines-board
+        type: whiteboard.apply
+        at: { mark: close-lines-board }
+        open: false
+      - id: scroll-cards
+        type: preview.scroll
+        at: { mark: scroll-cards }
+        timeoutMs: 5000
+        top: 680
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: typed key by key, "display: flex" before "flex: 1" would
+      # squeeze the cards to uneven widths for several seconds.
+      - id: type-cards
+        type: editor.type
+        at: { mark: type-cards }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  place-content: center end;\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu {\n  display: flex;\n  gap: 8px;\n}\n\n.drinks .menu-card {\n  flex: 1;\n}\n"
+      - id: expect-cards
+        type: expect.preview
+        at: { mark: after-cards }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: align-items
+    narration: >
+      [[mark:type-ai-start]] list မှာ align items ကို flex start နဲ့ ထည့်ကြည့်ရအောင်။
+      [[mark:after-ai-start]] အခု card တစ်ခုစီက သူ့ content လောက်ပဲ မြင့်ပြီး၊ သုံးခုလုံး အပေါ်မှာ
+      ညီနေပါတယ်။ [[mark:type-ai-center]] နောက်တစ်ခုက center ပါ။ နိမ့်တဲ့ card နှစ်ခုကို သတိထား
+      ကြည့်ပါ။ [[mark:after-ai-center]] အဲဒီ card နှစ်ခုက row ရဲ့ အလယ်ကို ဆင်းသွားပါပြီ။ direction က
+      row ဖြစ်လို့ cross axis က အပေါ်ကနေ အောက်ကို သွားပြီး၊ ဒီမှာ center ဆိုတာ အပေါ်အောက် အလယ်ကို
+      ဆိုလိုတာပါ။ [[mark:explain-baseline]] baseline ဆိုတဲ့ တန်ဖိုးလည်း ရှိပါတယ်။ သူက item တိုင်းရဲ့
+      ပထမ စာကြောင်းကို တစ်တန်းတည်း ညီအောင် စီပါတယ်။ စာလုံးကြီး ဈေးနှုန်းနဲ့ စာလုံးသေး label လို၊ font
+      size မတူတဲ့ item တွေမှာ အသုံးဝင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: aligning items on the cross axis"
+        url: "https://web.dev/learn/css/flexbox#aligning_items_on_the_cross-axis"
+      - title: "MDN — align-items"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-items"
+    actions:
+      - id: type-ai-start
+        type: editor.type
+        at: { mark: type-ai-start }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".drinks .menu {\n  display: flex;\n  gap: 8px;\n",
+            occurrence: 1,
+          }
+        text: "  align-items: flex-start;\n"
+      - id: type-ai-center
+        type: editor.type
+        at: { mark: type-ai-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  align-items: flex-start;\n", occurrence: 1 }
+        text: "  align-items: center;\n"
+      - id: expect-ai-center
+        type: expect.preview
+        at: { mark: after-ai-center }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: align-self
+    narration: >
+      [[mark:type-self]] card တစ်ခုတည်းကို ရွှေ့ချင်ရင် အဲဒီ card မှာ align self ကို သုံးပါတယ်။ အသစ်
+      ဆိုတဲ့ badge ပါတဲ့ လက်ဖက်ရည် card ကို cross axis ရဲ့ အဆုံးကို ပို့ကြည့်ရအောင်။
+      [[mark:after-self]] လက်ဖက်ရည် card တစ်ခုတည်း row ရဲ့ အောက်ခြေကို ဆင်းသွားပြီး၊ ကျန်တဲ့ နှစ်ခုက
+      အလယ်မှာပဲ ရှိနေပါတယ်။ [[mark:select-self]] ဒီ align self ကို ကြည့်ပါ။ သူက align items နဲ့ တူတဲ့
+      တန်ဖိုးတွေကို ယူပြီး၊ သူ့ item အတွက် container ရဲ့ align items ကို နိုင်ပါတယ်။ default က auto
+      ဖြစ်ပြီး၊ container ရဲ့ တန်ဖိုးကို သုံးမယ်လို့ ဆိုလိုပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: aligning items on the cross axis"
+        url: "https://web.dev/learn/css/flexbox#aligning_items_on_the_cross-axis"
+      - title: "MDN — align-self"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-self"
+    actions:
+      - id: type-self
+        type: editor.type
+        at: { mark: type-self }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".drinks .menu-card {\n  flex: 1;\n}\n", occurrence: 1 }
+        text: "\n.featured {\n  align-self: flex-end;\n}\n"
+      - id: expect-self
+        type: expect.preview
+        at: { mark: after-self }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-self
+        type: editor.select
+        at: { mark: select-self }
+        target: { file: styles.css, text: "align-self: flex-end;", occurrence: 1 }
+
+  - id: no-justify-self
+    chapter: "Justify self ဘာလို့ မရှိတာလဲ"
+    narration: >
+      [[mark:open-margin-board]] align self က item တစ်ခုကို cross axis ပေါ်မှာ ရွှေ့ပါတယ်။ main axis
+      ပေါ်မှာ item တစ်ခု ရွှေ့တဲ့ justify self ရော ရှိသလား။ flexbox မှာတော့ မရှိပါဘူး။
+      [[mark:draw-group]] main axis ပေါ်မှာ item တွေက အုပ်စုလိုက် ရွေ့ပါတယ်။ justify content က
+      နေရာလွတ်ကို အုပ်စု တစ်ခုလုံးရဲ့ ပတ်လည်မှာ ခွဲဝေတာမို့၊ item တစ်ခုတည်းကို သီးသန့်
+      မရွှေ့နိုင်ပါဘူး။ [[mark:draw-strike]] justify self က grid မှာ ရှိပေမယ့်၊ flexbox မှာတော့
+      browser က ကျော်သွားပါတယ်။ [[mark:draw-auto-margin]] item တစ်ခုတည်းအတွက် flexbox မှာ auto margin
+      ကို သုံးပါတယ်။ auto margin က သူ ရှိတဲ့ဘက်က နေရာလွတ် အကုန်လုံးကို ယူပါတယ်။ နောက်ဆုံး item ရဲ့
+      ဘယ်ဘက်မှာ ပေးလိုက်ရင်၊ အဲဒီ item ကို row ရဲ့ အဆုံးထိ တွန်းပို့ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: why is there no justify-self in flexbox?"
+        url: "https://web.dev/learn/css/flexbox#why_is_there_no_justify-self_in_flexbox"
+      - title: "MDN — justify-self (ignored in flex layouts)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-self"
+      - title: "CSS Flexible Box Layout Module Level 1 — aligning with auto margins"
+        url: "https://www.w3.org/TR/css-flexbox-1/#auto-margins"
+    actions:
+      - id: open-margin-board
+        type: whiteboard.apply
+        at: { mark: open-margin-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-group
+        type: whiteboard.apply
+        at: { mark: draw-group }
+        upsertIds: [d-bar1, d-g1, d-g2, d-g3, d-free1, d-group-note]
+        drawMs: 2800
+      - id: draw-strike
+        type: whiteboard.apply
+        at: { mark: draw-strike }
+        upsertIds: [d-js, d-js-strike, d-js-note]
+        drawMs: 2000
+      - id: draw-auto-margin
+        type: whiteboard.apply
+        at: { mark: draw-auto-margin }
+        upsertIds: [d-bar2, d-n1, d-n2, d-margin, d-margin-l, d-n3, d-margin-note]
+        drawMs: 3600
+
+  - id: auto-margin
+    narration: >
+      [[mark:close-margin-board]] navigation မှာ စမ်းကြည့်ရအောင်။ [[mark:scroll-top]] သူက page ရဲ့
+      အပေါ်ဆုံးမှာ ရှိပါတယ်။ [[mark:type-margin]] nav list ရဲ့ နောက်ဆုံး item ဖြစ်တဲ့ မှာယူရန် link
+      ကို last-child နဲ့ ရွေးပြီး၊ သူ့ ဘယ်ဘက်မှာ auto margin ပေးပါမယ်။ [[mark:after-margin]] မှာယူရန်
+      link က header ရဲ့ ညာဘက် အစွန်းကို ခုန်သွားပြီး၊ ကျန်တဲ့ link နှစ်ခုက အစမှာပဲ ရှိနေပါတယ်။
+      [[mark:select-margin]] ဒီ auto margin ကို ကြည့်ပါ။ browser က auto margin ကို justify content
+      မတိုင်ခင် တွက်လို့၊ နေရာလွတ်ကို သူက အမြဲ အရင် ယူပါတယ်။ lesson 21 မှာ သင်မယ့် margin inline start
+      ကတော့ ညာကနေ ဘယ်ကို စာရေးတဲ့ page မှာလည်း အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: why is there no justify-self in flexbox? (auto margins)"
+        url: "https://web.dev/learn/css/flexbox#why_is_there_no_justify-self_in_flexbox"
+      - title: "CSS Flexible Box Layout Module Level 1 — aligning with auto margins"
+        url: "https://www.w3.org/TR/css-flexbox-1/#auto-margins"
+      - title: "MDN — margin-inline-start"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline-start"
+    actions:
+      - id: close-margin-board
+        type: whiteboard.apply
+        at: { mark: close-margin-board }
+        open: false
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-margin
+        type: editor.type
+        at: { mark: type-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  align-self: flex-end;\n}\n", occurrence: 1 }
+        text: "\n.nav li:last-child {\n  margin-left: auto;\n}\n"
+      - id: expect-margin
+        type: expect.preview
+        at: { mark: after-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-order }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-margin
+        type: editor.select
+        at: { mark: select-margin }
+        target: { file: styles.css, text: "margin-left: auto;", occurrence: 1 }
+
+  - id: centering
+    chapter: "အလယ်တည့်တည့် ပို့ကြည့်ရအောင်"
+    narration: >
+      အခု alignment မှာ အသုံးအများဆုံး အလယ်တည့်တည့် ပို့တာကို၊ ကြိုဆိုတဲ့ အပိုင်းမှာ စမ်းကြည့်ရအောင်။
+      [[mark:type-hero-col]] lesson 15 မှာလိုပဲ ကြိုဆိုတဲ့ အပိုင်းကို column direction နဲ့ flex
+      container လုပ်ပါမယ်။ ဒါဆို သူ့ child တွေ အပေါ်အောက် ဆင့်နေပါမယ်။ [[mark:after-hero-col]]
+      ခေါင်းစဉ်က မရွေ့ပေမယ့်၊ မှာယူဖို့ ခလုတ်က box ရဲ့ အကျယ် တစ်ခုလုံးအထိ ဆန့်သွားပါပြီ။ column မှာ
+      cross axis က ဘယ်ကနေ ညာ ဖြစ်ပြီး၊ item တွေက default အားဖြင့် အဲဒီ axis အတိုင်း ဆန့်လို့ပါ။
+      [[mark:type-hero-jc]] အခု content ကို main axis ရဲ့ အလယ်ပို့ဖို့ justify content ကို center
+      ပေးပါမယ်။ [[mark:after-hero-jc]] ဘာမှ မရွေ့ပါဘူး။ column မှာ main axis က အပေါ်ကနေ အောက်
+      ဖြစ်ပြီး၊ box က content လောက်ပဲ မြင့်လို့ နေရာလွတ် မရှိပါဘူး။ [[mark:type-hero-h]] ဒါဆို
+      ကြိုဆိုတဲ့ အပိုင်းကို content ထက် ပိုမြင့်အောင် အမြင့် အနည်းဆုံး 240 pixel ပေးကြည့်ရအောင်။
+      [[mark:after-hero-h]] box က ပိုမြင့်လာပြီး၊ content က အပေါ်အောက် အလယ်ကို ရောက်သွားပါပြီ။
+      [[mark:type-hero-ai]] နောက်ဆုံး cross axis အတွက် align items ကို center ပေးပါမယ်။
+      [[mark:after-hero-ai]] အခု အပေါ်အောက်ရော ဘယ်ညာပါ အလယ်တည့်တည့် ရောက်သွားပြီး၊ ခလုတ်လည်း သူ့ အကျယ်
+      ပြန်ရပါပြီ။ column မှာ axis တွေ လှည့်သွားလို့၊ justify content က အပေါ်အောက်၊ align items က
+      ဘယ်ညာမှာ အလုပ်လုပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: with flex-direction: column"
+        url: "https://web.dev/learn/css/flexbox#with_flex-direction_column"
+      - title: "web.dev Learn CSS — Flexbox: how to center an item vertically and horizontally"
+        url: "https://web.dev/learn/css/flexbox#how_to_center_an_item_vertically_and_horizontally"
+      - title: "MDN — Center an element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/How_to/Layout_cookbook/Center_an_element"
+    actions:
+      # block: typed key by key, "display: flex" before the direction would lay
+      # the greeting, the text and the button out in a row for a few seconds.
+      - id: type-hero-col
+        type: editor.type
+        at: { mark: type-hero-col }
+        cadence: block
+        target: { file: styles.css, after: "  margin-left: auto;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  display: flex;\n  flex-direction: column;\n}\n"
+      - id: expect-hero-col
+        type: expect.preview
+        at: { mark: after-hero-col }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hero-jc
+        type: editor.type
+        at: { mark: type-hero-jc }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  flex-direction: column;\n", occurrence: 1 }
+        text: "  justify-content: center;\n"
+      - id: type-hero-h
+        type: editor.type
+        at: { mark: type-hero-h }
+        cadence: natural
+        target:
+          {
+            file: styles.css,
+            after: "  flex-direction: column;\n  justify-content: center;\n",
+            occurrence: 1,
+          }
+        text: "  min-height: 240px;\n"
+      - id: type-hero-ai
+        type: editor.type
+        at: { mark: type-hero-ai }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  min-height: 240px;\n", occurrence: 1 }
+        text: "  align-items: center;\n"
+      - id: expect-hero-ai
+        type: expect.preview
+        at: { mark: after-hero-ai }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "ပူပူနွေးနွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: centering-recipe
+    narration: >
+      [[mark:select-recipe]] ဒီ declaration သုံးခုကို ကြည့်ပါ။ justify content ရော align items ပါ
+      center ဖြစ်ရပြီး၊ main axis မှာ နေရာလွတ် ရှိအောင် အမြင့် အနည်းဆုံး တစ်ခု ပေးရပါတယ်။
+      [[mark:margin-auto]] နည်း နှစ်ခု ထပ်ရှိပါတယ်။ flex container မှာ child တစ်ခုတည်း ရှိရင်၊ သူ့
+      ဘက်တိုင်းမှာ auto margin ပေးတာနဲ့လည်း အပေါ်အောက်ရော ဘယ်ညာပါ အလယ်ရောက်ပါတယ်။ [[mark:block-align]]
+      ပြီးတော့ အခုခေတ် browser တွေမှာ align content က flexbox မပါတဲ့ ရိုးရိုး block container မှာလည်း
+      အလုပ်လုပ်လို့၊ content ကို အပေါ်အောက် အလယ် ပို့နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: how to center an item vertically and horizontally"
+        url: "https://web.dev/learn/css/flexbox#how_to_center_an_item_vertically_and_horizontally"
+      - title: "CSS Flexible Box Layout Module Level 1 — aligning with auto margins"
+        url: "https://www.w3.org/TR/css-flexbox-1/#auto-margins"
+      - title: "MDN — align-content (block containers)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/align-content"
+      - title: "CSS Box Alignment Module Level 3 — align-content"
+        url: "https://www.w3.org/TR/css-align-3/#align-justify-content"
+    actions:
+      - id: select-recipe
+        type: editor.select
+        at: { mark: select-recipe }
+        target:
+          {
+            file: styles.css,
+            text: "  justify-content: center;\n  min-height: 240px;\n  align-items: center;",
+            occurrence: 1,
+          }
+
+  - id: safe-center
+    chapter: "Safe center ဘာကြောင့် လိုလဲ"
+    narration: >
+      [[mark:scroll-wide]] အလယ်ပို့တဲ့အခါ သတိထားစရာ တစ်ခု ရှိပါတယ်။ preview မှာ ကြည့်ရအောင်။
+      [[mark:type-wide]] အင်္ဂလိပ် chip တွေရဲ့ row ကို gap ပါတဲ့ flex container လုပ်ပြီး၊ justify
+      content နဲ့ အလယ်ပို့ပါမယ်။ [[mark:after-wide]] chip ခြောက်ခုက row ထက် ကျယ်လို့ ဘေး
+      နှစ်ဘက်လုံးကို လျှံထွက်ပါတယ်။ ဘယ်ဘက် အစွန်းမှာ chip တစ်ခု ပြတ်နေပြီး၊ ပထမ chip ကိုတော့ လုံးဝ
+      မမြင်ရပါဘူး။ [[mark:explain-unsafe]] row ကို ညာဘက်ကိုပဲ scroll လုပ်လို့ ရပြီး၊ ဘယ်ဘက် အစွန်းထက်
+      ပိုမသွားနိုင်ပါဘူး။ ဒါကြောင့် ပထမ chip ဆီ ဘယ်လိုမှ မရောက်နိုင်ပါဘူး။ [[mark:type-safe]] justify
+      content ကို နောက်တစ်ခါ ရေးပြီး၊ center ရဲ့ ရှေ့မှာ safe ဆိုတဲ့ စကားလုံး ထည့်ပါမယ်။
+      [[mark:after-safe]] အခု ပထမ chip က ဘယ်ဘက် အစွန်းကနေ ပြန်စပြီး၊ ကျန်တာတွေကို scroll လုပ်ပြီး
+      ကြည့်လို့ ရပါတယ်။ [[mark:select-safe]] ဒီ safe center ကို ကြည့်ပါ။ item တွေ ဆံ့နေသရွေ့
+      အလယ်ပို့ပြီး၊ လျှံထွက်မယ့်အခါ အစကနေ စီလို့ ဘာမှ မပျောက်ပါဘူး။ 2024 ခုနှစ်ကတည်းက browser အဓိက
+      အားလုံးမှာ သုံးလို့ ရနေပါပြီ။ [[mark:start-vs-flex-start]] flex start နဲ့ flex end က flex
+      direction ကို လိုက်လို့ row reverse မှာ နေရာ လဲသွားပါတယ်။ place content မှာ သုံးခဲ့တဲ့ end
+      အပါအဝင်၊ ရိုးရိုး start နဲ့ end ကတော့ page ရဲ့ စာရေးတဲ့ ဦးတည်ရာကို လိုက်ပါတယ်။
+    sources:
+      - title: "MDN — justify-content: safe and unsafe"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content#safe"
+      - title: "CSS Box Alignment Module Level 3 — overflow alignment"
+        url: "https://www.w3.org/TR/css-align-3/#overflow-values"
+      - title: "MDN — justify-content (start, end, flex-start, flex-end)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content#values"
+    actions:
+      - id: scroll-wide
+        type: preview.scroll
+        at: { mark: scroll-wide }
+        timeoutMs: 5000
+        top: 900
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-wide
+        type: editor.type
+        at: { mark: type-wide }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  min-height: 240px;\n  align-items: center;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.wide-chips {\n  display: flex;\n  gap: 8px;\n  justify-content: center;\n}\n"
+      - id: expect-wide
+        type: expect.preview
+        at: { mark: after-wide }
+        timeoutMs: 4000
+        target: { by: testId, value: wide-chips }
+        textContains: "Sweet and creamy"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-safe
+        type: editor.type
+        at: { mark: type-safe }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  gap: 8px;\n  justify-content: center;\n", occurrence: 1 }
+        text: "  justify-content: safe center;\n"
+      - id: expect-safe
+        type: expect.preview
+        at: { mark: after-safe }
+        timeoutMs: 4000
+        target: { by: testId, value: wide-chips }
+        textContains: "Iced lemon tea"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-safe
+        type: editor.select
+        at: { mark: select-safe }
+        target: { file: styles.css, text: "justify-content: safe center;", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ ဒီ flex container က column ပါ။ သူ့
+      item တွေကို ဘယ်ညာ အလယ်ပို့ချင်ရင် ဘယ် property ကို သုံးမလဲ။ ခဏ စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေက align items ပါ။ column မှာ cross axis က ဘယ်ကနေ ညာကို သွားပြီး၊ align
+      property တွေက cross axis ပေါ်မှာ အလုပ်လုပ်လို့ပါ။ [[mark:quiz-other]] justify content ဆိုရင်တော့
+      အပေါ်အောက် အလယ်ကို ပို့ပါမယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ justify က main axis၊ align က
+      cross axis ပေါ်မှာ အလုပ်လုပ်ပါတယ်။ justify content နဲ့ align content က နေရာလွတ်ကို ခွဲဝေတာမို့
+      နေရာလွတ် ရှိမှ အလုပ်လုပ်ပါတယ်။ align items နဲ့ align self က item တွေကို သူတို့ line ထဲမှာ
+      နေရာချပြီး၊ default အားဖြင့် ဆန့်ပါတယ်။ auto margin က item တစ်ခုကို သီးသန့် တွန်းပို့ပြီး၊ safe
+      center က လျှံထွက်တဲ့ item တွေ မပျောက်အောင် ထိန်းပါတယ်။ [[mark:tools]] alignment က ထင်ထားသလို
+      မဖြစ်ရင်၊ ကိုယ့် browser ရဲ့ DevTools က flex container ရဲ့ line တွေနဲ့ နေရာလွတ်ကို
+      ဆွဲပြပေးနိုင်ပါတယ်။ [[mark:next-lesson]] flexbox က line တစ်ကြောင်းစီကို သီးသန့် စီလို့၊ line
+      မတူတဲ့ item တွေ column လိုက် မညီနိုင်ပါဘူး။ နောက် lesson မှာတော့ row နဲ့ column ကို တစ်ပြိုင်နက်
+      ထိန်းတဲ့ grid ကို ကြည့်သွားပါမယ်။ အဲဒီမှာလည်း ဒီ alignment property တွေကိုပဲ သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Flexbox: check your understanding"
+        url: "https://web.dev/learn/css/flexbox#check_your_understanding_2"
+      - title: "web.dev Learn CSS — Flexbox: resources"
+        url: "https://web.dev/learn/css/flexbox#resources"
+      - title: "Chrome DevTools — Inspect and debug CSS flexbox layouts"
+        url: "https://developer.chrome.com/docs/devtools/css/flexbox"
+      - title: "MDN — Aligning items in a flex container"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Aligning_items_in_a_flex_container"
+      - title: "web.dev Learn CSS — Grid (next lesson)"
+        url: "https://web.dev/learn/css/grid"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            f-title,
+            f-box,
+            f-i1,
+            f-i2,
+            f-i3,
+            f-dir,
+            f-main-arrow,
+            f-main-l,
+            f-cross-arrow,
+            f-cross-l,
+            f-q,
+          ]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a, f-a-check]
+        drawMs: 1600
+      - id: draw-quiz-other
+        type: whiteboard.apply
+        at: { mark: quiz-other }
+        upsertIds: [f-a2]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".chips {\n  display: flex;\n  justify-content: flex-end;\n  justify-content: center;\n  justify-content: space-between;\n  justify-content: space-around;\n  justify-content: space-evenly;\n}\n\n.chips .chip {\n  flex: 1;\n}\n\n.tags {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n  height: 220px;\n  align-content: flex-start;\n  align-content: center;\n  align-content: space-between;\n  place-content: center end;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".drinks .menu {\n  display: flex;\n  gap: 8px;\n  align-items: flex-start;\n  align-items: center;\n}\n\n.drinks .menu-card {\n  flex: 1;\n}\n\n.featured {\n  align-self: flex-end;\n}\n\n.nav li:last-child {\n  margin-left: auto;\n}\n\n.hero {\n  display: flex;\n  flex-direction: column;\n  justify-content: center;\n  min-height: 240px;\n  align-items: center;\n}\n\n.wide-chips {\n  display: flex;\n  gap: 8px;\n  justify-content: center;\n  justify-content: safe center;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
