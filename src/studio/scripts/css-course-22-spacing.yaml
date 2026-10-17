@@ -1,0 +1,2207 @@
+# CSS course (Burmese), lesson 22 of 43: spacing.
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 21; the three-cards puzzle; margin outside,
+# padding inside, gap between) → board (HTML spacing: br, hr, nbsp; only
+# when it carries meaning) → code tour (the br in the footer address, the hr,
+# the nbsp in the special's price; empty styles.css) → card padding (inside,
+# the background fills it) → card margin-bottom (outside, transparent; extra
+# space after the last card) → margin-bottom: 0 + the list as a grid with a
+# gap (space only between) → order button padding with two values → board
+# (one to four values clockwise from the top; border-box keeps padding inside
+# a set width) → drinks section max-width + margin 0 auto (centred; % margins
+# use the width; vertical auto is 0; auto in flex) → badge: block, fit-content,
+# negative top margin (overlaps the card edge, the name follows it up) →
+# .info heading bottom 20 + paragraph top 30 (30, not 50) → board (collapse
+# bands; block axis only; why; negative; empty block) → heading top 20 (the
+# tinted card moves down: parent-child collapse) → flow-root (the space moves
+# inside) → grid (20 + 30 = 50) → board (ways to prevent collapse) → board
+# (strategy: components own padding, layouts own gap, no outer margins on
+# components; alignment space; a scale) → tokens on :root, used by gap, card
+# padding and button padding → --space-m 24 (everything grows together) →
+# quiz (flex 20 + 30 = 50) and recap, hand-off to z-index (lesson 23).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload
+# (index.html is never edited). Keystroke-typed values have no misleading
+# valid prefix: "padding: 1…", "margin-bottom: 1…", "gap: 1…", "max-width: 3…"
+# and "margin-top: -2…" are invalid until their unit lands; "display: g…" is
+# invalid until "grid". The badge rule types width: fit-content BEFORE
+# display: block (width does nothing on an inline span, so the badge never
+# flashes as a full-width bar). "padding: 8px 20px" passes through "8px"
+# (8 on all sides for a moment) — never narrated. The :root rule, the lines
+# that contain var(…) and the --space-m override are line-by-line: :root is
+# typed at the top of a full file, and a half-typed ":r" selector or an
+# unterminated "--space-s: 8" would drop or swallow every rule after it (33
+# of 47 keystroke states did, probe-fix/root-states.ts); whole lines are
+# always valid (":root {" just nests the rest), and no unclosed parenthesis
+# or "--space-m: 2" ever reaches the browser.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): cards 384 wide
+# touching → padding 12 (cards 105 tall) → margin-bottom 16 (tinted list 361
+# → 409: 8 above the first card, 24 under the last) → grid + gap 16 (8 above,
+# 8 below, 16 between) → button 59 × 31 → 87 × 45 → drinks section 400 →
+# 320, 40 each side → badge 11 px above the card's top border, the name 30 px
+# higher → heading/paragraph space 0 → 20 → 30 → heading top 20: the tinted
+# card moves down 20 inside the white stage, heading flush with its top →
+# flow-root: card back up, 20 inside above the heading → grid: space 30 → 50
+# → tokens: card padding 8/16 (badge 15 px above the border), gap 16 →
+# --space-m 24: gaps 24, card sides 24, button 79 → 95 wide.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-22-spacing
+  title: "CSS course 22: Spacing"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 22
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit drinks block with three cards (the badge moved to
+      # the top of the special's card for the negative-margin demo, the
+      # special's price glued with &nbsp;) and an order button after the list;
+      # the lesson's collapse-demo block (an .info card with a heading and a
+      # paragraph, inside the white .stage panel); the kit footer (the address
+      # with a <br>, an <hr> before the copyright). No kit.js: nothing is
+      # clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: drinks (three cards; the badge sits first in the special's card; an order button after the list) -->
+              <section class="menu-section drinks" id="drinks" data-testid="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500&nbsp;ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+                <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
+              </section>
+
+              <!-- lesson block: collapse-demo (an .info card inside a white .stage panel) -->
+              <div class="stage" data-testid="collapse-stage">
+                <div class="info" data-testid="info">
+                  <h3 class="demo">ဖွင့်ချိန်</h3>
+                  <p class="demo">နေ့တိုင်း မနက် ၆ နာရီက ဖွင့်ပါတယ်။</p>
+                </div>
+              </div>
+            </main>
+
+            <!-- kit block: footer (the address keeps its line break; a thematic break before the copyright) -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း<br />ရန်ကုန်</p>
+              <p>09 123 456 789</p>
+              <hr />
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2, C and D, with the card margin and
+      # padding and the button padding removed (the lesson types them);
+      # section E tints the list, styles the collapse demo and the footer's hr.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 22 keeps A, B, B2, C and D. The cards have no margin and no padding
+          and the order button has no padding (the lesson types them); section E
+          tints the drinks list, gives the collapse demo its look and styles the
+          footer's thematic break. Section E sets no margin the lesson talks about
+          except the zero margins of the demo heading and paragraph.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 22: a little room above the page's first heading. */
+        .page {
+          padding-top: 16px;
+        }
+
+        /* The tinted drinks list shows where the cards' margins and gaps fall.
+           Its padding keeps the cards' margins inside it. */
+        .drinks .menu {
+          padding: 8px;
+          background: var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* The collapse demo: a tinted card with no top or bottom padding and no
+           border, so its first child's top margin can collapse through it. The white
+           .stage around it (section D) has padding, so the margin stops there. */
+        .stage {
+          min-height: 0;
+        }
+
+        .info {
+          padding: 0 16px;
+          background: var(--line);
+          border-radius: 8px;
+        }
+
+        /* Every margin the collapse demo talks about is typed in the lesson. */
+        .info h3,
+        .info p {
+          margin: 0;
+        }
+
+        .site-footer hr {
+          margin: 8px 0;
+          border: 0;
+          border-top: 1px solid var(--tea-light);
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the puzzle and the three kinds of space.
+    # Black = the cards, orange = margin, green = padding, red = gap / the
+    # extra space, blue = a box's border.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "နေရာလွတ် သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-card1,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-band1,
+        kind: rectangle,
+        x: 300,
+        y: 296,
+        width: 180,
+        height: 24,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-card2,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-band2,
+        kind: rectangle,
+        x: 300,
+        y: 376,
+        width: 180,
+        height: 24,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-card3,
+        kind: rectangle,
+        x: 300,
+        y: 400,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-band3,
+        kind: rectangle,
+        x: 300,
+        y: 456,
+        width: 180,
+        height: 24,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: a-extra-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 286,
+        y: 446,
+        width: 208,
+        height: 44,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-extra,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 200,
+        height: 36,
+        text: "အပို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-m-outer,
+        kind: rectangle,
+        x: 620,
+        y: 230,
+        width: 150,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-m-inner,
+        kind: rectangle,
+        x: 645,
+        y: 248,
+        width: 100,
+        height: 54,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m-label,
+        kind: text,
+        x: 800,
+        y: 257,
+        width: 270,
+        height: 36,
+        text: "margin · အပြင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-p-box,
+        kind: rectangle,
+        x: 620,
+        y: 360,
+        width: 150,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-p-content,
+        kind: rectangle,
+        x: 645,
+        y: 378,
+        width: 100,
+        height: 54,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-p-label,
+        kind: text,
+        x: 800,
+        y: 387,
+        width: 270,
+        height: 36,
+        text: "padding · အတွင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: a-g-a, kind: rectangle, x: 620, y: 490, width: 60, height: 80, strokeColor: "#1e1e1e" }
+    - {
+        id: a-g-stripe,
+        kind: rectangle,
+        x: 680,
+        y: 490,
+        width: 30,
+        height: 80,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - { id: a-g-b, kind: rectangle, x: 710, y: 490, width: 60, height: 80, strokeColor: "#1e1e1e" }
+    - {
+        id: a-g-label,
+        kind: text,
+        x: 800,
+        y: 512,
+        width: 270,
+        height: 36,
+        text: "gap · ကြား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — HTML spacing. Blue = the element, black = what it means,
+    # green = the rule, red = what to avoid.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "HTML ထဲက နေရာလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-br-k,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 140,
+        height: 36,
+        text: "<br>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-br-m,
+        kind: text,
+        x: 480,
+        y: 240,
+        width: 520,
+        height: 36,
+        text: "စာကြောင်း ချိုး · လိပ်စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-hr-k,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 140,
+        height: 36,
+        text: "<hr>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-hr-m,
+        kind: text,
+        x: 480,
+        y: 305,
+        width: 520,
+        height: 36,
+        text: "အကြောင်းအရာ ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-nbsp-k,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 140,
+        height: 36,
+        text: "&nbsp;",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-nbsp-m,
+        kind: text,
+        x: 480,
+        y: 370,
+        width: 520,
+        height: 36,
+        text: "1,500 ကျပ် · မခွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-rule,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 760,
+        height: 36,
+        text: "အဓိပ္ပာယ် ရှိမှ HTML · အလှအတွက်ဆိုရင် CSS",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-k,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 220,
+        height: 36,
+        text: "<br><br><br>",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 292,
+        y: 538,
+        width: 236,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-no-m,
+        kind: text,
+        x: 580,
+        y: 540,
+        width: 460,
+        height: 36,
+        text: "နေရာလွတ်အတွက် မသုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — one to four values, clockwise from the top. Blue = the box
+    # and its sides, orange = the code, green = what it means, violet = box
+    # sizing.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "တန်ဖိုး တစ်ခုကနေ လေးခုအထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 400,
+        y: 300,
+        width: 160,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-top,
+        kind: text,
+        x: 420,
+        y: 250,
+        width: 130,
+        height: 36,
+        text: "1 အပေါ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-right,
+        kind: text,
+        x: 575,
+        y: 336,
+        width: 90,
+        height: 36,
+        text: "2 ညာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-bottom,
+        kind: text,
+        x: 420,
+        y: 424,
+        width: 130,
+        height: 36,
+        text: "3 အောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-left,
+        kind: text,
+        x: 290,
+        y: 336,
+        width: 90,
+        height: 36,
+        text: "4 ဘယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-one,
+        kind: text,
+        x: 720,
+        y: 220,
+        width: 330,
+        height: 36,
+        text: "padding: 8px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-one-m,
+        kind: text,
+        x: 720,
+        y: 258,
+        width: 330,
+        height: 36,
+        text: "လေးဘက်လုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-two,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 330,
+        height: 36,
+        text: "padding: 8px 20px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-two-m,
+        kind: text,
+        x: 720,
+        y: 348,
+        width: 330,
+        height: 36,
+        text: "အပေါ်အောက် · ဘယ်ညာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-three,
+        kind: text,
+        x: 720,
+        y: 400,
+        width: 350,
+        height: 36,
+        text: "padding: 8px 20px 4px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-three-m,
+        kind: text,
+        x: 720,
+        y: 438,
+        width: 350,
+        height: 36,
+        text: "အပေါ် · ဘယ်ညာ · အောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-four,
+        kind: text,
+        x: 720,
+        y: 490,
+        width: 370,
+        height: 36,
+        text: "padding: 8px 20px 4px 0",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-four-m,
+        kind: text,
+        x: 720,
+        y: 528,
+        width: 370,
+        height: 36,
+        text: "အပေါ် · ညာ · အောက် · ဘယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-sizing,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 760,
+        height: 36,
+        text: "border-box · padding က ပေးထားတဲ့ အကျယ်ထဲမှာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — margin collapse. Blue = the heading, green = the paragraph,
+    # orange = the heading's margin, red = the paragraph's margin and the
+    # result, violet = the axis, black = the other rules.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Margin collapse",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-h3,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 240,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-h3-l,
+        kind: text,
+        x: 320,
+        y: 240,
+        width: 200,
+        height: 36,
+        text: "ခေါင်းစဉ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-band20,
+        kind: rectangle,
+        x: 300,
+        y: 286,
+        width: 240,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-band30,
+        kind: rectangle,
+        x: 296,
+        y: 286,
+        width: 248,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-p,
+        kind: rectangle,
+        x: 300,
+        y: 346,
+        width: 240,
+        height: 56,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-p-l,
+        kind: text,
+        x: 320,
+        y: 356,
+        width: 200,
+        height: 36,
+        text: "စာပိုဒ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-20,
+        kind: text,
+        x: 560,
+        y: 278,
+        width: 50,
+        height: 36,
+        text: "20",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-30,
+        kind: text,
+        x: 560,
+        y: 318,
+        width: 50,
+        height: 36,
+        text: "30",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-result,
+        kind: text,
+        x: 660,
+        y: 290,
+        width: 400,
+        height: 46,
+        text: "50 မဟုတ် · 30 ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: d-axis,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 640,
+        height: 36,
+        text: "block direction မှာပဲ · inline မဖြစ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-neg,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 640,
+        height: 36,
+        text: "30 နဲ့ −10 → 20",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-empty,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 700,
+        height: 36,
+        text: "block အလွတ် · margin နှစ်ခု → တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board E — what stops collapse. Green checks; each fix has its own colour.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Collapse မဖြစ်အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-c1,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 232,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-1,
+        kind: text,
+        x: 360,
+        y: 232,
+        width: 600,
+        height: 36,
+        text: "parent မှာ padding ဒါမှမဟုတ် border",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-c2,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 302,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-2,
+        kind: text,
+        x: 360,
+        y: 302,
+        width: 600,
+        height: 36,
+        text: "parent မှာ display: flow-root",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-c3,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 372,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-3,
+        kind: text,
+        x: 360,
+        y: 372,
+        width: 640,
+        height: 36,
+        text: "flex · grid item → 20 + 30 = 50",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-c4,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 442,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-4,
+        kind: text,
+        x: 360,
+        y: 442,
+        width: 600,
+        height: 36,
+        text: "float · absolute",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-c5,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 512,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-5,
+        kind: text,
+        x: 360,
+        y: 512,
+        width: 640,
+        height: 36,
+        text: "margin နှစ်ခုကြားမှာ တခြား အရာ ရှိရင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — a spacing strategy. Blue = the layout, green = components
+    # and their padding, red = the gaps, orange = no outer margins, violet =
+    # alignment, black = the scale.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Spacing အစီအစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-layout,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 320,
+        height: 320,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-c1,
+        kind: rectangle,
+        x: 325,
+        y: 250,
+        width: 270,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-g1,
+        kind: rectangle,
+        x: 325,
+        y: 320,
+        width: 270,
+        height: 25,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: f-c2,
+        kind: rectangle,
+        x: 325,
+        y: 345,
+        width: 270,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-g2,
+        kind: rectangle,
+        x: 325,
+        y: 415,
+        width: 270,
+        height: 25,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: f-c3,
+        kind: rectangle,
+        x: 325,
+        y: 440,
+        width: 270,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-comp-l,
+        kind: text,
+        x: 670,
+        y: 265,
+        width: 400,
+        height: 36,
+        text: "component → padding",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-layout-l,
+        kind: text,
+        x: 670,
+        y: 340,
+        width: 400,
+        height: 36,
+        text: "layout → gap",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-no-margin,
+        kind: text,
+        x: 670,
+        y: 415,
+        width: 400,
+        height: 36,
+        text: "component အပြင် margin ✗",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-align,
+        kind: text,
+        x: 670,
+        y: 490,
+        width: 400,
+        height: 36,
+        text: "alignment လည်း နေရာ ခွဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-scale,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 640,
+        height: 36,
+        text: "တန်ဖိုး သုံးလေးခုပဲ · 8 · 16 · 24",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board G — the closing quiz.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-q,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 760,
+        height: 40,
+        text: "flex column ထဲမှာ 20 နဲ့ 30 ဆိုရင်?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: g-a,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 220,
+        height: 46,
+        text: "50 pixel",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: g-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 560,
+        y: 306,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-rule,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 620,
+        height: 36,
+        text: "flex · grid item → margin ပေါင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4122
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: spacing-intro
+    chapter: "နေရာလွတ် သုံးမျိုး"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ margin နဲ့ padding ရဲ့ ဘက်တွေကို စာ ရေးတဲ့ ဦးတည်ရာနဲ့ ခေါ်ခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ နေရာလွတ်ကို ဘယ်နည်းနဲ့ ဘယ်မှာ ထည့်မလဲ၊ ဘယ်လို တစ်ပုံစံတည်း ထိန်းမလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ box ပုံတွေနဲ့ ကိုက်အောင် အပေါ်၊ အောက် နာမည်တွေကို သုံးပေမယ့်၊ logical နာမည်တွေနဲ့လည်း
+      အတူတူပါပဲ။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-puzzle]] အရင်ဆုံး ပြဿနာလေး တစ်ခု ကြည့်ရအောင်။ list ထဲမှာ card သုံးခု ရှိပြီး၊ card
+      တွေကြားမှာ နေရာလွတ် လိုချင်ပါတယ်။ card တိုင်းကို အောက်ဘက် margin ပေးလိုက်ရင်၊ နောက်ဆုံး card လည်း
+      ရသွားလို့ မလိုချင်တဲ့ နေရာလွတ် အပို ပေါ်လာပါတယ်။ [[mark:draw-margin]] ဘာကြောင့်လဲဆိုတော့၊ margin က
+      box တစ်ခုစီရဲ့ အပြင်ဘက်မှာ အမြဲ ပါလာတဲ့ နေရာလွတ် ဖြစ်လို့ပါ။ ဘေးက box တွေကို တွန်းထုတ်ပြီး၊
+      နောက်ခံ အရောင် မရှိပါဘူး။ [[mark:draw-padding]] padding ကတော့ box ရဲ့ အတွင်းဘက်၊ border နဲ့
+      content ကြားက နေရာလွတ်ပါ။ box ရဲ့ နောက်ခံ အရောင်က padding ကိုပါ ဖုံးထားပါတယ်။ [[mark:draw-gap]]
+      gap ကတော့ flex ဒါမှမဟုတ် grid container ထဲက item တွေကြားက နေရာလွတ်ပါ။ ပထမ item ရှေ့နဲ့ နောက်ဆုံး
+      item နောက်မှာ မထည့်ပါဘူး။ နေရာလွတ် လိုရင် အပြင်လား၊ အတွင်းလား၊ ကြားလား ဆိုတာ အရင် မေးကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Spacing"
+        url: "https://web.dev/learn/css/spacing"
+      - title: "web.dev Learn CSS — The box model"
+        url: "https://web.dev/learn/css/box-model"
+      - title: "MDN — margin"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin"
+      - title: "MDN — padding"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding"
+      - title: "MDN — gap"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-puzzle
+        type: whiteboard.apply
+        at: { mark: draw-puzzle }
+        upsertIds: [a-card1, a-band1, a-card2, a-band2, a-card3, a-band3, a-extra-ring, a-extra]
+        drawMs: 3600
+      - id: draw-margin
+        type: whiteboard.apply
+        at: { mark: draw-margin }
+        upsertIds: [a-m-outer, a-m-inner, a-m-label]
+        drawMs: 1800
+      - id: draw-padding
+        type: whiteboard.apply
+        at: { mark: draw-padding }
+        upsertIds: [a-p-box, a-p-content, a-p-label]
+        drawMs: 1800
+      - id: draw-gap
+        type: whiteboard.apply
+        at: { mark: draw-gap }
+        upsertIds: [a-g-a, a-g-stripe, a-g-b, a-g-label]
+        drawMs: 1800
+
+  - id: html-spacing
+    chapter: "HTML ထဲက နေရာလွတ်"
+    narration: >
+      [[mark:open-html-board]] HTML မှာလည်း နေရာလွတ် ထည့်တဲ့ နည်း တချို့ ရှိပါတယ်။ [[mark:draw-br]] br
+      element က စာသားထဲမှာ စာကြောင်း ချိုးပေးပါတယ်။ လိပ်စာလို၊ စာကြောင်း ချိုးတာက content ရဲ့
+      အစိတ်အပိုင်း ဖြစ်မှ သုံးပါတယ်။ [[mark:draw-hr]] hr element ကတော့ အပိုင်း တစ်ခုကနေ နောက်တစ်ခုကို
+      အကြောင်းအရာ ပြောင်းတာကို ပြပါတယ်။ browser က မျဉ်း တစ်ကြောင်း ဆွဲပေမယ့်၊ သူ့ အဓိပ္ပာယ်ကတော့ အဲဒီ
+      ပြောင်းတာပါ။ ဒါကြောင့် အလှအတွက် မျဉ်းပဲ လိုရင် CSS border ကို သုံးပါ။ [[mark:draw-nbsp]]
+      non-breaking space ကတော့ browser က စာကြောင်း ဘယ်တော့မှ မချိုးတဲ့ space ပါ။ ဒါကြောင့် ဈေးနှုန်းမှာ
+      သုံးရင် ဂဏန်းနဲ့ ကျပ် အမြဲ တွဲနေပါတယ်။ အများကြီး သုံးရင်တော့ ချိုးလို့ မရတဲ့ စာတန်း ရှည်ကြီးတွေ
+      ဖြစ်သွားပါတယ်။ [[mark:draw-html-rule]] ဒါကြောင့် HTML နဲ့ နေရာလွတ် ထည့်တာကို content ထဲမှာ
+      အဓိပ္ပာယ် ရှိမှပဲ လုပ်ပါ။ ကြည့်ကောင်းအောင်ပဲ လိုတဲ့ နေရာလွတ်ကိုတော့ CSS မှာ ရေးပါ။
+      [[mark:draw-no-br]] content ကို အောက် တွန်းချဖို့ br တွေ ဆင့်ထည့်တာကိုတော့ ရှောင်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: HTML spacing"
+        url: "https://web.dev/learn/css/spacing#html_spacing"
+      - title: "MDN — <br>: the line break element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/br"
+      - title: "MDN — <hr>: the thematic break element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/hr"
+      - title: "MDN — Entity (&nbsp;)"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Entity"
+    actions:
+      - id: open-html-board
+        type: whiteboard.apply
+        at: { mark: open-html-board }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-br
+        type: whiteboard.apply
+        at: { mark: draw-br }
+        upsertIds: [b-br-k, b-br-m]
+        drawMs: 1400
+      - id: draw-hr
+        type: whiteboard.apply
+        at: { mark: draw-hr }
+        upsertIds: [b-hr-k, b-hr-m]
+        drawMs: 1400
+      - id: draw-nbsp
+        type: whiteboard.apply
+        at: { mark: draw-nbsp }
+        upsertIds: [b-nbsp-k, b-nbsp-m]
+        drawMs: 1400
+      - id: draw-html-rule
+        type: whiteboard.apply
+        at: { mark: draw-html-rule }
+        upsertIds: [b-rule]
+        drawMs: 1600
+      - id: draw-no-br
+        type: whiteboard.apply
+        at: { mark: draw-no-br }
+        upsertIds: [b-no-k, b-no-strike, b-no-m]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-html-board]] ဒါတွေကို ဆိုင်ရဲ့ page မှာ ရှာကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML
+      ဖိုင်ပါ။ [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview ပွင့်လာပါပြီ။ base ဖိုင်က card
+      တွေကို margin နဲ့ padding မပေးထားလို့၊ card တွေ ကပ်နေပြီး စာသားတွေက ဘောင်နဲ့ ထိနေပါတယ်။ မှာမယ်
+      ခလုတ်မှာလည်း စာသားနဲ့ ခလုတ် အစွန်းကြား နေရာ သိပ် မရှိပါဘူး။ အရောင်ဖျော့ နောက်ခံက list ကိုယ်တိုင်
+      ဖြစ်လို့၊ နေရာလွတ် တစ်ခုစီ ဘယ်ရောက်လဲ မြင်ရပါမယ်။ [[mark:scroll-footer]] အရင် footer ကို
+      ဆင်းကြည့်ရအောင်။ [[mark:select-br]] လိပ်စာထဲက br က စာကြောင်းကို ချိုးပေးလို့၊ မြို့နာမည်က
+      အောက်တစ်ကြောင်းမှာ ရှိနေပါတယ်။ [[mark:select-hr]] ဖုန်းနံပါတ်ရဲ့ နောက်က hr က ဆက်သွယ်ရန်
+      အချက်အလက်တွေနဲ့ copyright စာကြောင်းကို ခွဲထားပါတယ်။ [[mark:select-nbsp]] အပေါ်က menu ထဲမှာတော့
+      လက်ဖက်ရည် ဈေးနှုန်းမှာ ဂဏန်းနဲ့ ကျပ်ကြား non-breaking space ရှိလို့၊ နှစ်ခုက ဘယ်တော့မှ
+      ခွဲမသွားပါဘူး။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: HTML spacing"
+        url: "https://web.dev/learn/css/spacing#html_spacing"
+      - title: "MDN — <br>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/br"
+      - title: "MDN — <hr>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/hr"
+    actions:
+      - id: close-html-board
+        type: whiteboard.apply
+        at: { mark: close-html-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-drinks
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: menu-drinks }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-button
+        type: expect.preview
+        at: { afterAction: expect-drinks }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-button }
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 5000
+        top: 1000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-footer
+        type: expect.preview
+        at: { afterAction: scroll-footer }
+        timeoutMs: 5000
+        target: { by: testId, value: footer }
+        textContains: "ရန်ကုန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-br
+        type: editor.select
+        at: { mark: select-br }
+        target: { file: index.html, text: "<br />", occurrence: 1 }
+      - id: select-hr
+        type: editor.select
+        at: { mark: select-hr }
+        target: { file: index.html, text: "<hr />", occurrence: 1 }
+      - id: select-nbsp
+        type: editor.select
+        at: { mark: select-nbsp }
+        target: { file: index.html, text: "1,500&nbsp;ကျပ်", occurrence: 1 }
+      - id: scroll-top
+        type: preview.scroll
+        at: { afterAction: select-nbsp }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-price
+        type: expect.preview
+        at: { afterAction: scroll-top }
+        timeoutMs: 5000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+
+  - id: padding-margin
+    chapter: "Card တွေမှာ padding နဲ့ margin ထည့်ကြည့်ရအောင်"
+    narration: >
+      [[mark:type-card-padding]] အရင်ဆုံး အတွင်းဘက်ကနေ စရအောင်။ card တိုင်းကို လေးဘက်လုံး padding တူတူ
+      ပေးပါမယ်။ [[mark:after-card-padding]] စာသားတွေ ဘောင်ကနေ ခွာသွားပြီး၊ အဖြူရောင် နောက်ခံကလည်း
+      padding နေရာကိုပါ ဖုံးသွားပါတယ်။ padding က box ရဲ့ အစိတ်အပိုင်း ဖြစ်လို့ပါ။
+      [[mark:type-card-margin]] အခု အပြင်ဘက်ပါ။ နောက်က card ကို တွန်းခွာဖို့ card တိုင်းကို အောက်ဘက်
+      margin ပေးပါမယ်။ [[mark:after-card-margin]] card တွေကြားမှာ နေရာလွတ် ပေါ်လာပြီး၊ အဲဒီ ကြားကနေ list
+      ရဲ့ နောက်ခံကို မြင်ရပါတယ်။ margin မှာ နောက်ခံ အရောင် မရှိလို့ပါ။ [[mark:look-last-card]] ဒါပေမဲ့
+      နောက်ဆုံး card ရဲ့ အောက်ကို ကြည့်ပါ။ သူလည်း margin ရသွားလို့၊ list ရဲ့ အောက်ဘက်မှာ အပေါ်ဘက်ထက်
+      နေရာလွတ် ပိုနေပါတယ်။ board ပေါ်က ပြဿနာ အတိုင်းပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: padding"
+        url: "https://web.dev/learn/css/spacing#padding"
+      - title: "web.dev Learn CSS — Spacing: margin"
+        url: "https://web.dev/learn/css/spacing#margin"
+      - title: "MDN — padding (the background extends under it)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding"
+      - title: "MDN — margin-bottom"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-bottom"
+    actions:
+      - id: type-card-padding
+        type: editor.type
+        at: { mark: type-card-padding }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".menu-card {\n  padding: 12px;\n}\n"
+      - id: expect-card-padding
+        type: expect.preview
+        at: { mark: after-card-padding }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-card-margin
+        type: editor.type
+        at: { mark: type-card-margin }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 12px;\n", occurrence: 1 }
+        text: "  margin-bottom: 16px;\n"
+      - id: expect-card-margin
+        type: expect.preview
+        at: { mark: after-card-margin }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: gap
+    narration: >
+      [[mark:type-margin-zero]] ဒါကြောင့် margin ကို ပြန်ဖြုတ်ပါမယ်။ နောက်မှ ရေးတဲ့ သုည တန်ဖိုးက
+      နိုင်ပါတယ်။ [[mark:type-list-gap]] အဲဒီအစား နေရာလွတ်ကို list မှာ ထည့်ပါမယ်။ list ကို grid
+      container လုပ်ပြီး gap 16 pixel ပေးပါမယ်။ grid မှာ default အားဖြင့် column တစ်ခုတည်း ရှိလို့ card
+      တွေ ဆင့်နေတုန်းပါ။ [[mark:after-list-gap]] အခု card တွေကြားမှာပဲ နေရာလွတ် ရှိပါတယ်။ ပထမ card ရဲ့
+      အပေါ်နဲ့ နောက်ဆုံး card ရဲ့ အောက်မှာ နေရာလွတ် သေးသေးလေး တူတူ ကျန်နေတာကတော့ list ကိုယ်တိုင်ရဲ့
+      padding ပါ။ [[mark:select-gap]] ဒီ gap ကို ကြည့်ပါ။ margin ကို card တစ်ခုစီက ပိုင်ပေမယ့်၊ gap ကို
+      layout က ပိုင်ပါတယ်။ ဒါကြောင့် card ဘယ်နှစ်ခု ထည့်ထည့်၊ နေရာလွတ်က card တွေကြားမှာပဲ ပေါ်ပြီး၊ card
+      တွေကိုလည်း margin ပေးစရာ မလိုတော့ပါဘူး။ flexbox နဲ့ သတင်းစာလို column ခွဲတဲ့ layout မှာလည်း
+      အတူတူပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: grid and flexbox"
+        url: "https://web.dev/learn/css/spacing#grid_and_flexbox"
+      - title: "MDN — gap (flex, grid and multi-column)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
+    actions:
+      - id: type-margin-zero
+        type: editor.type
+        at: { mark: type-margin-zero }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-bottom: 16px;\n", occurrence: 1 }
+        text: "  margin-bottom: 0;\n"
+      - id: type-list-gap
+        type: editor.type
+        at: { mark: type-list-gap }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-bottom: 0;\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu {\n  display: grid;\n  gap: 16px;\n}\n"
+      - id: expect-list-gap
+        type: expect.preview
+        at: { mark: after-list-gap }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-gap
+        type: editor.select
+        at: { mark: select-gap }
+        target: { file: styles.css, text: "gap: 16px;", occurrence: 1 }
+
+  - id: shorthand
+    chapter: "တန်ဖိုး တစ်ခုကနေ လေးခုအထိ"
+    narration: >
+      [[mark:type-btn-padding]] အခု မှာမယ် ခလုတ်ပါ။ သူ့မှာ အပေါ်အောက်ထက် ဘယ်ညာမှာ နေရာ ပိုလိုလို့၊
+      padding ကို တန်ဖိုး နှစ်ခု ပေးပါမယ်။ [[mark:after-btn-padding]] ခလုတ်ထဲမှာ နေရာ ချောင်သွားပါပြီ။
+      [[mark:open-trbl-board]] တန်ဖိုးတွေက ဘက်တွေနဲ့ ဘယ်လို ကိုက်လဲ။ [[mark:draw-trbl-box]] margin နဲ့
+      padding တန်ဖိုးတွေက အပေါ်ကနေ စပြီး နာရီလက်တံ လည်တဲ့ဘက် ပတ်ပါတယ်။ အပေါ်၊ ညာ၊ အောက်၊ ပြီးမှ ဘယ်ပါ။
+      [[mark:draw-trbl-one]] တစ်ခုတည်းဆိုရင် လေးဘက်လုံး ရပါတယ်။ [[mark:draw-trbl-two]] နှစ်ခုဆိုရင် ပထမက
+      အပေါ်နဲ့ အောက်၊ ဒုတိယက ဘယ်နဲ့ ညာ အတွက်ပါ။ ကိုယ့် ခလုတ်လိုပါပဲ။ [[mark:draw-trbl-three]]
+      သုံးခုဆိုရင် အပေါ်၊ ပြီးရင် ဘယ်ညာ၊ နောက်ဆုံးမှ အောက်ပါ။ [[mark:draw-trbl-four]] လေးခုဆိုရင်တော့
+      ဘက်တိုင်း ကိုယ်ပိုင် တန်ဖိုး ရပါတယ်။ အစဉ်ကတော့ ခုနက အတိုင်းပါ။ [[mark:draw-box-sizing]] lesson 2 က
+      border box rule ကို ဆက်သုံးထားလို့၊ ကိုယ် ပေးတဲ့ အကျယ်ထဲမှာ padding က ဆံ့နေပါတယ်။ အဲဒီ rule
+      မရှိရင်တော့ padding က ကိုယ် ပေးတဲ့ အကျယ်ထဲ မပါဘဲ အပြင်ကို ထပ်တိုးသွားလို့ box က ကြီးလာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: margin (one to four values)"
+        url: "https://web.dev/learn/css/spacing#margin"
+      - title: "MDN — padding (one to four values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding#syntax"
+      - title: "MDN — box-sizing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing"
+    actions:
+      - id: type-btn-padding
+        type: editor.type
+        at: { mark: type-btn-padding }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 16px;\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  padding: 8px 20px;\n}\n"
+      - id: expect-btn-padding
+        type: expect.preview
+        at: { mark: after-btn-padding }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-trbl-board
+        type: whiteboard.apply
+        at: { mark: open-trbl-board }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-trbl-box
+        type: whiteboard.apply
+        at: { mark: draw-trbl-box }
+        upsertIds: [c-box, c-top, c-right, c-bottom, c-left]
+        drawMs: 2600
+      - id: draw-trbl-one
+        type: whiteboard.apply
+        at: { mark: draw-trbl-one }
+        upsertIds: [c-one, c-one-m]
+        drawMs: 1200
+      - id: draw-trbl-two
+        type: whiteboard.apply
+        at: { mark: draw-trbl-two }
+        upsertIds: [c-two, c-two-m]
+        drawMs: 1400
+      - id: draw-trbl-three
+        type: whiteboard.apply
+        at: { mark: draw-trbl-three }
+        upsertIds: [c-three, c-three-m]
+        drawMs: 1400
+      - id: draw-trbl-four
+        type: whiteboard.apply
+        at: { mark: draw-trbl-four }
+        upsertIds: [c-four, c-four-m]
+        drawMs: 1400
+      - id: draw-box-sizing
+        type: whiteboard.apply
+        at: { mark: draw-box-sizing }
+        upsertIds: [c-sizing]
+        drawMs: 1600
+
+  - id: margin-auto
+    chapter: "Auto margin နဲ့ အနုတ် margin"
+    narration: >
+      [[mark:close-trbl-board]] margin ဆီ ပြန်ရအောင်။ [[mark:type-center]] သောက်စရာ အပိုင်းကို page ထက်
+      ကျဉ်းတဲ့ အကျယ် အများဆုံး တစ်ခု အရင် ပေးပါမယ်။ ပြီးရင် margin ကို အပေါ်နဲ့ အောက် သုည၊ ဘယ်နဲ့ ညာကို
+      auto ပေးပါမယ်။ [[mark:after-center]] သောက်စရာ အပိုင်း ကျဉ်းသွားပြီး၊ အလယ်မှာ ရောက်သွားပါပြီ။
+      [[mark:select-auto]] ဒီ auto ကို ကြည့်ပါ။ auto က သူ ရှိတဲ့ဘက်မှာ ကျန်နေတဲ့ နေရာလွတ် အကုန်လုံးကို
+      ယူပါတယ်။ ဘယ်ညာ နှစ်ဘက်လုံး auto ဆိုရင် ကျန်တဲ့ နေရာကို တစ်ဝက်စီ ခွဲလို့၊ container ထက် ကျဉ်းတဲ့
+      box က အလယ် ရောက်ပါတယ်။ [[mark:explain-margin-values]] margin မှာ ရာခိုင်နှုန်းလည်း ရပါတယ်။ အပေါ်
+      ဒါမှမဟုတ် အောက် margin ဖြစ်နေရင်တောင် ရာခိုင်နှုန်းက container ရဲ့ အမြင့်ကို မဟုတ်ဘဲ အကျယ်ကို
+      ယူတွက်ပါတယ်။ flow layout ထဲမှာ အပေါ်အောက် auto margin က သုည ဖြစ်လို့၊ ဒီနည်းက ဘယ်ညာမှာပဲ
+      အလယ်ပို့ပါတယ်။ flex container ထဲမှာတော့ lesson 17 မှာ မြင်ခဲ့သလို အပေါ်အောက် auto margin လည်း
+      အလုပ်လုပ်လို့၊ ဒေါင်လိုက်ပါ အလယ် ပို့နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: margin (auto)"
+        url: "https://web.dev/learn/css/spacing#margin"
+      - title: "MDN — margin (percentages refer to the containing block's inline size; auto)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin#values"
+      - title: "CSS Box Model Module Level 3 — margins"
+        url: "https://drafts.csswg.org/css-box-3/#margins"
+    actions:
+      - id: close-trbl-board
+        type: whiteboard.apply
+        at: { mark: close-trbl-board }
+        open: false
+      - id: type-center
+        type: editor.type
+        at: { mark: type-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  padding: 8px 20px;\n}\n", occurrence: 1 }
+        text: "\n.drinks {\n  max-width: 320px;\n  margin: 0 auto;\n}\n"
+      - id: expect-center
+        type: expect.preview
+        at: { mark: after-center }
+        timeoutMs: 4000
+        target: { by: testId, value: drinks }
+        textContains: "သောက်စရာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-auto
+        type: editor.select
+        at: { mark: select-auto }
+        target: { file: styles.css, text: "margin: 0 auto;", occurrence: 1 }
+
+  - id: negative-margin
+    narration: >
+      [[mark:type-badge]] margin ကို အနုတ် တန်ဖိုးလည်း ပေးလို့ ရပါတယ်။ လက်ဖက်ရည် card ရဲ့ အပေါ်ဆုံးမှာ
+      အသစ် ဆိုတဲ့ badge ရှိပါတယ်။ သူက inline element ဖြစ်လို့ အပေါ် margin က သူ့ကို မရွှေ့နိုင်ပါဘူး။
+      ဒါကြောင့် သူ့ကို block ပြောင်းပြီး စာသား ရှိသလောက်ပဲ ကျယ်အောင် ထားပါမယ်။ ပြီးမှ အပေါ်ဘက်ကို အနုတ်
+      margin ပေးပါမယ်။ [[mark:after-badge]] badge က အပေါ်ကို တက်သွားပြီး card ရဲ့ အပေါ် ဘောင်ကို
+      ဖုံးထားပါတယ်။ သူ့ အောက်က နာမည်ကလည်း လိုက်တက်လာပါတယ်။ အပေါင်း margin က တွန်းခွာပေမယ့်၊ အနုတ် margin
+      က box ကိုရော သူ့နောက်က အရာတွေကိုပါ ပြောင်းပြန် ဆွဲတင်လို့ပါ။ [[mark:select-negative]] ဒီ အနုတ်
+      တန်ဖိုးကို ကြည့်ပါ။ padding က ဘယ်တော့မှ အနုတ် မဖြစ်နိုင်ပေမယ့် margin ကတော့ ဖြစ်နိုင်ပါတယ်။ design
+      တွေမှာ box တွေကို တမင် ထပ်အောင် ဒီလို လုပ်ကြပါတယ်။ ဒါဆို ဘယ် box က အပေါ်မှာ ပေါ်မလဲ။ အဲဒါကို နောက်
+      lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: negative margin"
+        url: "https://web.dev/learn/css/spacing#negative_margin"
+      - title: "MDN — margin (negative values are allowed)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin#values"
+      - title: "MDN — padding (negative values are invalid)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding#values"
+      - title: "MDN — fit-content"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/fit-content"
+    actions:
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin: 0 auto;\n}\n", occurrence: 1 }
+        text: "\n.badge {\n  width: fit-content;\n  display: block;\n  margin-top: -24px;\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-negative
+        type: editor.select
+        at: { mark: select-negative }
+        target: { file: styles.css, text: "margin-top: -24px;", occurrence: 1 }
+
+  - id: collapse
+    chapter: "Margin collapse"
+    narration: >
+      [[mark:scroll-collapse]] အခု menu အောက်က အဖြူရောင် box ထဲက အရောင်ဖျော့ card ကို ကြည့်ရအောင်။ သူ့
+      ခေါင်းစဉ်နဲ့ စာပိုဒ်မှာ margin မရှိသေးပြီး၊ မျဉ်းပြတ်တွေက box တွေရဲ့ အစွန်းကို ပြပါတယ်။
+      [[mark:type-h3-bottom]] ခေါင်းစဉ်ကနေ စရအောင်။ သူ့ကို အောက်ဘက် margin 20 pixel ပေးလိုက်ရင်
+      စာပိုဒ်ကို အောက် တွန်းချသင့်ပါတယ်။ [[mark:after-h3-bottom]] ခေါင်းစဉ်နဲ့ စာပိုဒ်ကြားမှာ နေရာလွတ်
+      ပေါ်လာပါပြီ။ [[mark:type-p-top]] ပြီးရင် စာပိုဒ်ကို အပေါ်ဘက် margin 30 pixel ပေးပါမယ်။
+      ခေါင်းစဉ်ရဲ့ margin ထက် နည်းနည်း ပိုများပါတယ်။ [[mark:after-p-top]] နေရာလွတ် နည်းနည်းပဲ
+      ကြီးလာပါတယ်။ lesson 2 မှာ card တွေကြား မြင်ခဲ့တာ ဒါပါပဲ။ အခု ရှင်းပြပါမယ်။
+      [[mark:open-collapse-board]] ဆွဲကြည့်ရအောင်။ [[mark:draw-collapse-bands]] margin နှစ်ခုက တစ်ခုနဲ့
+      တစ်ခု ထိနေပါတယ်။ flow layout ထဲမှာ အပေါ်အောက် ကပ်နေတဲ့ block နှစ်ခုရဲ့ margin တွေက ပေါင်းမသွားဘဲ
+      ထပ်သွားပြီး၊ ကြီးတဲ့ တစ်ခုပဲ ကျန်ပါတယ်။ ဒါကြောင့် နေရာလွတ်က 50 မဟုတ်ဘဲ 30 pixel ပဲ ရှိပါတယ်။ ဒါကို
+      margin collapse လို့ ခေါ်ပါတယ်။ [[mark:draw-collapse-axis]] collapse က block direction မှာပဲ
+      ဖြစ်ပါတယ်။ ဒီမှာဆိုရင် အပေါ်နဲ့ အောက်ပါ။ inline direction က margin တွေ၊ ဒီမှာဆိုရင် ဘယ်ညာ margin
+      တွေကတော့ collapse မဖြစ်ပါဘူး။ [[mark:draw-collapse-why]] ဒီလို ဖြစ်ရတာက CSS ကို document တွေအတွက်
+      ဖန်တီးခဲ့လို့ပါ။ ခေါင်းစဉ်နဲ့ စာပိုဒ်ရဲ့ margin တွေ နှစ်ဆ မဖြစ်သင့်ပါဘူး။
+      [[mark:draw-collapse-negative]] margin တစ်ခုက အနုတ် ဖြစ်နေရင်တော့၊ browser က အနုတ် အများဆုံးကို
+      အပေါင်း အကြီးဆုံးနဲ့ ပေါင်းပါတယ်။ ဒါကြောင့် 30 နဲ့ အနုတ် 10 ဆိုရင် 20 ရပါတယ်။
+      [[mark:draw-collapse-empty]] content၊ padding၊ border၊ အမြင့် မရှိတဲ့ block အလွတ်မှာတော့၊ သူ့
+      အပေါ်နဲ့ အောက် margin က အချင်းချင်း collapse ဖြစ်ပြီး တစ်ခုပဲ ကျန်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: margin collapse"
+        url: "https://web.dev/learn/css/spacing#margin_collapse"
+      - title: "MDN — Mastering margin collapsing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"
+      - title: "CSS 2.2 — Collapsing margins"
+        url: "https://www.w3.org/TR/CSS22/box.html#collapsing-margins"
+    actions:
+      - id: scroll-collapse
+        type: preview.scroll
+        at: { mark: scroll-collapse }
+        timeoutMs: 5000
+        top: 440
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-info
+        type: expect.preview
+        at: { afterAction: scroll-collapse }
+        timeoutMs: 5000
+        target: { by: testId, value: info }
+        textContains: "နေ့တိုင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-h3-bottom
+        type: editor.type
+        at: { mark: type-h3-bottom }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-top: -24px;\n}\n", occurrence: 1 }
+        text: "\n.info h3 {\n  margin-bottom: 20px;\n}\n"
+      - id: type-p-top
+        type: editor.type
+        at: { mark: type-p-top }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-bottom: 20px;\n}\n", occurrence: 1 }
+        text: "\n.info p {\n  margin-top: 30px;\n}\n"
+      - id: expect-p-top
+        type: expect.preview
+        at: { mark: after-p-top }
+        timeoutMs: 4000
+        target: { by: testId, value: info }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-collapse-board
+        type: whiteboard.apply
+        at: { mark: open-collapse-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-collapse-bands
+        type: whiteboard.apply
+        at: { mark: draw-collapse-bands }
+        upsertIds: [d-h3, d-h3-l, d-band20, d-20, d-band30, d-30, d-p, d-p-l, d-result]
+        drawMs: 4500
+      - id: draw-collapse-axis
+        type: whiteboard.apply
+        at: { mark: draw-collapse-axis }
+        upsertIds: [d-axis]
+        drawMs: 1600
+      - id: draw-collapse-negative
+        type: whiteboard.apply
+        at: { mark: draw-collapse-negative }
+        upsertIds: [d-neg]
+        drawMs: 1400
+      - id: draw-collapse-empty
+        type: whiteboard.apply
+        at: { mark: draw-collapse-empty }
+        upsertIds: [d-empty]
+        drawMs: 1600
+
+  - id: parent-child
+    chapter: "Margin collapse ကို ဘယ်လို တားမလဲ"
+    narration: >
+      [[mark:close-collapse-board]] collapse နောက်တစ်မျိုးကတော့ မထင်မှတ်ဘဲ ကြုံရတတ်ပါတယ်။
+      [[mark:type-h3-top]] အရောင်ဖျော့ card ထဲမှာ ခေါင်းစဉ်ရဲ့ အပေါ်ဘက် နေရာ ရအောင်၊ ခေါင်းစဉ်ကို အပေါ်
+      margin ပါ ပေးကြည့်ရအောင်။ [[mark:after-h3-top]] နေရာလွတ် ဘယ်ရောက်လဲ ကြည့်ပါ၊ card ထဲ မဟုတ်ပါဘူး။
+      card တစ်ခုလုံး ဆင်းသွားပြီး အပေါ်မှာ အဖြူ နေရာ ပေါ်လာပါတယ်။ ခေါင်းစဉ်က card ထိပ်နဲ့ ကပ်နေတုန်းပါ။
+      [[mark:explain-parent-child]] ခေါင်းစဉ်က card ရဲ့ ပထမ child ဖြစ်ပြီး၊ card မှာ အပေါ် padding ရော
+      border ပါ မရှိပါဘူး။ ဒါကြောင့် ခေါင်းစဉ်ရဲ့ အပေါ် margin က card ကိုယ်တိုင်ရဲ့ အပေါ် margin နဲ့
+      collapse ဖြစ်ပြီး card အပြင်ကို ရောက်သွားပါတယ်။ နောက်ဆုံး child ရဲ့ အောက် margin ကလည်း ဒီလိုပဲ
+      ထွက်သွားနိုင်ပါတယ်။ [[mark:type-flow-root]] ပြင်နည်း တစ်ခုက card ရဲ့ display ကို flow-root
+      ပေးတာပါ။ [[mark:after-flow-root]] card က အပေါ် ပြန်တက်လာပြီး၊ နေရာလွတ်က card ထဲမှာ ရောက်သွားပါပြီ။
+      lesson 13 မှာလိုပဲ flow-root က box ထဲမှာ flow layout အသစ် တစ်ခု စခိုင်းလို့၊ child တွေရဲ့ margin က
+      အထဲမှာပဲ ကျန်ပါတယ်။ [[mark:select-flow-root]] ဒီ flow-root က card ကို အပြင်ကနေ ခွဲပေမယ့်၊
+      ခေါင်းစဉ်နဲ့ စာပိုဒ်ကြားမှာ 30 pixel ပဲ ရှိတုန်းပါ။ card ထဲမှာ flow layout ဖြစ်နေတုန်းလို့ပါ။
+      [[mark:type-grid]] အခု card ကို grid container အဖြစ် ပြောင်းကြည့်ရအောင်။ [[mark:after-grid]]
+      စာပိုဒ်က အောက်ကို ခုန်ဆင်းသွားပါပြီ။ grid item တွေ၊ flex item တွေရဲ့ margin က collapse မဖြစ်လို့၊
+      20 နဲ့ 30 ပေါင်းပြီး 50 ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "MDN — Mastering margin collapsing (parent and first or last child)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"
+      - title: "MDN — display: flow-root"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display#flow-root"
+      - title: "CSS Grid Layout Module Level 2 — grid item margins do not collapse"
+        url: "https://drafts.csswg.org/css-grid/#grid-items"
+      - title: "web.dev Learn CSS — Spacing: preventing margin collapse"
+        url: "https://web.dev/learn/css/spacing#preventing_margin_collapse"
+    actions:
+      - id: close-collapse-board
+        type: whiteboard.apply
+        at: { mark: close-collapse-board }
+        open: false
+      - id: type-h3-top
+        type: editor.type
+        at: { mark: type-h3-top }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".info h3 {\n  margin-bottom: 20px;\n", occurrence: 1 }
+        text: "  margin-top: 20px;\n"
+      - id: expect-h3-top
+        type: expect.preview
+        at: { mark: after-h3-top }
+        timeoutMs: 4000
+        target: { by: testId, value: collapse-stage }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-flow-root
+        type: editor.type
+        at: { mark: type-flow-root }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  margin-top: 30px;\n}\n", occurrence: 1 }
+        text: "\n.info {\n  display: flow-root;\n}\n"
+      - id: expect-flow-root
+        type: expect.preview
+        at: { mark: after-flow-root }
+        timeoutMs: 4000
+        target: { by: testId, value: info }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-flow-root
+        type: editor.select
+        at: { mark: select-flow-root }
+        target: { file: styles.css, text: "display: flow-root;", occurrence: 1 }
+      - id: type-grid
+        type: editor.type
+        at: { mark: type-grid }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  display: flow-root;\n", occurrence: 1 }
+        text: "  display: grid;\n"
+      - id: expect-grid
+        type: expect.preview
+        at: { mark: after-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: info }
+        textContains: "နေ့တိုင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: prevent-board
+    narration: >
+      [[mark:open-prevent-board]] margin collapse ကို တားလို့ ရတဲ့ နည်းတွေ ကြည့်ရအောင်။
+      [[mark:draw-prevent-padding]] parent မှာ padding ဒါမှမဟုတ် border ရှိရင်၊ child ရဲ့ margin က
+      parent ထဲမှာပဲ ကျန်ပါတယ်။ ခုနက card တွေရဲ့ margin က list ထဲမှာ ကျန်ခဲ့တာ list မှာ padding
+      ရှိလို့ပါ။ [[mark:draw-prevent-root]] parent ကို flow-root ပေးရင်လည်း အတူတူပါ။
+      [[mark:draw-prevent-flex]] flex item နဲ့ grid item တွေရဲ့ margin က collapse မဖြစ်ဘဲ ပေါင်းပါတယ်။
+      [[mark:draw-prevent-out]] float box နဲ့ absolute box တွေလည်း collapse မဖြစ်ပါဘူး။
+      [[mark:draw-prevent-between]] margin တွေက ထိနေမှ collapse ဖြစ်တာပါ။ ဒါကြောင့် ကြားမှာ content၊
+      padding ဒါမှမဟုတ် border တစ်ခုခု ရှိနေရင် margin နှစ်ခုလုံး ကျန်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: preventing margin collapse"
+        url: "https://web.dev/learn/css/spacing#preventing_margin_collapse"
+      - title: "MDN — Mastering margin collapsing"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"
+      - title: "MDN — Block formatting context"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_display/Block_formatting_context"
+    actions:
+      - id: open-prevent-board
+        type: whiteboard.apply
+        at: { mark: open-prevent-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-prevent-padding
+        type: whiteboard.apply
+        at: { mark: draw-prevent-padding }
+        upsertIds: [e-c1, e-1]
+        drawMs: 1600
+      - id: draw-prevent-root
+        type: whiteboard.apply
+        at: { mark: draw-prevent-root }
+        upsertIds: [e-c2, e-2]
+        drawMs: 1400
+      - id: draw-prevent-flex
+        type: whiteboard.apply
+        at: { mark: draw-prevent-flex }
+        upsertIds: [e-c3, e-3]
+        drawMs: 1600
+      - id: draw-prevent-out
+        type: whiteboard.apply
+        at: { mark: draw-prevent-out }
+        upsertIds: [e-c4, e-4]
+        drawMs: 1400
+      - id: draw-prevent-between
+        type: whiteboard.apply
+        at: { mark: draw-prevent-between }
+        upsertIds: [e-c5, e-5]
+        drawMs: 1600
+
+  - id: strategy
+    chapter: "Spacing ကို တစ်ပုံစံတည်း ထိန်းရအောင်"
+    narration: >
+      [[mark:open-strategy-board]] နည်း ဒီလောက် များတော့ page မှာ အစီအစဉ် လိုပါတယ်။
+      [[mark:draw-strategy-component]] အဆင်ပြေတဲ့ အစီအစဉ် တစ်ခုက၊ card ဒါမှမဟုတ် ခလုတ်လို component က
+      သူ့ အတွင်းဘက် နေရာလွတ် ဖြစ်တဲ့ padding ကို ကိုယ်တိုင် ပိုင်တာပါ။ [[mark:draw-strategy-layout]]
+      component တွေကို ထည့်ထားတဲ့ layout ကတော့ သူတို့ကြားက နေရာလွတ်ကို gap နဲ့ ပိုင်ပါတယ်။
+      [[mark:draw-strategy-no-margin]] component တွေကို အပြင်ဘက် margin မပေးတာ ကောင်းပါတယ်။ margin က
+      ဘေးက အရာကို တွန်းလို့၊ ခုနက နောက်ဆုံး card အောက်က နေရာလွတ် အပိုလို ဖြစ်တတ်ပါတယ်။
+      [[mark:draw-strategy-align]] alignment ကလည်း နေရာလွတ် ဖန်တီးပါတယ်။ item တွေကို ဖြန့်လိုက်ရင်
+      ကျန်တဲ့ နေရာကို item တွေကြား ခွဲပေးပါတယ်။ [[mark:draw-strategy-scale]] ပြီးတော့ spacing တန်ဖိုး
+      သုံးလေးခုကိုပဲ နေရာတိုင်းမှာ ပြန်သုံးရင် page က ညီညာပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: creating consistent spacing"
+        url: "https://web.dev/learn/css/spacing#creating_consistent_spacing"
+      - title: "web.dev Learn CSS — Flexbox: alignment and space distribution"
+        url: "https://web.dev/learn/css/flexbox#alignment_and_space_distribution"
+      - title: "web.dev Learn CSS — Logical properties"
+        url: "https://web.dev/learn/css/logical-properties"
+    actions:
+      - id: open-strategy-board
+        type: whiteboard.apply
+        at: { mark: open-strategy-board }
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-strategy-component
+        type: whiteboard.apply
+        at: { mark: draw-strategy-component }
+        upsertIds: [f-layout, f-c1, f-c2, f-c3, f-comp-l]
+        drawMs: 2600
+      - id: draw-strategy-layout
+        type: whiteboard.apply
+        at: { mark: draw-strategy-layout }
+        upsertIds: [f-g1, f-g2, f-layout-l]
+        drawMs: 1800
+      - id: draw-strategy-no-margin
+        type: whiteboard.apply
+        at: { mark: draw-strategy-no-margin }
+        upsertIds: [f-no-margin]
+        drawMs: 1400
+      - id: draw-strategy-align
+        type: whiteboard.apply
+        at: { mark: draw-strategy-align }
+        upsertIds: [f-align]
+        drawMs: 1400
+      - id: draw-strategy-scale
+        type: whiteboard.apply
+        at: { mark: draw-strategy-scale }
+        upsertIds: [f-scale]
+        drawMs: 1600
+
+  - id: tokens
+    narration: >
+      [[mark:close-strategy-board]] အဲဒီ တန်ဖိုးတွေကို custom property ထဲ သိမ်းရအောင်။
+      [[mark:type-root]] ဖိုင်ရဲ့ ထိပ်ဆုံးမှာ root element အတွက် spacing custom property နှစ်ခု
+      ကြေညာပါမယ်။ 8 pixel ရှိတဲ့ အသေး တစ်ခုနဲ့ 16 pixel ရှိတဲ့ အလတ် တစ်ခုပါ။ [[mark:type-tok-gap]] list
+      ရဲ့ gap က အလတ်ကို သုံးပါတယ်။ [[mark:type-tok-card]] card တစ်ခုစီရဲ့ padding က အပေါ်အောက်အတွက်
+      အသေးကို၊ ဘယ်ညာအတွက် အလတ်ကို သုံးပါတယ်။ [[mark:type-tok-btn]] ခလုတ်လည်း ဒီ အတွဲကိုပဲ ယူပါတယ်။
+      [[mark:after-tokens]] တန်ဖိုးတွေ သိပ် မကွာလို့ ဘာမှ သိပ် မရွေ့ပါဘူး။ ဒါပေမဲ့ အခု card တွေကြားက gap
+      နဲ့ card၊ ခလုတ်ရဲ့ padding တွေက တစ်နေရာတည်းမှာ ရှိတဲ့ နာမည် နှစ်ခုကနေ လာပါတယ်။
+      [[mark:type-space-24]] အလတ် တန်ဖိုးကို 24 pixel ပြောင်းကြည့်ရအောင်။ [[mark:after-space-24]]
+      တစ်နေရာတည်း ပြင်လိုက်တာနဲ့ gap တွေ၊ card ရဲ့ ဘယ်ညာ padding နဲ့ ခလုတ်ပါ အတူတူ ကြီးသွားပါပြီ။ lesson
+      11 မှာလို custom property ကို component တစ်ခုမှာပဲ ပြန်ပေးရင်တော့ အဲဒီ အပိုင်းပဲ ပြောင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: creating consistent spacing"
+        url: "https://web.dev/learn/css/spacing#creating_consistent_spacing"
+      - title: "web.dev Learn CSS — Custom properties"
+        url: "https://web.dev/learn/css/custom-properties"
+      - title: "MDN — Using CSS custom properties"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties"
+    actions:
+      - id: close-strategy-board
+        type: whiteboard.apply
+        at: { mark: close-strategy-board }
+        open: false
+      - id: scroll-top-tokens
+        type: preview.scroll
+        at: { mark: close-strategy-board }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-root
+        type: editor.type
+        at: { mark: type-root }
+        cadence: line-by-line
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ":root {\n  --space-s: 8px;\n  --space-m: 16px;\n}\n\n"
+      - id: type-tok-gap
+        type: editor.type
+        at: { mark: type-tok-gap }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  gap: 16px;\n", occurrence: 1 }
+        text: "  gap: var(--space-m);\n"
+      - id: type-tok-card
+        type: editor.type
+        at: { mark: type-tok-card }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  margin-bottom: 0;\n", occurrence: 1 }
+        text: "  padding: var(--space-s) var(--space-m);\n"
+      - id: type-tok-btn
+        type: editor.type
+        at: { mark: type-tok-btn }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  padding: 8px 20px;\n", occurrence: 1 }
+        text: "  padding: var(--space-s) var(--space-m);\n"
+      - id: expect-tokens
+        type: expect.preview
+        at: { mark: after-tokens }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-space-24
+        type: editor.type
+        at: { mark: type-space-24 }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  --space-m: 16px;\n", occurrence: 1 }
+        text: "  --space-m: 24px;\n"
+      - id: expect-space-24
+        type: expect.preview
+        at: { mark: after-space-24 }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ ခေါင်းစဉ်ရဲ့ အောက် margin က 20 pixel၊
+      နောက်က စာပိုဒ်ရဲ့ အပေါ် margin က 30 ဖြစ်ပြီး၊ သူတို့ parent က direction ကို column ပေးထားတဲ့ flex
+      container ပါ။ နှစ်ခုကြားမှာ နေရာလွတ် ဘယ်လောက် ရှိမလဲ။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေက 50 pixel ပါ။ flex item တွေက grid item တွေလိုပဲ margin collapse မဖြစ်လို့ပါ။ [[mark:recap]]
+      ဒါဆို ပြန်ချုပ်ရရင်၊ HTML နဲ့ နေရာလွတ် ထည့်တာကို အဓိပ္ပာယ် ရှိမှပဲ လုပ်ပါ။ padding က box ရဲ့
+      အတွင်း၊ margin က အပြင်၊ gap က layout ထဲက item တွေကြားက နေရာလွတ်ပါ။ [[mark:recap-values]] shorthand
+      တန်ဖိုးတွေက အပေါ်ကနေ နာရီလက်တံ လည်တဲ့ဘက် သွားပါတယ်။ အကျယ် ကန့်သတ်ထားတဲ့ box ကို auto margin က အလယ်
+      ပို့ပြီး၊ margin က အနုတ်လည်း ရပါတယ်။ flow layout ထဲမှာ အပေါ်အောက် margin တွေ collapse ဖြစ်ပေမယ့်၊
+      padding၊ border၊ flow-root၊ flex ဒါမှမဟုတ် grid က အဲဒါကို တားပါတယ်။ spacing custom property တွေက
+      နေရာလွတ်တွေကို တစ်ပုံစံတည်း ထိန်းပေးပါတယ်။ [[mark:next-lesson]] card အစွန်းပေါ်က badge က မေးခွန်း
+      တစ်ခု ချန်ထားပါတယ်။ box တွေ ထပ်နေရင် ဘယ်ဟာ အပေါ်မှာ ပေါ်မလဲ။ နောက် lesson မှာတော့ z-index နဲ့
+      stacking context ကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Spacing: check your understanding"
+        url: "https://web.dev/learn/css/spacing#check_your_understanding"
+      - title: "MDN — Mastering margin collapsing (flex and grid items)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_box_model/Mastering_margin_collapsing"
+      - title: "web.dev Learn CSS — Z-index and stacking contexts (next lesson)"
+        url: "https://web.dev/learn/css/z-index"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [g-title, g-q]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [g-a, g-a-check, g-rule]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ":root {\n  --space-s: 8px;\n  --space-m: 16px;\n  --space-m: 24px;\n}\n\n.menu-card {\n  padding: 12px;\n  margin-bottom: 16px;\n  margin-bottom: 0;\n  padding: var(--space-s) var(--space-m);\n}\n\n.drinks .menu {\n  display: grid;\n  gap: 16px;\n  gap: var(--space-m);\n}\n\n.order-btn {\n  padding: 8px 20px;\n  padding: var(--space-s) var(--space-m);\n}\n\n.drinks {\n  max-width: 320px;\n  margin: 0 auto;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "\n.badge {\n  width: fit-content;\n  display: block;\n  margin-top: -24px;\n}\n\n.info h3 {\n  margin-bottom: 20px;\n  margin-top: 20px;\n}\n\n.info p {\n  margin-top: 30px;\n}\n\n.info {\n  display: flow-root;\n  display: grid;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
