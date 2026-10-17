@@ -1,0 +1,2154 @@
+# CSS course (Burmese), lesson 38 of 43: transitions.
+#
+# Narration is the final Burmese (voice-script.md mirrors it span by span;
+# DESIGN.md holds the design brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning. Edit
+# this YAML directly (the probe/ assembly is retired).
+#
+# Shape: board (recall lesson 37; elements have states; CSS jumps between
+# them in one frame) → code tour (order form + toggle, three chips, drinks
+# with open/lift toggles, the sold-out photo, lesson 11's cup) → the order
+# button's active state: an instant jump → board (interpolation; a computed
+# value must change) → transition-duration switches it on, both ways;
+# transition-property: all by default, then background-color; the four
+# longhands → the chips: the shorthand with translate, ease by default, then
+# linear / ease-out; interrupted transitions turn around → the drinks: hidden
+# with opacity, revealed with a stagger of delays; negative delays → today's
+# special: a three-item list that replaces the cards' whole list (opacity
+# kept; translate fast, box shadow slow),
+# individual transform properties vs transform → the gallery photo: grey to
+# colour with a filter transition; colours and shadows the same way → the
+# price: font-size interpolates, font-family flips (discrete) → the order
+# form's border on :focus-within and the field's background on :focus after
+# typing a name; both fade back when the editor takes focus → board (triggers: hover,
+# focus, focus-within, target, active, a class from JavaScript) → enter vs
+# exit on the order button (150ms in, 2s out) → the cup pours because
+# --tea-level is registered → reduced motion (viewer's device; the tea drops
+# back, at once for a viewer who asks for reduced motion; the opt-in pattern) → board (layout → paint → composite; transform and opacity;
+# height: auto; events; transitions above !important) → quiz + recap,
+# hand-off to keyframe animations (lesson 39).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload;
+# no HTML edit. Every new rule is appended at the END of the file, so an
+# unclosed "{" or "(" while typing only swallows the end of the file; the two
+# edits into earlier rules (enter / exit) contain no brackets. Rules with
+# rgb( or nth-child( or the media query are line-by-line (every revealed line
+# is balanced) or the last rule while they are typed. Every state change is a
+# class toggled by kit.js through preview.click (class changes replay, and the
+# transition runs in the replay); the focus demo uses preview.input, and the
+# editor.select after it takes focus back to the editor (a recorded blur).
+# Each click whose motion the narration describes lands on the first word of
+# that description (the chips' return 1 s before it), so the words and the
+# motion overlap.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): header 0–101,
+# form 117–304 (order button 251), toggle 312, chips 363–460 (move toggle
+# 464), drinks 508–1047 (toggles 546, cards from 589), gallery 1063–1369
+# (photo toggle 1338), cup 1385–1585, document 1621 (1636 at the end).
+# Scroll positions: 0 (form, toggle, chips), 500 (drinks toggles and all four
+# cards), 960 (gallery; clamps to 905 at 720 tall), 2000 (clamps to the end:
+# the cup and its button).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-38-transitions
+  title: "CSS course 38: Transition"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 38
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and nav left out), the kit order form
+      # (name field and order button), the lesson's controls (kit.js class
+      # toggles, each next to its demo), the slide-row chips, the kit drinks
+      # block (four cards), the kit gallery (photo marked sold-out) and the
+      # kit cup with its fill button.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and nav left out) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: order-form (the name field and the order button) -->
+              <form class="order-form" id="order" data-testid="order-form">
+                <h2>အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ ကိုအောင်" data-testid="input-name" />
+                <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
+              </form>
+
+              <!-- lesson block: controls (kit.js toggles is-active on the order button) -->
+              <p class="controls">
+                <button class="toggle" type="button" data-toggle-class="is-active" data-target=".order-btn" data-testid="toggle-active">ပြောင်းမယ်</button>
+              </p>
+
+              <!-- lesson block: slide-row (three chips named after the easing each one gets) -->
+              <section class="easing" data-testid="easing">
+                <div class="slide-row" data-testid="slide-row" lang="en">
+                  <span>linear</span>
+                  <span>ease</span>
+                  <span>ease-out</span>
+                </div>
+                <p class="controls">
+                  <button class="toggle" type="button" data-toggle-class="is-moved" data-target=".slide-row" data-testid="toggle-move">ရွှေ့မယ်</button>
+                </p>
+              </section>
+
+              <!-- kit block: drinks, plus controls: open the menu, lift today's special -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <p class="controls">
+                  <button class="toggle" type="button" data-toggle-class="is-open" data-target=".drinks .menu" data-testid="toggle-open">မီနူး ဖွင့်မယ်</button>
+                  <button class="toggle" type="button" data-toggle-class="is-lifted" data-target=".featured" data-testid="toggle-lift">မြှင့်မယ်</button>
+                </p>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: gallery (the photo is marked sold-out), plus a toggle that marks it available -->
+              <section class="gallery" id="gallery" data-testid="gallery">
+                <h2>ဆိုင်ပုံရိပ်</h2>
+                <figure class="photo sold-out" data-testid="photo">
+                  <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" data-testid="photo-teahouse" />
+                  <figcaption>ဆိုင်အတွင်း</figcaption>
+                </figure>
+                <p class="controls">
+                  <button class="toggle" type="button" data-toggle-class="available" data-target=".photo" data-testid="toggle-photo">ပြန်ရပြီ</button>
+                </p>
+              </section>
+
+              <!-- kit block: cup (lesson 11's registered --tea-level), plus its fill button -->
+              <section class="pour" data-testid="pour">
+                <h2>လက်ဖက်ရည် တစ်ခွက်</h2>
+                <div class="cup" data-testid="cup"><div class="cup-fill"></div></div>
+                <p class="controls">
+                  <button class="toggle" type="button" data-toggle-class="is-full" data-target=".cup" data-testid="fill-cup">ဖြည့်မယ်</button>
+                </p>
+              </section>
+            </main>
+
+            <!-- kit block: kit-script (the class toggles) -->
+            <script type="module" src="/kit.js"></script>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C minus the sold-out opacity;
+      # section D dropped. Section E: the toggle buttons, the white order
+      # form, the chips, and lesson 11's registered cup (full state set on
+      # .cup-fill, the element that reads --tea-level).
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 38 keeps A, B, B2 and C, minus the sold-out opacity (the gallery
+          photo's sold-out look is the grey filter the lesson types); section D
+          dropped. Section E pins the toggle buttons, the order form's box, the
+          slide-row chips and the registered tea cup. No transition, translate,
+          filter or opacity on anything the lesson animates.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 38: the toggle buttons kit.js drives, a white order form, the three
+           slide-row chips (one per line, so each slides along its own track) and
+           lesson 11's tea cup. --tea-level is registered (inherits: false), so the
+           full state sets it on .cup-fill, the element that reads it. */
+        .controls {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 8px 0 12px;
+        }
+
+        .toggle {
+          padding: 2px 14px;
+          border: 1px solid var(--tea);
+          border-radius: 999px;
+          background: #fff;
+          color: var(--tea);
+          font: inherit;
+          font-size: 14px;
+        }
+
+        .order-form {
+          margin-top: 16px;
+          padding: 12px 16px;
+          border-radius: var(--radius);
+          background: #fff;
+        }
+
+        .easing,
+        .gallery,
+        .pour {
+          margin-top: 16px;
+        }
+
+        .slide-row span {
+          display: block;
+          width: fit-content;
+          margin: 0 0 8px;
+          padding: 0 12px;
+          border: 1px solid var(--line);
+          border-radius: 999px;
+          background: var(--cream);
+          font-size: 14px;
+        }
+
+        @property --tea-level {
+          syntax: "<percentage>";
+          inherits: false;
+          initial-value: 30%;
+        }
+
+        .cup {
+          box-sizing: content-box;
+          display: flex;
+          align-items: flex-end;
+          width: 80px;
+          height: 120px;
+          border: 3px solid var(--tea-dark);
+          border-top: 0;
+          border-radius: 0 0 16px 16px;
+          background: #fff;
+          overflow: hidden;
+        }
+
+        .cup-fill {
+          width: 100%;
+          height: var(--tea-level);
+          background: var(--tea);
+        }
+
+        .cup.is-full .cup-fill {
+          --tea-level: 90%;
+        }
+      styles.css: ""
+      kit.js: |
+        // kit.js: pinned helper for lessons that need a click to change the DOM.
+        // Never typed during a lesson. Every helper is a data attribute on the clicked
+        // element; data-target (a CSS selector) names the element that changes, and
+        // defaults to the clicked element itself.
+        //
+        //   data-toggle-class="is-open"      toggles a class on the target
+        //   data-toggle-attr="hidden"        toggles a boolean attribute on the target
+        //   data-show-modal="#confirm"       opens that <dialog> with showModal()
+        //   data-set-property="--brand"      sets a custom property on <html>
+        //     data-value="#2f6b3a"           ...to this value
+        //   data-say="text"                  writes the text into the target
+        //
+        // On a popover, <details> or <dialog>:
+        //   data-report="#status"            writes "open" / "closed" into #status on
+        //                                    every toggle (a DOM fact expect.preview
+        //                                    can assert; popovers have no open attribute,
+        //                                    and a closed dialog has none to compare)
+        // On a checkbox or radio:
+        //   data-report="#status"            writes "checked" / "unchecked" into #status
+        //                                    on every change (a clicked checkbox never
+        //                                    gets a checked attribute and its value
+        //                                    stays "on", so expect.preview needs this)
+        //
+        // It never throws: a missing target or dialog is ignored.
+
+        const HELPERS = "[data-toggle-class],[data-toggle-attr],[data-show-modal],[data-set-property],[data-say]";
+
+        document.addEventListener("click", (event) => {
+          const source = event.target instanceof Element ? event.target.closest(HELPERS) : null;
+          if (!source) return;
+          const { toggleClass, toggleAttr, showModal, setProperty, value, say, target } = source.dataset;
+          const element = target ? document.querySelector(target) : source;
+          if (!element) return;
+          if (toggleClass) element.classList.toggle(toggleClass);
+          if (toggleAttr) element.toggleAttribute(toggleAttr);
+          if (setProperty) document.documentElement.style.setProperty(setProperty, value ?? "");
+          if (say !== undefined) element.textContent = say;
+          if (showModal) {
+            const dialog = document.querySelector(showModal);
+            if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+          }
+        });
+
+        // toggle does not bubble, so listen in the capture phase.
+        document.addEventListener(
+          "toggle",
+          (event) => {
+            const source = event.target instanceof HTMLElement ? event.target : null;
+            const report = source?.dataset.report ? document.querySelector(source.dataset.report) : null;
+            if (report) report.textContent = event.newState ?? (source.hasAttribute("open") ? "open" : "closed");
+          },
+          true,
+        );
+
+        // change bubbles; only checkboxes and radios report.
+        document.addEventListener("change", (event) => {
+          const input = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!input || (input.type !== "checkbox" && input.type !== "radio")) return;
+          const report = input.dataset.report ? document.querySelector(input.dataset.report) : null;
+          if (report) report.textContent = input.checked ? "checked" : "unchecked";
+        });
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — states and the frames between them. Top half (intro): black
+    # title, orange = the normal state, green = the active state, red = the
+    # instant jump. Bottom half (interpolation scene): orange / green = the old
+    # and new values, blue = the in-between frames the browser computes (and
+    # the stroke through "instant"), violet = what has to happen first.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "State ပြောင်းတဲ့အခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-normal,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: s-normal-l,
+        kind: text,
+        x: 340,
+        y: 256,
+        width: 130,
+        height: 36,
+        text: "ပုံမှန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-active,
+        kind: rectangle,
+        x: 780,
+        y: 240,
+        width: 200,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: s-active-l,
+        kind: text,
+        x: 830,
+        y: 256,
+        width: 110,
+        height: 36,
+        text: "active",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-jump,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 530,
+        y: 258,
+        width: 220,
+        height: 34,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-jump-l,
+        kind: text,
+        x: 560,
+        y: 316,
+        width: 170,
+        height: 36,
+        text: "ချက်ချင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 552,
+        y: 316,
+        width: 110,
+        height: 36,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-old,
+        kind: rectangle,
+        x: 300,
+        y: 430,
+        width: 60,
+        height: 60,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - { id: a-f1, kind: rectangle, x: 410, y: 440, width: 40, height: 40, strokeColor: "#1971c2" }
+    - { id: a-f2, kind: rectangle, x: 490, y: 440, width: 40, height: 40, strokeColor: "#1971c2" }
+    - { id: a-f3, kind: rectangle, x: 570, y: 440, width: 40, height: 40, strokeColor: "#1971c2" }
+    - { id: a-f4, kind: rectangle, x: 650, y: 440, width: 40, height: 40, strokeColor: "#1971c2" }
+    - { id: a-f5, kind: rectangle, x: 730, y: 440, width: 40, height: 40, strokeColor: "#1971c2" }
+    - {
+        id: a-new,
+        kind: rectangle,
+        x: 820,
+        y: 430,
+        width: 60,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: a-old-l,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 220,
+        height: 36,
+        text: "အရင် တန်ဖိုး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-new-l,
+        kind: text,
+        x: 800,
+        y: 380,
+        width: 240,
+        height: 36,
+        text: "တန်ဖိုး အသစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-interp,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 760,
+        height: 36,
+        text: "interpolation · ကြားက frame တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-trigger,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 760,
+        height: 36,
+        text: "computed value ပြောင်းမှ စ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — what can start a transition. Orange = the pointer, blue =
+    # focus, violet = the address, red = pressing, green = a class from
+    # JavaScript (circled: every demo in this lesson).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Transition ကို ဘာက စပေးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-hover,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 640,
+        height: 36,
+        text: "hover · pointer တင်ထားချိန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-focus,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 640,
+        height: 36,
+        text: "focus · focus ရနေချိန်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-within,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 700,
+        height: 36,
+        text: "focus-within · အထဲမှာ focus ရှိချိန်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-target,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "target · URL ထဲက id နဲ့ တူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-active,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 640,
+        height: 36,
+        text: "active · ဖိနှိပ်နေချိန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-class,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 520,
+        height: 36,
+        text: "class · JavaScript က ထည့် ဖြုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-class-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 505,
+        width: 560,
+        height: 66,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-class-l,
+        kind: text,
+        x: 900,
+        y: 520,
+        width: 190,
+        height: 36,
+        text: "← ဒီ lesson",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — how a frame is drawn. Red = layout (expensive to animate),
+    # orange = paint, green = composite (cheap: transform, opacity); violet =
+    # height auto, blue = events, black = the cascade note.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Frame တစ်ခု ဆွဲပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-layout,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 190,
+        height: 66,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+      }
+    - {
+        id: c-layout-l,
+        kind: text,
+        x: 345,
+        y: 245,
+        width: 110,
+        height: 36,
+        text: "layout",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 247,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-paint,
+        kind: rectangle,
+        x: 570,
+        y: 230,
+        width: 190,
+        height: 66,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-paint-l,
+        kind: text,
+        x: 625,
+        y: 245,
+        width: 90,
+        height: 36,
+        text: "paint",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 770,
+        y: 247,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-composite,
+        kind: rectangle,
+        x: 840,
+        y: 230,
+        width: 220,
+        height: 66,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: c-composite-l,
+        kind: text,
+        x: 870,
+        y: 245,
+        width: 170,
+        height: 36,
+        text: "composite",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-slow,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 760,
+        height: 36,
+        text: "width · height · top → frame တိုင်း layout",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-fast,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 760,
+        height: 36,
+        text: "transform · opacity → composite ပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-auto,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 760,
+        height: 36,
+        text: "height auto ✗ → grid rows 0fr → 1fr",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-events,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 600,
+        height: 36,
+        text: "transitionend · JavaScript event",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-important,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 700,
+        height: 36,
+        text: "run နေတဲ့ transition > important",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board D — the closing quiz. Blue = questions, green = answers.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 720,
+        height: 40,
+        text: "easing ကို ဘယ် property နဲ့ ပေးလဲ",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: d-a1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 600,
+        height: 36,
+        text: "transition-timing-function",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-q2,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 720,
+        height: 40,
+        text: "all ကို သုံးတာ အကောင်းဆုံးလား",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: d-a2,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 720,
+        height: 36,
+        text: "မဟုတ် · property တွေကို စာရင်း ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4138
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Transition ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ blend mode နဲ့ အရောင်တွေကို နောက်က အလွှာတွေနဲ့ ရောခဲ့ပြီး၊
+      course ရဲ့ အလှဆင်တဲ့ အပိုင်း ပြီးသွားပါပြီ။ ဒီ lesson ကစပြီး page ပေါ်က အရာတွေ
+      လှုပ်ရှားလာပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev
+      server ကို စနေပါပြီ။ [[mark:draw-states]] element တွေမှာ state တွေ ရှိပါတယ်။ menu
+      က ပွင့်တာ ပိတ်တာ၊ ခလုတ်က ပုံမှန်နဲ့ active ဖြစ်တာမျိုးပါ။ state တစ်ခုစီမှာ style
+      ကိုယ်စီ ရှိနိုင်ပါတယ်။ [[mark:draw-jump]] state ပြောင်းတဲ့အခါ CSS က style အသစ်ကို
+      frame တစ်ခုတည်းမှာ ပြောင်းထည့်လို့၊ ကြားမှာ ဘာမှ မရှိပါဘူး။ transition ဆိုတာ
+      ချက်ချင်း မခုန်ဘဲ အချိန်ယူပြီး ဖြည်းဖြည်း ပြောင်းစေတာပါ။ ခုန်တာကို အရင်
+      ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions"
+        url: "https://web.dev/learn/css/transitions"
+      - title: "MDN — Using CSS transitions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_transitions/Using_CSS_transitions"
+      - title: "CSS Transitions Level 1"
+        url: "https://www.w3.org/TR/css-transitions-1/"
+    actions:
+      - id: open-states-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [s-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark at the end of the code tour, well over 40 s later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-states
+        type: whiteboard.apply
+        at: { mark: draw-states }
+        upsertIds: [s-normal, s-normal-l, s-active, s-active-l]
+        drawMs: 2000
+      - id: draw-jump
+        type: whiteboard.apply
+        at: { mark: draw-jump }
+        upsertIds: [s-jump, s-jump-l]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-states]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-form]] အပေါ်ဆုံးမှာ အော်ဒါ form ရှိပြီး၊ သူ့ထဲမှာ အော်ဒါ ခလုတ်
+      ပါပါတယ်။ [[mark:select-toggle]] သူ့အောက်က ပြောင်းမယ် ခလုတ်က script တိုတို တစ်ခုနဲ့
+      အော်ဒါ ခလုတ်မှာ class တစ်ခု ထည့်လိုက် ဖြုတ်လိုက် လုပ်ပေးပါတယ်။
+      [[mark:select-slide]] နောက်မှ ပေးမယ့် အမြန်နှုန်း ပုံစံအတိုင်း နာမည် တပ်ထားတဲ့
+      chip သုံးခု ရှိပါတယ်။ [[mark:select-drinks-controls]] သောက်စရာ menu မှာ menu
+      ဖွင့်တဲ့ ခလုတ်နဲ့ ယနေ့ အထူး card ကို မြှင့်တဲ့ ခလုတ် ရှိပါတယ်။
+      [[mark:select-photo]] gallery ဓာတ်ပုံကို ရောင်းကုန်ပြီလို့ မှတ်ထားပြီး၊
+      အောက်ဆုံးမှာ lesson 11 က လက်ဖက်ရည် ခွက် ရှိပါတယ်။ [[mark:open-styles]] CSS
+      ဖိုင်ကတော့ အလွတ်ဖြစ်လို့၊ state ပြောင်းရင် ချက်ချင်း ခုန်သွားမှာပါ။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ အော်ဒါ ခလုတ်က အညိုရောင် ဖြစ်ပြီး၊
+      chip တွေက ဘယ်ဘက်မှာ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition triggers (a class from JavaScript)"
+        url: "https://web.dev/learn/css/transitions#transition_triggers"
+      - title: "MDN — Element.classList"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/classList"
+    actions:
+      - id: close-states-board
+        type: whiteboard.apply
+        at: { mark: close-states }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-form
+        type: editor.select
+        at: { mark: select-form }
+        target:
+          {
+            file: index.html,
+            text: '<button class="order-btn" type="button" data-testid="order-button">',
+            occurrence: 1,
+          }
+      - id: select-toggle
+        type: editor.select
+        at: { mark: select-toggle }
+        target:
+          {
+            file: index.html,
+            text: 'data-toggle-class="is-active" data-target=".order-btn"',
+            occurrence: 1,
+          }
+      - id: select-slide
+        type: editor.select
+        at: { mark: select-slide }
+        target:
+          {
+            file: index.html,
+            text: "<span>linear</span>\n          <span>ease</span>\n          <span>ease-out</span>",
+            occurrence: 1,
+          }
+      - id: select-drinks-controls
+        type: editor.select
+        at: { mark: select-drinks-controls }
+        target: { file: index.html, text: 'data-toggle-class="is-open"', occurrence: 1 }
+      - id: select-photo
+        type: editor.select
+        at: { mark: select-photo }
+        target:
+          {
+            file: index.html,
+            text: '<figure class="photo sold-out" data-testid="photo">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-order-button
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-order-button }
+
+  - id: instant
+    narration: >
+      [[mark:type-active]] ပထမဆုံး အော်ဒါ ခလုတ်ရဲ့ active state ကို ရေးပါမယ်။ ခလုတ်မှာ
+      active class ရှိရင် နောက်ခံက အစိမ်းရောင် ဖြစ်ပါမယ်။ အဲဒီ class မရှိသေးလို့၊
+      အခုတော့ ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:click-active]] ပြောင်းမယ် ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-active]] အော်ဒါ ခလုတ်က တစ်ချက်တည်းနဲ့ အစိမ်း
+      ဖြစ်သွားပါပြီ။ frame တစ်ခုမှာ အညို၊ နောက် frame မှာ အစိမ်းပါ။
+      [[mark:select-active]] ဒီ selector ကို ကြည့်ပါ။ click က class တစ်ခု ထည့်ပေးရုံပါ။
+      အဲဒီအခါ ဒီ rule က ကိုက်လာလို့၊ နောက်ခံ အရောင် ချက်ချင်း ပြောင်းသွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Transitions (states switch instantly)"
+        url: "https://web.dev/learn/css/transitions"
+      - title: "MDN — Using CSS transitions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_transitions/Using_CSS_transitions"
+    actions:
+      - id: type-active
+        type: editor.type
+        at: { mark: type-active }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".order-btn.is-active {\n  background: darkgreen;\n}\n"
+      - id: click-active
+        type: preview.click
+        at: { mark: click-active, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-active }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-active
+        type: expect.preview
+        at: { mark: after-active }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn is-active" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-active
+        type: editor.select
+        at: { mark: select-active }
+        target: { file: styles.css, text: ".order-btn.is-active", occurrence: 1 }
+
+  - id: interpolation
+    narration: >
+      [[mark:open-frames]] transition က ဒီ ကွက်လပ်ကို ဖြည့်ပေးပါတယ်။ [[mark:draw-ends]]
+      တစ်ဖက်မှာ အရင် တန်ဖိုး၊ နောက်တစ်ဖက်မှာ တန်ဖိုး အသစ် ရှိပါတယ်။ [[mark:draw-frames]]
+      ကြားထဲက တန်ဖိုးတွေကိုတော့ ကိုယ် ပေးတဲ့ အချိန်အတွင်းမှာ browser က frame တိုင်း
+      တွက်ပေးပါတယ်။ အဲဒါကို interpolation လို့ ခေါ်ပါတယ်။ ဒါကြောင့် user က ဘာ ဘယ်လို
+      ပြောင်းသွားလဲ ဆိုတာ လိုက်မြင်ရပါတယ်။ [[mark:draw-trigger]] ဒါပေမဲ့ transition က
+      သူ့ဘာသာ ဘယ်တော့မှ မစပါဘူး။ class ထည့်တာ၊ pseudo-class ကိုက်လာတာမျိုးကြောင့်
+      computed value တစ်ခု အရင် ပြောင်းမှ စပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions (interpolation)"
+        url: "https://web.dev/learn/css/transitions"
+      - title: "CSS Transitions Level 1 — starting of transitions"
+        url: "https://www.w3.org/TR/css-transitions-1/#starting"
+      - title: "MDN — Using CSS transitions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_transitions/Using_CSS_transitions"
+    actions:
+      - id: open-frames-board
+        type: whiteboard.apply
+        at: { mark: open-frames }
+        open: true
+        upsertIds: [s-strike]
+        drawMs: 700
+      - id: draw-ends
+        type: whiteboard.apply
+        at: { mark: draw-ends }
+        upsertIds: [a-old, a-old-l, a-new, a-new-l]
+        drawMs: 1800
+      - id: draw-frames
+        type: whiteboard.apply
+        at: { mark: draw-frames }
+        upsertIds: [a-f1, a-f2, a-f3, a-f4, a-f5, a-interp]
+        drawMs: 3000
+      - id: draw-trigger
+        type: whiteboard.apply
+        at: { mark: draw-trigger }
+        upsertIds: [a-trigger]
+        drawMs: 1600
+
+  - id: duration
+    chapter: "Transition ကို ဖွင့်ရအောင်"
+    narration: >
+      [[mark:close-frames]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-duration]] အော်ဒါ
+      ခလုတ်အတွက် rule အသစ် တစ်ခုမှာ transition ကို 500 millisecond ကြာချိန် ပေးပါမယ်။
+      state ပြောင်းတာ မရှိသေးလို့၊ ရိုက်နေတုန်း ဘာမှ မလှုပ်ပါဘူး။ [[mark:click-off]]
+      ပြောင်းမယ် ခလုတ်ကို ထပ်နှိပ်ပါမယ်။ [[mark:after-off]] အစိမ်းက စက္ကန့် တစ်ဝက်အတွင်း
+      အညိုကို ဖြည်းဖြည်း ပြန်ပြောင်းသွားပါပြီ။ [[mark:click-on]] ထပ်နှိပ်ပါမယ်။
+      [[mark:after-on]] အစိမ်းဘက်ကိုလည်း ဖြည်းဖြည်း ပြောင်းပါတယ်။ ဒီ rule က state
+      နှစ်ခုလုံးမှာ ကိုက်လို့ နှစ်ဘက်လုံး ချောမွေ့တာပါ။ [[mark:select-duration]] ဒီ
+      transition duration ကို ကြည့်ပါ။ သူ့ initial value က 0 စက္ကန့် ဖြစ်ပြီး၊ 0 ဆိုရင်
+      transition လုံးဝ မဖြစ်ပါဘူး။ ဒါကြောင့် transition ကို ဖွင့်ပေးတာက ကြာချိန်ပါ။
+      [[mark:explain-all]] ကိုယ်က ဘယ် property လဲ မပြောခဲ့ပါဘူး။ transition property ရဲ့
+      initial value က all ဖြစ်လို့၊ transition ဖြစ်နိုင်တာ အားလုံး ဖြစ်သွားတာပါ။
+      [[mark:type-property]] လိုချင်တဲ့ property ကိုပဲ ရွေးပေးရအောင်။ ဒီ ခလုတ်မှာ
+      ပြောင်းတာက နောက်ခံ အရောင် တစ်ခုတည်းပါ။ [[mark:explain-why-list]] all ဆိုရင်
+      မရည်ရွယ်တဲ့ ပြောင်းလဲမှုတွေပါ ဖြည်းဖြည်း ပြောင်းပြီး browser အလုပ်လည်း
+      ပိုများပါတယ်။ ရွေးပေးရင် ဘာ လှုပ်မလဲ ရှင်းရှင်း သိရပါတယ်။
+      [[mark:explain-longhands]] ကျန်တဲ့ longhand နှစ်ခုက timing function နဲ့ delay
+      ဖြစ်ပြီး၊ transition shorthand က လေးခုလုံးကို တစ်ခါတည်း ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition-duration"
+        url: "https://web.dev/learn/css/transitions#transition-duration"
+      - title: "web.dev Learn CSS — Transitions: transition-property"
+        url: "https://web.dev/learn/css/transitions#transition-property"
+      - title: "MDN — transition-duration (initial value 0s)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition-duration"
+      - title: "MDN — transition-property (initial value all)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition-property"
+      - title: "MDN — transition (the four longhands)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition"
+    actions:
+      - id: close-frames-board
+        type: whiteboard.apply
+        at: { mark: close-frames }
+        open: false
+      - id: type-duration
+        type: editor.type
+        at: { mark: type-duration }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: darkgreen;\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  transition-duration: 500ms;\n}\n"
+      - id: click-off
+        type: preview.click
+        at: { mark: click-off, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-active }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-off
+        type: expect.preview
+        at: { mark: after-off }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-on
+        type: preview.click
+        at: { mark: click-on }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-active }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-on
+        type: expect.preview
+        at: { mark: after-on }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn is-active" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-duration
+        type: editor.select
+        at: { mark: select-duration }
+        target: { file: styles.css, text: "transition-duration: 500ms;", occurrence: 1 }
+      - id: type-property
+        type: editor.type
+        at: { mark: type-property }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transition-duration: 500ms;\n", occurrence: 1 }
+        text: "  transition-property: background-color;\n"
+
+  - id: easing
+    chapter: "Easing ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:type-slide]] အခု chip တွေဆီ သွားရအောင်။ ဒီတစ်ခါ shorthand ကို သုံးပါမယ်။
+      property က translate ဖြစ်ပြီး၊ လိုက်ကြည့်လို့ ရလောက်အောင် ကြာချိန်ကို 3 စက္ကန့်
+      ပေးပါမယ်။ [[mark:type-moved]] ရွှေ့ထားတဲ့ state မှာ chip တွေက ညာဘက်ကို 160 pixel
+      ရွေ့သွားပါမယ်။ lesson 14 မှာ မြင်ခဲ့သလို၊ translate က ဘေးက box တွေကို မတွန်းဘဲ
+      ရွှေ့ပါတယ်။ [[mark:click-move]] ရွှေ့မယ် ခလုတ်ကို နှိပ်ကြည့်ရအောင်။
+      [[mark:after-move]] သုံးခုလုံး အတူတူ ရွေ့သွားပါပြီ။ အစမှာ နှေး၊ အလယ်မှာ မြန်ပြီး၊
+      အဆုံးမှာ နှေးပါတယ်။ easing ဆိုတာ ပြောင်းလဲမှု တစ်လျှောက် အမြန်နှုန်း ဘယ်လို
+      ပြောင်းမလဲ ဆိုတာပါ။ default က linear မဟုတ်ဘဲ ease ပါ။ [[mark:type-easings]] အခု
+      timing function longhand နဲ့ ပထမ chip ကို linear၊ တတိယ chip ကို ease out ပေးပါမယ်။
+      အလယ်က chip ကတော့ default ease အတိုင်း ကျန်ပါတယ်။ chip တွေကို ပြန်ပို့ပြီး သေချာ
+      ကြည့်ရအောင်။ [[mark:click-back]] linear chip က အမြန်နှုန်း တစ်သမတ်တည်းနဲ့
+      သွားပါတယ်။ ease out chip ကတော့ အစမှာ မြန်ပြီး၊ အဆုံးမှာ ဖြည်းဖြည်း ရပ်သွားလို့
+      ပိုသဘာဝ ကျပါတယ်။ [[mark:explain-curves]] ကိုယ်ပိုင် curve တွေနဲ့ steps ကိုတော့
+      lesson 39 မှာ ကြည့်ပါမယ်။ chip တွေ သွားနေတုန်း ထပ်နှိပ်ရင်တော့၊ ရောက်နေတဲ့
+      နေရာကနေပဲ ပြန်လှည့်လာပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition-timing-function"
+        url: "https://web.dev/learn/css/transitions#transition-timing-function"
+      - title: "MDN — transition-timing-function (initial value ease)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition-timing-function"
+      - title: "MDN — translate"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/translate"
+      - title: "CSS Transitions Level 1 — faster reversing of interrupted transitions"
+        url: "https://www.w3.org/TR/css-transitions-1/#reversing"
+    actions:
+      - id: type-slide
+        type: editor.type
+        at: { mark: type-slide }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  transition-property: background-color;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.slide-row span {\n  transition: translate 3s;\n}\n"
+      - id: type-moved
+        type: editor.type
+        at: { mark: type-moved }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transition: translate 3s;\n}\n", occurrence: 1 }
+        text: "\n.slide-row.is-moved span {\n  translate: 160px 0;\n}\n"
+      - id: click-move
+        type: preview.click
+        at: { mark: click-move, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-move }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-moved
+        type: expect.preview
+        at: { mark: after-move }
+        timeoutMs: 4000
+        target: { by: testId, value: slide-row }
+        attribute: { name: class, value: "slide-row is-moved" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: each revealed line is a complete one-line rule, so the
+      # nth-child( parenthesis never stands open.
+      - id: type-easings
+        type: editor.type
+        at: { mark: type-easings }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  translate: 160px 0;\n}\n", occurrence: 1 }
+        text: "\n.slide-row span:nth-child(1) { transition-timing-function: linear; }\n.slide-row span:nth-child(3) { transition-timing-function: ease-out; }\n"
+      - id: click-back
+        type: preview.click
+        at: { mark: click-back, offsetMs: -1000 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-move }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-back
+        type: expect.preview
+        at: { mark: click-back }
+        timeoutMs: 4000
+        target: { by: testId, value: slide-row }
+        attribute: { name: class, value: "slide-row" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-linear
+        type: editor.select
+        at: { mark: click-back }
+        target: { file: styles.css, text: "transition-timing-function: linear;", occurrence: 1 }
+
+  - id: stagger
+    chapter: "Delay နဲ့ တစ်ခုပြီး တစ်ခု"
+    narration: >
+      [[mark:scroll-drinks]] သောက်စရာ menu ဆီ ဆင်းရအောင်။ [[mark:type-hide]] card တွေကို
+      အရင် ဖျောက်ရအောင်။ opacity ကို 0 ပေးရင် လုံးဝ မမြင်ရတော့ပါဘူး။ ပြီးတော့ opacity
+      အတွက် 600 millisecond transition ပေးပါမယ်။ [[mark:after-hide]] card တွေ ချက်ချင်း
+      ပျောက်သွားပါတယ်။ opacity ပြောင်းတဲ့ အချိန်မှာ transition ကို မရေးရသေးလို့ပါ။
+      [[mark:type-open]] menu မှာ open class ရှိရင် card တွေကို အပြည့် ပြန်မြင်ရပါမယ်။
+      menu မပွင့်သေးလို့ အခုတော့ preview မှာ ဘာမှ မပေါ်သေးပါဘူး။ [[mark:type-delays]]
+      ဒုတိယ၊ တတိယနဲ့ စတုတ္ထ card တွေက မစခင် 200၊ 400 နဲ့ 600 millisecond စောင့်ပါမယ်။
+      delay ဆိုတာ ပြောင်းလဲမှု မစခင် စောင့်တဲ့ အချိန်ပါ။ [[mark:click-open]] menu ကို
+      ဖွင့်ရအောင်။ [[mark:after-open]] card တွေ တစ်ခုပြီး တစ်ခု ပေါ်လာပါပြီ။ delay တွေ
+      တဖြည်းဖြည်း များလာတာကို stagger လို့ ခေါ်ပြီး၊ မျက်စိက စာရင်းအတိုင်း အောက်ကို
+      လိုက်သွားပါတယ်။ [[mark:explain-negative]] ဒီ delay မှာ အနုတ် တန်ဖိုးလည်း ပေးလို့
+      ရပါတယ်။ အဲဒီအခါ transition က မစောင့်ဘဲ၊ အဲဒီ အချိန်စာ ရောက်ပြီးသား နေရာကနေ စပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition-delay"
+        url: "https://web.dev/learn/css/transitions#transition-delay"
+      - title: "MDN — transition-delay (negative values start partway)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition-delay"
+      - title: "MDN — opacity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/opacity"
+    actions:
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: scroll-drinks }
+        timeoutMs: 5000
+        top: 500
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-hide
+        type: editor.type
+        at: { mark: type-hide }
+        cadence: line-by-line
+        target:
+          { file: styles.css, after: "transition-timing-function: ease-out; }\n", occurrence: 1 }
+        text: "\n.drinks .menu-card {\n  opacity: 0;\n  transition: opacity 600ms;\n}\n"
+      - id: expect-hidden
+        type: expect.preview
+        at: { mark: after-hide }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        attribute: { name: class, value: "menu" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-open
+        type: editor.type
+        at: { mark: type-open }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transition: opacity 600ms;\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu.is-open .menu-card {\n  opacity: 1;\n}\n"
+      - id: type-delays
+        type: editor.type
+        at: { mark: type-delays }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  opacity: 1;\n}\n", occurrence: 1 }
+        text: "\n.drinks .menu-card:nth-child(2) { transition-delay: 200ms; }\n.drinks .menu-card:nth-child(3) { transition-delay: 400ms; }\n.drinks .menu-card:nth-child(4) { transition-delay: 600ms; }\n"
+      - id: click-open
+        type: preview.click
+        at: { mark: click-open, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-open }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-open
+        type: expect.preview
+        at: { mark: after-open }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-drinks }
+        attribute: { name: class, value: "menu is-open" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-delay
+        type: editor.select
+        at: { mark: explain-negative }
+        target: { file: styles.css, text: "transition-delay: 600ms;", occurrence: 1 }
+
+  - id: lift
+    chapter: "Transition နှစ်ခု တစ်ပြိုင်နက်"
+    narration: >
+      [[mark:type-lift-transition]] အခု ယနေ့ အထူး card ပါ။ သူ့ transition မှာ item
+      သုံးခုကို comma နဲ့ ခြားထားပါတယ်။ ဒီ rule က card တွေရဲ့ transition စာရင်းကို
+      တစ်ခုလုံး အစားထိုးလို့၊ opacity ကို ပြန်ထည့်ရပါတယ်။ item တစ်ခုစီက property
+      တစ်ခုကို ကိုယ်ပိုင် အချိန် ပေးလို့၊ translate က 200 millisecond၊ box shadow က 2
+      စက္ကန့် ကြာပါတယ်။ [[mark:select-item]] ဒီ item ကို ကြည့်ပါ။ item ထဲမှာ ပထမ အချိန်က
+      အမြဲ ကြာချိန် ဖြစ်ပြီး၊ ဒုတိယ အချိန် ပါရင် delay ဖြစ်ပါတယ်။ [[mark:type-lift]]
+      မြှင့်ထားတဲ့ state မှာ card က အပေါ်ကို 8 pixel တက်ပြီး အရိပ် ပျော့ပျော့ ရပါမယ်။
+      card ကို မြှင့်ရအောင်။ [[mark:click-lift]] card က မြန်မြန် တက်သွားပြီး၊ အရိပ်ကတော့
+      ခဏလောက် ဆက်ကြီးလာပါသေးတယ်။ [[mark:select-translate]] ဒီ translate ကို ကြည့်ပါ။
+      lesson 14 မှာ မြင်ခဲ့တဲ့ translate၊ rotate နဲ့ scale က သီးခြား property တွေ
+      ဖြစ်လို့၊ တစ်ခုစီကို အချိန် သီးသန့် ပေးလို့ ရပါတယ်။ transform property မှာတော့
+      function အားလုံးက အချိန် တစ်ခုတည်း မျှသုံးရပါတယ်။ card ကို ပြန်ချကြည့်ရအောင်။
+      [[mark:click-drop]] မြန်မြန် ပြန်ဆင်းလာပြီး၊ အရိပ်ကတော့ နောက်ကနေ ဖြည်းဖြည်း
+      ပျောက်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: shorthand"
+        url: "https://web.dev/learn/css/transitions#shorthand_transition"
+      - title: "web.dev Learn CSS — Transitions: individual transform properties"
+        url: "https://web.dev/learn/css/transitions#individual_transform_properties"
+      - title: "web.dev Learn CSS — Transitions: shadows"
+        url: "https://web.dev/learn/css/transitions#shadows"
+      - title: "MDN — transition (first time = duration, second = delay)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/transition"
+      - title: "CSS Transforms Level 2 — individual transform properties"
+        url: "https://www.w3.org/TR/css-transforms-2/#individual-transforms"
+    actions:
+      - id: type-lift-transition
+        type: editor.type
+        at: { mark: type-lift-transition }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "transition-delay: 600ms; }\n", occurrence: 1 }
+        text: "\n.drinks .featured {\n  transition: opacity 600ms,\n    translate 200ms ease-out,\n    box-shadow 2s ease-out;\n}\n"
+      - id: select-item
+        type: editor.select
+        at: { mark: select-item }
+        target: { file: styles.css, text: "box-shadow 2s ease-out", occurrence: 1 }
+      # line-by-line: the rgb( line is revealed whole, so no parenthesis stands
+      # open; the rule is also the last one in the file while it appears.
+      - id: type-lift
+        type: editor.type
+        at: { mark: type-lift }
+        cadence: line-by-line
+        target: { file: styles.css, after: "    box-shadow 2s ease-out;\n}\n", occurrence: 1 }
+        text: "\n.drinks .featured.is-lifted {\n  translate: 0 -8px;\n  box-shadow: 0 16px 24px rgb(0 0 0 / 25%);\n}\n"
+      - id: click-lift
+        type: preview.click
+        at: { mark: click-lift }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-lift }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-lifted
+        type: expect.preview
+        at: { afterAction: click-lift }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured is-lifted" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-translate
+        type: editor.select
+        at: { mark: select-translate }
+        target: { file: styles.css, text: "translate: 0 -8px;", occurrence: 1 }
+      - id: click-drop
+        type: preview.click
+        at: { mark: click-drop }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-lift }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-dropped
+        type: expect.preview
+        at: { afterAction: click-drop }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: filter
+    chapter: "ဘာတွေ transition လုပ်လို့ ရလဲ"
+    narration: >
+      [[mark:scroll-gallery]] အခု gallery ပါ။ [[mark:type-grey]] ရောင်းကုန်တဲ့
+      ဓာတ်ပုံကို lesson 36 က grayscale filter နဲ့ မီးခိုးရောင် ပြောင်းပြီး၊ filter ကို 1
+      စက္ကန့် transition ပေးပါမယ်။ [[mark:after-grey]] card တွေတုန်းကလိုပဲ၊ ဓာတ်ပုံက
+      ချက်ချင်း မီးခိုးရောင် ဖြစ်သွားပါတယ်။ [[mark:type-available]] ဓာတ်ပုံကို
+      ပြန်ရပြီလို့ မှတ်လိုက်ရင်၊ filter ကို none ပြန်ပေးပါမယ်။ none ဆိုတာ filter လုံးဝ
+      မရှိတာပါ။ [[mark:click-photo]] ပြန်ရပြီ ခလုတ်ကို နှိပ်ရအောင်။ [[mark:after-photo]]
+      အရောင်တွေ ဖြည်းဖြည်း ပြန်လာပါပြီ။ နှစ်ဘက်လုံးမှာ filter function တူတူ ဆိုရင်
+      ချောချော transition ဖြစ်ပြီး၊ none ကိုတော့ မီးခိုးရောင် လုံးဝ မရှိတာလို့ ယူပါတယ်။
+      ခလုတ်ရဲ့ အရောင်နဲ့ card ရဲ့ အရိပ်လည်း ဒီလိုပဲ transition ဖြစ်ခဲ့တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: filters"
+        url: "https://web.dev/learn/css/transitions#filters"
+      - title: "web.dev Learn CSS — Transitions: color"
+        url: "https://web.dev/learn/css/transitions#color"
+      - title: "MDN — filter (interpolation)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter#interpolation"
+      - title: "Filter Effects Module Level 1 — interpolation of filters"
+        url: "https://www.w3.org/TR/filter-effects-1/#interpolation-of-filters"
+    actions:
+      - id: scroll-gallery
+        type: preview.scroll
+        at: { mark: scroll-gallery }
+        timeoutMs: 5000
+        top: 960
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-grey
+        type: editor.type
+        at: { mark: type-grey }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  box-shadow: 0 16px 24px rgb(0 0 0 / 25%);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.sold-out img {\n  filter: grayscale(1);\n  transition: filter 1s;\n}\n"
+      - id: expect-grey
+        type: expect.preview
+        at: { mark: after-grey }
+        timeoutMs: 4000
+        target: { by: testId, value: photo }
+        attribute: { name: class, value: "photo sold-out" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-available
+        type: editor.type
+        at: { mark: type-available }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transition: filter 1s;\n}\n", occurrence: 1 }
+        text: "\n.sold-out.available img {\n  filter: none;\n}\n"
+      - id: click-photo
+        type: preview.click
+        at: { mark: click-photo, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-photo }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-available
+        type: expect.preview
+        at: { mark: after-photo }
+        timeoutMs: 4000
+        target: { by: testId, value: photo }
+        attribute: { name: class, value: "photo sold-out available" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: discrete
+    narration: >
+      [[mark:scroll-special]] ယနေ့ အထူးဆီ ပြန်တက်ရအောင်။ [[mark:type-price-all]] သူ့
+      ဈေးနှုန်းကို property အားလုံးအတွက် 1 စက္ကန့် transition ပေးပါမယ်။ ရွေးပေးတာ
+      ပိုကောင်းတယ်လို့ ပြောခဲ့ပေမယ့်၊ ဘယ် property တွေ ဖြည်းဖြည်း ပြောင်းမလဲ ကြည့်ဖို့
+      all ကို တမင် သုံးတာပါ။ [[mark:type-price-big]] card ကို မြှင့်ထားရင် ဈေးနှုန်းက 22
+      pixel ထိ ကြီးလာပြီး၊ monospace font လည်း ပြောင်းပါမယ်။ [[mark:click-lift-price]]
+      card ကို ထပ်မြှင့်ပြီး ဈေးနှုန်းကို ကြည့်ရအောင်။ [[mark:after-lift-price]]
+      ဈေးနှုန်းက ဖြည်းဖြည်း ကြီးလာပေမယ့်၊ font ကတော့ အစမှာပဲ တစ်ချက်တည်းနဲ့
+      ပြောင်းသွားပါတယ်။ [[mark:explain-discrete]] ဒီ font family ကို ကြည့်ပါ။ font
+      နှစ်မျိုးရဲ့ ကြားက font ဆိုတာ မရှိပါဘူး။ font family၊ display လို အလယ် တန်ဖိုး
+      မရှိတဲ့ property တွေကို discrete လို့ ခေါ်ပြီး၊ all နဲ့တောင် ချက်ချင်း
+      ပြောင်းပါတယ်။ display ကိုပါ transition ထဲ ပါဝင်စေတဲ့ နည်းကို lesson 41 မှာ
+      ပြပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: what can and can't transition"
+        url: "https://web.dev/learn/css/transitions#what_can_and_cant_transition"
+      - title: "MDN — Animatable CSS properties (animation types; discrete)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animated_properties"
+      - title: "MDN — font-family (animation type: discrete)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-family"
+      - title: "CSS Transitions Level 2 — transition-behavior"
+        url: "https://drafts.csswg.org/css-transitions-2/#transition-behavior-property"
+    actions:
+      - id: scroll-special
+        type: preview.scroll
+        at: { mark: scroll-special }
+        timeoutMs: 5000
+        top: 500
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-price-all
+        type: editor.type
+        at: { mark: type-price-all }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: none;\n}\n", occurrence: 1 }
+        text: "\n.drinks .featured .price {\n  transition: all 1s;\n}\n"
+      - id: type-price-big
+        type: editor.type
+        at: { mark: type-price-big }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  transition: all 1s;\n}\n", occurrence: 1 }
+        text: "\n.drinks .featured.is-lifted .price {\n  font-size: 22px;\n  font-family: monospace;\n}\n"
+      - id: click-lift-price
+        type: preview.click
+        at: { mark: click-lift-price, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-lift }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-lifted-price
+        type: expect.preview
+        at: { mark: after-lift-price }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured is-lifted" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-family
+        type: editor.select
+        at: { mark: explain-discrete }
+        target: { file: styles.css, text: "font-family: monospace;", occurrence: 1 }
+
+  - id: focus-within
+    chapter: "Transition ကို ဘာက စပေးလဲ"
+    narration: >
+      [[mark:scroll-top]] အော်ဒါ form ဆီ ပြန်တက်ရအောင်။ [[mark:type-form]] form ကို 2
+      pixel အညိုဖျော့ရောင် border ပေးပြီး၊ border အရောင်ကို 400 millisecond transition
+      ပေးပါမယ်။ [[mark:type-within]] form ထဲက တစ်ခုခု focus ရနေတုန်း border က
+      အစိမ်းရောင် ဖြစ်ပါမယ်။ အရောင်ပဲ ပြောင်းလို့၊ transition ကိုလည်း အရောင်မှာပဲ
+      ပေးထားပါတယ်။ [[mark:type-focus]] field ကိုယ်တိုင်အတွက်တော့ ရိုးရိုး focus ကို
+      သုံးပါမယ်။ focus ရနေတုန်း နောက်ခံက အစိမ်းဖျော့ဖျော့ ဖြစ်ပြီး၊ နောက်ခံမှာ
+      သူ့ကိုယ်ပိုင် transition ပါပါတယ်။ [[mark:input-name]] field ထဲမှာ နာမည်
+      ရိုက်ထည့်ကြည့်ရအောင်။ [[mark:after-input]] နှစ်ခုလုံး ဖြည်းဖြည်း ပြောင်းလာပါပြီ။
+      field က focus ရနေလို့ အစိမ်းဖျော့ဖျော့ ဖြစ်ပြီး၊ form ရဲ့ border ကတော့ focus က
+      သူ့ထဲမှာ ရှိလို့ အစိမ်းရောင် ဖြစ်တာပါ။ [[mark:select-within]] ဒီ focus within ကို
+      ကြည့်ပါ။ highlight လုပ်ဖို့ editor က focus ယူသွားတော့၊ ထွက်တဲ့ဘက်မှာလည်း
+      transition တူတူ run လို့ field နဲ့ form က ဖြည်းဖြည်း ပြန်ပြောင်းသွားပါတယ်။
+      [[mark:explain-pseudo]] ဒါကြောင့် lesson 27 နဲ့ 28 က pseudo-class တွေကလည်း class
+      လိုပဲ transition ကို စပေးနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition triggers (:focus, :focus-within)"
+        url: "https://web.dev/learn/css/transitions#transition_triggers"
+      - title: "MDN — :focus-within"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus-within"
+      - title: "MDN — :focus"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: the opening line stands open only while it is the last
+      # rule in the file.
+      - id: type-form
+        type: editor.type
+        at: { mark: type-form }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  font-family: monospace;\n}\n", occurrence: 1 }
+        text: "\n.order-form {\n  border: 2px solid tan;\n  transition: border-color 400ms;\n}\n"
+      - id: type-within
+        type: editor.type
+        at: { mark: type-within }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  transition: border-color 400ms;\n}\n", occurrence: 1 }
+        text: "\n.order-form:focus-within {\n  border-color: seagreen;\n}\n"
+      # line-by-line: two complete rules, the last in the file while they
+      # appear. Same specificity as base.css's white field background, and
+      # later, so the focus colour wins.
+      - id: type-focus
+        type: editor.type
+        at: { mark: type-focus }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  border-color: seagreen;\n}\n", occurrence: 1 }
+        text: "\n.order-form input {\n  transition: background-color 400ms;\n}\n\n.order-form input:focus {\n  background: #dff2e3;\n}\n"
+      # The bridge focuses the field, then sets its value: :focus on the
+      # field, :focus-within on the form. The next editor.select focuses the
+      # editor, so both blur (rrweb records it; lesson 28 relies on the same).
+      - id: input-name
+        type: preview.input
+        at: { mark: input-name, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: input-name }
+        value: "ကိုအောင်"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-name
+        type: expect.preview
+        at: { mark: after-input }
+        timeoutMs: 4000
+        target: { by: testId, value: input-name }
+        value: "ကိုအောင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-within
+        type: editor.select
+        at: { mark: select-within }
+        target: { file: styles.css, text: ".order-form:focus-within", occurrence: 1 }
+
+  - id: triggers
+    narration: >
+      [[mark:open-triggers]] ဒါဆို transition ကို ဘာက စပေးနိုင်လဲ။ computed value ကို
+      ပြောင်းစေတဲ့ ဘယ်အရာမဆိုပါ။ [[mark:draw-hover]] hover က pointer ကို element ပေါ်
+      တင်ထားတုန်း ကိုက်ပါတယ်။ touch screen တွေမှာတော့ hover ကို အားကိုးလို့ မရပါဘူး။
+      replay က hover ကို သေချာ မပြနိုင်လို့၊ ဒီ lesson မှာ click ပဲ သုံးခဲ့တာပါ။
+      [[mark:draw-focus]] focus နဲ့ focus within ကို ခုနက မြင်ခဲ့ပါပြီ။
+      [[mark:draw-target]] target က URL အဆုံးမှာ ပါတဲ့ id နဲ့ တူတဲ့ element ကို
+      ကိုက်လို့၊ link ရိုးရိုးနဲ့တင် transition ကို စလို့ ရပါတယ်။ [[mark:draw-active]]
+      active က element ကို ဖိနှိပ်ထားတုန်း ကိုက်ပါတယ်။ [[mark:draw-class]] နောက်ဆုံးက ဒီ
+      lesson ရဲ့ ခလုတ်တွေလို JavaScript က ထည့်လိုက် ဖြုတ်လိုက် လုပ်တဲ့ class ပါ။ ဒါက
+      အယုံကြည်ရဆုံး နည်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: transition triggers"
+        url: "https://web.dev/learn/css/transitions#transition_triggers"
+      - title: "MDN — :hover"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:hover"
+      - title: "MDN — :target"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:target"
+      - title: "MDN — :active"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:active"
+    actions:
+      - id: open-triggers-board
+        type: whiteboard.apply
+        at: { mark: open-triggers }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-hover
+        type: whiteboard.apply
+        at: { mark: draw-hover }
+        upsertIds: [b-hover]
+        drawMs: 1200
+      - id: draw-focus
+        type: whiteboard.apply
+        at: { mark: draw-focus }
+        upsertIds: [b-focus, b-within]
+        drawMs: 1600
+      - id: draw-target
+        type: whiteboard.apply
+        at: { mark: draw-target }
+        upsertIds: [b-target]
+        drawMs: 1200
+      - id: draw-active
+        type: whiteboard.apply
+        at: { mark: draw-active }
+        upsertIds: [b-active]
+        drawMs: 1000
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [b-class, b-class-ring, b-class-l]
+        drawMs: 2000
+
+  - id: enter-exit
+    chapter: "ဝင်တဲ့အခါနဲ့ ထွက်တဲ့အခါ"
+    narration: >
+      [[mark:close-triggers]] အော်ဒါ ခလုတ်ဆီ ပြန်သွားရအောင်။ [[mark:type-exit]] သူ့
+      ပုံမှန် rule မှာ transition shorthand နဲ့ နောက်ခံကို 2 စက္ကန့် ပေးပါမယ်။ longhand
+      နှစ်ခုရဲ့ နောက်မှာ ရေးထားလို့၊ သူတို့ကို အစားထိုးပါတယ်။ [[mark:type-enter]] active
+      rule မှာတော့ နောက်ခံကို 150 millisecond ပဲ ပေးလို့၊ ဝင်တဲ့အခါ မြန်မြန်
+      ပြောင်းပါမယ်။ active state ကနေ ထွက်ဖို့ ပြောင်းမယ် ခလုတ်ကို နှိပ်ပါမယ်။
+      [[mark:click-exit]] အစိမ်းက 2 စက္ကန့် ကြာအောင် အညိုကို ဖြည်းဖြည်း
+      ပြန်ပြောင်းပါတယ်။ [[mark:click-enter]] ပြန်ဝင်ပါမယ်။ [[mark:after-enter]]
+      ချက်ချင်းနီးပါး အစိမ်း ဖြစ်သွားပါတယ်။ [[mark:explain-enter-exit]] ဒီ 150
+      millisecond transition ကို ကြည့်ပါ။ browser က ရောက်သွားတဲ့ state ရဲ့ transition
+      ကို သုံးပါတယ်။ ဝင်တဲ့အခါ active rule ရဲ့ဟာ၊ ထွက်တဲ့အခါ ပုံမှန် rule ရဲ့ဟာပါ။
+      active rule မှာပဲ transition ရှိရင် ထွက်တဲ့အခါ ချက်ချင်း ပြောင်းမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: different transitions for enter or exit"
+        url: "https://web.dev/learn/css/transitions#different_transitions_for_enter_or_exit"
+      - title: "CSS Transitions Level 1 — the after-change style decides the transition"
+        url: "https://www.w3.org/TR/css-transitions-1/#starting"
+    actions:
+      - id: close-triggers-board
+        type: whiteboard.apply
+        at: { mark: close-triggers }
+        open: false
+      - id: type-exit
+        type: editor.type
+        at: { mark: type-exit }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  transition-property: background-color;\n", occurrence: 1 }
+        text: "  transition: background-color 2s;\n"
+      - id: type-enter
+        type: editor.type
+        at: { mark: type-enter }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: darkgreen;\n", occurrence: 1 }
+        text: "  transition: background-color 150ms;\n"
+      - id: click-exit
+        type: preview.click
+        at: { mark: click-exit }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-active }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-exit
+        type: expect.preview
+        at: { afterAction: click-exit }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-enter
+        type: preview.click
+        at: { mark: click-enter }
+        timeoutMs: 5000
+        target: { by: testId, value: toggle-active }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-enter
+        type: expect.preview
+        at: { mark: after-enter }
+        timeoutMs: 4000
+        target: { by: testId, value: order-button }
+        attribute: { name: class, value: "order-btn is-active" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-enter
+        type: editor.select
+        at: { mark: explain-enter-exit }
+        target: { file: styles.css, text: "transition: background-color 150ms;", occurrence: 1 }
+
+  - id: cup
+    chapter: "Custom property ကို transition လုပ်ရအောင်"
+    narration: >
+      [[mark:scroll-cup]] အခု လက်ဖက်ရည် ခွက်ပါ။ လက်ဖက်ရည်ရဲ့ အမြင့်က lesson 11 မှာ
+      register လုပ်ခဲ့တဲ့ tea level ပါ။ 30 ရာခိုင်နှုန်းကနေ စပြီး၊ ခွက်မှာ full class
+      ရှိရင် 90 ဖြစ်ပါတယ်။ [[mark:type-cup]] လက်ဖက်ရည်ကို 2 စက္ကန့် transition
+      ပေးရအောင်။ ဒီတစ်ခါ transition လုပ်မယ့် property က custom property ကိုယ်တိုင်ပါ။
+      [[mark:click-fill]] ခွက်ကို ဖြည့်ရအောင်။ [[mark:after-fill]] လက်ဖက်ရည် 30 ကနေ 90
+      ရာခိုင်နှုန်းထိ ချောချော တက်လာပါတယ်။ [[mark:explain-registered]] ဒီ tea level ကို
+      ကြည့်ပါ။ ရာခိုင်နှုန်း type နဲ့ register လုပ်ထားလို့၊ browser က ကြားက
+      တန်ဖိုးတွေကို တွက်နိုင်တာပါ။ register မလုပ်ထားတဲ့ custom property မှာ type
+      မရှိလို့၊ 90 ကို တန်းခုန်သွားမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Custom properties: more control with @property"
+        url: "https://web.dev/learn/css/custom-properties#more_control_with_property"
+      - title: "MDN — @property (registered properties can be animated)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@property"
+      - title: "MDN — Custom properties (--*): unregistered values animate discretely"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/--*"
+      - title: "CSS Properties and Values API Level 1 — animation behavior"
+        url: "https://www.w3.org/TR/css-properties-values-api-1/#animation-behavior-of-custom-properties"
+    actions:
+      - id: scroll-cup
+        type: preview.scroll
+        at: { mark: scroll-cup }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-cup
+        type: editor.type
+        at: { mark: type-cup }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: #dff2e3;\n}\n", occurrence: 1 }
+        text: "\n.cup-fill {\n  transition: --tea-level 2s;\n}\n"
+      - id: click-fill
+        type: preview.click
+        at: { mark: click-fill, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: fill-cup }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-full
+        type: expect.preview
+        at: { mark: after-fill }
+        timeoutMs: 4000
+        target: { by: testId, value: cup }
+        attribute: { name: class, value: "cup is-full" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-tea-level
+        type: editor.select
+        at: { mark: explain-registered }
+        target: { file: styles.css, text: "--tea-level 2s", occurrence: 1 }
+
+  - id: reduced-motion
+    chapter: "Reduced motion နဲ့ performance"
+    narration: >
+      [[mark:type-reduce]] လှုပ်ရှားမှုကြောင့် မူးတဲ့သူ၊ အာရုံပျံ့တဲ့သူတွေက ကိုယ့်
+      စက်မှာ reduced motion setting ဖွင့်ထားနိုင်ပါတယ်။ သူတို့အတွက် ဒီ media query က
+      transition အားလုံးကို ပိတ်ပြီး၊ important က တခြား rule တွေ ပြန်ဖွင့်တာကို
+      တားပေးပါတယ်။ [[mark:select-reduce]] ဒီ media query ကို ကြည့်ပါ။ သူ့ကို lesson
+      ကြည့်နေတဲ့ စက်ပေါ်မှာ စစ်ပါတယ်။ လက်ဖက်ရည်ကို ပြန်လျှော့ကြည့်ရအောင်။
+      [[mark:click-empty]] ကိုယ့် စက်မှာ reduced motion ဖွင့်ထားရင် ချက်ချင်း
+      ကျသွားပြီး၊ မဖွင့်ထားရင် 2 စက္ကန့် ကြာအောင် ကျပါတယ်။ [[mark:explain-opt-in]]
+      အားလုံးကို ပိတ်တာက အပြင်းထန်ဆုံး နည်းပါ။ ပိုနူးညံ့တဲ့ နည်းကတော့ ဘာမှ မတောင်းထားမှ
+      ကိုက်တဲ့ media query ထဲမှာပဲ လှုပ်ရှားမှု ထည့်ပြီး၊ အရောင် ပြောင်းတာကိုတော့
+      လူတိုင်းအတွက် ထားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: accessibility considerations"
+        url: "https://web.dev/learn/css/transitions#accessibility_considerations"
+      - title: "MDN — prefers-reduced-motion"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+      - title: "web.dev — prefers-reduced-motion"
+        url: "https://web.dev/articles/prefers-reduced-motion"
+    actions:
+      # line-by-line: the media query's parenthesis is closed on its first
+      # line; the rule is the last one in the file.
+      - id: type-reduce
+        type: editor.type
+        at: { mark: type-reduce }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  transition: --tea-level 2s;\n}\n", occurrence: 1 }
+        text: "\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n  }\n}\n"
+      - id: select-reduce
+        type: editor.select
+        at: { mark: select-reduce }
+        target: { file: styles.css, text: "@media (prefers-reduced-motion: reduce)", occurrence: 1 }
+      # The preview is still at the cup (scene cup). The recording's browser has
+      # no reduce setting, so the tea drops over 2 s here; a viewer whose device
+      # asks for reduced motion sees it drop at once (the replay evaluates the
+      # media query in the viewer's browser).
+      - id: click-empty
+        type: preview.click
+        at: { mark: click-empty }
+        timeoutMs: 5000
+        target: { by: testId, value: fill-cup }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-emptied
+        type: expect.preview
+        at: { afterAction: click-empty }
+        timeoutMs: 4000
+        target: { by: testId, value: cup }
+        attribute: { name: class, value: "cup" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: performance
+    narration: >
+      [[mark:open-pipeline]] လှုပ်ရှားမှုတွေက browser ကိုလည်း ပင်ပန်းစေပါတယ်။
+      [[mark:draw-pipeline]] frame တိုင်းမှာ browser က layout လုပ်၊ pixel တွေ paint
+      လုပ်ပြီး၊ နောက်ဆုံးမှာ အလွှာတွေကို composite လုပ်ပါတယ်။ [[mark:draw-slow]] width၊
+      height ဒါမှမဟုတ် top ကို transition လုပ်ရင် frame တိုင်း layout ပြန်လုပ်ပြီး ဘေးက
+      box တွေကိုပါ ရွှေ့ရလို့ ထစ်နိုင်ပါတယ်။ [[mark:draw-fast]] transform နဲ့ opacity
+      ကတော့ အများအားဖြင့် နောက်ဆုံး composite အဆင့်ပဲ လိုပါတယ်။ ဒါကြောင့် card ကို
+      translate နဲ့ မြှင့်ပြီး၊ menu ကို opacity နဲ့ ပေါ်စေခဲ့တာပါ။ [[mark:draw-auto]]
+      height ကိုတော့ auto အထိ transition လုပ်လို့ မရပါဘူး။ auto က ဂဏန်း မဟုတ်လို့ပါ။
+      အဲဒီအစား grid row တွေကို 0 fr ကနေ 1 fr ထိ transition လုပ်ကြပါတယ်။
+      [[mark:draw-extras]] transition ပြီးသွားရင် transitionend ဆိုတဲ့ JavaScript event
+      ထွက်လာပါတယ်။ lesson 5 ရဲ့ origin board မှာ မြင်ခဲ့သလို၊ run နေတဲ့ transition ရဲ့
+      တန်ဖိုးက important declaration ကိုတောင် နိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: performance considerations"
+        url: "https://web.dev/learn/css/transitions#performance_considerations"
+      - title: "web.dev — How to create high-performance CSS animations"
+        url: "https://web.dev/articles/animations-guide"
+      - title: "MDN — transitionend event"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/transitionend_event"
+      - title: "CSS Cascading and Inheritance Level 5 — cascade sorting order (transitions)"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-sort"
+    actions:
+      - id: open-pipeline-board
+        type: whiteboard.apply
+        at: { mark: open-pipeline }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-pipeline
+        type: whiteboard.apply
+        at: { mark: draw-pipeline }
+        upsertIds:
+          [
+            c-layout,
+            c-layout-l,
+            c-arrow-1,
+            c-paint,
+            c-paint-l,
+            c-arrow-2,
+            c-composite,
+            c-composite-l,
+          ]
+        drawMs: 3200
+      - id: draw-slow
+        type: whiteboard.apply
+        at: { mark: draw-slow }
+        upsertIds: [c-slow]
+        drawMs: 1600
+      - id: draw-fast
+        type: whiteboard.apply
+        at: { mark: draw-fast }
+        upsertIds: [c-fast]
+        drawMs: 1400
+      - id: draw-auto
+        type: whiteboard.apply
+        at: { mark: draw-auto }
+        upsertIds: [c-auto]
+        drawMs: 1400
+      - id: draw-extras
+        type: whiteboard.apply
+        at: { mark: draw-extras }
+        upsertIds: [c-events, c-important]
+        drawMs: 2000
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း နှစ်ခု မေးကြည့်ရအောင်။ easing ကို ဘယ် property နဲ့
+      ပေးလဲ။ [[mark:quiz-1]] transition timing function ပါ။ transition easing ဆိုတဲ့
+      property မရှိပါဘူး။ [[mark:ask-quiz-2]] all ကို သုံးတာ အကောင်းဆုံးလား။
+      [[mark:quiz-2]] မဟုတ်ပါဘူး။ မရည်ရွယ်တာတွေပါ လှုပ်နိုင်ပြီး၊ property တိုင်းလည်း
+      transition မဖြစ်ပါဘူး။ လိုချင်တာတွေကိုပဲ စာရင်း ပေးပါ။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ computed value ပြောင်းတဲ့အခါ transition က ကြားက frame တွေကို
+      ဖြည့်ပေးပါတယ်။ ကြာချိန်က transition ကို ဖွင့်ပေးပြီး၊ property၊ easing နဲ့ delay က
+      ပုံစံကို ပြင်ပေးပါတယ်။ run တာက ရောက်သွားတဲ့ state ရဲ့ transition ဖြစ်ပြီး၊ reduced
+      motion တောင်းထားတဲ့ user တွေကိုလည်း ဂရုစိုက်ရပါမယ်။ [[mark:next-lesson]]
+      transition က state နှစ်ခုကြားမှာပဲ သွားပြီး၊ စပေးမယ့် အရာကို စောင့်ပါတယ်။ နောက်
+      lesson မှာတော့ အဆင့် အများကြီး ပါပြီး သူ့ဘာသာ run တဲ့ keyframe animation ကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Transitions: check your understanding"
+        url: "https://web.dev/learn/css/transitions#check_your_understanding"
+      - title: "web.dev Learn CSS — Animations (next lesson)"
+        url: "https://web.dev/learn/css/animations"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-q1]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [d-a1]
+        drawMs: 1400
+      - id: draw-ask-quiz-2
+        type: whiteboard.apply
+        at: { mark: ask-quiz-2 }
+        upsertIds: [d-q2]
+        drawMs: 1400
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [d-a2]
+        drawMs: 1200
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".order-btn.is-active {\n  background: darkgreen;\n  transition: background-color 150ms;\n}\n\n.order-btn {\n  transition-duration: 500ms;\n  transition-property: background-color;\n  transition: background-color 2s;\n}\n\n.slide-row span {\n  transition: translate 3s;\n}\n\n.slide-row.is-moved span {\n  translate: 160px 0;\n}\n\n.slide-row span:nth-child(1) { transition-timing-function: linear; }\n.slide-row span:nth-child(3) { transition-timing-function: ease-out; }\n\n.drinks .menu-card {\n  opacity: 0;\n  transition: opacity 600ms;\n}\n\n.drinks .menu.is-open .menu-card {\n  opacity: 1;\n}\n\n.drinks .menu-card:nth-child(2) { transition-delay: 200ms; }\n.drinks .menu-card:nth-child(3) { transition-delay: 400ms; }\n.drinks .menu-card:nth-child(4) { transition-delay: 600ms; }\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".drinks .featured {\n  transition: opacity 600ms,\n    translate 200ms ease-out,\n    box-shadow 2s ease-out;\n}\n\n.drinks .featured.is-lifted {\n  translate: 0 -8px;\n  box-shadow: 0 16px 24px rgb(0 0 0 / 25%);\n}\n\n.sold-out img {\n  filter: grayscale(1);\n  transition: filter 1s;\n}\n\n.sold-out.available img {\n  filter: none;\n}\n\n.drinks .featured .price {\n  transition: all 1s;\n}\n\n.drinks .featured.is-lifted .price {\n  font-size: 22px;\n  font-family: monospace;\n}\n\n.order-form {\n  border: 2px solid tan;\n  transition: border-color 400ms;\n}\n\n.order-form:focus-within {\n  border-color: seagreen;\n}\n\n.order-form input {\n  transition: background-color 400ms;\n}\n\n.order-form input:focus {\n  background: #dff2e3;\n}\n\n.cup-fill {\n  transition: --tea-level 2s;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  * {\n    transition: none !important;\n  }\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
