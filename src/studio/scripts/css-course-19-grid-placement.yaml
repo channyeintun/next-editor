@@ -1,0 +1,2414 @@
+# CSS course (Burmese), lesson 19 of 43: grid part 2, lines and placement.
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 18; auto placement fills cells in HTML order,
+# row by row; order changes only what you see; grid-auto-flow: column) → code
+# tour (hero strip, two specials, seven numbered tiles with a wide third one,
+# snacks, a photo card whose badge comes first; empty styles.css) → specials
+# repeat(auto-fill, minmax(110px, 1fr)) (two cards + an empty third column) →
+# auto-fit (the empty column collapses, the cards stretch) → board (fill vs
+# fit; the same once a row is full; a definite size is needed) → tiles
+# repeat(3, 1fr) → .wide span 2 (a hole after tile 2) → dense (tile 4
+# backfills) → board (the visual order vs the HTML order) → board (lines 1..4
+# and -4..-1; 1 / 3 = two columns; 1 / -1 = the whole row) → first tile 1 / 3
+# → 1 / -1 (a banner) → board (explicit vs implicit grid; -1 is the last
+# explicit line; grid-auto-rows / -columns) → snacks: two columns, one
+# minmax(150px, auto) row (150 tall; the added rows are auto) →
+# grid-auto-rows: minmax(150px, auto) (every
+# row 150) → photo card: display grid (two rows) → same cell (the later photo
+# covers the badge) → z-index: 1 (badge on top, no position needed) → hero:
+# named lines (no change, not a grid yet) → children in "content" → display
+# grid (everything moves in 16px) → strip in "full" (edge to edge) → quiz
+# (4 columns, 2 / -1 = 3 columns) and recap; hand-off to lesson 20 (areas,
+# subgrid, alignment).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Rules are appended at the END of styles.css. Keystroke-typed values have no
+# misleading valid prefix: the specials rule is typed at the end of the file
+# (an unclosed "repeat(… 1fr" is only complete once it is the final value;
+# "minmax(110px, 1" is invalid); the auto-fit and auto-rows lines are typed at
+# the END of their rule, so their open parenthesis swallows only the rule's
+# closing brace and they stay invalid until the last ")"; "span 2", "1 / 3",
+# "dense", "z-index: 1" pass through no other valid layout ("grid-column: 1"
+# alone keeps tile 1 where it already is); the photo rule types grid-column
+# before grid-row (column 1 alone changes nothing); the hero's named-line
+# track list and its children's "content" rule are typed while the hero is
+# not a grid yet (no effect), and display: grid is inserted last. Line-by-line
+# where a prefix would flash: "1 / -1" ("1" alone would shrink the banner),
+# the strip's "full" ("f", "fu", "ful" are valid names that would push the
+# strip into an implicit column), and the tiles and snacks rules (the
+# narration summarises them).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts): specials 400
+# wide stacked → auto-fill 125 / 125 + an empty 125 track → auto-fit 194 /
+# 194; tiles 128 wide, 3 per row → span 2: tile 3 264 wide on row 2, hole at
+# row 1 column 3 → dense: tile 4 fills it (row 1: 1 2 4; row 2: 3 3 5) →
+# 1 / 3: tile 1 264 wide (row 1: 1 1 2; order 1-7 again) → 1 / -1: tile 1
+# 400 wide; snacks 194 wide, row 1 150 tall, rows 2-3 105 → auto rows: all
+# 150; photo: badge line then photo → grid: badge top right of row 1, photo
+# row 2 → same cell: the photo hides the badge → z-index: badge on top;
+# hero: text at the box's left edge → grid: text inset 16 (368 wide) → strip
+# 400 wide again.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-19-grid-placement
+  title: "CSS course 19: Grid အပိုင်း 2၊ line နဲ့ placement"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 19
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit hero (plus a dark strip that will run edge to
+      # edge), the lesson blocks specials (two cards), gallery-grid (seven
+      # numbered tiles, the third one wide), the kit snacks block (verbatim)
+      # and photo-card (its price badge comes BEFORE the photo). No kit.js:
+      # nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero (plus a lesson strip that will run edge to edge) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <p class="hero-strip" data-testid="hero-strip">မနက် ၆ နာရီကတည်းက ဖွင့်ပါတယ်</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- lesson block: specials (two cards) -->
+              <section class="menu-section" id="specials">
+                <h2>ယနေ့အထူး</h2>
+                <ul class="menu specials demo" data-testid="specials">
+                  <li class="menu-card" data-testid="special-tea">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <span class="price">1,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="special-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: gallery-grid (seven numbered tiles; the third is wide) -->
+              <section class="menu-section" id="gallery-grid">
+                <h2>ဆိုင်ပုံရိပ်</h2>
+                <ul class="tiles demo" data-testid="tiles">
+                  <li class="tile" data-testid="tile-1">1</li>
+                  <li class="tile" data-testid="tile-2">2</li>
+                  <li class="tile wide" data-testid="tile-3">3</li>
+                  <li class="tile" data-testid="tile-4">4</li>
+                  <li class="tile" data-testid="tile-5">5</li>
+                  <li class="tile" data-testid="tile-6">6</li>
+                  <li class="tile" data-testid="tile-7">7</li>
+                </ul>
+              </section>
+
+              <!-- kit block: snacks -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- lesson block: photo-card (the badge comes BEFORE the photo) -->
+              <section class="menu-section" id="photo">
+                <h2>ဆိုင်အတွင်း</h2>
+                <div class="photo-card" data-testid="photo-card">
+                  <span class="price-badge" data-testid="price-badge">1,500 ကျပ်</span>
+                  <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" />
+                </div>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2, C and D; the hero has no side
+      # padding and the cards no margin. Section E styles the lesson blocks
+      # and contains no grid track, placement or z-index declaration.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 19 keeps A, B, B2, C and D. Changes: the hero has no side padding
+          (the lesson gives it side space with named grid lines), the card margin is 0
+          (the grid gap is the only space between cards). Section E styles the
+          lesson's own blocks and contains no grid track or placement declaration.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px 0;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* .stage is a fixed playground for overlap and position demos. */
+        .stage {
+          position: relative;
+          min-height: 160px;
+          margin: 16px 0;
+          padding: 12px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 19: the look of the lesson's own blocks. Every grid declaration
+           (tracks, placement, z-index) is typed in styles.css. */
+        .menu-section {
+          margin-top: 16px;
+        }
+
+        /* Hero: the paragraphs keep the same spacing in flow and in grid. */
+        .hero p {
+          margin: 0 0 12px;
+        }
+
+        .hero-strip {
+          padding: 4px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        /* As a grid item the link keeps its own width instead of stretching. */
+        .hero .order-link {
+          justify-self: start;
+        }
+
+        /* Numbered gallery tiles; the wide one is darker. */
+        .tiles {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .tile {
+          padding: 8px;
+          background: var(--cream);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          color: var(--tea);
+          font-weight: 700;
+          text-align: center;
+        }
+
+        .tile.wide {
+          background: var(--tea);
+          color: #fff;
+        }
+
+        /* Photo card: in a grid, the badge sits in the top right corner of its cell. */
+        .photo-card img {
+          display: block;
+          width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        .price-badge {
+          justify-self: end;
+          align-self: start;
+          margin: 8px;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--gold);
+          color: var(--ink);
+          font-weight: 700;
+        }
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — auto placement. White = the grid's cells, green = row flow
+    # (the default), orange = its direction and rule, violet = order,
+    # blue = grid-auto-flow: column.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 380,
+        height: 46,
+        text: "Auto placement",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-c1, kind: rectangle, x: 300, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-c2, kind: rectangle, x: 400, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-c3, kind: rectangle, x: 500, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-c4, kind: rectangle, x: 300, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-c5, kind: rectangle, x: 400, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-c6, kind: rectangle, x: 500, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-i1,
+        kind: rectangle,
+        x: 306,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-n1,
+        kind: text,
+        x: 336,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-i2,
+        kind: rectangle,
+        x: 406,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-n2,
+        kind: text,
+        x: 436,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-i3,
+        kind: rectangle,
+        x: 506,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-n3,
+        kind: text,
+        x: 536,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-i4,
+        kind: rectangle,
+        x: 306,
+        y: 316,
+        width: 78,
+        height: 58,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-n4,
+        kind: text,
+        x: 336,
+        y: 327,
+        width: 20,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-i5,
+        kind: rectangle,
+        x: 406,
+        y: 316,
+        width: 78,
+        height: 58,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-n5,
+        kind: text,
+        x: 436,
+        y: 327,
+        width: 20,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: a-d1, kind: rectangle, x: 720, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-d2, kind: rectangle, x: 820, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-d3, kind: rectangle, x: 920, y: 230, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-d4, kind: rectangle, x: 720, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-d5, kind: rectangle, x: 820, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - { id: a-d6, kind: rectangle, x: 920, y: 310, width: 90, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-j1,
+        kind: rectangle,
+        x: 726,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m1,
+        kind: text,
+        x: 756,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-j2,
+        kind: rectangle,
+        x: 726,
+        y: 316,
+        width: 78,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m2,
+        kind: text,
+        x: 756,
+        y: 327,
+        width: 20,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-j3,
+        kind: rectangle,
+        x: 826,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m3,
+        kind: text,
+        x: 856,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-j4,
+        kind: rectangle,
+        x: 826,
+        y: 316,
+        width: 78,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m4,
+        kind: text,
+        x: 856,
+        y: 327,
+        width: 20,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-j5,
+        kind: rectangle,
+        x: 926,
+        y: 236,
+        width: 78,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-m5,
+        kind: text,
+        x: 956,
+        y: 247,
+        width: 20,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-row,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 388,
+        width: 290,
+        height: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-row-l,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 200,
+        height: 36,
+        text: "row လိုက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 640,
+        height: 36,
+        text: "HTML အစဉ်အတိုင်း · နောက် အကွက်လွတ်ထဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-order,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 640,
+        height: 36,
+        text: "order → မြင်ရတဲ့ အစဉ်ပဲ ပြောင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-col-k,
+        kind: text,
+        x: 720,
+        y: 170,
+        width: 360,
+        height: 36,
+        text: "grid-auto-flow: column",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-col,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 1020,
+        y: 230,
+        width: 30,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-col-l,
+        kind: text,
+        x: 720,
+        y: 420,
+        width: 220,
+        height: 36,
+        text: "column လိုက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-col-rows,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 640,
+        height: 36,
+        text: "column လိုက်ဆို row တွေ သတ်မှတ်ရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board B — auto-fill vs auto-fit. Blue = auto-fill, green = the cards
+    # and auto-fit, orange = the empty track kept, red = collapsed / invalid,
+    # violet = when they look the same.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "auto-fill နဲ့ auto-fit",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-fill-k,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 160,
+        height: 36,
+        text: "auto-fill",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-fill-box,
+        kind: rectangle,
+        x: 300,
+        y: 262,
+        width: 600,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-fill-c1,
+        kind: rectangle,
+        x: 308,
+        y: 270,
+        width: 184,
+        height: 54,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-fill-c2,
+        kind: rectangle,
+        x: 508,
+        y: 270,
+        width: 184,
+        height: 54,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-fill-c3,
+        kind: rectangle,
+        x: 708,
+        y: 270,
+        width: 184,
+        height: 54,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-fill-empty,
+        kind: text,
+        x: 745,
+        y: 279,
+        width: 110,
+        height: 36,
+        text: "အလွတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-fill-note,
+        kind: text,
+        x: 940,
+        y: 279,
+        width: 130,
+        height: 36,
+        text: "ချန်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-fit-k,
+        kind: text,
+        x: 300,
+        y: 362,
+        width: 160,
+        height: 36,
+        text: "auto-fit",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-fit-box,
+        kind: rectangle,
+        x: 300,
+        y: 402,
+        width: 600,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-fit-c1,
+        kind: rectangle,
+        x: 308,
+        y: 410,
+        width: 288,
+        height: 54,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-fit-c2,
+        kind: rectangle,
+        x: 604,
+        y: 410,
+        width: 288,
+        height: 54,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-fit-note,
+        kind: text,
+        x: 940,
+        y: 419,
+        width: 150,
+        height: 36,
+        text: "အလွတ် → 0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-same,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 600,
+        height: 36,
+        text: "item များရင် နှစ်ခု တူတူပဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-bad,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 380,
+        height: 36,
+        text: "repeat(auto-fill, 1fr) ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-good,
+        kind: text,
+        x: 740,
+        y: 570,
+        width: 330,
+        height: 36,
+        text: "minmax(110px, 1fr) ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — dense and reading order. White = tiles in HTML order,
+    # violet = the wide tile, orange = the tile that jumped (and the order
+    # you see), blue = the HTML order, green = when to use dense.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Dense နဲ့ အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-code,
+        kind: text,
+        x: 700,
+        y: 245,
+        width: 360,
+        height: 36,
+        text: "grid-auto-flow: dense",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-t1, kind: rectangle, x: 300, y: 230, width: 100, height: 56, strokeColor: "#1e1e1e" }
+    - {
+        id: c-n1,
+        kind: text,
+        x: 340,
+        y: 240,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-t2, kind: rectangle, x: 408, y: 230, width: 100, height: 56, strokeColor: "#1e1e1e" }
+    - {
+        id: c-n2,
+        kind: text,
+        x: 448,
+        y: 240,
+        width: 20,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-t4,
+        kind: rectangle,
+        x: 516,
+        y: 230,
+        width: 100,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-n4,
+        kind: text,
+        x: 556,
+        y: 240,
+        width: 20,
+        height: 36,
+        text: "4",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-t3,
+        kind: rectangle,
+        x: 300,
+        y: 294,
+        width: 208,
+        height: 56,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-n3,
+        kind: text,
+        x: 394,
+        y: 304,
+        width: 20,
+        height: 36,
+        text: "3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: c-t5, kind: rectangle, x: 516, y: 294, width: 100, height: 56, strokeColor: "#1e1e1e" }
+    - {
+        id: c-n5,
+        kind: text,
+        x: 556,
+        y: 304,
+        width: 20,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-seen,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 520,
+        height: 36,
+        text: "မြင်ရတဲ့ အစဉ် · 1 2 4 3",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-dom,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 560,
+        height: 36,
+        text: "Tab · screen reader · 1 2 3 4",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-use,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 620,
+        height: 36,
+        text: "အစဉ် အရေးမကြီးမှ dense သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — line numbers both ways. White = three column tracks,
+    # blue = lines counted from the start, red = from the end, green = 1 / 3,
+    # orange = 1 / -1, violet = the rule.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "Line နံပါတ်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: d-c1, kind: rectangle, x: 360, y: 290, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - { id: d-c2, kind: rectangle, x: 520, y: 290, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - { id: d-c3, kind: rectangle, x: 680, y: 290, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: d-p1,
+        kind: text,
+        x: 344,
+        y: 245,
+        width: 24,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-p2,
+        kind: text,
+        x: 504,
+        y: 245,
+        width: 24,
+        height: 36,
+        text: "2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-p3,
+        kind: text,
+        x: 664,
+        y: 245,
+        width: 24,
+        height: 36,
+        text: "3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-p4,
+        kind: text,
+        x: 824,
+        y: 245,
+        width: 24,
+        height: 36,
+        text: "4",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-n4,
+        kind: text,
+        x: 338,
+        y: 372,
+        width: 40,
+        height: 36,
+        text: "-4",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-n3,
+        kind: text,
+        x: 498,
+        y: 372,
+        width: 40,
+        height: 36,
+        text: "-3",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-n2,
+        kind: text,
+        x: 658,
+        y: 372,
+        width: 40,
+        height: 36,
+        text: "-2",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-n1,
+        kind: text,
+        x: 818,
+        y: 372,
+        width: 40,
+        height: 36,
+        text: "-1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-bar13,
+        kind: rectangle,
+        x: 360,
+        y: 440,
+        width: 310,
+        height: 44,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-bar13-t,
+        kind: text,
+        x: 376,
+        y: 444,
+        width: 100,
+        height: 36,
+        text: "1 / 3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-bar13-l,
+        kind: text,
+        x: 710,
+        y: 444,
+        width: 230,
+        height: 36,
+        text: "→ column 2 ခု",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-barfull,
+        kind: rectangle,
+        x: 360,
+        y: 515,
+        width: 470,
+        height: 44,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: d-barfull-t,
+        kind: text,
+        x: 376,
+        y: 519,
+        width: 110,
+        height: 36,
+        text: "1 / -1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-barfull-l,
+        kind: text,
+        x: 870,
+        y: 519,
+        width: 200,
+        height: 36,
+        text: "→ အပြည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 620,
+        height: 36,
+        text: "line ကို ရေတွက် · track ကို မဟုတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — explicit vs implicit grid. Blue = the explicit row, orange =
+    # rows the browser added, red = where -1 is, green / violet = the
+    # properties that size added tracks.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Explicit grid နဲ့ implicit grid",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-x1,
+        kind: rectangle,
+        x: 340,
+        y: 230,
+        width: 185,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: e-x2,
+        kind: rectangle,
+        x: 535,
+        y: 230,
+        width: 185,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: e-l1,
+        kind: text,
+        x: 300,
+        y: 212,
+        width: 24,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-x-l,
+        kind: text,
+        x: 760,
+        y: 232,
+        width: 260,
+        height: 36,
+        text: "explicit grid",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-x-n,
+        kind: text,
+        x: 760,
+        y: 272,
+        width: 300,
+        height: 36,
+        text: "ကိုယ်တိုင် သတ်မှတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: e-i1, kind: rectangle, x: 340, y: 310, width: 185, height: 70, strokeColor: "#f08c00" }
+    - { id: e-i2, kind: rectangle, x: 535, y: 310, width: 185, height: 70, strokeColor: "#f08c00" }
+    - { id: e-i3, kind: rectangle, x: 340, y: 390, width: 185, height: 70, strokeColor: "#f08c00" }
+    - { id: e-i4, kind: rectangle, x: 535, y: 390, width: 185, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: e-i-l,
+        kind: text,
+        x: 760,
+        y: 352,
+        width: 260,
+        height: 36,
+        text: "implicit grid",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-i-n,
+        kind: text,
+        x: 760,
+        y: 392,
+        width: 300,
+        height: 36,
+        text: "browser က ထပ်ဖွင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-lm1,
+        kind: text,
+        x: 282,
+        y: 287,
+        width: 40,
+        height: 36,
+        text: "-1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-minus,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 640,
+        height: 36,
+        text: "-1 = explicit grid ရဲ့ နောက်ဆုံး line",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-auto-r,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 600,
+        height: 36,
+        text: "grid-auto-rows → ထပ်ဖွင့်တဲ့ row",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-auto-c,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 660,
+        height: 36,
+        text: "grid-auto-columns → ထပ်ဖွင့်တဲ့ column",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 520,
+        height: 40,
+        text: "column 4 ခု ရှိတဲ့ grid",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-q2,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 760,
+        height: 40,
+        text: "grid-column: 2 / -1 → column ဘယ်နှစ်ခု?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: f-a,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 160,
+        height: 46,
+        text: "3 ခု",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: f-a-check,
+        kind: freedraw,
+        stroke: check,
+        x: 500,
+        y: 371,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 560,
+        height: 36,
+        text: "-1 = line 5 · line 2 → line 5",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4119
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: placement-intro
+    chapter: "Item တွေကို browser က ဘယ်လို နေရာချလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ track တွေကို သတ်မှတ်ခဲ့ပြီး၊ item တိုင်းကို browser က အကွက်လွတ်ထဲ သူ့ဘာသာ
+      ထည့်ပေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ item တွေရဲ့ နေရာကို ကိုယ်တိုင် ဆုံးဖြတ်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-cells-a]] ဒါက column သုံးခု၊ row နှစ်ခု ပါတဲ့ grid ပါ။ [[mark:draw-auto-row]] item
+      တွေကို နေရာ မသတ်မှတ်ထားရင်၊ browser က သူတို့ကို HTML အစဉ်အတိုင်း တစ်ခုချင်း ယူပြီး နောက်
+      အကွက်လွတ်ထဲကို ထည့်ပေးပါတယ်။ row တစ်ခုကို ဘယ်ကနေ ညာ ပြည့်အောင် ဖြည့်ပြီးမှ အောက် row ကို ဆင်းပါတယ်။
+      ဒါကို auto placement လို့ ခေါ်ပါတယ်။ [[mark:draw-order]] lesson 16 က order ကလည်း grid မှာ
+      အလုပ်လုပ်ပါတယ်။ ဒါပေမဲ့ သူက မြင်ရတဲ့ အစဉ်ကိုပဲ ပြောင်းပါတယ်။ keyboard နဲ့ screen reader ကတော့ HTML
+      အစဉ်အတိုင်းပဲ သွားနေတုန်းပါ။ [[mark:draw-auto-col]] grid auto flow ကို column ပေးလိုက်ရင်တော့၊
+      browser က column တစ်ခုချင်း အပေါ်ကနေ အောက် ဖြည့်သွားပါတယ်။ အဲဒီအခါ row တွေကိုလည်း သတ်မှတ်ပေးရပါမယ်။
+      မပေးရင် item တိုင်းက column အသစ် တစ်ခုစီ ရပြီး၊ grid တစ်ခုလုံးက row ရှည်ကြီး တစ်ခုတည်း
+      ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-placement"
+        url: "https://web.dev/learn/css/grid#auto-placement"
+      - title: "MDN — Auto-placement in grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Auto-placement_in_grid_layout"
+      - title: "MDN — grid-auto-flow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-auto-flow"
+      - title: "MDN — order"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/order"
+      - title: "CSS Grid Layout Module Level 2 — grid item placement algorithm"
+        url: "https://drafts.csswg.org/css-grid/#auto-placement-algo"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-cells-a
+        type: whiteboard.apply
+        at: { mark: draw-cells-a }
+        upsertIds: [a-c1, a-c2, a-c3, a-c4, a-c5, a-c6]
+        drawMs: 1500
+      - id: draw-auto-row
+        type: whiteboard.apply
+        at: { mark: draw-auto-row }
+        upsertIds:
+          [a-i1, a-n1, a-i2, a-n2, a-i3, a-n3, a-i4, a-n4, a-i5, a-n5, a-arrow-row, a-row-l, a-rule]
+        drawMs: 5000
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [a-order]
+        drawMs: 1400
+      - id: draw-auto-col
+        type: whiteboard.apply
+        at: { mark: draw-auto-col }
+        upsertIds:
+          [
+            a-col-k,
+            a-d1,
+            a-d2,
+            a-d3,
+            a-d4,
+            a-d5,
+            a-d6,
+            a-j1,
+            a-m1,
+            a-j2,
+            a-m2,
+            a-j3,
+            a-m3,
+            a-j4,
+            a-m4,
+            a-j5,
+            a-m5,
+            a-arrow-col,
+            a-col-l,
+            a-col-rows,
+          ]
+        drawMs: 6000
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-strip]] အပေါ်ဆုံးက ကြိုဆိုတဲ့ အပိုင်းမှာ ဆိုင်ဖွင့်ချိန် ပါတဲ့ အရောင်ရင့် တန်းလေး
+      ရှိပါတယ်။ [[mark:select-specials]] သူ့အောက်မှာ card နှစ်ခုပဲ ပါတဲ့ ယနေ့အထူး list ရှိပါတယ်။
+      [[mark:select-tiles]] ပြီးတော့ နံပါတ် တပ်ထားတဲ့ gallery tile ခုနစ်ခု ပါပါတယ်။ တတိယ tile မှာ
+      ကျယ်ရမယ်လို့ မှတ်ထားတဲ့ class နောက်တစ်ခု ပါပါတယ်။ သူ့နောက်မှာ စားစရာ menu ရှိပါတယ်။
+      [[mark:select-photo]] နောက်ဆုံးက ဓာတ်ပုံ card ပါ။ HTML ထဲမှာ ဈေးနှုန်း badge က ပုံရဲ့ ရှေ့မှာ
+      ရှိတာကို မှတ်ထားပါ။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ base ဖိုင်ကလည်း card တွေကို
+      margin မပေးထားပါဘူး။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ base ဖိုင်က ကြိုဆိုတဲ့ အပိုင်းကို
+      ဘယ်ညာ နေရာလွတ် မပေးထားလို့၊ သူ့ စာသားတွေက box ရဲ့ ဘယ်ဘက် အစွန်းနဲ့ ကပ်နေပါတယ်။ ဒါကို နောက်ဆုံးမှာ
+      ပြင်ပါမယ်။ သူ့အောက်မှာတော့ ယနေ့အထူး card နှစ်ခုက အပေါ်အောက် ဆင့်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid"
+        url: "https://web.dev/learn/css/grid"
+      - title: "MDN — Basic concepts of grid layout"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Basic_concepts_of_grid_layout"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-strip
+        type: editor.select
+        at: { mark: select-strip }
+        target:
+          {
+            file: index.html,
+            text: '<p class="hero-strip" data-testid="hero-strip">',
+            occurrence: 1,
+          }
+      - id: select-specials
+        type: editor.select
+        at: { mark: select-specials }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="menu specials demo" data-testid="specials">',
+            occurrence: 1,
+          }
+      - id: select-tiles
+        type: editor.select
+        at: { mark: select-tiles }
+        target:
+          {
+            file: index.html,
+            text: '<li class="tile wide" data-testid="tile-3">3</li>',
+            occurrence: 1,
+          }
+      - id: select-photo
+        type: editor.select
+        at: { mark: select-photo }
+        target:
+          {
+            file: index.html,
+            text: '<span class="price-badge" data-testid="price-badge">1,500 ကျပ်</span>',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero-strip }
+        textContains: "၆ နာရီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-specials
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: specials }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-specials }
+
+  - id: auto-fill
+    chapter: "Auto-fill နဲ့ auto-fit"
+    narration: >
+      [[mark:type-auto-fill]] ယနေ့အထူး list ကို grid လုပ်ပါမယ်။ ဒါပေမဲ့ ဒီတစ်ခါ column ဘယ်နှစ်ခု လိုချင်လဲ
+      မပြောပါဘူး။ repeat မှာ ထပ်ရမယ့် အကြိမ်ရေ အစား auto-fill ကို ပေးပြီး၊ column တစ်ခုစီကို minmax နဲ့
+      အငယ်ဆုံး 110 pixel၊ အကြီးဆုံး 1 fr ပေးပါမယ်။ ပြီးတော့ အရင်လိုပဲ gap ထည့်ပါမယ်။
+      [[mark:after-auto-fill]] card နှစ်ခု ဘေးချင်း ယှဉ်သွားပေမယ့်၊ row တစ်ခုလုံးကို မပြည့်ပါဘူး။
+      မျဉ်းပြတ်က list ရဲ့ အစွန်းကို ပြနေပြီး၊ ညာဘက်မှာ နေရာလွတ် ကျန်နေပါတယ်။ [[mark:select-auto-fill]] ဒီ
+      auto-fill ကို ကြည့်ပါ။ သူက row ထဲမှာ ဆံ့သလောက် column တွေကို လုပ်ပေးပါတယ်။ list က 400 pixel လောက်
+      ကျယ်လို့၊ အနည်းဆုံး 110 pixel ရှိတဲ့ column သုံးခုက gap တွေနဲ့အတူ ဆံ့ပေမယ့်၊ လေးခုကတော့ မဆံ့ပါဘူး။
+      [[mark:explain-auto-fill]] card နှစ်ခုပဲ ရှိပေမယ့် auto-fill က column သုံးခုလုံးကို ချန်ထားပါတယ်။
+      တတိယ column က အလွတ် ဖြစ်နေပေမယ့် ပျောက်မသွားဘဲ၊ နေရာ တစ်ပုံကို ယူထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-fill and auto-fit"
+        url: "https://web.dev/learn/css/grid#auto-fill_and_auto-fit"
+      - title: "MDN — repeat() (auto-fill)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/repeat"
+      - title: "CSS Grid Layout Module Level 2 — automatic repetitions"
+        url: "https://drafts.csswg.org/css-grid/#auto-repeat"
+    actions:
+      - id: type-auto-fill
+        type: editor.type
+        at: { mark: type-auto-fill }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".specials {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));\n  gap: 12px;\n}\n"
+      - id: expect-auto-fill
+        type: expect.preview
+        at: { mark: after-auto-fill }
+        timeoutMs: 4000
+        target: { by: testId, value: special-palata }
+        textContains: "1,200 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-auto-fill
+        type: editor.select
+        at: { mark: select-auto-fill }
+        target: { file: styles.css, text: "auto-fill", occurrence: 1 }
+
+  - id: auto-fit
+    narration: >
+      [[mark:type-auto-fit]] အခု rule ရဲ့ အဆုံးမှာ column declaration နောက်တစ်ခု ထည့်ပါမယ်။ auto-fill အစား
+      auto-fit ဖြစ်တာကလွဲရင် ကျန်တာ အတူတူပါ။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။
+      [[mark:after-auto-fit]] နေရာလွတ် ပျောက်သွားပြီး၊ card နှစ်ခုက row တစ်ခုလုံး ပြည့်အောင်
+      ဆန့်သွားပါပြီ။ [[mark:select-auto-fit]] ဒီ auto-fit ကို ကြည့်ပါ။ သူလည်း column အရေအတွက်ကို အတူတူ
+      တွက်ပါတယ်။ ပြီးမှ အလွတ် column တိုင်းကို သူ့ gap နဲ့အတူ သုည အထိ ချုံ့လိုက်ပါတယ်။ card နှစ်ခုရဲ့
+      column တွေက အကြီးဆုံး 1 fr ဖြစ်လို့၊ လွတ်သွားတဲ့ နေရာကို ခွဲယူကြပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-fill and auto-fit"
+        url: "https://web.dev/learn/css/grid#auto-fill_and_auto-fit"
+      - title: "MDN — repeat() (auto-fit)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/repeat"
+      - title: "CSS Grid Layout Module Level 2 — collapsed tracks (auto-fit)"
+        url: "https://drafts.csswg.org/css-grid/#collapsed-track"
+    actions:
+      # Typed at the END of the rule: until the last ")" lands, the open
+      # parenthesis swallows only the closing brace, so the declaration stays
+      # invalid and auto-fill holds; nothing else is lost.
+      - id: type-auto-fit
+        type: editor.type
+        at: { mark: type-auto-fit }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 12px;\n", occurrence: 1 }
+        text: "  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));\n"
+      - id: expect-auto-fit
+        type: expect.preview
+        at: { mark: after-auto-fit }
+        timeoutMs: 4000
+        target: { by: testId, value: special-tea }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-auto-fit
+        type: editor.select
+        at: { mark: select-auto-fit }
+        target: { file: styles.css, text: "auto-fit", occurrence: 1 }
+
+  - id: fill-fit-board
+    narration: >
+      [[mark:open-fill-board]] နှစ်ခုကို board ပေါ်မှာ ယှဉ်ကြည့်ရအောင်။ [[mark:draw-fill]] auto-fill က
+      ဆံ့သမျှ column အကုန် လုပ်ပြီး၊ အလွတ်တွေကိုလည်း ချန်ထားပါတယ်။ [[mark:draw-fit]] auto-fit ကလည်း column
+      အရေအတွက် အတူတူ တွက်ပေမယ့်၊ အလွတ်တွေကို သုည အထိ ချုံ့လိုက်လို့ item တွေ ကြီးလာပါတယ်။
+      [[mark:draw-same]] item တွေက row တစ်ခု ပြည့်လောက်အောင် များရင်တော့၊ အလွတ် column မရှိတော့လို့
+      နှစ်ခုက တူတူပဲ မြင်ရပါတယ်။ [[mark:draw-definite]] သတိထားစရာ တစ်ခုက၊ column ဘယ်နှစ်ခု ဆံ့လဲ တွက်ဖို့
+      browser က ပုံသေ အရွယ်အစား တစ်ခု လိုပါတယ်။ ဒါကြောင့် auto-fill ကို 1 fr သက်သက်နဲ့ ပေးလို့ မရဘဲ၊
+      ကိုယ့် minmax ကို 110 pixel ကနေ စထားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-fill and auto-fit"
+        url: "https://web.dev/learn/css/grid#auto-fill_and_auto-fit"
+      - title: "MDN — repeat() (auto-repeat needs a definite track size)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/repeat#values"
+      - title: "CSS Grid Layout Module Level 2 — automatic repetitions"
+        url: "https://drafts.csswg.org/css-grid/#auto-repeat"
+    actions:
+      - id: open-fill-board
+        type: whiteboard.apply
+        at: { mark: open-fill-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-fill
+        type: whiteboard.apply
+        at: { mark: draw-fill }
+        upsertIds:
+          [b-fill-k, b-fill-box, b-fill-c1, b-fill-c2, b-fill-c3, b-fill-empty, b-fill-note]
+        drawMs: 3000
+      - id: draw-fit
+        type: whiteboard.apply
+        at: { mark: draw-fit }
+        upsertIds: [b-fit-k, b-fit-box, b-fit-c1, b-fit-c2, b-fit-note]
+        drawMs: 2800
+      - id: draw-same
+        type: whiteboard.apply
+        at: { mark: draw-same }
+        upsertIds: [b-same]
+        drawMs: 1400
+      - id: draw-definite
+        type: whiteboard.apply
+        at: { mark: draw-definite }
+        upsertIds: [b-bad, b-good]
+        drawMs: 2000
+
+  - id: span-hole
+    chapter: "Span၊ အကွက်လွတ်နဲ့ dense"
+    narration: >
+      [[mark:close-fill-board]] editor ထဲ ပြန်သွားရအောင်။ [[mark:scroll-tiles]] အခု gallery tile တွေပါ။
+      [[mark:type-tiles]] tile တွေရဲ့ list ကို 1 fr column သုံးခုနဲ့ gap နည်းနည်း ပါတဲ့ grid လုပ်ပါမယ်။
+      [[mark:after-tiles]] tile ခုနစ်ခုက HTML အစဉ်အတိုင်း row တစ်ခုမှာ သုံးခုစီ ဝင်သွားပါတယ်။
+      [[mark:type-span]] ကျယ်ရမယ့် tile ကို column နှစ်ခုစာ နေရာ ပေးပါမယ်။ span နဲ့ နံပါတ် တစ်ခု ပေးရင်၊
+      item က track ဘယ်နှစ်ခုစာ နေရာယူမလဲ ဆိုတာ သတ်မှတ်ပါတယ်။ နေရာကတော့ auto placement ချပေးတဲ့ နေရာကနေ
+      စပါတယ်။ [[mark:after-span]] tile 3 က column နှစ်ခုစာ ကျယ်သွားပေမယ့်၊ ဘယ်ရောက်သွားလဲ ကြည့်ပါ။ tile 1
+      နဲ့ 2 ပြီးတော့ ပထမ row မှာ အကွက် တစ်ကွက်ပဲ ကျန်လို့ သူ့အတွက် မလောက်ပါဘူး။ ဒါကြောင့် browser က သူ့ကို
+      နောက် row ကို ချလိုက်ပြီး၊ ပထမ row မှာ အကွက်လွတ် တစ်ကွက် ကျန်ခဲ့ပါတယ်။ [[mark:explain-hole]] auto
+      placement က ရှေ့ကိုပဲ ဆက်သွားပါတယ်။ ကျော်သွားပြီးသား အကွက်ကို ပြန်လာ မဖြည့်လို့၊ အကွက်လွတ်က
+      ဒီအတိုင်း ကျန်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-placement (span, holes)"
+        url: "https://web.dev/learn/css/grid#auto-placement"
+      - title: "MDN — grid-column (span)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-column"
+      - title: "MDN — Auto-placement in grid layout: filling gaps"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Auto-placement_in_grid_layout"
+    actions:
+      - id: close-fill-board
+        type: whiteboard.apply
+        at: { mark: close-fill-board }
+        open: false
+      - id: scroll-tiles
+        type: preview.scroll
+        at: { mark: scroll-tiles }
+        timeoutMs: 5000
+        top: 350
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-tiles
+        type: editor.type
+        at: { mark: type-tiles }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.tiles {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}\n"
+      - id: expect-tiles
+        type: expect.preview
+        at: { mark: after-tiles }
+        timeoutMs: 4000
+        target: { by: testId, value: tile-7 }
+        textContains: "7"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-span
+        type: editor.type
+        at: { mark: type-span }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 8px;\n}\n", occurrence: 1 }
+        text: "\n.tiles .wide {\n  grid-column: span 2;\n}\n"
+      - id: expect-span
+        type: expect.preview
+        at: { mark: after-span }
+        timeoutMs: 4000
+        target: { by: testId, value: tile-3 }
+        textContains: "3"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: dense
+    narration: >
+      [[mark:type-dense]] ဒီ အကွက်လွတ်ကို ဖြည့်ခိုင်းလို့ ရပါတယ်။ tile grid မှာ grid auto flow ကို dense
+      ပေးကြည့်ရအောင်။ [[mark:after-dense]] tile 4 က အကွက်လွတ်ထဲ တက်သွားပြီး၊ tile 5 က ကျယ်တဲ့ tile ဘေးကို
+      ရောက်လာပါပြီ။ [[mark:select-dense]] ဒီ dense ကို ကြည့်ပါ။ သူက browser ကို ရှေ့က အကွက်လွတ်တွေ
+      ပြန်ကြည့်ပြီး၊ နောက်က ဆံ့တဲ့ item တွေနဲ့ ဖြည့်ခိုင်းပါတယ်။ grid က ပိုသပ်ရပ်သွားပေမယ့်၊ အခု 4 က 3 ရဲ့
+      ရှေ့ကို ရောက်နေပါတယ်။ [[mark:open-dense-board]] mouse မသုံးတဲ့သူတွေအတွက် ဒါက အရေးကြီးပါတယ်။
+      [[mark:draw-dense-order]] screen ပေါ်မှာ မြင်ရတဲ့ အစဉ်က 1၊ 2၊ 4၊ 3 ပါ။ [[mark:draw-dense-dom]]
+      ဒါပေမဲ့ Tab key နဲ့ screen reader က HTML အစဉ်အတိုင်း 1၊ 2၊ 3၊ 4 သွားပါတယ်။ ဒါတွေက link တွေ ဆိုရင်၊
+      keyboard နဲ့ သွားတဲ့သူအတွက် ဟိုခုန် ဒီခုန် ဖြစ်နေပါလိမ့်မယ်။ [[mark:draw-dense-use]] ဒါကြောင့် dense
+      ကို ဓာတ်ပုံ gallery လို အစဉ် အရေးမကြီးတဲ့ နေရာမှာပဲ သုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Grid: auto-placement (dense packing)"
+        url: "https://web.dev/learn/css/grid#auto-placement"
+      - title: "MDN — grid-auto-flow (dense)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-auto-flow"
+      - title: "MDN — Grid layout and accessibility (reordering)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_layout_and_accessibility"
+    actions:
+      - id: type-dense
+        type: editor.type
+        at: { mark: type-dense }
+        cadence: natural
+        target: { file: styles.css, after: "  gap: 8px;\n", occurrence: 1 }
+        text: "  grid-auto-flow: dense;\n"
+      - id: expect-dense
+        type: expect.preview
+        at: { mark: after-dense }
+        timeoutMs: 4000
+        target: { by: testId, value: tile-4 }
+        textContains: "4"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-dense
+        type: editor.select
+        at: { mark: select-dense }
+        target: { file: styles.css, text: "grid-auto-flow: dense;", occurrence: 1 }
+      - id: open-dense-board
+        type: whiteboard.apply
+        at: { mark: open-dense-board }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-code]
+      - id: draw-dense-order
+        type: whiteboard.apply
+        at: { mark: draw-dense-order }
+        upsertIds: [c-t1, c-n1, c-t2, c-n2, c-t4, c-n4, c-t3, c-n3, c-t5, c-n5, c-seen]
+        drawMs: 3000
+      - id: draw-dense-dom
+        type: whiteboard.apply
+        at: { mark: draw-dense-dom }
+        upsertIds: [c-dom]
+        drawMs: 1600
+      - id: draw-dense-use
+        type: whiteboard.apply
+        at: { mark: draw-dense-use }
+        upsertIds: [c-use]
+        drawMs: 1600
+
+  - id: lines-board
+    chapter: "Line နံပါတ်နဲ့ နေရာချကြည့်ရအောင်"
+    narration: >
+      [[mark:open-lines-board]] အခုထိ cell တွေကို browser က ရွေးပေးခဲ့ပါတယ်။ အခုတော့ line နံပါတ်တွေနဲ့
+      item ကို ကိုယ်တိုင် နေရာချကြည့်ရအောင်။ [[mark:draw-lines-pos]] column သုံးခုမှာ line လေးကြောင်း
+      ရှိပြီး၊ 1 ကနေ 4 အထိ နံပါတ် တပ်ပါတယ်။ [[mark:draw-lines-neg]] ဒီ line တွေကို နောက်ဆုံး line ကနေ
+      ပြောင်းပြန်လည်း ရေတွက်လို့ ရပါတယ်။ နောက်ဆုံး line က အနုတ် 1၊ သူ့ရှေ့က line က အနုတ် 2၊ ဒီလို
+      ဆက်သွားပါတယ်။ [[mark:draw-place-13]] item ကို နေရာချဖို့ စမယ့် line နဲ့ ဆုံးမယ့် line ကို ပေးပါတယ်။
+      line 1 ကနေ line 3 အထိဆိုရင် column သုံးခု မဟုတ်ဘဲ နှစ်ခုပဲ ယူပါတယ်။ track ကို မဟုတ်ဘဲ line ကို
+      ရေတွက်နေလို့ပါ။ [[mark:draw-place-full]] line 1 ကနေ အနုတ် 1 အထိဆိုရင်တော့၊ column ဘယ်နှစ်ခု
+      သတ်မှတ်ထားထား row တစ်ခုလုံး အပြည့်ကို ယူပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: placing items"
+        url: "https://web.dev/learn/css/grid#placing_items"
+      - title: "web.dev Learn CSS — Layout: grid (line placement)"
+        url: "https://web.dev/learn/css/layout#grid"
+      - title: "MDN — Grid layout using line-based placement"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_layout_using_line-based_placement"
+      - title: "MDN — Grid lines"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Grid_Lines"
+    actions:
+      - id: open-lines-board
+        type: whiteboard.apply
+        at: { mark: open-lines-board }
+        clear: true
+        upsertIds: [d-title, d-c1, d-c2, d-c3]
+      - id: draw-lines-pos
+        type: whiteboard.apply
+        at: { mark: draw-lines-pos }
+        upsertIds: [d-p1, d-p2, d-p3, d-p4]
+        drawMs: 1600
+      - id: draw-lines-neg
+        type: whiteboard.apply
+        at: { mark: draw-lines-neg }
+        upsertIds: [d-n4, d-n3, d-n2, d-n1]
+        drawMs: 1800
+      - id: draw-place-13
+        type: whiteboard.apply
+        at: { mark: draw-place-13 }
+        upsertIds: [d-bar13, d-bar13-t, d-bar13-l, d-rule]
+        drawMs: 3000
+      - id: draw-place-full
+        type: whiteboard.apply
+        at: { mark: draw-place-full }
+        upsertIds: [d-barfull, d-barfull-t, d-barfull-l]
+        drawMs: 2200
+
+  - id: place-tile
+    narration: >
+      [[mark:close-lines-board]] tile တွေဆီ ပြန်သွားရအောင်။ [[mark:type-first]] lesson 4 မှာ တွေ့ခဲ့တဲ့
+      first-child selector နဲ့ ပထမဆုံး tile ကို ရွေးပါမယ်။ ပြီးတော့ သူ့ကို grid column နဲ့ line 1 ကနေ line
+      3 အထိ နေရာ ပေးပါမယ်။ [[mark:after-first]] tile 1 က column နှစ်ခုစာ ယူသွားပါပြီ။ tile 2 က ပထမ row မှာ
+      ကျန်တဲ့ အကွက်ကို ယူပြီး၊ ကျန်တာတွေက နောက်က လိုက်လာလို့၊ tile တွေ အစဉ်အတိုင်း ပြန်ဖြစ်သွားပါတယ်။
+      [[mark:select-first]] ဒီ grid column declaration ကို ကြည့်ပါ။ သူက start နဲ့ end ကို တစ်ခါတည်း ပေးတဲ့
+      shorthand ဖြစ်ပြီး၊ မျဉ်းစောင်းရဲ့ ရှေ့မှာ စမယ့် line၊ နောက်မှာ ဆုံးမယ့် line ကို ရေးပါတယ်။ row
+      တွေအတွက် grid row ကလည်း ဒီအတိုင်းပါပဲ။ [[mark:type-full]] အခု line 1 ကနေ အနုတ် 1 အထိ ပေးတဲ့
+      declaration နောက်တစ်ခု ထည့်ပါမယ်။ [[mark:after-full]] tile 1 က grid အကျယ် တစ်ခုလုံး ပြည့်တဲ့ banner
+      ဖြစ်သွားပြီး၊ ကျန်တဲ့ tile တွေက နောက် row ကနေ စပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: placing items"
+        url: "https://web.dev/learn/css/grid#placing_items"
+      - title: "MDN — grid-column"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-column"
+      - title: "MDN — grid-row"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-row"
+      - title: "CSS Grid Layout Module Level 2 — line-based placement"
+        url: "https://drafts.csswg.org/css-grid/#line-placement"
+    actions:
+      - id: close-lines-board
+        type: whiteboard.apply
+        at: { mark: close-lines-board }
+        open: false
+      - id: type-first
+        type: editor.type
+        at: { mark: type-first }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  grid-column: span 2;\n}\n", occurrence: 1 }
+        text: "\n.tiles li:first-child {\n  grid-column: 1 / 3;\n}\n"
+      - id: expect-first
+        type: expect.preview
+        at: { mark: after-first }
+        timeoutMs: 4000
+        target: { by: testId, value: tile-1 }
+        textContains: "1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-first
+        type: editor.select
+        at: { mark: select-first }
+        target: { file: styles.css, text: "grid-column: 1 / 3;", occurrence: 1 }
+      # line-by-line: "grid-column: 1" alone is valid and would shrink tile 1
+      # back to one column until "/ -1" lands.
+      - id: type-full
+        type: editor.type
+        at: { mark: type-full }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  grid-column: 1 / 3;\n", occurrence: 1 }
+        text: "  grid-column: 1 / -1;\n"
+      - id: expect-full
+        type: expect.preview
+        at: { mark: after-full }
+        timeoutMs: 4000
+        target: { by: testId, value: tiles }
+        textContains: "7"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: implicit-board
+    chapter: "Explicit grid နဲ့ implicit grid"
+    narration: >
+      [[mark:open-implicit-board]] tile grid ကို column တွေ ပေးခဲ့ပေမယ့် row တွေ မပေးခဲ့ပါဘူး။ ဒါဆို သူ့
+      row တွေ ဘယ်က ရောက်လာတာလဲ။ [[mark:draw-explicit]] grid template columns နဲ့ rows နဲ့ ကိုယ်တိုင်
+      သတ်မှတ်ထားတဲ့ track တွေကို explicit grid လို့ ခေါ်ပါတယ်။ [[mark:draw-implicit]] cell တွေထက် item တွေ
+      ပိုများလာရင်၊ browser က သူတို့ကို ထည့်ဖို့ track တွေကို အလိုလို ထပ်ဖွင့်ပေးပါတယ်။ အဲဒီ track
+      တွေကတော့ implicit grid ပါ။ default အားဖြင့် auto ဖြစ်လို့ content ဆံ့သလောက်ပဲ ကြီးပါတယ်။
+      [[mark:draw-minus-one]] ဒီမှာ သတိထားစရာ တစ်ခု ရှိပါတယ်။ အနုတ် 1 က grid တစ်ခုလုံးရဲ့ နောက်ဆုံး line
+      မဟုတ်ဘဲ၊ explicit grid ရဲ့ နောက်ဆုံး line ပါ။ ဒါကြောင့် row line 1 ကနေ အနုတ် 1 အထိ ပေးထားတဲ့ item က
+      browser ထပ်ဖွင့်ထားတဲ့ row တွေအထိ မရောက်ပါဘူး။ [[mark:draw-auto-props]] ထပ်ဖွင့်တဲ့ track တွေကို
+      grid auto rows နဲ့ grid auto columns နဲ့ အရွယ်အစား ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: placing items (implicit grid)"
+        url: "https://web.dev/learn/css/grid#placing_items"
+      - title: "MDN — Basic concepts of grid layout: the implicit and explicit grid"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Basic_concepts_of_grid_layout#the_implicit_and_explicit_grid"
+      - title: "CSS Grid Layout Module Level 2 — implicit grid; negative indices count from the end of the explicit grid"
+        url: "https://drafts.csswg.org/css-grid/#implicit-grids"
+    actions:
+      - id: open-implicit-board
+        type: whiteboard.apply
+        at: { mark: open-implicit-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-explicit
+        type: whiteboard.apply
+        at: { mark: draw-explicit }
+        upsertIds: [e-x1, e-x2, e-l1, e-x-l, e-x-n]
+        drawMs: 2400
+      - id: draw-implicit
+        type: whiteboard.apply
+        at: { mark: draw-implicit }
+        upsertIds: [e-i1, e-i2, e-i3, e-i4, e-i-l, e-i-n]
+        drawMs: 3000
+      - id: draw-minus-one
+        type: whiteboard.apply
+        at: { mark: draw-minus-one }
+        upsertIds: [e-lm1, e-minus]
+        drawMs: 2000
+      - id: draw-auto-props
+        type: whiteboard.apply
+        at: { mark: draw-auto-props }
+        upsertIds: [e-auto-r, e-auto-c]
+        drawMs: 2000
+
+  - id: auto-rows
+    narration: >
+      [[mark:close-implicit-board]] စားစရာ menu မှာ စမ်းကြည့်ရအောင်။ [[mark:scroll-snacks]] card တွေက
+      အပေါ်အောက် ဆင့်နေပါတယ်။ [[mark:type-snacks]] list ကို 1 fr column နှစ်ခု၊ အနည်းဆုံး 150 pixel
+      မြင့်တဲ့ row တစ်ခုနဲ့ gap ပါတဲ့ grid လုပ်ပါမယ်။ [[mark:after-snacks]] ပထမ row က 150 pixel မြင့်ပြီး၊
+      သူ့ထဲက card တွေက row ပြည့်အောင် ဆန့်နေပါတယ်။ ကိုယ် သတ်မှတ်ထားတဲ့ row က ဒီ တစ်ခုတည်းပါ။ ကျန်တဲ့ row
+      နှစ်ခုကို browser က ထပ်ဖွင့်ထားလို့ auto ဖြစ်ပြီး၊ card လောက်ပဲ မြင့်ပါတယ်။ [[mark:type-auto-rows]]
+      rule ရဲ့ အဆုံးမှာ grid auto rows နဲ့ ထပ်ဖွင့်တဲ့ row တွေကို အရွယ်အစား ပေးပါမယ်။
+      [[mark:after-auto-rows]] အခု row တိုင်းက ပထမ row လောက် မြင့်သွားပါပြီ။ card တစ်ခုတည်း ရှိတဲ့
+      နောက်ဆုံး row လည်း အတူတူပါ။ [[mark:select-auto-rows]] ဒီ grid auto rows ထဲက minmax ကို ကြည့်ပါ။
+      ထပ်ဖွင့်တဲ့ row တစ်ခုစီက အနည်းဆုံး 150 pixel ရပြီး၊ အကြီးဆုံးက auto ဖြစ်လို့ content က နေရာ
+      ပိုလိုရင် ဆက်မြင့်နိုင်ပါတယ်။ [[mark:explain-auto-cols]] grid auto columns ကလည်း ထပ်ဖွင့်တဲ့ column
+      တွေအတွက် ဒီအတိုင်းပါပဲ။ ဥပမာ grid auto flow ကို column ပေးထားတဲ့ အခါမျိုးပါ။
+    sources:
+      - title: "MDN — grid-auto-rows"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-auto-rows"
+      - title: "MDN — grid-auto-columns"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-auto-columns"
+      - title: "MDN — grid-template-rows"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template-rows"
+      - title: "web.dev Learn CSS — Grid: placing items (implicit grid)"
+        url: "https://web.dev/learn/css/grid#placing_items"
+    actions:
+      - id: close-implicit-board
+        type: whiteboard.apply
+        at: { mark: close-implicit-board }
+        open: false
+      - id: scroll-snacks
+        type: preview.scroll
+        at: { mark: scroll-snacks }
+        timeoutMs: 5000
+        top: 650
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-snacks
+        type: editor.type
+        at: { mark: type-snacks }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  grid-column: 1 / -1;\n}\n", occurrence: 1 }
+        text: "\n.snacks .menu {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  grid-template-rows: minmax(150px, auto);\n  gap: 12px;\n}\n"
+      - id: expect-snacks
+        type: expect.preview
+        at: { mark: after-snacks }
+        timeoutMs: 4000
+        target: { by: testId, value: menu-snacks }
+        textContains: "ရှမ်းခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Typed at the END of the rule: its open parenthesis swallows only the
+      # closing brace until the last ")" lands, so the gap never flickers.
+      - id: type-auto-rows
+        type: editor.type
+        at: { mark: type-auto-rows }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  grid-template-rows: minmax(150px, auto);\n  gap: 12px;\n",
+            occurrence: 1,
+          }
+        text: "  grid-auto-rows: minmax(150px, auto);\n"
+      - id: expect-auto-rows
+        type: expect.preview
+        at: { mark: after-auto-rows }
+        timeoutMs: 4000
+        target: { by: testId, value: card-shan-noodles }
+        textContains: "ကုန်သွားပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-auto-rows
+        type: editor.select
+        at: { mark: select-auto-rows }
+        target: { file: styles.css, text: "grid-auto-rows: minmax(150px, auto);", occurrence: 1 }
+
+  - id: overlap
+    chapter: "Item တွေကို ထပ်ထားကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-photo]] အခု ဓာတ်ပုံ card ပါ။ badge က ပုံရဲ့ အပေါ်မှာ သီးသန့် တစ်ကြောင်း ယူထားပါတယ်။
+      [[mark:type-photo-grid]] အရင်ဆုံး ဓာတ်ပုံ card ကို track တစ်ခုမှ မပေးဘဲ grid လုပ်ကြည့်ရအောင်။
+      [[mark:after-photo-grid]] track မပေးထားလို့ browser က row နှစ်ခု ထပ်ဖွင့်ပြီး၊ badge နဲ့ ပုံက
+      တစ်ခုစီ ရပါတယ်။ HTML ထဲကလိုပဲ badge က အရင် ရှိပါတယ်။ base ဖိုင်က badge ကို cell ရဲ့ ညာဘက်
+      အပေါ်ထောင့်မှာ နေခိုင်းထားလို့ ညာဘက် ရောက်တာပါ။ ဒီလို align လုပ်တာကို နောက် lesson မှာ ကြည့်ပါမယ်။
+      [[mark:type-same-cell]] အခု card ရဲ့ child တိုင်းကို column 1၊ row 1 မှာ ထားပါမယ်။ ဒါတွေလည်း line
+      နံပါတ်ပါပဲ၊ ဒီတစ်ခါတော့ စမယ့် line ကိုပဲ ပေးတာပါ။ ဆုံးမယ့် line မပေးရင် item က track တစ်ခုစာ
+      နေရာယူပါတယ်။ [[mark:after-same-cell]] အခု နှစ်ခုလုံး cell တစ်ခုတည်းမှာ ရှိနေလို့ ထပ်သွားပြီး၊ badge
+      က ပုံရဲ့ နောက်ကွယ်ကို ရောက်ပြီး ပျောက်သွားပါပြီ။ grid item တွေ ထပ်နေရင် HTML ထဲမှာ နောက်မှ ပါတဲ့
+      item က အပေါ်က ပေါ်ပါတယ်။ ဒီမှာတော့ အဲဒါက ပုံပါ။ [[mark:type-z]] badge ကို အပေါ် ပြန်ရောက်အောင်
+      z-index 1 ပေးကြည့်ရအောင်။ [[mark:after-z]] badge ပြန်ပေါ်လာပြီး၊ ပုံရဲ့ ညာဘက် အပေါ်ထောင့်မှာ
+      ရှိနေပါပြီ။ [[mark:select-z]] ဒီ z-index ကို ကြည့်ပါ။ lesson 14 က sticky ခေါင်းစဉ်မှာ သုံးခဲ့ပါတယ်။
+      ပုံမှန် box မှာ z-index က position ပေးထားမှ အလုပ်လုပ်ပေမယ့်၊ grid item မှာတော့ position မလိုပါဘူး။
+      box တွေ ဘယ်လို ထပ်လဲ ဆိုတာကိုတော့ lesson 23 မှာ အသေးစိတ် ရှင်းပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: placing items (overlapping items, z-index)"
+        url: "https://web.dev/learn/css/grid#placing_items"
+      - title: "MDN — Grid layout using line-based placement: layering items"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_layout_using_line-based_placement#layering_items_with_z-index"
+      - title: "MDN — z-index"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/z-index"
+      - title: "CSS Grid Layout Module Level 2 — z-axis ordering of grid items"
+        url: "https://drafts.csswg.org/css-grid/#z-order"
+    actions:
+      - id: scroll-photo
+        type: preview.scroll
+        at: { mark: scroll-photo }
+        timeoutMs: 5000
+        top: 1150
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-photo-grid
+        type: editor.type
+        at: { mark: type-photo-grid }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  grid-auto-rows: minmax(150px, auto);\n}\n", occurrence: 1 }
+        text: "\n.photo-card {\n  display: grid;\n}\n"
+      - id: expect-photo-grid
+        type: expect.preview
+        at: { mark: after-photo-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: price-badge }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # grid-column first: column 1 alone changes nothing (one column), so
+      # the badge and photo jump into one cell only when grid-row lands.
+      - id: type-same-cell
+        type: editor.type
+        at: { mark: type-same-cell }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".photo-card {\n  display: grid;\n}\n", occurrence: 1 }
+        text: "\n.photo-card > * {\n  grid-column: 1;\n  grid-row: 1;\n}\n"
+      - id: expect-same-cell
+        type: expect.preview
+        at: { mark: after-same-cell }
+        timeoutMs: 4000
+        target: { by: testId, value: photo-card }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-z
+        type: editor.type
+        at: { mark: type-z }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  grid-row: 1;\n}\n", occurrence: 1 }
+        text: "\n.price-badge {\n  z-index: 1;\n}\n"
+      - id: expect-z
+        type: expect.preview
+        at: { mark: after-z }
+        timeoutMs: 4000
+        target: { by: testId, value: price-badge }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-z
+        type: editor.select
+        at: { mark: select-z }
+        target: { file: styles.css, text: "z-index: 1;", occurrence: 1 }
+
+  - id: named-lines
+    chapter: "Line တွေကို နာမည်ပေးကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-top]] နောက်ဆုံး၊ အပေါ်ဆုံးက ကြိုဆိုတဲ့ အပိုင်းပါ။ စာသားတွေကို အစွန်းကနေ အတွင်း
+      ဝင်စေချင်ပြီး၊ အရောင်ရင့် တန်းလေးကိုတော့ အစွန်းကနေ အစွန်းအထိ ထားချင်ပါတယ်။ [[mark:type-hero-cols]]
+      ဒီ အပိုင်းကို column သုံးခု ပေးပါမယ်။ 16 pixel၊ 1 fr နဲ့ 16 pixel ပါ။ အရွယ်အစားတွေကြားက လေးထောင့်
+      ကွင်းထဲမှာ line တွေကို နာမည် ပေးပါတယ်။ အပြင်ဘက် line တွေက full start နဲ့ full end ဖြစ်ပြီး၊
+      အတွင်းဘက် line တွေက content start နဲ့ content end ပါ။ [[mark:after-hero-cols]] ဒီ အပိုင်းက grid
+      မဟုတ်သေးလို့ ဘာမှ မပြောင်းသေးပါဘူး။ [[mark:type-hero-kids]] နောက်တစ်ဆင့်၊ သူ့ child တိုင်းကို
+      content column ထဲ ထည့်ပါမယ်။ ဒီတစ်ခါ line နံပါတ် မဟုတ်ဘဲ နာမည် ပေးပါတယ်။ [[mark:select-content]] ဒီ
+      content ကို ကြည့်ပါ။ content လို့ပဲ ခေါ်တဲ့ line မရှိပါဘူး။ ဒါပေမဲ့ line နှစ်ကြောင်းရဲ့ နာမည်က start
+      နဲ့ end ပဲ ကွာပြီး ရှေ့က စကားလုံး တူနေရင်၊ browser က သူတို့ကြားမှာ အဲဒီ စကားလုံးနဲ့ area တစ်ခု
+      လုပ်ပေးပါတယ်။ ဒါကြောင့် content ဆိုတာ content start ကနေ content end အထိပါ။ [[mark:type-hero-grid]]
+      အခု rule ရဲ့ အပေါ်ဆုံးမှာ display ကို grid ပေးပါမယ်။ [[mark:after-hero-grid]] စာသားတွေက
+      ဘေးနှစ်ဘက်ကနေ 16 pixel စီ ဝင်သွားပါပြီ။ ဒါပေမဲ့ တန်းလေးလည်း ဝင်သွားပါတယ်။ [[mark:type-strip]]
+      ဒါကြောင့် တန်းလေးကို full line တွေကြားမှာ ထားပါမယ်။ specificity တူလို့ နောက်မှ ရေးတဲ့ ဒီ rule က
+      နိုင်ပါတယ်။ [[mark:after-strip]] တန်းလေးက အစွန်းကနေ အစွန်းအထိ ပြန်ဆန့်သွားပြီး၊ စာသားတွေက
+      အတွင်းမှာပဲ ကျန်ပါတယ်။ line တွေကို နာမည် ပေးထားရင် ရေတွက်စရာ မလိုတော့ပါဘူး။
+    sources:
+      - title: "MDN — Grid layout using named grid lines"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Grid_layout_using_named_grid_lines"
+      - title: "web.dev Learn CSS — Grid: named lines"
+        url: "https://web.dev/learn/css/grid#placing_items"
+      - title: "CSS Grid Layout Module Level 2 — named lines and implicit named areas"
+        url: "https://drafts.csswg.org/css-grid/#implicit-named-areas"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-hero-cols
+        type: editor.type
+        at: { mark: type-hero-cols }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  z-index: 1;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  grid-template-columns: [full-start] 16px [content-start] 1fr [content-end] 16px [full-end];\n}\n"
+      - id: expect-hero-cols
+        type: expect.preview
+        at: { mark: after-hero-cols }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hero-kids
+        type: editor.type
+        at: { mark: type-hero-kids }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "16px [full-end];\n}\n", occurrence: 1 }
+        text: "\n.hero > * {\n  grid-column: content;\n}\n"
+      - id: select-content
+        type: editor.select
+        at: { mark: select-content }
+        target: { file: styles.css, text: "grid-column: content;", occurrence: 1 }
+      - id: type-hero-grid
+        type: editor.type
+        at: { mark: type-hero-grid }
+        cadence: natural
+        target: { file: styles.css, after: ".hero {\n", occurrence: 1 }
+        text: "  display: grid;\n"
+      - id: expect-hero-grid
+        type: expect.preview
+        at: { mark: after-hero-grid }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # line-by-line: "f", "fu" and "ful" are valid line names that do not
+      # exist, so typed key by key they would push the strip into an
+      # implicit column for a moment.
+      - id: type-strip
+        type: editor.type
+        at: { mark: type-strip }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  grid-column: content;\n}\n", occurrence: 1 }
+        text: "\n.hero-strip {\n  grid-column: full;\n}\n"
+      - id: expect-strip
+        type: expect.preview
+        at: { mark: after-strip }
+        timeoutMs: 4000
+        target: { by: testId, value: hero-strip }
+        textContains: "၆ နာရီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ column လေးခု ရှိတဲ့ grid မှာ item
+      တစ်ခုကို column line 2 ကနေ အနုတ် 1 အထိ ပေးရင်၊ column ဘယ်နှစ်ခု ယူမလဲ။ ခဏ စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေက သုံးခုပါ။ column လေးခုမှာ line ငါးကြောင်း ရှိလို့ အနုတ် 1 က line 5
+      ဖြစ်ပြီး၊ line 2 ကနေ line 5 အထိ column သုံးခု ရှိပါတယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊
+      auto-fill နဲ့ auto-fit က ဆံ့သလောက် column တွေ လုပ်ပေးပါတယ်။ auto-fill က အလွတ်တွေကို ချန်ထားပြီး၊
+      auto-fit ကတော့ ချုံ့လိုက်ပါတယ်။ auto placement က HTML အစဉ်အတိုင်း သွားပြီး၊ span က item ကို track
+      နှစ်ခု သုံးခုစာ နေရာယူစေပါတယ်။ dense က အကွက်လွတ်တွေကို ဖြည့်ပေမယ့်၊ မြင်ရတဲ့ အစဉ်ကို HTML အစဉ်နဲ့
+      ကွဲသွားစေနိုင်ပါတယ်။ [[mark:recap-2]] line နံပါတ်တွေနဲ့ item ကို အတိအကျ နေရာချလို့ ရပြီး၊ အနုတ် 1 က
+      explicit grid ရဲ့ နောက်ဆုံး line ပါ။ grid auto rows က ထပ်ဖွင့်တဲ့ row တွေကို အရွယ်အစား ပေးပါတယ်။
+      cell တစ်ခုတည်းထဲက item တွေ ထပ်ပါတယ်။ line တွေကို နာမည် ပေးရင် နာမည်နဲ့ နေရာချလို့ ရပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ area တွေကို နာမည် ပေးပြီး page ကို layout ချတာ၊ subgrid
+      နဲ့ card အတွင်းပိုင်းတွေ ညီအောင် လုပ်တာ၊ item တွေကို cell ထဲမှာ align လုပ်တာကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Grid: check your understanding"
+        url: "https://web.dev/learn/css/grid#check_your_understanding"
+      - title: "MDN — Grid lines (negative numbers)"
+        url: "https://developer.mozilla.org/en-US/docs/Glossary/Grid_Lines"
+      - title: "web.dev Learn CSS — Grid: grid template areas (next lesson)"
+        url: "https://web.dev/learn/css/grid#grid_template_areas"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q1, f-q2]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a, f-a-check, f-rule]
+        drawMs: 2000
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".specials {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));\n  gap: 12px;\n  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));\n}\n\n.tiles {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n  grid-auto-flow: dense;\n}\n\n.tiles .wide {\n  grid-column: span 2;\n}\n\n.tiles li:first-child {\n  grid-column: 1 / 3;\n  grid-column: 1 / -1;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "\n.snacks .menu {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  grid-template-rows: minmax(150px, auto);\n  gap: 12px;\n  grid-auto-rows: minmax(150px, auto);\n}\n\n.photo-card {\n  display: grid;\n}\n\n.photo-card > * {\n  grid-column: 1;\n  grid-row: 1;\n}\n\n.price-badge {\n  z-index: 1;\n}\n\n.hero {\n  display: grid;\n  grid-template-columns: [full-start] 16px [content-start] 1fr [content-end] 16px [full-end];\n}\n\n.hero > * {\n  grid-column: content;\n}\n\n.hero-strip {\n  grid-column: full;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
