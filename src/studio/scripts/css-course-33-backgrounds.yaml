@@ -1,0 +1,2210 @@
+# CSS course (Burmese), lesson 33 of 43: backgrounds.
+#
+# Narration is Burmese (voice-script.md next to this file is the same text
+# with ⟪mark⟫ anchors; DESIGN.md is the span-by-span brief). Every [[mark:…]]
+# sits where its action begins, at a sentence end or right after a ၊ pause.
+#
+# Shape: board (recall lesson 32; the background layer: colour at the bottom,
+# images above it with the first on top, then border, then content) → code
+# tour (dark header with the shop name, a hero with no background, today's
+# special card, the reviews box from lesson 24) → the card gets a tan
+# background-color (initial transparent; not inherited) → a thick dashed
+# border: the tan shows in the gaps (clip defaults to border-box); the body's
+# background fills the canvas (explain) → images.css tour (url() from lesson
+# 12, data URIs, custom properties; image-set in one sentence) → the hero
+# gets the 48 px leaf tile (repeats both ways, cut at the edges; decoration
+# only) → repeat-x, no-repeat, space (3 rows, gaps), round (4 squashed rows)
+# → board (168 ÷ 48 = 3.5: repeat cuts, space shares the gap, round resizes)
+# → the card gets the cup badge: right top, top (one value → centre), right
+# 12px bottom 8px (edge offsets) → board (percentages align the same point;
+# lengths move the top-left corner) → board (keyword order, same-axis pairs,
+# edge offsets in either order, -x/-y longhands) → the hero gets the photo: auto (natural size), cover
+# (fills, crops), contain (fits, gap); lengths/% explained → the reviews box
+# gets a cup; a scripted scroll leaves it in place (scroll); local makes it
+# scroll away with the content; scroll back → board (scroll / local / fixed,
+# iOS and transform caveats) → board (border/padding/content boxes; origin
+# places, clip paints) → the card: origin content-box (the cup moves in by
+# the padding), clip padding-box (the gaps show the page) → the shop name:
+# @supports (background-clip: text) { gradient → clip: text → transparent
+# text } in three visible steps → the hero as one background shorthand with
+# three layers + a colour (line-by-line) → the reset gotcha on the reviews
+# box (palegreen, then the shorthand wipes colour and cup, then longhand
+# after it) → quiz board + recap, hand-off to borders and shadows (lesson 34).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Images come from the pinned images.css (data: URIs in custom properties,
+# read with var()). A keystroke-typed var( or linear-gradient( is an unclosed
+# function until its ")", and an unclosed function swallows the rest of the
+# stylesheet, so every edit that types a "(" lands in the LAST rule of the
+# file (nothing after it can be swallowed); edits into earlier rules are
+# paren-free keywords and lengths, and the shorthand is line-by-line with
+# balanced parentheses on every line. Until a new declaration is complete it
+# is invalid and the previous one keeps painting (brief flashes such as the
+# border vanishing at "6px" are never narrated).
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors as
+# this file, screenshots in probe/): the page is exactly 720 tall, so the
+# preview never scrolls. Header 0–101 (shop name 400 × 36 at y 16), hero
+# 400 × 168 at y 117, card 400 × 105 at y 339 (115 with the 6 px border),
+# reviews 400 × 160 at y 461/471 (scrollHeight 275, clientHeight 158, a scroll
+# to 120 clamps to 117). Leaf tile 48 × 48: repeat → 8⅓ × 3½ tiles (cut at
+# the right and bottom); space → 3 rows with 12 px gaps; round → 8 × 4 tiles
+# of 50 × 42. Photo 320 × 200: auto → cut at the bottom, 80 px gap on the
+# right; cover → 400 × 250 (82 px cut); contain → 269 × 168 (131 px gap).
+# Cup 40 × 40: right top → touches the border's inner edge; top → centred on
+# the top edge; right 12px bottom 8px; origin content-box moves it 16 px left
+# and 12 px up (the card's padding). Reviews cup at right 12px top 12px:
+# stays at scrollTop 117 with scroll, leaves the view with local, returns at
+# scrollTop 0.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-33-backgrounds
+  title: "CSS course 33: နောက်ခံ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 33
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and nav left out), the kit hero, the
+      # drinks section with today's special card only, and the kit's reviews
+      # block (a 160-pixel scroll region, last quote testid last-review).
+      # images.css is linked before styles.css. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/images.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and nav left out) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero (no background yet; a fixed height for the image demos) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#main" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks (today's special card only) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: reviews (a 160-pixel scroll region) -->
+              <div class="reviews" tabindex="0" role="region" aria-labelledby="reviews-title" data-testid="reviews">
+                <h2 id="reviews-title">ဧည့်သည်တွေ ပြောတာ</h2>
+                <p>လက်ဖက်ရည် အရမ်းကောင်းတယ်။</p>
+                <p>ပလာတာ ပူပူလေး ကြိုက်တယ်။</p>
+                <p>ဝန်ထမ်းတွေ ဖော်ရွေတယ်။</p>
+                <p>မုန့်ဟင်းခါး အရသာ ပြည့်တယ်။</p>
+                <p>မနက်စောစော ဖွင့်တာ အဆင်ပြေတယ်။</p>
+                <p data-testid="last-review">နောက်လည်း လာဦးမယ်။</p>
+              </div>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C without the hero's and the menu
+      # card's background (D dropped). Section E gives the hero a fixed
+      # height of 168 px (3.5 leaf tiles), pins the reviews box from lesson
+      # 24 and darkens the card's price and description for the tan card. No background-image/-size/-position/-clip rule anywhere.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 33 keeps A, B, B2 and C without the hero and menu-card backgrounds;
+          section E sizes the hero and the reviews box and darkens the card's text. No background-image,
+          background-size, background-position or background-clip rule lives here.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 33: a fixed hero height (3.5 leaf tiles tall, so space and round
+           differ visibly; the photo is cropped by cover and leaves gaps with contain)
+           and the kit's 160-pixel scrolling reviews box. */
+        .hero {
+          height: 168px;
+        }
+
+        .reviews {
+          height: 160px;
+          overflow: auto;
+          margin-top: 16px;
+          padding: 8px 16px;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .reviews p {
+          margin: 0 0 8px;
+        }
+
+        /* The card turns tan during the lesson: darker text keeps the price and the
+           description readable on it (AA contrast). */
+        .featured .price {
+          color: var(--tea-dark);
+        }
+
+        .featured .desc {
+          color: var(--ink);
+        }
+      # images.css: the kit's pinned images (data: URIs in custom properties),
+      # never typed; the leaf tile is drawn at 48 × 48 in this lesson.
+      images.css: |
+        /*
+          images.css: pinned, never typed, linked only by lessons that need background
+          or mask images (33 backgrounds, 37 blend modes, optionally 35 masks).
+          Images are data: URIs inside custom properties, so a lesson's styles.css can
+          write background-image: var(--leaf-tile) and never contains url( itself:
+          url( in a typed file makes Vite run postcss on every keystroke, which shows
+          its error overlay on half-typed states (PLATFORM.md section 2). url() to a
+          project file does replay (fixed in 0a728aef); data: URIs simply keep the
+          images self-contained.
+          Lesson 33 draws the leaf tile at 48 x 48 (the kit's is 24) so its repeat
+          modes read on screen; the cup badge is 40 x 40 and the photo 320 x 200.
+        */
+        :root {
+          --leaf-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath d='M5 19C5 10 11 5 19 5c0 8-5 14-14 14z' fill='%232f6b3a' fill-opacity='0.35'/%3E%3Cpath d='M6 18L17 7' stroke='%232f6b3a' stroke-opacity='0.5' stroke-width='1'/%3E%3C/svg%3E");
+          --cup-badge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M15 9c-2-2 2-4 0-6M21 9c-2-2 2-4 0-6' fill='none' stroke='%23c9a27e' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M7 13h22v6a11 11 0 0 1-22 0z' fill='%238b5a2b'/%3E%3Cpath d='M29 15h3a4 4 0 0 1 0 8h-4' fill='none' stroke='%238b5a2b' stroke-width='2.5'/%3E%3Cellipse cx='18' cy='35' rx='14' ry='3' fill='%233b2314'/%3E%3C/svg%3E");
+          --photo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='200' viewBox='0 0 320 200'%3E%3Crect width='320' height='200' fill='%239fd3e6'/%3E%3Ccircle cx='260' cy='44' r='22' fill='%23fff4c2'/%3E%3Cpath d='M0 120 Q80 70 160 110 T320 100 V200 H0z' fill='%232f6b3a'/%3E%3Cpath d='M0 150 Q90 115 190 145 T320 140 V200 H0z' fill='%234f8a3c'/%3E%3Cg fill='%231f4a28'%3E%3Ccircle cx='40' cy='160' r='6'/%3E%3Ccircle cx='70' cy='170' r='6'/%3E%3Ccircle cx='100' cy='158' r='6'/%3E%3Ccircle cx='130' cy='172' r='6'/%3E%3Ccircle cx='220' cy='166' r='6'/%3E%3Ccircle cx='250' cy='176' r='6'/%3E%3Ccircle cx='280' cy='162' r='6'/%3E%3C/g%3E%3Crect x='140' y='128' width='40' height='30' fill='%23c9a27e'/%3E%3Cpath d='M134 130 L160 112 L186 130z' fill='%238b5a2b'/%3E%3C/svg%3E");
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the background layer, drawn bottom-up. Orange = the colour,
+    # blue = the images, violet = the border, green = the content, white =
+    # the viewer and the takeaway.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "နောက်ခံ အလွှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-viewer,
+        kind: text,
+        x: 900,
+        y: 168,
+        width: 160,
+        height: 36,
+        text: "ကြည့်သူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 945,
+        y: 220,
+        width: 40,
+        height: 300,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-content-box,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 580,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-content-t,
+        kind: text,
+        x: 320,
+        y: 242,
+        width: 520,
+        height: 36,
+        text: "content · စာသား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-border-box,
+        kind: rectangle,
+        x: 300,
+        y: 310,
+        width: 580,
+        height: 60,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-border-t,
+        kind: text,
+        x: 320,
+        y: 322,
+        width: 520,
+        height: 36,
+        text: "border",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-image-box,
+        kind: rectangle,
+        x: 300,
+        y: 390,
+        width: 580,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-image-t,
+        kind: text,
+        x: 320,
+        y: 402,
+        width: 540,
+        height: 36,
+        text: "background image · ပထမ = အပေါ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-color-box,
+        kind: rectangle,
+        x: 300,
+        y: 470,
+        width: 580,
+        height: 60,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-color-t,
+        kind: text,
+        x: 320,
+        y: 482,
+        width: 540,
+        height: 36,
+        text: "background color · တစ်ခုပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 700,
+        height: 36,
+        text: "နောက်ခံက စာသားကို မဖုံးဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B — 3.5 leaves in the hero's height. Green = whole leaves at
+    # their real size, red = the cut leaf, orange = the shared gap, violet =
+    # resized leaves, white = the frames.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 640,
+        height: 46,
+        text: "168 ÷ 48 = 3.5 ရွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: b-f1, kind: rectangle, x: 330, y: 215, width: 110, height: 315, strokeColor: "#1e1e1e" }
+    - { id: b-f2, kind: rectangle, x: 610, y: 215, width: 110, height: 315, strokeColor: "#1e1e1e" }
+    - { id: b-f3, kind: rectangle, x: 890, y: 215, width: 110, height: 315, strokeColor: "#1e1e1e" }
+    - {
+        id: b-r1,
+        kind: rectangle,
+        x: 340,
+        y: 215,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-r2,
+        kind: rectangle,
+        x: 340,
+        y: 305,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-r3,
+        kind: rectangle,
+        x: 340,
+        y: 395,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-r4,
+        kind: rectangle,
+        x: 340,
+        y: 485,
+        width: 90,
+        height: 45,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: b-l1,
+        kind: text,
+        x: 330,
+        y: 548,
+        width: 160,
+        height: 36,
+        text: "repeat",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-n1,
+        kind: text,
+        x: 330,
+        y: 592,
+        width: 220,
+        height: 36,
+        text: "တစ်ဝက် ပြတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-s1,
+        kind: rectangle,
+        x: 620,
+        y: 215,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-s2,
+        kind: rectangle,
+        x: 620,
+        y: 328,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-s3,
+        kind: rectangle,
+        x: 620,
+        y: 440,
+        width: 90,
+        height: 90,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-l2,
+        kind: text,
+        x: 610,
+        y: 548,
+        width: 160,
+        height: 36,
+        text: "space",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-n2,
+        kind: text,
+        x: 610,
+        y: 592,
+        width: 220,
+        height: 36,
+        text: "3 ရွက် + ကြား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-o1,
+        kind: rectangle,
+        x: 900,
+        y: 215,
+        width: 90,
+        height: 78,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-o2,
+        kind: rectangle,
+        x: 900,
+        y: 294,
+        width: 90,
+        height: 78,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-o3,
+        kind: rectangle,
+        x: 900,
+        y: 373,
+        width: 90,
+        height: 78,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-o4,
+        kind: rectangle,
+        x: 900,
+        y: 452,
+        width: 90,
+        height: 78,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-l3,
+        kind: text,
+        x: 890,
+        y: 548,
+        width: 160,
+        height: 36,
+        text: "round",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-n3,
+        kind: text,
+        x: 890,
+        y: 592,
+        width: 200,
+        height: 36,
+        text: "4 ရွက် · ချုံ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — percentages line up the same point. Blue = the box, orange =
+    # the image, white = the values, green = the rule, violet = lengths.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Position ရာခိုင်နှုန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-box1,
+        kind: rectangle,
+        x: 300,
+        y: 236,
+        width: 220,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-img1,
+        kind: rectangle,
+        x: 300,
+        y: 236,
+        width: 70,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 200,
+        height: 36,
+        text: "0% 0%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-box2,
+        kind: rectangle,
+        x: 570,
+        y: 236,
+        width: 220,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-img2,
+        kind: rectangle,
+        x: 720,
+        y: 340,
+        width: 70,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 570,
+        y: 400,
+        width: 220,
+        height: 36,
+        text: "100% 100%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-box3,
+        kind: rectangle,
+        x: 840,
+        y: 236,
+        width: 220,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-img3,
+        kind: rectangle,
+        x: 915,
+        y: 288,
+        width: 70,
+        height: 46,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-dot,
+        kind: freedraw,
+        stroke: circle,
+        x: 930,
+        y: 296,
+        width: 40,
+        height: 30,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        x: 840,
+        y: 400,
+        width: 200,
+        height: 36,
+        text: "50% 50%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-same,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 700,
+        height: 36,
+        text: "ပုံရဲ့ အမှတ် = box ရဲ့ အမှတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-len,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 740,
+        height: 36,
+        text: "20px 10px → ပုံရဲ့ ဘယ်အပေါ်ထောင့်ကို ရွှေ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — how to write a position. Green = valid, red = invalid,
+    # violet = the longhands.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Position ရေးနည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-any,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 36,
+        text: "top right = right top ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-ok,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 260,
+        height: 36,
+        text: "left 50% ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-bad,
+        kind: text,
+        x: 640,
+        y: 310,
+        width: 260,
+        height: 36,
+        text: "50% left ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-same,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 600,
+        height: 36,
+        text: "left right ✗ · axis တူ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-edge,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 700,
+        height: 36,
+        text: "bottom 8px right 12px ✓ · right 12px top ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-xy,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 640,
+        height: 36,
+        text: "background-position-x · -y",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — background-attachment. Blue = scroll (default), green =
+    # local, orange = fixed, red = where fixed fails.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Background attachment",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-scroll,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 680,
+        height: 36,
+        text: "scroll → box နဲ့ ကပ် · default",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-local,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 680,
+        height: 36,
+        text: "local → content နဲ့ ကပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-fixed,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 700,
+        height: 36,
+        text: "fixed → browser window နဲ့ ကပ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-ios,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 640,
+        height: 36,
+        text: "iPhone · iPad Safari → fixed မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-transform,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 700,
+        height: 36,
+        text: "parent မှာ transform → fixed မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — the three boxes for origin and clip. Violet = border box,
+    # blue = padding box, green = content box; the two rules below use the
+    # colour of their default box.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Origin နဲ့ clip",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-border,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 500,
+        height: 290,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-padding,
+        kind: rectangle,
+        x: 330,
+        y: 260,
+        width: 440,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-content,
+        kind: rectangle,
+        x: 380,
+        y: 310,
+        width: 340,
+        height: 130,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-border-l,
+        kind: text,
+        x: 850,
+        y: 236,
+        width: 220,
+        height: 36,
+        text: "border box",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-padding-l,
+        kind: text,
+        x: 850,
+        y: 290,
+        width: 220,
+        height: 36,
+        text: "padding box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-content-l,
+        kind: text,
+        x: 850,
+        y: 344,
+        width: 220,
+        height: 36,
+        text: "content box",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-origin,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 780,
+        height: 36,
+        text: "origin → ပုံ နေရာချ · default padding box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-clip,
+        kind: text,
+        x: 300,
+        y: 604,
+        width: 780,
+        height: 36,
+        text: "clip → ဆွဲမယ့် နေရာ · default border box",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board G — the closing quiz. White = questions, green = answers, red =
+    # the wrong property.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "မေးခွန်း နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-q1,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 560,
+        height: 36,
+        text: "နောက်ခံ ပုံ ဘယ်က စလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a1,
+        kind: text,
+        x: 300,
+        y: 286,
+        width: 760,
+        height: 36,
+        text: "padding box ရဲ့ ဘယ်အပေါ်ထောင့် · repeat",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-q2,
+        kind: text,
+        x: 300,
+        y: 366,
+        width: 640,
+        height: 36,
+        text: "page scroll လုပ်တုန်း ပုံ ငြိမ်ဖို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a2,
+        kind: text,
+        x: 300,
+        y: 416,
+        width: 340,
+        height: 36,
+        text: "attachment: fixed ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-a2-bad,
+        kind: text,
+        x: 700,
+        y: 416,
+        width: 320,
+        height: 36,
+        text: "position: fixed ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4133
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: bg-intro
+    chapter: "နောက်ခံ အလွှာ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ gradient တွေကို နောက်ခံ ပုံ အဖြစ် ဆွဲခဲ့ပါတယ်။ ဒီ lesson မှာတော့ နောက်ခံ
+      အရောင်၊ နောက်ခံ ပုံနဲ့ ပုံကို နေရာချတာ စတဲ့ နောက်ခံ property အားလုံးကို ကြည့်သွားပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-viewer]] box တိုင်းမှာ နောက်ခံ အလွှာ ရှိပြီး၊ ကြည့်သူနဲ့ အဝေးဆုံးမှာ ဆွဲပါတယ်။
+      [[mark:draw-color]] အောက်ဆုံးမှာ နောက်ခံ အရောင် တစ်ရောင်တည်း ရှိပါတယ်။ [[mark:draw-images]]
+      သူ့အပေါ်မှာ နောက်ခံ ပုံ ကြိုက်သလောက် ထပ်လို့ ရပြီး၊ စာရင်းထဲက ပထမ ပုံက အပေါ်ဆုံးမှာ ရှိပါတယ်။
+      [[mark:draw-border]] border ကို ပုံတွေရဲ့ အပေါ်မှာ ဆွဲပါတယ်။ [[mark:draw-content]] နောက်ဆုံးမှာ
+      စာသားနဲ့ child element တွေ ဖြစ်တဲ့ content က ကြည့်သူနဲ့ အနီးဆုံးမှာ ရှိပါတယ်။ [[mark:draw-rule]]
+      ဒါကြောင့် နောက်ခံက စာသားရဲ့ နောက်မှာ အမြဲ ရှိနေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds"
+        url: "https://web.dev/learn/css/backgrounds"
+      - title: "CSS Backgrounds and Borders Module Level 3 — backgrounds (layering)"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#backgrounds"
+      - title: "MDN — Using multiple backgrounds (the first layer is on top)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/CSS_backgrounds_and_borders/Using_multiple_backgrounds"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-viewer
+        type: whiteboard.apply
+        at: { mark: draw-viewer }
+        upsertIds: [a-viewer, a-arrow]
+        drawMs: 1400
+      - id: draw-color
+        type: whiteboard.apply
+        at: { mark: draw-color }
+        upsertIds: [a-color-box, a-color-t]
+        drawMs: 1400
+      - id: draw-images
+        type: whiteboard.apply
+        at: { mark: draw-images }
+        upsertIds: [a-image-box, a-image-t]
+        drawMs: 1600
+      - id: draw-border
+        type: whiteboard.apply
+        at: { mark: draw-border }
+        upsertIds: [a-border-box, a-border-t]
+        drawMs: 1000
+      - id: draw-content
+        type: whiteboard.apply
+        at: { mark: draw-content }
+        upsertIds: [a-content-box, a-content-t]
+        drawMs: 1200
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [a-rule]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-name]] အပေါ်ဆုံးမှာ အညိုရင့် header ထဲက ဆိုင် နာမည် ရှိပါတယ်။ [[mark:select-hero]]
+      header ရဲ့ အောက်မှာ ကြိုဆိုတဲ့ အပိုင်း ရှိပါတယ်။ [[mark:select-card]] ပြီးတော့ ဒီနေ့ အထူး card ပါ။
+      [[mark:select-reviews]] အောက်ဆုံးမှာတော့ lesson 24 မှာ scroll လုပ်ခဲ့တဲ့ ဧည့်သည် မှတ်ချက် box ပါ။
+      [[mark:open-styles]] CSS ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ ကြိုဆိုတဲ့
+      အပိုင်းနဲ့ card မှာ နောက်ခံ မရှိသေးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds"
+        url: "https://web.dev/learn/css/backgrounds"
+      - title: "web.dev Learn CSS — Overflow (scroll containers)"
+        url: "https://web.dev/learn/css/overflow"
+    actions:
+      - id: close-intro
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target:
+          {
+            file: index.html,
+            text: '<h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>',
+            occurrence: 1,
+          }
+      - id: select-hero
+        type: editor.select
+        at: { mark: select-hero }
+        target:
+          { file: index.html, text: '<section class="hero" data-testid="hero">', occurrence: 1 }
+      - id: select-card
+        type: editor.select
+        at: { mark: select-card }
+        target: { file: index.html, text: '<li class="menu-card featured"', occurrence: 1 }
+      - id: select-reviews
+        type: editor.select
+        at: { mark: select-reviews }
+        target: { file: index.html, text: '<div class="reviews"', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-reviews
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-reviews }
+
+  - id: bg-color
+    chapter: "Background color"
+    narration: >
+      [[mark:type-color]] ဒီနေ့ အထူး card ကို အညိုဖျော့ အရောင် ပေးကြည့်ရအောင်။ background color ရဲ့
+      initial value က transparent ဖြစ်လို့၊ ခုနက card ကို ဖောက်ပြီး နောက်က page ကို မြင်ခဲ့ရတာပါ။
+      [[mark:after-color]] card က အညိုဖျော့ ဖြစ်သွားပါပြီ။ ထဲက နာမည်နဲ့ ဈေးနှုန်းက ဒီ အရောင်ကို inherit
+      မဖြစ်ပါဘူး။ သူတို့က transparent ဖြစ်နေလို့ card ကို ဖောက်မြင်ရတာပါ။ [[mark:type-border]] အခု
+      ပိုရင့်တဲ့ အညိုရောင်နဲ့ မျဉ်းပြတ် border ထူထူ ထည့်ပါမယ်။ မျဉ်းပြတ်တွေကြားက နေရာကို ကြည့်ထားပါ။
+      [[mark:after-border]] ကြားတွေမှာ အညိုဖျော့ အရောင်ကို မြင်ရပါတယ်။ default အားဖြင့် နောက်ခံကို border
+      ရဲ့ အောက်မှာပါ၊ အပြင်ဘက် အစွန်းအထိ ဆွဲလို့ပါ။ [[mark:explain-canvas]] ခြွင်းချက် တစ်ခုလည်း ရှိပါတယ်။
+      body ဒါမှမဟုတ် html element မှာ နောက်ခံ အရောင် ပေးရင်၊ page က တိုနေရင်တောင် browser window
+      တစ်ခုလုံးကို ဖြည့်ပါတယ်။ preview တစ်ခုလုံး page ရဲ့ အရောင် ဖြစ်နေတာ ဒါကြောင့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background color"
+        url: "https://web.dev/learn/css/backgrounds#background_color"
+      - title: "MDN — background-color (initial value transparent, not inherited)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-color"
+      - title: "CSS Backgrounds and Borders Module Level 3 — the canvas background and the root element"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#special-backgrounds"
+      - title: "MDN — background-clip (initial value border-box)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-clip"
+    actions:
+      - id: type-color
+        type: editor.type
+        at: { mark: type-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".featured {\n  background-color: tan;\n}\n"
+      - id: expect-color
+        type: expect.preview
+        at: { mark: after-color }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-border
+        type: editor.type
+        at: { mark: type-border }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-color: tan;\n", occurrence: 1 }
+        text: "  border: 6px dashed sienna;\n"
+      - id: expect-border
+        type: expect.preview
+        at: { mark: after-border }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: bg-image
+    chapter: "Background image"
+    narration: >
+      [[mark:open-images]] ပုံတွေက စာသား အရမ်းရှည်လို့၊ ကြိုရေးထားတဲ့ သီးသန့် CSS ဖိုင် တစ်ခုထဲမှာ
+      ထားပါတယ်။ [[mark:select-url]] ပုံတိုင်းက lesson 12 မှာ တွေ့ခဲ့တဲ့ url ကို သုံးပါတယ်။ path က relative
+      ဖြစ်ရင်၊ page ရှိတဲ့ နေရာကနေ မဟုတ်ဘဲ CSS ဖိုင် ရှိတဲ့ နေရာကနေ စရှာပါတယ်။ [[mark:select-data]] ဒါက
+      အဲဒီ lesson မှာ ပြောခဲ့တဲ့ data URI ပါ။ ပုံ တစ်ပုံလုံးကို url ထဲမှာ စာသားအဖြစ် ရေးထားလို့ ပုံ ဖိုင်
+      သီးသန့် မလိုပါဘူး။ [[mark:select-var]] ပုံ တစ်ပုံစီကို custom property ထဲမှာ သိမ်းထားလို့၊ ကိုယ့်
+      CSS ဖိုင်က var နဲ့ ဖတ်ယူပါတယ်။ [[mark:explain-image-set]] image set ဆိုတဲ့ function ကတော့ ပုံ
+      တစ်ပုံကို resolution အမျိုးမျိုးနဲ့ ပေးပြီး၊ browser က screen နဲ့ ကိုက်တဲ့ ပုံကို ရွေးပါတယ်။
+      [[mark:open-styles-leaf]] CSS ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-leaf]] အခု ကြိုဆိုတဲ့ အပိုင်းမှာ
+      လက်ဖက်ရွက် ပုံလေးကို background image အဖြစ် ထည့်ကြည့်ပါမယ်။ ရိုက်နေတုန်း အဲဒီ အပိုင်းကို
+      လိုက်ကြည့်ပါ။ [[mark:after-leaf]] အရွက်တွေက အပိုင်း တစ်ခုလုံးကို ဖုံးသွားပါပြီ။ ပုံက ဘယ်ဘက်
+      အပေါ်ထောင့်ကနေ စပြီး ဘယ်ညာ အပေါ်အောက် နှစ်ဘက်လုံး ထပ်ခါ စီသွားပါတယ်။ ညာဘက်နဲ့ အောက်ဘက် အစွန်းက
+      ပုံတွေကတော့ ပြတ်နေပါတယ်။ [[mark:explain-decor]] နောက်ခံ ပုံကို အလှဆင်ဖို့ပဲ သုံးရပါတယ်။ screen
+      reader က ကျော်သွားပြီး၊ print ထုတ်ရင်လည်း အများအားဖြင့် မပါပါဘူး။ ဟင်းလျာ ဓာတ်ပုံလို အဓိပ္ပာယ်
+      ရှိတဲ့ ပုံကိုတော့ alt text ပါတဲ့ img element နဲ့ ထည့်ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background images and url()"
+        url: "https://web.dev/learn/css/backgrounds#background_images"
+      - title: "MDN — url() (relative URLs resolve against the stylesheet)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/url_value"
+      - title: "MDN — data: URLs"
+        url: "https://developer.mozilla.org/docs/Web/URI/Reference/Schemes/data"
+      - title: "MDN — image-set()"
+        url: "https://developer.mozilla.org/docs/Web/CSS/image/image-set"
+      - title: "MDN — background-image: accessibility"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-image#accessibility"
+    actions:
+      - id: open-images
+        type: workspace.openFile
+        at: { mark: open-images }
+        path: images.css
+      - id: select-url
+        type: editor.select
+        at: { mark: select-url }
+        target: { file: images.css, text: 'url("data:image/svg+xml,', occurrence: 1 }
+      - id: select-data
+        type: editor.select
+        at: { mark: select-data }
+        target: { file: images.css, text: "data:image/svg+xml,%3Csvg", occurrence: 1 }
+      - id: select-var
+        type: editor.select
+        at: { mark: select-var }
+        target: { file: images.css, text: "--leaf-tile:", occurrence: 1 }
+      - id: open-styles-leaf
+        type: workspace.openFile
+        at: { mark: open-styles-leaf }
+        path: styles.css
+      - id: type-leaf
+        type: editor.type
+        at: { mark: type-leaf }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  border: 6px dashed sienna;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  background-image: var(--leaf-tile);\n}\n"
+      - id: expect-leaf
+        type: expect.preview
+        at: { mark: after-leaf }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: repeat
+    chapter: "Background repeat"
+    narration: >
+      [[mark:type-repeat-x]] ပုံ ထပ်ခါ စီတာကို background repeat က ထိန်းပါတယ်။ repeat x ပေးကြည့်ရအောင်။
+      [[mark:after-repeat-x]] အပေါ်ဘက်မှာ တစ်တန်းပဲ ကျန်ပါတော့တယ်။ [[mark:select-repeat-x]] repeat x က
+      တန်ဖိုး နှစ်ခုရဲ့ အတိုကောက်ပါ။ တန်ဖိုး နှစ်ခု ပေးရင် ပထမက ဘယ်ညာ axis အတွက်၊ ဒုတိယက အပေါ်အောက် axis
+      အတွက်ပါ။ repeat x က ဘယ်ညာမှာပဲ စီခိုင်းပြီး၊ repeat y ကတော့ ပြောင်းပြန်ပါ။ [[mark:type-no-repeat]]
+      နောက်တစ်ခုက no repeat ပါ။ ပုံကို axis နှစ်ခုလုံးမှာ ထပ်မစီတော့ပါဘူး။ [[mark:after-no-repeat]] ပုံ
+      စတဲ့ နေရာ ဖြစ်တဲ့ ဘယ်ဘက် အပေါ်ထောင့်မှာ အရွက် တစ်ရွက်ပဲ ကျန်ပါတယ်။ [[mark:type-space]] နောက်ထပ်
+      တန်ဖိုး နှစ်ခုက အရွက်ကို ဘယ်တော့မှ မဖြတ်ပါဘူး။ ပထမက space ပါ။ [[mark:after-space]] အခု အရွက်
+      အပြည့်တွေ သုံးတန်း ရှိပြီး၊ ကြားမှာ နေရာလွတ် ရှိပါတယ်။ [[mark:type-round]] ဒုတိယ တန်ဖိုးကတော့ round
+      ပါ။ [[mark:after-round]] အခု လေးတန်း ဖြစ်သွားပြီး၊ ဆံ့အောင် အရွက်တွေ နည်းနည်း ပြားသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: repeating background images"
+        url: "https://web.dev/learn/css/backgrounds#repeating_background_images"
+      - title: "MDN — background-repeat"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-repeat"
+      - title: "CSS Backgrounds and Borders Module Level 3 — background-repeat"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#background-repeat"
+    actions:
+      - id: type-repeat-x
+        type: editor.type
+        at: { mark: type-repeat-x }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  background-image: var(--leaf-tile);\n", occurrence: 1 }
+        text: "  background-repeat: repeat-x;\n"
+      - id: expect-repeat-x
+        type: expect.preview
+        at: { mark: after-repeat-x }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-repeat-x
+        type: editor.select
+        at: { mark: select-repeat-x }
+        target: { file: styles.css, text: "repeat-x", occurrence: 1 }
+      - id: type-no-repeat
+        type: editor.type
+        at: { mark: type-no-repeat }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-repeat: repeat-x;\n", occurrence: 1 }
+        text: "  background-repeat: no-repeat;\n"
+      - id: type-space
+        type: editor.type
+        at: { mark: type-space }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-repeat: no-repeat;\n", occurrence: 1 }
+        text: "  background-repeat: space;\n"
+      - id: type-round
+        type: editor.type
+        at: { mark: type-round }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-repeat: space;\n", occurrence: 1 }
+        text: "  background-repeat: round;\n"
+      - id: expect-round
+        type: expect.preview
+        at: { mark: after-round }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: tiles-board
+    narration: >
+      [[mark:open-tiles]] ဘာကြောင့်လဲဆိုတော့၊ ဒီ အပိုင်းက 168 pixel မြင့်ပြီး အရွက် တစ်ရွက်က 48 pixel
+      ဖြစ်လို့ အရွက် သုံးရွက်ခွဲ ဆံ့ပါတယ်။ [[mark:draw-repeat]] repeat က သုံးရွက် ပြီးရင် လေးရွက်မြောက်ကို
+      တစ်ဝက်မှာ ဖြတ်ပါတယ်။ [[mark:draw-space]] space ကတော့ အပြည့် ဆံ့တဲ့ သုံးရွက်ကိုပဲ မူလ အရွယ်အတိုင်း
+      ဆွဲပါတယ်။ ပထမနဲ့ နောက်ဆုံး အရွက်က အပေါ်နဲ့ အောက် အစွန်းကို ကပ်ပြီး၊ ကျန်တဲ့ နေရာလွတ်ကို ကြားတွေမှာ
+      ခွဲပေးပါတယ်။ [[mark:draw-round]] round ကတော့ အပြည့် ဆံ့အောင် အရွက်တွေရဲ့ အရွယ်အစားကို ပြောင်းပါတယ်။
+      သုံးရွက်ခွဲကို အနီးဆုံး လေးရွက် ဖြစ်အောင် တိုးလိုက်လို့ အရွက် တစ်ရွက်စီရဲ့ အမြင့် လျော့သွားပါတယ်။
+      အရေအတွက်ကို လျှော့ရရင်တော့ ဆန့်ထွက်သွားပါတယ်။ [[mark:explain-shape]] အကျယ်နဲ့ အမြင့်ကို သီးသန့်စီ
+      တွက်လို့ အရွက်ရဲ့ ပုံသဏ္ဌာန် ပြောင်းသွားနိုင်ပါတယ်။
+    sources:
+      - title: "MDN — background-repeat: space and round"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-repeat#values"
+      - title: "CSS Backgrounds and Borders Module Level 3 — round and space"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#valdef-background-repeat-round"
+    actions:
+      - id: open-tiles
+        type: whiteboard.apply
+        at: { mark: open-tiles }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-f1, b-f2, b-f3]
+        drawMs: 1500
+      - id: draw-repeat
+        type: whiteboard.apply
+        at: { mark: draw-repeat }
+        upsertIds: [b-r1, b-r2, b-r3, b-r4, b-l1, b-n1]
+        drawMs: 2400
+      - id: draw-space
+        type: whiteboard.apply
+        at: { mark: draw-space }
+        upsertIds: [b-s1, b-s2, b-s3, b-l2, b-n2]
+        drawMs: 2400
+      - id: draw-round
+        type: whiteboard.apply
+        at: { mark: draw-round }
+        upsertIds: [b-o1, b-o2, b-o3, b-o4, b-l3, b-n3]
+        drawMs: 2400
+
+  - id: position
+    chapter: "Background position"
+    narration: >
+      [[mark:close-tiles]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-badge]] ဒီနေ့ အထူး card မှာ ခွက်ပုံလေး
+      တစ်ခု ထည့်ပါမယ်။ rule အသစ်မှာ ခွက်ပုံကို တစ်ပုံတည်း ပေးပြီး၊ နေရာကို right top လို့ ပေးပါတယ်။
+      [[mark:after-badge]] ခွက်က ညာဘက် အပေါ်ထောင့်မှာ၊ border ရဲ့ အတွင်းဘက်ကို ကပ်ပြီး ရှိပါတယ်။
+      [[mark:type-top]] အခု top ဆိုတဲ့ keyword တစ်ခုတည်းကို ပေးကြည့်ပါမယ်။ [[mark:after-top]] ခွက်က
+      အပေါ်ဘက် အစွန်းရဲ့ အလယ်ကို ရွှေ့သွားပါပြီ။ တန်ဖိုး တစ်ခုပဲ ပေးရင် ကျန်တဲ့ axis မှာ center ကို
+      ယူလို့ပါ။ [[mark:type-edge]] နေရာ အတိအကျ လိုချင်ရင် အစွန်း keyword ရဲ့ နောက်မှာ အဲဒီ အစွန်းကနေ
+      ဘယ်လောက် ခွာမလဲ ရေးပါတယ်။ ညာဘက်ကနေ 12 pixel၊ အောက်ဘက်ကနေ 8 pixel ပါ။ [[mark:after-edge]] အခု ခွက်က
+      ညာဘက် အောက်ထောင့်ကနေ နည်းနည်း ခွာနေပါတယ်။ အကွာအဝေး တစ်ခုစီက သူ့ရှေ့က keyword နဲ့ တွဲပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background position"
+        url: "https://web.dev/learn/css/backgrounds#background_position"
+      - title: "MDN — background-position (one, two, three and four value syntax)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-position"
+      - title: "CSS Values and Units Level 4 — <position>"
+        url: "https://drafts.csswg.org/css-values-4/#position"
+    actions:
+      - id: close-tiles
+        type: whiteboard.apply
+        at: { mark: close-tiles }
+        open: false
+      - id: type-badge
+        type: editor.type
+        at: { mark: type-badge }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background-repeat: round;\n}\n", occurrence: 1 }
+        text: "\n.featured {\n  background-image: var(--cup-badge);\n  background-repeat: no-repeat;\n  background-position: right top;\n}\n"
+      - id: expect-badge
+        type: expect.preview
+        at: { mark: after-badge }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-top
+        type: editor.type
+        at: { mark: type-top }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-position: right top;\n", occurrence: 1 }
+        text: "  background-position: top;\n"
+      - id: type-edge
+        type: editor.type
+        at: { mark: type-edge }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-position: top;\n", occurrence: 1 }
+        text: "  background-position: right 12px bottom 8px;\n"
+      - id: expect-edge
+        type: expect.preview
+        at: { mark: after-edge }
+        timeoutMs: 4000
+        target: { by: testId, value: badge-laphet-yay }
+        textContains: "အသစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: percent-board
+    narration: >
+      [[mark:open-percent]] ရာခိုင်နှုန်းကတော့ တွက်ပုံ ထူးခြားပါတယ်။ [[mark:draw-zero]] initial value
+      ဖြစ်တဲ့ နှစ်ဘက်လုံး 0 ရာခိုင်နှုန်းက ပုံရဲ့ ဘယ်အပေါ်ထောင့်ကို box ရဲ့ ဘယ်အပေါ်ထောင့်မှာ ထားပါတယ်။
+      [[mark:draw-hundred]] 100 ရာခိုင်နှုန်းက ပုံရဲ့ ညာအောက်ထောင့်ကို box ရဲ့ ညာအောက်ထောင့်မှာ ထားပါတယ်။
+      [[mark:draw-fifty]] 50 ရာခိုင်နှုန်းက ပုံရဲ့ အလယ်ကို box ရဲ့ အလယ်မှာ ထားပါတယ်။ ပုံရဲ့ ဘယ်ဘက်
+      အစွန်းကို box ရဲ့ အလယ် ရောက်အောင် ရွှေ့တာ မဟုတ်ပါဘူး။ [[mark:draw-same]] ရာခိုင်နှုန်းက ပုံနဲ့ box
+      ရဲ့ အမှတ် တူတူကို ထပ်အောင် ညှိတာပါ။ [[mark:draw-length]] keyword မပါတဲ့ pixel တန်ဖိုးကတော့ ပုံရဲ့
+      ဘယ်အပေါ်ထောင့်ကို box ရဲ့ ဘယ်အပေါ်ထောင့်ကနေ အဲဒီလောက် ရွှေ့ရုံပါပဲ။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background position"
+        url: "https://web.dev/learn/css/backgrounds#background_position"
+      - title: "MDN — background-position: regarding percentages"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-position#regarding_percentages"
+      - title: "CSS Backgrounds and Borders Module Level 3 — background-position"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#background-position"
+    actions:
+      - id: open-percent
+        type: whiteboard.apply
+        at: { mark: open-percent }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-zero
+        type: whiteboard.apply
+        at: { mark: draw-zero }
+        upsertIds: [c-box1, c-img1, c-l1]
+        drawMs: 1600
+      - id: draw-hundred
+        type: whiteboard.apply
+        at: { mark: draw-hundred }
+        upsertIds: [c-box2, c-img2, c-l2]
+        drawMs: 1600
+      - id: draw-fifty
+        type: whiteboard.apply
+        at: { mark: draw-fifty }
+        upsertIds: [c-box3, c-img3, c-dot, c-l3]
+        drawMs: 2000
+      - id: draw-same
+        type: whiteboard.apply
+        at: { mark: draw-same }
+        upsertIds: [c-same]
+        drawMs: 1200
+      - id: draw-length
+        type: whiteboard.apply
+        at: { mark: draw-length }
+        upsertIds: [c-len]
+        drawMs: 1400
+
+  - id: rules-board
+    narration: >
+      [[mark:open-rules]] position ရေးနည်း စည်းမျဉ်း အချို့ ရှိပါတယ်။ [[mark:draw-any]] keyword
+      သက်သက်ဆိုရင် ဘယ်အစဉ်နဲ့ ရေးရေး ရပါတယ်။ [[mark:draw-ok]] တန်ဖိုး နှစ်ခုတည်း ရေးပြီး pixel ဒါမှမဟုတ်
+      ရာခိုင်နှုန်း ရောပါလာရင်တော့ ပထမ တန်ဖိုးက ဘယ်ညာအတွက် ဖြစ်ရပါတယ်။ [[mark:draw-bad]] 50 ရာခိုင်နှုန်း
+      ပြီးမှ left ကတော့ မမှန်ပါဘူး။ [[mark:draw-same-axis]] left နဲ့ right လို axis တူတဲ့ keyword နှစ်ခု
+      တွဲရင်လည်း မမှန်ပါဘူး။ [[mark:draw-edge]] အစွန်း keyword နဲ့ အကွာအဝေး တွဲရေးရင်တော့ ကြိုက်တဲ့ axis
+      ကို အရင် ရေးလို့ ရပြီး၊ ခွာစရာ မလိုတဲ့ ဘက်မှာ keyword ပဲ ထားလို့လည်း ရပါတယ်။ [[mark:draw-xy]]
+      background position x နဲ့ background position y ဆိုတဲ့ longhand တွေက axis တစ်ခုစီကို သီးသန့်
+      ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background position (keyword order)"
+        url: "https://web.dev/learn/css/backgrounds#background_position"
+      - title: "MDN — background-position-x"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-position-x"
+      - title: "MDN — background-position-y"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-position-y"
+    actions:
+      - id: open-rules
+        type: whiteboard.apply
+        at: { mark: open-rules }
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-any
+        type: whiteboard.apply
+        at: { mark: draw-any }
+        upsertIds: [d-any]
+        drawMs: 1200
+      - id: draw-ok
+        type: whiteboard.apply
+        at: { mark: draw-ok }
+        upsertIds: [d-ok]
+        drawMs: 1000
+      - id: draw-bad
+        type: whiteboard.apply
+        at: { mark: draw-bad }
+        upsertIds: [d-bad]
+        drawMs: 1000
+      - id: draw-same-axis
+        type: whiteboard.apply
+        at: { mark: draw-same-axis }
+        upsertIds: [d-same]
+        drawMs: 1200
+      - id: draw-edge
+        type: whiteboard.apply
+        at: { mark: draw-edge }
+        upsertIds: [d-edge]
+        drawMs: 1400
+      - id: draw-xy
+        type: whiteboard.apply
+        at: { mark: draw-xy }
+        upsertIds: [d-xy]
+        drawMs: 1200
+
+  - id: size
+    chapter: "Background size၊ cover နဲ့ contain"
+    narration: >
+      [[mark:close-rules]] ကြိုဆိုတဲ့ အပိုင်းမှာ ဒီတစ်ခါ ဓာတ်ပုံ ထည့်ကြည့်ရအောင်။ [[mark:type-photo]] rule
+      အသစ် တစ်ခုမှာ ဓာတ်ပုံကို ထပ်မစီဘဲ background image အဖြစ် ပေးပါမယ်။ [[mark:after-photo]] ဓာတ်ပုံက သူ့
+      မူလ အရွယ် 320 pixel နဲ့ 200 pixel အတိုင်း ပေါ်လာပါတယ်။ ညာဘက်အထိ မရောက်ဘဲ၊ အောက်ပိုင်းလည်း
+      ပြတ်နေပါတယ်။ ဒါက background size ရဲ့ initial value ဖြစ်တဲ့ auto ပါ။ [[mark:type-cover]] background
+      size ကို cover ပေးကြည့်ရအောင်။ [[mark:after-cover]] အခု ဓာတ်ပုံက အပိုင်း တစ်ခုလုံး ပြည့်သွားပါပြီ။
+      ပုံသဏ္ဌာန် မပျက်ဘဲ နေရာလွတ် မကျန်တော့တဲ့အထိ ချဲ့လိုက်လို့၊ အောက်ဘက်က တစ်ပိုင်း ပြတ်သွားပါတယ်။
+      [[mark:type-contain]] နောက် keyword တစ်ခုက contain ပါ။ [[mark:after-contain]] အခု ဓာတ်ပုံ တစ်ပုံလုံး
+      မြင်ရပါပြီ။ box ထဲ အပြည့် ဆံ့အောင် ချုံ့ထားလို့ ညာဘက်မှာ နေရာလွတ် ကျန်ပါတယ်။ no repeat မပါရင်တော့
+      အဲဒီ နေရာကို ပုံ အထပ်တွေက ဖြည့်ပါလိမ့်မယ်။ [[mark:explain-lengths]] အကျယ်နဲ့ အမြင့်ကို pixel
+      ဒါမှမဟုတ် ရာခိုင်နှုန်းနဲ့လည်း ပေးလို့ ရပါတယ်။ တန်ဖိုး တစ်ခုပဲ ပေးရင် အဲဒါက အကျယ် ဖြစ်ပြီး၊ အမြင့်က
+      auto နဲ့ ပုံသဏ္ဌာန်ကို ထိန်းပေးပါတယ်။ ရာခိုင်နှုန်းကိုတော့ ပုံနဲ့ မဟုတ်ဘဲ box နဲ့ တွက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background size"
+        url: "https://web.dev/learn/css/backgrounds#background_size"
+      - title: "MDN — background-size (cover, contain, lengths, auto)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-size"
+      - title: "CSS Backgrounds and Borders Module Level 3 — background-size"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#background-size"
+    actions:
+      - id: close-rules
+        type: whiteboard.apply
+        at: { mark: close-rules }
+        open: false
+      - id: type-photo
+        type: editor.type
+        at: { mark: type-photo }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  background-position: right 12px bottom 8px;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.hero {\n  background-image: var(--photo);\n  background-repeat: no-repeat;\n}\n"
+      - id: expect-photo
+        type: expect.preview
+        at: { mark: after-photo }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-cover
+        type: editor.type
+        at: { mark: type-cover }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: var(--photo);\n  background-repeat: no-repeat;\n",
+            occurrence: 1,
+          }
+        text: "  background-size: cover;\n"
+      - id: type-contain
+        type: editor.type
+        at: { mark: type-contain }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-size: cover;\n", occurrence: 1 }
+        text: "  background-size: contain;\n"
+      - id: expect-contain
+        type: expect.preview
+        at: { mark: after-contain }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: attachment
+    chapter: "Background attachment"
+    narration: >
+      [[mark:type-reviews-cup]] အခု မှတ်ချက် box မှာလည်း ခွက်ပုံ တစ်ပုံတည်းကို ညာဘက်နဲ့ အပေါ်ဘက်ကနေ 12
+      pixel စီ ခွာပြီး ထည့်ပါမယ်။ [[mark:after-reviews-cup]] ခွက်က box ရဲ့ ညာဘက် အပေါ်ထောင့်မှာ ရှိပါတယ်။
+      [[mark:scroll-reviews]] script နဲ့ box ကို အောက်ဆုံးထိ scroll လုပ်ရအောင်။ [[mark:after-scroll]]
+      မှတ်ချက်တွေ အပေါ် တက်သွားပေမယ့် ခွက်ကတော့ နေရာမှာပဲ ရှိနေပါတယ်။ background attachment ရဲ့ default
+      ဖြစ်တဲ့ scroll မှာ နောက်ခံက content နဲ့ မဟုတ်ဘဲ box နဲ့ ကပ်နေလို့ပါ။ [[mark:type-local]] အခု
+      attachment ကို local ပေးကြည့်ရအောင်။ [[mark:after-local]] ခွက် ပျောက်သွားပါပြီ။ local မှာ နောက်ခံက
+      content နဲ့ ကပ်နေလို့၊ ပထမ မှတ်ချက်တွေနဲ့အတူ အပေါ်ကို တက်သွားတာပါ။ [[mark:scroll-back]] အပေါ်ဆုံးကို
+      ပြန် scroll လုပ်ရအောင်။ [[mark:after-scroll-back]] ပထမ မှတ်ချက်နဲ့အတူ ခွက် ပြန်ပေါ်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background attachment"
+        url: "https://web.dev/learn/css/backgrounds#background_attachment"
+      - title: "MDN — background-attachment (scroll, fixed, local)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-attachment"
+    actions:
+      - id: type-reviews-cup
+        type: editor.type
+        at: { mark: type-reviews-cup }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background-size: contain;\n}\n", occurrence: 1 }
+        text: "\n.reviews {\n  background-image: var(--cup-badge);\n  background-repeat: no-repeat;\n  background-position: right 12px top 12px;\n}\n"
+      - id: expect-reviews-cup
+        type: expect.preview
+        at: { mark: after-reviews-cup }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "ဧည့်သည်တွေ ပြောတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # The box scrolls 117 px at most (scrollHeight 275, clientHeight 158).
+      - id: scroll-reviews
+        type: preview.scroll
+        at: { mark: scroll-reviews }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 120
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-local
+        type: editor.type
+        at: { mark: type-local }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-position: right 12px top 12px;\n",
+            occurrence: 1,
+          }
+        text: "  background-attachment: local;\n"
+      - id: expect-local
+        type: expect.preview
+        at: { mark: after-local }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-back
+        type: preview.scroll
+        at: { mark: scroll-back }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: attachment-board
+    narration: >
+      [[mark:open-attach]] attachment မှာ တန်ဖိုး သုံးခု ရှိပါတယ်။ [[mark:draw-scroll]] scroll က box ထဲက
+      content ကို scroll လုပ်ရင် ပုံကို ငြိမ်ထားပေမယ့်၊ page ကို scroll လုပ်ရင်တော့ box နဲ့အတူ ရွေ့ပါတယ်။
+      [[mark:draw-local]] local ကတော့ ပုံကို box ထဲက content နဲ့အတူ ရွေ့စေပါတယ်။ [[mark:draw-fixed]] fixed
+      ကတော့ ပုံကို browser window နဲ့ ကပ်ထားလို့၊ page ကို scroll လုပ်လည်း ငြိမ်နေပါတယ်။ box က သူ့
+      နောက်မှာ ရှိနေတဲ့ ပုံ အပိုင်းကိုပဲ ပြပါတယ်။ [[mark:draw-fixed-ios]] fixed မှာ သတိထားစရာ နှစ်ခု
+      ရှိပါတယ်။ iPhone၊ iPad Safari က fixed ကို scroll လိုပဲ ပြပါတယ်။ [[mark:draw-fixed-transform]] parent
+      တစ်ခုခုမှာ transform ပါရင်လည်း အလုပ်မလုပ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background attachment"
+        url: "https://web.dev/learn/css/backgrounds#background_attachment"
+      - title: "MDN — background-attachment: browser compatibility"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-attachment#browser_compatibility"
+      - title: "Web Platform Status — background-attachment"
+        url: "https://webstatus.dev/features/background-attachment"
+    actions:
+      - id: open-attach
+        type: whiteboard.apply
+        at: { mark: open-attach }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-scroll
+        type: whiteboard.apply
+        at: { mark: draw-scroll }
+        upsertIds: [e-scroll]
+        drawMs: 1400
+      - id: draw-local
+        type: whiteboard.apply
+        at: { mark: draw-local }
+        upsertIds: [e-local]
+        drawMs: 1200
+      - id: draw-fixed
+        type: whiteboard.apply
+        at: { mark: draw-fixed }
+        upsertIds: [e-fixed]
+        drawMs: 1400
+      - id: draw-fixed-ios
+        type: whiteboard.apply
+        at: { mark: draw-fixed-ios }
+        upsertIds: [e-ios]
+        drawMs: 1400
+      - id: draw-fixed-transform
+        type: whiteboard.apply
+        at: { mark: draw-fixed-transform }
+        upsertIds: [e-transform]
+        drawMs: 1400
+
+  - id: origin-clip
+    chapter: "Origin နဲ့ clip"
+    narration: >
+      [[mark:open-boxes]] နောက်ထပ် property နှစ်ခုက နောက်ခံအတွက် box model ရဲ့ ဘယ် box ကို သုံးမလဲ
+      ရွေးပေးပါတယ်။ [[mark:draw-boxes]] lesson 2 မှာ box sizing နဲ့ တွေ့ခဲ့တဲ့ content box နဲ့ border box
+      ရဲ့ ကြားမှာ padding box လည်း ရှိပါတယ်။ border box က border အပါအဝင်၊ padding box က border ရဲ့ အတွင်း၊
+      content box က padding ရဲ့ အတွင်းပါ။ [[mark:draw-origin]] background origin က ပုံကို ဘယ်ကနေ စပြီး
+      နေရာချမလဲ၊ အရွယ်အစားကို ဘာနဲ့ တွက်မလဲ ဆုံးဖြတ်ပါတယ်။ default က padding box ဖြစ်လို့ ခွက်က border ကို
+      ကပ်နေခဲ့တာပါ။ [[mark:draw-clip]] background clip ကတော့ နောက်ခံကို ဘယ်အထိ ဆွဲမလဲ ဆုံးဖြတ်ပြီး
+      ကျန်တာကို ဖြတ်ပစ်ပါတယ်။ default က border box ဖြစ်လို့ မျဉ်းပြတ်တွေ အောက်မှာ အရောင် မြင်ခဲ့ရတာပါ။
+      [[mark:close-boxes]] card မှာ စမ်းကြည့်ရအောင်။ [[mark:type-origin]] ပထမဆုံး origin ကို content box
+      ပေးပါမယ်။ ခွက်ကို ကြည့်ထားပါ။ [[mark:after-origin]] ခွက်က card ရဲ့ padding ရှိသလောက် အထဲကို
+      ဝင်သွားပါပြီ။ အကွာအဝေးတွေကို content ရဲ့ အစွန်းကနေ စတွက်လို့ပါ။ [[mark:type-clip]] အခု clip ကို
+      padding box ပေးပါမယ်။ မျဉ်းပြတ်တွေကြားကို ကြည့်ထားပါ။ [[mark:after-clip]] အရောင်က border ရဲ့
+      အတွင်းဘက်မှာ ရပ်သွားလို့၊ ကြားတွေမှာ page ကို ပြန်မြင်ရပါပြီ။ content box ပေးရင်တော့ padding ပေါ်ကပါ
+      အရောင် ပျောက်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background origin and background clip"
+        url: "https://web.dev/learn/css/backgrounds#background_origin"
+      - title: "MDN — background-origin"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-origin"
+      - title: "MDN — background-clip"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-clip"
+      - title: "CSS Backgrounds and Borders Module Level 3 — background-origin and background-clip"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#background-origin"
+    actions:
+      - id: open-boxes
+        type: whiteboard.apply
+        at: { mark: open-boxes }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-boxes
+        type: whiteboard.apply
+        at: { mark: draw-boxes }
+        upsertIds: [f-border, f-border-l, f-padding, f-padding-l, f-content, f-content-l]
+        drawMs: 3000
+      - id: draw-origin
+        type: whiteboard.apply
+        at: { mark: draw-origin }
+        upsertIds: [f-origin]
+        drawMs: 1600
+      - id: draw-clip
+        type: whiteboard.apply
+        at: { mark: draw-clip }
+        upsertIds: [f-clip]
+        drawMs: 1600
+      - id: close-boxes
+        type: whiteboard.apply
+        at: { mark: close-boxes }
+        open: false
+      - id: type-origin
+        type: editor.type
+        at: { mark: type-origin }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-position: right 12px bottom 8px;\n",
+            occurrence: 1,
+          }
+        text: "  background-origin: content-box;\n"
+      - id: expect-origin
+        type: expect.preview
+        at: { mark: after-origin }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-clip
+        type: editor.type
+        at: { mark: type-clip }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-origin: content-box;\n", occurrence: 1 }
+        text: "  background-clip: padding-box;\n"
+      - id: expect-clip
+        type: expect.preview
+        at: { mark: after-clip }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: clip-text
+    chapter: "Gradient စာလုံး"
+    narration: >
+      [[mark:type-text-img]] clip မှာ text ဆိုတဲ့ တန်ဖိုး တစ်ခု ကျန်ပါသေးတယ်။ နောက်ခံကို စာလုံးတွေရဲ့
+      အထဲမှာပဲ ဆွဲပါတယ်။ ဆိုင် နာမည်မှာ စမ်းကြည့်ရအောင်။ lesson 8 မှာ တွေ့ခဲ့တဲ့ supports ထဲမှာ
+      ရေးမှာမို့၊ text အထိ clip လုပ်နိုင်တဲ့ browser တွေမှာပဲ ဒီ rule အလုပ်လုပ်ပါမယ်။ ပထမဆုံး ရွှေရောင်ကနေ
+      အနီရောင်ကို ကူးတဲ့ gradient ပါ။ [[mark:after-text-img]] အခုတော့ gradient က ဆိုင် နာမည်ရဲ့ box
+      တစ်ခုလုံး ပြည့်နေပါတယ်။ [[mark:type-text-clip]] ပြီးရင် text အထိ clip လုပ်ပါမယ်။
+      [[mark:after-text-clip]] box အပြည့် ရှိခဲ့တဲ့ gradient ပျောက်သွားပါပြီ။ gradient က စာလုံးတွေရဲ့
+      အထဲမှာပဲ ကျန်ပေမယ့်၊ စာလုံး အရောင်က အပေါ်ကနေ ဖုံးထားပါတယ်။ [[mark:type-text-color]] ဒါကြောင့် စာလုံး
+      အရောင်ကို transparent ပေးပါမယ်။ [[mark:after-text-color]] အခု စာလုံးတွေထဲမှာ gradient ကို
+      မြင်ရပါပြီ။ [[mark:explain-support]] text အထိ clip လုပ်တာက အခု browser အဓိက အားလုံးမှာ ရပြီး၊
+      အဟောင်းတွေမှာတော့ prefix လိုခဲ့ပါတယ်။ supports စစ်တာ မပါရင်၊ clip မလုပ်နိုင်တဲ့ browser မှာ
+      စာလုံးတွေ ပျောက်နေပါလိမ့်မယ်။ gradient တစ်လျှောက်လုံးမှာ contrast လုံလောက်လားလည်း စစ်ကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: background clip (text)"
+        url: "https://web.dev/learn/css/backgrounds#background_clip"
+      - title: "MDN — background-clip: text"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-clip#text"
+      - title: "CSS Backgrounds and Borders Module Level 4 — background-clip"
+        url: "https://drafts.csswg.org/css-backgrounds-4/#background-clip"
+      - title: "Web Platform Status — background-clip: text"
+        url: "https://webstatus.dev/features/background-clip-text"
+      - title: "MDN — @supports"
+        url: "https://developer.mozilla.org/docs/Web/CSS/@supports"
+    actions:
+      - id: type-text-img
+        type: editor.type
+        at: { mark: type-text-img }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background-attachment: local;\n}\n", occurrence: 1 }
+        text: "\n@supports (background-clip: text) {\n  .shop-name {\n    background-image: linear-gradient(90deg, gold, tomato);\n  }\n}\n"
+      - id: expect-text-img
+        type: expect.preview
+        at: { mark: after-text-img }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-text-clip
+        type: editor.type
+        at: { mark: type-text-clip }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "    background-image: linear-gradient(90deg, gold, tomato);\n",
+            occurrence: 1,
+          }
+        text: "    background-clip: text;\n"
+      - id: type-text-color
+        type: editor.type
+        at: { mark: type-text-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "    background-clip: text;\n", occurrence: 1 }
+        text: "    color: transparent;\n"
+      - id: expect-text-color
+        type: expect.preview
+        at: { mark: after-text-color }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: shorthand
+    chapter: "Background shorthand"
+    narration: >
+      [[mark:type-shorthand]] အခု ကြိုဆိုတဲ့ အပိုင်းကို background shorthand တစ်ခုတည်းနဲ့ comma ခြားထားတဲ့
+      အလွှာ လေးလွှာ ပေးပါမယ်။ အပေါ်ကနေ ခွက်ပုံ အသေးလေး၊ အမှောင် gradient၊ အပြည့် ဖြစ်နေတဲ့ ဓာတ်ပုံနဲ့
+      အညိုရင့် အရောင်ပါ။ စာလုံးကိုလည်း အဖြူ ပေးပါတယ်။ [[mark:after-shorthand]] ခွက်က အပေါ်ဆုံးမှာ ရှိပြီး၊
+      gradient က ဓာတ်ပုံရဲ့ အပေါ်ပိုင်းကို မှောင်စေလို့ အဖြူရောင် ခေါင်းစဉ်ကို ဖတ်ရ လွယ်ပါတယ်။
+      [[mark:select-cup-layer]] ခွက် အလွှာကို ကြည့်ပါ။ အရွယ်အစားကို နေရာရဲ့ နောက်မှာ slash ခံပြီး
+      ရေးရလို့၊ အရွယ်အစား ပေးရင် နေရာပါ ရေးရပါတယ်။ ဒီမှာ မပါပေမယ့်၊ box နာမည် တစ်ခုပဲ ရေးရင် origin နဲ့
+      clip နှစ်ခုလုံး အဲဒီ box ဖြစ်ပြီး၊ နှစ်ခု ရေးရင် origin ပြီးမှ clip ပါ။ [[mark:select-color-layer]]
+      အရောင်ကို နောက်ဆုံး အလွှာမှာပဲ ထည့်လို့ ရပြီး၊ ပုံ အားလုံးရဲ့ အောက်မှာ ရှိပါတယ်။ သူက fallback လည်း
+      ဖြစ်ပါတယ်။ ပုံတွေ load မဖြစ်ရင်တောင် စာလုံး အဖြူရဲ့ နောက်မှာ အရောင်ရင့် ရှိနေပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: multiple backgrounds and the background shorthand"
+        url: "https://web.dev/learn/css/backgrounds#the_background_shorthand"
+      - title: "MDN — background (shorthand syntax)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background"
+      - title: "MDN — Using multiple backgrounds"
+        url: "https://developer.mozilla.org/docs/Web/CSS/CSS_backgrounds_and_borders/Using_multiple_backgrounds"
+      - title: "CSS Backgrounds and Borders Module Level 3 — the background shorthand"
+        url: "https://drafts.csswg.org/css-backgrounds-3/#background"
+    actions:
+      # line-by-line: a long declaration the narration summarises; every
+      # revealed line has balanced parentheses, and the declaration is invalid
+      # (the previous hero rules keep painting) until its last line lands.
+      - id: type-shorthand
+        type: editor.type
+        at: { mark: type-shorthand }
+        cadence: line-by-line
+        target: { file: styles.css, after: "    color: transparent;\n  }\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  background:\n    var(--cup-badge) right 12px top 12px / 32px no-repeat,\n    linear-gradient(rgb(0 0 0 / 40%), transparent),\n    var(--photo) center / cover no-repeat,\n    #3b2314;\n  color: white;\n}\n"
+      - id: expect-shorthand
+        type: expect.preview
+        at: { mark: after-shorthand }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "ပူပူနွေးနွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-cup-layer
+        type: editor.select
+        at: { mark: select-cup-layer }
+        target: { file: styles.css, text: "right 12px top 12px / 32px", occurrence: 1 }
+      - id: select-color-layer
+        type: editor.select
+        at: { mark: select-color-layer }
+        target: { file: styles.css, text: "    #3b2314;", occurrence: 1 }
+
+  - id: reset-gotcha
+    narration: >
+      [[mark:type-green]] shorthand မှာ သတိထားစရာ တစ်ခု ရှိပါတယ်။ rule အသစ် တစ်ခုမှာ မှတ်ချက် box ကို
+      အစိမ်းဖျော့ အရောင် ပေးပါမယ်။ [[mark:after-green]] box အစိမ်းဖျော့ ဖြစ်သွားပါပြီ။
+      [[mark:type-gotcha]] နောက်တစ်ကြောင်းမှာ shorthand နဲ့ အရွက်ပုံ ပေးပါမယ်။ [[mark:after-gotcha]]
+      အရွက်တွေ ပေါ်လာပေမယ့် အစိမ်းရောင် ပျောက်သွားပြီး ခွက်လည်း ပျောက်သွားပါတယ်။ shorthand က သူ မရေးထားတဲ့
+      နောက်ခံ property အားလုံးကို initial value ပြန်ထားလို့၊ အရောင်က transparent ပြန်ဖြစ်သွားတာပါ။
+      [[mark:type-fix]] ဒါကြောင့် shorthand ကို အရင်ရေးပြီး၊ longhand တွေကို နောက်မှ ရေးပါ။
+      [[mark:after-fix]] အရွက်တွေ အောက်မှာ အစိမ်း ပြန်ပေါ်လာပါပြီ။
+    sources:
+      - title: "MDN — background: the shorthand sets omitted longhands to their initial values"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background#syntax"
+      - title: "MDN — Shorthand properties: tricky edge cases"
+        url: "https://developer.mozilla.org/docs/Web/CSS/CSS_cascade/Shorthand_properties#tricky_edge_cases"
+    actions:
+      - id: type-green
+        type: editor.type
+        at: { mark: type-green }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: white;\n}\n", occurrence: 1 }
+        text: "\n.reviews {\n  background-color: palegreen;\n}\n"
+      - id: expect-green
+        type: expect.preview
+        at: { mark: after-green }
+        timeoutMs: 4000
+        target: { by: testId, value: reviews }
+        textContains: "ဧည့်သည်တွေ ပြောတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-gotcha
+        type: editor.type
+        at: { mark: type-gotcha }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background-color: palegreen;\n", occurrence: 1 }
+        text: "  background: var(--leaf-tile);\n"
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: var(--leaf-tile);\n", occurrence: 1 }
+        text: "  background-color: palegreen;\n"
+      - id: expect-fix
+        type: expect.preview
+        at: { mark: after-fix }
+        timeoutMs: 4000
+        target: { by: testId, value: last-review }
+        textContains: "နောက်လည်း လာဦးမယ်။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း နှစ်ခု မေးကြည့်ရအောင်။ နောက်ခံ ပုံက ဘယ်ကနေ စလဲ။ [[mark:quiz-1]] padding
+      box ရဲ့ ဘယ်အပေါ်ထောင့်ကနေ စပြီး၊ default အားဖြင့် ထပ်ခါ စီပါတယ်။ [[mark:quiz-2]] page ကို scroll
+      လုပ်တုန်း ပုံကို ငြိမ်နေအောင် ဘာနဲ့ လုပ်လဲ။ position ကို fixed ပေးတာ မဟုတ်ဘဲ၊ background attachment
+      ကို fixed ပေးရပါတယ်။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ အောက်ဆုံးမှာ အရောင်၊ သူ့အပေါ်မှာ ပုံတွေ
+      ရှိပြီး ပထမ ပုံက အပေါ်ဆုံးပါ။ border နဲ့ content က သူတို့ အပေါ်မှာ ရှိပါတယ်။ repeat၊ position နဲ့
+      size က ပုံ တစ်ပုံစီကို ဘယ်လို ထပ်စီမလဲ၊ ဘယ်မှာ ထားမလဲ၊ ဘယ်လောက် ကြီးမလဲ ဆုံးဖြတ်ပါတယ်။ origin က ဘယ်
+      box ကနေ စတွက်မလဲ ရွေးပြီး၊ clip က ဘယ် box အထိ ဆွဲမလဲ ရွေးပါတယ်။ [[mark:next-lesson]] နောက် lesson
+      မှာတော့ border ရဲ့ မျဉ်းပုံစံ၊ ထောင့်ဝိုင်းတွေနဲ့ box shadow လို အရိပ်တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Backgrounds: check your understanding"
+        url: "https://web.dev/learn/css/backgrounds#check_your_understanding"
+      - title: "MDN — background-origin (border-box, padding-box, content-box)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/background-origin#values"
+      - title: "web.dev Learn CSS — Borders (next lesson)"
+        url: "https://web.dev/learn/css/borders"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [g-title, g-q1]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [g-a1]
+        drawMs: 1400
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [g-q2, g-a2, g-a2-bad]
+        drawMs: 2200
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".featured {\n  background-color: tan;\n  border: 6px dashed sienna;\n}\n\n.hero {\n  background-image: var(--leaf-tile);\n  background-repeat: repeat-x;\n  background-repeat: no-repeat;\n  background-repeat: space;\n  background-repeat: round;\n}\n\n.featured {\n  background-image: var(--cup-badge);\n  background-repeat: no-repeat;\n  background-position: right top;\n  background-position: top;\n  background-position: right 12px bottom 8px;\n  background-origin: content-box;\n  background-clip: padding-box;\n}\n\n.hero {\n  background-image: var(--photo);\n  background-repeat: no-repeat;\n  background-size: cover;\n  background-size: contain;\n}\n\n.reviews {\n  background-image: var(--cup-badge);\n  background-repeat: no-repeat;\n  background-position: right 12px top 12px;\n  background-attachment: local;\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: "@supports (background-clip: text) {\n  .shop-name {\n    background-image: linear-gradient(90deg, gold, tomato);\n    background-clip: text;\n    color: transparent;\n  }\n}\n\n.hero {\n  background:\n    var(--cup-badge) right 12px top 12px / 32px no-repeat,\n    linear-gradient(rgb(0 0 0 / 40%), transparent),\n    var(--photo) center / cover no-repeat,\n    #3b2314;\n  color: white;\n}\n\n.reviews {\n  background-color: palegreen;\n  background: var(--leaf-tile);\n  background-color: palegreen;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
