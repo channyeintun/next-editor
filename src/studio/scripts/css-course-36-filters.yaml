@@ -1,0 +1,1984 @@
+# CSS course (Burmese), lesson 36 of 43: filters.
+#
+# Narration is an ENGLISH DRAFT for the Burmese writer (DESIGN.md next to this
+# file is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 35; the frosted "today's special" card is the
+# goal; filter vs backdrop filter) → code tour (photo with the promo card on
+# it, three thumbnails, a teal badge, a small night card, four SVG cups) →
+# photo: grayscale 1, 0.5, sepia, none → thumbnails: brightness, contrast,
+# saturate → board (colour wheel) → badge: hue-rotate 90 then 180 → night
+# card: invert (not a dark mode) → cups 1 and 2: drop-shadow + hue-rotate in
+# both orders → board (left-to-right pipeline, invalid function drops all,
+# opacity()) → cups 3 and 4: box-shadow vs drop-shadow (no spread / inset,
+# chained drop shadows) → board (SVG filter through url(#id), explained only)
+# → the whole figure blurs (text too), stacking context / containing block,
+# then none → promo: backdrop-filter alone shows nothing (opaque background),
+# then a 35 % white background makes frosted glass; support + readable
+# fallback → quiz + recap, hand-off to blend modes (lesson 37).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload,
+# no HTML edit, no clicks. A keystroke-typed function has an unclosed "(" until
+# its ")", and an unclosed function swallows the rest of the stylesheet, so
+# every keystroke edit that contains "(" lands in the LAST rule of the file;
+# the two edits into earlier rules (filter: none on the photo image, and on the
+# figure) contain no parentheses.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# h2 16–46, photo 400 × 250 at y 54 (promo card 210 × 67 at 28,146 over the
+# photo's cups and table), caption 304, thumbnails 341 (three 120 × 75),
+# badge 432, night card 485 (400 × 80), cups 585 (four 64 × 64 boxes); the
+# whole page fits in 720 px, document 720 tall at every stage. Screenshots in
+# probe/.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-36-filters
+  title: "CSS course 36: Filter"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 36
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit gallery block (the photo, with the lesson's promo
+      # card placed over it), and the lesson blocks thumbs (three small copies
+      # of the photo), badge (a teal entry badge), night (a small card with a
+      # photo, a name and a price) and cups (four tea cups drawn as inline SVG
+      # inside 64 px boxes, transparent around the cup). No kit.js: nothing is
+      # clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: gallery (the photo, with the promo card placed over it) -->
+              <section class="gallery" id="gallery" data-testid="gallery">
+                <h2>ဆိုင်ပုံရိပ်</h2>
+                <figure class="photo">
+                  <img src="/teahouse.svg" alt="ဆိုင်အတွင်းပိုင်း" width="320" height="200" data-testid="photo-teahouse" />
+                  <p class="promo" data-testid="promo"><strong>ယနေ့ အထူး</strong><br />လက်ဖက်ရည် · 1,500 ကျပ်</p>
+                  <figcaption>ဆိုင်အတွင်း</figcaption>
+                </figure>
+              </section>
+
+              <!-- lesson block: thumbs (three small copies of the photo) -->
+              <div class="thumbs" data-testid="thumbs">
+                <img src="/teahouse.svg" alt="" width="120" height="75" data-testid="thumb-1" />
+                <img src="/teahouse.svg" alt="" width="120" height="75" data-testid="thumb-2" />
+                <img src="/teahouse.svg" alt="" width="120" height="75" data-testid="thumb-3" />
+              </div>
+
+              <!-- lesson block: badge (a teal entry badge) -->
+              <p class="badge-line"><span class="badge" data-testid="entry-badge">ဝင်ရောက်ရန်</span></p>
+
+              <!-- lesson block: night (a small card with a photo) -->
+              <div class="menu-card night" data-testid="night">
+                <img src="/teahouse.svg" alt="" width="80" height="50" />
+                <div>
+                  <h3 class="name">လက်ဖက်ရည်</h3>
+                  <span class="price">1,500 ကျပ်</span>
+                </div>
+              </div>
+
+              <!-- lesson block: cups (four tea cups drawn as inline SVG, transparent around the cup) -->
+              <div class="cups" data-testid="cups">
+                <div class="cup-a" data-testid="cup-a">
+                  <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ခွက် 1">
+                    <path d="M22 14c-4-4 4-6 0-11M32 14c-4-4 4-6 0-11" fill="none" stroke="#c9a27e" stroke-width="2" stroke-linecap="round" />
+                    <ellipse cx="30" cy="56" rx="26" ry="5" fill="#c9a27e" />
+                    <path d="M50 26c11 0 11 15 0 15" fill="none" stroke="#8b5a2b" stroke-width="4" />
+                    <path d="M10 20h40v12c0 12-8 20-20 20s-20-8-20-20z" fill="#8b5a2b" />
+                    <ellipse cx="30" cy="20" rx="20" ry="4" fill="#c9a27e" />
+                  </svg>
+                </div>
+                <div class="cup-b" data-testid="cup-b">
+                  <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ခွက် 2">
+                    <path d="M22 14c-4-4 4-6 0-11M32 14c-4-4 4-6 0-11" fill="none" stroke="#c9a27e" stroke-width="2" stroke-linecap="round" />
+                    <ellipse cx="30" cy="56" rx="26" ry="5" fill="#c9a27e" />
+                    <path d="M50 26c11 0 11 15 0 15" fill="none" stroke="#8b5a2b" stroke-width="4" />
+                    <path d="M10 20h40v12c0 12-8 20-20 20s-20-8-20-20z" fill="#8b5a2b" />
+                    <ellipse cx="30" cy="20" rx="20" ry="4" fill="#c9a27e" />
+                  </svg>
+                </div>
+                <div class="cup-c" data-testid="cup-c">
+                  <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ခွက် 3">
+                    <path d="M22 14c-4-4 4-6 0-11M32 14c-4-4 4-6 0-11" fill="none" stroke="#c9a27e" stroke-width="2" stroke-linecap="round" />
+                    <ellipse cx="30" cy="56" rx="26" ry="5" fill="#c9a27e" />
+                    <path d="M50 26c11 0 11 15 0 15" fill="none" stroke="#8b5a2b" stroke-width="4" />
+                    <path d="M10 20h40v12c0 12-8 20-20 20s-20-8-20-20z" fill="#8b5a2b" />
+                    <ellipse cx="30" cy="20" rx="20" ry="4" fill="#c9a27e" />
+                  </svg>
+                </div>
+                <div class="cup-d" data-testid="cup-d">
+                  <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ခွက် 4">
+                    <path d="M22 14c-4-4 4-6 0-11M32 14c-4-4 4-6 0-11" fill="none" stroke="#c9a27e" stroke-width="2" stroke-linecap="round" />
+                    <ellipse cx="30" cy="56" rx="26" ry="5" fill="#c9a27e" />
+                    <path d="M50 26c11 0 11 15 0 15" fill="none" stroke="#8b5a2b" stroke-width="4" />
+                    <path d="M10 20h40v12c0 12-8 20-20 20s-20-8-20-20z" fill="#8b5a2b" />
+                    <ellipse cx="30" cy="20" rx="20" ry="4" fill="#c9a27e" />
+                  </svg>
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (section D dropped). Section E:
+      # top padding, the full-width photo as the promo card's positioning box,
+      # the solid-cream promo card, the thumbnail row, the teal badge, the
+      # night card and the cups row.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 36 keeps A, B, B2 and C; section D dropped. Section E pins the
+          photo with its promo card on top, the thumbnails, the teal entry badge, the
+          night card and the row of cups. No filter, backdrop filter or shadow on
+          anything the lesson styles.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 36: the photo fills the column and is the positioning box of the
+           promo card (solid cream at first; the lesson makes it frosted glass), three
+           thumbnails in a row, the teal entry badge, the night card (a photo beside
+           the name), and four cups in a row (each cup's box is 64 x 64, so a box
+           shadow has a box to follow). */
+        .page {
+          padding-top: 16px;
+        }
+
+        .photo {
+          position: relative;
+        }
+
+        .photo img {
+          width: 100%;
+        }
+
+        .promo {
+          position: absolute;
+          top: 92px;
+          left: 12px;
+          margin: 0;
+          padding: 8px 14px;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+          line-height: 1.6;
+        }
+
+        .thumbs {
+          display: flex;
+          gap: 12px;
+          margin: 0 0 16px;
+        }
+
+        .thumbs img {
+          display: block;
+          width: 120px;
+          height: auto;
+          border-radius: 8px;
+        }
+
+        .badge-line {
+          margin: 0 0 16px;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 4px 16px;
+          background: #0f766e;
+          font-size: 16px;
+        }
+
+        .night {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .night img {
+          display: block;
+          width: 80px;
+          height: auto;
+          border-radius: 8px;
+        }
+
+        .cups {
+          display: flex;
+          gap: 32px;
+          margin: 20px 0 0;
+        }
+
+        .cups > div {
+          width: 64px;
+          height: 64px;
+        }
+
+        .cups svg {
+          display: block;
+        }
+      styles.css: ""
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — the goal: a frosted card on the photo. Blue = the photo,
+    # violet = the card / backdrop filter, green = sharp text, orange =
+    # filter, red = the functions.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Filter ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-photo,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 360,
+        height: 220,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: a-photo-l,
+        kind: text,
+        x: 320,
+        y: 245,
+        width: 200,
+        height: 36,
+        text: "ဆိုင် ဓာတ်ပုံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-card,
+        kind: rectangle,
+        x: 340,
+        y: 320,
+        width: 230,
+        height: 90,
+        strokeColor: "#6741d9",
+        backgroundColor: "#e5dbff",
+      }
+    - {
+        id: a-card-l,
+        kind: text,
+        x: 370,
+        y: 345,
+        width: 170,
+        height: 36,
+        text: "ယနေ့ အထူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-behind,
+        kind: text,
+        x: 720,
+        y: 270,
+        width: 340,
+        height: 36,
+        text: "နောက်က ပုံ → ဝါး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-sharp,
+        kind: text,
+        x: 720,
+        y: 340,
+        width: 340,
+        height: 36,
+        text: "စာသား → မဝါး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-filter,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 560,
+        height: 36,
+        text: "filter → element ကိုယ်တိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-backdrop,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 600,
+        height: 36,
+        text: "backdrop filter → နောက်က အရာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-funcs,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 560,
+        height: 36,
+        text: "blur · grayscale · brightness …",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — the colour wheel. Black = the wheel, each dot and its legend
+    # line in its own hue (red 0°, green 120°, blue 240°, the teal badge near
+    # 180°, violet = where +90° lands), black = the full circle.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 520,
+        height: 46,
+        text: "Hue rotate · အရောင်ဝိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-wheel,
+        kind: ellipse,
+        x: 360,
+        y: 250,
+        width: 260,
+        height: 260,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-red,
+        kind: ellipse,
+        x: 476,
+        y: 236,
+        width: 28,
+        height: 28,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+      }
+    - {
+        id: b-green,
+        kind: ellipse,
+        x: 589,
+        y: 431,
+        width: 28,
+        height: 28,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: b-blue,
+        kind: ellipse,
+        x: 363,
+        y: 431,
+        width: 28,
+        height: 28,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: b-teal,
+        kind: ellipse,
+        x: 487,
+        y: 496,
+        width: 28,
+        height: 28,
+        strokeColor: "#0c8599",
+        backgroundColor: "#99e9f2",
+      }
+    - {
+        id: b-violet,
+        kind: ellipse,
+        x: 346,
+        y: 377,
+        width: 28,
+        height: 28,
+        strokeColor: "#6741d9",
+        backgroundColor: "#d0bfff",
+      }
+    - {
+        id: b-l-red,
+        kind: text,
+        x: 700,
+        y: 240,
+        width: 300,
+        height: 36,
+        text: "0° · အနီ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-green,
+        kind: text,
+        x: 700,
+        y: 290,
+        width: 300,
+        height: 36,
+        text: "120° · အစိမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-blue,
+        kind: text,
+        x: 700,
+        y: 340,
+        width: 300,
+        height: 36,
+        text: "240° · အပြာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-teal,
+        kind: text,
+        x: 700,
+        y: 410,
+        width: 340,
+        height: 36,
+        text: "badge · 180° နား",
+        strokeColor: "#0c8599",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-turn,
+        kind: text,
+        x: 700,
+        y: 480,
+        width: 340,
+        height: 36,
+        text: "+90° → လေးပုံ တစ်ပုံ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-l-full,
+        kind: text,
+        x: 700,
+        y: 540,
+        width: 340,
+        height: 36,
+        text: "360° → မူလ အရောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C — the filter list runs left to right. Blue = the input cup,
+    # orange = functions, green = what comes out, red = an invalid function,
+    # violet = opacity().
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 560,
+        height: 46,
+        text: "ဘယ်ကနေ ညာကို တစ်ဆင့်ချင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-a-in,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 110,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-a-in-l,
+        kind: text,
+        x: 318,
+        y: 240,
+        width: 80,
+        height: 36,
+        text: "ခွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: c-a-ar1, kind: freedraw, stroke: arrow-right, x: 420, y: 240, width: 50, height: 36 }
+    - {
+        id: c-a-f1,
+        kind: rectangle,
+        x: 480,
+        y: 230,
+        width: 200,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-a-f1-l,
+        kind: text,
+        x: 494,
+        y: 240,
+        width: 175,
+        height: 36,
+        text: "drop-shadow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: c-a-ar2, kind: freedraw, stroke: arrow-right, x: 690, y: 240, width: 50, height: 36 }
+    - {
+        id: c-a-f2,
+        kind: rectangle,
+        x: 750,
+        y: 230,
+        width: 180,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-a-f2-l,
+        kind: text,
+        x: 764,
+        y: 240,
+        width: 155,
+        height: 36,
+        text: "hue-rotate",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-a-out,
+        kind: text,
+        x: 480,
+        y: 296,
+        width: 520,
+        height: 36,
+        text: "→ ခွက်ရော အရိပ်ပါ အရောင် ပြောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-b-in,
+        kind: rectangle,
+        x: 300,
+        y: 360,
+        width: 110,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#d0ebff",
+      }
+    - {
+        id: c-b-in-l,
+        kind: text,
+        x: 318,
+        y: 370,
+        width: 80,
+        height: 36,
+        text: "ခွက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: c-b-ar1, kind: freedraw, stroke: arrow-right, x: 420, y: 370, width: 50, height: 36 }
+    - {
+        id: c-b-f1,
+        kind: rectangle,
+        x: 480,
+        y: 360,
+        width: 180,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-b-f1-l,
+        kind: text,
+        x: 494,
+        y: 370,
+        width: 155,
+        height: 36,
+        text: "hue-rotate",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: c-b-ar2, kind: freedraw, stroke: arrow-right, x: 670, y: 370, width: 50, height: 36 }
+    - {
+        id: c-b-f2,
+        kind: rectangle,
+        x: 730,
+        y: 360,
+        width: 200,
+        height: 56,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffd8a8",
+      }
+    - {
+        id: c-b-f2-l,
+        kind: text,
+        x: 744,
+        y: 370,
+        width: 175,
+        height: 36,
+        text: "drop-shadow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-b-out,
+        kind: text,
+        x: 480,
+        y: 426,
+        width: 520,
+        height: 36,
+        text: "→ ခွက်ပဲ ပြောင်း · အရိပ် အနီ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-invalid,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 640,
+        height: 36,
+        text: "function တစ်ခု မှား → အားလုံး မသက်ရောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-opacity,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 640,
+        height: 36,
+        text: "opacity() → စာရင်းထဲက တစ်ဆင့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board D — an SVG filter through url(#id). Violet = the CSS side, green
+    # = the HTML page with the SVG, blue = the filter element, orange = its
+    # steps, red = the two rules.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "SVG filter",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-svg,
+        kind: rectangle,
+        x: 630,
+        y: 230,
+        width: 470,
+        height: 190,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-svg-l,
+        kind: text,
+        x: 650,
+        y: 245,
+        width: 380,
+        height: 36,
+        text: "HTML ထဲက svg",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-filter,
+        kind: text,
+        x: 650,
+        y: 300,
+        width: 380,
+        height: 36,
+        text: "filter id = duo",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-prims,
+        kind: text,
+        x: 650,
+        y: 360,
+        width: 410,
+        height: 36,
+        text: "feColorMatrix · feTurbulence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-uses,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 560,
+        height: 36,
+        text: "duotone · noise · …",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-css,
+        kind: text,
+        x: 280,
+        y: 300,
+        width: 270,
+        height: 36,
+        text: "filter: url(#duo)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 300,
+        width: 40,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-same,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 620,
+        height: 36,
+        text: "သုံးမယ့် page ထဲမှာပဲ ထားပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-missing,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 620,
+        height: 36,
+        text: "ရှာမတွေ့ရင် → filter မသက်ရောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board E — the closing quiz. Blue = the candidates, green = yes, red =
+    # no, violet = SVG filters.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Filter function ဟုတ်လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 560,
+        height: 40,
+        text: "grayscale · invert · blur",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-q2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 560,
+        height: 40,
+        text: "brightness · flip · multiply",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: e-yes,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 700,
+        height: 36,
+        text: "✓ grayscale · invert · blur · brightness",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-no,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 600,
+        height: 36,
+        text: "✗ flip → function မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-no2,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 600,
+        height: 36,
+        text: "✗ multiply → blend mode",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-url,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 600,
+        height: 36,
+        text: "SVG filter → url(#id)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4136
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: filters-intro
+    chapter: "Filter ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ clip path နဲ့ box တွေကို ပုံသဏ္ဌာန် ဖြတ်ခဲ့ပြီး၊ mask နဲ့
+      ဖြည်းဖြည်း မှိန်သွားအောင် လုပ်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ filter နဲ့ pixel
+      တွေကိုယ်တိုင်ကို ပြောင်းပါမယ်။ ဓာတ်ပုံ ပြင်တဲ့ app တွေထဲက effect တွေလိုပါပဲ။ ဒါပေမဲ့
+      browser က page ပေါ်မှာ တိုက်ရိုက် လုပ်ပေးတာ ဖြစ်လို့၊ ပုံ ဖိုင်ကတော့ ဘာမှ မပြောင်းပါဘူး။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-goal]] ဒီနေ့ ရည်မှန်းချက်ကို ကြည့်ရအောင်။ ဆိုင်ရဲ့ ဓာတ်ပုံပေါ်မှာ ယနေ့ အထူး
+      လို့ ရေးထားတဲ့ card သေးသေး တစ်ခု ရှိပါတယ်။ [[mark:draw-glass]] အဲဒီ card ကို မှန်ဝါးလို
+      ဖြစ်စေချင်ပါတယ်။ card နောက်က ဓာတ်ပုံက ဝါးနေပေမယ့်၊ card ပေါ်က စာသားကတော့ ပြတ်ပြတ်သားသား
+      ကျန်နေရပါမယ်။ [[mark:draw-filter]] property နှစ်ခု သုံးပါမယ်။ filter က element ကို
+      ဝါးအောင်၊ အဖြူအမည်း ဖြစ်အောင် လုပ်ပေးပြီး၊ သူ့ထဲက စာသား အပါအဝင် element တစ်ခုလုံးကို
+      ပြောင်းပါတယ်။ [[mark:draw-backdrop]] backdrop filter ကတော့ element ကိုယ်တိုင် မဟုတ်ဘဲ၊
+      သူ့ နောက်က အရာကိုပဲ ပြောင်းပါတယ်။ [[mark:draw-functions]] property နှစ်ခုလုံးက blur၊
+      grayscale၊ brightness လို filter function တွေကို တူတူ ယူပါတယ်။ ဆိုင်ရဲ့ page ပေါ်မှာ
+      တစ်ခုချင်း စမ်းကြည့်ပြီး၊ နောက်ဆုံးမှာ မှန်ဝါး card ကို လုပ်ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn CSS — Filters"
+        url: "https://web.dev/learn/css/filters"
+      - title: "web.dev Learn CSS — Shadows (filter: drop-shadow)"
+        url: "https://web.dev/learn/css/shadows#drop_shadow"
+      - title: "MDN — filter"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter"
+      - title: "MDN — backdrop-filter"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/backdrop-filter"
+    actions:
+      - id: open-goal-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-goal
+        type: whiteboard.apply
+        at: { mark: draw-goal }
+        upsertIds: [a-photo, a-photo-l, a-card, a-card-l]
+        drawMs: 2400
+      - id: draw-glass
+        type: whiteboard.apply
+        at: { mark: draw-glass }
+        upsertIds: [a-behind, a-sharp]
+        drawMs: 1800
+      - id: draw-filter
+        type: whiteboard.apply
+        at: { mark: draw-filter }
+        upsertIds: [a-filter]
+        drawMs: 1400
+      - id: draw-backdrop
+        type: whiteboard.apply
+        at: { mark: draw-backdrop }
+        upsertIds: [a-backdrop]
+        drawMs: 1400
+      - id: draw-functions
+        type: whiteboard.apply
+        at: { mark: draw-functions }
+        upsertIds: [a-funcs]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-goal-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-photo]] အပေါ်ဆုံးမှာ ဆိုင်ရဲ့ ဓာတ်ပုံ ရှိပြီး၊ figure ထဲမှာ ပုံ
+      ထည့်ထားပါတယ်။ [[mark:select-promo]] ယနေ့ အထူး card ကတော့ ဓာတ်ပုံရဲ့ အပေါ်မှာ တင်ထားတဲ့
+      စာပိုဒ် တစ်ခုပါ။ အခုတော့ သူ့ နောက်ခံက ဖောက်မမြင်ရတဲ့ နို့နှစ်ရောင် ဖြစ်နေပါသေးတယ်။
+      [[mark:select-thumbs]] ဓာတ်ပုံ အောက်မှာ အဲဒီ ပုံကိုပဲ သေးသေးလေး သုံးပုံ ထပ်ထည့်ထားပါတယ်။
+      [[mark:select-badge]] အစိမ်းပြာရောင် badge လည်း ရှိပါတယ်။ [[mark:select-night]] ပြီးတော့
+      ပုံ၊ နာမည်နဲ့ ဈေးနှုန်း ပါတဲ့ card သေးသေး တစ်ခုပါ။ [[mark:select-cups]] အောက်ဆုံးမှာ SVG
+      နဲ့ ဆွဲထားတဲ့ လက်ဖက်ရည် ခွက် လေးခု ရှိပါတယ်။ ခွက် တစ်ခုစီက စတုရန်း box တစ်ခုထဲမှာ
+      ရှိပြီး၊ ခွက်ရဲ့ ပတ်လည်မှာ box က ဖောက်ထွင်း မြင်ရပါတယ်။ [[mark:open-styles]] CSS
+      ဖိုင်ကတော့ အလွတ်ပါ။ [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ filter ဘာမှ
+      မပေးရသေးလို့၊ ပုံတိုင်းက သူ့ မူလ အရောင်အတိုင်း ပေါ်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters"
+        url: "https://web.dev/learn/css/filters"
+      - title: "MDN — filter (initial value none)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter"
+    actions:
+      - id: close-goal-board
+        type: whiteboard.apply
+        at: { mark: close-goal-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-photo
+        type: editor.select
+        at: { mark: select-photo }
+        target: { file: index.html, text: '<figure class="photo">', occurrence: 1 }
+      - id: select-promo
+        type: editor.select
+        at: { mark: select-promo }
+        target: { file: index.html, text: '<p class="promo" data-testid="promo">', occurrence: 1 }
+      - id: select-thumbs
+        type: editor.select
+        at: { mark: select-thumbs }
+        target:
+          { file: index.html, text: '<div class="thumbs" data-testid="thumbs">', occurrence: 1 }
+      - id: select-badge
+        type: editor.select
+        at: { mark: select-badge }
+        target:
+          {
+            file: index.html,
+            text: '<span class="badge" data-testid="entry-badge">',
+            occurrence: 1,
+          }
+      - id: select-night
+        type: editor.select
+        at: { mark: select-night }
+        target:
+          {
+            file: index.html,
+            text: '<div class="menu-card night" data-testid="night">',
+            occurrence: 1,
+          }
+      - id: select-cups
+        type: editor.select
+        at: { mark: select-cups }
+        target: { file: index.html, text: '<div class="cups" data-testid="cups">', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-photo
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: photo-teahouse }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-promo
+        type: expect.preview
+        at: { afterAction: expect-photo }
+        timeoutMs: 5000
+        target: { by: testId, value: promo }
+        textContains: "ယနေ့ အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-cups
+        type: expect.preview
+        at: { afterAction: expect-promo }
+        timeoutMs: 5000
+        target: { by: testId, value: cup-d }
+        attribute: { name: class, value: "cup-d" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-cups }
+
+  - id: grayscale
+    chapter: "ပုံကို အဖြူအမည်း လုပ်ရအောင်"
+    narration: >
+      [[mark:type-gray]] ဓာတ်ပုံကနေ စကြည့်ရအောင်။ filter property က filter function တွေကို
+      စာရင်းလိုက် ယူပါတယ်။ ပုံကို grayscale function တစ်ခုတည်း ပေးပြီး၊ ပမာဏကို 1 ထားပါမယ်။
+      ဓာတ်ပုံကို လိုက်ကြည့်ပါ။ [[mark:after-gray]] ဓာတ်ပုံက မီးခိုးရောင် ဖြစ်သွားပါပြီ။
+      အရောင်တွေ ပျောက်သွားပေမယ့်၊ အလင်းနဲ့ အမှောင်တော့ ကျန်နေပါသေးတယ်။
+      [[mark:select-gray-one]] ဒီ 1 ကို ကြည့်ပါ။ filter function အများစုက ပမာဏကို ဂဏန်း
+      ဒါမှမဟုတ် ရာခိုင်နှုန်းနဲ့ ယူပြီး၊ 1 နဲ့ 100 ရာခိုင်နှုန်းက အတူတူပါပဲ။ grayscale မှာ 0
+      ဆိုရင် ဘာမှ မပြောင်းဘဲ၊ 1 ဆိုရင် အပြည့် ဖြစ်ပါတယ်။ 1 ထက် များရင်လည်း 1 လို့ပဲ ယူပြီး၊
+      ပမာဏ လုံးဝ မရေးရင်လည်း အပြည့် ရပါတယ်။ [[mark:type-half]] သူ့အောက်မှာ ပမာဏ တစ်ဝက်နဲ့
+      ဒုတိယ declaration တစ်ခု ထပ်ထည့်ကြည့်ရအောင်။ [[mark:after-half]] နောက်မှ ရေးတဲ့
+      declaration က နိုင်လို့၊ ဓာတ်ပုံက တစ်ဝက်ပဲ မီးခိုးရောင် ဖြစ်တော့ပါတယ်။ အရောင်တွေ
+      ရှိနေပေမယ့် ဖျော့နေပါတယ်။ [[mark:type-sepia]] နောက်တစ်ခုက အညိုရောင် နွေးနွေး ပေးတဲ့
+      sepia function ပါ။ [[mark:after-sepia]] အခု နှစ်ပေါင်းများစွာက ရန်ကုန် ဓာတ်ပုံဟောင်း
+      တစ်ပုံလို ဖြစ်သွားပါပြီ။ [[mark:type-none]] filter ရဲ့ initial value က none ပါ။ အဲဒါကို
+      နောက်ဆုံးမှာ ရေးကြည့်ရအောင်။ [[mark:after-none]] none က filter အားလုံးကို ပိတ်ပေးလို့၊
+      ဓာတ်ပုံရဲ့ အရောင်တွေ ပြန်ရောက်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Filters: the filter property"
+        url: "https://web.dev/learn/css/filters#the_filter_property"
+      - title: "web.dev Learn CSS — Filters: grayscale"
+        url: "https://web.dev/learn/css/filters#grayscale"
+      - title: "web.dev Learn CSS — Filters: sepia"
+        url: "https://web.dev/learn/css/filters#sepia"
+      - title: "MDN — grayscale() (0 to 1 or a percentage; values over 100% are clamped; default 1)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/grayscale"
+      - title: "MDN — sepia()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/sepia"
+      - title: "Filter Effects Module Level 1 — filter functions"
+        url: "https://drafts.fxtf.org/filter-effects-1/#filter-functions"
+    actions:
+      - id: type-gray
+        type: editor.type
+        at: { mark: type-gray }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".photo img {\n  filter: grayscale(1);\n}\n"
+      - id: expect-gray
+        type: expect.preview
+        at: { mark: after-gray }
+        timeoutMs: 4000
+        target: { by: testId, value: photo-teahouse }
+        attribute: { name: alt, value: "ဆိုင်အတွင်းပိုင်း" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-gray-one
+        type: editor.select
+        at: { mark: select-gray-one }
+        target: { file: styles.css, text: "grayscale(1)", occurrence: 1 }
+      - id: type-half
+        type: editor.type
+        at: { mark: type-half }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: grayscale(1);\n", occurrence: 1 }
+        text: "  filter: grayscale(0.5);\n"
+      - id: expect-half
+        type: expect.preview
+        at: { mark: after-half }
+        timeoutMs: 4000
+        target: { by: testId, value: gallery }
+        textContains: "ဆိုင်အတွင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-sepia
+        type: editor.type
+        at: { mark: type-sepia }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: grayscale(0.5);\n", occurrence: 1 }
+        text: "  filter: sepia(1);\n"
+      - id: expect-sepia
+        type: expect.preview
+        at: { mark: after-sepia }
+        timeoutMs: 4000
+        target: { by: testId, value: photo-teahouse }
+        attribute: { name: src, value: "/teahouse.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-none
+        type: editor.type
+        at: { mark: type-none }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: sepia(1);\n", occurrence: 1 }
+        text: "  filter: none;\n"
+      - id: expect-none
+        type: expect.preview
+        at: { mark: after-none }
+        timeoutMs: 4000
+        target: { by: testId, value: promo }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: tones
+    chapter: "Brightness၊ contrast နဲ့ saturate"
+    narration: >
+      [[mark:type-bright]] ပုံသေးသေးတွေနဲ့ function နောက်ထပ် သုံးခုကို ကြည့်ပါမယ်။ ပထမ ပုံကို
+      lesson 4 မှာ တွေ့ခဲ့တဲ့ nth-child နဲ့ ရွေးပြီး၊ brightness ကို 0.6 ပေးပါမယ်။
+      [[mark:after-bright]] ပုံက ပိုမှောင်သွားပါပြီ။ brightness မှာ 1 ဆိုရင် ပုံက မူလအတိုင်း
+      ရှိပြီး၊ 0 ဆိုရင် အမည်းရောင် လုံးလုံး ဖြစ်ပါတယ်။ 1 ထက် များရင်တော့ ပိုလင်းလာပါတယ်။
+      [[mark:type-contrast]] ဒုတိယ ပုံကိုတော့ contrast 1.6 ပေးပါမယ်။ contrast က ပုံထဲက လင်းတဲ့
+      အပိုင်းနဲ့ မှောင်တဲ့ အပိုင်း ဘယ်လောက် ကွာမလဲ ဆိုတာ ဆုံးဖြတ်ပါတယ်။
+      [[mark:after-contrast]] လင်းတဲ့ နေရာတွေ ပိုလင်းပြီး မှောင်တဲ့ နေရာတွေ ပိုမှောင်လာလို့၊
+      အစွန်းတွေ ပိုပြတ်သားလာပါတယ်။ 1 ထက် နည်းရင်တော့ contrast လျော့သွားပြီး၊ 0 မှာ
+      ပုံတစ်ပုံလုံး မီးခိုးရောင် တစ်ရောင်တည်း ဖြစ်သွားပါတယ်။ [[mark:type-saturate]] တတိယ
+      ပုံကိုတော့ saturate 2 ပေးပါမယ်။ saturate က အရောင် ဘယ်လောက် ရင့်မလဲ ဆိုတာ ဆုံးဖြတ်ပြီး၊ 0
+      ဆိုရင် grayscale လိုပဲ အရောင် အားလုံး ပျောက်သွားပါတယ်။ [[mark:after-saturate]] အရောင်တွေ
+      နှစ်ဆ ရင့်သွားလို့၊ အညိုရောင် ကြမ်းပြင်က လိမ္မော်ရောင် တောက်တောက် ဖြစ်သွားပါပြီ။
+      brightness၊ contrast နဲ့ saturate မှာ အမြင့်ဆုံး ကန့်သတ်ချက် မရှိပေမယ့်၊ grayscale နဲ့
+      sepia ကတော့ 1 မှာ ရပ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: brightness"
+        url: "https://web.dev/learn/css/filters#brightness"
+      - title: "web.dev Learn CSS — Filters: contrast"
+        url: "https://web.dev/learn/css/filters#contrast"
+      - title: "web.dev Learn CSS — Filters: saturate"
+        url: "https://web.dev/learn/css/filters#saturate"
+      - title: "MDN — brightness() (0 is black, 1 unchanged, no upper limit)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/brightness"
+      - title: "MDN — contrast() (0 is grey, below 1 less, above 1 more)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/contrast"
+      - title: "MDN — saturate() (0 is fully desaturated, values over 1 over-saturate)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/saturate"
+    actions:
+      - id: type-bright
+        type: editor.type
+        at: { mark: type-bright }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: none;\n}\n", occurrence: 1 }
+        text: "\n.thumbs img:nth-child(1) {\n  filter: brightness(0.6);\n}\n"
+      - id: expect-bright
+        type: expect.preview
+        at: { mark: after-bright }
+        timeoutMs: 4000
+        target: { by: testId, value: thumb-1 }
+        attribute: { name: src, value: "/teahouse.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-contrast
+        type: editor.type
+        at: { mark: type-contrast }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: brightness(0.6);\n}\n", occurrence: 1 }
+        text: "\n.thumbs img:nth-child(2) {\n  filter: contrast(1.6);\n}\n"
+      - id: expect-contrast
+        type: expect.preview
+        at: { mark: after-contrast }
+        timeoutMs: 4000
+        target: { by: testId, value: thumb-2 }
+        attribute: { name: src, value: "/teahouse.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-saturate
+        type: editor.type
+        at: { mark: type-saturate }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: contrast(1.6);\n}\n", occurrence: 1 }
+        text: "\n.thumbs img:nth-child(3) {\n  filter: saturate(2);\n}\n"
+      - id: expect-saturate
+        type: expect.preview
+        at: { mark: after-saturate }
+        timeoutMs: 4000
+        target: { by: testId, value: thumb-3 }
+        attribute: { name: src, value: "/teahouse.svg" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: hue-wheel
+    chapter: "အရောင်ဝိုင်းကို လှည့်ရအောင်"
+    narration: >
+      [[mark:open-wheel]] နောက် function က lesson 9 မှာ တွေ့ခဲ့တဲ့ hue နဲ့ အလုပ်လုပ်ပါတယ်။ hue
+      က အရောင်ဝိုင်းပေါ်က နေရာကို ဒီဂရီနဲ့ ပြတာပါ။ [[mark:draw-wheel]] 0 ဒီဂရီက အနီ၊ 120 က
+      အစိမ်း၊ 240 က အပြာ ဖြစ်ပါတယ်။ [[mark:draw-teal]] ကိုယ့် badge ကတော့ 180 ဒီဂရီ နားက
+      အစိမ်းပြာရောင်ပါ။ [[mark:draw-turn]] hue rotate function က element ရဲ့ အရောင်တိုင်းကို
+      ဒီ ဝိုင်းပေါ်မှာ ကိုယ်ပေးတဲ့ ထောင့်အတိုင်း လှည့်ပေးပါတယ်။ ဥပမာ 90 ဒီဂရီ ဆိုရင် လေးပုံ
+      တစ်ပုံ လှည့်တာပါ။ [[mark:draw-full]] 360 ဒီဂရီ တစ်ပတ်ပြည့် လှည့်ရင်တော့ အရောင်တိုင်း မူလ
+      နေရာကို ပြန်ရောက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: hue-rotate"
+        url: "https://web.dev/learn/css/filters#hue-rotate"
+      - title: "web.dev Learn CSS — Color (hue in HSL)"
+        url: "https://web.dev/learn/css/color#hsl"
+      - title: "MDN — hue-rotate()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/hue-rotate"
+    actions:
+      - id: open-wheel
+        type: whiteboard.apply
+        at: { mark: open-wheel }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-wheel
+        type: whiteboard.apply
+        at: { mark: draw-wheel }
+        upsertIds: [b-wheel, b-red, b-l-red, b-green, b-l-green, b-blue, b-l-blue]
+        drawMs: 3200
+      - id: draw-teal
+        type: whiteboard.apply
+        at: { mark: draw-teal }
+        upsertIds: [b-teal, b-l-teal]
+        drawMs: 1400
+      - id: draw-turn
+        type: whiteboard.apply
+        at: { mark: draw-turn }
+        upsertIds: [b-violet, b-l-turn]
+        drawMs: 1400
+      - id: draw-full
+        type: whiteboard.apply
+        at: { mark: draw-full }
+        upsertIds: [b-l-full]
+        drawMs: 1200
+
+  - id: hue-rotate
+    narration: >
+      [[mark:close-wheel]] badge မှာ စမ်းကြည့်ရအောင်။ [[mark:type-hue90]] badge အတွက် rule
+      အသစ်နဲ့ သူ့ အရောင်အားလုံးကို 90 ဒီဂရီ၊ အရောင်ဝိုင်းရဲ့ လေးပုံ တစ်ပုံ လှည့်ကြည့်ရအောင်။
+      [[mark:after-hue90]] badge က ခရမ်းရောင် ဖြစ်သွားပါပြီ။ [[mark:type-hue180]] အောက်မှာ
+      တစ်ဝက် လှည့်တဲ့ 180 ဒီဂရီကို စမ်းကြည့်ရအောင်။ [[mark:after-hue180]] အခု ပန်းနီရောင်ပါ။
+      ဝိုင်းပေါ်မှာ အစိမ်းပြာရောင်ရဲ့ တစ်ဖက်ခြမ်းက အရောင် ဖြစ်ပါတယ်။ [[mark:select-deg]] ဒီ
+      ထောင့်ကို ကြည့်ပါ။ ဒီဂရီ ဒါမှမဟုတ် turn လို unit နဲ့ ရေးရပြီး၊ အနုတ် ပေးရင်
+      ပြောင်းပြန်ဘက်ကို လှည့်ပါတယ်။ အဖြူနဲ့ မီးခိုးရောင်မှာ လှည့်စရာ hue မရှိလို့၊ အဖြူရောင်
+      စာသားကတော့ အဖြူအတိုင်း ကျန်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: hue-rotate"
+        url: "https://web.dev/learn/css/filters#hue-rotate"
+      - title: "MDN — hue-rotate() (an angle; 360deg is a full turn; negative values allowed)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/hue-rotate"
+    actions:
+      - id: close-wheel
+        type: whiteboard.apply
+        at: { mark: close-wheel }
+        open: false
+      - id: type-hue90
+        type: editor.type
+        at: { mark: type-hue90 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: saturate(2);\n}\n", occurrence: 1 }
+        text: "\n.badge {\n  filter: hue-rotate(90deg);\n}\n"
+      - id: expect-hue90
+        type: expect.preview
+        at: { mark: after-hue90 }
+        timeoutMs: 4000
+        target: { by: testId, value: entry-badge }
+        textContains: "ဝင်ရောက်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hue180
+        type: editor.type
+        at: { mark: type-hue180 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: hue-rotate(90deg);\n", occurrence: 1 }
+        text: "  filter: hue-rotate(180deg);\n"
+      - id: expect-hue180
+        type: expect.preview
+        at: { mark: after-hue180 }
+        timeoutMs: 4000
+        target: { by: testId, value: entry-badge }
+        attribute: { name: class, value: "badge" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-deg
+        type: editor.select
+        at: { mark: select-deg }
+        target: { file: styles.css, text: "180deg", occurrence: 1 }
+
+  - id: invert
+    chapter: "Invert နဲ့ dark mode"
+    narration: >
+      [[mark:scroll-night]] card သေးသေးဆီ ဆင်းသွားရအောင်။ [[mark:type-invert]] ဒီ card အတွက်
+      ညဘက် ပုံစံ တစ်ခု အမြန် လိုချင်တယ် ဆိုပါစို့။ invert function ကို 1 နဲ့ စမ်းကြည့်ရအောင်။
+      [[mark:after-invert]] အဖြူရောင် card က အမည်းရောင် ဖြစ်ပြီး၊ အရောင်ရင့် စာလုံးတွေက
+      လင်းသွားလို့ ပထမတော့ dark mode လို ထင်ရပါတယ်။ ဒါပေမဲ့ ပုံကို ကြည့်ပါ။ ဓာတ်ပုံ ဖလင်လို
+      ပြောင်းပြန် ဖြစ်နေပြီး၊ အညိုရောင် ဈေးနှုန်းကလည်း အပြာဖျော့ရောင် ဖြစ်သွားပါတယ်။
+      [[mark:explain-invert]] ဒါကြောင့် invert က dark mode မဟုတ်ပါဘူး။ သူက ဓာတ်ပုံတွေ၊
+      ဆိုင်ရဲ့ အရောင်တွေ အပါအဝင် အရောင်တိုင်းကို ပြောင်းပြန် လှန်တာပါ။ တကယ့် dark mode မှာတော့
+      lesson 11 မှာ တွေ့ခဲ့တဲ့ custom property တွေနဲ့ အရောင်အသစ်တွေ ရွေးပေးရပါတယ်။ invert
+      ကလည်း grayscale လို 1 မှာ ရပ်ပြီး၊ 0.5 မှာ အရောင်တိုင်း အလယ်အလတ် မီးခိုးရောင်
+      တစ်ရောင်တည်း ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: invert"
+        url: "https://web.dev/learn/css/filters#invert"
+      - title: "MDN — invert() (0 to 1, clamped; default 1)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/invert"
+    actions:
+      - id: scroll-night
+        type: preview.scroll
+        at: { mark: scroll-night }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-invert
+        type: editor.type
+        at: { mark: type-invert }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: hue-rotate(180deg);\n}\n", occurrence: 1 }
+        text: "\n.night {\n  filter: invert(1);\n}\n"
+      - id: expect-invert
+        type: expect.preview
+        at: { mark: after-invert }
+        timeoutMs: 4000
+        target: { by: testId, value: night }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: chaining
+    chapter: "Function တွေရဲ့ အစဉ်"
+    narration: >
+      [[mark:type-cup-a]] အခု ခွက်တွေဆီ သွားရအောင်။ filter တစ်ခုထဲမှာ function အများကြီးကို
+      space နဲ့ ခြားပြီး ရေးလို့ ရပါတယ်။ ပထမ ခွက်မှာ အစွန်း ပြတ်ပြတ် အနီရောင် drop shadow
+      တစ်ခု ရေးပြီး၊ သူ့နောက်မှာ 120 ဒီဂရီ hue rotate ထည့်ပါမယ်။ အရိပ်ကို လိုက်ကြည့်ပါ။
+      [[mark:after-cup-a]] ခွက်က အစိမ်းရောင် ဖြစ်သွားပြီး၊ အရိပ်ကလည်း အနီ မဟုတ်တော့ဘဲ
+      အစိမ်းရောင် ဖြစ်သွားပါပြီ။ [[mark:type-cup-b]] ဒုတိယ ခွက်ကိုတော့ function နှစ်ခု တူတူကို
+      ပြောင်းပြန် အစဉ်နဲ့ ပေးပါမယ်။ [[mark:after-cup-b]] ဒီ ခွက်လည်း အစိမ်းရောင်
+      ဖြစ်သွားပေမယ့်၊ အရိပ်ကတော့ အနီရောင်အတိုင်း ကျန်ပါတယ်။ [[mark:open-pipeline]] ဘာကြောင့်
+      ကွာသွားတာလဲ။ function တွေက ဘယ်ကနေ ညာကို အစဉ်လိုက် အလုပ်လုပ်ပြီး၊ တစ်ခုစီက သူ့ရှေ့က
+      function ထုတ်ပေးခဲ့တဲ့ ပုံပေါ်မှာ ဆက်လုပ်လို့ပါ။ [[mark:draw-row-a]] ပထမ ခွက်မှာ
+      အရိပ်ကို အရင် ထည့်ပါတယ်။ ပြီးမှ အရိပ် အပါအဝင် ပုံတစ်ခုလုံးကို အရောင်ဝိုင်းပေါ်မှာ
+      လှည့်လိုက်တာပါ။ [[mark:draw-row-b]] ဒုတိယ ခွက်မှာတော့ ခွက်ကိုပဲ အရင် လှည့်ပြီး၊ အနီရောင်
+      အရိပ်ကို နောက်မှ ထည့်လို့ သူ့ အရောင်ကို ဘာကမှ မပြောင်းပါဘူး။ [[mark:draw-invalid]]
+      စာရင်းထဲမှာ function တစ်ခုတည်း မှားနေရင်တောင်၊ ဥပမာ မရှိတဲ့ နာမည် တစ်ခု ပါနေရင်တောင်၊
+      browser က declaration တစ်ခုလုံးကို ပစ်လိုက်ပါတယ်။ ဒါကြောင့် ကျန်တဲ့ function တွေလည်း
+      အလုပ်မလုပ်တော့ပါဘူး။ [[mark:draw-opacity]] opacity function လည်း ရှိပါတယ်။ သူက opacity
+      property လိုပဲ 0 မှာ မမြင်ရဘဲ၊ 1 မှာ အပြည့် မြင်ရပါတယ်။ ကွာတာက သူက ဒီ စာရင်းထဲက အဆင့်
+      တစ်ဆင့် ဖြစ်လို့၊ တခြား function တွေနဲ့ အစဉ်လိုက် အလုပ်လုပ်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Filters: the filter property (several functions)"
+        url: "https://web.dev/learn/css/filters#the_filter_property"
+      - title: "web.dev Learn CSS — Filters: opacity"
+        url: "https://web.dev/learn/css/filters#opacity"
+      - title: "MDN — filter (functions apply in order; an invalid function drops the declaration)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter"
+      - title: "MDN — opacity() filter function"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/opacity"
+      - title: "Filter Effects Module Level 1 — the filter property (a filter function list)"
+        url: "https://drafts.fxtf.org/filter-effects-1/#FilterProperty"
+    actions:
+      - id: type-cup-a
+        type: editor.type
+        at: { mark: type-cup-a }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: invert(1);\n}\n", occurrence: 1 }
+        text: "\n.cup-a {\n  filter: drop-shadow(4px 4px 0 #b23a2b) hue-rotate(120deg);\n}\n"
+      - id: expect-cup-a
+        type: expect.preview
+        at: { mark: after-cup-a }
+        timeoutMs: 4000
+        target: { by: testId, value: cup-a }
+        attribute: { name: class, value: "cup-a" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-cup-b
+        type: editor.type
+        at: { mark: type-cup-b }
+        cadence: line-by-line
+        target: { file: styles.css, after: "hue-rotate(120deg);\n}\n", occurrence: 1 }
+        text: "\n.cup-b {\n  filter: hue-rotate(120deg) drop-shadow(4px 4px 0 #b23a2b);\n}\n"
+      - id: expect-cup-b
+        type: expect.preview
+        at: { mark: after-cup-b }
+        timeoutMs: 4000
+        target: { by: testId, value: cup-b }
+        attribute: { name: class, value: "cup-b" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-pipeline
+        type: whiteboard.apply
+        at: { mark: open-pipeline }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-row-a
+        type: whiteboard.apply
+        at: { mark: draw-row-a }
+        upsertIds: [c-a-in, c-a-in-l, c-a-ar1, c-a-f1, c-a-f1-l, c-a-ar2, c-a-f2, c-a-f2-l, c-a-out]
+        drawMs: 3200
+      - id: draw-row-b
+        type: whiteboard.apply
+        at: { mark: draw-row-b }
+        upsertIds: [c-b-in, c-b-in-l, c-b-ar1, c-b-f1, c-b-f1-l, c-b-ar2, c-b-f2, c-b-f2-l, c-b-out]
+        drawMs: 3200
+      - id: draw-invalid
+        type: whiteboard.apply
+        at: { mark: draw-invalid }
+        upsertIds: [c-invalid]
+        drawMs: 1600
+      - id: draw-opacity
+        type: whiteboard.apply
+        at: { mark: draw-opacity }
+        upsertIds: [c-opacity]
+        drawMs: 1600
+
+  - id: drop-shadow
+    chapter: "Drop shadow နဲ့ box shadow"
+    narration: >
+      [[mark:close-pipeline]] lesson 34 မှာ drop shadow က မြင်ရတဲ့ ပုံသဏ္ဌာန်ကို လိုက်တယ်လို့
+      ပြောခဲ့ပါတယ်။ နောက်ဆုံး ခွက် နှစ်ခုမှာ ဖောက်ထွင်း မြင်ရတဲ့ အရိပ် ပျော့ပျော့ တူတူကို
+      ပေးပြီး၊ box shadow နဲ့ နှိုင်းယှဉ်ကြည့်ရအောင်။ [[mark:type-cup-c]] တတိယ ခွက်ကို box
+      shadow ပေးပါမယ်။ [[mark:after-cup-c]] အရိပ်က လေးထောင့် ဖြစ်နေပါတယ်။ box ထဲမှာ ဘာမှ
+      မရှိတဲ့ နေရာမှာတောင် SVG ပတ်လည်က box ကို လိုက်လို့ပါ။ [[mark:type-cup-d]] လေးခုမြောက်
+      ခွက်ကိုတော့ တန်ဖိုး တူတူကို drop shadow function နဲ့ ပေးပါမယ်။ [[mark:after-cup-d]] ဒီ
+      အရိပ်ကတော့ လေးထောင့် မဟုတ်ဘဲ၊ ခွက်၊ လက်ကိုင်နဲ့ ပန်းကန်ပြားရဲ့ ပုံသဏ္ဌာန်အတိုင်း ကပ်ပြီး
+      ကျပါတယ်။ drop shadow ကို တကယ် ဆွဲထားတဲ့ pixel တွေကနေ ထုတ်လို့၊ ဖောက်ထွင်း မြင်ရတဲ့ pixel
+      တွေမှာ အရိပ် မကျပါဘူး။ [[mark:select-drop]] ဒီ drop shadow ထဲက တန်ဖိုးတွေကို ကြည့်ပါ။ x
+      နဲ့ y offset၊ မပေးလည်း ရတဲ့ blur နဲ့ အရောင် ပါပါတယ်။ box shadow နဲ့ မတူတာက spread နဲ့
+      inset မရှိဘဲ၊ function တစ်ခုက အရိပ် တစ်ခုပဲ ဆွဲပါတယ်။ [[mark:explain-multi]] အရိပ်
+      ပိုလိုချင်ရင် drop shadow function တွေကို box shadow မှာလို comma နဲ့ မဟုတ်ဘဲ space နဲ့
+      ခြားပြီး ထပ်ရေးပါ။ တစ်ခုစီက ရှေ့က ရလဒ်ပေါ်မှာ အလုပ်လုပ်လို့၊ ဒုတိယ အရိပ်က ခွက်ကနေရော ပထမ
+      အရိပ်ကနေပါ ကျပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: drop-shadow"
+        url: "https://web.dev/learn/css/filters#drop-shadow"
+      - title: "web.dev Learn CSS — Shadows: drop shadow"
+        url: "https://web.dev/learn/css/shadows#drop_shadow"
+      - title: "MDN — drop-shadow() (follows the alpha mask; no spread or inset)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/drop-shadow"
+      - title: "MDN — box-shadow"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-shadow"
+    actions:
+      - id: close-pipeline
+        type: whiteboard.apply
+        at: { mark: close-pipeline }
+        open: false
+      - id: type-cup-c
+        type: editor.type
+        at: { mark: type-cup-c }
+        cadence: line-by-line
+        target: { file: styles.css, after: "drop-shadow(4px 4px 0 #b23a2b);\n}\n", occurrence: 1 }
+        text: "\n.cup-c {\n  box-shadow: 4px 6px 6px rgb(0 0 0 / 35%);\n}\n"
+      - id: expect-cup-c
+        type: expect.preview
+        at: { mark: after-cup-c }
+        timeoutMs: 4000
+        target: { by: testId, value: cup-c }
+        attribute: { name: class, value: "cup-c" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-cup-d
+        type: editor.type
+        at: { mark: type-cup-d }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  box-shadow: 4px 6px 6px rgb(0 0 0 / 35%);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.cup-d {\n  filter: drop-shadow(4px 6px 6px rgb(0 0 0 / 35%));\n}\n"
+      - id: expect-cup-d
+        type: expect.preview
+        at: { mark: after-cup-d }
+        timeoutMs: 4000
+        target: { by: testId, value: cup-d }
+        attribute: { name: class, value: "cup-d" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-drop
+        type: editor.select
+        at: { mark: select-drop }
+        target:
+          { file: styles.css, text: "drop-shadow(4px 6px 6px rgb(0 0 0 / 35%))", occurrence: 1 }
+
+  - id: svg-filters
+    chapter: "SVG filter"
+    narration: >
+      [[mark:open-svg]] filter function တွေ အပြင်၊ filter property က SVG filter ကိုလည်း
+      သုံးလို့ ရပါတယ်။ [[mark:draw-svg-box]] ကိုယ့် HTML page ထဲမှာ id ပါတဲ့ SVG filter
+      element တစ်ခု ထည့်ထားရပါတယ်။ [[mark:draw-svg-prims]] အဲဒီ ထဲမှာ effect ကို အဆင့်
+      သေးသေးတွေနဲ့ တည်ဆောက်ပါတယ်။ အရောင် ပြောင်းတဲ့ အဆင့် တစ်ခုက ဓာတ်ပုံကို အရောင်
+      နှစ်ရောင်တည်း ဖြစ်တဲ့ duotone ပြောင်းပေးနိုင်ပြီး၊ နောက် အဆင့် တစ်ခုက အစက်အပြောက်
+      ကြမ်းကြမ်း ထည့်ပေးနိုင်ပါတယ်။ CSS function တွေထက် အများကြီး ပိုလုပ်နိုင်ပါတယ်။
+      [[mark:draw-svg-url]] CSS ထဲကနေ url နဲ့ သူ့ id ကို ညွှန်ပြီး သုံးပါတယ်။
+      [[mark:draw-svg-rules]] SVG ကို filter သုံးမယ့် page ထဲမှာပဲ ထားပါ။ ဖိုင် သပ်သပ်ထဲက
+      filter ကို browser တိုင်းက မသုံးနိုင်လို့ပါ။ browser က filter ကို ရှာမတွေ့ရင်လည်း filter
+      မသက်ရောက်ပါဘူး။ ဒီနေ့ board ပေါ်မှာပဲ ပုံကြမ်း ဆွဲပြတာ ဖြစ်လို့၊ ကိုယ့် editor ထဲမှာ
+      စမ်းကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Filters: url"
+        url: "https://web.dev/learn/css/filters#url"
+      - title: "MDN — filter (url() to an SVG filter element)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter#url"
+      - title: "MDN — SVG <filter> element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/SVG/Element/filter"
+      - title: "Filter Effects Module Level 1 — the filter property (a missing reference disables the filter)"
+        url: "https://drafts.fxtf.org/filter-effects-1/#FilterProperty"
+    actions:
+      - id: open-svg
+        type: whiteboard.apply
+        at: { mark: open-svg }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-svg-box
+        type: whiteboard.apply
+        at: { mark: draw-svg-box }
+        upsertIds: [d-svg, d-svg-l, d-filter]
+        drawMs: 2000
+      - id: draw-svg-prims
+        type: whiteboard.apply
+        at: { mark: draw-svg-prims }
+        upsertIds: [d-prims, d-uses]
+        drawMs: 2000
+      - id: draw-svg-url
+        type: whiteboard.apply
+        at: { mark: draw-svg-url }
+        upsertIds: [d-css, d-arrow]
+        drawMs: 1600
+      - id: draw-svg-rules
+        type: whiteboard.apply
+        at: { mark: draw-svg-rules }
+        upsertIds: [d-same, d-missing]
+        drawMs: 2000
+
+  - id: blur
+    chapter: "ပုံကို ဝါးရအောင်"
+    narration: >
+      [[mark:close-svg]] နောက်ဆုံး function ဖြစ်တဲ့ blur အတွက် ဓာတ်ပုံဆီ ပြန်သွားရအောင်။
+      [[mark:scroll-photo]] ဒီတစ်ခါ filter ကို ဓာတ်ပုံ၊ card နဲ့ ပုံ အောက်က စာတန်း ပါတဲ့
+      figure တစ်ခုလုံးမှာ ပေးပါမယ်။ [[mark:type-blur]] rule အသစ်နဲ့ figure ကို 4 pixel blur
+      ပေးပါမယ်။ card ပေါ်က စာသားကို လိုက်ကြည့်ပါ။ [[mark:after-blur]] အားလုံး ဝါးသွားပါပြီ။
+      card ပေါ်က စာသားနဲ့ ပုံ အောက်က စာတန်းတောင် ဝါးနေပါတယ်။ filter က element နဲ့ သူ့ထဲက
+      အရာအားလုံးကို သက်ရောက်ပြီး၊ child တစ်ခုက သူ့အတွက် သီးသန့် ပိတ်လို့ မရပါဘူး။
+      [[mark:select-blur-len]] ဒီ 4 pixel ကို ကြည့်ပါ။ blur ကို pixel လို unit ပါတဲ့ အရှည်နဲ့
+      ပေးရပြီး၊ အဲဒါက ဝါးတဲ့ အချင်းဝက်ပါ။ ရာခိုင်နှုန်းနဲ့ အနုတ် တန်ဖိုးတော့ ပေးလို့ မရပါဘူး။
+      အချင်းဝက် ကြီးလေ browser က ဆွဲရတာ ပိုပင်ပန်းလေ ဖြစ်ပြီး၊ ဝါးတာက element ရဲ့ အစွန်းကို
+      နည်းနည်း ကျော်ထွက်ပါတယ်။ [[mark:explain-stacking]] none မဟုတ်တဲ့ filter တိုင်းက element
+      ကို lesson 23 မှာ တွေ့ခဲ့တဲ့ stacking context အသစ် ဖြစ်စေပါတယ်။ lesson 14 မှာ
+      ပြောခဲ့သလို fixed child တွေရဲ့ containing block လည်း ဖြစ်သွားပါတယ်။
+      [[mark:type-blur-off]] စာသား ဝါးနေတာကို မလိုချင်လို့၊ ဒီ filter ကို none နဲ့
+      ပြန်ပိတ်ကြည့်ရအောင်။ [[mark:after-blur-off]] အားလုံး ပြန်ပြတ်သားသွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Filters: blur"
+        url: "https://web.dev/learn/css/filters#blur"
+      - title: "MDN — blur() (a length; no percentages)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/blur"
+      - title: "MDN — filter (creates a stacking context and a containing block)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter"
+      - title: "Filter Effects Module Level 1 — stacking context and containing block"
+        url: "https://drafts.fxtf.org/filter-effects-1/#FilterProperty"
+    actions:
+      - id: close-svg
+        type: whiteboard.apply
+        at: { mark: close-svg }
+        open: false
+      - id: scroll-photo
+        type: preview.scroll
+        at: { mark: scroll-photo }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-blur
+        type: editor.type
+        at: { mark: type-blur }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  filter: drop-shadow(4px 6px 6px rgb(0 0 0 / 35%));\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.photo {\n  filter: blur(4px);\n}\n"
+      - id: expect-blur
+        type: expect.preview
+        at: { mark: after-blur }
+        timeoutMs: 4000
+        target: { by: testId, value: promo }
+        textContains: "ယနေ့ အထူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-blur-len
+        type: editor.select
+        at: { mark: select-blur-len }
+        target: { file: styles.css, text: "blur(4px)", occurrence: 1 }
+      - id: type-blur-off
+        type: editor.type
+        at: { mark: type-blur-off }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: blur(4px);\n", occurrence: 1 }
+        text: "  filter: none;\n"
+      - id: expect-blur-off
+        type: expect.preview
+        at: { mark: after-blur-off }
+        timeoutMs: 4000
+        target: { by: testId, value: gallery }
+        textContains: "ဆိုင်အတွင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: backdrop
+    chapter: "မှန်ဝါး card"
+    narration: >
+      [[mark:type-backdrop]] အခု ရည်မှန်းချက်ဆီ ရောက်ပါပြီ။ backdrop filter က function တွေ
+      တူတူ ယူပေမယ့်၊ element ရဲ့ border အတွင်းမှာ သူ့ နောက်က ဆွဲထားတဲ့ အရာကိုပဲ filter
+      လုပ်ပါတယ်။ card ကို 8 pixel blur ပေးကြည့်ရအောင်။ [[mark:after-backdrop]] ဘာမှ
+      မပြောင်းပါဘူး။ card ရဲ့ နောက်ခံက ဖောက်မမြင်ရတဲ့ နို့နှစ်ရောင် ဖြစ်နေတော့၊ နောက်က အရာကို
+      မမြင်ရပါဘူး။ [[mark:type-glass]] lesson 9 မှာ တွေ့ခဲ့တဲ့ rgb နဲ့ alpha ကို သုံးပြီး၊
+      နောက်ခံကို 35 ရာခိုင်နှုန်းပဲ မြင်ရတဲ့ အဖြူရောင် ပေးပါမယ်။ card ကို လိုက်ကြည့်ပါ။
+      [[mark:after-glass]] အခု မှန်ဝါး ဖြစ်သွားပါပြီ။ card နောက်က လက်ဖက်ရည် ခွက်တွေနဲ့ စားပွဲက
+      ဝါးနေပြီး၊ အပေါ်က စာသားကတော့ ပြတ်ပြတ်သားသား ကျန်ပါတယ်။ ဝါးတာကလည်း card ရဲ့
+      ထောင့်ဝိုင်းတွေအတိုင်း လိုက်ပါတယ်။ [[mark:explain-support]] backdrop filter ကို 2024
+      ခုနှစ်ကစပြီး browser အဓိက အားလုံးမှာ သုံးလို့ ရနေပါပြီ။ အရင်က Safari က webkit prefix
+      ပါမှ နားလည်ခဲ့လို့၊ prefix မပါတဲ့ ဒီ code က iPhone အဟောင်းတွေမှာ ဝါးတာ မပေါ်ပါဘူး။
+      ဒါကြောင့် ဖောက်ထွင်း မြင်ရတဲ့ အဖြူရောင် နောက်ခံကို ထားခဲ့တာပါ။ blur အလုပ်မလုပ်ရင်တောင်
+      ဓာတ်ပုံပေါ်က စာသားကို ဖတ်လို့ ရနေမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Filters: backdrop filter"
+        url: "https://web.dev/learn/css/filters#backdrop_filter"
+      - title: "MDN — backdrop-filter (needs a transparent or semi-transparent background)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/backdrop-filter"
+      - title: "Filter Effects Module Level 2 — backdrop-filter"
+        url: "https://drafts.fxtf.org/filter-effects-2/#BackdropFilterProperty"
+      - title: "webstatus.dev — backdrop-filter (Baseline 2024)"
+        url: "https://webstatus.dev/features/backdrop-filter"
+    actions:
+      - id: type-backdrop
+        type: editor.type
+        at: { mark: type-backdrop }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  filter: blur(4px);\n  filter: none;\n}\n", occurrence: 1 }
+        text: "\n.promo {\n  backdrop-filter: blur(8px);\n}\n"
+      - id: expect-backdrop
+        type: expect.preview
+        at: { mark: after-backdrop }
+        timeoutMs: 4000
+        target: { by: testId, value: promo }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-glass
+        type: editor.type
+        at: { mark: type-glass }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  backdrop-filter: blur(8px);\n", occurrence: 1 }
+        text: "  background: rgb(255 255 255 / 35%);\n"
+      - id: expect-glass
+        type: expect.preview
+        at: { mark: after-glass }
+        timeoutMs: 4000
+        target: { by: testId, value: promo }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ ဒီထဲက ဘယ်ဟာတွေက filter
+      function တွေလဲ။ [[mark:quiz-answer]] grayscale၊ invert၊ blur နဲ့ brightness တို့
+      ဖြစ်ပါတယ်။ flip ဆိုတဲ့ function မရှိပါဘူး။ multiply ကတော့ filter မဟုတ်ဘဲ blend mode
+      တစ်ခုပါ။ [[mark:quiz-url]] url နဲ့ဆိုရင် CSS က SVG filter ကိုလည်း သုံးနိုင်ပါတယ်။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ filter က element နဲ့ သူ့ထဲက အရာအားလုံးကို
+      ပြောင်းပြီး၊ function တွေက ဘယ်ကနေ ညာကို အစဉ်လိုက် အလုပ်လုပ်ပါတယ်။ အများစုက ပမာဏကို ဂဏန်း
+      ဒါမှမဟုတ် ရာခိုင်နှုန်းနဲ့ ယူပြီး၊ blur က အရှည်၊ hue rotate က ထောင့်ကို ယူပါတယ်။ drop
+      shadow က ဆွဲထားတဲ့ ပုံသဏ္ဌာန်ကို လိုက်ပြီး၊ backdrop filter ကတော့ ဖောက်ထွင်း မြင်ရတဲ့
+      element ရဲ့ နောက်က အရာကိုပဲ ပြောင်းပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့
+      element ရဲ့ အရောင်တွေကို သူ့ နောက်က အလွှာတွေနဲ့ ရောပေးတဲ့ blend mode ကို၊ ဒီနေ့
+      လုပ်ခဲ့သလို မီးခိုးရောင် ဓာတ်ပုံ တစ်ပုံကနေ စပြီး ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Filters: check your understanding"
+        url: "https://web.dev/learn/css/filters#check_your_understanding"
+      - title: "web.dev Learn CSS — Blend modes (next lesson)"
+        url: "https://web.dev/learn/css/blend-modes"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-q1, e-q2]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [e-yes, e-no, e-no2]
+        drawMs: 2000
+      - id: draw-quiz-url
+        type: whiteboard.apply
+        at: { mark: quiz-url }
+        upsertIds: [e-url]
+        drawMs: 1200
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".photo img {\n  filter: grayscale(1);\n  filter: grayscale(0.5);\n  filter: sepia(1);\n  filter: none;\n}\n\n.thumbs img:nth-child(1) {\n  filter: brightness(0.6);\n}\n\n.thumbs img:nth-child(2) {\n  filter: contrast(1.6);\n}\n\n.thumbs img:nth-child(3) {\n  filter: saturate(2);\n}\n\n.badge {\n  filter: hue-rotate(90deg);\n  filter: hue-rotate(180deg);\n}\n\n.night {\n  filter: invert(1);\n}\n\n.cup-a {\n  filter: drop-shadow(4px 4px 0 #b23a2b) hue-rotate(120deg);\n}\n\n.cup-b {\n  filter: hue-rotate(120deg) drop-shadow(4px 4px 0 #b23a2b);\n}\n\n.cup-c {\n  box-shadow: 4px 6px 6px rgb(0 0 0 / 35%);\n}\n\n.cup-d {\n  filter: drop-shadow(4px 6px 6px rgb(0 0 0 / 35%));\n}\n\n.photo {\n  filter: blur(4px);\n  filter: none;\n}\n\n.promo {\n  backdrop-filter: blur(8px);\n  background: rgb(255 255 255 / 35%);\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
