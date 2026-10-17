@@ -1,0 +1,2310 @@
+# CSS course (Burmese), lesson 6 of 43: specificity.
+#
+# Narration is Burmese (voice-script.md next to this file is its source, and
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its
+# action begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese too.
+#
+# Shape: board (recall lesson 5's cascade steps, circle specificity, the open
+# question: why did the class beat a later button rule?) → code tour (header
+# ID, nav classes, card order buttons, the teal inline-styled call button) →
+# the class-vs-type hook live → board (the ID | class | element scoreboard,
+# what each column counts, compare from the left, 1,0,0 > 0,11,0) → card
+# titles: a gold rule loses a tie to a later brown rule, then wins after a
+# second class is added → board (the tie and the sum) → header links: an ID
+# rule beats a later two-class rule → board (1,0,1 vs 0,2,0, the :where plan)
+# → :where() wraps the ID live, the active link turns gold (a small board
+# shows the [id=…] alternative) → :is() with an ID in its list beats a later
+# plain rule → board (is/not/has = strongest argument, where = 0, nth-child of
+# S) → :not() turns the normal cards black and white and a later plain card
+# rule cannot undo it → the inline style and !important →
+# board (habits: single classes, :where, layers; avoid IDs, !important and
+# doubled classes; DOM distance never counts; tools) → recap, hand-off to
+# inheritance (lesson 7).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no index.html
+# edit, no click. Colour keywords have no valid prefix (sienna, gray,
+# darkgoldenrod, saddlebrown, white, gold, green, red), the filter goes from
+# none straight to grayscale(1) when its "(" lands at the end of the file
+# (measured) and "none" has no valid prefix, and every rule with an opening
+# bracket is appended at the end of the file except the :where( wrap: its
+# opening part is one block insert (all three links show their plain base
+# colour while the narration says so) and its ")" follows at its own mark.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-06-specificity
+  title: "CSS course 6: Specificity"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 6
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: drinks (each card gains an order button) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                    <button class="order-btn" type="button" data-testid="order-laphet-yay">မှာမယ်</button>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                    <button class="order-btn" type="button">မှာမယ်</button>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                    <button class="order-btn" type="button">မှာမယ်</button>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <button class="order-btn" type="button">မှာမယ်</button>
+                  </li>
+                </ul>
+                <!-- lesson block: the inline-styled call button (as in lesson 5) -->
+                <p><button class="order-btn" type="button" style="background: teal" data-testid="inline-button">ဖုန်းဆက်ရန်</button></p>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and the part of C this page uses, minus
+      # every declaration the lesson fights over: no background or text colour
+      # on .order-btn (typed), no .site-header a colour (the links start in
+      # the plain base link colour so the ID rule has a job), and no colour
+      # on .menu-card .desc (so the :is demo competes only with typed rules).
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture. Lesson 6 keeps sections A,
+          B, B2 and the header, menu, card and button furniture of section C,
+          without the button colours, the header link colour and the card
+          description colour (the lesson's own rules set those).
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture (header, menu, cards, buttons) == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-section {
+          margin-top: 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-btn {
+          display: inline-block;
+          margin-left: 8px;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          font: inherit;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 6: none. */
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A: recall the cascade steps (blue), today's step circled (orange),
+    # the open question from lesson 5 (class rule blue, later type rule green,
+    # "written later" violet, the answer orange/violet).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 380,
+        height: 46,
+        text: "ဘယ် rule က နိုင်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 262,
+        y: 232,
+        width: 28,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-s1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 200,
+        height: 36,
+        text: "relevance",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-s2,
+        kind: text,
+        x: 300,
+        y: 278,
+        width: 280,
+        height: 36,
+        text: "origin · important",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-s3,
+        kind: text,
+        x: 300,
+        y: 326,
+        width: 300,
+        height: 36,
+        text: "inline style · layer",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-s4,
+        kind: text,
+        x: 300,
+        y: 374,
+        width: 180,
+        height: 36,
+        text: "specificity",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-s5,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 240,
+        height: 36,
+        text: "ရေးထားတဲ့ အစဉ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 282,
+        y: 362,
+        width: 220,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 505,
+        y: 374,
+        width: 140,
+        height: 36,
+        text: "ဒီ lesson",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-q-class-box,
+        kind: rectangle,
+        x: 700,
+        y: 230,
+        width: 320,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-q-class,
+        kind: text,
+        x: 718,
+        y: 241,
+        width: 270,
+        height: 36,
+        text: ".order-btn { … }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-q-type-box,
+        kind: rectangle,
+        x: 700,
+        y: 320,
+        width: 320,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-q-type,
+        kind: text,
+        x: 718,
+        y: 331,
+        width: 210,
+        height: 36,
+        text: "button { … }",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-q-later,
+        kind: text,
+        x: 700,
+        y: 392,
+        width: 230,
+        height: 36,
+        text: "နောက်မှ ရေးတာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-q-mark,
+        kind: text,
+        x: 990,
+        y: 392,
+        width: 30,
+        height: 36,
+        text: "?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1040,
+        y: 238,
+        width: 45,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-ans1,
+        kind: text,
+        x: 700,
+        y: 480,
+        width: 340,
+        height: 36,
+        text: "selector ကို အရင် စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-ans2,
+        kind: text,
+        x: 700,
+        y: 530,
+        width: 300,
+        height: 36,
+        text: "တူမှ အစဉ်ကို ကြည့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B: the scoreboard. Red = ID column, blue = class column, green =
+    # element column (the same colours on boards C and D), orange = how to
+    # compare, violet = notes.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "Specificity ကို ဘယ်လို တွက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-h-id,
+        kind: rectangle,
+        x: 620,
+        y: 222,
+        width: 110,
+        height: 50,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: b-h-id-label,
+        kind: text,
+        x: 660,
+        y: 229,
+        width: 40,
+        height: 36,
+        text: "ID",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-class,
+        kind: rectangle,
+        x: 750,
+        y: 222,
+        width: 110,
+        height: 50,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-h-class-label,
+        kind: text,
+        x: 770,
+        y: 229,
+        width: 75,
+        height: 36,
+        text: "class",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-el,
+        kind: rectangle,
+        x: 880,
+        y: 222,
+        width: 140,
+        height: 50,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-h-el-label,
+        kind: text,
+        x: 893,
+        y: 229,
+        width: 115,
+        height: 36,
+        text: "element",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-sel,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 190,
+        height: 36,
+        text: ".order-btn",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-a,
+        kind: text,
+        x: 667,
+        y: 292,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-b,
+        kind: text,
+        x: 797,
+        y: 292,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-c,
+        kind: text,
+        x: 942,
+        y: 292,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-sel,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 120,
+        height: 36,
+        text: "button",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-a,
+        kind: text,
+        x: 667,
+        y: 342,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-b,
+        kind: text,
+        x: 797,
+        y: 342,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-c,
+        kind: text,
+        x: 942,
+        y: 342,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-cmp-label,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 250,
+        height: 36,
+        text: "ဘယ်ဘက်ကနေ စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-cmp-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 620,
+        y: 402,
+        width: 400,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1045,
+        y: 286,
+        width: 45,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-cnt-id,
+        kind: text,
+        x: 655,
+        y: 455,
+        width: 60,
+        height: 36,
+        text: "#id",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-cnt-class,
+        kind: text,
+        x: 768,
+        y: 455,
+        width: 100,
+        height: 110,
+        text: ".class\n[href]\n:hover",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-cnt-el,
+        kind: text,
+        x: 893,
+        y: 455,
+        width: 130,
+        height: 74,
+        text: "p\n::before",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-zero,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 290,
+        height: 36,
+        text: "* · combinator = 0",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-big,
+        kind: text,
+        x: 720,
+        y: 600,
+        width: 300,
+        height: 36,
+        text: "1,0,0  >  0,11,0",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-low,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 320,
+        height: 36,
+        text: "အလေးချိန် နည်းနည်း ထားပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C: the scoreboard reused for the card titles (tie, then the sum)
+    # and, re-opened later, for the header links (the ID wins; the :where
+    # plan). Same column colours as board B; violet = the tie rule; green
+    # check = the winner; red circle = the deciding ID.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "အလေးချိန်ကို ပေါင်းတွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-h-id,
+        kind: rectangle,
+        x: 700,
+        y: 215,
+        width: 90,
+        height: 46,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffe3e3",
+      }
+    - {
+        id: c-h-id-label,
+        kind: text,
+        x: 728,
+        y: 220,
+        width: 40,
+        height: 36,
+        text: "ID",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-h-class,
+        kind: rectangle,
+        x: 805,
+        y: 215,
+        width: 100,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-h-class-label,
+        kind: text,
+        x: 818,
+        y: 220,
+        width: 75,
+        height: 36,
+        text: "class",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-h-el,
+        kind: rectangle,
+        x: 920,
+        y: 215,
+        width: 130,
+        height: 46,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-h-el-label,
+        kind: text,
+        x: 928,
+        y: 220,
+        width: 115,
+        height: 36,
+        text: "element",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1-sel,
+        kind: text,
+        x: 290,
+        y: 275,
+        width: 220,
+        height: 36,
+        text: ".featured h3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1-a,
+        kind: text,
+        x: 737,
+        y: 275,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1-b,
+        kind: text,
+        x: 847,
+        y: 275,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1-c,
+        kind: text,
+        x: 977,
+        y: 275,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-sel,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 240,
+        height: 36,
+        text: ".menu-card h3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-a,
+        kind: text,
+        x: 737,
+        y: 325,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-b,
+        kind: text,
+        x: 847,
+        y: 325,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-c,
+        kind: text,
+        x: 977,
+        y: 325,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-tie,
+        kind: text,
+        x: 290,
+        y: 372,
+        width: 380,
+        height: 36,
+        text: "တူရင် နောက်မှ ရေးတာ နိုင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-sel,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 390,
+        height: 36,
+        text: ".menu-card.featured h3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-a,
+        kind: text,
+        x: 737,
+        y: 420,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-b,
+        kind: text,
+        x: 847,
+        y: 420,
+        width: 20,
+        height: 36,
+        text: "2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-c,
+        kind: text,
+        x: 977,
+        y: 420,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1058,
+        y: 414,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-r4-sel,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 260,
+        height: 36,
+        text: "#site-header a",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-a,
+        kind: text,
+        x: 737,
+        y: 490,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-b,
+        kind: text,
+        x: 847,
+        y: 490,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-c,
+        kind: text,
+        x: 977,
+        y: 490,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 714,
+        y: 482,
+        width: 66,
+        height: 52,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-r5-sel,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 280,
+        height: 36,
+        text: ".nav-link.active",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r5-a,
+        kind: text,
+        x: 737,
+        y: 540,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r5-b,
+        kind: text,
+        x: 847,
+        y: 540,
+        width: 20,
+        height: 36,
+        text: "2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r5-c,
+        kind: text,
+        x: 977,
+        y: 540,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r6-sel,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 390,
+        height: 36,
+        text: ":where(#site-header) a",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-r6-a,
+        kind: text,
+        x: 737,
+        y: 600,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-r6-b,
+        kind: text,
+        x: 847,
+        y: 600,
+        width: 20,
+        height: 36,
+        text: "0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r6-c,
+        kind: text,
+        x: 977,
+        y: 600,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r5-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1058,
+        y: 534,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+
+    # Board X (where-fix, attr-id): the same header element picked by ID and by
+    # an attribute selector on its id. Red = scores in the ID column, blue =
+    # scores in the class column.
+    - {
+        id: x-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ID ကို attribute နဲ့ ရွေးရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: x-r1-sel,
+        kind: text,
+        x: 300,
+        y: 260,
+        width: 260,
+        height: 36,
+        text: "#site-header a",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-r1-val,
+        kind: text,
+        x: 780,
+        y: 260,
+        width: 150,
+        height: 36,
+        text: "1 · 0 · 1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: x-r2-sel,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 380,
+        height: 36,
+        text: '[id="site-header"] a',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-r2-val,
+        kind: text,
+        x: 780,
+        y: 330,
+        width: 150,
+        height: 36,
+        text: "0 · 1 · 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board D: the functional pseudo-classes. Blue = takes the strongest
+    # argument, green = always zero, red = the trap we just saw, violet = the
+    # nth-child mention.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 46,
+        text: "Pseudo-class တွေရဲ့ အလေးချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-is,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 360,
+        height: 36,
+        text: ":is()   :not()   :has()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-is-val,
+        kind: text,
+        x: 820,
+        y: 232,
+        width: 260,
+        height: 36,
+        text: "အထဲက အလေးဆုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-where,
+        kind: text,
+        x: 300,
+        y: 287,
+        width: 160,
+        height: 36,
+        text: ":where()",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-where-val,
+        kind: text,
+        x: 820,
+        y: 287,
+        width: 140,
+        height: 36,
+        text: "အမြဲ 0",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-is,
+        kind: text,
+        x: 300,
+        y: 367,
+        width: 440,
+        height: 36,
+        text: ":is(.menu-card, #specials) p",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-is-val,
+        kind: text,
+        x: 820,
+        y: 367,
+        width: 150,
+        height: 36,
+        text: "1 · 0 · 1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-not,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 400,
+        height: 36,
+        text: ".menu-card:not(.featured)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-not-val,
+        kind: text,
+        x: 820,
+        y: 422,
+        width: 150,
+        height: 36,
+        text: "0 · 2 · 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-has,
+        kind: text,
+        x: 300,
+        y: 477,
+        width: 360,
+        height: 36,
+        text: ".menu-card:has(.badge)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-has-val,
+        kind: text,
+        x: 820,
+        y: 477,
+        width: 150,
+        height: 36,
+        text: "0 · 2 · 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-nth,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 330,
+        height: 36,
+        text: ":nth-child(2 of .x)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-ex-nth-val,
+        kind: text,
+        x: 820,
+        y: 552,
+        width: 150,
+        height: 36,
+        text: "0 · 2 · 0",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E: habits. Green = use, red = avoid, orange = what specificity
+    # ignores, violet = tools.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Specificity ကို နိမ့်နိမ့် ထားပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-use-h,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 120,
+        height: 36,
+        text: "သုံးပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-use-1,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 260,
+        height: 36,
+        text: "class တစ်ခုတည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-use-2,
+        kind: text,
+        x: 300,
+        y: 325,
+        width: 290,
+        height: 36,
+        text: ":where() → အခြေခံ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-use-3,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 100,
+        height: 36,
+        text: "layer",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-avoid-h,
+        kind: text,
+        x: 700,
+        y: 225,
+        width: 140,
+        height: 36,
+        text: "ရှောင်ပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-avoid-1,
+        kind: text,
+        x: 700,
+        y: 275,
+        width: 80,
+        height: 36,
+        text: "#id",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-avoid-2,
+        kind: text,
+        x: 700,
+        y: 325,
+        width: 170,
+        height: 36,
+        text: "!important",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-avoid-3,
+        kind: text,
+        x: 700,
+        y: 375,
+        width: 340,
+        height: 36,
+        text: ".order-btn.order-btn",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-prox,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 480,
+        height: 36,
+        text: "body h1 = html h1 = 0 · 0 · 2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-prox-note,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 260,
+        height: 36,
+        text: "နီးတာ မဆိုင်ပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-tools,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 340,
+        height: 36,
+        text: "DevTools · calculator",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4106
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-board
+    chapter: "Specificity ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ declaration နှစ်ခု ပြိုင်တဲ့အခါ browser က အဆင့်လိုက် စစ်ပေးတဲ့ cascade ကို
+      ကြည့်ခဲ့ပါတယ်။ [[mark:draw-steps]] browser က relevance ကို အရင် စစ်ပြီး၊ origin နဲ့ important၊
+      style attribute နဲ့ layer၊ ပြီးရင် specificity ကို စစ်ပါတယ်။ ရေးထားတဲ့ အစဉ်ကိုတော့ အဆုံးမှာမှ
+      ကြည့်ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ dev server
+      ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။ [[mark:circle-spec]] ဒီ lesson မှာ အစဉ်
+      မတိုင်ခင် အဆင့်၊ selector ရဲ့ အလေးချိန် ဖြစ်တဲ့ specificity ကို အသေးစိတ် ကြည့်ပါမယ်။
+      [[mark:draw-question]] ပြီးခဲ့တဲ့ lesson မှာ class နဲ့ ရွေးတဲ့ rule က မှာမယ် ခလုတ်ကို အရောင်
+      ပေးထားပြီး၊ နောက်မှ ရေးထားတဲ့ ခလုတ် အားလုံးကို ရွေးတဲ့ rule က ရှုံးသွားခဲ့ပါတယ်။ ဘာကြောင့်လဲ
+      ဆိုတာ မှတ်မိကြမှာပါ။ [[mark:draw-answer]] class က ပိုလေးလို့ပါ။ browser က အစဉ်ကို မကြည့်ခင်
+      selector တွေ ဘယ်လောက် တိကျလဲ အရင် နှိုင်းယှဉ်ပြီး၊ အဲဒါ တူမှပဲ အစဉ်ကို ကြည့်ပါတယ်။ ဒါပေမဲ့
+      အလေးချိန်ကို ဘယ်လို တွက်လဲ ဆိုတာကိုတော့ ချန်ထားခဲ့ပါတယ်။ ဒီ lesson ပြီးရင် selector တိုင်းရဲ့
+      အလေးချိန်ကို ကိုယ်တိုင် တွက်ပြီး ဘယ်ဟာ နိုင်မလဲ ကြိုသိနိုင်ပါလိမ့်မယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "web.dev Learn CSS — The cascade"
+        url: "https://web.dev/learn/css/the-cascade"
+      - title: "CSS Cascading and Inheritance Level 5 — cascade sorting order"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-sort"
+    actions:
+      - id: open-recall-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: draw-steps
+        type: whiteboard.apply
+        at: { mark: draw-steps }
+        upsertIds: [a-s1, a-s2, a-s3, a-s4, a-s5, a-arrow]
+        drawMs: 3600
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: circle-spec
+        type: whiteboard.apply
+        at: { mark: circle-spec }
+        upsertIds: [a-circle, a-today]
+        drawMs: 1400
+      - id: draw-question
+        type: whiteboard.apply
+        at: { mark: draw-question }
+        upsertIds: [a-q-class-box, a-q-class, a-q-type-box, a-q-type, a-q-later, a-q-mark]
+        drawMs: 4200
+      - id: draw-answer
+        type: whiteboard.apply
+        at: { mark: draw-answer }
+        upsertIds: [a-q-check, a-ans1, a-ans2]
+        drawMs: 2600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-recall-board]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      ဆိုင်ရဲ့ header နဲ့ သောက်စရာ menu ပါပါတယ်။ [[mark:select-header-id]] header မှာ ID တစ်ခု ပါပြီး၊
+      ID တွေ ဘာကြောင့် အားကောင်းလဲ သူ့ကနေ မြင်ရပါမယ်။ [[mark:select-nav-active]] navigation link
+      တိုင်းမှာ class တစ်ခု တူတူ ပါပြီး၊ ပထမ link မှာတော့ အခု ရောက်နေတဲ့ page ကို ပြတဲ့ ဒုတိယ class
+      တစ်ခု ထပ်ပါပါတယ်။ [[mark:select-card-button]] card တိုင်းရဲ့ အဆုံးမှာ မှာမယ် ခလုတ် တစ်ခုစီ
+      ပါပါတယ်။ [[mark:select-inline-style]] menu ရဲ့ အောက်မှာတော့ ဖုန်းဆက်ရန် ခလုတ် ရှိပြီး၊
+      ပြီးခဲ့တဲ့ lesson က စိမ်းပြာရောင် ခလုတ်လိုပဲ သူ့ အရောင်ကို style attribute ထဲမှာ တိုက်ရိုက်
+      ရေးထားပါတယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ base ဖိုင်က font နဲ့
+      နေရာချထားပုံကို ပေးထားပေမယ့်၊ ခလုတ် အရောင်နဲ့ header ထဲက link အရောင်တွေကိုတော့ ချန်ထားပါတယ်။ ဒီ
+      lesson မှာ အဲဒီ အရောင်တွေအတွက် rule တွေ ပြိုင်ကြည့်မှာမို့ပါ။ [[mark:preview-opens]] dev server
+      အသင့် ဖြစ်သွားလို့၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။ မှာမယ် ခလုတ်တွေက browser ရဲ့ default
+      အရောင်အတိုင်း ရှိနေပြီး၊ ဖုန်းဆက်ရန် ခလုတ် တစ်ခုပဲ စိမ်းပြာရောင် ဖြစ်နေပါတယ်။
+    sources:
+      - title: "MDN — id (global attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/id"
+      - title: "MDN — class (global attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/class"
+      - title: "MDN — style (global attribute)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/style"
+    actions:
+      - id: close-recall-board
+        type: whiteboard.apply
+        at: { mark: close-recall-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-header-id
+        type: editor.select
+        at: { mark: select-header-id }
+        target: { file: index.html, text: 'id="site-header"', occurrence: 1 }
+      - id: select-nav-active
+        type: editor.select
+        at: { mark: select-nav-active }
+        target: { file: index.html, text: 'class="nav-link active"', occurrence: 1 }
+      - id: select-card-button
+        type: editor.select
+        at: { mark: select-card-button }
+        target:
+          {
+            file: index.html,
+            text: '<button class="order-btn" type="button" data-testid="order-laphet-yay">မှာမယ်</button>',
+            occurrence: 1,
+          }
+      - id: select-inline-style
+        type: editor.select
+        at: { mark: select-inline-style }
+        target: { file: index.html, text: 'style="background: teal"', occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-header
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: site-header }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-inline-style
+        type: expect.preview
+        at: { afterAction: expect-header }
+        timeoutMs: 5000
+        target: { by: testId, value: inline-button }
+        attribute: { name: style, value: "background: teal" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-inline-style }
+
+  - id: hook
+    narration: >
+      [[mark:type-order-btn]] ပြီးခဲ့တဲ့ lesson ကလို rule နှစ်ခု ပြိုင်တာကို ခလုတ်တွေမှာ
+      ပြန်စမ်းကြည့်ရအောင်။ ပထမ rule က မှာမယ် ခလုတ်ရဲ့ class နဲ့ ရွေးပြီး၊ အညိုရောင် နောက်ခံနဲ့
+      အဖြူရောင် စာလုံး ပေးပါမယ်။ [[mark:after-order-btn]] မှာမယ် ခလုတ်တွေ အညိုရောင် ဖြစ်သွားပါပြီ။
+      ဖုန်းဆက်ရန် ခလုတ်မှာလည်း ဒီ class ပါပေမယ့်၊ နောက်ခံကတော့ စိမ်းပြာရောင်အတိုင်းပါ။ သူ့ကို နောက်မှ
+      ပြန်ကြည့်ပါမယ်။ [[mark:type-button-rule]] အခု သူ့အောက်မှာ ခလုတ် အားလုံးကို type selector နဲ့
+      ရွေးတဲ့ rule တစ်ခု ထည့်ပြီး မီးခိုးရောင် နောက်ခံ ပေးပါမယ်။ နောက်မှ ရေးတာ ဖြစ်လို့၊ အစဉ်က
+      ဆုံးဖြတ်မယ်ဆိုရင် ခလုတ်တွေ မီးခိုးရောင် ဖြစ်သွားရမှာပါ။ [[mark:after-button-rule]] ဒါပေမဲ့
+      preview မှာ အညိုရောင်အတိုင်းပါ။ rule နှစ်ခုလုံးက ခလုတ် တူတူတွေကို ရွေးထားပြီး၊ origin ရော layer
+      ပါ တူတဲ့အတွက် cascade က specificity အဆင့်ကို ရောက်လာပါတယ်။ [[mark:select-class-sel]] ဒီ selector
+      က class နဲ့ ရွေးပါတယ်။ [[mark:select-type-sel]] ဒီ selector မှာတော့ element နာမည်ပဲ ပါပါတယ်။
+      class က ပိုတိကျလို့ နိုင်ပြီး၊ အစဉ်ကို မစစ်ရတော့ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+    actions:
+      - id: type-order-btn
+        type: editor.type
+        at: { mark: type-order-btn }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".order-btn {\n  background: sienna;\n  color: white;\n}\n"
+      - id: expect-order-button
+        type: expect.preview
+        at: { mark: after-order-btn }
+        timeoutMs: 4000
+        target: { by: testId, value: order-laphet-yay }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-button-rule
+        type: editor.type
+        at: { mark: type-button-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: white;\n}\n", occurrence: 1 }
+        text: "\nbutton {\n  background: gray;\n}\n"
+      - id: expect-call-button
+        type: expect.preview
+        at: { mark: after-button-rule }
+        timeoutMs: 4000
+        target: { by: testId, value: inline-button }
+        textContains: "ဖုန်းဆက်ရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-class-sel
+        type: editor.select
+        at: { mark: select-class-sel }
+        target: { file: styles.css, text: ".order-btn", occurrence: 1 }
+      - id: select-type-sel
+        type: editor.select
+        at: { mark: select-type-sel }
+        target: { file: styles.css, text: "button {", occurrence: 1 }
+
+  - id: triad-board
+    chapter: "Specificity ကို ဘယ်လို တွက်လဲ"
+    narration: >
+      [[mark:open-triad]] ဒါဆို browser က specificity ကို ဘယ်လို တွက်လဲ။ [[mark:draw-columns]]
+      selector တိုင်းကို အကွက် သုံးကွက် ပါတဲ့ အမှတ် ပေးပါတယ်။ ဘယ်ဘက်မှာ ID၊ အလယ်မှာ class၊ ညာဘက်မှာ
+      element ဖြစ်ပြီး၊ selector ထဲမှာ တစ်မျိုးစီ ဘယ်နှခု ပါလဲ ရေတွက်ပါတယ်။ [[mark:draw-row-class]]
+      class selector က ID မှာ သုည၊ class မှာ တစ်၊ element မှာ သုည ရပါတယ်။ [[mark:draw-row-type]] type
+      selector က ID မှာ သုည၊ class မှာ သုည၊ element မှာ တစ် ရပါတယ်။ [[mark:draw-compare]] အမှတ်
+      နှစ်ခုကို နှိုင်းယှဉ်တဲ့အခါ ဘယ်ဘက်ကနေ စပါတယ်။ ID အကွက်မှာ နှစ်ခုလုံး သုည ဖြစ်လို့ ညာဘက် တစ်ကွက်
+      ရွှေ့ပါတယ်။ class အကွက်မှာ တစ်က သုညထက် များလို့ အဲဒီမှာတင် ရပ်လိုက်ပါတယ်။ element အကွက်ကိုတော့
+      လုံးဝ မကြည့်တော့ပါဘူး။ [[mark:draw-class-col]] အလယ် အကွက်မှာ attribute selector တွေနဲ့ hover လို
+      pseudo-class တွေကိုလည်း class လိုပဲ ရေတွက်ပါတယ်။ ဒါကြောင့် link ကို href attribute နဲ့ပါ
+      ရွေးရင်၊ attribute အတွက် class အကွက်မှာ တစ်၊ link အတွက် element အကွက်မှာ တစ် ရပါတယ်။
+      [[mark:draw-element-col]] ညာဘက် အကွက်က element နာမည်တွေကို ရေတွက်ပြီး၊ before လို pseudo-element
+      တွေကိုလည်း element လိုပဲ ရေတွက်ပါတယ်။ [[mark:draw-zero]] universal selector နဲ့ selector
+      တွေကြားက combinator တွေကတော့ အမှတ် လုံးဝ မရပါဘူး။ [[mark:draw-big-compare]] အကွက်
+      တစ်ကွက်ချင်းစီကို သီးသန့် နှိုင်းယှဉ်တဲ့အတွက် ID တစ်ခုက class ဆယ့်တစ်ခုကိုတောင် နိုင်ပါတယ်။
+      ဂဏန်းတွေလို ဆယ်ပြည့်ရင် ဘယ်ဘက်ကို တက်သွားတာမျိုး မရှိပါဘူး။ [[mark:draw-keep-low]] ဒါကြောင့်
+      အလေးချိန်ကို နည်းနည်းပဲ ထားပါ။ ဒါမှ နောက် rule တစ်ခုက လိုရင် ပြန်ပြင်လို့ ရမှာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: specificity scoring"
+        url: "https://web.dev/learn/css/specificity#specificity_scoring"
+      - title: "MDN — Specificity: selector weight categories"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+      - title: "Selectors Level 4 — calculating a selector's specificity"
+        url: "https://www.w3.org/TR/selectors-4/#specificity-rules"
+    actions:
+      - id: open-triad
+        type: whiteboard.apply
+        at: { mark: open-triad }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-columns
+        type: whiteboard.apply
+        at: { mark: draw-columns }
+        upsertIds:
+          [b-h-id, b-h-id-label, b-h-class, b-h-class-label, b-h-el, b-h-el-label, b-cnt-id]
+        drawMs: 3200
+      - id: draw-row-class
+        type: whiteboard.apply
+        at: { mark: draw-row-class }
+        upsertIds: [b-r1-sel, b-r1-a, b-r1-b, b-r1-c]
+        drawMs: 1800
+      - id: draw-row-type
+        type: whiteboard.apply
+        at: { mark: draw-row-type }
+        upsertIds: [b-r2-sel, b-r2-a, b-r2-b, b-r2-c]
+        drawMs: 1800
+      - id: draw-compare
+        type: whiteboard.apply
+        at: { mark: draw-compare }
+        upsertIds: [b-cmp-label, b-cmp-arrow, b-check]
+        drawMs: 3000
+      - id: draw-class-col
+        type: whiteboard.apply
+        at: { mark: draw-class-col }
+        upsertIds: [b-cnt-class]
+        drawMs: 1600
+      - id: draw-element-col
+        type: whiteboard.apply
+        at: { mark: draw-element-col }
+        upsertIds: [b-cnt-el]
+        drawMs: 1200
+      - id: draw-zero
+        type: whiteboard.apply
+        at: { mark: draw-zero }
+        upsertIds: [b-zero]
+        drawMs: 1400
+      - id: draw-big-compare
+        type: whiteboard.apply
+        at: { mark: draw-big-compare }
+        upsertIds: [b-big]
+        drawMs: 1600
+      - id: draw-keep-low
+        type: whiteboard.apply
+        at: { mark: draw-keep-low }
+        upsertIds: [b-low]
+        drawMs: 1400
+
+  - id: add-up
+    chapter: "အလေးချိန်ကို ပေါင်းတွက်ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-triad]] menu မှာ အမှတ်တွေ ပေါင်းတာကို ကြည့်ရအောင်။ [[mark:type-featured-h3]]
+      featured ဆိုတဲ့ class ပါတဲ့ လက်ဖက်ရည် card ကို ထင်ရှားအောင်၊ rule တစ်ခုနဲ့ သူ့ ခေါင်းစဉ်ကို
+      ရွှေရောင် ပေးပါမယ်။ [[mark:after-featured]] ပထမ ခေါင်းစဉ် ရွှေရောင် ပြောင်းသွားပါပြီ။
+      [[mark:type-card-h3]] ပြီးတော့ card ခေါင်းစဉ် အားလုံးကို အညိုရင့်ရောင် ပေးချင်လို့၊ ပထမ rule ရဲ့
+      အောက်မှာ menu card အားလုံးထဲက ခေါင်းစဉ်တွေကို ရွေးတဲ့ rule ထည့်ပါမယ်။ [[mark:after-card-h3]]
+      လက်ဖက်ရည် card ကို ကြည့်ပါ၊ ရွှေရောင် ပျောက်သွားပါပြီ။ အညိုရောင် rule က အဲဒီ ခေါင်းစဉ်ကိုပါ
+      ယူသွားတာပါ။ [[mark:type-add-class]] ရွှေရောင် rule ကို ပိုတိကျအောင်၊ featured class ရဲ့ ရှေ့မှာ
+      menu card class ကို ကြားမှာ ဘာမှ မခြားဘဲ ကပ်ထည့်ပါမယ်။ [[mark:after-add-class]] ရွှေရောင်
+      ပြန်ပေါ်လာပါပြီ။ ရှေ့ပိုင်းက class နှစ်ခုလုံး ပါတဲ့ card ကို ရွေးတဲ့ compound selector
+      ဖြစ်သွားပြီး၊ ဖိုင်ထဲမှာ အရင် ရေးထားပေမယ့် နိုင်သွားတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: specificity in context"
+        url: "https://web.dev/learn/css/specificity#specificity_in_context"
+      - title: "web.dev Learn CSS — Specificity: a tie falls back to source order"
+        url: "https://web.dev/learn/css/specificity#a_tie_in_specificity_falls_back_to_source_order"
+      - title: "MDN — Specificity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+    actions:
+      - id: close-triad
+        type: whiteboard.apply
+        at: { mark: close-triad }
+        open: false
+      - id: type-featured-h3
+        type: editor.type
+        at: { mark: type-featured-h3 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: gray;\n}\n", occurrence: 1 }
+        text: "\n.featured h3 {\n  color: darkgoldenrod;\n}\n"
+      - id: expect-featured-card
+        type: expect.preview
+        at: { mark: after-featured }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        attribute: { name: class, value: "menu-card featured" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-card-h3
+        type: editor.type
+        at: { mark: type-card-h3 }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: darkgoldenrod;\n}\n", occurrence: 1 }
+        text: "\n.menu-card h3 {\n  color: saddlebrown;\n}\n"
+      - id: type-add-class
+        type: editor.type
+        at: { mark: type-add-class }
+        cadence: natural
+        target: { file: styles.css, after: "  background: gray;\n}\n\n", occurrence: 1 }
+        text: ".menu-card"
+      - id: expect-coffee-card
+        type: expect.preview
+        at: { mark: after-add-class }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        attribute: { name: class, value: "menu-card" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: add-up-board
+    narration: >
+      [[mark:open-scores]] ဒီ selector တွေကို အမှတ်ဇယားပေါ် တင်ကြည့်ရအောင်။ [[mark:draw-tie-rows]] အစက
+      ရေးခဲ့တဲ့ ရွှေရောင် rule ရော၊ အညိုရောင် rule ပါ class တစ်ခုနဲ့ element တစ်ခုစီ ပါခဲ့ပါတယ်။
+      အကွက်တိုင်း တူနေတဲ့အတွက် နောက်မှ ရေးတဲ့ rule က နိုင်ပါတယ်။ ရွှေရောင် ပျောက်သွားတာ ဒါကြောင့်ပါ။
+      [[mark:draw-sum-row]] class နောက်တစ်ခု ထည့်လိုက်တော့ ရွှေရောင် rule မှာ class နှစ်ခု
+      ဖြစ်သွားပါတယ်။ ID အကွက်မှာ တူနေသေးပေမယ့် class အကွက်မှာ နှစ်က တစ်ထက် များလို့၊ ဖိုင်ထဲမှာ
+      ဘယ်နေရာ ရှိရှိ နိုင်ပါတယ်။ selector အပိုင်း တစ်ခု ထပ်ထည့်တိုင်း သူ သက်ဆိုင်တဲ့ အကွက်မှာ တစ်
+      တိုးသွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: specificity in context"
+        url: "https://web.dev/learn/css/specificity#specificity_in_context"
+      - title: "Selectors Level 4 — calculating a selector's specificity"
+        url: "https://www.w3.org/TR/selectors-4/#specificity-rules"
+    actions:
+      - id: open-scores
+        type: whiteboard.apply
+        at: { mark: open-scores }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-h-id, c-h-id-label, c-h-class, c-h-class-label, c-h-el, c-h-el-label]
+      - id: draw-tie-rows
+        type: whiteboard.apply
+        at: { mark: draw-tie-rows }
+        upsertIds: [c-r1-sel, c-r1-a, c-r1-b, c-r1-c, c-r2-sel, c-r2-a, c-r2-b, c-r2-c, c-tie]
+        drawMs: 4400
+      - id: draw-sum-row
+        type: whiteboard.apply
+        at: { mark: draw-sum-row }
+        upsertIds: [c-r3-sel, c-r3-a, c-r3-b, c-r3-c, c-r3-check]
+        drawMs: 2800
+
+  - id: id-trap
+    chapter: "ID selector ရဲ့ ပြဿနာ"
+    narration: >
+      [[mark:close-scores]] အခု header link တွေကို ကြည့်ရအောင်။ [[mark:type-id-rule]] header ရဲ့
+      နောက်ခံ ရင့်နေလို့ link တွေကို ဖတ်ရ ခက်နေပါတယ်။ ဒါကြောင့် header ရဲ့ ID နဲ့ စပြီး သူ့ထဲက link
+      အားလုံးကို ရွေးတဲ့ rule တစ်ခုနဲ့ အဖြူရောင် ပေးပါမယ်။ [[mark:after-id-rule]] link သုံးခုလုံး
+      ဖြူသွားပါပြီ။ [[mark:type-active]] အခု ရောက်နေတဲ့ page ရဲ့ link ကို ရွှေရောင်နဲ့
+      ထင်ရှားစေချင်လို့၊ အဖြူရောင် rule ရဲ့ နောက်မှာ navigation class နဲ့ active class နှစ်ခုလုံး
+      ပါတဲ့ link ကို ရွေးတဲ့ rule အသစ် ထည့်ပါမယ်။ [[mark:after-active]] ဒါပေမဲ့ active link က
+      ဖြူနေတုန်းပါ။ class နှစ်ခု ပါပြီး နောက်မှ ရေးထားတာတောင် မနိုင်ပါဘူး။ [[mark:reopen-scores]]
+      အမှတ်ဇယား ပြန်ကြည့်ရအောင်။ [[mark:draw-id-rows]] အဖြူရောင် rule မှာ ID တစ်ခုနဲ့ element တစ်ခု
+      ပါပြီး၊ active link ရဲ့ rule မှာတော့ ID မပါဘဲ class နှစ်ခု ပါပါတယ်။ ID အကွက်ကို အရင် စစ်တော့
+      တစ်က သုညကို နိုင်သွားလို့၊ class အကွက်ကို ရောက်တောင် မရောက်ပါဘူး။ class ဘယ်နှခု ထည့်ထည့်
+      နိုင်မှာ မဟုတ်လို့၊ team အများစုက style ပေးဖို့ ID ကို ရှောင်ကြတာပါ။ [[mark:draw-where-plan]]
+      ပိုကောင်းတဲ့ ပြင်နည်းက လေးနေတဲ့ selector ကို ပေါ့အောင် လုပ်တာပါ။ ID အပိုင်းကို where ဆိုတဲ့
+      pseudo-class ထဲ ထည့်လိုက်ရင် အဲဒီ အပိုင်းက သုည ဖြစ်သွားပြီး၊ အဖြူရောင် rule မှာ element
+      တစ်ခုစာပဲ ကျန်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: ID selectors"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — Specificity: the ID column"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+      - title: "MDN — :where()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:where"
+    actions:
+      - id: close-scores
+        type: whiteboard.apply
+        at: { mark: close-scores }
+        open: false
+      - id: type-id-rule
+        type: editor.type
+        at: { mark: type-id-rule }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: ".menu-card h3 {\n  color: saddlebrown;\n}\n", occurrence: 1 }
+        text: "\n#site-header a {\n  color: white;\n}\n"
+      - id: expect-nav-links
+        type: expect.preview
+        at: { mark: after-id-rule }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-hours }
+        textContains: "ဖွင့်ချိန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-active
+        type: editor.type
+        at: { mark: type-active }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "#site-header a {\n  color: white;\n}\n", occurrence: 1 }
+        text: "\n.nav-link.active {\n  color: gold;\n}\n"
+      - id: expect-active-class
+        type: expect.preview
+        at: { mark: after-active }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-drinks }
+        attribute: { name: class, value: "nav-link active" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: reopen-scores
+        type: whiteboard.apply
+        at: { mark: reopen-scores }
+        open: true
+        upsertIds: [c-title]
+      - id: draw-id-rows
+        type: whiteboard.apply
+        at: { mark: draw-id-rows }
+        upsertIds: [c-r4-sel, c-r4-a, c-r4-b, c-r4-c, c-r5-sel, c-r5-a, c-r5-b, c-r5-c, c-r4-circle]
+        drawMs: 4800
+      - id: draw-where-plan
+        type: whiteboard.apply
+        at: { mark: draw-where-plan }
+        upsertIds: [c-r6-sel, c-r6-a, c-r6-b, c-r6-c, c-r5-check]
+        drawMs: 3200
+
+  - id: where-fix
+    narration: >
+      [[mark:close-scores-2]] editor ထဲမှာ လုပ်ကြည့်ရအောင်။ [[mark:type-where-open]] ID ရဲ့ ရှေ့မှာ
+      where ရဲ့ အစ အပိုင်းကို ထည့်ပါမယ်။ ကွင်း မပိတ်ရသေးတဲ့ selector က မမှန်သေးလို့၊ browser က ဒီ rule
+      နဲ့ နောက်က rule ကိုပါ ကျော်သွားပြီး၊ link သုံးခုလုံး ပုံမှန် အရောင် ပြန်ဖြစ်နေပါတယ်။
+      [[mark:type-where-close]] ID ရဲ့ နောက်မှာ ကွင်းပိတ်ကို ထည့်ပါမယ်။ [[mark:after-where]] အခု
+      active link က ရွှေရောင် ဖြစ်သွားပါပြီ။ ကျန်တဲ့ နှစ်ခု ဖြူနေတာက၊ အဖြူရောင် rule နဲ့ base ဖိုင်က
+      ရိုးရိုး link rule အမှတ် တူသွားပြီး၊ ကိုယ့် rule က နောက်မှ ရေးထားလို့ပါ။ [[mark:select-where]]
+      where ထဲက ဒီ ID က rule ကို header ထဲမှာပဲ ကန့်ထားတုန်းပါ။ အမှတ်ကိုတော့ ဘာမှ မတိုးစေပါဘူး။
+      [[mark:attr-id]] ID နဲ့ ရွေးချင်ပေမယ့် အလေးချိန် နည်းနည်း ထားချင်ရင်၊ id attribute ကို ကြည့်တဲ့
+      attribute selector သုံးနိုင်ပါတယ်။ element တူတူကိုပဲ ရွေးပေမယ့်၊ ID အကွက်မှာ မဟုတ်ဘဲ class
+      အကွက်မှာ ရေတွက်ပါတယ်။
+    sources:
+      - title: "MDN — :where()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:where"
+      - title: "web.dev Learn CSS — Specificity: other selectors"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — Attribute selectors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Attribute_selectors"
+    actions:
+      - id: close-scores-2
+        type: whiteboard.apply
+        at: { mark: close-scores-2 }
+        open: false
+      # One block insert: the links go straight from white to the plain base
+      # colour (the unclosed bracket swallows this rule and the gold one), with
+      # no keystroke states in between (a lone ":" would drop only the white
+      # rule and turn the active link gold early).
+      - id: type-where-open
+        type: editor.type
+        at: { mark: type-where-open }
+        cadence: block
+        target:
+          {
+            file: styles.css,
+            after: ".menu-card h3 {\n  color: saddlebrown;\n}\n\n",
+            occurrence: 1,
+          }
+        text: ":where("
+      - id: type-where-close
+        type: editor.type
+        at: { mark: type-where-close }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ":where(#site-header", occurrence: 1 }
+        text: ")"
+      - id: expect-active-link
+        type: expect.preview
+        at: { mark: after-where }
+        timeoutMs: 4000
+        target: { by: testId, value: nav-drinks }
+        textContains: "မီနူး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-where
+        type: editor.select
+        at: { mark: select-where }
+        target: { file: styles.css, text: ":where(#site-header)", occurrence: 1 }
+      # The one selector taught by voice gets its syntax on a small board,
+      # closed again at the start of the next scene.
+      - id: open-attr-board
+        type: whiteboard.apply
+        at: { mark: attr-id }
+        open: true
+        clear: true
+        upsertIds: [x-title]
+      - id: draw-attr-rows
+        type: whiteboard.apply
+        at: { afterAction: open-attr-board }
+        upsertIds: [x-r1-sel, x-r1-val, x-r2-sel, x-r2-val]
+        drawMs: 2600
+
+  - id: is-trap
+    chapter: "Pseudo-class တွေရဲ့ အလေးချိန်"
+    narration: >
+      selector စာရင်း လက်ခံတဲ့ pseudo-class တွေမှာ အမှတ်ပေးပုံ သီးသန့် ရှိပါတယ်။ [[mark:type-is-rule]]
+      ဆိုင်က ကိုယ်ပိုင် ID ပါတဲ့ အထူး menu box တစ်ခု ထည့်ဖို့ စီစဉ်နေတယ် ဆိုပါစို့။ အဲဒီ box ထဲက
+      စာပိုဒ်တွေနဲ့ card စာပိုဒ်တွေကို အရောင် တူတူ ပေးချင်လို့၊ is ဆိုတဲ့ pseudo-class ထဲမှာ
+      နှစ်ခုလုံးကို စာရင်းလုပ်ပါမယ်။ [[mark:after-is]] card စာပိုဒ်တွေ စိမ်းသွားပါပြီ။
+      [[mark:type-card-p]] နောက်တော့ card စာပိုဒ်တွေကို အညိုရောင် ပြောင်းချင်လို့၊ ဒီ rule နောက်မှာ
+      ရိုးရိုး rule တစ်ခု ထည့်ပါမယ်။ [[mark:after-card-p]] စိမ်းနေတုန်းပါ။ [[mark:select-specials]]
+      ဘာကြောင့်လဲဆိုတော့၊ စာရင်းထဲက ဒီ ID ကြောင့်ပါ။ is pseudo-class က သူ့ထဲက အလေးဆုံး selector ရဲ့
+      အမှတ်ကို ယူလို့၊ card စာပိုဒ်တွေအတွက်ပါ ID တစ်ခုနဲ့ element တစ်ခုစာ အမှတ် ရပါတယ်။ page ထဲမှာ
+      အဲဒီ ID ပါတဲ့ element မရှိသေးတာတောင် ဒီလိုပါပဲ။
+    sources:
+      - title: "MDN — :is()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:is"
+      - title: "web.dev Learn CSS — Pseudo-classes"
+        url: "https://web.dev/learn/css/pseudo-classes"
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+    actions:
+      - id: close-attr-board
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-is-rule
+        type: editor.type
+        at: { mark: type-is-rule }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: ".nav-link.active {\n  color: gold;\n}\n", occurrence: 1 }
+        text: "\n:is(.menu-card, #specials) p {\n  color: green;\n}\n"
+      - id: expect-coffee-desc
+        type: expect.preview
+        at: { mark: after-is }
+        timeoutMs: 4000
+        target: { by: testId, value: card-coffee }
+        textContains: "နို့ဆီနဲ့ ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-card-p
+        type: editor.type
+        at: { mark: type-card-p }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: green;\n}\n", occurrence: 1 }
+        text: "\n.menu-card p {\n  color: saddlebrown;\n}\n"
+      - id: select-specials
+        type: editor.select
+        at: { mark: select-specials }
+        target: { file: styles.css, text: "#specials", occurrence: 1 }
+
+  - id: functions-board
+    narration: >
+      [[mark:open-functions]] selector စာရင်း ယူတဲ့ pseudo-class လေးခုကို အတူ ကြည့်ရအောင်။
+      [[mark:draw-is-group]] is၊ not နဲ့ has pseudo-class တွေက ကိုယ်တိုင် အမှတ် မရပေမယ့်၊ သူတို့ထဲက
+      အလေးဆုံး selector ရဲ့ အမှတ်ကို ယူပါတယ်။ ဒါကြောင့် အလေးချိန် များတဲ့ selector တစ်ခု ပါတာနဲ့
+      selector တစ်ခုလုံး လေးသွားပါတယ်။ [[mark:draw-where-row]] where pseudo-class က is လိုပဲ
+      ရွေးပေမယ့်၊ ထဲမှာ ဘာပဲ ရှိရှိ အမှတ်က အမြဲ သုည ပါ။ အစိမ်းရောင် rule မှာ is အစား where ကို
+      သုံးခဲ့ရင်၊ ရိုးရိုး အညိုရောင် rule က နိုင်ခဲ့မှာပါ။ [[mark:draw-examples]] ဥပမာ ကြည့်ရင်၊
+      အစိမ်းရောင် rule က is ထဲက ID ကြောင့် ID လို အမှတ် ရပါတယ်။ not နဲ့ featured မဟုတ်တဲ့ card ကို
+      ရွေးရင်၊ ထဲက class ကိုပါ ရေတွက်လို့ class အကွက်မှာ နှစ် ရပါတယ်။ has နဲ့ badge ပါတဲ့ card ကို
+      ရွေးရင်လည်း အတူတူပါပဲ။ [[mark:draw-nth]] of ဆိုတဲ့ keyword နဲ့ စစ်ထုတ်တဲ့ nth-child ကလည်း
+      ဆင်တူပါတယ်။ သူ့ကိုယ်တိုင်က class တစ်ခုစာ ရပြီး၊ စစ်ထုတ်တဲ့ selector ထဲက အလေးဆုံး အမှတ်ကို
+      ထပ်ပေါင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Pseudo-classes"
+        url: "https://web.dev/learn/css/pseudo-classes"
+      - title: "MDN — :not()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:not"
+      - title: "MDN — :has()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+      - title: "MDN — :nth-child() (the of S syntax)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:nth-child"
+      - title: "Selectors Level 4 — specificity of :is(), :not(), :has() and :nth-child()"
+        url: "https://www.w3.org/TR/selectors-4/#specificity-rules"
+    actions:
+      - id: open-functions
+        type: whiteboard.apply
+        at: { mark: open-functions }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-is-group
+        type: whiteboard.apply
+        at: { mark: draw-is-group }
+        upsertIds: [d-is, d-is-val]
+        drawMs: 2400
+      - id: draw-where-row
+        type: whiteboard.apply
+        at: { mark: draw-where-row }
+        upsertIds: [d-where, d-where-val]
+        drawMs: 1600
+      - id: draw-examples
+        type: whiteboard.apply
+        at: { mark: draw-examples }
+        upsertIds: [d-ex-is, d-ex-is-val, d-ex-not, d-ex-not-val, d-ex-has, d-ex-has-val]
+        drawMs: 5200
+      - id: draw-nth
+        type: whiteboard.apply
+        at: { mark: draw-nth }
+        upsertIds: [d-ex-nth, d-ex-nth-val]
+        drawMs: 1800
+
+  - id: not-live
+    narration: >
+      [[mark:close-functions]] not rule ကို preview ထဲမှာ စမ်းကြည့်ရအောင်။ [[mark:type-not]] ဒီ rule က
+      featured မဟုတ်တဲ့ menu card အားလုံးကို ရွေးပြီး၊ filter နဲ့ အဖြူအမည်း ပြောင်းပါမယ်။ ဒါဆို
+      လက်ဖက်ရည် card တစ်ခုပဲ အရောင် ကျန်ပြီး ထင်ရှားလာပါမယ်။ [[mark:after-not]] ကော်ဖီ၊ သံပုရာရည်နဲ့
+      ဖာလူဒါ card တွေ အဖြူအမည်း ဖြစ်သွားပြီး၊ လက်ဖက်ရည် card ကတော့ အရောင်အတိုင်း ရှိနေပါတယ်။
+      [[mark:type-card-reset]] နောက်မှာ ရိုးရိုး card rule တစ်ခု ရေးပြီး card အားလုံးကို အရောင်
+      ပြန်ပေးကြည့်ပါမယ်။ not ထဲက class ကို မရေတွက်ဘူးဆိုရင်၊ အဖြူအမည်း rule က class တစ်ခုပဲ ရပြီး
+      အမှတ် တူတဲ့အတွက် အစဉ်မှာ ရှုံးရမှာပါ။ [[mark:after-card-reset]] card တွေ အဖြူအမည်းအတိုင်းပါ။
+      [[mark:select-not]] not ထဲက ဒီ class ကိုပါ ရေတွက်လို့၊ အဖြူအမည်း rule မှာ class နှစ်ခု ဖြစ်ပြီး
+      နိုင်သွားတာပါ။
+    sources:
+      - title: "MDN — :not()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:not"
+      - title: "MDN — filter"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter"
+    actions:
+      - id: close-functions
+        type: whiteboard.apply
+        at: { mark: close-functions }
+        open: false
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: ".menu-card p {\n  color: saddlebrown;\n}\n", occurrence: 1 }
+        text: "\n.menu-card:not(.featured) {\n  filter: grayscale(1);\n}\n"
+      - id: expect-lime-card
+        type: expect.preview
+        at: { mark: after-not }
+        timeoutMs: 4000
+        target: { by: testId, value: card-lime-juice }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-card-reset
+        type: editor.type
+        at: { mark: type-card-reset }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: grayscale(1);\n}\n", occurrence: 1 }
+        text: "\n.menu-card {\n  filter: none;\n}\n"
+      - id: select-not
+        type: editor.select
+        at: { mark: select-not }
+        target: { file: styles.css, text: ":not(.featured)", occurrence: 1 }
+
+  - id: inline-important
+    chapter: "Inline style နဲ့ important"
+    narration: >
+      [[mark:open-index-2]] ဖုန်းဆက်ရန် ခလုတ်ကို ကြည့်ရအောင်။ သူ့ စိမ်းပြာရောင်က tag ကိုယ်တိုင်ရဲ့
+      style attribute ထဲမှာ ရှိပါတယ်။ [[mark:select-inline-2]] style attribute က selector မဟုတ်လို့
+      specificity မရှိပါဘူး။ cascade က သူ့ကို အရင် အဆင့် တစ်ခုမှာ ဆုံးဖြတ်ပြီးလို့၊ ကိုယ့် အညိုရောင်
+      class rule က သူ့ကို မနိုင်ခဲ့တာပါ။ တချို့က ID အကွက်ရဲ့ ဘယ်ဘက်မှာ အကွက် တစ်ကွက် ရှိတယ်လို့
+      ပြောကြပေမယ့်၊ တကယ်တော့ သီးသန့် အဆင့် တစ်ခုပါ။ [[mark:open-styles-2]] CSS ဖိုင်ထဲကနေဆိုရင်
+      important keyword တစ်ခုပဲ သူ့ကို ကျော်နိုင်ပါတယ်။ [[mark:type-important]] ဒါကြောင့် မှာမယ်
+      ခလုတ်ရဲ့ class အတွက် rule အသစ်နဲ့ အညိုရောင် နောက်ခံ ထပ်ပေးပြီး၊ ဒီတစ်ခါ important တပ်ပါမယ်။
+      [[mark:after-important]] HTML မှာ စိမ်းပြာရောင် ရေးထားတုန်း ဖြစ်ပေမယ့် ဖုန်းဆက်ရန် ခလုတ်
+      အညိုရောင် ဖြစ်သွားပါပြီ။ important က specificity ကို မမြှင့်ပါဘူး။ declaration ကို
+      ပိုအားကောင်းတဲ့ အုပ်စုထဲ ရွှေ့ပေးပြီး၊ cascade က အဲဒီ အုပ်စုကို style attribute ထက် အရင်
+      စစ်ပါတယ်။ [[mark:type-button-important]] နှစ်ဘက်လုံး important ဖြစ်နေရင် ဘာဖြစ်မလဲ။ ခလုတ်
+      အားလုံးကို type selector နဲ့ ရွေးပြီး အနီရောင် နောက်ခံ ပေးတဲ့ rule အသစ်မှာလည်း important
+      တပ်ကြည့်ရအောင်။ [[mark:after-button-important]] ဘာမှ မပြောင်းပါဘူး။ important declaration
+      နှစ်ခုကြားမှာ specificity က ပြန်ဆုံးဖြတ်လို့၊ class က element ကို နိုင်နေတုန်းပါ။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: factors that don't affect specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "MDN — !important"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/important"
+      - title: "CSS Cascading and Inheritance Level 5 — the style attribute and importance"
+        url: "https://www.w3.org/TR/css-cascade-5/#cascade-sort"
+    actions:
+      - id: open-index-2
+        type: workspace.openFile
+        at: { mark: open-index-2 }
+        path: index.html
+      - id: select-inline-2
+        type: editor.select
+        at: { mark: select-inline-2 }
+        target: { file: index.html, text: 'style="background: teal"', occurrence: 1 }
+      - id: open-styles-2
+        type: workspace.openFile
+        at: { mark: open-styles-2 }
+        path: styles.css
+      - id: type-important
+        type: editor.type
+        at: { mark: type-important }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  filter: none;\n}\n", occurrence: 1 }
+        text: "\n.order-btn {\n  background: sienna !important;\n}\n"
+      - id: expect-still-teal-attr
+        type: expect.preview
+        at: { mark: after-important }
+        timeoutMs: 4000
+        target: { by: testId, value: inline-button }
+        attribute: { name: style, value: "background: teal" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-button-important
+        type: editor.type
+        at: { mark: type-button-important }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: sienna !important;\n}\n", occurrence: 1 }
+        text: "\nbutton {\n  background: red !important;\n}\n"
+      - id: expect-order-after-important
+        type: expect.preview
+        at: { mark: after-button-important }
+        timeoutMs: 4000
+        target: { by: testId, value: order-laphet-yay }
+        textContains: "မှာမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: habits-board
+    chapter: "Specificity ကို နိမ့်နိမ့် ထားရအောင်"
+    narration: >
+      [[mark:open-habits]] နောက်ဆုံးအနေနဲ့ specificity ကို ထိန်းပေးတဲ့ အလေ့အထတွေကို ကြည့်ရအောင်။
+      [[mark:draw-use]] ဖြစ်နိုင်ရင် class တစ်ခုတည်းနဲ့ style ပေးပါ။ ကိုယ့် အခြေခံ style တွေရဲ့
+      selector ကို where ထဲ ထည့်ထားရင်၊ နောက်က ဘယ် rule မဆို ပြန်ပြင်လို့ ရပါတယ်။ cascade layer
+      တွေနဲ့ဆိုရင်၊ ဘယ် အုပ်စု နိုင်မလဲ ဆိုတာကို အမှတ် မမြှင့်ဘဲ ဆုံးဖြတ်လို့ ရပါတယ်။
+      [[mark:draw-avoid]] style ပေးဖို့ ID ကို ရှောင်ပြီး၊ important ကို တကယ် လိုမှပဲ သုံးပါ။
+      [[mark:draw-double]] တချို့က အလေးချိန် တိုးဖို့ class တစ်ခုကို နှစ်ခါ ထပ်ရေးကြပါတယ်။
+      အလုပ်ဖြစ်ပေမယ့်၊ ဒါ လိုလာရင် တခြား selector က အလေးချိန် များနေလို့ပါ။ အဲဒီ selector ကိုပဲ
+      ပေါ့အောင် ပြင်ပါ။ [[mark:draw-proximity]] specificity က tree ထဲမှာ ဘယ်လောက် နီးလဲ ဆိုတာကိုလည်း
+      မကြည့်ပါဘူး။ body က ခေါင်းစဉ်နဲ့ ပိုနီးပေမယ့်၊ body ထဲက ခေါင်းစဉ်ကို ရွေးတဲ့ selector ရော၊ html
+      ထဲက ခေါင်းစဉ်ကို ရွေးတဲ့ selector ပါ element အကွက်မှာ နှစ် ရလို့၊ နောက်မှ ရေးတဲ့ rule က
+      နိုင်ပါတယ်။ [[mark:draw-tools]] အမှတ်ကို မသေချာရင်၊ DevTools မှာ Styles panel ထဲက selector ပေါ်
+      mouse တင်ကြည့်ပါ။ အမှတ်ကို ပြပေးပါတယ်။ online specificity calculator တွေကလည်း ဒီလိုပဲ
+      တွက်ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity: pragmatically increasing specificity"
+        url: "https://web.dev/learn/css/specificity#pragmatically_increasing_specificity"
+      - title: "MDN — Specificity: tips for handling specificity headaches"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascade/Specificity"
+      - title: "MDN — @layer"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@layer"
+      - title: "Keegan Street — Specificity Calculator"
+        url: "https://specificity.keegan.st/"
+      - title: "Chrome DevTools — CSS features reference"
+        url: "https://developer.chrome.com/docs/devtools/css/reference"
+    actions:
+      - id: open-habits
+        type: whiteboard.apply
+        at: { mark: open-habits }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-use
+        type: whiteboard.apply
+        at: { mark: draw-use }
+        upsertIds: [e-use-h, e-use-1, e-use-2, e-use-3]
+        drawMs: 3200
+      - id: draw-avoid
+        type: whiteboard.apply
+        at: { mark: draw-avoid }
+        upsertIds: [e-avoid-h, e-avoid-1, e-avoid-2]
+        drawMs: 2000
+      - id: draw-double
+        type: whiteboard.apply
+        at: { mark: draw-double }
+        upsertIds: [e-avoid-3]
+        drawMs: 1600
+      - id: draw-proximity
+        type: whiteboard.apply
+        at: { mark: draw-proximity }
+        upsertIds: [e-prox, e-prox-note]
+        drawMs: 2600
+      - id: draw-tools
+        type: whiteboard.apply
+        at: { mark: draw-tools }
+        upsertIds: [e-tools]
+        drawMs: 1400
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ selector ရဲ့ အမှတ်မှာ ID၊ class နဲ့ element ဆိုတဲ့ အကွက်
+      သုံးကွက် ရှိပြီး၊ attribute နဲ့ pseudo-class တွေကို class အကွက်မှာ ရေတွက်ပါတယ်။ ဘယ်ဘက်ကနေ စ
+      နှိုင်းယှဉ်ပြီး၊ အကုန် တူမှ ရေးထားတဲ့ အစဉ်က ဆုံးဖြတ်ပါတယ်။ is၊ not နဲ့ has က သူတို့ထဲက အလေးဆုံး
+      selector ရဲ့ အမှတ်ကို ယူပြီး၊ where ကတော့ အမြဲ သုည ပါ။ inline style နဲ့ important က specificity
+      ရဲ့ အပြင်မှာ ရှိပေမယ့်၊ important နှစ်ခုကြားမှာတော့ specificity က ပြန်ဆုံးဖြတ်ပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ inheritance ကို ကြည့်သွားပါမယ်။ selector နဲ့ မကိုက်ဘဲ
+      parent ဆီကနေ child တွေဆီ ဆက်ရောက်လာတဲ့ တန်ဖိုးတွေ အကြောင်းပါ။ element ကို တိုက်ရိုက် ရွေးတဲ့
+      rule က အဲဒီ တန်ဖိုးကို ဘာကြောင့် အမြဲ နိုင်လဲ ဆိုတာလည်း ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Specificity"
+        url: "https://web.dev/learn/css/specificity"
+      - title: "web.dev Learn CSS — Inheritance"
+        url: "https://web.dev/learn/css/inheritance"
+    actions:
+      - id: close-habits
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: expect-final-css
+        type: expect.file
+        at: { afterAction: close-habits }
+        path: styles.css
+        contains: ".order-btn {\n  background: sienna;\n  color: white;\n}\n\nbutton {\n  background: gray;\n}\n\n.menu-card.featured h3 {\n  color: darkgoldenrod;\n}\n\n.menu-card h3 {\n  color: saddlebrown;\n}\n\n:where(#site-header) a {\n  color: white;\n}\n\n.nav-link.active {\n  color: gold;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ":is(.menu-card, #specials) p {\n  color: green;\n}\n\n.menu-card p {\n  color: saddlebrown;\n}\n\n.menu-card:not(.featured) {\n  filter: grayscale(1);\n}\n\n.menu-card {\n  filter: none;\n}\n\n.order-btn {\n  background: sienna !important;\n}\n\nbutton {\n  background: red !important;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
