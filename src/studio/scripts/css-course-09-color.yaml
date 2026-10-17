@@ -1,0 +1,2036 @@
+# CSS course (Burmese), lesson 9 of 43: colour. Opens Part 2 (values).
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 8; where colour goes; the ways to write it) →
+# code tour (index.html: the HSL/OKLCH chip rows and the swatch squares; empty
+# styles.css; the header's cream text is unreadable on its transparent
+# background) → tomato header (named colour) → tea-brown hex, board (pairs,
+# shorthand, alpha), the brown gets two alpha digits → rgb() with slash alpha
+# on the hero → board (the HSL wheel) → HSL chips: same lightness, uneven
+# brightness → OKLCH chips: even brightness; L, C, H pointed at; OKLab and the
+# other spaces in one breath → board (gamut: sRGB inside Display P3, color(),
+# out-of-gamut mapping, the color-gamut media query) → scroll to the menu;
+# currentColor on the prices, the line follows the text colour; system
+# colours explained → color-mix() tint and shade around the pinned brown,
+# then blue + yellow mixed in sRGB (grey) and in OKLCH (teal) → relative
+# colour syntax tints today's special, with a plain fallback line first →
+# board (which syntax when; contrast 4.5:1) → recap, hand-off to units and
+# sizes (lesson 10).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config. Every typed
+# state is plain CSS that hot-swaps with no reload; there is no index.html
+# edit and no interaction. Hex values are never keystroke-typed (a half-typed
+# "#8b5" is a valid green): hex lines arrive line-by-line, and the two alpha
+# digits arrive as one block insert. Every keystroke-typed function value
+# (rgb(, hsl(, oklch(, color-mix() is typed into the LAST rule of the file,
+# so its open bracket can only swallow the end of its own rule while typed.
+# Colour keywords (tomato, sienna, seagreen, currentColor) have no valid
+# prefix.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-09-color
+  title: "CSS course 9: အရောင် ရေးနည်းတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 9
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="ဆိုင်">
+                <ul>
+                  <li><a class="nav-link active" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#hours" data-testid="nav-hours">ဖွင့်ချိန်</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- lesson block: chips (two rows, one per colour syntax) -->
+              <div class="chips hsl" data-testid="chips-hsl">
+                <span class="row-label" lang="en">HSL</span>
+                <span class="chip sweet">ချို</span>
+                <span class="chip mild">ပေါ့</span>
+                <span class="chip strong">ကျ</span>
+              </div>
+              <div class="chips oklch" data-testid="chips-oklch">
+                <span class="row-label" lang="en">OKLCH</span>
+                <span class="chip sweet">ချို</span>
+                <span class="chip mild">ပေါ့</span>
+                <span class="chip strong">ကျ</span>
+              </div>
+
+              <!-- lesson block: swatches (squares that color-mix fills) -->
+              <div class="swatches" data-testid="swatches">
+                <span class="swatch tint" data-testid="swatch-tint"></span>
+                <span class="swatch base" data-testid="swatch-base"></span>
+                <span class="swatch shade" data-testid="swatch-shade"></span>
+              </div>
+              <div class="swatches" data-testid="swatches-space">
+                <span class="row-label" lang="en">srgb</span>
+                <span class="swatch mix-srgb" data-testid="swatch-srgb"></span>
+                <span class="row-label" lang="en">oklch</span>
+                <span class="swatch mix-oklch" data-testid="swatch-oklch"></span>
+              </div>
+
+              <!-- kit block: drinks -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="iced" data-testid="card-falooda">
+                    <h3 class="name">ဖာလူဒါ</h3>
+                    <p class="desc">ရေခဲမုန့်နဲ့ ပူတင်း</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B and B2 of the course kit and the parts of C
+      # this page uses, WITHOUT the header's background (so its cream text
+      # starts unreadable on a transparent background) and WITHOUT the price
+      # colour (both typed by the lesson). Section E styles the lesson's chip
+      # rows (neutral brown, white text) and swatch squares (empty dashed
+      # squares; the middle one pinned to the shop's brown). Never typed,
+      # never shown beyond one sentence.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 9 keeps sections A, B, B2 and the parts of C its
+          page uses, without the header's background and the price colour (the
+          lesson types both). Section E styles the chips and swatches.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture (lesson 9: no header background, no price colour) == */
+        .site-header {
+          padding: 16px;
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-link {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 9: the chip rows and the swatch squares. The chips start a neutral
+           brown with white text; the swatches start as empty dashed squares, except
+           the middle one, which shows the shop's brown that the lesson mixes from. */
+        .chips,
+        .swatches {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0 0 12px;
+        }
+
+        .row-label {
+          width: 56px;
+          color: var(--muted);
+          font-size: 13px;
+        }
+
+        .chip {
+          padding: 2px 16px;
+          border-radius: 999px;
+          background: var(--muted);
+          color: #fff;
+        }
+
+        .swatch {
+          width: 64px;
+          height: 64px;
+          border: 1px dashed var(--muted);
+          border-radius: 8px;
+        }
+
+        .swatch.base {
+          border-style: solid;
+          background: #8b5a2b;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — where colour goes (left, blue frame) and the ways to write it
+    # (right, green frame); the point that they are one kind of value (violet).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "CSS မှာ အရောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-where-frame,
+        kind: rectangle,
+        x: 280,
+        y: 220,
+        width: 400,
+        height: 320,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-where-h,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 220,
+        height: 36,
+        text: "ဘယ်မှာ သုံးလဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-where-1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 240,
+        height: 36,
+        text: "စာလုံး · color",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-where-2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 300,
+        height: 36,
+        text: "နောက်ခံ · background",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-where-3,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 320,
+        height: 36,
+        text: "ဘောင် · border၊ outline",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-where-4,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 240,
+        height: 36,
+        text: "အရိပ် · shadow",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-where-5,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 300,
+        height: 36,
+        text: "link မျဉ်း · underline",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-frame,
+        kind: rectangle,
+        x: 740,
+        y: 220,
+        width: 340,
+        height: 320,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-how-h,
+        kind: text,
+        x: 760,
+        y: 232,
+        width: 180,
+        height: 36,
+        text: "ရေးနည်းတွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-1,
+        kind: text,
+        x: 760,
+        y: 290,
+        width: 240,
+        height: 36,
+        text: "နာမည် · tomato",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-2,
+        kind: text,
+        x: 760,
+        y: 340,
+        width: 220,
+        height: 36,
+        text: "hex · #8b5a2b",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-3,
+        kind: text,
+        x: 760,
+        y: 390,
+        width: 220,
+        height: 36,
+        text: "rgb() · hsl()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-4,
+        kind: text,
+        x: 760,
+        y: 440,
+        width: 260,
+        height: 36,
+        text: "oklch() · color()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-how-5,
+        kind: text,
+        x: 760,
+        y: 490,
+        width: 200,
+        height: 36,
+        text: "color-mix()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-same,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 480,
+        height: 36,
+        text: "အားလုံး တန်ဖိုး အမျိုးအစား တစ်ခုတည်းပါ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — a hex colour taken apart: the three pairs in their channel
+    # colours with their decimal values; the shorthand (violet); the alpha
+    # pair (orange) and the 50% trap (red, circled).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 380,
+        height: 46,
+        text: "Hex ကို ခွဲကြည့်ရအောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-hash,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 40,
+        height: 60,
+        text: "#",
+        strokeColor: "#1e1e1e",
+        fontSize: 48,
+      }
+    - {
+        id: b-r,
+        kind: text,
+        x: 350,
+        y: 232,
+        width: 70,
+        height: 60,
+        text: "8b",
+        strokeColor: "#e03131",
+        fontSize: 48,
+      }
+    - {
+        id: b-g,
+        kind: text,
+        x: 450,
+        y: 232,
+        width: 70,
+        height: 60,
+        text: "5a",
+        strokeColor: "#2f9e44",
+        fontSize: 48,
+      }
+    - {
+        id: b-b,
+        kind: text,
+        x: 550,
+        y: 232,
+        width: 70,
+        height: 60,
+        text: "2b",
+        strokeColor: "#1971c2",
+        fontSize: 48,
+      }
+    - {
+        id: b-r-n,
+        kind: text,
+        x: 340,
+        y: 310,
+        width: 90,
+        height: 36,
+        text: "R 139",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-g-n,
+        kind: text,
+        x: 445,
+        y: 310,
+        width: 80,
+        height: 36,
+        text: "G 90",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-b-n,
+        kind: text,
+        x: 545,
+        y: 310,
+        width: 80,
+        height: 36,
+        text: "B 43",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-range,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 300,
+        height: 36,
+        text: "00 → ff = 0 → 255",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-short,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 340,
+        height: 36,
+        text: "#fff = #ffffff = အဖြူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-alpha,
+        kind: text,
+        x: 760,
+        y: 232,
+        width: 120,
+        height: 60,
+        text: "+ cc",
+        strokeColor: "#f08c00",
+        fontSize: 48,
+      }
+    - {
+        id: b-alpha-1,
+        kind: text,
+        x: 760,
+        y: 320,
+        width: 260,
+        height: 36,
+        text: "alpha · ff = 100%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-alpha-2,
+        kind: text,
+        x: 760,
+        y: 375,
+        width: 160,
+        height: 36,
+        text: "cc ≈ 80%",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-alpha-3,
+        kind: text,
+        x: 760,
+        y: 450,
+        width: 160,
+        height: 36,
+        text: "80 ≈ 50%",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-alpha-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 740,
+        y: 436,
+        width: 200,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+
+    # Board C — the HSL colour wheel: hue angles as coloured dots and labels
+    # around a circle; saturation (orange) and lightness (violet) on the right.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 320,
+        height: 46,
+        text: "HSL · အရောင်ဝိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-wheel,
+        kind: ellipse,
+        x: 380,
+        y: 270,
+        width: 260,
+        height: 260,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-dot-0,
+        kind: ellipse,
+        x: 500,
+        y: 260,
+        width: 20,
+        height: 20,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: c-hue-0,
+        kind: text,
+        x: 500,
+        y: 222,
+        width: 30,
+        height: 36,
+        text: "0",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-dot-60,
+        kind: ellipse,
+        x: 613,
+        y: 325,
+        width: 20,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: c-hue-60,
+        kind: text,
+        x: 648,
+        y: 300,
+        width: 40,
+        height: 36,
+        text: "60",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-dot-120,
+        kind: ellipse,
+        x: 613,
+        y: 455,
+        width: 20,
+        height: 20,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: c-hue-120,
+        kind: text,
+        x: 648,
+        y: 462,
+        width: 55,
+        height: 36,
+        text: "120",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-dot-240,
+        kind: ellipse,
+        x: 387,
+        y: 455,
+        width: 20,
+        height: 20,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: c-hue-240,
+        kind: text,
+        x: 318,
+        y: 462,
+        width: 55,
+        height: 36,
+        text: "240",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-dot-300,
+        kind: ellipse,
+        x: 387,
+        y: 325,
+        width: 20,
+        height: 20,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: c-hue-300,
+        kind: text,
+        x: 318,
+        y: 300,
+        width: 55,
+        height: 36,
+        text: "300",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-hue-label,
+        kind: text,
+        x: 445,
+        y: 382,
+        width: 140,
+        height: 36,
+        text: "hue · ဒီဂရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-sat,
+        kind: text,
+        x: 760,
+        y: 280,
+        width: 160,
+        height: 36,
+        text: "saturation",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-sat-2,
+        kind: text,
+        x: 760,
+        y: 325,
+        width: 300,
+        height: 36,
+        text: "0% မီးခိုး → ရင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-light,
+        kind: text,
+        x: 760,
+        y: 420,
+        width: 140,
+        height: 36,
+        text: "lightness",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-2,
+        kind: text,
+        x: 760,
+        y: 465,
+        width: 300,
+        height: 36,
+        text: "0% မည်း · 100% ဖြူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-light-3,
+        kind: text,
+        x: 760,
+        y: 510,
+        width: 260,
+        height: 36,
+        text: "50% = အရောင် အပြည့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — gamut: sRGB (blue) inside Display P3 (green); a colour the
+    # screen can't show (red) mapped to the nearest one; the color() function
+    # (violet) and the color-gamut media query (orange).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 320,
+        height: 46,
+        text: "Gamut ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-srgb,
+        kind: ellipse,
+        x: 720,
+        y: 280,
+        width: 260,
+        height: 170,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: e-srgb-label,
+        kind: text,
+        x: 810,
+        y: 345,
+        width: 80,
+        height: 36,
+        text: "sRGB",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: e-p3, kind: ellipse, x: 640, y: 210, width: 420, height: 300, strokeColor: "#2f9e44" }
+    - {
+        id: e-p3-label,
+        kind: text,
+        x: 790,
+        y: 224,
+        width: 150,
+        height: 36,
+        text: "Display P3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-out-label,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 220,
+        height: 36,
+        text: "screen မပြနိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-out-dot,
+        kind: ellipse,
+        x: 310,
+        y: 300,
+        width: 30,
+        height: 30,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: e-out-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 350,
+        y: 295,
+        width: 380,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    # The arrow's tip ends just inside the sRGB edge, where a green dot marks
+    # the colour the browser shows; the green label sits under the arrow's
+    # shaft, clear of the P3 outline (x ≈ 640 at that height).
+    - {
+        id: e-near-dot,
+        kind: ellipse,
+        x: 743,
+        y: 306,
+        width: 18,
+        height: 18,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: e-near-label,
+        kind: text,
+        x: 360,
+        y: 345,
+        width: 240,
+        height: 36,
+        text: "အနီးဆုံး အရောင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-color-fn,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 400,
+        height: 36,
+        text: "color(display-p3 1 0.5 0)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-media,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 380,
+        height: 36,
+        text: "@media (color-gamut: p3)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board F — recap: which syntax for which job (each key in its own
+    # colour), and the contrast floor (red, underlined).
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "ဘယ်ဟာ ဘယ်အချိန် သုံးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-k1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 120,
+        height: 36,
+        text: "နာမည်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-v1,
+        kind: text,
+        x: 640,
+        y: 230,
+        width: 220,
+        height: 36,
+        text: "အမြန် စမ်းရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 80,
+        height: 36,
+        text: "hex",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-v2,
+        kind: text,
+        x: 640,
+        y: 280,
+        width: 280,
+        height: 36,
+        text: "design ကနေ ကူးရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k3,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 200,
+        height: 36,
+        text: "rgb() · hsl()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-v3,
+        kind: text,
+        x: 640,
+        y: 330,
+        width: 300,
+        height: 36,
+        text: "ဂဏန်းနဲ့ ပြင်ချင်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k4,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 120,
+        height: 36,
+        text: "oklch()",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-v4,
+        kind: text,
+        x: 640,
+        y: 380,
+        width: 340,
+        height: 36,
+        text: "palette၊ အလင်း ညီချင်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k5,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 270,
+        height: 36,
+        text: "color-mix() · from",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-v5,
+        kind: text,
+        x: 640,
+        y: 430,
+        width: 320,
+        height: 36,
+        text: "အရောင်သစ် ထုတ်ချင်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-contrast,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 300,
+        height: 36,
+        text: "contrast ≥ 4.5 : 1",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-contrast-ul,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 540,
+        width: 280,
+        height: 20,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-contrast-note,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 340,
+        height: 36,
+        text: "စာလုံး ဖတ်ရ လွယ်ရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4109
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "အရောင်ကို ဘယ်မှာ သုံးလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson က nesting နဲ့အတူ course ရဲ့ ပထမ အပိုင်း ပြီးသွားပါပြီ။ ဒီ lesson ကစပြီး
+      property တွေကို ပေးတဲ့ တန်ဖိုးတွေ အကြောင်း ကြည့်သွားမှာ ဖြစ်ပြီး၊ အရောင်နဲ့ စပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ dev server ကို စနေပါပြီ။
+      ဒါမှ နောက်ပိုင်း page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။ [[mark:draw-where]] ဒါဆို CSS မှာ အရောင်ကို
+      ဘယ်မှာ သုံးလဲ။ စာလုံး၊ နောက်ခံ၊ ဘောင်နဲ့ outline၊ အရိပ်၊ link အောက်က မျဉ်းမှာ သုံးပြီး၊ ဒီ
+      property တွေ အားလုံးက အရောင် တန်ဖိုး တစ်ခုကို လက်ခံပါတယ်။ [[mark:draw-syntax]] အဲဒီ တန်ဖိုးကို
+      ရေးနည်းကလည်း အများကြီး ရှိပါတယ်။ နာမည်၊ hex code၊ ဒါမှမဟုတ် RGB၊ HSL၊ OKLCH လို function တွေနဲ့
+      ရေးလို့ ရပါတယ်။ [[mark:draw-same]] ဘယ်လို ရေးရေး တန်ဖိုး အမျိုးအစား တစ်ခုတည်း ဖြစ်လို့၊ အရောင်
+      ပေးလို့ ရတဲ့ နေရာတိုင်းမှာ သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color"
+        url: "https://web.dev/learn/css/color"
+      - title: "web.dev Learn CSS — Color: where to use color in CSS rules"
+        url: "https://web.dev/learn/css/color#where-to-use-color-in-css-rules"
+      - title: "MDN — <color> value type"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value"
+      - title: "CSS Color Module Level 4"
+        url: "https://www.w3.org/TR/css-color-4/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-where
+        type: whiteboard.apply
+        at: { mark: draw-where }
+        upsertIds: [a-where-frame, a-where-h, a-where-1, a-where-2, a-where-3, a-where-4, a-where-5]
+        drawMs: 3500
+      - id: draw-syntax
+        type: whiteboard.apply
+        at: { mark: draw-syntax }
+        upsertIds: [a-how-frame, a-how-h, a-how-1, a-how-2, a-how-3, a-how-4, a-how-5]
+        drawMs: 3500
+      - id: draw-same
+        type: whiteboard.apply
+        at: { mark: draw-same }
+        upsertIds: [a-same]
+        drawMs: 1200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] project ထဲမှာ ဘာတွေ ပါလဲ ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page
+      ရဲ့ HTML ဖိုင်ပါ။ ဆိုင်ရဲ့ header၊ ကြိုဆိုတဲ့ အပိုင်းနဲ့ သောက်စရာ menu က အရင်အတိုင်းပါပဲ။
+      [[mark:select-chips]] ကြိုဆိုတဲ့ အပိုင်းအောက်မှာ ချို၊ ပေါ့၊ ကျ ဆိုတဲ့ လက်ဖက်ရည် chip လေးတွေ
+      နှစ်တန်း အသစ် ပါပါတယ်။ တစ်တန်းကို HSL နဲ့၊ နောက်တစ်တန်းကို OKLCH နဲ့ အရောင် ပေးပြီး
+      ယှဉ်ကြည့်ပါမယ်။ [[mark:select-swatches]] သူတို့ အောက်က လေးထောင့်ကွက်လေးတွေကိုတော့ အရောင်တွေ
+      ရောပြီး ဖြည့်ကြည့်ပါမယ်။ [[mark:open-styles]] ကိုယ့် CSS ဖိုင်ကတော့ အလွတ်ပါ။ ဒီတစ်ခါ base CSS
+      မှာ header ရဲ့ နောက်ခံနဲ့ ဈေးနှုန်း အရောင် မပါပါဘူး။ အဲဒါတွေကို ကိုယ်တိုင် ရေးသွားမှာပါ။
+      [[mark:preview-opens]] dev server အသင့် ဖြစ်သွားလို့၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။
+      အပေါ်ဆုံးကို ကြည့်ပါ။ ဆိုင်နာမည် ရှိနေပေမယ့် ဖတ်လို့ မရသလောက် ဖြစ်နေပါတယ်။ [[mark:transparent]]
+      စာလုံးက နို့နှစ်ရောင် ဖြစ်ပြီး header မှာ နောက်ခံ မရှိလို့၊ အောက်က နို့နှစ်ရောင် page ကို
+      ဖောက်မြင်နေရတာပါ။ နောက်ခံရဲ့ initial value က လုံးဝ ဖောက်ထွင်း မြင်ရတဲ့ transparent ဆိုတဲ့ အရောင်
+      ဖြစ်လို့ပါ။
+    sources:
+      - title: "MDN — background-color (initial value transparent)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-color"
+      - title: "MDN — <named-color>: transparent"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/named-color#transparent"
+      - title: "web.dev Learn CSS — Color: system colors and keywords"
+        url: "https://web.dev/learn/css/color#system-colors"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-chips
+        type: editor.select
+        at: { mark: select-chips }
+        target:
+          {
+            file: index.html,
+            text: "<div class=\"chips hsl\" data-testid=\"chips-hsl\">\n        <span class=\"row-label\" lang=\"en\">HSL</span>\n        <span class=\"chip sweet\">ချို</span>\n        <span class=\"chip mild\">ပေါ့</span>\n        <span class=\"chip strong\">ကျ</span>\n      </div>",
+            occurrence: 1,
+          }
+      - id: select-swatches
+        type: editor.select
+        at: { mark: select-swatches }
+        target:
+          {
+            file: index.html,
+            text: "<div class=\"swatches\" data-testid=\"swatches\">\n        <span class=\"swatch tint\" data-testid=\"swatch-tint\"></span>\n        <span class=\"swatch base\" data-testid=\"swatch-base\"></span>\n        <span class=\"swatch shade\" data-testid=\"swatch-shade\"></span>\n      </div>",
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-shop-name
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-chips
+        type: expect.preview
+        at: { afterAction: expect-shop-name }
+        timeoutMs: 5000
+        target: { by: testId, value: chips-hsl }
+        textContains: "ချို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-base-swatch
+        type: expect.preview
+        at: { afterAction: expect-chips }
+        timeoutMs: 5000
+        target: { by: testId, value: swatch-base }
+        attribute: { name: class, value: "swatch base" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-base-swatch }
+
+  - id: named
+    chapter: "Named color၊ hex နဲ့ RGB"
+    narration: >
+      header ကို နောက်ခံ ပေးကြည့်ရအောင်။ အမြန်ဆုံး နည်းဖြစ်တဲ့ အရောင် နာမည်နဲ့ စပါမယ်။
+      [[mark:type-tomato]] header အတွက် rule တစ်ခု ရေးပြီး၊ နောက်ခံကို tomato ဆိုတဲ့ အရောင် နာမည်
+      ပေးပါမယ်။ [[mark:after-tomato]] header က ခရမ်းချဉ်သီးလို အနီရောင် ဖြစ်ပြီး၊ ဆိုင်နာမည်ကို
+      မြင်ရပါပြီ။ [[mark:named-facts]] CSS မှာ ဒီလို နာမည်နဲ့ ကြိုပေးထားတဲ့ named color 148 ရောင် ရှိပြီး၊
+      စာလုံးကြီး စာလုံးသေး ရေးရေး အတူတူပါ။ အမြန် စမ်းဖို့ အဆင်ပြေပေမယ့် အရေအတွက် နည်းပြီး၊ နာမည်တွေကလည်း
+      အမြဲ စနစ်တကျ မဟုတ်ပါဘူး။ ဥပမာ dark gray က gray ထက် ပိုလင်းပါတယ်။ [[mark:numeric]] ပြီးတော့ အနီရောင်က
+      လက်ဖက်ရည်ဆိုင်နဲ့ မလိုက်ပါဘူး။ ကိုယ် လိုချင်တာက logo ထဲက ခွက်ရဲ့ အညိုရောင် အတိအကျ ဖြစ်လို့၊
+      ကြိုက်တဲ့ အရောင် မှန်သမျှ ရွေးလို့ ရတဲ့ ဂဏန်းနဲ့ ရေးတဲ့ numeric color ကို သုံးရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color: named colors"
+        url: "https://web.dev/learn/css/color#named-colors"
+      - title: "MDN — <named-color>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/named-color"
+      - title: "web.dev Learn CSS — Color: numeric colors"
+        url: "https://web.dev/learn/css/color#numeric-colors"
+    actions:
+      - id: type-tomato
+        type: editor.type
+        at: { mark: type-tomato }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".site-header {\n  background: tomato;\n}\n"
+      - id: expect-header
+        type: expect.preview
+        at: { mark: after-tomato }
+        timeoutMs: 4000
+        target: { by: testId, value: site-header }
+        textContains: "Yangon"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tomato-typed
+        type: expect.file
+        at: { afterAction: expect-header }
+        path: styles.css
+        contains: ".site-header {\n  background: tomato;\n}\n"
+
+  - id: hex
+    narration: >
+      [[mark:type-hex]] အရောင် နာမည်ရဲ့ အောက်မှာ hex နဲ့ ရေးတဲ့ နောက်ခံ declaration တစ်ခု ထပ်ထည့်ပါမယ်။
+      property တူလို့ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။ [[mark:after-hex]] အခု header က
+      လက်ဖက်ရည်လို နွေးနွေး အညိုရောင် ဖြစ်သွားပါပြီ။ logo ထဲက ခွက်နဲ့ အရောင် အတိအကျ တူလို့၊ ခွက်ရဲ့
+      ကိုယ်ထည်တောင် ပျောက်သွားပါတယ်။ [[mark:open-hex-board]] ဒီ စာလုံး ခြောက်လုံးက ဘာကို ဆိုလိုလဲ။
+      [[mark:draw-pairs]] hex က အနီ၊ အစိမ်း၊ အပြာ သုံးမျိုးရဲ့ ပမာဏကို နှစ်လုံးတွဲ သုံးတွဲနဲ့ ရေးပါတယ်။ 0
+      ကနေ 9 နဲ့ a ကနေ f ကို သုံးတဲ့ base 16 ဖြစ်လို့၊ တစ်တွဲစီက 0 ကနေ 255 အထိ ရပါတယ်။ ကိုယ့် အညိုမှာ အနီ
+      များများ၊ အစိမ်း နည်းနည်း၊ အပြာ နည်းနည်းလေးပဲ ပါပါတယ်။ [[mark:draw-short]] အတွဲတိုင်းမှာ စာလုံး
+      နှစ်လုံးစီ တူနေရင် တစ်လုံးစီပဲ ရေးလို့ ရပါတယ်။ ဒါကြောင့် f သုံးလုံးက f ခြောက်လုံးနဲ့ တူပြီး၊
+      အဖြူရောင်ပါ။ [[mark:draw-alpha]] လေးတွဲမြောက်က alpha ပါ။ အရောင်ကို ဘယ်လောက် ဖောက်ထွင်း မြင်ရမလဲ
+      ဆိုတဲ့ တန်ဖိုးပါ။ f နှစ်လုံးဆိုရင် အရောင် အပြည့် ဖြစ်လို့ လုံးဝ ဖောက်မမြင်ရဘဲ၊ c နှစ်လုံးဆိုရင်
+      အရောင်က 80 ရာခိုင်နှုန်းလောက်ပဲ ပါပါတယ်။ [[mark:draw-trap]] hex မှာ တစ်ဝက်က 50 မဟုတ်ဘဲ 80 ပါ။ 255
+      ရဲ့ တစ်ဝက် 128 ကို hex နဲ့ ရေးရင် 80 ဖြစ်လို့ပါ။ [[mark:close-hex-board]] header မှာ alpha ကို
+      စမ်းကြည့်ရအောင်။ [[mark:type-alpha]] အညိုရောင်ရဲ့ နောက်ဆုံးမှာ စာလုံး နှစ်လုံး ထပ်ထည့်ပါမယ်။
+      [[mark:after-alpha]] header နည်းနည်း လင်းလာပါပြီ။ အောက်က page ကို ငါးပုံ တစ်ပုံလောက်
+      ဖောက်မြင်ရလို့ပါ။ ခွက်လည်း ပြန်ပေါ်လာပါပြီ။ [[mark:opacity]] ဒါက opacity နဲ့ မတူပါဘူး။ opacity က
+      element တစ်ခုလုံးကို စာလုံးပါ ဖျော့စေပြီး၊ နောက်ခံထဲက alpha ကတော့ နောက်ခံကိုပဲ ဖျော့စေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color: hex colors"
+        url: "https://web.dev/learn/css/color#hex-colors"
+      - title: "MDN — <hex-color>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/hex-color"
+      - title: "MDN — opacity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/opacity"
+    actions:
+      # Hex is never keystroke-typed: a half-typed "#8b5" is a valid green.
+      - id: type-hex
+        type: editor.type
+        at: { mark: type-hex }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  background: tomato;\n", occurrence: 1 }
+        text: "  background: #8b5a2b;\n"
+      - id: expect-hex-typed
+        type: expect.file
+        at: { mark: after-hex }
+        path: styles.css
+        contains: "  background: #8b5a2b;\n"
+      - id: open-hex-board
+        type: whiteboard.apply
+        at: { mark: open-hex-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-pairs
+        type: whiteboard.apply
+        at: { mark: draw-pairs }
+        upsertIds: [b-hash, b-r, b-g, b-b, b-r-n, b-g-n, b-b-n, b-range]
+        drawMs: 3600
+      - id: draw-short
+        type: whiteboard.apply
+        at: { mark: draw-short }
+        upsertIds: [b-short]
+        drawMs: 1200
+      - id: draw-alpha
+        type: whiteboard.apply
+        at: { mark: draw-alpha }
+        upsertIds: [b-alpha, b-alpha-1, b-alpha-2]
+        drawMs: 2000
+      - id: draw-trap
+        type: whiteboard.apply
+        at: { mark: draw-trap }
+        upsertIds: [b-alpha-3, b-alpha-circle]
+        drawMs: 1500
+      - id: close-hex-board
+        type: whiteboard.apply
+        at: { mark: close-hex-board }
+        open: false
+      # The two alpha digits land together, so the value is never seven digits.
+      - id: type-alpha
+        type: editor.type
+        at: { mark: type-alpha }
+        cadence: block
+        target: { file: styles.css, after: "  background: #8b5a2b", occurrence: 1 }
+        text: "cc"
+      - id: expect-alpha-typed
+        type: expect.file
+        at: { mark: after-alpha }
+        path: styles.css
+        contains: "  background: #8b5a2bcc;\n"
+
+  - id: rgb
+    narration: >
+      [[mark:type-rgb]] RGB ကလည်း ဒီ အနီ၊ အစိမ်း၊ အပြာ အလင်း သုံးမျိုးကို ရောတာပါ။ ဒါပေမဲ့ hex အစား
+      သာမန် ဂဏန်းနဲ့ ရေးပါတယ်။ ကြိုဆိုတဲ့ အပိုင်းကို alpha 20 ရာခိုင်နှုန်း ရှိတဲ့ အညိုရင့်ရောင်
+      ပေးကြည့်ရအောင်။ [[mark:after-rgb]] ကြိုဆိုတဲ့ အပိုင်းက နုနုလေး အညိုဖျော့ရောင် ဖြစ်သွားပါပြီ။
+      အညိုရင့်က 20 ရာခိုင်နှုန်းပဲ ပါလို့၊ နောက်က page ကို အများကြီး ဖောက်မြင်နေရတာပါ။
+      [[mark:select-slash]] ဒီ slash နဲ့ alpha ကို ကြည့်ပါ။ ခေတ်သစ် CSS မှာ တန်ဖိုး သုံးခုကို space
+      နဲ့ ခြားပြီး၊ alpha ကို slash နောက်မှာ ရာခိုင်နှုန်းနဲ့ ဖြစ်ဖြစ်၊ 0 ကနေ 1 ကြား ဂဏန်းနဲ့ ဖြစ်ဖြစ်
+      ရေးပါတယ်။ [[mark:legacy]] code အဟောင်းတွေမှာတော့ comma နဲ့ ခြားထားတာ၊ RGBA ဆိုတဲ့ function
+      သုံးထားတာ တွေ့ရပါလိမ့်မယ်။ နှစ်မျိုးလုံး အလုပ်လုပ်ဆဲ ဖြစ်ပြီး၊ RGBA က အခု RGB ရဲ့ နောက်ထပ် နာမည်
+      တစ်ခုပါပဲ။ ဒါပေမဲ့ comma နဲ့ slash ကိုတော့ ရောမရေးရပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Color: RGB"
+        url: "https://web.dev/learn/css/color#rgb-red-green-blue"
+      - title: "MDN — rgb()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/rgb"
+    actions:
+      - id: type-rgb
+        type: editor.type
+        at: { mark: type-rgb }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  background: #8b5a2bcc;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  background: rgb(60 35 15 / 20%);\n}\n"
+      - id: expect-hero
+        type: expect.preview
+        at: { mark: after-rgb }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-rgb-typed
+        type: expect.file
+        at: { afterAction: expect-hero }
+        path: styles.css
+        contains: ".hero {\n  background: rgb(60 35 15 / 20%);\n}\n"
+      - id: select-slash
+        type: editor.select
+        at: { mark: select-slash }
+        target: { file: styles.css, text: "/ 20%", occurrence: 1 }
+
+  - id: hsl
+    chapter: "HSL နဲ့ OKLCH"
+    narration: >
+      [[mark:open-wheel]] အနီ၊ အစိမ်း၊ အပြာ ဂဏန်းတွေက screen က အရောင် ထုတ်ပုံ ဖြစ်ပေမယ့်၊ လူတွေ
+      အရောင်ကို စဉ်းစားပုံ မဟုတ်ပါဘူး။ [[mark:draw-wheel]] HSL က ဘယ်အရောင်လဲ၊ ဘယ်လောက် ရင့်လဲ၊
+      ဘယ်လောက် လင်းလဲ ဆိုပြီး လူ စဉ်းစားသလို ရေးပါတယ်။ hue က အရောင်ဝိုင်းပေါ်က နေရာကို ဒီဂရီနဲ့
+      ပြတာပါ။ 0 ဒီဂရီက အနီ၊ 60 က အဝါ၊ 120 က အစိမ်း၊ 240 က အပြာ၊ 300 က ပန်းခရမ်းပါ။ 360 မှာ အနီ
+      ပြန်ရောက်ပါတယ်။ [[mark:draw-sat]] saturation က အရောင် ဘယ်လောက် ရင့်လဲ ဆိုတာပါ။ 0
+      ရာခိုင်နှုန်းဆိုရင် မီးခိုးရောင်ပါ။ [[mark:draw-light]] lightness က ဘယ်လောက် လင်းလဲ ဆိုတာပါ။ 0
+      ရာခိုင်နှုန်းက အမည်း၊ 50 က အရောင် အပြည့်၊ 100 က အဖြူပါ။ ဒါကြောင့် ပိုလင်းတဲ့၊ ပိုမှောင်တဲ့
+      အရောင် လိုရင် ဂဏန်း တစ်ခုပဲ ပြောင်းရုံပါ။ [[mark:close-wheel]] HSL chip တန်းကို အရောင်
+      ပေးကြည့်ရအောင်။ [[mark:type-hsl]] ချို chip နဲ့ စပါမယ်။ hue ကို အဝါရောင် ဖြစ်တဲ့ 60 ဒီဂရီ၊
+      saturation 80 ရာခိုင်နှုန်း၊ lightness 50 ရာခိုင်နှုန်း ပေးပါမယ်။ [[mark:type-hsl-rest]] ကျန်တဲ့
+      chip နှစ်ခုမှာ hue ကိုပဲ အစိမ်းရောင် ဖြစ်တဲ့ 140 နဲ့ အပြာရောင် ဖြစ်တဲ့ 240 ပြောင်းပါမယ်။ chip
+      တွေရဲ့ စာလုံးက အဖြူရောင် ဖြစ်ပြီးသားပါ။ [[mark:after-hsl]] ဂဏန်းအရဆိုရင် သုံးခုလုံး အလင်း
+      တူသင့်ပါတယ်။ ဒါပေမဲ့ preview ကို ကြည့်ပါ။ အဝါ chip က အရမ်း လင်းလို့ အဖြူ စာလုံး ပျောက်သလောက်
+      ဖြစ်နေပြီး၊ အစိမ်းမှာလည်း ဖတ်ရ ခက်ပါတယ်။ အပြာကတော့ မှောင်လို့ အဖြူ စာလုံးကို ကောင်းကောင်း
+      ဖတ်ရပါတယ်။ [[mark:hsl-why]] HSL ရဲ့ lightness က တွက်ချက်မှု သက်သက်ပဲ ဖြစ်ပြီး၊ မျက်စိ မြင်ပုံနဲ့
+      မကိုက်ပါဘူး။ မျက်စိကတော့ အဝါကို အပြာထက် အများကြီး ပိုလင်းတယ်လို့ မြင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color: HSL"
+        url: "https://web.dev/learn/css/color#hsl-hue-saturation-lightness"
+      - title: "MDN — hsl()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/hsl"
+      - title: "MDN — <hue>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/hue"
+    actions:
+      - id: open-wheel
+        type: whiteboard.apply
+        at: { mark: open-wheel }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-wheel
+        type: whiteboard.apply
+        at: { mark: draw-wheel }
+        upsertIds:
+          [
+            c-wheel,
+            c-hue-label,
+            c-dot-0,
+            c-hue-0,
+            c-dot-60,
+            c-hue-60,
+            c-dot-120,
+            c-hue-120,
+            c-dot-240,
+            c-hue-240,
+            c-dot-300,
+            c-hue-300,
+          ]
+        drawMs: 5000
+      - id: draw-sat
+        type: whiteboard.apply
+        at: { mark: draw-sat }
+        upsertIds: [c-sat, c-sat-2]
+        drawMs: 1500
+      - id: draw-light
+        type: whiteboard.apply
+        at: { mark: draw-light }
+        upsertIds: [c-light, c-light-2, c-light-3]
+        drawMs: 2200
+      - id: close-wheel
+        type: whiteboard.apply
+        at: { mark: close-wheel }
+        open: false
+      - id: type-hsl
+        type: editor.type
+        at: { mark: type-hsl }
+        cadence: fast-explainer
+        target:
+          { file: styles.css, after: "  background: rgb(60 35 15 / 20%);\n}\n", occurrence: 1 }
+        text: "\n.hsl .sweet { background: hsl(60 80% 50%); }\n"
+      - id: type-hsl-rest
+        type: editor.type
+        at: { mark: type-hsl-rest }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".hsl .sweet { background: hsl(60 80% 50%); }\n",
+            occurrence: 1,
+          }
+        text: ".hsl .mild { background: hsl(140 80% 50%); }\n.hsl .strong { background: hsl(240 80% 50%); }\n"
+      - id: expect-hsl-chips
+        type: expect.preview
+        at: { mark: after-hsl }
+        timeoutMs: 4000
+        target: { by: testId, value: chips-hsl }
+        textContains: "ကျ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-hsl-typed
+        type: expect.file
+        at: { afterAction: expect-hsl-chips }
+        path: styles.css
+        contains: ".hsl .strong { background: hsl(240 80% 50%); }\n"
+
+  - id: oklch
+    narration: >
+      [[mark:type-oklch]] ဒီ ပြဿနာကို OKLCH က ဖြေရှင်းပါတယ်။ သူက လူ့မျက်စိ မြင်ပုံနဲ့ ကိုက်အောင်
+      ဖန်တီးထားတဲ့ ရေးနည်းပါ။ ဒုတိယ တန်းက ချို chip ကို lightness 60 ရာခိုင်နှုန်းနဲ့ စပါမယ်။
+      [[mark:type-oklch-rest]] ကျန်တဲ့ chip နှစ်ခုမှာ lightness နဲ့ ဒုတိယ တန်ဖိုးကို အတူတူ ထားပြီး၊ hue
+      ကိုပဲ ပြောင်းပါမယ်။ [[mark:after-oklch]] အခု chip သုံးခုလုံး အလင်း တူတူ မြင်ရပြီး၊ အဖြူ
+      စာလုံးကိုလည်း သုံးခုလုံးမှာ အတူတူလောက် ဖတ်ရပါတယ်။ အဝါကတော့ အဝါညို ဖြစ်သွားပါတယ်။ အပြာနဲ့ အလင်း
+      တူအောင် လုပ်ရင် အဝါက တကယ်တော့ ဒီလို ဖြစ်သွားလို့ပါ။ [[mark:select-l]] ပထမ တန်ဖိုးကို ကြည့်ပါ။ OKLCH
+      မှာလည်း တန်ဖိုး သုံးခု ပါပြီး၊ ပထမက မျက်စိ မြင်ပုံနဲ့ ကိုက်တဲ့ lightness ပါ။ 0 ကနေ 100
+      ရာခိုင်နှုန်းထိ ရှိပါတယ်။ [[mark:select-c]] ဒုတိယက chroma ပါ။ အရောင် ဘယ်လောက် တောက်လဲ ဆိုတာပါ။ 0
+      ဆိုရင် မီးခိုးရောင်ပါ။ လက်တွေ့မှာ 1 ထက် အများကြီး ငယ်တာပဲ သုံးပါတယ်။ [[mark:select-h]] တတိယက hue ပါ။
+      ဒီမှာလည်း ဒီဂရီနဲ့ ရေးပေမယ့် ဂဏန်းတွေက HSL နဲ့ မတူပါဘူး။ OKLCH မှာ အဝါက 100 လောက်၊ အပြာက 265
+      လောက်မှာ ရှိပါတယ်။ [[mark:oklch-why]] ဒါကြောင့် palette တွေ ဖန်တီးဖို့နဲ့ စာလုံး ဖတ်ရ လွယ်အောင်
+      ထိန်းဖို့ OKLCH က အသုံးဝင်ပါတယ်။ [[mark:other-spaces]] OKLCH နဲ့ အခြေခံ တူတဲ့ OKLab လည်း ရှိပါတယ်။
+      သူက hue ဒီဂရီ အစား အရောင် axis နှစ်ခုကို သုံးလို့၊ gradient နဲ့ အရောင် ရောတဲ့အခါ ကောင်းပါတယ်။
+      အရင်ကတည်းက ရှိတဲ့ lab နဲ့ lch၊ hue ကို အဖြူ အမည်းနဲ့ ရောတဲ့ hwb တို့လည်း ရှိပါသေးတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color: high-definition colors"
+        url: "https://web.dev/learn/css/color#high-definition-colors"
+      - title: "MDN — oklch()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch"
+      - title: "MDN — oklab()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklab"
+      - title: "MDN — hwb()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/hwb"
+      - title: "Chrome for Developers — High definition CSS color guide"
+        url: "https://developer.chrome.com/docs/css-ui/high-definition-css-color-guide"
+    actions:
+      - id: type-oklch
+        type: editor.type
+        at: { mark: type-oklch }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".hsl .strong { background: hsl(240 80% 50%); }\n",
+            occurrence: 1,
+          }
+        text: "\n.oklch .sweet { background: oklch(60% 0.12 100); }\n"
+      - id: type-oklch-rest
+        type: editor.type
+        at: { mark: type-oklch-rest }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".oklch .sweet { background: oklch(60% 0.12 100); }\n",
+            occurrence: 1,
+          }
+        text: ".oklch .mild { background: oklch(60% 0.12 145); }\n.oklch .strong { background: oklch(60% 0.12 265); }\n"
+      - id: expect-oklch-chips
+        type: expect.preview
+        at: { mark: after-oklch }
+        timeoutMs: 4000
+        target: { by: testId, value: chips-oklch }
+        textContains: "ကျ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-oklch-typed
+        type: expect.file
+        at: { afterAction: expect-oklch-chips }
+        path: styles.css
+        contains: ".oklch .strong { background: oklch(60% 0.12 265); }\n"
+      - id: select-l
+        type: editor.select
+        at: { mark: select-l }
+        target: { file: styles.css, text: "60%", occurrence: 1 }
+      - id: select-c
+        type: editor.select
+        at: { mark: select-c }
+        target: { file: styles.css, text: "0.12", occurrence: 1 }
+      - id: select-h
+        type: editor.select
+        at: { mark: select-h }
+        target: { file: styles.css, text: "265", occurrence: 1 }
+
+  - id: gamut
+    chapter: "Gamut နဲ့ Display P3"
+    narration: >
+      [[mark:open-gamut]] hex၊ RGB နဲ့ HSL က screen အဟောင်းတွေ ပြနိုင်တဲ့ sRGB အပိုင်းအခြားထဲက
+      အရောင်တွေကိုပဲ ရေးနိုင်ပါတယ်။ [[mark:draw-srgb]] ဒီလို အရောင် အပိုင်းအခြားကို gamut လို့ ခေါ်ပါတယ်။
+      [[mark:draw-p3]] ဖုန်းနဲ့ laptop အသစ် အတော်များများကတော့ Display P3 ဆိုတဲ့ ပိုကျယ်တဲ့ gamut ကို
+      ပြနိုင်ပြီး၊ အနီ၊ အစိမ်း၊ လိမ္မော်ရောင်တွေ ပိုတောက်ပါတယ်။ OKLCH နဲ့ အဲဒီ အရောင်တွေကို ရေးနိုင်ပါတယ်။
+      [[mark:draw-color-fn]] color function နဲ့လည်း ရပါတယ်။ color space ဆိုတာ အရောင်ကို ဂဏန်းနဲ့ ဖော်ပြတဲ့
+      စနစ် ဖြစ်ပြီး၊ sRGB နဲ့ OKLCH လည်း color space တွေပါပဲ။ အရင်ဆုံး display p3 ဒါမှမဟုတ် rec2020 လို
+      color space နာမည်၊ နောက်မှ channel သုံးခုကို 0 ကနေ 1 ကြား ဂဏန်းနဲ့ ပေးရပါတယ်။ [[mark:draw-out]]
+      screen က မပြနိုင်တဲ့ အရောင်ကို out of gamut လို့ ခေါ်ပါတယ်။ အဲဒီအခါ browser က ပြနိုင်တဲ့ အနီးစပ်ဆုံး
+      အရောင် တစ်ခုကို ပြောင်းပြပါတယ်။ [[mark:draw-media]] ပိုတောက်တဲ့ အရောင်တွေကို gamut ကျယ်တဲ့ screen
+      တွေမှာပဲ ပေးချင်ရင်၊ screen ရဲ့ gamut ကို စစ်တဲ့ media query ထဲမှာ ထည့်ရေးပါ။ [[mark:p3-honest]] ဒီ
+      အပို အရောင်တွေကို မြင်ရမလား ဆိုတာ ကိုယ့် screen ပေါ် မူတည်လို့ board ပေါ်မှာပဲ ဆွဲပြတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Color: high-definition colors"
+        url: "https://web.dev/learn/css/color#high-definition-colors"
+      - title: "MDN — color()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color"
+      - title: "web.dev Learn CSS — Color: out of gamut colors"
+        url: "https://web.dev/learn/css/color#out-of-gamut-colors"
+      - title: "MDN — @media color-gamut"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/color-gamut"
+      - title: "CSS Color Module Level 4 — gamut mapping"
+        url: "https://www.w3.org/TR/css-color-4/#gamut-mapping"
+    actions:
+      - id: open-gamut
+        type: whiteboard.apply
+        at: { mark: open-gamut }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-srgb
+        type: whiteboard.apply
+        at: { mark: draw-srgb }
+        upsertIds: [e-srgb, e-srgb-label]
+        drawMs: 1400
+      - id: draw-p3
+        type: whiteboard.apply
+        at: { mark: draw-p3 }
+        upsertIds: [e-p3, e-p3-label]
+        drawMs: 1600
+      - id: draw-color-fn
+        type: whiteboard.apply
+        at: { mark: draw-color-fn }
+        upsertIds: [e-color-fn]
+        drawMs: 1500
+      - id: draw-out
+        type: whiteboard.apply
+        at: { mark: draw-out }
+        upsertIds: [e-out-label, e-out-dot, e-out-arrow, e-near-dot, e-near-label]
+        drawMs: 2800
+      - id: draw-media
+        type: whiteboard.apply
+        at: { mark: draw-media }
+        upsertIds: [e-media]
+        drawMs: 1500
+
+  - id: current-color
+    chapter: "အထူး keyword တွေ"
+    narration: >
+      [[mark:close-gamut]] editor ထဲ ပြန်သွားပြီး အထူး keyword နှစ်ခုကို ကြည့်ရအောင်။ တစ်ခုက header မှာ
+      အစကတည်းက တွေ့ခဲ့တဲ့ transparent ပါ။ [[mark:scroll-menu]] နောက်တစ်ခုကို စမ်းဖို့ menu ထဲက
+      ဈေးနှုန်းတွေ လိုလို့၊ preview ကို အောက်ဆင်းကြည့်ရအောင်။ [[mark:type-price]] ဈေးနှုန်းတွေကို
+      အညိုနီရောင် ပေးပြီး၊ အောက်မှာ 2 pixel ထူတဲ့ မျဉ်း ထည့်ပါမယ်။ မျဉ်းရဲ့ အရောင်ကိုတော့ currentColor
+      လို့ ရေးပါမယ်။ currentColor ဆိုတာ element ရဲ့ လက်ရှိ စာလုံး အရောင်ကို ကိုယ်စားပြုတဲ့ keyword ပါ။
+      [[mark:after-price]] ဈေးနှုန်းတွေနဲ့ အောက်က မျဉ်း နှစ်ခုလုံး အညိုနီရောင် ဖြစ်သွားပါပြီ။
+      [[mark:type-green]] rule ရဲ့ နောက်ဆုံးမှာ declaration တစ်ခု ထပ်ထည့်ပြီး စာလုံးကို အစိမ်းရောင်
+      ပြောင်းကြည့်ရအောင်။ [[mark:after-green]] စာလုံး အစိမ်းရောင် ဖြစ်သွားပြီး၊ border ကို မထိခဲ့ပေမယ့်
+      အောက်က မျဉ်းလည်း လိုက်ပြောင်းသွားပါတယ်။ ဒါကြောင့် currentColor နဲ့ border၊ အရိပ်နဲ့ icon တွေကို
+      စာလုံး အရောင်အတိုင်း လိုက်စေနိုင်ပါတယ်။ border အရောင် မပေးရင်လည်း default က စာလုံး အရောင်ပါပဲ။
+      [[mark:system-colors]] system color တွေလည်း ရှိပါသေးတယ်။ ဥပမာ page ရဲ့ နောက်ခံအတွက် Canvas၊
+      စာလုံးအတွက် CanvasText ပါ။ သူတို့က ကြည့်တဲ့သူရဲ့ browser နဲ့ theme ကနေ လာလို့ dark mode မှာ
+      ပြောင်းသွားနိုင်ပါတယ်။ ကြည့်တဲ့သူ အလိုက် ကွာနိုင်လို့ ဒီ lesson မှာတော့ မသုံးပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Color: system colors and keywords"
+        url: "https://web.dev/learn/css/color#system-colors"
+      - title: "MDN — <color>: currentColor keyword"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value#currentcolor_keyword"
+      - title: "MDN — <system-color>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/system-color"
+      - title: "MDN — border-color (initial value currentcolor)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-color"
+    actions:
+      - id: close-gamut
+        type: whiteboard.apply
+        at: { mark: close-gamut }
+        open: false
+      - id: scroll-menu
+        type: preview.scroll
+        at: { mark: scroll-menu }
+        timeoutMs: 4000
+        top: 430
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-price
+        type: editor.type
+        at: { mark: type-price }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: ".oklch .strong { background: oklch(60% 0.12 265); }\n",
+            occurrence: 1,
+          }
+        text: "\n.price {\n  color: sienna;\n  border-bottom: 2px solid currentColor;\n}\n"
+      - id: expect-price
+        type: expect.preview
+        at: { mark: after-price }
+        timeoutMs: 4000
+        target: { by: testId, value: price-laphet-yay }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-price-typed
+        type: expect.file
+        at: { afterAction: expect-price }
+        path: styles.css
+        contains: "  border-bottom: 2px solid currentColor;\n}\n"
+      - id: type-green
+        type: editor.type
+        at: { mark: type-green }
+        cadence: natural
+        target:
+          { file: styles.css, after: "  border-bottom: 2px solid currentColor;\n", occurrence: 1 }
+        text: "  color: seagreen;\n"
+      - id: expect-green-typed
+        type: expect.file
+        at: { mark: after-green }
+        path: styles.css
+        contains: "  border-bottom: 2px solid currentColor;\n  color: seagreen;\n}\n"
+
+  - id: color-mix
+    chapter: "အရောင်တွေကို ရောကြည့်ရအောင်"
+    narration: >
+      CSS က ရှိပြီးသား အရောင်တွေကနေ အရောင်သစ်တွေကိုလည်း ထုတ်ပေးနိုင်လို့၊ Sass လို tool အပို မလိုပါဘူး။
+      menu အပေါ်က လေးထောင့်ကွက်တွေက အဲဒီအတွက်ပါ။ အလယ်က ကွက်မှာ ဆိုင်ရဲ့ အညိုရောင် ရှိပြီးသားပါ။
+      [[mark:type-tint]] color mix function က အရောင် နှစ်ခုကို ရာခိုင်နှုန်းနဲ့ ရောပေးပါတယ်။ OKLCH ထဲမှာ
+      ကိုယ့် အညိုရောင်ကို အဖြူ 30 ရာခိုင်နှုန်းနဲ့ ရောပါမယ်။ [[mark:after-tint]] ဘယ်ဘက် ကွက်ထဲမှာ
+      အညိုဖျော့ ပေါ်လာပါပြီ။ [[mark:type-shade]] ညာဘက် ကွက်ကိုတော့ အမည်း 30 ရာခိုင်နှုန်းနဲ့ ရောပါမယ်။
+      [[mark:after-shade]] အခု အညိုရောင် တစ်ခုတည်းကနေ ဖျော့၊ ပုံမှန်၊ ရင့် သုံးမျိုး ရလာပြီး၊ palette
+      သေးသေးလေး တစ်ခု ဖြစ်သွားပါပြီ။ [[mark:percent-rules]] ဒီ ရာခိုင်နှုန်းကို ကြည့်ပါ။ အဖြူက 30 ဖြစ်လို့
+      ကျန်တဲ့ 70 ရာခိုင်နှုန်းက အညိုရောင်ပါ။ ရာခိုင်နှုန်း မပေးရင်တော့ တစ်ဝက်စီ ရောပါတယ်။
+      [[mark:select-in]] ရှေ့ဆုံးက အပိုင်းကတော့ ဘယ် color space ထဲမှာ ရောမလဲ ဆိုတာ ရွေးတာပါ။ ဒါကို
+      ပြောင်းရင် ရလဒ်လည်း ပြောင်းပါတယ်။ [[mark:type-spaces]] အပြာနဲ့ အဝါကို sRGB ထဲမှာ တစ်ခါ၊ OKLCH ထဲမှာ
+      တစ်ခါ ရောကြည့်ရအောင်။ [[mark:after-spaces]] sRGB မှာ အပြာနဲ့ အဝါရဲ့ အလယ်က မှိုင်းမှိုင်း
+      မီးခိုးရောင် ဖြစ်နေပါတယ်။ OKLCH မှာတော့ hue က အရောင်ဝိုင်း တစ်လျှောက် ပတ်သွားလို့ တောက်တောက်
+      အစိမ်းပြာရောင် ရပါတယ်။ ယေဘုယျအားဖြင့် OKLCH နဲ့ OKLab မှာ ရောတာ ပိုသဘာဝ ကျပါတယ်။ browser အဟောင်းတွေက
+      color space မပါရင် နားမလည်လို့ အမြဲ ရေးပေးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Color: manipulating colors"
+        url: "https://web.dev/learn/css/color#manipulating-colors"
+      - title: "web.dev Learn CSS — Color: color-mix()"
+        url: "https://web.dev/learn/css/color#color-mix"
+      - title: "MDN — color-mix()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/color-mix"
+      - title: "CSS Color Module Level 5 — color-mix()"
+        url: "https://www.w3.org/TR/css-color-5/#color-mix"
+    actions:
+      - id: type-tint
+        type: editor.type
+        at: { mark: type-tint }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: seagreen;\n}\n", occurrence: 1 }
+        text: "\n.tint { background: color-mix(in oklch, #8b5a2b, white 30%); }\n"
+      - id: expect-tint
+        type: expect.preview
+        at: { mark: after-tint }
+        timeoutMs: 4000
+        target: { by: testId, value: swatch-tint }
+        attribute: { name: class, value: "swatch tint" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tint-typed
+        type: expect.file
+        at: { afterAction: expect-tint }
+        path: styles.css
+        contains: "white 30%); }\n"
+      - id: type-shade
+        type: editor.type
+        at: { mark: type-shade }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".tint { background: color-mix(in oklch, #8b5a2b, white 30%); }\n",
+            occurrence: 1,
+          }
+        text: ".shade { background: color-mix(in oklch, #8b5a2b, black 30%); }\n"
+      - id: expect-shade-typed
+        type: expect.file
+        at: { mark: after-shade }
+        path: styles.css
+        contains: "black 30%); }\n"
+      - id: select-white
+        type: editor.select
+        at: { mark: percent-rules }
+        target: { file: styles.css, text: "white 30%", occurrence: 1 }
+      - id: select-in
+        type: editor.select
+        at: { mark: select-in }
+        target: { file: styles.css, text: "in oklch", occurrence: 1 }
+      - id: type-spaces
+        type: editor.type
+        at: { mark: type-spaces }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".shade { background: color-mix(in oklch, #8b5a2b, black 30%); }\n",
+            occurrence: 1,
+          }
+        text: "\n.mix-srgb { background: color-mix(in srgb, blue, yellow); }\n.mix-oklch { background: color-mix(in oklch, blue, yellow); }\n"
+      - id: expect-mix
+        type: expect.preview
+        at: { mark: after-spaces }
+        timeoutMs: 4000
+        target: { by: testId, value: swatch-oklch }
+        attribute: { name: class, value: "swatch mix-oklch" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-spaces-typed
+        type: expect.file
+        at: { afterAction: expect-mix }
+        path: styles.css
+        contains: ".mix-oklch { background: color-mix(in oklch, blue, yellow); }\n"
+
+  - id: relative
+    chapter: "Relative color"
+    narration: >
+      [[mark:type-relative]] နောက်ဆုံး tool က relative color syntax ပါ။ ရှိပြီးသား အရောင် တစ်ခုကနေ channel
+      တစ်ခုချင်းကို ပြင်ပြီး အရောင်သစ် ထုတ်ပေးပါတယ်။ ဒီနည်းနဲ့ လက်ဖက်ရည် card ကို အရောင် ပေးကြည့်ရအောင်။
+      [[mark:after-relative]] card မှာ နွေးနွေး ဖျော့ဖျော့ နောက်ခံနဲ့ အညိုနုနု border ပေါ်လာပါပြီ။
+      [[mark:select-from]] from ဆိုတဲ့ စကားလုံးကို ကြည့်ပါ။ ကိုယ့် အညိုရောင်ကို အစ အရောင်အဖြစ် ယူပြီး၊
+      OKLCH ရဲ့ channel တွေကို l၊ c၊ h ဆိုတဲ့ နာမည်တွေနဲ့ ခွဲထုတ်ပေးပါတယ်။ [[mark:select-bg-channels]]
+      နောက်ခံအတွက် hue ဖြစ်တဲ့ h ကို ဒီအတိုင်း ထားပြီး၊ lightness ကို 95 ရာခိုင်နှုန်း၊ chroma ကို အရမ်း
+      နည်းနည်းပဲ ပေးထားလို့၊ အညိုရောင်ပဲ ဖြစ်ပေမယ့် အများကြီး ဖျော့ပါတယ်။ [[mark:select-border-channels]]
+      border အတွက်တော့ chroma နဲ့ hue ကို ဒီအတိုင်း ထားပြီး၊ lightness ကိုတော့ calc နဲ့ တွက်ပြီး နည်းနည်း
+      လျှော့ထားပါတယ်။ slash နောက်မှာလည်း alpha 50 ရာခိုင်နှုန်း ထည့်ထားပါတယ်။ [[mark:select-fallback]]
+      အပေါ်က ရိုးရိုး hex နဲ့ ရေးတဲ့ declaration က cascade lesson မှာ မြင်ခဲ့တဲ့ fallback ပါ။ relative
+      color က အသစ် ဖြစ်လို့၊ သူ့ကို နားမလည်တဲ့ browser က relative color declaration ကို ကျော်ပြီး ဒီ
+      fallback ကို သုံးပါတယ်။ [[mark:lesson-11]] lesson 11 မှာတော့ ဒီ အညိုရောင်ကို custom property ထဲ
+      ထည့်ပြီး၊ တစ်နေရာတည်းက ပြောင်းရုံနဲ့ page တစ်ခုလုံး အရောင် ပြောင်းအောင် လုပ်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color: relative color syntax"
+        url: "https://web.dev/learn/css/color#relative-color-syntax"
+      - title: "MDN — Using relative colors"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_colors/Relative_colors"
+      - title: "CSS Color Module Level 5 — relative colors"
+        url: "https://www.w3.org/TR/css-color-5/#relative-colors"
+    actions:
+      # A complete rule, revealed line by line (the fallback hex line would
+      # flash other colours if keystroke-typed).
+      - id: type-relative
+        type: editor.type
+        at: { mark: type-relative }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: ".mix-oklch { background: color-mix(in oklch, blue, yellow); }\n",
+            occurrence: 1,
+          }
+        text: "\n.featured {\n  background: #f3e7d3;\n  background: oklch(from #8b5a2b 95% 0.03 h);\n  border: 2px solid oklch(from #8b5a2b calc(l - 0.1) c h / 50%);\n}\n"
+      - id: expect-featured
+        type: expect.preview
+        at: { mark: after-relative }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-relative-typed
+        type: expect.file
+        at: { afterAction: expect-featured }
+        path: styles.css
+        contains: "  border: 2px solid oklch(from #8b5a2b calc(l - 0.1) c h / 50%);\n}\n"
+      - id: select-from
+        type: editor.select
+        at: { mark: select-from }
+        target: { file: styles.css, text: "from #8b5a2b", occurrence: 1 }
+      - id: select-bg-channels
+        type: editor.select
+        at: { mark: select-bg-channels }
+        target: { file: styles.css, text: "95% 0.03 h", occurrence: 1 }
+      - id: select-border-channels
+        type: editor.select
+        at: { mark: select-border-channels }
+        target: { file: styles.css, text: "calc(l - 0.1) c h / 50%", occurrence: 1 }
+      - id: select-fallback
+        type: editor.select
+        at: { mark: select-fallback }
+        target: { file: styles.css, text: "background: #f3e7d3;", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-recap]] ဒါဆို အရောင်ကို ဘယ်ပုံစံနဲ့ ရေးသင့်လဲ။ [[mark:draw-when]] အမြန် စမ်းကြည့်ရင်
+      နာမည်၊ design ကနေ အရောင် ကူးရင် hex၊ ဂဏန်းနဲ့ ပြင်ချင်ရင် RGB ဒါမှမဟုတ် HSL ကို သုံးပါ။ palette ရဲ့
+      အလင်း ညီချင်ရင် OKLCH၊ ရှိပြီးသား အရောင်ကနေ အသစ် ထုတ်ချင်ရင်တော့ color mix ဒါမှမဟုတ် relative color
+      ကို သုံးပါ။ [[mark:draw-contrast]] contrast ဆိုတာ စာလုံးနဲ့ နောက်ခံ အရောင် ဘယ်လောက် ကွာလဲ ဆိုတာပါ။
+      ဘယ်ရေးနည်း သုံးသုံး ပုံမှန် စာလုံးအတွက် အနည်းဆုံး 4.5 နဲ့ 1 လိုပါတယ်။ ခုနက OKLCH chip တွေနဲ့
+      ဖောက်ထွင်း header ပေါ်က စာလုံး သေးတွေတောင် ဒီထက် နိမ့်လို့ အမြဲ စစ်ကြည့်ပါ။ OKLCH မှာဆိုရင်
+      lightness တစ်ခုတည်းကို နည်းနည်း လျှော့ရုံနဲ့ chip သုံးခုလုံး ဖတ်ရ လွယ်လာပါတယ်။ [[mark:quiz]]
+      ကိုယ့်ဘာသာ စဉ်းစားကြည့်ပါ။ စာလုံး ငါးလုံးပါတဲ့ hex အရောင် မှန်သလား။ မမှန်ပါဘူး။ hex က စာလုံး 6 လုံး၊
+      alpha ပါရင် 8 လုံး ဖြစ်ပြီး၊ သူတို့ရဲ့ အတိုပုံစံက 3 လုံးနဲ့ 4 လုံးပါ။ [[mark:resources]]
+      ဆက်လေ့လာချင်ရင် OKLCH color picker တစ်ခုနဲ့ အရောင် ဖန်တီးပြီး ကူးသုံးကြည့်ပါ။ [[mark:recap]] ဒါဆို
+      ပြန်ချုပ်ရရင်၊ HSL ရဲ့ lightness က မျက်စိ မြင်ပုံနဲ့ မကိုက်ပေမယ့် OKLCH ရဲ့ lightness ကတော့
+      ကိုက်ပါတယ်။ alpha က အရောင်ကို ဖောက်ထွင်း မြင်ရစေပြီး၊ currentColor က စာလုံး အရောင်ကို လိုက်ပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ အရွယ်အစား ပေးတဲ့ ဂဏန်းတွေနဲ့ pixel၊ ရာခိုင်နှုန်း၊ rem လို
+      unit တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Color"
+        url: "https://web.dev/learn/css/color"
+      - title: "W3C WAI — Understanding Contrast (Minimum)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+      - title: "OKLCH Color Picker & Converter"
+        url: "https://oklch.com/"
+      - title: "MDN — <hex-color>: syntax"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/hex-color#syntax"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: open-recap }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-when
+        type: whiteboard.apply
+        at: { mark: draw-when }
+        upsertIds: [f-k1, f-v1, f-k2, f-v2, f-k3, f-v3, f-k4, f-v4, f-k5, f-v5]
+        drawMs: 5000
+      - id: draw-contrast
+        type: whiteboard.apply
+        at: { mark: draw-contrast }
+        upsertIds: [f-contrast, f-contrast-ul, f-contrast-note]
+        drawMs: 2200
+      - id: expect-final-header
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".site-header {\n  background: tomato;\n  background: #8b5a2bcc;\n}\n\n.hero {\n  background: rgb(60 35 15 / 20%);\n}\n"
+      - id: expect-final-chips
+        type: expect.file
+        at: { afterAction: expect-final-header }
+        path: styles.css
+        contains: ".hsl .sweet { background: hsl(60 80% 50%); }\n.hsl .mild { background: hsl(140 80% 50%); }\n.hsl .strong { background: hsl(240 80% 50%); }\n\n.oklch .sweet { background: oklch(60% 0.12 100); }\n.oklch .mild { background: oklch(60% 0.12 145); }\n.oklch .strong { background: oklch(60% 0.12 265); }\n"
+      - id: expect-final-price
+        type: expect.file
+        at: { afterAction: expect-final-chips }
+        path: styles.css
+        contains: ".price {\n  color: sienna;\n  border-bottom: 2px solid currentColor;\n  color: seagreen;\n}\n"
+      - id: expect-final-mix
+        type: expect.file
+        at: { afterAction: expect-final-price }
+        path: styles.css
+        contains: ".tint { background: color-mix(in oklch, #8b5a2b, white 30%); }\n.shade { background: color-mix(in oklch, #8b5a2b, black 30%); }\n\n.mix-srgb { background: color-mix(in srgb, blue, yellow); }\n.mix-oklch { background: color-mix(in oklch, blue, yellow); }\n"
+      - id: expect-final-relative
+        type: expect.file
+        at: { afterAction: expect-final-mix }
+        path: styles.css
+        contains: ".featured {\n  background: #f3e7d3;\n  background: oklch(from #8b5a2b 95% 0.03 h);\n  border: 2px solid oklch(from #8b5a2b calc(l - 0.1) c h / 50%);\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
