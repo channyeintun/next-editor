@@ -111,67 +111,67 @@ lesson:
     - id: l03_p01
       contentType: google
       name: "K1 · Cover"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p01
     - id: l03_p01b
       contentType: google
       name: "K1 · Cover: the question"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p01b
     - id: l03_p02
       contentType: google
       name: "K2 · Why not 100%: one"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p02
     - id: l03_p02b
       contentType: google
       name: "K2 · Why not 100%: two"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p02b
     - id: l03_p02c
       contentType: google
       name: "K2 · Why not 100%: three"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p02c
     - id: l03_p03
       contentType: google
       name: "K3 · Ops team vs SRE: ops"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p03
     - id: l03_p03b
       contentType: google
       name: "K3 · Ops team vs SRE: SRE"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p03b
     - id: l03_p03c
       contentType: google
       name: "K3 · Ops team vs SRE: all"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p03c
     - id: l03_p03d
       contentType: google
       name: "K3 · Ops team vs SRE: the ceiling"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p03d
     - id: l03_p04
       contentType: google
       name: "K2 · First-year list: two"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p04
     - id: l03_p04b
       contentType: google
       name: "K2 · First-year list: three"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p04b
     - id: l03_p04c
       contentType: google
       name: "K2 · Reliability as an investment"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p04c
     - id: l03_p05
       contentType: google
       name: "K2 · This week"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l03_p05
   whiteboardAssets:
     # Board B1: the real bill (P2 comb): red source, bus, five tines, violet total
