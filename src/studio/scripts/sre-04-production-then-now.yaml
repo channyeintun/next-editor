@@ -1,0 +1,1533 @@
+# SRE from zero, lesson 4: production then and now.
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-04-production-then-now.md. The narration
+# is that script's spoken lines, character for character; each ⟪…⟫ marker is
+# a [[mark:…]] at the same place. Check with
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-04-production-then-now.md \
+#     src/studio/scripts/sre-04-production-then-now.yaml
+#
+# The arc: the cover asks who is right when every status check is green but
+# Bank Y transfers are slow; a compare page sets hand-kept servers against
+# workloads on rented platforms; board B1 turns capacity into a spending
+# choice (Thingyan peak, idle money, autoscaling, the doubled bill, spot vs
+# reserved, the provider's control plane); board B2 sets the two-week ticket
+# path against the Bill Pay template (golden path, the platform underneath, a
+# check that stops a typo); pages name guardrails and rules written as code;
+# board B3 shows the gray failure from the hook; pages answer the hook (server
+# says, user feels; when you find out) and point at seeing production; the
+# recap selects the five terms in notes.md and leaves a pause before the
+# answer to its question.
+#
+# Pacing (decided for Module 1, settled at YAML build time): stretches that
+# would hold one page or board step longer than ~35 s got extra page advances
+# (l04_p01b, l04_p02b, l04_p02c, l04_p03b, l04_p04b, l04_p05b) or board steps
+# (B1 steps 3b, 4 and 5; B2 step 2b), each at an existing sentence end. B2
+# step 1b keeps step 1 to three boxes, and B3 step 2b lands the orange target
+# as the narration names it, both at existing sentence ends too. The
+# spoken text did not change. ask-question is one more mark at an existing
+# sentence end: the question-line select hangs off it so the select's drag
+# lands in silence after the question, and the answer waits for it.
+#
+# Deck: "Next Editor · SRE 1 · Why SRE". The deckUrl placeholder is swapped
+# for the real /pub link once Chan publishes the deck; until then the
+# Director warns that the deck is unreachable.
+#
+# Board colours (course colour jobs, authored for light mode; the dark board
+# inverts them): #1e1e1e ink paints white; blue #1971c2 = the thing named and
+# data series; green #2f9e44 = healthy; red #e03131 = failure; orange
+# #f08c00 = caveat, limit or threshold; violet #6741d9 = a second series.
+# A label that needs two or three lines is one text asset per line, so each
+# line meets the 0.55 em width rule on its own.
+schemaVersion: 1
+
+lesson:
+  slug: sre-04-production-then-now
+  title: "SRE from zero 4: Production ဘယ်လို ပြောင်းလဲလာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Production ဘယ်လို ပြောင်းလဲလာလဲ
+
+        - workload-centric — server တစ်လုံးချင်းထက် workload နဲ့ user ရလဒ်ကို ကြည့်
+        - golden path — template နဲ့ ဘေးကင်းတဲ့ standard လမ်း
+        - guardrail — ခွင့်ပြုချက် အစား လမ်းထဲက check
+        - gray failure — server up၊ user တချို့အတွက် နှေး
+        - user ဘက်က တိုင်းတာ — server မဟုတ်ဘဲ user ခံစားရတာကို တိုင်း
+
+        မေးခွန်း: dashboard က အစိမ်း၊ ဒါပေမဲ့ user အုပ်စု တစ်ခုရဲ့ request 20% က နှေးနေတယ်။ ဒါ ဘယ်လို failure လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Production ဘယ်လို ပြောင်းလဲလာလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="series">SRE from zero · 4</p>
+              <h1>Production ဘယ်လို ပြောင်းလဲလာလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          line-height: 1.6;
+        }
+
+        .series {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          font-size: 1.75rem;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l04_p01
+      contentType: google
+      name: "Cover: all green, can't pay"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p01
+    - id: l04_p01b
+      contentType: google
+      name: "Cover: who is right?"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p01b
+    - id: l04_p02
+      contentType: google
+      name: "Then"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p02
+    - id: l04_p02b
+      contentType: google
+      name: "Then and now"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p02b
+    - id: l04_p02c
+      contentType: google
+      name: "Workload-centric"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p02c
+    - id: l04_p03
+      contentType: google
+      name: "Guardrails, not gates"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p03
+    - id: l04_p03b
+      contentType: google
+      name: "Rules written as code"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p03b
+    - id: l04_p04
+      contentType: google
+      name: "Server says, user feels"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p04
+    - id: l04_p04b
+      contentType: google
+      name: "When you find out"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p04b
+    - id: l04_p05
+      contentType: google
+      name: "Seeing production now"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p05
+    - id: l04_p05b
+      contentType: google
+      name: "Seeing production now (all three)"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p05b
+    - id: l04_p06
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l04_p06
+  whiteboardAssets:
+    # ---- Board B1 (P5 bars): capacity is now a spending decision ----------
+    # Step 1: the title (furniture), the axis, twelve monthly blue bars and
+    # the Thingyan label over the tall April bar.
+    - {
+        id: l04-b1-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 580,
+        height: 45,
+        text: "Padauk ရဲ့ တစ်နှစ်စာ traffic",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l04-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 284,
+        y: 540,
+        width: 364,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b1-jan,
+        kind: text,
+        x: 284,
+        y: 574,
+        width: 136,
+        height: 35,
+        text: "ဇန်နဝါရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b1-dec,
+        kind: text,
+        x: 540,
+        y: 574,
+        width: 120,
+        height: 35,
+        text: "ဒီဇင်ဘာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b1-m01,
+        kind: rectangle,
+        x: 290,
+        y: 480,
+        width: 22,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m02,
+        kind: rectangle,
+        x: 320,
+        y: 485,
+        width: 22,
+        height: 75,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m03,
+        kind: rectangle,
+        x: 350,
+        y: 465,
+        width: 22,
+        height: 95,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m04,
+        kind: rectangle,
+        x: 380,
+        y: 360,
+        width: 22,
+        height: 200,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m05,
+        kind: rectangle,
+        x: 410,
+        y: 470,
+        width: 22,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m06,
+        kind: rectangle,
+        x: 440,
+        y: 475,
+        width: 22,
+        height: 85,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m07,
+        kind: rectangle,
+        x: 470,
+        y: 480,
+        width: 22,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m08,
+        kind: rectangle,
+        x: 500,
+        y: 475,
+        width: 22,
+        height: 85,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m09,
+        kind: rectangle,
+        x: 530,
+        y: 470,
+        width: 22,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m10,
+        kind: rectangle,
+        x: 560,
+        y: 460,
+        width: 22,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m11,
+        kind: rectangle,
+        x: 590,
+        y: 450,
+        width: 22,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-m12,
+        kind: rectangle,
+        x: 620,
+        y: 440,
+        width: 22,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b1-thingyan,
+        kind: text,
+        x: 336,
+        y: 312,
+        width: 140,
+        height: 35,
+        text: "သင်္ကြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Step 2: the thin orange threshold bought for the peak, and the idle
+    # money in the empty space under it (right of the April bar).
+    - {
+        id: l04-b1-peak-line,
+        kind: rectangle,
+        x: 284,
+        y: 352,
+        width: 364,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l04-b1-peak-label,
+        kind: text,
+        x: 664,
+        y: 336,
+        width: 340,
+        height: 35,
+        text: "peak အတွက် ကြိုဝယ်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b1-idle,
+        kind: text,
+        x: 412,
+        y: 380,
+        width: 290,
+        height: 35,
+        text: "အလဟဿ ဖြစ်နေတဲ့ ငွေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 3: a green stepped outline hugging the bars (Jan–Mar, Apr,
+    # May–Sep, Oct–Dec) and its label.
+    - {
+        id: l04-b1-scale-1,
+        kind: rectangle,
+        x: 285,
+        y: 457,
+        width: 92,
+        height: 103,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b1-scale-2,
+        kind: rectangle,
+        x: 377,
+        y: 354,
+        width: 28,
+        height: 206,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b1-scale-3,
+        kind: rectangle,
+        x: 405,
+        y: 462,
+        width: 150,
+        height: 98,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b1-scale-4,
+        kind: rectangle,
+        x: 555,
+        y: 432,
+        width: 92,
+        height: 128,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b1-scale-label,
+        kind: text,
+        x: 664,
+        y: 428,
+        width: 330,
+        height: 35,
+        text: "လိုသလို တိုး၊ လျှော့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Step 3b (pacing split of step 3): the uncapped rule plus the retry loop.
+    - {
+        id: l04-b1-nocap-1,
+        kind: text,
+        x: 664,
+        y: 478,
+        width: 350,
+        height: 35,
+        text: "အကန့်အသတ် မရှိ + retry",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b1-nocap-2,
+        kind: text,
+        x: 664,
+        y: 514,
+        width: 170,
+        height: 35,
+        text: "= bill 2 ဆ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 4 (pacing): where each job runs, from the narration's own words.
+    - {
+        id: l04-b1-spot,
+        kind: text,
+        x: 280,
+        y: 216,
+        width: 460,
+        height: 35,
+        text: "settlement job: spot instance",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b1-reserved,
+        kind: text,
+        x: 280,
+        y: 258,
+        width: 490,
+        height: 35,
+        text: "payment API: ကြိုငှားထားတဲ့ စက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Step 5 (pacing): the provider's control plane has a bad hour.
+    - {
+        id: l04-b1-control,
+        kind: text,
+        x: 285,
+        y: 612,
+        width: 640,
+        height: 35,
+        text: "control plane: 1 နာရီ၊ customer ထောင်ချီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # ---- Board B2 (P6 lanes): ticket path vs golden path ------------------
+    # Step 1: top lane, developer → ticket: 2 ပတ် → ops. Step 1b (split so
+    # no step draws more than three boxes): → red server box.
+    - {
+        id: l04-b2-dev1-box,
+        kind: rectangle,
+        x: 258,
+        y: 190,
+        width: 156,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-dev1,
+        kind: text,
+        x: 265,
+        y: 222,
+        width: 142,
+        height: 35,
+        text: "developer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 418,
+        y: 225,
+        width: 36,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-ticket-box,
+        kind: rectangle,
+        x: 458,
+        y: 190,
+        width: 218,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-ticket,
+        kind: text,
+        x: 465,
+        y: 222,
+        width: 204,
+        height: 35,
+        text: "ticket: 2 ပတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 680,
+        y: 225,
+        width: 36,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-ops-box,
+        kind: rectangle,
+        x: 720,
+        y: 190,
+        width: 80,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-ops,
+        kind: text,
+        x: 735,
+        y: 222,
+        width: 50,
+        height: 35,
+        text: "ops",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-arrow3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 804,
+        y: 225,
+        width: 36,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-server-box,
+        kind: rectangle,
+        x: 844,
+        y: 190,
+        width: 236,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l04-b2-server-1,
+        kind: text,
+        x: 852,
+        y: 205,
+        width: 112,
+        height: 35,
+        text: "server၊",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-server-2,
+        kind: text,
+        x: 852,
+        y: 245,
+        width: 220,
+        height: 35,
+        text: "monitoring မပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 2: bottom lane, developer → template → green service box. The
+    # long arrow leaves room for the check box in step 3.
+    - {
+        id: l04-b2-dev2-box,
+        kind: rectangle,
+        x: 258,
+        y: 400,
+        width: 156,
+        height: 125,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-dev2,
+        kind: text,
+        x: 265,
+        y: 445,
+        width: 142,
+        height: 35,
+        text: "developer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-arrow4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 418,
+        y: 447,
+        width: 36,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-template-box,
+        kind: rectangle,
+        x: 458,
+        y: 400,
+        width: 150,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l04-b2-template,
+        kind: text,
+        x: 466,
+        y: 445,
+        width: 128,
+        height: 35,
+        text: "template",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-arrow5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 612,
+        y: 447,
+        width: 222,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b2-service-box,
+        kind: rectangle,
+        x: 838,
+        y: 400,
+        width: 242,
+        height: 125,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b2-service-1,
+        kind: text,
+        x: 846,
+        y: 408,
+        width: 220,
+        height: 35,
+        text: "metric၊ alert၊",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-service-2,
+        kind: text,
+        x: 846,
+        y: 445,
+        width: 190,
+        height: 35,
+        text: "backup ပါတဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-service-3,
+        kind: text,
+        x: 846,
+        y: 482,
+        width: 112,
+        height: 35,
+        text: "service",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Step 2b (pacing split of step 2): the platform carrying what no one
+    # person can know, under the golden path.
+    - {
+        id: l04-b2-platform-band,
+        kind: rectangle,
+        x: 258,
+        y: 545,
+        width: 822,
+        height: 92,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l04-b2-platform,
+        kind: text,
+        x: 276,
+        y: 573,
+        width: 690,
+        height: 35,
+        text: "platform: server၊ network၊ storage၊ security",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Step 3: an orange check box on the bottom lane's path and a red typo
+    # stopped at it.
+    - {
+        id: l04-b2-check-box,
+        kind: rectangle,
+        x: 668,
+        y: 400,
+        width: 110,
+        height: 125,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l04-b2-check,
+        kind: text,
+        x: 682,
+        y: 406,
+        width: 82,
+        height: 35,
+        text: "check",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-typo,
+        kind: text,
+        x: 690,
+        y: 316,
+        width: 66,
+        height: 35,
+        text: "typo",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b2-typo-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 708,
+        y: 356,
+        width: 30,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+
+    # ---- Board B3 (P6 lanes): gray failure ---------------------------------
+    # Step 1: top lane, one green box.
+    - {
+        id: l04-b3-status-box,
+        kind: rectangle,
+        x: 280,
+        y: 165,
+        width: 400,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l04-b3-status,
+        kind: text,
+        x: 292,
+        y: 182,
+        width: 380,
+        height: 35,
+        text: "status check: အားလုံး UP",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Step 2: bottom lane, the share of slow Bank Y transfers from the old
+    # Android app and six 30-minute bars (7 px per %). Step 2b: the 1% target
+    # (the line sits 7 px above the bars' base, at 1%).
+    - {
+        id: l04-b3-lane-1,
+        kind: text,
+        x: 280,
+        y: 255,
+        width: 590,
+        height: 35,
+        text: "Bank Y ငွေလွှဲ 5 စက္ကန့်ထက် ကြာတဲ့ %",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-lane-2,
+        kind: text,
+        x: 280,
+        y: 292,
+        width: 340,
+        height: 35,
+        text: "(Android app အဟောင်း)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 284,
+        y: 596,
+        width: 372,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l04-b3-bar1,
+        kind: rectangle,
+        x: 290,
+        y: 611,
+        width: 40,
+        height: 4,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-bar2,
+        kind: rectangle,
+        x: 354,
+        y: 610,
+        width: 40,
+        height: 5,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-bar3,
+        kind: rectangle,
+        x: 418,
+        y: 482,
+        width: 40,
+        height: 133,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-bar4,
+        kind: rectangle,
+        x: 482,
+        y: 454,
+        width: 40,
+        height: 161,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-bar5,
+        kind: rectangle,
+        x: 546,
+        y: 447,
+        width: 40,
+        height: 168,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-bar6,
+        kind: rectangle,
+        x: 610,
+        y: 468,
+        width: 40,
+        height: 147,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l04-b3-val1,
+        kind: text,
+        x: 280,
+        y: 566,
+        width: 64,
+        height: 35,
+        text: "0.4%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-val2,
+        kind: text,
+        x: 346,
+        y: 565,
+        width: 64,
+        height: 35,
+        text: "0.6%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-val3,
+        kind: text,
+        x: 414,
+        y: 442,
+        width: 56,
+        height: 35,
+        text: "19%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-val4,
+        kind: text,
+        x: 478,
+        y: 414,
+        width: 56,
+        height: 35,
+        text: "23%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-val5,
+        kind: text,
+        x: 542,
+        y: 407,
+        width: 56,
+        height: 35,
+        text: "24%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-val6,
+        kind: text,
+        x: 606,
+        y: 428,
+        width: 56,
+        height: 35,
+        text: "21%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l04-b3-target-line,
+        kind: rectangle,
+        x: 284,
+        y: 606,
+        width: 372,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l04-b3-target,
+        kind: text,
+        x: 668,
+        y: 590,
+        width: 428,
+        height: 35,
+        text: "ပစ်မှတ်: နှေးတာ 1% ထက် မပို",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 3: the last four bars turn red (red bars drawn over the blue
+    # ones) and the label naming who is hurt.
+    - {
+        id: l04-b3-bar3-red,
+        kind: rectangle,
+        x: 418,
+        y: 482,
+        width: 40,
+        height: 133,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l04-b3-bar4-red,
+        kind: rectangle,
+        x: 482,
+        y: 454,
+        width: 40,
+        height: 161,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l04-b3-bar5-red,
+        kind: rectangle,
+        x: 546,
+        y: 447,
+        width: 40,
+        height: 168,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l04-b3-bar6-red,
+        kind: rectangle,
+        x: 610,
+        y: 468,
+        width: 40,
+        height: 147,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l04-b3-hurt,
+        kind: text,
+        x: 280,
+        y: 337,
+        width: 720,
+        height: 35,
+        text: "Bank Y: Android app အဟောင်း user တွေအတွက် နှေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console
+  # (AthanLab or VoxCPM2); scripts keep pinning a built-in profile.
+  voiceProfile: pocket-alba-v1
+  seed: 2604
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "Production အရင်နဲ့ အခု"
+    narration: >
+      [[mark:show-p01]] reliability အတွက် လူနဲ့ အချိန် ပေးဖို့ CTO ကိုနေလင်း သဘောတူပြီးကတည်းက မသီရိက ပထမနှစ် စာရင်းကို တစ်ခုချင်း လုပ်နေပါတယ်။ တစ်ရက် ညနေမှာတော့ Bank Y ကို ငွေလွှဲတာ အကြာကြီး စောင့်နေရတယ် ဆိုတဲ့ post တွေ တက်လာတာကို support အဖွဲ့ကို ဦးဆောင်တဲ့ မစု သတိထားမိပါတယ်။
+      [[mark:show-p01b]] မသီရိက dashboard ကို ဖွင့်ကြည့်တော့ status check တွေ အားလုံး up ဖြစ်ပြီး အစိမ်းရောင် ပြနေပါတယ်။ ဒါပေမဲ့ user တချို့အတွက်တော့ 2 နာရီလောက် Bank Y ကို ငွေလွှဲလို့ မရသလောက် နှေးနေခဲ့ပါတယ်။ ဒါဆို ဘယ်သူ မှန်လဲ၊ dashboard လား၊ user တွေလား?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "Google Cloud Well-Architected Framework: Reliability pillar",
+          url: "https://docs.cloud.google.com/architecture/framework/reliability",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l04_p01,
+        }
+      # Pacing: the cover's details and question arrive with the dashboard.
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l04_p01b }
+
+  - id: then-now
+    narration: >
+      [[mark:show-p02]] ဒီမေးခွန်းကို မဖြေခင် production ဘယ်လို ပြောင်းလဲလာလဲ အရင် ကြည့်ရအောင်။ ဘယ်ဘက်က အရင်ခေတ်မှာ server တွေကို ကိုယ်တိုင် ဝယ်ပြီး တစ်လုံးချင်း လက်နဲ့ ပြုစုခဲ့ကြပါတယ်။ server အသစ် လိုရင် ticket တင်ပြီး ရက်သတ္တပတ်ချီ စောင့်ရသလို၊ system ကောင်းမကောင်းကိုလည်း server ရဲ့ uptime နဲ့ပဲ တိုင်းခဲ့ကြပါတယ်။
+      [[mark:show-p02b]] ညာဘက်က အခုခေတ်မှာတော့ Padauk လို ကုမ္ပဏီ အသေးတွေကတောင် cloud ကနေ စက် ငှားပြီး code ကို container တွေ၊ request ဝင်လာမှ run တဲ့ function တွေအဖြစ် run ပါတယ်။ developer က လိုတာကို ticket မတင်ဘဲ self-service နဲ့ ကိုယ်တိုင် ယူနိုင်လို့ မိနစ်ပိုင်းပဲ ကြာပါတယ်။
+      [[mark:show-p02c]] ဒီလို server တစ်လုံးချင်းအစား container၊ function လို workload တွေကို platform ပေါ်မှာ run ပြီး user ခံစားရတာကို ကြည့်တဲ့ ပုံစံကို workload-centric လို့ ခေါ်ပါတယ်။ ပြဿနာက Padauk ရဲ့ dashboard က server up လား ဆိုတဲ့ အရင်ခေတ် မေးခွန်းကိုပဲ ဖြေနေသေးတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Production Environment at Google",
+          url: "https://sre.google/sre-book/production-environment/",
+        }
+      - {
+          title: "Hybrid and multicloud architecture patterns",
+          url: "https://docs.cloud.google.com/architecture/hybrid-multicloud-patterns",
+        }
+    actions:
+      # Advances in place from the cover: the left (then) column first.
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l04_p02 }
+      # Pacing: the right (now) column lands as the narration turns to it.
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l04_p02b }
+      # Pacing: the comparison gets its name, workload-centric.
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l04_p02c }
+
+  - id: capacity
+    chapter: "Capacity နဲ့ cloud bill"
+    narration: >
+      [[mark:close-p02]] [[mark:draw-b1-s1]] cloud ကြောင့် ပထမဆုံး ပြောင်းသွားတာက capacity ပါ။ ဒီ bar တွေက Padauk ရဲ့ လအလိုက် traffic ဖြစ်ပြီး ဧပြီလမှာ သင်္ကြန်ကြောင့် အများကြီး မြင့်ပါတယ်။ ကိုယ်ပိုင် server ခေတ်မှာတော့ စက်ရဖို့ လနဲ့ချီ ကြာလို့ တစ်နှစ်လုံးရဲ့ အမြင့်ဆုံး လကို ခံနိုင်အောင် ကြိုဝယ်ထားရပါတယ်။
+      [[mark:draw-b1-s2]] ဒီ လိမ္မော်ရောင် မျဉ်းက peak အတွက် ကြိုဝယ်ထားတဲ့ capacity ပါ။ မျဉ်းအောက်က နေရာလွတ်တွေကတော့ မသုံးဘဲ အလဟဿ ဖြစ်နေတဲ့ ငွေတွေပါ။ cloud မှာတော့ သုံးသလောက်ပဲ ပေးရလို့ capacity ဆိုတာ ငွေ ဘယ်လောက် သုံးမလဲ ဆိုတဲ့ ဆုံးဖြတ်ချက် ဖြစ်လာပါတယ်။
+      [[mark:draw-b1-s3]] ဒီတော့ သင်္ကြန် မတိုင်ခင် capacity တိုးပြီး ပွဲပြီးရင် ပြန်လျှော့နိုင်ပါတယ်၊ load အလိုက် စက်ကို အလိုအလျောက် တိုးပေး လျှော့ပေးတာကို autoscaling လို့ ခေါ်ပါတယ်။ [[mark:draw-b1-s3b]] ဒါပေမဲ့ peak ည တစ်ညမှာ autoscaling မှာ အကန့်အသတ် မရှိတဲ့အပြင် retry loop တစ်ခုက request တွေကို ထပ်ခါထပ်ခါ ပို့နေတော့ စက်တွေ ဆက်တိုးပြီး cloud bill 2 ဆ ဖြစ်သွားလို့ အခု အကန့်အသတ် ထည့်ထားပါပြီ။
+      [[mark:draw-b1-s4]] ငွေကိစ္စက တစ်ခါ စီစဉ်ရုံနဲ့ မပြီးပါဘူး၊ ဥပမာ merchant တွေဆီ ငွေလွှဲတဲ့ settlement job က နောက်ကျလို့ရလို့ စျေးပေါပေမဲ့ provider က ပြန်ယူနိုင်တဲ့ spot instance ပေါ်မှာ run ပြီး payment API ကိုတော့ ကြိုငှားထားတဲ့ စက်တွေပေါ်မှာ ထားပါတယ်။ database ကို provider က run ပေးတဲ့ managed service နဲ့ သုံးရင်တောင် ကိုယ့် design နဲ့ code ကတော့ ကိုယ့်တာဝန်ပါပဲ။
+      [[mark:draw-b1-s5]] cloud မှာ ပျက်ပုံကလည်း ပြောင်းလာပါတယ်။ customer တွေ မျှသုံးပြီး စက်နဲ့ setting တွေကို စီမံတဲ့ provider ရဲ့ control plane မှာ 1 နာရီလောက် ပြဿနာ တက်ရင် ထိခိုက်မယ့် နယ်ပယ်၊ blast radius က customer ထောင်ချီအထိ ကျယ်နိုင်ပါတယ်။ အဲဒီအချိန်မှာ ကိုယ့် app ဆက်အလုပ်လုပ်နိုင်အောင် ကိုယ်ပဲ ကြိုပြင်ထားရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google Cloud Well-Architected Framework: Reliability pillar",
+          url: "https://docs.cloud.google.com/architecture/framework/reliability",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+      - {
+          title: "Timeouts, retries, and backoff with jitter (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+        }
+    actions:
+      - { id: close-p02, type: slide.close, at: { mark: close-p02, offsetMs: -400 } }
+      # Opens on an empty board with the title only (furniture, no drawMs).
+      - {
+          id: open-b1,
+          type: whiteboard.apply,
+          at: { mark: draw-b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l04-b1-title],
+        }
+      - id: draw-b1-s1
+        type: whiteboard.apply
+        at: { mark: draw-b1-s1, offsetMs: 200 }
+        upsertIds:
+          [
+            l04-b1-axis,
+            l04-b1-jan,
+            l04-b1-dec,
+            l04-b1-m01,
+            l04-b1-m02,
+            l04-b1-m03,
+            l04-b1-m04,
+            l04-b1-m05,
+            l04-b1-m06,
+            l04-b1-m07,
+            l04-b1-m08,
+            l04-b1-m09,
+            l04-b1-m10,
+            l04-b1-m11,
+            l04-b1-m12,
+            l04-b1-thingyan,
+          ]
+        drawMs: 2600
+      - {
+          id: draw-b1-s2,
+          type: whiteboard.apply,
+          at: { mark: draw-b1-s2 },
+          upsertIds: [l04-b1-peak-line, l04-b1-peak-label, l04-b1-idle],
+          drawMs: 1600,
+        }
+      - id: draw-b1-s3
+        type: whiteboard.apply
+        at: { mark: draw-b1-s3 }
+        upsertIds:
+          [l04-b1-scale-1, l04-b1-scale-2, l04-b1-scale-3, l04-b1-scale-4, l04-b1-scale-label]
+        drawMs: 1800
+      # Pacing: step 3 split in two; the red label lands with its sentence.
+      - {
+          id: draw-b1-s3b,
+          type: whiteboard.apply,
+          at: { mark: draw-b1-s3b },
+          upsertIds: [l04-b1-nocap-1, l04-b1-nocap-2],
+          drawMs: 1000,
+        }
+      # Pacing: spot vs reserved capacity.
+      - {
+          id: draw-b1-s4,
+          type: whiteboard.apply,
+          at: { mark: draw-b1-s4 },
+          upsertIds: [l04-b1-spot, l04-b1-reserved],
+          drawMs: 1400,
+        }
+      # Pacing: the provider's control plane (the README's suggested step 4).
+      - {
+          id: draw-b1-s5,
+          type: whiteboard.apply,
+          at: { mark: draw-b1-s5 },
+          upsertIds: [l04-b1-control],
+          drawMs: 1000,
+        }
+
+  - id: golden-path
+    chapter: "Golden path နဲ့ guardrail"
+    narration: >
+      [[mark:draw-b2-s1]] ဒုတိယ ပြောင်းလဲမှုက service အသစ် တစ်ခု production ရောက်ပုံပါ။ Padauk က လျှပ်စစ် မီတာခ ပေးလို့ရမယ့် Bill Pay ကို ထုတ်တော့မှာပါ။ အပေါ်ဘက်က လမ်းဟောင်းမှာ developer က ticket တင်ပြီး ops ဆီက server ကို 2 ပတ်လောက် စောင့်ရပါတယ်။ [[mark:draw-b2-s1b]] ရလာတဲ့ server မှာလည်း monitoring မပါလို့ ပျက်ရင် user တွေ မတိုင်မချင်း ဘယ်သူမှ မသိပါဘူး။
+      [[mark:draw-b2-s2]] ဒါကြောင့် မသီရိက template တစ်ခု ဆောက်လိုက်ပါတယ်။ အောက်ဘက်က လမ်းသစ်မှာ developer က template ကို ရွေးလိုက်ရုံနဲ့ metric၊ alert၊ backup တွေ ပါပြီးသား service ရပါတယ်။ ဒီလို လိုက်သွားရုံနဲ့ reliability အများစု ပါလာတဲ့ standard လမ်းကို golden path လို့ ခေါ်ပါတယ်။
+      [[mark:draw-b2-s2b]] lesson 1 က ပြောခဲ့တဲ့ developer က ကိုယ်ရေးတာကို ကိုယ်တိုင် run တဲ့ ပုံစံကို you build it, you run it လို့ ခေါ်ပါတယ်။ ဒါပေမဲ့ server၊ network၊ storage၊ security အားလုံးကို တစ်ယောက်တည်း မကျွမ်းကျင်နိုင်လို့ အဲဒါတွေကို platform က ထမ်းပေးမှ ဖြစ်နိုင်တာပါ။
+      [[mark:draw-b2-s3]] template ထဲမှာ check တွေလည်း ပါပါတယ်။ Bill Pay ရဲ့ ပထမဆုံး deploy မှာ developer တစ်ယောက်က lesson 2 က ဝန်ဆောင်ခ typo လိုပဲ config မှာ typo ရိုက်မိပေမဲ့ check က deploy မလုပ်ခင်မှာပဲ ရပ်ပေးလိုက်ပါတယ်။ ဒီလိုနဲ့ Bill Pay က 2 ပတ် မစောင့်ရဘဲ monitoring အပြည့်နဲ့ production ရောက်သွားပြီး အဲဒီ template က Padauk ရဲ့ ပထမဆုံး golden path ဖြစ်လာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - id: draw-b2-s1
+        type: whiteboard.apply
+        at: { mark: draw-b2-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l04-b2-dev1-box,
+            l04-b2-dev1,
+            l04-b2-arrow1,
+            l04-b2-ticket-box,
+            l04-b2-ticket,
+            l04-b2-arrow2,
+            l04-b2-ops-box,
+            l04-b2-ops,
+          ]
+        drawMs: 2000
+      # Step 1 split so it draws three boxes, not four: the red server box
+      # lands as the narration says the server comes without monitoring.
+      - {
+          id: draw-b2-s1b,
+          type: whiteboard.apply,
+          at: { mark: draw-b2-s1b },
+          upsertIds: [l04-b2-arrow3, l04-b2-server-box, l04-b2-server-1, l04-b2-server-2],
+          drawMs: 1200,
+        }
+      - id: draw-b2-s2
+        type: whiteboard.apply
+        at: { mark: draw-b2-s2 }
+        upsertIds:
+          [
+            l04-b2-dev2-box,
+            l04-b2-dev2,
+            l04-b2-arrow4,
+            l04-b2-template-box,
+            l04-b2-template,
+            l04-b2-arrow5,
+            l04-b2-service-box,
+            l04-b2-service-1,
+            l04-b2-service-2,
+            l04-b2-service-3,
+          ]
+        drawMs: 2400
+      # Pacing: step 2 split in two; the platform band lands with its sentence.
+      - {
+          id: draw-b2-s2b,
+          type: whiteboard.apply,
+          at: { mark: draw-b2-s2b },
+          upsertIds: [l04-b2-platform-band, l04-b2-platform],
+          drawMs: 1200,
+        }
+      - id: draw-b2-s3
+        type: whiteboard.apply
+        at: { mark: draw-b2-s3 }
+        upsertIds: [l04-b2-check-box, l04-b2-check, l04-b2-typo, l04-b2-typo-arrow]
+        drawMs: 1400
+
+  - id: guardrails
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] ခုနက check လို ကန့်သတ်ချက်ကို guardrail လို့ ခေါ်ပါတယ်။ လမ်းဘေးက အကာလိုပဲ အန္တရာယ်ရှိတဲ့ နေရာကို မကျော်အောင် ကာပေးပြီး ဘေးကင်းတဲ့ အလုပ်ကိုတော့ ဆက်သွားခွင့် ပေးပါတယ်။ ဂိတ်မှာဆိုရင် ပြောင်းလဲမှု တစ်ခုချင်းကို လူ တစ်ယောက်က ခွင့်ပြုတဲ့အထိ ရပ်စောင့်ရပါတယ်။ guardrail မှာတော့ check တွေကို လမ်းထဲမှာ ထည့်ထားပြီး monitoring နဲ့ backup ကလည်း အစကတည်းက ပါလို့ developer တွေ ပိုမြန်လာပေမဲ့ risk မတိုးပါဘူး။
+      [[mark:show-p03b]] စည်းမျဉ်းတွေကို code နဲ့ ရေးပြီး pipeline ကို စစ်ခိုင်းလို့လည်း ရပါတယ်။ ဥပမာ မှတ်ပုံတင် အချက်အလက်တွေကို ပြည်တွင်းမှာပဲ ထားရမယ်လို့ စည်းမျဉ်းက ဆိုတယ် ဆိုပါစို့။ အဲဒီ data ကို ပြည်ပ ရောက်စေမယ့် deploy မှန်သမျှကို pipeline က တားပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l04_p03 }
+      # Pacing: rules written as code get their own page.
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l04_p03b }
+
+  - id: gray-failure
+    chapter: "Gray failure"
+    narration: >
+      [[mark:close-p03b]] [[mark:draw-b3-s1]] ဒါဆို Bank Y ညနေကို ပြန်သွားရအောင်။ အပေါ်ဘက်က status check က server တိုင်းကို မိနစ်တိုင်း မေးကြည့်ပြီး ပြန်ဖြေရင် up လို့ ပြတာမို့ ညနေ တစ်ခုလုံး အစိမ်းရောင်ပါပဲ။ ဒါပေမဲ့ ဒီ check က server ပြန်ဖြေနိုင်သေးလားလို့ပဲ မေးတာပါ၊ user ရဲ့ ငွေလွှဲ ဘယ်လောက် ကြာလဲ ဆိုတာ မမေးပါဘူး။
+      [[mark:draw-b3-s2]] အောက်ဘက်ကတော့ Android app အဟောင်းကနေ Bank Y ကို ငွေလွှဲတာတွေထဲက 5 စက္ကန့်ထက် ကြာတဲ့ ရာခိုင်နှုန်းကို မိနစ် 30 စီ ပြထားတာပါ။ [[mark:draw-b3-s2b]] လိမ္မော်ရောင် မျဉ်းက နှေးတာ 1 ရာခိုင်နှုန်းထက် မပိုရဘူး ဆိုတဲ့ ပစ်မှတ်ပါ။ lesson 3 မှာ ပြောခဲ့သလို ဒီလို သဘောတူထားတဲ့ ပစ်မှတ်ကို service level objective၊ အတိုကောက် SLO လို့ ခေါ်ပါတယ်။ ပထမ 1 နာရီမှာ 1 ရာခိုင်နှုန်း မပြည့်လို့ မျဉ်းအောက်မှာပါ။
+      [[mark:draw-b3-s3]] နောက် 2 နာရီမှာတော့ 20 ရာခိုင်နှုန်းလောက်အထိ တက်သွားပြီး၊ ဒါက lesson အစက 2 နာရီပါ။ ဒီလို server တွေ up နေပေမဲ့ Android app အဟောင်း သုံးသူတွေလို user တချို့အတွက် နှေးနေတာ၊ တစ်ဝက်တစ်ပျက် ပျက်နေတာမျိုးကို gray failure လို့ ခေါ်ပါတယ်။ ငွေလွှဲ အားလုံးရဲ့ ပျမ်းမျှက ကောင်းနေတုန်းပဲ ဖြစ်ပြီး ဒုက္ခက user အုပ်စု တစ်ခုမှာပဲ စုနေလို့ dashboard မှာ မမြင်ရတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - {
+          id: draw-b3-s1,
+          type: whiteboard.apply,
+          at: { mark: draw-b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l04-b3-status-box, l04-b3-status],
+          drawMs: 1000,
+        }
+      - id: draw-b3-s2
+        type: whiteboard.apply
+        at: { mark: draw-b3-s2 }
+        upsertIds:
+          [
+            l04-b3-lane-1,
+            l04-b3-lane-2,
+            l04-b3-axis,
+            l04-b3-bar1,
+            l04-b3-val1,
+            l04-b3-bar2,
+            l04-b3-val2,
+            l04-b3-bar3,
+            l04-b3-val3,
+            l04-b3-bar4,
+            l04-b3-val4,
+            l04-b3-bar5,
+            l04-b3-val5,
+            l04-b3-bar6,
+            l04-b3-val6,
+          ]
+        drawMs: 2600
+      # Step 2 split: the orange target lands as the narration names it.
+      - {
+          id: draw-b3-s2b,
+          type: whiteboard.apply,
+          at: { mark: draw-b3-s2b },
+          upsertIds: [l04-b3-target-line, l04-b3-target],
+          drawMs: 1000,
+        }
+      - id: draw-b3-s3
+        type: whiteboard.apply
+        at: { mark: draw-b3-s3 }
+        upsertIds: [l04-b3-bar3-red, l04-b3-bar4-red, l04-b3-bar5-red, l04-b3-bar6-red, l04-b3-hurt]
+        drawMs: 1600
+
+  - id: server-vs-user
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] အခု အစက မေးခွန်းကို ဖြေလို့ရပါပြီ။ server ဘက်က အားလုံး up ဖြစ်နေပေမဲ့ user ဘက်ကတော့ Bank Y ကို ငွေလွှဲလို့ မရပါဘူး။ ငွေလွှဲ အားလုံးရဲ့ ပျမ်းမျှက 2 စက္ကန့်ပဲ ရှိပေမဲ့ Android app အဟောင်း user တွေထဲက 5 ယောက်မှာ 1 ယောက်က 20 စက္ကန့်လောက် စောင့်နေရလို့ dashboard အစိမ်းရောင် ဖြစ်နေချိန်မှာ ဒေါသထွက်နေတဲ့ post တွေ တက်လာတာပါ။
+      [[mark:show-p04b]] နှစ်ဘက်လုံးရဲ့ ကိန်းဂဏန်းတွေ မှန်ပေမဲ့ reliability ကို ဆုံးဖြတ်တာက user ဘက်ပါ။ server ဘက်က dashboard ကိုပဲ ကြည့်နေရင် user တွေ ဒုက္ခရောက်ပြီး post တင်မှ သိရပါတယ်။ user ဘက်ကနေ တိုင်းထားရင်တော့ နှေးတာ 1 ရာခိုင်နှုန်း ကျော်တာနဲ့ သိရလို့ post တွေ မတက်ခင် ပြင်ဖို့ အချိန် ရပါသေးတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l04_p04 }
+      # Pacing: when each side finds out.
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l04_p04b }
+
+  - id: seeing-production
+    narration: >
+      [[mark:show-p05]] အဲဒီညနေက မသီရိက အချိန် ဘယ်မှာ ကုန်နေလဲ ရှာဖို့ service တိုင်းရဲ့ log ကို တစ်ခုပြီး တစ်ခု ဖွင့်ခဲ့ရပါတယ်။ ငွေလွှဲ request တစ်ခုက gateway၊ payment service၊ ဘဏ် ဆိုပြီး ဖြတ်သွားတာမို့ အစအဆုံး ခြေရာခံပေးတဲ့ trace ရှိရင် ဘယ်နေရာ နှေးနေလဲ မိနစ်ပိုင်းနဲ့ မြင်ရမှာပါ။
+      [[mark:show-p05b]] ပြဿနာကို အရင်ဆုံး ပြနိုင်တာက metric အများကြီး မဟုတ်ဘဲ ငွေလွှဲရဲ့ SLO ပါ၊ SLO လွဲမှ အသေးစိတ်ကို ဝင်ရှာရပါတယ်။ metric မှာ ဖုန်းနံပါတ်လို label ထည့်မိရင် metric အရေအတွက် အဆမတန် များလာပြီး bill တက်တတ်လို့ label ကို နည်းနည်းပဲ ထားသင့်ပါတယ်။ data ကိုလည်း support အဖွဲ့ပါ ကြည့်လို့ရအောင် မျှသုံးပါ။ ဒါတွေကို lesson 8 မှာ ဆက်လေ့လာပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "OpenTelemetry: Signals", url: "https://opentelemetry.io/docs/concepts/signals/" }
+      - {
+          title: "OpenTelemetry: Observability primer",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+      - {
+          title: "SRE book, 1st ed: Monitoring Distributed Systems",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      # Advances in place from l04_p04b: the trace line first.
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l04_p05 }
+      # Pacing: the SLO and metric-label lines land as the narration names them.
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l04_p05b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] ဒီအပတ်အတွက်ကတော့ အဖွဲ့ သေးသေးလေးမှာတောင် လုပ်လို့ရတာ သုံးခုပါ။ ပထမ၊ app version အဟောင်း ဒါမှမဟုတ် ဘဏ် တစ်ခုတည်းအတွက်ပဲ နှေးနေတာမျိုး၊ dashboard မမြင်ရတဲ့ failure တစ်ခုကို ရှာကြည့်ပါ။ ဒုတိယ၊ ကိုယ့် autoscaling မှာ အကန့်အသတ် ရှိလား စစ်ကြည့်ပါ။ တတိယ၊ service အသစ် တစ်ခု စဆောက်တာကနေ production ရောက်တဲ့အထိ ဘယ်လောက် ကြာလဲ အချိန် မှတ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Measuring reliability (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/measuring-reliability/",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l04_p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] ဒီနေ့ အချက် ငါးခုကို notes ထဲမှာ စုထားပါတယ်။ [[mark:select-workload]] workload-centric က server တစ်လုံးချင်းအစား workload နဲ့ user ဘက်က ရလဒ်ကို ကြည့်တာပါ။ [[mark:select-golden]] golden path က template ကို ရွေးရုံနဲ့ metric၊ alert၊ backup ပါလာတဲ့ standard လမ်းပါ။ [[mark:select-guardrail]] guardrail က ခွင့်ပြုချက် စောင့်ရတဲ့ ဂိတ် မဟုတ်ဘဲ လမ်းထဲက check ပါ။
+      [[mark:select-gray]] gray failure က server တွေ up နေပေမဲ့ user အုပ်စု တစ်ခုအတွက် နှေးနေတာမျိုးပါ။ [[mark:select-user-side]] ဒါကြောင့် reliability ကို user ဘက်ကနေ တိုင်းထားမှ စောစော သိပြီး ပြင်ချိန် ရပါတယ်။ ကဲ၊ ဒီ lesson ရဲ့ မေးခွန်းပါ။ ကိုယ့် dashboard က အစိမ်းရောင် ပြနေတုန်းမှာ user အုပ်စု တစ်ခုရဲ့ request 20 ရာခိုင်နှုန်းက နှေးနေတယ်။ [[mark:ask-question]] ဒါ ဘယ်လို failure မျိုးလဲ?
+      [[mark:pause-answer]] ဒါက gray failure ပါ။ နောက် lesson ကတော့ ည 9 နာရီမှာ စပါမယ်။ promo ကြီး မစခင်မှာ SMS code တွေ နှေးလာတာကို developer ကိုမင်း သတိထားမိပါတယ်။ သူက အဖွဲ့ထဲ ရောက်တာ မကြာသေးသလို ပြီးခဲ့တဲ့လကလည်း သူ့မေးခွန်းကို တစ်ယောက်က ရယ်ခဲ့ဖူးပါတယ်။ ကိုမင်း ပြောရဲပါ့မလား?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "Google Cloud Well-Architected Framework: Reliability pillar",
+          url: "https://docs.cloud.google.com/architecture/framework/reliability",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      # notes.md is the entry file and already showing, so no click.
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: select-workload,
+          type: editor.select,
+          at: { mark: select-workload },
+          target: { file: notes.md, text: "workload-centric", occurrence: 1 },
+        }
+      - {
+          id: select-golden,
+          type: editor.select,
+          at: { mark: select-golden },
+          target: { file: notes.md, text: "golden path", occurrence: 1 },
+        }
+      - {
+          id: select-guardrail,
+          type: editor.select,
+          at: { mark: select-guardrail },
+          target: { file: notes.md, text: "guardrail", occurrence: 1 },
+        }
+      - {
+          id: select-gray,
+          type: editor.select,
+          at: { mark: select-gray },
+          target: { file: notes.md, text: "gray failure", occurrence: 1 },
+        }
+      - {
+          id: select-user-side,
+          type: editor.select,
+          at: { mark: select-user-side },
+          target: { file: notes.md, text: "user ဘက်က တိုင်းတာ", occurrence: 1 },
+        }
+      # The ⟪pause 3s⟫: the question-line select starts as the question ends
+      # and its drag runs in silence; the answer at pause-answer waits for it
+      # (the scheduler holds the next dialog until a select finishes). Hung
+      # off ask-question because an action at pause-answer itself would run
+      # under the answer instead of before it.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 3100 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: dashboard က အစိမ်း၊ ဒါပေမဲ့ user အုပ်စု တစ်ခုရဲ့ request 20% က နှေးနေတယ်။ ဒါ ဘယ်လို failure လဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
