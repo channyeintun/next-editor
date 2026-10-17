@@ -1,0 +1,2229 @@
+# CSS course (Burmese), lesson 32 of 43: gradients.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is already Burmese.
+#
+# Shape: board (recall lesson 31; a gradient is a picture the browser draws, so
+# it goes in background-image, not background-color) → code tour (header with
+# an empty awning strip, a dark hero with white text, an empty tea glass, a
+# coin badge, a beige pie with a legend in a card, two beige bars) → hero:
+# background-color: linear-gradient() does nothing (invalid, dropped) →
+# background-image: top to bottom → to right → board (0deg up, clockwise,
+# to right = 90deg, corner keywords depend on the box) → 135deg → a 60% stop
+# → board (stops on a ruler, colour hint, hard stop) → the glass gets three
+# hard-stop bands (double positions; a 0 is raised to the previous stop) →
+# the hero gets a dark see-through layer on top (the first layer is on top)
+# → coin: default radial, then circle at 30% 30% → board (size keywords,
+# ending shape, explicit sizes) → board (conic as a clock: 12 o'clock,
+# clockwise, from, at) → pie: soft conic, then a hard-stop pie chart →
+# awning: repeating stripes → stats card: one big spot, then background-size
+# tiles it into dots → bars: blue → yellow in sRGB (grey middle) and
+# `in oklch` on the second bar (vivid) → board (default interpolation, `in`,
+# shorter/longer hue) → quiz + recap, hand-off to the background properties
+# (lesson 33).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# A keystroke-typed gradient has an unclosed "(" until its last ")", and an
+# unclosed function swallows the rest of the stylesheet. So every keystroke
+# edit lands in the LAST rule of the file (nothing after it can be swallowed)
+# and the one edit into an earlier rule (the hero's layers, after the glass
+# rule exists) is line-by-line: each revealed line has balanced parentheses.
+# The glass and awning rules are line-by-line too: long stop lists the
+# narration summarises and then points at with editor.select.
+# A keystroke edit always has a "}" after the cursor (a new rule lands first
+# as an empty block insert; the only exception is the hero's first line,
+# background-color, which is invalid in every half-typed state): at the very
+# end of the file the browser closes
+# an open "(" and "{" by itself, so "radial-gradient(#fff" would paint white.
+# With the "}" in the way, a new declaration stays invalid until its last ")"
+# and the previous one in the same rule keeps painting.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# header 0–125 (awning 28 tall at the top), hero 141–341 (400 × 200), glass
+# 80 × 140 at y 357, coin 96 × 96 at y 379, stats card 513–707 (pie 160),
+# bars at y 748 and 818, document 886 tall (screenshots in probe/).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-32-gradients
+  title: "CSS course 32: Gradient"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 32
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit header (logo and nav left out) with the awning strip
+      # above the shop name; the kit hero; the lesson blocks glass + coin
+      # (.treats), pie with its legend (.stats) and compare (two .bar strips).
+      # No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (logo and nav left out; the awning strip sits above the shop name) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <div class="awning" aria-hidden="true" data-testid="awning"></div>
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero (200 px tall, white text on a plain dark background) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#main" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- lesson blocks: glass (an empty tea glass) and coin (a round badge) -->
+              <div class="treats" data-testid="treats">
+                <div class="tea-glass" aria-hidden="true" data-testid="tea-glass"></div>
+                <span class="coin" data-testid="coin">လတ်ဆတ်</span>
+              </div>
+
+              <!-- lesson block: pie (what customers order, with a legend) -->
+              <section class="stats" data-testid="stats">
+                <div class="pie" aria-hidden="true" data-testid="pie"></div>
+                <div>
+                  <h2>ဧည့်သည်တွေ မှာတာ</h2>
+                  <ul class="legend" data-testid="legend">
+                    <li><span class="key key-tea"></span>လက်ဖက်ရည် 45%</li>
+                    <li><span class="key key-coffee"></span>ကော်ဖီ 30%</li>
+                    <li><span class="key key-salad"></span>လက်ဖက်သုပ် 25%</li>
+                  </ul>
+                </div>
+              </section>
+
+              <!-- lesson block: compare (two bars for the two ways of mixing colours) -->
+              <section class="compare" data-testid="compare">
+                <p class="bar-label">sRGB</p>
+                <div class="bar" data-testid="bar-srgb"></div>
+                <p class="bar-label">OKLCH</p>
+                <div class="bar oklch" data-testid="bar-oklch"></div>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C (the hero's background removed;
+      # D dropped). Section E sizes the boxes the gradients paint and gives the
+      # hero a plain dark background colour with white text. No
+      # background-image or background-size anywhere.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 32 keeps A, B, B2 and C (minus the hero's background; section D
+          dropped). Section E sizes the boxes the gradients paint: the awning, a
+          fixed-height dark hero with white text, the tea glass, the coin, the round
+          pie in its card, the legend swatches and the two comparison bars. Every
+          background-image and background-size is typed.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 32: the boxes the typed gradients paint. Every background-image
+           and background-size is typed during the lesson. */
+        .awning {
+          height: 28px;
+          margin: -16px -16px 12px;
+        }
+
+        .hero {
+          height: 200px;
+          color: #fff;
+          background-color: var(--tea-dark);
+        }
+
+        .treats {
+          display: flex;
+          align-items: center;
+          gap: 32px;
+          margin: 16px 0;
+          padding: 0 16px;
+        }
+
+        .tea-glass {
+          width: 80px;
+          height: 140px;
+          border: 3px solid var(--line);
+          border-top: 0;
+          border-radius: 0 0 16px 16px;
+        }
+
+        .coin {
+          display: grid;
+          place-items: center;
+          width: 96px;
+          height: 96px;
+          border: 2px solid var(--gold);
+          border-radius: 50%;
+          color: var(--tea-dark);
+          font-weight: 700;
+        }
+
+        .stats {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding: 16px;
+          background-color: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .pie {
+          flex: none;
+          width: 160px;
+          height: 160px;
+          border-radius: 50%;
+          background-color: var(--line);
+        }
+
+        .legend {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .key {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          margin-inline-end: 8px;
+          border-radius: 3px;
+          vertical-align: middle;
+        }
+
+        .key-tea {
+          background-color: #6b3e26;
+        }
+
+        .key-coffee {
+          background-color: #c9a227;
+        }
+
+        .key-salad {
+          background-color: #2f6b3a;
+        }
+
+        .compare {
+          margin-top: 16px;
+        }
+
+        .bar-label {
+          margin: 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .bar {
+          height: 36px;
+          margin-bottom: 8px;
+          border-radius: 8px;
+          background-color: var(--line);
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — a gradient is a picture. Orange = the picture, green = the
+    # property that takes it, red = the one that doesn't, blue = why a
+    # drawn picture is better than a file, violet = other places that take
+    # images.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Gradient ဆိုတာ ပုံ တစ်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-swatch,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 220,
+        height: 130,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffe8cc",
+      }
+    - {
+        id: a-swatch-l,
+        kind: text,
+        x: 322,
+        y: 287,
+        width: 180,
+        height: 36,
+        text: "အညို → ရွှေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-img,
+        kind: text,
+        x: 580,
+        y: 250,
+        width: 380,
+        height: 36,
+        text: "background-image ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-col,
+        kind: text,
+        x: 580,
+        y: 320,
+        width: 380,
+        height: 36,
+        text: "background-color ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-col-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 580,
+        y: 320,
+        width: 290,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-why1,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 560,
+        height: 36,
+        text: "browser က ဆွဲပေး · ပုံ ဖိုင် မလို",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-why2,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 460,
+        height: 36,
+        text: "ဘယ်လောက် ချဲ့ချဲ့ ကြည်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-other,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 640,
+        height: 36,
+        text: "mask · border image · list marker",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board B — direction and angles. Black = the box, blue = the four
+    # angles, orange = the default, violet = the turning direction, green =
+    # keyword = angle, red = the corner-keyword trap.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "ဦးတည်ရာနဲ့ ဒီဂရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-box,
+        kind: rectangle,
+        x: 460,
+        y: 270,
+        width: 240,
+        height: 140,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-0,
+        kind: text,
+        x: 530,
+        y: 226,
+        width: 120,
+        height: 36,
+        text: "0deg ↑",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-90,
+        kind: text,
+        x: 740,
+        y: 322,
+        width: 160,
+        height: 36,
+        text: "90deg →",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-180,
+        kind: text,
+        x: 460,
+        y: 424,
+        width: 320,
+        height: 36,
+        text: "180deg ↓ · default",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-270,
+        kind: text,
+        x: 280,
+        y: 322,
+        width: 140,
+        height: 36,
+        text: "← 270deg",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-cw,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 560,
+        height: 36,
+        text: "နာရီလက်တံ အတိုင်း လှည့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-kw,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 420,
+        height: 36,
+        text: "to right = 90deg",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-corner,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 700,
+        height: 36,
+        text: "to top right ≠ 45deg · box ပုံ အလိုက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — colour stops on a ruler. Orange = the solid part, blue = the
+    # blend, violet = the colour hint, green = the hard stop.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 46,
+        text: "Color stop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-solid,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 420,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffe8cc",
+      }
+    - {
+        id: c-blend,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 280,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-0,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 60,
+        height: 36,
+        text: "0%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-60,
+        kind: text,
+        x: 696,
+        y: 290,
+        width: 70,
+        height: 36,
+        text: "60%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-100,
+        kind: text,
+        x: 940,
+        y: 290,
+        width: 90,
+        height: 36,
+        text: "100%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-solid-l,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 360,
+        height: 36,
+        text: "60% အထိ အညို အပြည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-blend-l,
+        kind: text,
+        x: 720,
+        y: 340,
+        width: 300,
+        height: 36,
+        text: "အဲဒီကနေ ကူး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-hint,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 640,
+        height: 36,
+        text: "color hint · ကူးတဲ့ အလယ်မှတ် ရွှေ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-hard-a,
+        kind: rectangle,
+        x: 300,
+        y: 480,
+        width: 350,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-hard-b,
+        kind: rectangle,
+        x: 650,
+        y: 480,
+        width: 350,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+      }
+    - {
+        id: c-hard-l,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 660,
+        height: 36,
+        text: "နေရာ တူ stop နှစ်ခု → အစွန်း ပြတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — radial size keywords. Black = the box, red = the centre
+    # (at), green = closest-side (drawn), orange = the default (its corner
+    # circled), blue = the
+    # two in between, violet = shape and explicit sizes.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Radial gradient",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-box,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 360,
+        height: 230,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-dot,
+        kind: ellipse,
+        x: 366,
+        y: 286,
+        width: 14,
+        height: 14,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: d-closest,
+        kind: ellipse,
+        x: 310,
+        y: 230,
+        width: 126,
+        height: 126,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-dot-l,
+        kind: text,
+        x: 700,
+        y: 240,
+        width: 360,
+        height: 36,
+        text: "at → အလယ်မှတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-closest-l,
+        kind: text,
+        x: 700,
+        y: 295,
+        width: 320,
+        height: 36,
+        text: "closest-side",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-farthest-l,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 400,
+        height: 36,
+        text: "farthest-corner · default",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-middle-l,
+        kind: text,
+        x: 700,
+        y: 405,
+        width: 260,
+        height: 36,
+        text: "closest-corner",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-middle2-l,
+        kind: text,
+        x: 700,
+        y: 450,
+        width: 260,
+        height: 36,
+        text: "farthest-side",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # The default's corner, circled: the farthest corner from the centre dot.
+    - {
+        id: d-far-corner,
+        kind: freedraw,
+        stroke: circle,
+        x: 636,
+        y: 436,
+        width: 48,
+        height: 48,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-shape,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 560,
+        height: 36,
+        text: "ellipse (default) · circle",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-explicit,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 620,
+        height: 36,
+        text: "circle 80px · ellipse 60% 40%",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — conic as a clock. Blue = the clock and where it starts,
+    # violet = the sweep, black = stop units, orange = from, green = at.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 46,
+        text: "Conic gradient",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-clock,
+        kind: ellipse,
+        x: 320,
+        y: 260,
+        width: 220,
+        height: 220,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-12,
+        kind: text,
+        x: 380,
+        y: 218,
+        width: 110,
+        height: 36,
+        text: "12 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-sweep,
+        kind: freedraw,
+        stroke: circle,
+        x: 350,
+        y: 290,
+        width: 160,
+        height: 160,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-start,
+        kind: text,
+        x: 600,
+        y: 260,
+        width: 460,
+        height: 36,
+        text: "0deg · 12 နာရီက စ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-cw,
+        kind: text,
+        x: 600,
+        y: 315,
+        width: 460,
+        height: 36,
+        text: "နာရီလက်တံ အတိုင်း တစ်ပတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: e-stops,
+        kind: text,
+        x: 600,
+        y: 370,
+        width: 460,
+        height: 36,
+        text: "stop → deg ဒါမှမဟုတ် %",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-from,
+        kind: text,
+        x: 600,
+        y: 440,
+        width: 460,
+        height: 36,
+        text: "from 90deg → 3 နာရီက စ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-at,
+        kind: text,
+        x: 600,
+        y: 495,
+        width: 460,
+        height: 36,
+        text: "at → အလယ်မှတ် ရွှေ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — how the colours in between are mixed. Red = the grey sRGB
+    # middle, green = the bright OKLCH middle, orange = the default rule,
+    # blue = choosing with `in`, violet = hue on the colour wheel.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "အရောင် ရောပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-srgb,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 520,
+        height: 36,
+        text: "sRGB → အလယ် မီးခိုး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-oklch,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 520,
+        height: 36,
+        text: "OKLCH → အလယ် တောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-legacy,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 540,
+        height: 36,
+        text: "hex · named · rgb() → sRGB",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-modern,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 540,
+        height: 36,
+        text: "oklch() · lab() → OKLab",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-in,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 540,
+        height: 36,
+        text: "in oklch · in oklab · in srgb",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-wheel,
+        kind: ellipse,
+        x: 880,
+        y: 260,
+        width: 180,
+        height: 180,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-short-trace,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 920,
+        y: 330,
+        width: 90,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-long-trace,
+        kind: freedraw,
+        stroke: circle,
+        x: 900,
+        y: 280,
+        width: 140,
+        height: 140,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-short,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 540,
+        height: 36,
+        text: "shorter hue · default · လမ်းတို",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-long,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 540,
+        height: 36,
+        text: "longer hue · လမ်းရှည် · သက်တံ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board G — the closing quiz. Blue = questions, green = answers,
+    # violet = the generator sites named at the tools mark.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "မေးခွန်း နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 700,
+        height: 40,
+        text: "အရောင် အနည်းဆုံး ဘယ်နှရောင်?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: g-a1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 720,
+        height: 36,
+        text: "1 ရောင် ရ · အပြည့်ပဲ · ကူးဖို့ 2 ရောင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-q2,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 700,
+        height: 40,
+        text: "gradient အများကြီး ထပ်လို့ ရလား?",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: g-a2,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 720,
+        height: 36,
+        text: "ရ · comma ခြား · ပထမ = ရှေ့ဆုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-tools,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 480,
+        height: 36,
+        text: "gradient.style · conic.style",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4132
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: gradient-intro
+    chapter: "Gradient ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson နဲ့ course ရဲ့ စာသား အပိုင်း ပြီးပါပြီ။ ဒီ lesson မှာတော့ အလှဆင်တဲ့
+      အပိုင်းကို gradient နဲ့ စပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ
+      dev server ကို စနေပါပြီ။ [[mark:draw-swatch]] gradient ဆိုတာ အရောင် တစ်ခုကနေ နောက်တစ်ခုကို
+      ဖြည်းဖြည်း ကူးသွားတဲ့ နောက်ခံ ပုံပါ။ ဥပမာအားဖြင့် အညိုရင့်ကနေ ရွှေရောင်ကို ကူးသွားတဲ့ banner
+      မျိုးပါ။ [[mark:draw-image]] ဒါပေမဲ့ CSS မှာ gradient က အရောင် မဟုတ်ပါဘူး။ browser က ဆွဲပေးတဲ့
+      ပုံ တစ်ပုံ ဖြစ်လို့၊ ပုံကို လက်ခံတဲ့ property ဖြစ်တဲ့ background image ထဲမှာ ထည့်ရပါတယ်။
+      [[mark:draw-color]] background color ကတော့ အရောင် တစ်ရောင်ကိုပဲ လက်ခံလို့၊ gradient ထည့်ရင်
+      browser က မမှန်ဘူးဆိုပြီး ကျော်သွားပါတယ်။ [[mark:draw-why]] browser ကိုယ်တိုင် ဆွဲတာ ဖြစ်လို့
+      ဖိုင် download လုပ်စရာ မလိုသလို၊ ဘယ်လောက် ချဲ့ချဲ့ ကြည်နေပါတယ်။ [[mark:draw-other]] mask၊
+      border image လို ပုံ လက်ခံတဲ့ တခြား နေရာတွေမှာလည်း သုံးလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients"
+        url: "https://web.dev/learn/css/gradients"
+      - title: "MDN — <gradient> (a gradient is an <image>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient"
+      - title: "CSS Images Module Level 3 — gradients"
+        url: "https://drafts.csswg.org/css-images-3/#gradients"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-swatch
+        type: whiteboard.apply
+        at: { mark: draw-swatch }
+        upsertIds: [a-swatch, a-swatch-l]
+        drawMs: 1600
+      - id: draw-image
+        type: whiteboard.apply
+        at: { mark: draw-image }
+        upsertIds: [a-img]
+        drawMs: 1200
+      - id: draw-color
+        type: whiteboard.apply
+        at: { mark: draw-color }
+        upsertIds: [a-col, a-col-strike]
+        drawMs: 1600
+      - id: draw-why
+        type: whiteboard.apply
+        at: { mark: draw-why }
+        upsertIds: [a-why1, a-why2]
+        drawMs: 1800
+      - id: draw-other
+        type: whiteboard.apply
+        at: { mark: draw-other }
+        upsertIds: [a-other]
+        drawMs: 1400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro-board]] page ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML
+      ဖိုင်ပါ။ [[mark:select-hero]] ဆိုင် နာမည် အောက်က ကြိုဆိုတဲ့ အပိုင်းပါ။ အညိုရင့် နောက်ခံ
+      ရိုးရိုးပေါ်မှာ စာလုံး အဖြူတွေ ရှိပါတယ်။ [[mark:select-treats]] သူ့အောက်မှာ လက်ဖက်ရည်ခွက်
+      အလွတ်နဲ့ အဝိုင်း badge တစ်ခု ရှိပါတယ်။ [[mark:select-stats]] ပြီးတော့ ဧည့်သည်တွေ ဘာ မှာကြလဲ
+      ပြတဲ့ အဝိုင်း chart နဲ့ သူ့ စာရင်း ပါတဲ့ card ပါ။ [[mark:select-compare]] အောက်ဆုံးမှာတော့
+      အရောင် ရောနည်း နှစ်မျိုးကို နှိုင်းယှဉ်ဖို့ bar နှစ်ခု ရှိပါတယ်။ [[mark:open-styles]] CSS
+      ဖိုင်က အလွတ်ပါ။ box တွေရဲ့ အရွယ်အစားကို base CSS ဖိုင်က ပေးထားပေမယ့်၊ ပုံ မရှိသေးပါဘူး။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ ကြိုဆိုတဲ့ အပိုင်းမှာ အရောင်ရင့် တစ်ရောင်တည်း
+      ရှိပြီး၊ ခွက်က အလွတ်ပါ။ chart နေရာမှာလည်း နို့နှစ်ရောင် အဝိုင်းပဲ ရှိပါသေးတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients"
+        url: "https://web.dev/learn/css/gradients"
+      - title: "web.dev Learn CSS — Backgrounds"
+        url: "https://web.dev/learn/css/backgrounds"
+    actions:
+      - id: close-intro-board
+        type: whiteboard.apply
+        at: { mark: close-intro-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-hero
+        type: editor.select
+        at: { mark: select-hero }
+        target:
+          { file: index.html, text: '<section class="hero" data-testid="hero">', occurrence: 1 }
+      - id: select-treats
+        type: editor.select
+        at: { mark: select-treats }
+        target:
+          { file: index.html, text: '<div class="treats" data-testid="treats">', occurrence: 1 }
+      - id: select-stats
+        type: editor.select
+        at: { mark: select-stats }
+        target:
+          { file: index.html, text: '<section class="stats" data-testid="stats">', occurrence: 1 }
+      - id: select-compare
+        type: editor.select
+        at: { mark: select-compare }
+        target:
+          {
+            file: index.html,
+            text: '<section class="compare" data-testid="compare">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-legend
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: legend }
+        textContains: "လက်ဖက်သုပ် 25%"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-legend }
+
+  - id: linear-basics
+    chapter: "Linear gradient"
+    narration: >
+      [[mark:type-bgcolor]] ကြိုဆိုတဲ့ အပိုင်းကို အညိုရင့်ကနေ ရွှေရောင်ကို ကူးတဲ့ gradient
+      ပေးကြည့်ရအောင်။ ပထမဆုံး အရောင်အတွက် property ဖြစ်တဲ့ background color ထဲမှာ တမင်
+      ထည့်ကြည့်ပါမယ်။ ရိုက်နေတုန်း preview ကို လိုက်ကြည့်ပါ။ [[mark:after-bgcolor]] ဘာမှ
+      မပြောင်းပါဘူး။ background color က အရောင်ကိုပဲ လက်ခံလို့၊ browser က declaration တစ်ခုလုံးကို
+      မမှန်ဘူးဆိုပြီး ကျော်သွားတာပါ။ [[mark:type-bgimage]] အခု gradient အတူတူကိုပဲ
+      နောက်တစ်ကြောင်းမှာ၊ ပုံ ထည့်ရမယ့် နေရာ ဖြစ်တဲ့ background image ထဲမှာ ရေးပါမယ်။ အရောင်ရင့်
+      အပိုင်းကို သတိထား ကြည့်ပါ။ [[mark:after-bgimage]] gradient ပေါ်လာပါပြီ။ နောက်ခံ အရောင်ရင့်ရဲ့
+      အပေါ်မှာ ထပ်ဆွဲထားတာပါ။ linear gradient က မျဉ်းဖြောင့် တစ်လျှောက် ကူးသွားပြီး၊ ဦးတည်ရာ မပေးရင်
+      အပေါ်ကနေ အောက်ကို ကူးပါတယ်။ [[mark:select-two-colors]] ဒီ အရောင် နှစ်ခုကို ကြည့်ပါ။ နေရာ
+      မပေးထားလို့၊ ပထမ အရောင်က အစမှာ၊ နောက်ဆုံး အရောင်က အဆုံးမှာ ရှိပါတယ်။ ကြားမှာ အရောင်
+      ထပ်ထည့်ရင်လည်း ညီညီ ခွဲချပေးပါတယ်။ [[mark:explain-one-color]] 2025 ခုနှစ်ကစပြီး အရောင်
+      တစ်ရောင်တည်း ပါတဲ့ gradient ကိုလည်း ရေးလို့ ရပေမယ့်၊ အဲဒီ အရောင် အပြည့်ပဲ ဆွဲပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: linear gradient"
+        url: "https://web.dev/learn/css/gradients#linear_gradient"
+      - title: "MDN — linear-gradient()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/linear-gradient"
+      - title: "MDN — background-color (takes a <color>, not an <image>)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-color"
+      - title: "CSS Images Module Level 4 — color stop lists (a single stop is allowed)"
+        url: "https://drafts.csswg.org/css-images-4/#color-stop-syntax"
+    actions:
+      - id: type-bgcolor
+        type: editor.type
+        at: { mark: type-bgcolor }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".hero {\n  background-color: linear-gradient(#6b3e26, #c9a227);\n}\n"
+      - id: expect-bgcolor
+        type: expect.preview
+        at: { mark: after-bgcolor }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-bgimage
+        type: editor.type
+        at: { mark: type-bgimage }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-color: linear-gradient(#6b3e26, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: linear-gradient(#6b3e26, #c9a227);\n"
+      - id: expect-bgimage
+        type: expect.preview
+        at: { mark: after-bgimage }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-two-colors
+        type: editor.select
+        at: { mark: select-two-colors }
+        target: { file: styles.css, text: "#6b3e26, #c9a227", occurrence: 2 }
+
+  - id: direction
+    narration: >
+      [[mark:type-toright]] ဦးတည်ရာ ပြောင်းချင်ရင် အရောင်တွေရဲ့ ရှေ့မှာ ရေးပြီး comma ခံရပါတယ်။ to
+      right ဆိုတဲ့ keyword ကို ပေးကြည့်ရအောင်။ ရွှေရောင် ဘယ်နေရာကို ရွှေ့သွားလဲ လိုက်ကြည့်ပါ။
+      [[mark:after-toright]] အခု အညိုရောင်က ဘယ်ဘက်၊ ရွှေရောင်က ညာဘက် ရောက်သွားပါပြီ။ keyword က
+      gradient ဆုံးမယ့် ဘက်ကို ပြောတာပါ။ [[mark:open-angles]] ဒီဂရီနဲ့လည်း ရပါတယ်။
+      [[mark:draw-zero]] 0 ဒီဂရီက အပေါ်ဘက်ပါ။ [[mark:draw-clockwise]] ဒီဂရီ များလာရင် နာရီလက်တံ
+      လည်တဲ့ဘက်ကို လှည့်သွားပါတယ်။ 90 က ညာဘက်၊ default ဖြစ်တဲ့ 180 က အောက်၊ 270 က ဘယ်ဘက်ပါ။ lesson
+      10 က turn လို unit တွေကိုလည်း သုံးလို့ ရပါတယ်။ [[mark:draw-keyword]] ဒါကြောင့် to right နဲ့ 90
+      ဒီဂရီက အတူတူပါပဲ။ [[mark:draw-corner]] ဒါပေမဲ့ to top right က 45 ဒီဂရီ အမြဲ မဟုတ်ပါဘူး။
+      browser က box ရဲ့ ထောင့်ဖြတ်မျဉ်းကို ကြည့်ပြီး မျဉ်းကို စောင်းပေးလို့၊ ဒီဂရီက box ရဲ့
+      ပုံသဏ္ဌာန်ပေါ် မူတည်ပါတယ်။ လေးထောင့်ညီ box မှာပဲ 45 ဒီဂရီ ဖြစ်ပါတယ်။ [[mark:close-angles]]
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:type-deg]] 135 ဒီဂရီ ရေးကြည့်ရအောင်။ 0 က အပေါ်၊ 90 က ညာဘက်
+      ဖြစ်လို့၊ 135 ဆိုတာ ညာဘက်နဲ့ အောက်ဘက်ရဲ့ ကြား တစ်ဝက်တည့်တည့်မှာ ရှိပါတယ်။ [[mark:after-deg]]
+      အခု အညိုရောင်က ဘယ်ဘက် အပေါ်ထောင့်ကနေ စပြီး၊ ရွှေရောင်က ညာဘက် အောက်ထောင့်မှာ ဆုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: linear gradient (to keywords, angles)"
+        url: "https://web.dev/learn/css/gradients#linear_gradient"
+      - title: "MDN — linear-gradient(): composition of a linear gradient"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/linear-gradient#composition_of_a_linear_gradient"
+      - title: "CSS Images Module Level 3 — linear gradient syntax (0deg points up, clockwise; corner keywords)"
+        url: "https://drafts.csswg.org/css-images-3/#linear-gradient-syntax"
+    actions:
+      - id: type-toright
+        type: editor.type
+        at: { mark: type-toright }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(#6b3e26, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: linear-gradient(to right, #6b3e26, #c9a227);\n"
+      - id: expect-toright
+        type: expect.preview
+        at: { mark: after-toright }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-angles
+        type: whiteboard.apply
+        at: { mark: open-angles }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-box]
+      - id: draw-zero
+        type: whiteboard.apply
+        at: { mark: draw-zero }
+        upsertIds: [b-0]
+        drawMs: 900
+      - id: draw-clockwise
+        type: whiteboard.apply
+        at: { mark: draw-clockwise }
+        upsertIds: [b-90, b-180, b-270, b-cw]
+        drawMs: 3200
+      - id: draw-keyword
+        type: whiteboard.apply
+        at: { mark: draw-keyword }
+        upsertIds: [b-kw]
+        drawMs: 1200
+      - id: draw-corner
+        type: whiteboard.apply
+        at: { mark: draw-corner }
+        upsertIds: [b-corner]
+        drawMs: 1600
+      - id: close-angles
+        type: whiteboard.apply
+        at: { mark: close-angles }
+        open: false
+      - id: type-deg
+        type: editor.type
+        at: { mark: type-deg }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(to right, #6b3e26, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: linear-gradient(135deg, #6b3e26, #c9a227);\n"
+      - id: expect-deg
+        type: expect.preview
+        at: { mark: after-deg }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: stops
+    chapter: "Color stop"
+    narration: >
+      [[mark:type-stop]] နောက်တစ်ဆင့်မှာ အညိုရောင်ကို နေရာ ပေးကြည့်ပါမယ်။ အညိုရောင်ရဲ့ နောက်မှာ 60
+      ရာခိုင်နှုန်း ထည့်ရေးပြီး၊ ရွှေရောင်ကတော့ ညာဘက် အောက်ထောင့်မှာပဲ ဆုံးပါသေးတယ်။
+      [[mark:after-stop]] အညိုရောင် နေရာ ကျယ်လာပါပြီ။ gradient ရဲ့ 60 ရာခိုင်နှုန်းအထိ အညို အပြည့်
+      ဖြစ်ပြီး၊ နောက်ဆုံး အပိုင်းမှာပဲ ကူးပါတယ်။ [[mark:select-stop]] ဒီလို အရောင်နဲ့ သူ့ နေရာကို
+      color stop လို့ ခေါ်ပါတယ်။ gradient ရဲ့ ဘယ်နေရာ ရောက်ရင် ဒီ အရောင် အပြည့် ဖြစ်ရမလဲ ဆိုတဲ့
+      မှတ်တိုင်ပါ။ [[mark:explain-stop]] ကူးတာက stop နှစ်ခုကြားမှာပဲ ဖြစ်ပါတယ်။ ပထမ stop
+      မတိုင်ခင်နဲ့ နောက်ဆုံး stop ကျော်ပြီးရင်တော့ အရောင် အပြည့်ပဲ ရှိပါတယ်။ [[mark:open-ruler]]
+      ပေတံ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-solid]] 0 ကနေ 60 ရာခိုင်နှုန်းအထိ အညို အပြည့်ပါ။
+      [[mark:draw-blend]] 60 ကနေ 100 အထိကတော့ ရွှေရောင်ကို ကူးပါတယ်။ [[mark:draw-hint]] အရောင်
+      နှစ်ခုကြားမှာ အရောင် မပါဘဲ နေရာ သက်သက် ရေးရင် color hint ဖြစ်ပါတယ်။ ကူးတာ တစ်ဝက် ရောက်တဲ့
+      နေရာကို ရွှေ့ပေးပါတယ်။ [[mark:draw-hard]] stop နှစ်ခုက နေရာ တစ်ခုတည်းမှာ ရှိရင်တော့ ကူးဖို့
+      နေရာ မကျန်လို့၊ အစွန်း ပြတ်ပြတ် ဖြစ်သွားပါတယ်။ ဒါကို hard stop လို့ ခေါ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: color stops"
+        url: "https://web.dev/learn/css/gradients#linear_gradient"
+      - title: "MDN — Using CSS gradients: positioning color stops, hard lines, color hints"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_images/Using_CSS_gradients#positioning_color_stops"
+      - title: "CSS Images Module Level 4 — color stop fixup and transition hints"
+        url: "https://drafts.csswg.org/css-images-4/#color-stop-fixup"
+    actions:
+      - id: type-stop
+        type: editor.type
+        at: { mark: type-stop }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(135deg, #6b3e26, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: linear-gradient(135deg, #6b3e26 60%, #c9a227);\n"
+      - id: expect-stop
+        type: expect.preview
+        at: { mark: after-stop }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-stop
+        type: editor.select
+        at: { mark: select-stop }
+        target: { file: styles.css, text: "#6b3e26 60%", occurrence: 1 }
+      - id: open-ruler
+        type: whiteboard.apply
+        at: { mark: open-ruler }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-solid
+        type: whiteboard.apply
+        at: { mark: draw-solid }
+        upsertIds: [c-0, c-solid, c-60, c-solid-l]
+        drawMs: 2000
+      - id: draw-blend
+        type: whiteboard.apply
+        at: { mark: draw-blend }
+        upsertIds: [c-blend, c-100, c-blend-l]
+        drawMs: 1800
+      - id: draw-hint
+        type: whiteboard.apply
+        at: { mark: draw-hint }
+        upsertIds: [c-hint]
+        drawMs: 1400
+      - id: draw-hard
+        type: whiteboard.apply
+        at: { mark: draw-hard }
+        upsertIds: [c-hard-a, c-hard-b, c-hard-l]
+        drawMs: 2000
+
+  - id: glass
+    narration: >
+      [[mark:close-ruler]] hard stop ကို လက်ဖက်ရည်ခွက်မှာ သုံးကြည့်ရအောင်။ [[mark:scroll-glass]] ခွက်က
+      ကြိုဆိုတဲ့ အပိုင်း အောက်မှာပါ။ [[mark:type-glass]] gradient တစ်ခုနဲ့ ခွက်ကို အရောင် မရောတဲ့ အပိုင်း
+      သုံးပိုင်း ခွဲပါမယ်။ အပေါ်က နို့အမြှုပ်၊ အလယ်က နို့လက်ဖက်ရည်၊ အောက်ဆုံးက လက်ဖက်ရည် ရင့်ရင့်ပါ။
+      [[mark:after-glass]] အရောင် မရောဘဲ သန့်သန့် အပိုင်း သုံးပိုင်း ဖြစ်သွားပါပြီ။ [[mark:select-foam]]
+      နို့အမြှုပ်မှာ နေရာ နှစ်ခု ပေးထားပါတယ်။ ဒါက အရောင် တူတဲ့ stop နှစ်ခုကို အတိုကောက် ရေးတာ ဖြစ်လို့၊ 0
+      ကနေ 20 ရာခိုင်နှုန်းအထိ တစ်ရောင်တည်း ဖြစ်ပါတယ်။ [[mark:select-milk]] နို့လက်ဖက်ရည်က 0 ကနေ စပါတယ်။
+      ဒါပေမဲ့ stop တစ်ခုက သူ့ရှေ့က stop ထက် စောခွင့် မရှိတဲ့အတွက်၊ browser က သူ့ကို 20 ရာခိုင်နှုန်းအထိ
+      ရွှေ့ပေးပါတယ်။ နေရာ တစ်ခုတည်းမှာ stop နှစ်ခု ဖြစ်လို့ အစွန်း ပြတ်သွားတာပါ။ [[mark:select-tea]]
+      လက်ဖက်ရည် ရင့်ရင့်လည်း အတူတူပါပဲ။ နို့လက်ဖက်ရည် ဆုံးတဲ့ 70 ရာခိုင်နှုန်းကနေ စပြီး၊ ကျန်တဲ့ နေရာ
+      အကုန် ဖြည့်ပါတယ်။
+    sources:
+      - title: "MDN — Using CSS gradients: creating hard lines, multi-position color stops"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_images/Using_CSS_gradients#creating_hard_lines"
+      - title: "CSS Images Module Level 4 — color stop fixup (a position smaller than an earlier one is raised to it)"
+        url: "https://drafts.csswg.org/css-images-4/#color-stop-fixup"
+    actions:
+      - id: close-ruler
+        type: whiteboard.apply
+        at: { mark: close-ruler }
+        open: false
+      - id: scroll-glass
+        type: preview.scroll
+        at: { mark: scroll-glass }
+        timeoutMs: 5000
+        top: 200
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-glass
+        type: editor.type
+        at: { mark: type-glass }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(135deg, #6b3e26 60%, #c9a227);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.tea-glass {\n  background-image: linear-gradient(#f5ead7 0 20%, #c89f6a 0 70%, #6b3e26 0);\n}\n"
+      - id: expect-glass
+        type: expect.preview
+        at: { mark: after-glass }
+        timeoutMs: 4000
+        target: { by: testId, value: tea-glass }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-foam
+        type: editor.select
+        at: { mark: select-foam }
+        target: { file: styles.css, text: "#f5ead7 0 20%", occurrence: 1 }
+      - id: select-milk
+        type: editor.select
+        at: { mark: select-milk }
+        target: { file: styles.css, text: "#c89f6a 0 70%", occurrence: 1 }
+      - id: select-tea
+        type: editor.select
+        at: { mark: select-tea }
+        target: { file: styles.css, text: "#6b3e26 0)", occurrence: 1 }
+
+  - id: layers
+    chapter: "Gradient တွေကို အလွှာ ထပ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-hero]] ကြိုဆိုတဲ့ အပိုင်းက စာလုံး အဖြူတွေကို ဖတ်ရ ပိုလွယ်အောင် လုပ်ရအောင်။
+      [[mark:type-layers]] background image က comma ခြားထားတဲ့ စာရင်းကို လက်ခံပါတယ်။ ပထမက အပေါ်မှာ တစ်ဝက်
+      ဖောက်ထွင်း မြင်ရတဲ့ အမည်းရောင်ကနေ အောက်မှာ ပျောက်သွားတဲ့ gradient၊ ဒုတိယက ခုနက အညိုကနေ ရွှေကို
+      ကူးတဲ့ gradient ပါ။ ဒီ declaration အသစ်က အပေါ်က declaration တွေကို အစားထိုးပါတယ်။
+      [[mark:after-layers]] စာသား ရှိတဲ့ အပေါ်ပိုင်း ပိုမှောင်လာလို့၊ ခေါင်းစဉ် အဖြူက ပိုထင်းလာပါပြီ။
+      [[mark:select-overlay]] ဒီ အမည်း အလွှာကို ကြည့်ပါ။ စာရင်းထဲမှာ ပထမ ရှိတဲ့ ပုံကို အရှေ့ဆုံးမှာ
+      ဆွဲပါတယ်။ lesson 23 မှာ HTML ထဲ နောက်မှ လာတဲ့ box က အရင် box ကို ဖုံးတာနဲ့ ပြောင်းပြန်ပါ။
+      [[mark:explain-order]] ဒါကြောင့် အရှေ့ဆုံး အလွှာက နောက်က အလွှာကို ဖောက်မြင်ရအောင် ထားရပါတယ်။ နှစ်ခု
+      နေရာ လဲလိုက်ရင်၊ ဖောက်မမြင်ရတဲ့ gradient က အမည်း အလွှာကို ဖုံးသွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: layering"
+        url: "https://web.dev/learn/css/gradients#linear_gradient"
+      - title: "MDN — Using multiple backgrounds (the first layer is on top)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_backgrounds_and_borders/Using_multiple_backgrounds"
+      - title: "MDN — background-image"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-image"
+    actions:
+      - id: scroll-hero
+        type: preview.scroll
+        at: { mark: scroll-hero }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: the hero rule is no longer the last rule, and every
+      # revealed line has balanced parentheses, so the glass rule after it
+      # is never swallowed while the declaration is incomplete.
+      - id: type-layers
+        type: editor.type
+        at: { mark: type-layers }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(135deg, #6b3e26 60%, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image:\n    linear-gradient(rgb(0 0 0 / 50%), transparent),\n    linear-gradient(135deg, #6b3e26 60%, #c9a227);\n"
+      - id: expect-layers
+        type: expect.preview
+        at: { mark: after-layers }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-overlay
+        type: editor.select
+        at: { mark: select-overlay }
+        target:
+          {
+            file: styles.css,
+            text: "linear-gradient(rgb(0 0 0 / 50%), transparent),",
+            occurrence: 1,
+          }
+
+  - id: radial
+    chapter: "Radial gradient"
+    narration: >
+      [[mark:scroll-coin]] အခု အဝိုင်း badge ပါ။ [[mark:type-radial]] radial gradient က အလယ်မှတ် တစ်ခုကနေ
+      အပြင်ကို ဝိုင်းဝိုင်း ပျံ့သွားပါတယ်။ badge အတွက် rule အသစ် တစ်ခုမှာ၊ အလယ်က အဖြူဝါဝါ ဖျော့ဖျော့ကနေ
+      အစွန်းမှာ ရွှေရောင် ဖြစ်အောင် ရေးပါမယ်။ [[mark:after-radial]] badge က အလယ်ကနေ လင်းလာပါပြီ။ default
+      အားဖြင့် အလယ်မှတ်က box ရဲ့ အလယ်ပါ။ ပုံသဏ္ဌာန်က box ပုံအတိုင်း ellipse ဖြစ်ပေမယ့်၊ ဒီ box က
+      လေးထောင့်ညီ ဖြစ်လို့ circle ဖြစ်နေပါတယ်။ ရွှေရောင်ကတော့ အဝေးဆုံး ထောင့်မှာ ရောက်ပါတယ်။
+      [[mark:type-at]] အလင်းကို ရွှေ့ကြည့်ရအောင်။ အရောင်တွေရဲ့ ရှေ့မှာ circle လို့ ရေးပြီး၊ အလယ်မှတ်ကို
+      ဘယ်ဘက် အစွန်းကနေ 30 ရာခိုင်နှုန်း၊ အပေါ် အစွန်းကနေ 30 ရာခိုင်နှုန်းမှာ ထားပါမယ်။ [[mark:after-at]]
+      လင်းတဲ့ နေရာက ဘယ်ဘက် အပေါ်ကို ရွှေ့သွားပါပြီ။ [[mark:select-at]] at ဆိုတဲ့ keyword က အလယ်မှတ်ကို
+      သတ်မှတ်ပါတယ်။ နောက် lesson မှာ ကြည့်မယ့် background position လို တန်ဖိုးတွေ ပေးလို့ ရပါတယ်။
+      [[mark:open-radial-board]] အရွယ်အစားကိုလည်း ပြောင်းလို့ ရပါတယ်။ [[mark:draw-radial-box]] ဒီ box မှာ
+      အလယ်မှတ်က ဘယ်ဘက် အပေါ်နားမှာပါ။ [[mark:draw-closest]] closest side ဆိုရင် ပုံသဏ္ဌာန်က အနီးဆုံး
+      အစွန်းမှာ ဆုံးလို့ အသေးဆုံး ဖြစ်ပါတယ်။ [[mark:draw-farthest]] default ဖြစ်တဲ့ farthest corner က
+      အဝေးဆုံး ထောင့်အထိ ရောက်ပြီး၊ closest corner နဲ့ farthest side က ကြားမှာ ရှိပါတယ်။
+      [[mark:draw-shape]] circle လို့ မပြောရင် ပုံသဏ္ဌာန်က ellipse ပါ။ [[mark:draw-explicit]] အရွယ်အစားကို
+      ကိုယ်တိုင်လည်း ပေးလို့ ရပါတယ်။ အရှည် တစ်ခုဆိုရင် circle၊ တန်ဖိုး နှစ်ခုဆိုရင် ellipse ဖြစ်ပြီး၊
+      ရာခိုင်နှုန်းကို ellipse ပဲ လက်ခံပါတယ်။ radial gradient အများကြီး ထပ်ဆင့်လို့လည်း ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: radial gradient"
+        url: "https://web.dev/learn/css/gradients#radial_gradient"
+      - title: "MDN — radial-gradient() (shape, size keywords, position)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/radial-gradient"
+      - title: "CSS Images Module Level 3 — radial gradients (ending shape and size)"
+        url: "https://drafts.csswg.org/css-images-3/#radial-gradients"
+    actions:
+      - id: scroll-coin
+        type: preview.scroll
+        at: { mark: scroll-coin }
+        timeoutMs: 5000
+        top: 200
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # The empty rule lands first, so a '}' always follows the cursor: at the end of the file the browser would close an open '(' and '{' by itself, and a half-typed colour would paint as a one-colour gradient.
+      - id: insert-radial-rule
+        type: editor.type
+        at: { mark: type-radial }
+        cadence: block
+        target: { file: styles.css, after: "#6b3e26 0);\n}\n", occurrence: 1 }
+        text: "\n.coin {\n}\n"
+      - id: type-radial
+        type: editor.type
+        at: { afterAction: insert-radial-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".coin {\n", occurrence: 1 }
+        text: "  background-image: radial-gradient(#fff8e1, #c9a227);\n"
+      - id: expect-radial
+        type: expect.preview
+        at: { mark: after-radial }
+        timeoutMs: 4000
+        target: { by: testId, value: coin }
+        textContains: "လတ်ဆတ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-at
+        type: editor.type
+        at: { mark: type-at }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: radial-gradient(#fff8e1, #c9a227);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: radial-gradient(circle at 30% 30%, #fff8e1, #c9a227);\n"
+      - id: expect-at
+        type: expect.preview
+        at: { mark: after-at }
+        timeoutMs: 4000
+        target: { by: testId, value: coin }
+        textContains: "လတ်ဆတ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-at
+        type: editor.select
+        at: { mark: select-at }
+        target: { file: styles.css, text: "at 30% 30%", occurrence: 1 }
+      - id: open-radial-board
+        type: whiteboard.apply
+        at: { mark: open-radial-board }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-radial-box
+        type: whiteboard.apply
+        at: { mark: draw-radial-box }
+        upsertIds: [d-box, d-dot, d-dot-l]
+        drawMs: 1600
+      - id: draw-closest
+        type: whiteboard.apply
+        at: { mark: draw-closest }
+        upsertIds: [d-closest, d-closest-l]
+        drawMs: 1600
+      - id: draw-farthest
+        type: whiteboard.apply
+        at: { mark: draw-farthest }
+        upsertIds: [d-far-corner, d-farthest-l, d-middle-l, d-middle2-l]
+        drawMs: 1800
+      - id: draw-shape
+        type: whiteboard.apply
+        at: { mark: draw-shape }
+        upsertIds: [d-shape]
+        drawMs: 1200
+      - id: draw-explicit
+        type: whiteboard.apply
+        at: { mark: draw-explicit }
+        upsertIds: [d-explicit]
+        drawMs: 1400
+
+  - id: conic
+    chapter: "Conic gradient နဲ့ pie chart"
+    narration: >
+      [[mark:open-conic-board]] တတိယ အမျိုးအစားက conic gradient ပါ။ [[mark:draw-clock]] နာရီ
+      တစ်လုံးလို စဉ်းစားပါ။ အရောင်တွေက နာရီလက်တံလို အလယ်ပတ်လည်ကို လှည့်ပြီး ကူးပါတယ်။
+      [[mark:draw-start]] 12 နာရီကနေ စပြီး နာရီလက်တံ လည်တဲ့ဘက်ကို တစ်ပတ် ပတ်ပါတယ်။ ဒါကြောင့် stop
+      တွေကို ဒီဂရီ ဒါမှမဟုတ် တစ်ပတ်ရဲ့ ရာခိုင်နှုန်းနဲ့ ပေးရပါတယ်။ [[mark:draw-from]] from နဲ့ ဒီဂရီ
+      ပေးရင် စမှတ်ကို လှည့်ပါတယ်။ 90 ဒီဂရီဆိုရင် 3 နာရီကနေ စပါတယ်။ [[mark:draw-at]] at ကတော့ radial
+      မှာလိုပဲ အလယ်မှတ်ကို ရွှေ့ပါတယ်။ [[mark:close-conic-board]] chart ကို လုပ်ကြည့်ရအောင်။
+      [[mark:scroll-pie]] chart က အဝိုင်း သက်သက်ပါ။ [[mark:type-conic]] ပထမဆုံး chart အတွက် rule
+      အသစ် တစ်ခုမှာ၊ နေရာ မပါတဲ့ အရောင် သုံးရောင်နဲ့ conic gradient ရေးပါမယ်။ အညို၊ ရွှေနဲ့ အစိမ်းက
+      အပေါ်ကနေ စပြီး ပတ်သွားပါမယ်။ နို့နှစ်ရောင် အဝိုင်းကို လိုက်ကြည့်ပါ။ [[mark:after-conic]]
+      အရောင်တွေက အဝိုင်း ပတ်လည် ကူးသွားပါပြီ။ တစ်ပတ် ဆုံးပြီး ပြန်စတဲ့ အပေါ်ဆုံးမှာတော့ အစိမ်းနဲ့
+      အညိုက မျဉ်းဖြောင့် တစ်ကြောင်းနဲ့ ဆုံနေပါတယ်။ [[mark:type-pie]] အခု ခွက်တုန်းကလိုပဲ hard stop
+      တွေကို နောက်တစ်ကြောင်းမှာ ရေးပါမယ်။ အညိုက 45 ရာခိုင်နှုန်းအထိ၊ ရွှေက 75 ရာခိုင်နှုန်းအထိ
+      ဖြစ်ပြီး၊ ကျန်တဲ့ အပိုင်းက အစိမ်းပါ။ [[mark:after-pie]] pie chart ဖြစ်သွားပါပြီ။
+      စာရင်းထဲကအတိုင်း 45၊ 30 နဲ့ 25 ရာခိုင်နှုန်း အပိုင်းတွေ ရပါတယ်။ အဝိုင်း ဖြစ်တာကတော့ lesson 34
+      မှာ အသေးစိတ် ကြည့်မယ့် ထောင့်ဝိုင်းကြောင့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: conic gradient"
+        url: "https://web.dev/learn/css/gradients#conic_gradient"
+      - title: "MDN — conic-gradient() (from, at, pie charts)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/conic-gradient"
+      - title: "CSS Images Module Level 4 — conic gradients"
+        url: "https://drafts.csswg.org/css-images-4/#conic-gradients"
+    actions:
+      - id: open-conic-board
+        type: whiteboard.apply
+        at: { mark: open-conic-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-clock
+        type: whiteboard.apply
+        at: { mark: draw-clock }
+        upsertIds: [e-clock, e-sweep]
+        drawMs: 2200
+      - id: draw-start
+        type: whiteboard.apply
+        at: { mark: draw-start }
+        upsertIds: [e-12, e-start, e-cw, e-stops]
+        drawMs: 2800
+      - id: draw-from
+        type: whiteboard.apply
+        at: { mark: draw-from }
+        upsertIds: [e-from]
+        drawMs: 1400
+      - id: draw-at
+        type: whiteboard.apply
+        at: { mark: draw-at }
+        upsertIds: [e-at]
+        drawMs: 1200
+      - id: close-conic-board
+        type: whiteboard.apply
+        at: { mark: close-conic-board }
+        open: false
+      - id: scroll-pie
+        type: preview.scroll
+        at: { mark: scroll-pie }
+        timeoutMs: 5000
+        top: 400
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # Empty rule first (see insert-radial-rule).
+      - id: insert-conic-rule
+        type: editor.type
+        at: { mark: type-conic }
+        cadence: block
+        target: { file: styles.css, after: "at 30% 30%, #fff8e1, #c9a227);\n}\n", occurrence: 1 }
+        text: "\n.pie {\n}\n"
+      - id: type-conic
+        type: editor.type
+        at: { afterAction: insert-conic-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".pie {\n", occurrence: 1 }
+        text: "  background-image: conic-gradient(#6b3e26, #c9a227, #2f6b3a);\n"
+      - id: expect-conic
+        type: expect.preview
+        at: { mark: after-conic }
+        timeoutMs: 4000
+        target: { by: testId, value: pie }
+        attribute: { name: aria-hidden, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-pie
+        type: editor.type
+        at: { mark: type-pie }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: conic-gradient(#6b3e26, #c9a227, #2f6b3a);\n",
+            occurrence: 1,
+          }
+        text: "  background-image: conic-gradient(#6b3e26 0 45%, #c9a227 0 75%, #2f6b3a 0);\n"
+      - id: expect-pie
+        type: expect.preview
+        at: { mark: after-pie }
+        timeoutMs: 4000
+        target: { by: testId, value: legend }
+        textContains: "လက်ဖက်ရည် 45%"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: repeating
+    chapter: "Repeating gradient နဲ့ pattern"
+    narration: >
+      [[mark:scroll-top]] အခု ဆိုင် နာမည် အပေါ်က နေရာလွတ်ကို မိုးကာ လုပ်ကြည့်ရအောင်။
+      [[mark:type-awning]] အနီနဲ့ အဖြူ အစင်းတွေအတွက် ညာဘက်ကို သွားတဲ့ repeating linear gradient ကို
+      သုံးပါမယ်။ အနီက 0 ကနေ 20 pixel အထိ၊ အဖြူက 20 ကနေ 40 pixel အထိပါ။ [[mark:after-awning]]
+      ဆိုင်ရှေ့ မိုးကာ အစစ်လိုပဲ အပေါ်မှာ အစင်းတွေ ပေါ်လာပါပြီ။ [[mark:select-repeat]] ဒီ stop
+      တွေကို ကြည့်ပါ။ ရေးပုံက ရိုးရိုး gradient နဲ့ အတူတူပါပဲ။ ဒါပေမဲ့ ပထမ stop ကနေ နောက်ဆုံး stop
+      အထိ ဖြစ်တဲ့ 40 pixel ကို box ပြည့်အောင် ထပ်ခါ ဆွဲပါတယ်။ [[mark:explain-repeat]] ဒါကြောင့် stop
+      တွေမှာ အရှည် ပေးရပါတယ်။ နောက်ဆုံး stop က 100 ရာခိုင်နှုန်းမှာ ဆိုရင် ထပ်ဆွဲစရာ နေရာ
+      မကျန်တော့ပါဘူး။ ကွင်းတွေအတွက် repeating radial gradient နဲ့၊ ရောင်ခြည်တွေအတွက် repeating conic
+      gradient လည်း ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: repeating and mixing"
+        url: "https://web.dev/learn/css/gradients#repeating_and_mixing"
+      - title: "MDN — repeating-linear-gradient()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gradient/repeating-linear-gradient"
+      - title: "CSS Images Module Level 3 — repeating gradients"
+        url: "https://drafts.csswg.org/css-images-3/#repeating-gradients"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-awning
+        type: editor.type
+        at: { mark: type-awning }
+        cadence: line-by-line
+        target: { file: styles.css, after: "#c9a227 0 75%, #2f6b3a 0);\n}\n", occurrence: 1 }
+        text: "\n.awning {\n  background-image: repeating-linear-gradient(90deg, #b23a2b 0 20px, #fff 20px 40px);\n}\n"
+      - id: expect-awning
+        type: expect.preview
+        at: { mark: after-awning }
+        timeoutMs: 4000
+        target: { by: testId, value: shop-name }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-repeat
+        type: editor.select
+        at: { mark: select-repeat }
+        target: { file: styles.css, text: "#b23a2b 0 20px, #fff 20px 40px", occurrence: 1 }
+
+  - id: tiles
+    narration: >
+      [[mark:scroll-stats]] နောက် pattern တစ်ခုက chart card ပေါ်က အစက်တွေပါ။ [[mark:type-dots]] card
+      အတွက် rule အသစ်မှာ radial gradient ပေးပါမယ်။ အလယ်ကနေ 25 ရာခိုင်နှုန်းအထိ နို့နှစ်ရောင်
+      ဖြစ်ပြီး၊ အဲဒီနောက်မှာ transparent ပါ။ ခွက်တုန်းကလိုပဲ ဒုတိယ stop မှာ 0 ပေးထားလို့ အစွန်း
+      ပြတ်ပါတယ်။ [[mark:after-dots]] card အလယ်မှာ chart နောက်ကို တစ်ပိုင်း ဝင်နေတဲ့ ဘဲဥပုံ အစက်ကြီး
+      တစ်ခုပဲ ရပါတယ်။ gradient မှာ ကိုယ်ပိုင် အရွယ်အစား မရှိလို့၊ box တစ်ခုလုံး ပြည့်အောင်
+      ဆန့်သွားတာပါ။ [[mark:type-size]] background size ပေးပါမယ်။ နှစ်ဘက်လုံး 24 pixel ပါ။
+      [[mark:after-size]] အခု ပုံက 24 pixel လေးထောင့် ဖြစ်ပြီး၊ နှစ်ဘက်လုံး ထပ်ခါ စီသွားလို့
+      အစက်လေးတွေ ရပါပြီ။ background size ကို နောက် lesson မှာ အသေးစိတ် ကြည့်ပါမယ်။
+      [[mark:explain-mixing]] linear၊ radial၊ conic တွေကို စာရင်း တစ်ခုထဲမှာ ရောသုံးပြီး၊ အလွှာ
+      တစ်ခုစီကို ကိုယ်ပိုင် အရွယ်အစားနဲ့ နေရာ ပေးလို့လည်း ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: repeating and mixing"
+        url: "https://web.dev/learn/css/gradients#repeating_and_mixing"
+      - title: "MDN — Using CSS gradients: stacked gradients and patterns"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_images/Using_CSS_gradients#stacked_gradients"
+      - title: "CSS Images Module Level 3 — gradients have no intrinsic dimensions"
+        url: "https://drafts.csswg.org/css-images-3/#gradients"
+      - title: "MDN — background-size"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-size"
+    actions:
+      - id: scroll-stats
+        type: preview.scroll
+        at: { mark: scroll-stats }
+        timeoutMs: 5000
+        top: 400
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # Empty rule first (see insert-radial-rule).
+      - id: insert-dots-rule
+        type: editor.type
+        at: { mark: type-dots }
+        cadence: block
+        target: { file: styles.css, after: "#fff 20px 40px);\n}\n", occurrence: 1 }
+        text: "\n.stats {\n}\n"
+      - id: type-dots
+        type: editor.type
+        at: { afterAction: insert-dots-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".stats {\n", occurrence: 1 }
+        text: "  background-image: radial-gradient(#e6d5bf 25%, transparent 0);\n"
+      - id: expect-dots
+        type: expect.preview
+        at: { mark: after-dots }
+        timeoutMs: 4000
+        target: { by: testId, value: stats }
+        textContains: "ဧည့်သည်တွေ မှာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: radial-gradient(#e6d5bf 25%, transparent 0);\n",
+            occurrence: 1,
+          }
+        text: "  background-size: 24px 24px;\n"
+      - id: expect-size
+        type: expect.preview
+        at: { mark: after-size }
+        timeoutMs: 4000
+        target: { by: testId, value: stats }
+        textContains: "ဧည့်သည်တွေ မှာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: interpolation
+    chapter: "အရောင် ရောပုံ"
+    narration: >
+      [[mark:scroll-bars]] နောက်ဆုံးက stop တွေကြားက အရောင်တွေကို ဘယ်လို ရောလဲ ဆိုတာပါ။ [[mark:type-bar]]
+      rule တစ်ခုနဲ့ bar နှစ်ခုလုံးကို ညာဘက်ကို သွားတဲ့ အပြာကနေ အဝါ gradient တူတူ ပေးပါမယ်။ အရောင်
+      နှစ်ခုလုံးက နာမည်နဲ့ ရေးတဲ့ ရိုးရိုး အရောင်တွေပါ။ ပေါ်လာတဲ့အခါ bar တွေရဲ့ အလယ်ကို ကြည့်ပါ။
+      [[mark:after-bar]] အလယ်က မှိုင်းမှိုင်း မီးခိုးရောင် ဖြစ်နေပါတယ်။ နာမည်နဲ့ ရေးတဲ့ အရောင်က ရေးနည်း
+      အဟောင်း ဖြစ်လို့၊ browser က sRGB ထဲမှာ ရောပါတယ်။ lesson 9 မှာ color mix နဲ့ မြင်ခဲ့သလိုပဲ၊ sRGB က
+      အနီ၊ အစိမ်း၊ အပြာ ဂဏန်းတွေကို ပျမ်းမျှ ယူလို့၊ အပြာနဲ့ အဝါရဲ့ တစ်ဝက်က မီးခိုးရောင် ဖြစ်သွားတာပါ။
+      [[mark:type-oklch]] အခု ဒုတိယ bar နဲ့ပဲ ကိုက်တဲ့ rule သီးသန့် တစ်ခုမှာ၊ ဦးတည်ရာရဲ့ နောက်မှာ in oklch
+      လို့ ရေးပါမယ်။ ဒါဆို browser က sRGB မှာ မဟုတ်ဘဲ OKLCH color space ထဲမှာ ရောပေးပါတယ်။
+      [[mark:after-oklch]] ဒုတိယ bar ကတော့ အစိမ်းပြာနဲ့ အစိမ်းကို ဖြတ်သွားလို့ တောက်နေပါတယ်။ OKLCH မှာ hue
+      က အရောင်ဝိုင်း တစ်လျှောက် ပတ်သွားပြီး chroma ကို ထိန်းထားလို့၊ အလယ်က မှိုင်းမသွားပါဘူး။
+      [[mark:select-fallback]] ဒီ selector က class နှစ်ခုနဲ့ အပေါ်က rule ကို နိုင်ပါတယ်။ in oklch ကို
+      မသိတဲ့ browser က ဒီ declaration ကို ကျော်ပြီး၊ ရိုးရိုး gradient ကို fallback အဖြစ် ပြပါတယ်။
+      [[mark:open-mix-board]] board မှာ ကြည့်ရအောင်။ [[mark:draw-default]] in မပါရင်၊ oklch လို ရေးနည်း
+      အသစ်တွေကို OKLab ထဲမှာ ရောပါတယ်။ ဒါပေမဲ့ hex၊ အရောင် နာမည်၊ rgb လို ရေးနည်း အဟောင်းချည်းပဲ ဆိုရင်
+      sRGB ထဲမှာ ရောလို့၊ page အဟောင်းတွေက ပုံစံ မပြောင်းပါဘူး။ [[mark:draw-in]] in နဲ့ဆိုရင် color space
+      ကို ကိုယ်တိုင် ရွေးလို့ ရပါတယ်။ [[mark:draw-wheel]] OKLCH၊ HSL လို hue ပါတဲ့ color space တွေမှာ
+      အရောင်ဝိုင်းကို လမ်း နှစ်လမ်းနဲ့ ပတ်လို့ ရပါတယ်။ [[mark:draw-shorter]] default ဖြစ်တဲ့ shorter hue က
+      လမ်းတိုကို သွားပါတယ်။ [[mark:draw-longer]] longer hue က လမ်းရှည်ကို ပတ်လို့ သက်တံ့လို အရောင်စုံ
+      ဖြစ်ပါတယ်။ increasing hue နဲ့ decreasing hue ကတော့ hue တိုးတဲ့ဘက်၊ လျော့တဲ့ဘက်ကိုပဲ အမြဲ လှည့်ပါတယ်။
+      [[mark:explain-screen]] ဒီလို တောက်တဲ့ အရောင်တွေက screen တစ်ခုနဲ့ တစ်ခု မတူဘဲ မြင်ရနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: interpolation and color spaces"
+        url: "https://web.dev/learn/css/gradients#interpolation_and_color_spaces"
+      - title: "MDN — <color-interpolation-method>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method"
+      - title: "MDN — <hue-interpolation-method>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/hue-interpolation-method"
+      - title: "CSS Color Module Level 4 — interpolation (default color space, legacy colors in sRGB)"
+        url: "https://drafts.csswg.org/css-color-4/#interpolation"
+    actions:
+      - id: scroll-bars
+        type: preview.scroll
+        at: { mark: scroll-bars }
+        timeoutMs: 5000
+        top: 1000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # Empty rule first (see insert-radial-rule).
+      - id: insert-bar-rule
+        type: editor.type
+        at: { mark: type-bar }
+        cadence: block
+        target: { file: styles.css, after: "  background-size: 24px 24px;\n}\n", occurrence: 1 }
+        text: "\n.bar {\n}\n"
+      - id: type-bar
+        type: editor.type
+        at: { afterAction: insert-bar-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".bar {\n", occurrence: 1 }
+        text: "  background-image: linear-gradient(to right, blue, yellow);\n"
+      - id: expect-bar
+        type: expect.preview
+        at: { mark: after-bar }
+        timeoutMs: 4000
+        target: { by: testId, value: bar-srgb }
+        attribute: { name: class, value: "bar" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Empty rule first (see insert-radial-rule).
+      - id: insert-oklch-rule
+        type: editor.type
+        at: { mark: type-oklch }
+        cadence: block
+        target:
+          {
+            file: styles.css,
+            after: "  background-image: linear-gradient(to right, blue, yellow);\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.bar.oklch {\n}\n"
+      - id: type-oklch
+        type: editor.type
+        at: { afterAction: insert-oklch-rule }
+        cadence: fast-explainer
+        target: { file: styles.css, after: ".bar.oklch {\n", occurrence: 1 }
+        text: "  background-image: linear-gradient(to right in oklch, blue, yellow);\n"
+      - id: expect-oklch
+        type: expect.preview
+        at: { mark: after-oklch }
+        timeoutMs: 4000
+        target: { by: testId, value: bar-oklch }
+        attribute: { name: class, value: "bar oklch" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-fallback
+        type: editor.select
+        at: { mark: select-fallback }
+        target: { file: styles.css, text: ".bar.oklch {", occurrence: 1 }
+      - id: open-mix-board
+        type: whiteboard.apply
+        at: { mark: open-mix-board }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-srgb, f-oklch]
+      - id: draw-default
+        type: whiteboard.apply
+        at: { mark: draw-default }
+        upsertIds: [f-modern, f-legacy]
+        drawMs: 2000
+      - id: draw-in
+        type: whiteboard.apply
+        at: { mark: draw-in }
+        upsertIds: [f-in]
+        drawMs: 1200
+      - id: draw-wheel
+        type: whiteboard.apply
+        at: { mark: draw-wheel }
+        upsertIds: [f-wheel]
+        drawMs: 1200
+      - id: draw-shorter
+        type: whiteboard.apply
+        at: { mark: draw-shorter }
+        upsertIds: [f-short-trace, f-short]
+        drawMs: 1400
+      - id: draw-longer
+        type: whiteboard.apply
+        at: { mark: draw-longer }
+        upsertIds: [f-long-trace, f-long]
+        drawMs: 1800
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း နှစ်ခု မေးကြည့်ရအောင်။ gradient တစ်ခုမှာ အရောင် အနည်းဆုံး
+      ဘယ်နှရောင် လိုလဲ။ [[mark:quiz-1]] အခုဆိုရင် တစ်ရောင်တည်းလည်း ရပါတယ်။ ဒါပေမဲ့ box ကို အဲဒီ အရောင်
+      အပြည့်ပဲ ဆွဲလို့၊ ကူးချင်ရင်တော့ နှစ်ရောင် လိုပါတယ်။ [[mark:quiz-2]] element တစ်ခုမှာ gradient
+      အများကြီး ထပ်လို့ ရလား။ ရပါတယ်။ comma နဲ့ ခြားရေးပြီး၊ ပထမ တစ်ခုက အရှေ့ဆုံးမှာ ရှိပါတယ်။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ gradient က ပုံ တစ်ပုံ ဖြစ်လို့ background image ထဲမှာ
+      ထည့်ရပါတယ်။ linear က မျဉ်းဖြောင့်အတိုင်း၊ radial က အလယ်ကနေ အပြင်ကို ဝိုင်းဝိုင်း၊ conic က
+      အလယ်ပတ်လည်ကို လှည့်ပြီး ကူးပါတယ်။ color stop တွေက အရောင်တွေကို နေရာ ချပေးပြီး၊ repeating gradient
+      နဲ့ background size က pattern တွေ လုပ်ပေးပါတယ်။ [[mark:tools]] ရှုပ်တဲ့ gradient တွေအတွက် board
+      ပေါ်က online tool တွေက ကူညီပေမယ့်၊ ရိုးရိုး gradient ကိုတော့ လက်နဲ့ ရိုက်တာ ပိုမြန်ပါတယ်။
+      [[mark:next-lesson]] နောက် lesson မှာတော့ နောက်ခံ ပုံရဲ့ အရွယ်အစား၊ နေရာနဲ့ ထပ်ခါ စီပုံ စတဲ့ ကျန်တဲ့
+      နောက်ခံ property တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Gradients: check your understanding"
+        url: "https://web.dev/learn/css/gradients#check_your_understanding"
+      - title: "web.dev Learn CSS — Gradients: resources"
+        url: "https://web.dev/learn/css/gradients#resources"
+      - title: "gradient.style — a gradient generator"
+        url: "https://gradient.style"
+      - title: "conic.style — conic gradient gallery"
+        url: "https://conic.style"
+      - title: "web.dev Learn CSS — Backgrounds (next lesson)"
+        url: "https://web.dev/learn/css/backgrounds"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [g-title, g-q1]
+      - id: draw-quiz-1
+        type: whiteboard.apply
+        at: { mark: quiz-1 }
+        upsertIds: [g-a1]
+        drawMs: 1400
+      - id: draw-quiz-2
+        type: whiteboard.apply
+        at: { mark: quiz-2 }
+        upsertIds: [g-q2, g-a2]
+        drawMs: 2200
+      - id: draw-tools
+        type: whiteboard.apply
+        at: { mark: tools }
+        upsertIds: [g-tools]
+        drawMs: 1400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".hero {\n  background-color: linear-gradient(#6b3e26, #c9a227);\n  background-image: linear-gradient(#6b3e26, #c9a227);\n  background-image: linear-gradient(to right, #6b3e26, #c9a227);\n  background-image: linear-gradient(135deg, #6b3e26, #c9a227);\n  background-image: linear-gradient(135deg, #6b3e26 60%, #c9a227);\n  background-image:\n    linear-gradient(rgb(0 0 0 / 50%), transparent),\n    linear-gradient(135deg, #6b3e26 60%, #c9a227);\n}\n\n.tea-glass {\n  background-image: linear-gradient(#f5ead7 0 20%, #c89f6a 0 70%, #6b3e26 0);\n}\n\n.coin {\n  background-image: radial-gradient(#fff8e1, #c9a227);\n  background-image: radial-gradient(circle at 30% 30%, #fff8e1, #c9a227);\n}\n\n.pie {\n  background-image: conic-gradient(#6b3e26, #c9a227, #2f6b3a);\n  background-image: conic-gradient(#6b3e26 0 45%, #c9a227 0 75%, #2f6b3a 0);\n}\n\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".awning {\n  background-image: repeating-linear-gradient(90deg, #b23a2b 0 20px, #fff 20px 40px);\n}\n\n.stats {\n  background-image: radial-gradient(#e6d5bf 25%, transparent 0);\n  background-size: 24px 24px;\n}\n\n.bar {\n  background-image: linear-gradient(to right, blue, yellow);\n}\n\n.bar.oklch {\n  background-image: linear-gradient(to right in oklch, blue, yellow);\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
