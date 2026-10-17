@@ -119,62 +119,62 @@ lesson:
     - id: l04_p01
       contentType: google
       name: "Cover: all green, can't pay"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p01
     - id: l04_p01b
       contentType: google
       name: "Cover: who is right?"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p01b
     - id: l04_p02
       contentType: google
       name: "Then"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p02
     - id: l04_p02b
       contentType: google
       name: "Then and now"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p02b
     - id: l04_p02c
       contentType: google
       name: "Workload-centric"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p02c
     - id: l04_p03
       contentType: google
       name: "Guardrails, not gates"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p03
     - id: l04_p03b
       contentType: google
       name: "Rules written as code"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p03b
     - id: l04_p04
       contentType: google
       name: "Server says, user feels"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p04
     - id: l04_p04b
       contentType: google
       name: "When you find out"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p04b
     - id: l04_p05
       contentType: google
       name: "Seeing production now"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p05
     - id: l04_p05b
       contentType: google
       name: "Seeing production now (all three)"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p05b
     - id: l04_p06
       contentType: google
       name: "This week"
-      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS4U7TvQcusdo_MEF9kN2JK1ZsNNMAjH8rXg9A70KgYuIxf8bq2hjPbDXTUpYAJgQ-AehPOM9zyo_Lx/pub"
       pageId: l04_p06
   whiteboardAssets:
     # ---- Board B1 (P5 bars): capacity is now a spending decision ----------
