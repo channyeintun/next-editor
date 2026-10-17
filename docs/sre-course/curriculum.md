@@ -722,9 +722,9 @@ live only in the private coverage map.
   8. **Behavior first.** Board B3 (P7 staircase), cleared: (1) "try it once" → "it helps"; (2) "habit" →
      violet "culture". Narration: Padauk's one habit is a 30-minute blameless review after every incident,
      with no memo and no mandate; renaming the ops team without changing what people are rewarded for
-     turns people against it; to see whether it works, ask people before and after how confident they are
-     at a real task (never done it → with a pair → alone → every week → taught it), and again a month and
-     six months later.
+     turns people against it; to see whether it works, ask the team how confident they are at a real task
+     on our own three-step scale (not yet → with someone beside me → on my own), once before the habit
+     starts and again a few months later. (Not the book's five-step scale or its survey schedule.)
   9. **This week.** Page `l05_p06` (K2) "This week" · "Thank the next person with bad news" · "Rewrite one
      'who' as 'what'" · "Find what only one person knows".
 - **Recap (`notes.md`):** blameless · local rationality · psychological safety · hero antipattern · Westrum

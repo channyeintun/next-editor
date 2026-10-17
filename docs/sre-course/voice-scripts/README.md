@@ -180,10 +180,11 @@ the glossary. These are the changes from the separately reviewed drafts:
 **Lesson 5**
 
 16. Is the hook "team chat ထဲမှာ စာရိုက်ပြီးပေမဲ့ ပို့ဖို့ ချီတုံချတုံ ဖြစ်နေပါတယ်" how you would say it?
-17. **Copyright caution.** The confidence check follows the spec: ask before, right after, at 1 month
-    and at 6 months. That timing matches the book's, and two of the five answers ("with a pair",
-    "taught it") are close to the book's scale. Keep it as specced, or simplify to "before and a few
-    months later" with our own answer scale?
+17. **Copyright caution (resolved).** The confidence check followed the book's survey schedule and a
+    five-step answer scale close to the book's. It now uses our own three answers (မလုပ်ရဲသေးဘူး /
+    တစ်ယောက်ယောက် ဘေးမှာ ရှိရင် လုပ်နိုင်တယ် / ကိုယ့်ဘာသာ လုပ်နိုင်တယ်), asked once before the habit starts
+    and again a few months later. The curriculum spec was changed to match. Please check the new sentence
+    reads naturally.
 18. Should the three Westrum types stay in English (pathological, bureaucratic, generative) with a
     Burmese gloss, or get Burmese labels in the narration?
 19. Ko Aung skipped the 2 a.m. check on an earlier night, since he was away during the Thingyan
