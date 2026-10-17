@@ -1,0 +1,1939 @@
+# CSS course (Burmese), lesson 29 of 43: lists and counters.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]]
+# sits where its action begins, at a sentence end; each span carries one
+# piece of meaning. Everything the learner sees (title, chapters, whiteboard
+# labels, UI strings) is already Burmese.
+#
+# Shape: board (recall lesson 28; ul / ol + start, reversed, value / dl; the
+# number is information) → board (display: list-item makes a block box + a
+# marker box; outside in the list's padding, inside on the first line) → code
+# tour → list-style-type myanmar on the steps (set on the list, inherited) →
+# ready-made counter styles (sentence) → a "🍵 " string on the drinks →
+# square, lower-roman (later declarations win; a style, not meaning) →
+# position inside / outside on the long step (+ right-aligned markers) →
+# list-style-image explained (no url typed) → list-style shorthand → footer
+# reset row (list-style none + padding 0 + flex; role="list" explained) → dl
+# styled → a heading made a list item with a string marker (a11y warning) →
+# board (what a counter is: reset / increment / counter(), set, display none,
+# the built-in list-item counter) → the steps renumbered with a custom counter
+# in ::before → nested categories with counters(list-item, ".") on ::marker →
+# board (several counters, automatic footnotes) → the reversed top-five list
+# (HTML attribute) → board (reversed math: items + 1, step −1; reversed() is
+# Firefox-only) → @counter-style tea (unknown name falls back to decimal first)
+# → quiz board + recap, hand-off to lesson 30 (fonts).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload, no
+# HTML edit, no kit.js. Keystroke typing is used only where every half-typed
+# state is harmless: a partly typed keyword in list-style-type is a custom
+# counter-style name the browser doesn't know, which falls back to decimal
+# numbers, so edits that would flash numbers over bullets or Myanmar digits
+# (square, lower-roman, the shorthand, the footer reset, the heading, the
+# counter reset, the counters() line) are revealed line by line instead.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# document 1247 tall at start (steps 46, drinks 206, prices 383, cats 618, top
+# 864, footer 1094). The long step wraps to two lines at both positions. The
+# footer row makes the document 1197 tall; the dl spacing adds 16 (1213).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-29-lists-counters
+  title: "CSS course 29: List နဲ့ counter"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 29
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the lesson's lists, top to bottom in the order the lesson
+      # styles them: brewing steps (<ol>, one long step that wraps), the
+      # drinks (<ul>), the prices (<dl>, with a heading that becomes a list
+      # item), nested menu categories (<ol> in <ol>), a reversed top-five list,
+      # and a footer with a plain list of links. No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- lesson block: steps (the order matters) -->
+              <section class="brew" id="steps">
+                <h2>လက်ဖက်ရည် ဖျော်နည်း</h2>
+                <ol class="steps" data-testid="steps">
+                  <li>ရေနွေး တည်ပါ။</li>
+                  <li data-testid="long-step">လက်ဖက်ခြောက် ထည့်ပြီး၊ အရောင် ရင့်လာတဲ့အထိ ငါးမိနစ်လောက် စိမ်ထားပါ။</li>
+                  <li>နို့ဆီနဲ့ နို့စိမ်း ရောပါ။</li>
+                  <li>ခွက်ထဲ လောင်းပြီး ပူပူ သောက်ပါ။</li>
+                </ol>
+              </section>
+
+              <!-- kit block: drinks, as a plain bulleted list (the order does not matter) -->
+              <section class="drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="drink-list" data-testid="drink-list">
+                  <li>လက်ဖက်ရည်</li>
+                  <li>ကော်ဖီ</li>
+                  <li>သံပုရာရည်</li>
+                  <li>ဖာလူဒါ</li>
+                </ul>
+              </section>
+
+              <!-- lesson block: price-dl (term and description pairs) -->
+              <section class="prices" id="prices">
+                <h2 class="prices-title" data-testid="prices-title">ဈေးနှုန်း</h2>
+                <dl class="price-dl" data-testid="price-dl">
+                  <dt>လက်ဖက်ရည်</dt>
+                  <dd>1,500 ကျပ်</dd>
+                  <dt>ကော်ဖီ</dt>
+                  <dd>1,800 ကျပ်</dd>
+                  <dt>မုန့်ဟင်းခါး</dt>
+                  <dd>2,500 ကျပ်</dd>
+                </dl>
+              </section>
+
+              <!-- lesson block: nested-menu (two categories, two items each) -->
+              <section class="menu-cats" id="cats">
+                <h2>မီနူး အမျိုးအစား</h2>
+                <ol class="cats" data-testid="cats">
+                  <li>
+                    <h3>သောက်စရာ</h3>
+                    <ol>
+                      <li>လက်ဖက်ရည်</li>
+                      <li>ကော်ဖီ</li>
+                    </ol>
+                  </li>
+                  <li>
+                    <h3>စားစရာ</h3>
+                    <ol>
+                      <li>မုန့်ဟင်းခါး</li>
+                      <li>ပလာတာ</li>
+                    </ol>
+                  </li>
+                </ol>
+              </section>
+
+              <!-- lesson block: top-drinks (an HTML attribute makes it count down) -->
+              <section class="top-drinks" id="top">
+                <h2>လူကြိုက်အများဆုံး ငါးမျိုး</h2>
+                <ol class="top" reversed data-testid="top">
+                  <li>ဖာလူဒါ</li>
+                  <li>ကော်ဖီ</li>
+                  <li>သံပုရာရည်</li>
+                  <li>မုန့်ဟင်းခါး</li>
+                  <li>လက်ဖက်ရည်</li>
+                </ol>
+              </section>
+            </main>
+
+            <!-- kit block: footer, with a plain list of links -->
+            <footer class="site-footer" data-testid="footer">
+              <nav aria-label="အောက်ခြေ">
+                <ul class="footer-nav" data-testid="footer-nav">
+                  <li><a href="#steps">ဖျော်နည်း</a></li>
+                  <li><a href="#drinks">မီနူး</a></li>
+                  <li><a href="#prices">ဈေးနှုန်း</a></li>
+                </ul>
+              </nav>
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B and B2 only (no furniture, so every list
+      # keeps the browser's own markers, margins and padding); section E only
+      # spaces the sections and colours the footer.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 29 keeps A, B and B2 only: no furniture, so every list keeps the
+          browser's own bullets, numbers, margins and padding. Section E only spaces
+          the sections and colours the footer. No list-style, counter or display rule.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 29: space between the sections and the footer's colours. Every
+           list-style, counter, margin and display rule for a list is typed. */
+        .page > section + section {
+          margin-top: 16px;
+        }
+
+        .site-footer {
+          padding: 8px 16px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — the three list elements. Blue = ul, green = ol, orange = the
+    # ol attributes, violet = dl, red underline = choose by meaning.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "List သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-ul,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 120,
+        height: 36,
+        text: "<ul>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ul-d,
+        kind: text,
+        x: 460,
+        y: 240,
+        width: 560,
+        height: 36,
+        text: "အစဉ် အရေးမကြီး · အစက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ol,
+        kind: text,
+        x: 300,
+        y: 304,
+        width: 120,
+        height: 36,
+        text: "<ol>",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-ol-d,
+        kind: text,
+        x: 460,
+        y: 304,
+        width: 560,
+        height: 36,
+        text: "အစဉ် အရေးကြီး · နံပါတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-ol-attrs,
+        kind: text,
+        x: 460,
+        y: 356,
+        width: 560,
+        height: 36,
+        text: "start · reversed · value",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-dl,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 120,
+        height: 36,
+        text: "<dl>",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-dl-d,
+        kind: text,
+        x: 460,
+        y: 432,
+        width: 600,
+        height: 36,
+        text: "<dt> နာမည် + <dd> ဖော်ပြချက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-meaning,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 700,
+        height: 36,
+        text: "အဓိပ္ပာယ်အလိုက် ရွေး · နံပါတ်က သတင်းအချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-meaning-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 570,
+        width: 560,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+
+    # Board B — where the marker comes from. Orange = the list and its left
+    # padding, blue = the li block boxes, violet = the marker boxes, green =
+    # the inside position.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Marker ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-list,
+        kind: rectangle,
+        x: 300,
+        y: 228,
+        width: 700,
+        height: 196,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-pad,
+        kind: rectangle,
+        x: 300,
+        y: 228,
+        width: 100,
+        height: 196,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - { id: b-li1, kind: rectangle, x: 410, y: 246, width: 570, height: 72, strokeColor: "#1971c2" }
+    - {
+        id: b-li1-t,
+        kind: text,
+        x: 430,
+        y: 264,
+        width: 400,
+        height: 36,
+        text: "ရေနွေး တည်ပါ။",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m1,
+        kind: rectangle,
+        x: 340,
+        y: 256,
+        width: 54,
+        height: 52,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-m1-t,
+        kind: text,
+        x: 350,
+        y: 262,
+        width: 40,
+        height: 36,
+        text: "1.",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: b-li2, kind: rectangle, x: 410, y: 336, width: 570, height: 72, strokeColor: "#1971c2" }
+    - {
+        id: b-m2,
+        kind: rectangle,
+        x: 424,
+        y: 346,
+        width: 54,
+        height: 52,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-m2-t,
+        kind: text,
+        x: 434,
+        y: 352,
+        width: 40,
+        height: 36,
+        text: "2.",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-li2-t,
+        kind: text,
+        x: 494,
+        y: 354,
+        width: 420,
+        height: 36,
+        text: "လက်ဖက်ခြောက် ထည့်ပါ။",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-li-l,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 620,
+        height: 36,
+        text: "li → display: list-item",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-two,
+        kind: text,
+        x: 300,
+        y: 494,
+        width: 620,
+        height: 36,
+        text: "block box + marker box",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-out-l,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 680,
+        height: 36,
+        text: "outside → list ရဲ့ padding ထဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-in-l,
+        kind: text,
+        x: 300,
+        y: 604,
+        width: 680,
+        height: 36,
+        text: "inside → item ရဲ့ စာကြောင်းထဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board C — what a counter is. Blue = reset (create), green = increment
+    # (step), violet = counter() (show), orange = counter-set, red = not
+    # counted, white + blue underline = the built-in list-item counter.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Counter ဆိုတာ ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-what,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 760,
+        height: 36,
+        text: "နာမည်ပါတဲ့ ဂဏန်း · content နဲ့ပဲ ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-reset-box,
+        kind: rectangle,
+        x: 300,
+        y: 282,
+        width: 230,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-reset-t,
+        kind: text,
+        x: 316,
+        y: 298,
+        width: 200,
+        height: 36,
+        text: "counter-reset",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 538,
+        y: 300,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-inc-box,
+        kind: rectangle,
+        x: 586,
+        y: 282,
+        width: 280,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-inc-t,
+        kind: text,
+        x: 600,
+        y: 298,
+        width: 256,
+        height: 36,
+        text: "counter-increment",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 874,
+        y: 300,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-show-box,
+        kind: rectangle,
+        x: 922,
+        y: 282,
+        width: 170,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-show-t,
+        kind: text,
+        x: 936,
+        y: 298,
+        width: 140,
+        height: 36,
+        text: "counter()",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-reset-l,
+        kind: text,
+        x: 300,
+        y: 366,
+        width: 230,
+        height: 36,
+        text: "ဖန်တီး · 0",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-inc-l,
+        kind: text,
+        x: 586,
+        y: 366,
+        width: 280,
+        height: 36,
+        text: "+1 · 10 · −1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-show-l,
+        kind: text,
+        x: 922,
+        y: 366,
+        width: 160,
+        height: 36,
+        text: "ပြ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-set,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 760,
+        height: 36,
+        text: "counter-set → ရှိပြီးသားကို ပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-hidden,
+        kind: text,
+        x: 300,
+        y: 496,
+        width: 760,
+        height: 36,
+        text: "display: none → မရေတွက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-li,
+        kind: text,
+        x: 300,
+        y: 562,
+        width: 760,
+        height: 36,
+        text: "list-item → ol ရဲ့ built-in counter",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-li-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 600,
+        width: 130,
+        height: 14,
+        strokeColor: "#1971c2",
+      }
+
+    # Board D — several counters at once. Blue = section, green = paragraph,
+    # orange = the footnote recipe, violet = what the reader sees.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "Counter တွေ တွဲသုံးခြင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-sec,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 700,
+        height: 36,
+        text: "h2 တိုင်း → section +1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-par,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 760,
+        height: 36,
+        text: "h2 မှာ paragraph reset · p → +1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-par-l,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 700,
+        height: 36,
+        text: "section တိုင်း 1 က ပြန်စ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-foot-h,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 400,
+        height: 36,
+        text: "Footnote",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-foot1,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 600,
+        height: 36,
+        text: "body → note reset",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-foot2,
+        kind: text,
+        x: 300,
+        y: 518,
+        width: 600,
+        height: 36,
+        text: "link တိုင်း → note +1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-foot3,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 700,
+        height: 36,
+        text: "after → (1) (2) (3)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board E — counting down with your own counter. Blue = reset, green =
+    # step, violet = the result, orange = the rule, red = Firefox only,
+    # green = the HTML attribute works everywhere.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 46,
+        text: "ပြောင်းပြန် ရေတွက်ခြင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-items,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 500,
+        height: 36,
+        text: "item 5 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-reset,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 700,
+        height: 36,
+        text: "counter-reset: rank 6",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-step,
+        kind: text,
+        x: 300,
+        y: 344,
+        width: 700,
+        height: 36,
+        text: "counter-increment: rank -1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-seq,
+        kind: text,
+        x: 300,
+        y: 408,
+        width: 600,
+        height: 46,
+        text: "5 · 4 · 3 · 2 · 1",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: e-rule,
+        kind: text,
+        x: 300,
+        y: 482,
+        width: 760,
+        height: 36,
+        text: "စတန်ဖိုး = item အရေအတွက် + 1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-ff,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 700,
+        height: 36,
+        text: "reversed() → Firefox ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-html,
+        kind: text,
+        x: 300,
+        y: 594,
+        width: 700,
+        height: 36,
+        text: "<ol reversed> → browser တိုင်း ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz. White = the questions, one colour per
+    # answer.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "ပြန်စစ်ကြည့်ရအောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q1,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 420,
+        height: 36,
+        text: "list သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a1,
+        kind: text,
+        x: 760,
+        y: 236,
+        width: 300,
+        height: 36,
+        text: "ul · ol · dl",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-q2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 420,
+        height: 36,
+        text: "counter ဖန်တီးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a2,
+        kind: text,
+        x: 760,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "counter-reset",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-q3,
+        kind: text,
+        x: 300,
+        y: 364,
+        width: 420,
+        height: 36,
+        text: "ol ရဲ့ counter",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a3,
+        kind: text,
+        x: 760,
+        y: 364,
+        width: 300,
+        height: 36,
+        text: "list-item",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-q4,
+        kind: text,
+        x: 300,
+        y: 428,
+        width: 420,
+        height: 36,
+        text: "1.2 ပုံစံ နံပါတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a4,
+        kind: text,
+        x: 760,
+        y: 428,
+        width: 300,
+        height: 36,
+        text: "counters()",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4129
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: lists-intro
+    chapter: "List သုံးမျိုး"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ keyboard focus ကို မြင်သာအောင် လုပ်ပြီး၊ cursor ကိုလည်း ရွေးခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ list marker တွေကို ပုံစံ ပြောင်းပြီး၊ CSS က ဘယ်လို ရေတွက်လဲ ကြည့်ပါမယ်။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:draw-ul]] HTML မှာ list သုံးမျိုး ရှိပါတယ်။ unordered list က ဈေးဝယ်စာရင်းလို၊ အစဉ်
+      အရေးမကြီးတဲ့ အရာတွေအတွက်ပါ။ item တစ်ခုစီက li element ဖြစ်ပြီး၊ ရှေ့မှာ bullet လို့ ခေါ်တဲ့ အစက်လေး
+      ပါပါတယ်။ [[mark:draw-ol]] ordered list ကတော့ ဟင်းချက်နည်း အဆင့်တွေလို အစဉ် အရေးကြီးတဲ့
+      အရာတွေအတွက်ပါ။ ဒါကြောင့် သူ့ marker တွေက နံပါတ်တွေ ဖြစ်ပါတယ်။ [[mark:draw-ol-attrs]] attribute
+      သုံးခုနဲ့ နံပါတ်တွေကို ပြောင်းနိုင်ပါတယ်။ ol ရဲ့ start က စမယ့် နံပါတ်ကို သတ်မှတ်ပြီး၊ reversed က
+      ပြောင်းပြန် ရေတွက်ပါတယ်။ li ရဲ့ value က အဲဒီ item ရဲ့ နံပါတ်ပါ။ [[mark:draw-dl]] description list
+      ကတော့ သောက်စရာ တစ်ခုနဲ့ သူ့ ဈေးနှုန်းလို၊ နာမည် တစ်ခုနဲ့ သူ့ ဖော်ပြချက်ကို တွဲပေးပါတယ်။ li အစား dt
+      နဲ့ dd ကို သုံးပြီး၊ marker မပါပါဘူး။ [[mark:draw-meaning]] ဒါကြောင့် list ကို အဓိပ္ပာယ်အလိုက်
+      ရွေးပါ။ ordered list မှာ နံပါတ်ကိုယ်တိုင်က သတင်းအချက်ပါ။ အဆင့် နှစ်က အဆင့် တစ်ရဲ့ နောက်မှ လာတယ်
+      ဆိုတာ ပြောနေတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Lists: creating a list"
+        url: "https://web.dev/learn/css/lists#creating_a_list"
+      - title: "HTML Standard — the ul, ol and dl elements"
+        url: "https://html.spec.whatwg.org/multipage/grouping-content.html#the-ul-element"
+      - title: "MDN — <ol> (start, reversed, type)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/ol"
+      - title: "web.dev Learn CSS — Counters (markers carry information)"
+        url: "https://web.dev/learn/css/counters"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the code tour, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-ul
+        type: whiteboard.apply
+        at: { mark: draw-ul }
+        upsertIds: [a-ul, a-ul-d]
+        drawMs: 1600
+      - id: draw-ol
+        type: whiteboard.apply
+        at: { mark: draw-ol }
+        upsertIds: [a-ol, a-ol-d]
+        drawMs: 1600
+      - id: draw-ol-attrs
+        type: whiteboard.apply
+        at: { mark: draw-ol-attrs }
+        upsertIds: [a-ol-attrs]
+        drawMs: 1400
+      - id: draw-dl
+        type: whiteboard.apply
+        at: { mark: draw-dl }
+        upsertIds: [a-dl, a-dl-d]
+        drawMs: 1800
+      - id: draw-meaning
+        type: whiteboard.apply
+        at: { mark: draw-meaning }
+        upsertIds: [a-meaning, a-meaning-line]
+        drawMs: 1800
+
+  - id: marker-anatomy
+    narration: >
+      [[mark:open-anatomy]] ဒါဆို marker က ဘယ်က လာတာလဲ။ [[mark:draw-li-box]] li tag ကိုယ်တိုင်ကနေ လာတာ
+      မဟုတ်ပါဘူး။ browser က li တိုင်းကို list item ဆိုတဲ့ display ပေးထားပြီး၊ အဲဒီ display က box နှစ်ခု
+      ဖန်တီးပါတယ်။ item ရဲ့ ပုံမှန် block box နဲ့၊ lesson 26 မှာ style ပေးခဲ့တဲ့ marker box ပါ။
+      [[mark:draw-marker-out]] default အားဖြင့် marker က item ရဲ့ အပြင်ဘက်၊ list ရဲ့ ဘယ်ဘက် padding ထဲမှာ
+      ရှိပါတယ်။ ဒါကြောင့် browser က list တိုင်းကို ဘယ်ဘက် padding 40 pixel လောက် ပေးထားတာပါ။
+      [[mark:draw-marker-in]] list style position ကို inside ပေးလိုက်ရင်တော့၊ marker က item ရဲ့ ပထမ
+      စာကြောင်းထဲကို ဝင်သွားပြီး၊ စာသားရဲ့ ပထမ စကားလုံးလို နေရာယူပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Lists: display type and the marker box"
+        url: "https://web.dev/learn/css/lists#display_type"
+      - title: "CSS Lists and Counters Module Level 3 — list items"
+        url: "https://drafts.csswg.org/css-lists-3/#list-items"
+      - title: "MDN — list-style-position"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-position"
+    actions:
+      - id: open-anatomy
+        type: whiteboard.apply
+        at: { mark: open-anatomy }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-li-box
+        type: whiteboard.apply
+        at: { mark: draw-li-box }
+        upsertIds: [b-list, b-pad, b-li1, b-li1-t, b-li-l, b-two]
+        drawMs: 3000
+      - id: draw-marker-out
+        type: whiteboard.apply
+        at: { mark: draw-marker-out }
+        upsertIds: [b-m1, b-m1-t, b-out-l]
+        drawMs: 1800
+      - id: draw-marker-in
+        type: whiteboard.apply
+        at: { mark: draw-marker-in }
+        upsertIds: [b-li2, b-m2, b-m2-t, b-li2-t, b-in-l]
+        drawMs: 2600
+
+  - id: code-tour
+    narration: >
+      [[mark:close-anatomy]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက HTML ဖိုင်ပါ။
+      [[mark:select-steps]] အပေါ်ဆုံးက ဖျော်နည်း အဆင့်တွေက ordered list ပါ။ [[mark:select-long-step]]
+      ဒုတိယ အဆင့်ကို တမင် ရှည်ရှည် ရေးထားလို့၊ စာကြောင်း နှစ်ကြောင်း ဖြစ်ပါမယ်။ [[mark:select-drinks]]
+      သောက်စရာတွေကတော့ unordered list ပါ။ [[mark:select-prices]] ဈေးနှုန်းတွေက description list ပါ။
+      [[mark:select-cats]] အောက်မှာ မီနူး အမျိုးအစားတွေ ရှိပြီး၊ တစ်ခုစီထဲမှာ list သေးသေး တစ်ခုစီ ပါပါတယ်။
+      [[mark:select-top]] လူကြိုက်အများဆုံး ငါးမျိုးကို reversed attribute နဲ့ ရေးထားပါတယ်။
+      [[mark:select-footer]] footer မှာလည်း link တွေရဲ့ list ရှိပါတယ်။ [[mark:open-styles]] CSS ဖိုင်က
+      အလွတ် ဖြစ်ပြီး၊ base CSS ဖိုင်မှာလည်း list အတွက် rule လုံးဝ မပါပါဘူး။ [[mark:preview-opens]] preview
+      ပွင့်လာပါပြီ။ list တိုင်းက browser ရဲ့ default style အတိုင်းပါ။ နံပါတ်တွေ၊ အစက်ဝိုင်းတွေ ပေါ်နေပြီး၊
+      ဈေးနှုန်းတွေကလည်း အတွင်းကို ဝင်နေပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Lists"
+        url: "https://web.dev/learn/css/lists"
+      - title: "MDN — <dl>: the description list element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dl"
+    actions:
+      - id: close-anatomy
+        type: whiteboard.apply
+        at: { mark: close-anatomy }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-steps
+        type: editor.select
+        at: { mark: select-steps }
+        target: { file: index.html, text: '<ol class="steps" data-testid="steps">', occurrence: 1 }
+      - id: select-long-step
+        type: editor.select
+        at: { mark: select-long-step }
+        target: { file: index.html, text: '<li data-testid="long-step">', occurrence: 1 }
+      - id: select-drinks
+        type: editor.select
+        at: { mark: select-drinks }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="drink-list" data-testid="drink-list">',
+            occurrence: 1,
+          }
+      - id: select-prices
+        type: editor.select
+        at: { mark: select-prices }
+        target:
+          { file: index.html, text: '<dl class="price-dl" data-testid="price-dl">', occurrence: 1 }
+      - id: select-cats
+        type: editor.select
+        at: { mark: select-cats }
+        target: { file: index.html, text: '<ol class="cats" data-testid="cats">', occurrence: 1 }
+      - id: select-top
+        type: editor.select
+        at: { mark: select-top }
+        target:
+          { file: index.html, text: '<ol class="top" reversed data-testid="top">', occurrence: 1 }
+      - id: select-footer
+        type: editor.select
+        at: { mark: select-footer }
+        target:
+          {
+            file: index.html,
+            text: '<ul class="footer-nav" data-testid="footer-nav">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-steps
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: steps }
+        textContains: "ရေနွေး တည်ပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-drinks
+        type: expect.preview
+        at: { afterAction: expect-steps }
+        timeoutMs: 5000
+        target: { by: testId, value: drink-list }
+        textContains: "သံပုရာရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-drinks }
+
+  - id: marker-type
+    chapter: "Marker ရဲ့ ပုံစံနဲ့ နေရာ"
+    narration: >
+      [[mark:type-myanmar]] အဆင့်တွေကို မြန်မာ ဂဏန်းနဲ့ နံပါတ်တပ်ကြည့်ရအောင်။ အဆင့် နံပါတ်တွေကို လိုက်ကြည့်ပါ။
+      list style type ကို item တစ်ခုချင်းစီမှာ မပေးဘဲ list မှာ ပေးပါမယ်။ list style တွေက item တွေဆီ inherit
+      ဖြစ်လို့ပါ။ [[mark:after-myanmar]] နံပါတ်တွေ မြန်မာ ဂဏန်း ဖြစ်သွားပါပြီ။ နံပါတ်တပ်ပုံ တစ်မျိုးကို
+      counter style လို့ ခေါ်ပြီး၊ myanmar က browser မှာ ပါပြီးသား counter style တွေထဲက တစ်ခုပါ။ ရောမ ဂဏန်း၊
+      အက္ခရာနဲ့ တခြား ဘာသာစကားတွေရဲ့ ဂဏန်းတွေလည်း ပါပါတယ်။ [[mark:explain-ready-made]] ကိုယ် လိုချင်တာ
+      မပါရင်လည်း၊ W3C က counter style စာရင်း တစ်ခု ထုတ်ထားပါတယ်။ စာရေးစနစ် 45 မျိုးအတွက် style နောက်ထပ် 181 ခု
+      ပါပြီး၊ lesson အဆုံးမှာ ရေးမယ့် ပုံစံနဲ့ ရေးထားလို့ ကူးထည့်ရုံပါပဲ။ [[mark:type-string]] marker က
+      ကြိုက်တဲ့ စာသားလည်း ဖြစ်နိုင်ပါတယ်။ သောက်စရာ list ကို လက်ဖက်ရည် ခွက်နဲ့ နေရာလွတ် ပါတဲ့ string တစ်ခု
+      ပေးပါမယ်။ [[mark:after-string]] သောက်စရာ တိုင်းရဲ့ ရှေ့မှာ လက်ဖက်ရည် ခွက်လေး ပေါ်လာပါပြီ။ string marker
+      က ရေးထားတဲ့ အတိုင်း ပေါ်လို့၊ နေရာလွတ်ကိုလည်း quote ထဲမှာ ထည့်ရပါတယ်။ [[mark:type-square]] နောက်မှ
+      ရေးတဲ့ declaration က နိုင်လို့၊ အောက်မှာ ဆက်ရေး စမ်းရအောင်။ အရင် လေးထောင့် bullet ပေးကြည့်ပါမယ်။
+      [[mark:type-roman]] ပြီးတော့ ရောမ ဂဏန်း အသေး ပေးကြည့်ပါမယ်။ [[mark:after-roman]] ဒီ keyword ကို ကြည့်ပါ။
+      unordered list ဖြစ်ပေမယ့် သောက်စရာတွေမှာ နံပါတ်တွေ ပေါ်လာပါပြီ။ marker က ပုံစံ တစ်ခုပဲ ဖြစ်ပြီး၊
+      အဓိပ္ပာယ်ကတော့ HTML ကနေ လာတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Lists: list-style-type"
+        url: "https://web.dev/learn/css/lists#list-style-type"
+      - title: "MDN — list-style-type (keywords, myanmar, string values)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-type"
+      - title: "web.dev Learn CSS — Counters: list styles"
+        url: "https://web.dev/learn/css/counters#list_styles"
+      - title: "W3C — Ready-made Counter Styles"
+        url: "https://www.w3.org/TR/predefined-counter-styles/"
+    actions:
+      - id: type-myanmar
+        type: editor.type
+        at: { mark: type-myanmar }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".steps {\n  list-style-type: myanmar;\n}\n"
+      - id: expect-myanmar
+        type: expect.preview
+        at: { mark: after-myanmar }
+        timeoutMs: 4000
+        target: { by: testId, value: steps }
+        textContains: "လက်ဖက်ခြောက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-string
+        type: editor.type
+        at: { mark: type-string }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  list-style-type: myanmar;\n}\n", occurrence: 1 }
+        text: "\n.drink-list {\n  list-style-type: \"🍵 \";\n}\n"
+      - id: expect-string
+        type: expect.preview
+        at: { mark: after-string }
+        timeoutMs: 4000
+        target: { by: testId, value: drink-list }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Revealed whole: a half-typed keyword would show decimal numbers.
+      - id: type-square
+        type: editor.type
+        at: { mark: type-square }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  list-style-type: \"🍵 \";\n", occurrence: 1 }
+        text: "  list-style-type: square;\n"
+      - id: type-roman
+        type: editor.type
+        at: { mark: type-roman }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  list-style-type: square;\n", occurrence: 1 }
+        text: "  list-style-type: lower-roman;\n"
+      - id: select-roman
+        type: editor.select
+        at: { mark: after-roman }
+        target: { file: styles.css, text: "lower-roman", occurrence: 1 }
+
+  - id: marker-position
+    narration: >
+      [[mark:type-inside]] အခု ရှည်တဲ့ ဒုတိယ အဆင့်ကို ကြည့်ပါ။ list style position ကို inside ပေးပြီး၊ ဒုတိယ
+      စာကြောင်း ဘယ်ကနေ စလဲ ဆိုတာ လိုက်ကြည့်ပါ။ [[mark:after-inside]] နံပါတ်က စာသားထဲကို ဝင်သွားပြီး၊ ဒုတိယ
+      စာကြောင်းက နံပါတ်ရဲ့ အောက်၊ item ရဲ့ ဘယ်ဘက် အစွန်းကနေ စပါတယ်။ [[mark:type-outside]] default ဖြစ်တဲ့
+      outside ကို ပြန်ပေးကြည့်ရအောင်။ ဒုတိယ စာကြောင်းကို ဆက်ကြည့်ပါ။ [[mark:after-outside]] နံပါတ်က
+      အပြင်ဘက်ကို ပြန်ရောက်သွားပြီး၊ ဒုတိယ စာကြောင်းက အပေါ်က စာသားနဲ့ တန်းညီသွားပါတယ်။ outside marker တွေက
+      ညာဘက်ကို ကပ်နေလို့၊ item ဆယ်ခု ရှိရင်တောင် 9 နဲ့ 10 ရဲ့ အစက်တွေ တန်းညီပါမယ်။ [[mark:explain-image]] တတိယ
+      property ဖြစ်တဲ့ list style image ကတော့ ပုံ တစ်ပုံကို bullet အဖြစ် သုံးပါတယ်။ ဒါပေမဲ့ ပုံက မူလ
+      အရွယ်အစားအတိုင်းပဲ ပေါ်ပြီး ချုံ့ချဲ့လို့ မရပါဘူး။ ဒါကြောင့် string ဒါမှမဟုတ် marker pseudo-element ကို
+      သုံးတာ ပိုကောင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Lists: list-style-position"
+        url: "https://web.dev/learn/css/lists#list-style-position"
+      - title: "web.dev Learn CSS — Lists: list-style-image"
+        url: "https://web.dev/learn/css/lists#list-style-image"
+      - title: "MDN — list-style-image"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style-image"
+      - title: "web.dev Learn CSS — Counters: marker position"
+        url: "https://web.dev/learn/css/counters#list_styles"
+    actions:
+      - id: type-inside
+        type: editor.type
+        at: { mark: type-inside }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  list-style-type: myanmar;\n", occurrence: 1 }
+        text: "  list-style-position: inside;\n"
+      - id: expect-inside
+        type: expect.preview
+        at: { mark: after-inside }
+        timeoutMs: 4000
+        target: { by: testId, value: long-step }
+        textContains: "ငါးမိနစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-outside
+        type: editor.type
+        at: { mark: type-outside }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  list-style-position: inside;\n", occurrence: 1 }
+        text: "  list-style-position: outside;\n"
+      - id: expect-outside
+        type: expect.preview
+        at: { mark: after-outside }
+        timeoutMs: 4000
+        target: { by: testId, value: long-step }
+        textContains: "စိမ်ထားပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: shorthand
+    chapter: "Shorthand နဲ့ list reset"
+    narration: >
+      [[mark:type-shorthand]] type၊ position နဲ့ image ကို list style ဆိုတဲ့ shorthand တစ်ခုတည်းနဲ့
+      ပေးလို့ ရပါတယ်။ လေးထောင့် bullet နဲ့ inside ကို တစ်ကြောင်းတည်း ပေးရအောင်။ [[mark:after-shorthand]]
+      လေးထောင့်တွေ ပြန်လာပြီး item ထဲ ဝင်သွားပါပြီ။ [[mark:select-shorthand]] ဒီ shorthand ကို ကြည့်ပါ။
+      တန်ဖိုး နှစ်ခုကို ဘယ်အစဉ်နဲ့ ရေးရေး ရပြီး၊ မရေးခဲ့တဲ့ အပိုင်းကတော့ initial value ဖြစ်သွားပါတယ်။
+      image နဲ့ type နှစ်ခုလုံး ပေးထားရင်တော့၊ ပုံ load မရတဲ့အခါ type ကို သုံးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Lists: list-style shorthand"
+        url: "https://web.dev/learn/css/lists#list-style_shorthand"
+      - title: "MDN — list-style"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style"
+    actions:
+      - id: type-shorthand
+        type: editor.type
+        at: { mark: type-shorthand }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  list-style-type: lower-roman;\n", occurrence: 1 }
+        text: "  list-style: square inside;\n"
+      - id: expect-shorthand
+        type: expect.preview
+        at: { mark: after-shorthand }
+        timeoutMs: 4000
+        target: { by: testId, value: drink-list }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-shorthand
+        type: editor.select
+        at: { mark: select-shorthand }
+        target: { file: styles.css, text: "list-style: square inside;", occurrence: 1 }
+
+  - id: list-reset
+    narration: >
+      [[mark:scroll-footer]] အခု page အောက်ဆုံးက footer ဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-footer]] website
+      တွေမှာ link တွေကို အစက် မပါဘဲ တစ်တန်းတည်း စီထားတဲ့ list တွေ တွေ့ရပါတယ်။ marker တွေနဲ့ padding ကို
+      ဖယ်ပြီး၊ lesson 15 မှာလို gap ပါတဲ့ flex row ဖြစ်အောင် လုပ်ပါမယ်။ [[mark:after-footer]] link သုံးခု
+      တစ်တန်းတည်း စီသွားပါပြီ။ [[mark:select-padding]] ဒီ padding declaration က အရေးကြီးပါတယ်။ outside marker
+      တွေက အဲဒီ padding ထဲမှာ နေတာ ဖြစ်လို့၊ marker ကိုပဲ ဖယ်ရင် ဘယ်ဘက်မှာ နေရာလွတ် ကျန်နေပါလိမ့်မယ်။
+      [[mark:explain-role-list]] ဒီ ပုံစံမှာ သတိထားစရာ တစ်ခု ရှိပါတယ်။ Safari ကို screen reader နဲ့ သုံးရင်၊
+      marker မရှိတော့တဲ့ list ကို list လို့ မဖတ်တော့တာ ဖြစ်နိုင်ပါတယ်။ ဒီ footer list က nav ထဲမှာမို့ ပြဿနာ
+      မရှိပါဘူး။ ခဏနေ marker ဖယ်မယ့် အဆင့် list လို nav ပြင်ပက list တွေမှာတော့၊ HTML ထဲမှာ role ကို list လို့
+      ပေးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Lists: list-style shorthand (list-style: none)"
+        url: "https://web.dev/learn/css/lists#list-style_shorthand"
+      - title: "MDN — Styling lists: handling list spacing"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Text_styling/Styling_lists"
+      - title: 'MDN — list-style (accessibility: VoiceOver and role="list")'
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style#accessibility"
+    actions:
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-footer
+        type: expect.preview
+        at: { afterAction: scroll-footer }
+        timeoutMs: 4000
+        target: { by: testId, value: footer-nav }
+        textContains: "ဖျော်နည်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Revealed line by line: "list-style: n…" would flash decimal numbers.
+      - id: type-footer
+        type: editor.type
+        at: { mark: type-footer }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  list-style: square inside;\n}\n", occurrence: 1 }
+        text: "\n.footer-nav {\n  list-style: none;\n  padding: 0;\n  display: flex;\n  gap: 12px;\n}\n"
+      - id: expect-footer-row
+        type: expect.preview
+        at: { mark: after-footer }
+        timeoutMs: 4000
+        target: { by: testId, value: footer-nav }
+        textContains: "ဈေးနှုန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-padding
+        type: editor.select
+        at: { mark: select-padding }
+        target: { file: styles.css, text: "  padding: 0;", occurrence: 1 }
+
+  - id: description-list
+    chapter: "Description list နဲ့ list item"
+    narration: >
+      [[mark:scroll-prices]] ဈေးနှုန်း list ဆီ ပြန်တက်ကြည့်ရအောင်။ [[mark:type-dl]] description list
+      ကိုလည်း တခြား element တွေလိုပဲ style ပေးလို့ ရပါတယ်။ နာမည်တွေ ထင်ရှားအောင် dt တိုင်းကို စာလုံးထူ
+      ပေးပါမယ်။ ပြီးတော့ dd တိုင်းရဲ့ ဘယ်ဘက် margin ကို ဖယ်ပြီး၊ အောက်မှာ နေရာလွတ် နည်းနည်း ချန်ပါမယ်။
+      နာမည်တွေနဲ့ ဈေးနှုန်းတွေကို လိုက်ကြည့်ပါ။ [[mark:after-dl]] နာမည်တွေ ထူသွားပြီး၊ ဈေးနှုန်းတွေက
+      အတွင်းကို မဝင်တော့ဘဲ နာမည်ရဲ့ အောက်တည့်တည့်မှာ ရောက်နေပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Lists: description lists"
+        url: "https://web.dev/learn/css/lists#creating_a_list"
+      - title: "MDN — <dl>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dl"
+    actions:
+      - id: scroll-prices
+        type: preview.scroll
+        at: { mark: scroll-prices }
+        timeoutMs: 5000
+        top: 375
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-prices
+        type: expect.preview
+        at: { afterAction: scroll-prices }
+        timeoutMs: 4000
+        target: { by: testId, value: price-dl }
+        textContains: "1,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-dl
+        type: editor.type
+        at: { mark: type-dl }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  gap: 12px;\n}\n", occurrence: 1 }
+        text: "\n.price-dl dt {\n  font-weight: bold;\n}\n\n.price-dl dd {\n  margin: 0 0 8px;\n}\n"
+      - id: expect-dl
+        type: expect.preview
+        at: { mark: after-dl }
+        timeoutMs: 4000
+        target: { by: testId, value: price-dl }
+        textContains: "2,500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: any-list-item
+    narration: >
+      [[mark:type-heading]] element မဆို list item ဖြစ်လို့ ရပါတယ်။ ဈေးနှုန်း ခေါင်းစဉ်ကို list item ဆိုတဲ့
+      display ပေးပြီး၊ အရွက်လေး ပါတဲ့ string ကို marker အဖြစ် ပေးပါမယ်။ ခေါင်းစဉ်မှာ list လို ဘယ်ဘက် padding
+      မရှိလို့၊ marker ကို inside နဲ့ ထားပါမယ်။ [[mark:after-heading]] ခေါင်းစဉ်ရဲ့ ရှေ့မှာ အရွက်လေး
+      ပေါ်လာပါပြီ။ [[mark:select-display]] ဒီ display ကို ကြည့်ပါ။ marker ကို ဖန်တီးပေးတာ သူပါ။
+      [[mark:select-string]] marker ရဲ့ content မဟုတ်ဘဲ string ကို သုံးထားလို့၊ Safari မှာလည်း အရွက်လေး
+      ပေါ်ပါတယ်။ [[mark:explain-a11y-heading]] ဒါပေမဲ့ ဒါက ပုံစံကိုပဲ ပြောင်းတာပါ။ screen reader က list item
+      လို့ မဖတ်ဘဲ ခေါင်းစဉ် အဖြစ်ပဲ ဖတ်ပါတယ်။ list အစစ် လိုရင် list element ကို သုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Lists: display type"
+        url: "https://web.dev/learn/css/lists#display_type"
+      - title: "MDN — display: list-item"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/display#list-item"
+      - title: "MDN — ::marker (browser compatibility)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker#browser_compatibility"
+    actions:
+      # Revealed line by line: with display list-item and no position yet, a
+      # default disc would hang into the page edge for a moment.
+      - id: type-heading
+        type: editor.type
+        at: { mark: type-heading }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  margin: 0 0 8px;\n}\n", occurrence: 1 }
+        text: "\n.prices-title {\n  display: list-item;\n  list-style: \"🌿 \" inside;\n}\n"
+      - id: expect-heading
+        type: expect.preview
+        at: { mark: after-heading }
+        timeoutMs: 4000
+        target: { by: testId, value: prices-title }
+        textContains: "ဈေးနှုန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-display
+        type: editor.select
+        at: { mark: select-display }
+        target: { file: styles.css, text: "display: list-item;", occurrence: 1 }
+      - id: select-string
+        type: editor.select
+        at: { mark: select-string }
+        target: { file: styles.css, text: '"🌿 "', occurrence: 1 }
+
+  - id: counter-board
+    chapter: "Counter ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:open-counter]] အခုထိ နံပါတ်ကို browser က တပ်ပေးခဲ့တာပါ။ ဒါဆို ကိုယ့် CSS နဲ့ ဘယ်လို ရေတွက်လဲ
+      ကြည့်ရအောင်။ [[mark:draw-counter-what]] counter ဆိုတာ ကိုယ်ပေးတဲ့ နာမည်နဲ့ CSS ကိုယ်တိုင်
+      ရေတွက်ပေးတဲ့ ကိန်းဂဏန်းပါ။ သူ့ကို screen ပေါ်မှာ content property နဲ့ပဲ ပြလို့ ရပါတယ်။
+      [[mark:draw-reset]] counter reset က counter ကို ဖန်တီးပါတယ်။ များသောအားဖြင့် ရေတွက်မယ့် element
+      တွေရဲ့ parent မှာ ပေးပါတယ်။ စတန်ဖိုး ပေးလို့ ရပြီး၊ မပေးရင် သုညကနေ စပါတယ်။ [[mark:draw-increment]]
+      counter increment က element တစ်ခုစီမှာ counter ကို တိုးပါတယ်။ default က တစ် တိုးပေမယ့်၊ 10 ဖြစ်ဖြစ်၊
+      အနုတ် ကိန်း ဖြစ်ဖြစ် ပေးလို့ ရပါတယ်။ [[mark:draw-show]] ပြီးရင် counter function က content ထဲမှာ
+      လက်ရှိ တန်ဖိုးကို ပြပါတယ်။ ဒုတိယ argument အနေနဲ့ myanmar လို counter style ပေးလို့ ရပါတယ်။
+      [[mark:draw-set]] counter set ကတော့ counter အသစ် မဖန်တီးဘဲ၊ ရှိပြီးသား counter ရဲ့ တန်ဖိုးကို
+      ပြောင်းပေးပါတယ်။ [[mark:draw-hidden]] box ရှိတဲ့ element ကိုပဲ ရေတွက်လို့၊ display none ဆိုရင်
+      ကျော်သွားပါတယ်။ [[mark:draw-list-item]] ordered list တွေကလည်း ဒီလို counter တစ်ခုကို
+      သုံးနေပြီးသားပါ။ list item ဆိုတဲ့ built-in counter ပါ။ list item တစ်ခုစီက သူ့ကို တစ် တိုးပြီး၊
+      နံပါတ် marker က သူ့ တန်ဖိုးကို ပြတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Counters"
+        url: "https://web.dev/learn/css/counters#counters"
+      - title: "MDN — Using CSS counters"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_counter_styles/Using_CSS_counters"
+      - title: "MDN — counter-reset"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/counter-reset"
+      - title: "MDN — counter-set"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/counter-set"
+      - title: "CSS Lists and Counters Module Level 3 — automatic numbering"
+        url: "https://drafts.csswg.org/css-lists-3/#auto-numbering"
+    actions:
+      - id: open-counter
+        type: whiteboard.apply
+        at: { mark: open-counter }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-counter-what
+        type: whiteboard.apply
+        at: { mark: draw-counter-what }
+        upsertIds: [c-what]
+        drawMs: 1400
+      - id: draw-reset
+        type: whiteboard.apply
+        at: { mark: draw-reset }
+        upsertIds: [c-reset-box, c-reset-t, c-reset-l]
+        drawMs: 1800
+      - id: draw-increment
+        type: whiteboard.apply
+        at: { mark: draw-increment }
+        upsertIds: [c-arrow1, c-inc-box, c-inc-t, c-inc-l]
+        drawMs: 2000
+      - id: draw-show
+        type: whiteboard.apply
+        at: { mark: draw-show }
+        upsertIds: [c-arrow2, c-show-box, c-show-t, c-show-l]
+        drawMs: 2000
+      - id: draw-set
+        type: whiteboard.apply
+        at: { mark: draw-set }
+        upsertIds: [c-set]
+        drawMs: 1400
+      - id: draw-hidden
+        type: whiteboard.apply
+        at: { mark: draw-hidden }
+        upsertIds: [c-hidden]
+        drawMs: 1200
+      - id: draw-list-item
+        type: whiteboard.apply
+        at: { mark: draw-list-item }
+        upsertIds: [c-li, c-li-line]
+        drawMs: 1600
+
+  - id: custom-counter
+    chapter: "အဆင့်တွေကို ကိုယ်တိုင် နံပါတ်တပ်ရအောင်"
+    narration: >
+      [[mark:close-counter]] ဖျော်နည်း အဆင့်တွေကို ကိုယ်ပိုင် counter နဲ့ နံပါတ်တပ်ရအောင်။
+      [[mark:type-counter-reset]] browser ရဲ့ နံပါတ်နဲ့ ကိုယ့် label နှစ်ခု ထပ်မပေါ်အောင်၊ rule အသစ် တစ်ခုမှာ
+      marker တွေကို ဖယ်ပြီး၊ step ဆိုတဲ့ နာမည်နဲ့ counter တစ်ခု ဖန်တီးပါမယ်။ [[mark:after-counter-reset]]
+      နံပါတ်တွေ ပျောက်သွားပါပြီ။ counter က ရှိနေပေမယ့် သူ့ကို ပြပေးမယ့် အရာ မရှိသေးပါဘူး။
+      [[mark:type-counter-inc]] ပြီးတော့ အဆင့် တစ်ခုစီက counter ကို တစ် တိုးပါမယ်။ counter ကို ဘယ်နေရာမှာမှ
+      မပြရသေးလို့၊ preview မှာတော့ ဘာမှ မပြောင်းပါဘူး။ [[mark:type-counter-before]] နောက်ဆုံး၊ အဆင့်
+      တစ်ခုစီရဲ့ before box ကို content ပေးပါမယ်။ အဆင့် ဆိုတဲ့ စကားလုံး၊ counter ရဲ့ တန်ဖိုး၊ ပြီးရင် ပုဒ်မ
+      တစ်ခုပါ။ [[mark:after-counter-before]] အဆင့်တိုင်းက သူ့ label နဲ့ စသွားပါပြီ။ [[mark:select-counter-fn]]
+      ဒီ counter function ကို ကြည့်ပါ။ counter style အဖြစ် myanmar ကို ပေးထားပါတယ်။ marker မဟုတ်ဘဲ before ကို
+      သုံးလို့ Safari မှာလည်း ပေါ်ပါတယ်။ HTML ထဲမှာတော့ နံပါတ် မပါပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Counters: counter-reset, counter-increment, counter()"
+        url: "https://web.dev/learn/css/counters#counters"
+      - title: "MDN — counter()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/counter"
+      - title: "web.dev Learn CSS — Pseudo-elements: ::before and ::after"
+        url: "https://web.dev/learn/css/pseudo-elements#before_and_after"
+    actions:
+      - id: close-counter
+        type: whiteboard.apply
+        at: { mark: close-counter }
+        open: false
+      - id: scroll-steps
+        type: preview.scroll
+        at: { mark: close-counter }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # Revealed line by line: "list-style: n…" would flash decimal numbers
+      # over the Myanmar digits.
+      - id: type-counter-reset
+        type: editor.type
+        at: { mark: type-counter-reset }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  list-style: \"🌿 \" inside;\n}\n", occurrence: 1 }
+        text: "\n.steps {\n  list-style: none;\n  counter-reset: step;\n}\n"
+      - id: expect-counter-reset
+        type: expect.preview
+        at: { mark: after-counter-reset }
+        timeoutMs: 4000
+        target: { by: testId, value: steps }
+        textContains: "ရေနွေး တည်ပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-counter-inc
+        type: editor.type
+        at: { mark: type-counter-inc }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  counter-reset: step;\n}\n", occurrence: 1 }
+        text: "\n.steps li {\n  counter-increment: step;\n}\n"
+      - id: type-counter-before
+        type: editor.type
+        at: { mark: type-counter-before }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  counter-increment: step;\n}\n", occurrence: 1 }
+        text: "\n.steps li::before {\n  content: \"အဆင့် \" counter(step, myanmar) \"။ \";\n}\n"
+      # Generated content is not part of the DOM: the step text is unchanged.
+      - id: expect-counter-before
+        type: expect.preview
+        at: { mark: after-counter-before }
+        timeoutMs: 4000
+        target: { by: testId, value: long-step }
+        textContains: "လက်ဖက်ခြောက် ထည့်ပြီး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-counter-fn
+        type: editor.select
+        at: { mark: select-counter-fn }
+        target: { file: styles.css, text: "counter(step, myanmar)", occurrence: 1 }
+
+  - id: nested-counters
+    chapter: "Nested list နဲ့ ပြောင်းပြန် ရေတွက်ခြင်း"
+    narration: >
+      [[mark:scroll-cats]] အခု မီနူး အမျိုးအစားတွေပါ။ [[mark:explain-nested-scope]] အမျိုးအစား တစ်ခုစီထဲမှာ
+      list သီးသန့် ရှိပြီး၊ list တိုင်းက သူ့ကိုယ်ပိုင် list item counter ကို အသစ် စပါတယ်။ ဒါကြောင့် အထဲက item
+      တွေက တစ်ကနေ ပြန်စတာပါ။ [[mark:type-nested]] နောက်ဆုံးမှာ s ပါတဲ့ counters function က level တိုင်းရဲ့
+      နံပါတ်ကို ကိုယ်ပေးတဲ့ သင်္ကေတနဲ့ ဆက်ပြီး ပြပါတယ်။ ဒီမှာတော့ အစက်ကို ပေးပြီး၊ ဒီ marker တွေရဲ့ content ထဲ
+      ထည့်ပါမယ်။ [[mark:after-nested]] အမျိုးအစားတွေက 1 နဲ့ 2၊ item တွေက တစ် ပွိုင့် တစ်၊ တစ် ပွိုင့် နှစ်၊
+      နှစ် ပွိုင့် တစ်၊ နှစ် ပွိုင့် နှစ် ဖြစ်သွားပါပြီ။ s မပါတဲ့ counter function ဆိုရင် အတွင်းဆုံး
+      နံပါတ်ကိုပဲ ပြပါမယ်။ [[mark:explain-safari-marker]] ဒီတစ်ခါတော့ marker ရဲ့ content ကို သုံးထားလို့၊
+      Safari မှာ ပုံမှန် နံပါတ်တွေကိုပဲ မြင်ရပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Counters: nested counters"
+        url: "https://web.dev/learn/css/counters#nested_counters"
+      - title: "MDN — counters()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/counters"
+      - title: "MDN — ::marker (Safari supports only color and font-size)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker#browser_compatibility"
+    actions:
+      - id: scroll-cats
+        type: preview.scroll
+        at: { mark: scroll-cats }
+        timeoutMs: 5000
+        top: 626
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-cats
+        type: expect.preview
+        at: { afterAction: scroll-cats }
+        timeoutMs: 4000
+        target: { by: testId, value: cats }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      # Revealed line by line: an open separator string would flash "11".
+      - id: type-nested
+        type: editor.type
+        at: { mark: type-nested }
+        cadence: line-by-line
+        target: { file: styles.css, after: "counter(step, myanmar) \"။ \";\n}\n", occurrence: 1 }
+        text: "\n.cats li::marker {\n  content: counters(list-item, \".\") \" \";\n}\n"
+      - id: expect-nested
+        type: expect.preview
+        at: { mark: after-nested }
+        timeoutMs: 4000
+        target: { by: testId, value: cats }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-counters-fn
+        type: editor.select
+        at: { mark: after-nested }
+        target: { file: styles.css, text: 'counters(list-item, ".")', occurrence: 1 }
+
+  - id: counter-combos
+    narration: >
+      [[mark:open-combos]] counter တစ်ခုထက် ပိုပြီး တွဲသုံးလို့လည်း ရပါတယ်။ [[mark:draw-sections]] ဥပမာ၊
+      ခေါင်းစဉ် တိုင်းက section counter ကို တိုးပြီး paragraph counter ကို reset လုပ်ပါတယ်။ စာပိုဒ်
+      တိုင်းကတော့ သူ့ကို တိုးပါတယ်။ ဒါကြောင့် စာပိုဒ် နံပါတ်တွေက section တိုင်းမှာ ပြန်စပါတယ်။
+      [[mark:draw-footnotes]] footnote တွေလည်း ဒီ နည်းပါပဲ။ body မှာ note counter ကို တစ်ခါ reset လုပ်၊
+      footnote link တိုင်းမှာ တစ် တိုးပြီး၊ link တစ်ခုစီရဲ့ after box မှာ ပြပါတယ်။
+      [[mark:draw-footnote-out]] ဒါဆို HTML ထဲမှာ နံပါတ် မရေးဘဲ footnote တွေက သူ့ဘာသာ နံပါတ်တပ်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Counters: multiple counters and footnotes"
+        url: "https://web.dev/learn/css/counters#counters"
+      - title: "MDN — Using CSS counters: basic example"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_counter_styles/Using_CSS_counters#basic_example"
+    actions:
+      - id: open-combos
+        type: whiteboard.apply
+        at: { mark: open-combos }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-sections
+        type: whiteboard.apply
+        at: { mark: draw-sections }
+        upsertIds: [d-sec, d-par, d-par-l]
+        drawMs: 2400
+      - id: draw-footnotes
+        type: whiteboard.apply
+        at: { mark: draw-footnotes }
+        upsertIds: [d-foot-h, d-foot1, d-foot2]
+        drawMs: 2200
+      - id: draw-footnote-out
+        type: whiteboard.apply
+        at: { mark: draw-footnote-out }
+        upsertIds: [d-foot3]
+        drawMs: 1200
+
+  - id: reversed
+    narration: >
+      [[mark:close-combos]] လူကြိုက်အများဆုံး list ဆီ ဆင်းကြည့်ရအောင်။ [[mark:open-index-top]] HTML
+      ဖိုင်ဆီ ပြန်သွားပါမယ်။ [[mark:select-reversed]] ဒီ reversed attribute ကို ကြည့်ပါ။ ပြောင်းပြန်
+      ရေတွက်ဖို့ ဒါပဲ လိုပါတယ်။ [[mark:after-reversed]] preview မှာ 5 ကနေ 1 အထိ ပြောင်းပြန် ရေတွက်ထားလို့၊
+      လူကြိုက်အများဆုံး လက်ဖက်ရည်က နံပါတ် 1 ဖြစ်ပါတယ်။ [[mark:open-reverse-board]] ကိုယ်ပိုင် counter
+      ဆိုရင် စတန်ဖိုးကို ကိုယ်တိုင် တွက်ရပါတယ်။ [[mark:draw-reverse-reset]] item ငါးခုအတွက် counter ကို 6
+      နဲ့ reset လုပ်ပါ။ item အရေအတွက်ထက် တစ် ပိုတာပါ။ [[mark:draw-reverse-step]] increment ကို အနုတ် တစ်
+      ပေးပါ။ item တိုင်းက အရင် လျှော့ပြီးမှ ပြလို့၊ ပထမ item က 5၊ နောက်ဆုံးက 1 ကို ပြပါတယ်။
+      [[mark:draw-reverse-note]] စတန်ဖိုးကို အလိုလို တွက်ပေးတဲ့ reversed function လည်း CSS မှာ ရှိပေမယ့်၊
+      Firefox မှာပဲ ရပါသေးတယ်။ ဒါကြောင့် ရိုးရိုး list တွေအတွက်တော့ browser တိုင်းမှာ ရတဲ့ reversed
+      attribute ကို သုံးပါ။
+    sources:
+      - title: "web.dev Learn CSS — Counters: reversing counters"
+        url: "https://web.dev/learn/css/counters#reversing_counters"
+      - title: "HTML Standard — the ol element (reversed)"
+        url: "https://html.spec.whatwg.org/multipage/grouping-content.html#the-ol-element"
+      - title: "MDN — counter-reset (reversed() browser support)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/counter-reset#browser_compatibility"
+    actions:
+      - id: close-combos
+        type: whiteboard.apply
+        at: { mark: close-combos }
+        open: false
+      - id: scroll-top-list
+        type: preview.scroll
+        at: { mark: close-combos }
+        timeoutMs: 5000
+        top: 872
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-index-top
+        type: workspace.openFile
+        at: { mark: open-index-top }
+        path: index.html
+      - id: select-reversed
+        type: editor.select
+        at: { mark: select-reversed }
+        target: { file: index.html, text: "reversed", occurrence: 1 }
+      # The reversed attribute is present (an empty string value).
+      - id: expect-reversed
+        type: expect.preview
+        at: { mark: after-reversed }
+        timeoutMs: 4000
+        target: { by: testId, value: top }
+        attribute: { name: reversed, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-top-text
+        type: expect.preview
+        at: { afterAction: expect-reversed }
+        timeoutMs: 4000
+        target: { by: testId, value: top }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-reverse-board
+        type: whiteboard.apply
+        at: { mark: open-reverse-board }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-items]
+      - id: draw-reverse-reset
+        type: whiteboard.apply
+        at: { mark: draw-reverse-reset }
+        upsertIds: [e-reset, e-rule]
+        drawMs: 2000
+      - id: draw-reverse-step
+        type: whiteboard.apply
+        at: { mark: draw-reverse-step }
+        upsertIds: [e-step, e-seq]
+        drawMs: 2200
+      - id: draw-reverse-note
+        type: whiteboard.apply
+        at: { mark: draw-reverse-note }
+        upsertIds: [e-ff, e-html]
+        drawMs: 1800
+
+  - id: counter-style
+    chapter: "ကိုယ်ပိုင် counter style"
+    narration: >
+      [[mark:close-reverse]] နောက်ဆုံး၊ ကိုယ်ပိုင် counter style လုပ်ကြည့်ရအောင်။ [[mark:open-styles-tea]] CSS
+      ဖိုင်ဆီ ပြန်သွားပါမယ်။ [[mark:type-tea-use]] သောက်စရာ list ရဲ့ list style type ကို မရှိသေးတဲ့ နာမည်
+      တစ်ခု ပေးပါမယ်။ tea ပါ။ [[mark:after-tea-use]] လေးထောင့်လေးတွေ ရိုးရိုး ဂဏန်း ဖြစ်သွားပါပြီ။ browser က
+      tea ကို မသိလို့၊ fallback အနေနဲ့ decimal ကို သုံးလိုက်တာပါ။ [[mark:type-tea-define]] အခု counter style
+      at-rule နဲ့ သူ့ကို ဖန်တီးပါမယ်။ system ကို cyclic ပေးလို့၊ symbol တွေ ကုန်သွားရင် အစကနေ ပြန်စပါတယ်။
+      symbol နှစ်ခုက လက်ဖက်ရည် ခွက်နဲ့ ကော်ဖီ ခွက်ပါ။ symbol တိုင်းရဲ့ နောက်က suffix က default အားဖြင့်
+      အစက်နဲ့ နေရာလွတ် ဖြစ်ပေမယ့်၊ နေရာလွတ် တစ်ခုတည်း ဖြစ်အောင် ပြောင်းပါမယ်။ [[mark:after-tea-define]]
+      လက်ဖက်ရည်နဲ့ ကော်ဖီ ခွက်တွေ တလှည့်စီ ပေါ်လာပါပြီ။ [[mark:explain-systems]] ဒီ cyclic system ကို ကြည့်ပါ။
+      extends က myanmar လို ရှိပြီးသား style ကို ယူသုံးလို့၊ suffix ကိုပဲ ပြောင်းလို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Counters: @counter-style"
+        url: "https://web.dev/learn/css/counters#list_styles"
+      - title: "MDN — @counter-style"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@counter-style"
+      - title: "CSS Counter Styles Level 3 — system, symbols, suffix, fallback"
+        url: "https://drafts.csswg.org/css-counter-styles-3/"
+    actions:
+      - id: close-reverse
+        type: whiteboard.apply
+        at: { mark: close-reverse }
+        open: false
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: close-reverse }
+        timeoutMs: 5000
+        top: 198
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-styles-tea
+        type: workspace.openFile
+        at: { mark: open-styles-tea }
+        path: styles.css
+      - id: type-tea-use
+        type: editor.type
+        at: { mark: type-tea-use }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  list-style: square inside;\n", occurrence: 1 }
+        text: "  list-style-type: tea;\n"
+      - id: expect-tea-use
+        type: expect.preview
+        at: { mark: after-tea-use }
+        timeoutMs: 4000
+        target: { by: testId, value: drink-list }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-tea-define
+        type: editor.type
+        at: { mark: type-tea-define }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  content: counters(list-item, \".\") \" \";\n}\n",
+            occurrence: 1,
+          }
+        text: "\n@counter-style tea {\n  system: cyclic;\n  symbols: \"🍵\" \"☕\";\n  suffix: \" \";\n}\n"
+      - id: expect-tea-define
+        type: expect.preview
+        at: { mark: after-tea-define }
+        timeoutMs: 4000
+        target: { by: testId, value: drink-list }
+        textContains: "ဖာလူဒါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-system
+        type: editor.select
+        at: { mark: explain-systems }
+        target: { file: styles.css, text: "system: cyclic;", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မေးခွန်း လေးခု စစ်ကြည့်ရအောင်။ အဖြေ မပေါ်ခင် ကိုယ်တိုင် အရင် ဖြေကြည့်ပါ။ list element
+      သုံးမျိုးက ဘာတွေလဲ။ [[mark:quiz-lists]] ul၊ ol နဲ့ dl ပါ။ counter ကို ဘယ် property က ဖန်တီးလဲ။
+      [[mark:quiz-reset]] counter reset ပါ။ ol မှာ browser သုံးတဲ့ counter ရဲ့ နာမည်က ဘာလဲ။
+      [[mark:quiz-list-item]] list item ပါ။ တစ် ပွိုင့် နှစ် လို နံပါတ်ကို ဘာနဲ့ ပြလဲ။ [[mark:quiz-counters]]
+      ကြားက သင်္ကေတနဲ့ s ပါတဲ့ counters function ကို သုံးပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ list ကို
+      အဓိပ္ပာယ်အလိုက် ရွေးပါ။ marker ရဲ့ type၊ position နဲ့ image ကို list မှာ ပေးရင် item တွေက inherit
+      ဖြစ်ပါတယ်။ counter ကို reset နဲ့ ဖန်တီး၊ increment နဲ့ တိုးပြီး၊ counter ဒါမှမဟုတ် counters function နဲ့
+      ပြပါတယ်။ ပိုသိချင်ရင် MDN မှာ list ကို style ပေးနည်း guide ကို ရှာဖတ်ကြည့်ပါ။ [[mark:next-lesson]] နောက်
+      lesson မှာတော့ စာသားဆီ ဆက်သွားပြီး၊ font၊ စာလုံး အရွယ်အစားနဲ့ အထူကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Lists: check your understanding"
+        url: "https://web.dev/learn/css/lists#check_your_understanding"
+      - title: "web.dev Learn CSS — Counters: check your understanding"
+        url: "https://web.dev/learn/css/counters#check_your_understanding"
+      - title: "MDN — Styling lists"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Text_styling/Styling_lists"
+      - title: "web.dev Learn CSS — Typography (next lesson)"
+        url: "https://web.dev/learn/css/typography"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q1, f-q2, f-q3, f-q4]
+      - id: quiz-lists
+        type: whiteboard.apply
+        at: { mark: quiz-lists }
+        upsertIds: [f-a1]
+        drawMs: 900
+      - id: quiz-reset
+        type: whiteboard.apply
+        at: { mark: quiz-reset }
+        upsertIds: [f-a2]
+        drawMs: 900
+      - id: quiz-list-item
+        type: whiteboard.apply
+        at: { mark: quiz-list-item }
+        upsertIds: [f-a3]
+        drawMs: 900
+      - id: quiz-counters
+        type: whiteboard.apply
+        at: { mark: quiz-counters }
+        upsertIds: [f-a4]
+        drawMs: 900
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".steps {\n  list-style-type: myanmar;\n  list-style-position: inside;\n  list-style-position: outside;\n}\n\n.drink-list {\n  list-style-type: \"🍵 \";\n  list-style-type: square;\n  list-style-type: lower-roman;\n  list-style: square inside;\n  list-style-type: tea;\n}\n\n.footer-nav {\n  list-style: none;\n  padding: 0;\n  display: flex;\n  gap: 12px;\n}\n\n.price-dl dt {\n  font-weight: bold;\n}\n\n.price-dl dd {\n  margin: 0 0 8px;\n}\n\n.prices-title {\n  display: list-item;\n  list-style: \"🌿 \" inside;\n}\n\n.steps {\n  list-style: none;\n  counter-reset: step;\n}\n\n.steps li {\n  counter-increment: step;\n}\n\n.steps li::before {\n  content: \"အဆင့် \" counter(step, myanmar) \"။ \";\n}\n\n.cats li::marker {\n  content: counters(list-item, \".\") \" \";\n}\n\n@counter-style tea {\n  system: cyclic;\n  symbols: \"🍵\" \"☕\";\n  suffix: \" \";\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
