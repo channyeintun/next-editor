@@ -1,0 +1,1313 @@
+# SRE from zero, lesson 5: Reliability culture (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-05-reliability-culture.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-05-reliability-culture.md \
+#     src/studio/scripts/sre-05-reliability-culture.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Pacing (something changes on screen at least every ~35 s at 70 ms/char):
+# extra marks sit at existing sentence ends and drive continuation pages
+# (l05_p01b, l05_p03b, …, same kit as the page they continue) or split board
+# steps. B2 step 1 and step 2 are each split in two so no step adds more than
+# three labelled boxes; B3 gains a third step (the three-answer confidence
+# check) because its last stretch held for ~43 s. The cover's four lines are
+# spread over l05_p01 and l05_p01b, since the K1 kit holds three.
+#
+# Boards (P6 lanes, P4 unrolled rows, P7 staircase). Colour jobs: #1e1e1e ink
+# (paints white) for titles and arrows, blue the person or thing named, green
+# healthy/done, red failure, orange the caveat, violet the result. A label on
+# two lines is two text assets, one per line: the overflow rule counts a whole
+# text's length, so one "\n" label would need the width of both lines.
+#
+# Deck pages: deck "Next Editor · SRE 1 · Why SRE". The /pub URL below is a
+# placeholder until Chan publishes the deck; the Director's unreachable-deck
+# warning is expected until then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-05-reliability-culture.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-05-reliability-culture.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-05-reliability-culture.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-05-reliability-culture
+  title: "SRE from zero 5: Reliability ယဉ်ကျေးမှု"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Reliability ယဉ်ကျေးမှု
+
+        - blameless — "ဘယ်သူလဲ" မဟုတ်ဘဲ "ဘာက ဖြစ်စေခဲ့လဲ"၊ owner နဲ့ ရက်စွဲ ပါရမယ်
+        - local rationality — အဲဒီအချိန်က သူ့အတွက် အဓိပ္ပာယ် ရှိခဲ့တယ်
+        - psychological safety — မေးရဲ၊ ပြောရဲ၊ ဝန်ခံရဲ
+        - hero antipattern — လူ တစ်ယောက်ရဲ့ ညဘက် ကြိုးစားမှုကို အားကိုးတာ
+        - Westrum — သတင်းဆိုး ယူလာသူ: နှုတ်ပိတ် · တန်းစီ · ကျေးဇူးတင်
+
+        မေးခွန်း: "config အမှားကို ဘယ်သူ push လုပ်ခဲ့တာလဲ?" ဆိုတဲ့ review မေးခွန်းကို ပြန်ရေးပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Reliability ယဉ်ကျေးမှု</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 5</p>
+              <h1>Reliability ယဉ်ကျေးမှု</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l05-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p01
+    - id: l05-p01b
+      contentType: google
+      name: Cover, the question
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p01b
+    - id: l05-p02
+      contentType: google
+      name: The messenger, pathological
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p02
+    - id: l05-p02b
+      contentType: google
+      name: The messenger, all three
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p02b
+    - id: l05-p03
+      contentType: google
+      name: What the culture does
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p03
+    - id: l05-p03b
+      contentType: google
+      name: Two foundations
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p03b
+    - id: l05-p03c
+      contentType: google
+      name: Two foundations and tools
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p03c
+    - id: l05-p04
+      contentType: google
+      name: Two questions
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p04
+    - id: l05-p04b
+      contentType: google
+      name: Local rationality
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p04b
+    - id: l05-p04c
+      contentType: google
+      name: Just culture
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p04c
+    - id: l05-p04d
+      contentType: google
+      name: Who versus what
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p04d
+    - id: l05-p05
+      contentType: google
+      name: Safe to speak
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p05
+    - id: l05-p05b
+      contentType: google
+      name: Psychological safety
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p05b
+    - id: l05-p05c
+      contentType: google
+      name: Room to act
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p05c
+    - id: l05-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/SRE-1-NOT-PUBLISHED-YET/pub"
+      pageId: l05_p06
+  whiteboardAssets:
+    # ---- Board B1: Padauk's night, two lanes (P6) ---------------------------
+    - {
+        id: l05-b1-lane1,
+        kind: text,
+        x: 260,
+        y: 170,
+        width: 120,
+        height: 45,
+        text: "အဲဒီည",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l05-b1-r1,
+        kind: rectangle,
+        x: 252,
+        y: 230,
+        width: 247,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l05-b1-t1,
+        kind: text,
+        x: 260,
+        y: 247,
+        width: 233,
+        height: 35,
+        text: "ကိုမင်း မြင်တယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 503,
+        y: 245,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b1-r2,
+        kind: rectangle,
+        x: 557,
+        y: 230,
+        width: 232,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b1-t2,
+        kind: text,
+        x: 565,
+        y: 247,
+        width: 218,
+        height: 35,
+        text: "တိတ်တိတ် နေတယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-x2,
+        kind: freedraw,
+        stroke: strike,
+        x: 562,
+        y: 246,
+        width: 222,
+        height: 38,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 793,
+        y: 245,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b1-r3,
+        kind: rectangle,
+        x: 847,
+        y: 230,
+        width: 247,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b1-t3,
+        kind: text,
+        x: 855,
+        y: 247,
+        width: 233,
+        height: 35,
+        text: "4 မိနစ် နောက်ကျ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-lane2,
+        kind: text,
+        x: 260,
+        y: 360,
+        width: 330,
+        height: 45,
+        text: "review ပြီးနောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l05-b1-r4,
+        kind: rectangle,
+        x: 252,
+        y: 420,
+        width: 263,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l05-b1-t4,
+        kind: text,
+        x: 260,
+        y: 437,
+        width: 248,
+        height: 35,
+        text: "ကိုမင်း post တင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 518,
+        y: 435,
+        width: 38,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b1-r5,
+        kind: rectangle,
+        x: 559,
+        y: 420,
+        width: 263,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b1-t5,
+        kind: text,
+        x: 567,
+        y: 437,
+        width: 248,
+        height: 35,
+        text: "မသီရိ ကျေးဇူးတင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 825,
+        y: 435,
+        width: 38,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b1-r6,
+        kind: rectangle,
+        x: 866,
+        y: 420,
+        width: 232,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b1-t6,
+        kind: text,
+        x: 874,
+        y: 430,
+        width: 218,
+        height: 35,
+        text: "ဒုတိယ provider",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b1-t6b,
+        kind: text,
+        x: 874,
+        y: 467,
+        width: 90,
+        height: 35,
+        text: "ဖွင့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: hero loop vs learning loop, two unrolled rows (P4) -------
+    - {
+        id: l05-b2-r1,
+        kind: rectangle,
+        x: 260,
+        y: 230,
+        width: 150,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b2-r1-t,
+        kind: text,
+        x: 270,
+        y: 257,
+        width: 130,
+        height: 35,
+        text: "incident",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-r1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 414,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-r2,
+        kind: rectangle,
+        x: 458,
+        y: 230,
+        width: 165,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b2-r2-t1,
+        kind: text,
+        x: 468,
+        y: 240,
+        width: 130,
+        height: 35,
+        text: "ကိုအောင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-r2-t2,
+        kind: text,
+        x: 468,
+        y: 275,
+        width: 145,
+        height: 35,
+        text: "ညဘက် ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-r2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 627,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-r3,
+        kind: rectangle,
+        x: 671,
+        y: 230,
+        width: 230,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b2-r3-t1,
+        kind: text,
+        x: 681,
+        y: 240,
+        width: 75,
+        height: 35,
+        text: "ဘာမှ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-r3-t2,
+        kind: text,
+        x: 681,
+        y: 275,
+        width: 115,
+        height: 35,
+        text: "မရေးထား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-r3-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 905,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-r4,
+        kind: rectangle,
+        x: 949,
+        y: 230,
+        width: 148,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b2-r4-t,
+        kind: text,
+        x: 959,
+        y: 257,
+        width: 130,
+        height: 35,
+        text: "incident",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-again-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 935,
+        y: 215,
+        width: 165,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l05-b2-again,
+        kind: text,
+        x: 960,
+        y: 168,
+        width: 120,
+        height: 35,
+        text: "ထပ်ဖြစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-praise,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 395,
+        height: 35,
+        text: "ညဘက် ကယ်တင်တာကို ချီးကျူး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-praise-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 675,
+        y: 347,
+        width: 50,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l05-b2-burnout,
+        kind: text,
+        x: 735,
+        y: 350,
+        width: 120,
+        height: 35,
+        text: "burnout",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g1,
+        kind: rectangle,
+        x: 260,
+        y: 420,
+        width: 150,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b2-g1-t,
+        kind: text,
+        x: 270,
+        y: 447,
+        width: 130,
+        height: 35,
+        text: "incident",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 414,
+        y: 445,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-g2,
+        kind: rectangle,
+        x: 458,
+        y: 420,
+        width: 165,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b2-g2-t1,
+        kind: text,
+        x: 468,
+        y: 430,
+        width: 145,
+        height: 35,
+        text: "blameless",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g2-t2,
+        kind: text,
+        x: 468,
+        y: 465,
+        width: 100,
+        height: 35,
+        text: "review",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 627,
+        y: 445,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-g3,
+        kind: rectangle,
+        x: 671,
+        y: 420,
+        width: 230,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b2-g3-t1,
+        kind: text,
+        x: 681,
+        y: 430,
+        width: 145,
+        height: 35,
+        text: "runbook +",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g3-t2,
+        kind: text,
+        x: 681,
+        y: 465,
+        width: 210,
+        height: 35,
+        text: "on-call ခွဲယူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g3-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 905,
+        y: 445,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b2-g4,
+        kind: rectangle,
+        x: 949,
+        y: 420,
+        width: 148,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b2-g4-t1,
+        kind: text,
+        x: 959,
+        y: 430,
+        width: 130,
+        height: 35,
+        text: "incident",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b2-g4-t2,
+        kind: text,
+        x: 959,
+        y: 465,
+        width: 100,
+        height: 35,
+        text: "နည်းလာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3: behaviour first, a staircase rising left to right (P7) ---
+    - {
+        id: l05-b3-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "incident တိုင်းပြီး မိနစ် 30 review",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l05-b3-s1,
+        kind: rectangle,
+        x: 280,
+        y: 480,
+        width: 190,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l05-b3-s1-t1,
+        kind: text,
+        x: 292,
+        y: 490,
+        width: 90,
+        height: 35,
+        text: "တစ်ခါ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-s1-t2,
+        kind: text,
+        x: 292,
+        y: 525,
+        width: 150,
+        height: 35,
+        text: "စမ်းကြည့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-s2,
+        kind: rectangle,
+        x: 490,
+        y: 410,
+        width: 190,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l05-b3-s2-t,
+        kind: text,
+        x: 502,
+        y: 427,
+        width: 135,
+        height: 35,
+        text: "အသုံးဝင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-s3,
+        kind: rectangle,
+        x: 700,
+        y: 340,
+        width: 190,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l05-b3-s3-t,
+        kind: text,
+        x: 712,
+        y: 357,
+        width: 110,
+        height: 35,
+        text: "အလေ့အထ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-s4,
+        kind: rectangle,
+        x: 910,
+        y: 270,
+        width: 185,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l05-b3-s4-t,
+        kind: text,
+        x: 920,
+        y: 287,
+        width: 165,
+        height: 35,
+        text: "ယဉ်ကျေးမှု",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-q1,
+        kind: text,
+        x: 470,
+        y: 597,
+        width: 165,
+        height: 35,
+        text: "မလုပ်ရဲသေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-q1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 640,
+        y: 594,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b3-q2,
+        kind: text,
+        x: 685,
+        y: 597,
+        width: 205,
+        height: 35,
+        text: "ဘေးမှာ ရှိရင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l05-b3-q2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 892,
+        y: 594,
+        width: 34,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l05-b3-q3,
+        kind: text,
+        x: 930,
+        y: 597,
+        width: 165,
+        height: 35,
+        text: "ကိုယ့်ဘာသာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2605
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: သတင်းဆိုး ယူလာသူ
+    narration: >
+      [[mark:show-p01]] အခုထိ Padauk က ပြဿနာ ဖြစ်တိုင်း config check၊ alert၊ template လို tool တွေနဲ့ ဖြေရှင်းခဲ့ပြီး၊ မသီရိကတော့ reliability ကို အပိုတာဝန်အဖြစ်ပဲ ကြည့်ပေးနေရတုန်းပါ။ ဒီနေ့ ပြဿနာကတော့ system ထဲမှာ မဟုတ်ဘဲ လူတွေကြားမှာ ဖြစ်ပါတယ်။
+      ည 9 နာရီ၊ top-up promo မစခင်မှာ အလုပ်ဝင်တာ မကြာသေးတဲ့ developer ကိုမင်းက SMS code ပို့ပေးတဲ့ provider တဖြည်းဖြည်း နှေးလာတာကို dashboard မှာ သတိထားမိပါတယ်။ [[mark:show-p01b]] team chat ထဲမှာ စာရိုက်ပြီးပေမဲ့ ပို့ဖို့ ချီတုံချတုံ ဖြစ်နေပါတယ်၊ ပြီးခဲ့တဲ့လက သူ မေးခွန်း တစ်ခု မေးတော့ တစ်ယောက်က ရယ်ခဲ့လို့ပါ။ ကိုမင်း ပြောရဲပါ့မလား?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "re:Work: Understand team effectiveness",
+          url: "https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l05-p01,
+        }
+      # Pacing: the cover's last two lines (the laugh, the question) land as they are said.
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l05-p01b }
+
+  - id: westrum
+    narration: >
+      [[mark:show-p02]] ကိုမင်း ပြောရဲမလား ဆိုတာက သူ့ သတ္တိထက်၊ အရင်က မေးခွန်း မေးခဲ့တဲ့သူတွေ ဘာဖြစ်ခဲ့လဲ ဆိုတာပေါ်မှာ ပိုမူတည်ပါတယ်။ လူမှုဗေဒ ပညာရှင် Ron Westrum က သတင်းဆိုး ယူလာတဲ့သူကို ဘယ်လို ဆက်ဆံလဲ ဆိုတာနဲ့ အဖွဲ့အစည်း ယဉ်ကျေးမှုကို သုံးမျိုး ခွဲပြခဲ့ပါတယ်။
+      ပထမ pathological အဖွဲ့မှာ အာဏာကို ဦးစားပေးလို့ သတင်းဆိုး ယူလာသူကို နှုတ်ပိတ်ခိုင်းပါတယ်။ [[mark:show-p02b]] ဒုတိယ bureaucratic အဖွဲ့မှာ စည်းမျဉ်းကို ဦးစားပေးလို့ သတင်းက တန်းစီပြီး အလှည့်စောင့်ရပါတယ်။ တတိယ generative အဖွဲ့မှာတော့ ရလဒ်ကို ဦးစားပေးလို့ သတင်းဆိုး ယူလာသူကို ကျေးဇူးတင်ပြီး ချက်ချင်း ဖြေရှင်းပါတယ်။
+      software delivery ကို နှစ်စဉ် လေ့လာတဲ့ DORA သုတေသနကလည်း အဖွဲ့တစ်ခု generative ဘက် ရောက်လေ software ကို ပိုမြန်မြန်၊ ပိုစိတ်ချရအောင် ထုတ်နိုင်လေ ဖြစ်တာကို တွေ့ထားပါတယ်။ မသီရိက ကိုနေလင်းကို ပြတဲ့ အထောက်အထားလည်း ဒါပါပဲ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Westrum, A typology of organisational cultures (BMJ Qual Saf, PMC)",
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1765804/",
+        }
+      - {
+          title: "DORA capability: Generative organizational culture",
+          url: "https://dora.dev/capabilities/generative-organizational-culture/",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l05-p02 }
+      # Pacing: the other two cards join as the narration names the second type.
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l05-p02b }
+
+  - id: padauk-night
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ဒါဆို Padauk ရဲ့ အဲဒီညကို ဒီ သုံးမျိုးထဲမှာ ထားကြည့်ရအောင်။ ကိုမင်း မြင်ခဲ့ပေမဲ့ တိတ်တိတ်ပဲ နေခဲ့လို့ promo အတွင်း SMS code တွေ 4 မိနစ် နောက်ကျပြီးမှ ရောက်ခဲ့ပါတယ်။ ဒါ ကိုမင်းရဲ့ အမှား မဟုတ်ပါဘူး။ မြင်တဲ့သူ ရှိရက်နဲ့ ပြောလို့ မရတဲ့ အဖွဲ့ ဖြစ်နေလို့ အဲဒီညက Padauk ဟာ pathological ဘက်နားမှာ ရှိနေခဲ့တာပါ။
+      [[mark:b1-s2]] နောက်မှ ပြောပြမယ့် review ပြီးလို့ အပတ်အနည်းငယ် ကြာတော့ SMS တွေ ထပ်နှေးလာပြီး၊ ဒီတစ်ခါ ကိုမင်းက team chat ထဲမှာ ချက်ချင်း post တင်လိုက်ပါတယ်။ မသီရိက အားလုံး မြင်အောင် ကျေးဇူးတင်ပြီး ဒုတိယ SMS provider ကို ဖွင့်လိုက်တော့ user တွေ ဘာမှ မသိလိုက်ပါဘူး။ ကျေးဇူးတင်စကား တစ်ခွန်းကို ထပ်ခါထပ်ခါ ပြောရင်း Padauk က generative ဘက်ကို ရွေ့လာတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Westrum, A typology of organisational cultures (BMJ Qual Saf, PMC)",
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1765804/",
+        }
+      - {
+          title: "DORA capability: Generative organizational culture",
+          url: "https://dora.dev/capabilities/generative-organizational-culture/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l05-b1-lane1],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds:
+          [
+            l05-b1-r1,
+            l05-b1-t1,
+            l05-b1-a1,
+            l05-b1-r2,
+            l05-b1-t2,
+            l05-b1-x2,
+            l05-b1-a2,
+            l05-b1-r3,
+            l05-b1-t3,
+          ]
+        drawMs: 2600
+      - { id: b1-s2, type: whiteboard.apply, at: { mark: b1-s2 }, upsertIds: [l05-b1-lane2] }
+      - id: b1-s2-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s2 }
+        upsertIds:
+          [
+            l05-b1-r4,
+            l05-b1-t4,
+            l05-b1-a3,
+            l05-b1-r5,
+            l05-b1-t5,
+            l05-b1-a4,
+            l05-b1-r6,
+            l05-b1-t6,
+            l05-b1-t6b,
+          ]
+        drawMs: 2600
+
+  - id: culture-does
+    narration: >
+      [[mark:close-b1]] [[mark:show-p03]] reliability ကို တန်ဖိုးထားတဲ့ ယဉ်ကျေးမှုမှာ နေ့စဉ် အလေ့အထ သုံးခု ရှိပါတယ်။ ရာထူးကြီးသူ ထင်တာထက် data နဲ့ user ရဲ့ အမြင်ကို ကြည့်ပြီး ဆုံးဖြတ်တယ်၊ သိတာကို ကိုယ့်အဖွဲ့ထဲမှာပဲ မသိမ်းဘဲ တခြား အဖွဲ့တွေကို မျှပေးတယ်၊ တစ်ခုခု ပျက်ရင်လည်း အပြစ်ရှာစရာ မဟုတ်ဘဲ သင်ယူစရာ အဖြစ် ကြည့်ပါတယ်။
+      [[mark:show-p03b]] ဒီ အလေ့အထတွေက အခြေခံ နှစ်ခုပေါ်မှာ ရပ်တည်ပါတယ်။ ပထမက ဘယ်လောက် စိတ်ချရရင် လုံလောက်လဲ ဆိုတာကို user တွေက ဆုံးဖြတ်တာပါ။ ဒုတိယက reliability အလုပ်ကိုလည်း feature အသစ်လိုပဲ ချီးကျူးပြီး ရာထူးတိုးတဲ့အခါ ထည့်တွက်တာပါ။ ဥပမာ နောက် သုံးလပတ် ဆုပေးပွဲမှာ Top-up ရဲ့ SMS provider အရန် အလုပ်ကို rewards screen အသစ်နဲ့ ဘေးချင်းယှဉ်ပြီး ချီးကျူးခဲ့ပါတယ်။
+      [[mark:show-p03c]] ဘယ် tool တွေ သုံးလဲ ဆိုတာကလည်း အလေ့အထကို ပြောင်းစေပါတယ်။ ဥပမာ ဘယ်သူမှ မကြည့်တဲ့ tool ငါးခုထက် အဖွဲ့တိုင်း အတူ ကြည့်တဲ့ dashboard တစ်ခုက ပိုအသုံးဝင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA capability: Generative organizational culture",
+          url: "https://dora.dev/capabilities/generative-organizational-culture/",
+        }
+      - {
+          title: "DORA capability: Learning culture",
+          url: "https://dora.dev/capabilities/learning-culture/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l05-p03 }
+      # Pacing: the two foundations, then the tools card.
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l05-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l05-p03c }
+
+  - id: hero-loop
+    chapter: ညဘက် hero
+    narration: >
+      [[mark:close-p03c]] [[mark:b2-s1]] Padauk ရဲ့ နောက်ပြဿနာက merchant တွေဆီ ငွေလွှဲတဲ့ settlement job ကြားမှာ ရပ်သွားရင် ပြန် run တတ်တာ ကိုအောင် တစ်ယောက်တည်း ဖြစ်နေတာပါ။ job ရပ်တာက merchant တွေကို ထိခိုက်နေလို့ ချက်ချင်း ဖြေရှင်းရမယ့် ပြဿနာ၊ incident ပါ။ incident ဖြစ်တိုင်း ကိုအောင်က ညဘက် ထပြင်ပေးတော့ အားလုံးက hero လို့ ချီးကျူးကြပါတယ်။
+      [[mark:b2-s1b]] ဒါပေမဲ့ ဘယ်လို ပြင်လဲ ဘယ်မှာမှ ရေးမထားလို့ ထပ်ဖြစ်တိုင်း သူ့ကိုပဲ ပြန်နှိုးရပါတယ်။ ဒီလို လူ တစ်ယောက်ရဲ့ ညဘက် ကြိုးစားမှုကို အားကိုးပြီး system ကို ရပ်တည်အောင် ထားတာကို hero antipattern လို့ ခေါ်ပါတယ်။ သင်္ကြန်မှာ ကိုအောင် ဇာတိ ပြန်သွားတုန်း job ရပ်သွားတော့ merchant တွေ ငွေရတာ တစ်ရက် နောက်ကျသွားပါတယ်။
+      [[mark:b2-s2]] ဒီတစ်ခါတော့ မသီရိက blameless review တစ်ခုကို ဦးဆောင်ပြီး ကိုနေလင်းကိုလည်း ဖိတ်ပါတယ်။ blameless ဆိုတာ lesson 2 က postmortem လိုပဲ ဘယ်သူ့ အပြစ်လဲလို့ လူကို မရှာဘဲ system နဲ့ လုပ်ငန်းစဉ်ထဲက အားနည်းချက်ကို ရှာတာပါ။ [[mark:b2-s2b]] review ကနေ အဆင့်လိုက် ရေးထားတဲ့ runbook ထွက်လာပြီး၊ ပြဿနာ တက်ရင် တုံ့ပြန်ရမယ့် on-call တာဝန်ကိုလည်း အလှည့်ကျ ခွဲယူလိုက်တော့ လူတိုင်း ပြင်တတ်လာပြီး incident တွေလည်း နည်းလာပါတယ်။
+      [[mark:b2-s3]] ဒါပေမဲ့ ညဘက် ကယ်တင်တာကိုပဲ ဆက်ချီးကျူးနေရင်၊ အိပ်ရေးပျက်ပြီး အချိန်ပို လုပ်တာက တကယ့် အလုပ်ပဲလို့ အဖွဲ့တစ်ခုလုံး သင်ယူသွားပြီး၊ hero ကိုယ်တိုင်လည်း burnout ဖြစ်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Postmortem Culture",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+      - {
+          title: "DORA capability: Learning culture",
+          url: "https://dora.dev/capabilities/learning-culture/",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      # Step 1 is split in two (pacing, and at most three boxes per step).
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l05-b2-r1, l05-b2-r1-t, l05-b2-r1-a, l05-b2-r2, l05-b2-r2-t1, l05-b2-r2-t2]
+        drawMs: 1800
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds:
+          [
+            l05-b2-r2-a,
+            l05-b2-r3,
+            l05-b2-r3-t1,
+            l05-b2-r3-t2,
+            l05-b2-r3-a,
+            l05-b2-r4,
+            l05-b2-r4-t,
+            l05-b2-again-circle,
+            l05-b2-again,
+          ]
+        drawMs: 2400
+      # Step 2 is split in two as well: four boxes in one row.
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l05-b2-g1, l05-b2-g1-t, l05-b2-g1-a, l05-b2-g2, l05-b2-g2-t1, l05-b2-g2-t2]
+        drawMs: 1800
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds:
+          [
+            l05-b2-g2-a,
+            l05-b2-g3,
+            l05-b2-g3-t1,
+            l05-b2-g3-t2,
+            l05-b2-g3-a,
+            l05-b2-g4,
+            l05-b2-g4-t1,
+            l05-b2-g4-t2,
+          ]
+        drawMs: 2200
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l05-b2-praise, l05-b2-praise-a, l05-b2-burnout]
+        drawMs: 1500
+
+  - id: two-questions
+    chapter: Blameless review
+    narration: >
+      [[mark:close-b2]] [[mark:show-p04]] review မှာ ကိုအောင် အရင် ညတစ်ညက မနက် 2 နာရီမှာ check တစ်ခုကို ကျော်ခဲ့တာ ပေါ်လာပါတယ်။ အရင်ဆိုရင် ဘာလို့ ကျော်တာလဲလို့ မေးမှာပါ။ မသီရိကတော့ screen မှာ ဘာပြနေလဲလို့ မေးပါတယ်၊ အဖြေက check က အရမ်းကြာပြီး screen ကလည်း ပြီးပြီလို့ ပြနေတာပါ။ ဘယ်သူ ခွင့်ပြုခဲ့လဲလို့ မမေးဘဲ၊ job ကို ပြန် run ဖို့ ဘာလို့ လမ်း တစ်ခုတည်းပဲ ရှိနေရတာလဲလို့လည်း မေးပါတယ်။
+      [[mark:show-p04b]] ဒီလို မေးတာက local rationality ဆိုတဲ့ အမြင်ကြောင့်ပါ။ လူတစ်ယောက် လုပ်ခဲ့တာက အဲဒီအချိန်၊ အဲဒီ အချက်အလက်နဲ့ဆိုရင် သူ့အတွက် အဓိပ္ပာယ် ရှိခဲ့တယ်လို့ မြင်တာပါ။ ကိုအောင်အတွက် အဓိပ္ပာယ် ရှိခဲ့ရင် နောက်လူအတွက်လည်း ရှိမှာမို့ ပြင်ရမှာက လူ မဟုတ်ဘဲ screen ပါ။
+      [[mark:show-p04c]] ဒါပေမဲ့ blameless ဆိုတာ ဘယ်သူမှ တာဝန်မရှိဘူးလို့ မဆိုလိုပါဘူး။ review က owner နဲ့ ရက်စွဲ ပါတဲ့ လုပ်စရာတွေနဲ့ ပြီးရပါတယ်၊ ဥပမာ runbook ကို ကိုအောင်နဲ့ မသီရိ နောက်တစ်ပတ်အတွင်း ရေးမယ် ဆိုတာမျိုးပါ။ အပြစ်မပေးပေမဲ့ တာဝန်ယူမှုကို ထိန်းထားတဲ့ ဒီ ယဉ်ကျေးမှုကို just culture လို့ ခေါ်ပါတယ်။
+      [[mark:show-p04d]] တခြားသူ မှားရင် ပေါ့ဆလို့၊ ကိုယ်မှားရင် tool ကြောင့်လို့ ထင်တတ်တာ လူ့သဘာဝပါ။ ဒါကြောင့် CTO ကိုနေလင်းကိုယ်တိုင် ဝင်ထိုင်ပြီး ဘယ်သူလဲ မမေးဘဲ ဘာက ဖြစ်စေခဲ့လဲလို့ မေးတာကို မြင်ရတော့မှ ဒီ အလေ့အထ စွဲသွားတာပါ။ အစပိုင်းမှာ ဖုံးထားခဲ့တဲ့ ပြဿနာတွေ ပေါ်လာလို့ ပိုဆိုးလာသလို ထင်ရနိုင်ပေမဲ့ ဒါက ကောင်းတဲ့ လက္ခဏာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Postmortem Culture",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+      - {
+          title: "DORA capability: Learning culture",
+          url: "https://dora.dev/capabilities/learning-culture/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l05-p04 }
+      # Pacing: local rationality, just culture, then the "who / what" row.
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l05-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l05-p04c }
+      - { id: show-p04d, type: slide.show, at: { mark: show-p04d }, slideId: l05-p04d }
+
+  - id: safe-to-speak
+    chapter: ပြောရဲတဲ့ အဖွဲ့
+    narration: >
+      [[mark:show-p05]] review အဆုံးမှာ ကိုနေလင်းက settlement job က လူ တစ်ယောက်တည်းအပေါ် မှီနေတာကို မသိခဲ့ဘူးလို့ ဝန်ခံပါတယ်။ ခေါင်းဆောင်က မသိတာကို ဖွင့်ပြောတော့ ကိုမင်းလို လူသစ်တွေလည်း မေးခွန်း မေးရင် ရယ်မှာ မဟုတ်ဘဲ ကျေးဇူးတင်မယ်၊ risk မြင်ရင် ဘယ်သူမဆို ပြောလို့ရတယ်လို့ ယုံလာကြပါတယ်။
+      [[mark:show-p05b]] မေးခွန်း မေးတာ၊ စိုးရိမ်တာ ပြောတာ၊ အမှား ဝန်ခံတာတွေကြောင့် အပြစ်ပေးခံရမှာ၊ အရှက်ခွဲခံရမှာ မကြောက်ဘဲ ပြောရဲတဲ့ ယုံကြည်မှုကို psychological safety လို့ ခေါ်ပါတယ်။ ဒါက ယဉ်ယဉ်ကျေးကျေး နေဖို့ မဟုတ်ဘဲ ပြောရခက်တဲ့ စကားတွေကို ပြောလို့ရအောင် လုပ်ပေးတာပါ။ ဒီ ယုံကြည်မှုကို manager နဲ့ ခေါင်းဆောင်တွေက ဖန်တီးပေးရပါတယ်။
+      [[mark:show-p05c]] ပြောခွင့်နဲ့အတူ လုပ်ခွင့်လည်း လိုပါတယ်။ ဥပမာ လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ toil များလွန်းရင် feature အသစ်တွေ ခဏ ရပ်မယ် ဆိုတာကို မသီရိက product manager မနှင်းနဲ့ ကြိုသဘောတူထားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "re:Work: Understand team effectiveness",
+          url: "https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l05-p05 }
+      # Pacing: psychological safety itself, then the room to act.
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l05-p05b }
+      - { id: show-p05c, type: slide.show, at: { mark: show-p05c }, slideId: l05-p05c }
+
+  - id: behavior-first
+    chapter: အလေ့အထကနေ စပါ
+    narration: >
+      [[mark:close-p05c]] [[mark:b3-s1]] ယဉ်ကျေးမှုကို ဘယ်လို ပြောင်းမလဲ? Padauk ကတော့ ယဉ်ကျေးမှု အရင် ပြောင်းဖို့ မစောင့်ဘဲ၊ memo လည်း မထုတ်၊ အမိန့်လည်း မပေးဘဲ incident တိုင်း ပြီးရင် မိနစ် 30 ကြာ blameless review လုပ်တဲ့ အလေ့အထ သေးသေးလေး တစ်ခုကို စမ်းလုပ်ကြည့်ပါတယ်။ [[mark:b3-s1b]] ပထမ တစ်ခါမှာတင် runbook ရလာလို့ အသုံးဝင်တာကို အားလုံး မြင်ကြပါတယ်။
+      [[mark:b3-s2]] အသုံးဝင်တော့ ထပ်လုပ်ကြရင်း အလေ့အထ ဖြစ်လာပြီး၊ ကြာတော့ အဲဒီ အလေ့အထကပဲ ယဉ်ကျေးမှု ဖြစ်သွားပါတယ်။ ဒါပေမဲ့ ops အဖွဲ့ကို Site Reliability Engineering၊ SRE လို့ နာမည်ပဲ ပြောင်းပေးပြီး ညဘက် ကယ်တင်တာကိုပဲ ဆက်ချီးကျူးနေရင်တော့ ဘာမှ မပြောင်းတဲ့အပြင် SRE ဆိုတဲ့ နာမည်ကိုပါ လူတွေ မယုံတော့ပါဘူး။
+      [[mark:b3-s3]] အလုပ်ဖြစ်လား သိချင်ရင် review တစ်ခု ဦးဆောင်တာလို တကယ့် အလုပ် တစ်ခုကို ကိုယ်တိုင် လုပ်နိုင်မယ်လို့ ဘယ်လောက် ယုံကြည်လဲ အဖွဲ့ကို မေးကြည့်ပါ။ မလုပ်ရဲသေးဘူး၊ တစ်ယောက်ယောက် ဘေးမှာ ရှိရင် လုပ်နိုင်တယ်၊ ကိုယ့်ဘာသာ လုပ်နိုင်တယ် ဆိုတဲ့ အဖြေ သုံးမျိုးထဲက ရွေးခိုင်းပြီး၊ အလေ့အထ မစခင် တစ်ခါ၊ လအနည်းငယ် ကြာတော့ တစ်ခါ မေးပြီး နှိုင်းယှဉ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA capability: Learning culture",
+          url: "https://dora.dev/capabilities/learning-culture/",
+        }
+      - {
+          title: "DORA capability: Generative organizational culture",
+          url: "https://dora.dev/capabilities/generative-organizational-culture/",
+        }
+    actions:
+      - { id: close-p05c, type: slide.close, at: { mark: close-p05c, offsetMs: -400 } }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l05-b3-title],
+        }
+      - id: b3-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds: [l05-b3-s1, l05-b3-s1-t1, l05-b3-s1-t2]
+        drawMs: 1200
+      # The second step lands when "it helps" is said.
+      - {
+          id: b3-s1b,
+          type: whiteboard.apply,
+          at: { mark: b3-s1b },
+          upsertIds: [l05-b3-s2, l05-b3-s2-t],
+          drawMs: 900,
+        }
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l05-b3-s3, l05-b3-s3-t, l05-b3-s4, l05-b3-s4-t]
+        drawMs: 1600
+      # Pacing: the three answers of the confidence check.
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l05-b3-q1, l05-b3-q1-a, l05-b3-q2, l05-b3-q2-a, l05-b3-q3]
+        drawMs: 1800
+
+  - id: this-week
+    narration: >
+      [[mark:close-b3]] [[mark:show-p06]] ယဉ်ကျေးမှုကို သေးသေးလေးကနေ စလို့ရပါတယ်၊ ဒီအပတ် လုပ်ကြည့်ဖို့ သုံးခုပါ။ နောက်တစ်ခါ သတင်းဆိုး ယူလာတဲ့သူကို အားလုံး ကြားအောင် ကျေးဇူးတင်ပါ။ ဘယ်သူလဲလို့ မေးတဲ့ review မေးခွန်း တစ်ခုကို ဘာက ဖြစ်စေခဲ့လဲ ဆိုတဲ့ မေးခွန်းအဖြစ် ပြန်ရေးကြည့်ပါ။ ပြီးတော့ လူ တစ်ယောက်တည်းပဲ သိတဲ့ အလုပ် တစ်ခုကို ရှာပြီး စာနဲ့ ချရေးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA capability: Generative organizational culture",
+          url: "https://dora.dev/capabilities/generative-organizational-culture/",
+        }
+      - {
+          title: "SRE book, 1st ed: Postmortem Culture",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l05-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] ပြန်နွှေးကြည့်ရအောင်။ [[mark:sel-blameless]] blameless review က ဘယ်သူ့ အပြစ်လဲ မမေးဘဲ ဘာက ဖြစ်စေခဲ့လဲလို့ မေးပေမဲ့ owner နဲ့ ရက်စွဲ ပါတဲ့ လုပ်စရာတွေနဲ့ ပြီးရပါတယ်။ [[mark:sel-local]] local rationality က အဲဒီအချိန်က သူ လုပ်ခဲ့တာ သူ့အတွက် အဓိပ္ပာယ် ရှိခဲ့တယ်လို့ မြင်တာပါ။
+      [[mark:sel-psych]] psychological safety က အပြစ်ပေးခံရမှာ မကြောက်ဘဲ မေးရဲ၊ ပြောရဲ၊ ဝန်ခံရဲတဲ့ ယုံကြည်မှုပါ။ [[mark:sel-hero]] hero antipattern က လူ တစ်ယောက်ရဲ့ ညဘက် ကြိုးစားမှုကို အားကိုးနေတာပါ။ [[mark:sel-westrum]] Westrum ရဲ့ သုံးမျိုးကတော့ သတင်းဆိုး ယူလာသူကို နှုတ်ပိတ်လား၊ တန်းစီ စောင့်ခိုင်းလား၊ ကျေးဇူးတင်လား ဆိုတာနဲ့ ခွဲတာပါ။
+      နောက်ဆုံး မေးခွန်း တစ်ခုပါ။ review တစ်ခုမှာ တစ်ယောက်က config အမှားကို ဘယ်သူ push လုပ်ခဲ့တာလဲလို့ မေးလိုက်ရင်၊ [[mark:ask-question]] ဒီ မေးခွန်းကို blameless ဖြစ်အောင် ဘယ်လို ပြန်ရေးမလဲ?
+      [[mark:pause-question]] ဥပမာ အဲဒီ config ကို push လုပ်တာ ဘေးကင်းတယ်လို့ ဘာကြောင့် ထင်ရခဲ့လဲလို့ ပြန်ရေးနိုင်ပါတယ်။ review ပြီးတော့ ကိုနေလင်းက မသီရိကို အချိန်ပြည့် SRE အဖြစ် ခန့်လိုက်ပါတယ်။ ပထမဆုံး တာဝန်က Top-up ပါ၊ finance အဖွဲ့က အဲဒါကို 100 ရာခိုင်နှုန်း စိတ်ချရစေချင်နေပါတယ်။ Top-up က တကယ်တော့ ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Postmortem Culture",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+      - {
+          title: "re:Work: Understand team effectiveness",
+          url: "https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-blameless,
+          type: editor.select,
+          at: { mark: sel-blameless },
+          target: { file: notes.md, text: "blameless", occurrence: 1 },
+        }
+      - {
+          id: sel-local,
+          type: editor.select,
+          at: { mark: sel-local },
+          target: { file: notes.md, text: "local rationality", occurrence: 1 },
+        }
+      - {
+          id: sel-psych,
+          type: editor.select,
+          at: { mark: sel-psych },
+          target: { file: notes.md, text: "psychological safety", occurrence: 1 },
+        }
+      - {
+          id: sel-hero,
+          type: editor.select,
+          at: { mark: sel-hero },
+          target: { file: notes.md, text: "hero antipattern", occurrence: 1 },
+        }
+      - {
+          id: sel-westrum,
+          type: editor.select,
+          at: { mark: sel-westrum },
+          target: { file: notes.md, text: "Westrum", occurrence: 1 },
+        }
+      # The voice script's ⟪pause 3s⟫. A select anchored at pause-question would
+      # drag under the answer's first words (the scheduler holds only the dialog
+      # after its anchor's), so it hangs off ask-question, the question's last
+      # clause: it starts about as the question ends, its ~1.2 s drag runs in
+      # silence, and the answer at pause-question waits for it. That gives a
+      # ~1.9 s pause at 70 ms/char (2.7 s at 55, 0.6 s at 95). An offset above
+      # ~4680 trips compile-check's 2.5 s inserted-silence warning at 55 ms/char.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 4550 }
+        target:
+          file: notes.md
+          text: 'မေးခွန်း: "config အမှားကို ဘယ်သူ push လုပ်ခဲ့တာလဲ?" ဆိုတဲ့ review မေးခွန်းကို ပြန်ရေးပါ။'
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
