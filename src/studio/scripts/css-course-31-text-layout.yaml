@@ -1,0 +1,2067 @@
+# CSS course (Burmese), lesson 31 of 43: arranging text (typography part 2).
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is already Burmese.
+#
+# Shape: board (recall lesson 30; the six things text layout controls) →
+# English tagline in capitals, Burmese shop name unchanged → wavy shorthand
+# underline on today's special → the old price's browser strike recoloured
+# and thickened with two longhands → board (four longhands, propagation) →
+# underline offset clears the Burmese marks on the about link → hero centred
+# → story justified (a don't for Burmese), start appended, first-line indent →
+# board (white-space table) → hours with pre (indent spaces show), then
+# pre-line → footer URL wraps with overflow-wrap: anywhere → board
+# (break-word vs anywhere, word-break, Burmese dictionary breaks) → headline
+# balanced (pretty, stable explained) → board (two clipping tools, the
+# three-part recipe) → long noodle name: nowrap, overflow hidden, ellipsis →
+# quiz + recap, hand-off to gradients (lesson 32).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Half-typed values are invalid until they land ("2" → "2em", "sea" →
+# "seagreen", "var(--chi" → "var(--chili)"), so the browser drops the
+# declaration for a moment and keeps the earlier state — never narrated.
+#
+# Measured in headless Chrome at 432 × 720 (probe/stages.ts, same anchors):
+# document 1527 tall (max scroll 807). Hero title 353 + 65 px wide lines
+# (lonely last word), balanced 233 + 186. Story: justify fills four lines to
+# 400 px; text-indent moves the first line in 32 px. Hours: normal runs the
+# two lines together; pre keeps the 10 indent spaces (second line 42 px
+# further in); pre-line drops them. Footer URL: one unbreakable 442 px token
+# in a 400 px box (page scrolls sideways) → anywhere: two lines, page back to
+# 432 wide. Long name: 2 lines → nowrap 444 px in a 366 px box (page 477 wide)
+# → hidden cut → ellipsis.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-31-text-layout
+  title: "CSS course 31: Typography အပိုင်း 2၊ စာသား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 31
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: the kit's header (tagline gets a test id), hero with a
+      # longer headline that wraps onto two lines, drinks (today's special and
+      # coffee with its old price in <s>), snacks (mohinga and the Shan
+      # noodles card with a long name), about (a link at the end of the
+      # story), hours (two lines in one paragraph, no <br>) and the footer
+      # (a long Facebook address as plain text). No kit.js: nothing is clicked.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (the tagline is the shop's one English line) -->
+            <header class="site-header" id="site-header" data-testid="site-header">
+              <img class="logo" src="/cup.svg" alt="" width="48" height="48" />
+              <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              <p class="tagline" lang="en" data-testid="tagline">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main">
+              <!-- kit block: hero (a longer headline that wraps onto two lines) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title" data-testid="hero-title">မင်္ဂလာပါ၊ ရွှေလက်ဖက်ရည်ဆိုင်က ကြိုဆိုပါတယ်</h2>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#hours" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: drinks (coffee carries its old price) -->
+              <section class="menu-section drinks" id="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" id="today-special" data-temp="hot" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                    <span class="badge" data-testid="badge-laphet-yay">အသစ်</span>
+                  </li>
+                  <li class="menu-card" data-temp="hot" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <s class="old-price" data-testid="old-price">2,000 ကျပ်</s>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: snacks (the Shan noodles card has a long name) -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-shan-noodles">
+                    <h3 class="name long-name" data-testid="long-name">ရှမ်းခေါက်ဆွဲ အထူး Special Shan noodles with extra toppings</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: about (with a link inside the story) -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story" data-testid="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။ <a href="#hours" data-testid="about-link">ဖွင့်ချိန်တွေ ကြည့်ရန်</a></p>
+              </section>
+
+              <!-- kit block: hours (the two lines sit in one paragraph, no <br>) -->
+              <section class="hours" id="hours" data-testid="hours">
+                <h2>ဖွင့်ချိန်</h2>
+                <p class="hours-text" data-testid="hours-text">တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ
+                  စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ</p>
+              </section>
+            </main>
+
+            <!-- kit block: footer (the page's long address is plain text) -->
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789">09 123 456 789</a></p>
+              <p class="fb-page" data-testid="fb-page">facebook.com/ShweLaphetYayTeaHouseBahanTownshipYangonMyanmar1998</p>
+              <p><small>© ရွှေလက်ဖက်ရည်ဆိုင်</small></p>
+            </footer>
+          </body>
+        </html>
+      # base.css: kit sections A, B, B2 and C; section E only spaces the about
+      # and hours sections. No text-align, text-decoration, white-space,
+      # wrapping or text-overflow rule (the <s> strike and the link underline
+      # come from the browser's own styles).
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page "furniture", so the CSS a lesson types can
+          focus on one idea. Each lesson keeps only the sections it needs and drops
+          any declaration that its own demo types or relies on being absent
+          (COURSE-KIT.md, "Deriving a lesson workspace"). B2 travels with B (every
+          lesson that keeps B keeps B2, except lesson 2, which types the reset).
+          Section E holds the few lesson-specific rules a start state pins.
+          Lesson 31 keeps A, B, B2 and C; section E only spaces the about and hours
+          sections. Every text-layout rule is typed during the lesson.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img> or the pinned images.css.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .sold-out {
+          opacity: 0.6;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 31: space above the about and hours sections. No text-align,
+           text-decoration, white-space, wrapping or text-overflow rule lives here;
+           every one of them is typed during the lesson. */
+        .about,
+        .hours {
+          margin-top: 16px;
+        }
+      styles.css: ""
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+
+  whiteboardAssets:
+    # Board A — what this lesson arranges. Blue = letter case, violet = lines
+    # on text, green = alignment, orange = spaces and line breaking, red =
+    # cutting a line that does not fit.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "စာသားကို ဘယ်လို စီမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-case,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 660,
+        height: 36,
+        text: "စာလုံး အကြီး အသေး → text-transform",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-lines,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 620,
+        height: 36,
+        text: "စာပေါ်က မျဉ်း → text-decoration",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-align,
+        kind: text,
+        x: 300,
+        y: 348,
+        width: 520,
+        height: 36,
+        text: "ညှိတာ → text-align",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-space,
+        kind: text,
+        x: 300,
+        y: 404,
+        width: 700,
+        height: 36,
+        text: "space · line break → white-space",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-wrap,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 700,
+        height: 36,
+        text: "စာကြောင်း ခွဲတာ → wrap",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-cut,
+        kind: text,
+        x: 300,
+        y: 516,
+        width: 700,
+        height: 36,
+        text: "မဆံ့ရင် ဖြတ်ပြီး … → text-overflow",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board B — the four parts of text-decoration. Blue = line, violet =
+    # style, orange = colour, green = thickness, red = the propagation rule.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 46,
+        text: "Text decoration ရဲ့ အပိုင်း လေးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-line,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 720,
+        height: 36,
+        text: "line → underline · overline · line-through",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-style,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 760,
+        height: 36,
+        text: "style → solid · double · dotted · dashed · wavy",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-color,
+        kind: text,
+        x: 300,
+        y: 348,
+        width: 620,
+        height: 36,
+        text: "color → default က စာလုံး အရောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-thick,
+        kind: text,
+        x: 300,
+        y: 404,
+        width: 520,
+        height: 36,
+        text: "thickness → မျဉ်း အထူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-prop,
+        kind: text,
+        x: 300,
+        y: 494,
+        width: 740,
+        height: 36,
+        text: "child ထဲက စာပေါ်ပါ ဆွဲ · none နဲ့ ဖျက်မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-prop-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 534,
+        width: 560,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+
+    # Board C — the white-space table. Blue = the values, black = the three
+    # questions, green ✓ / red ✗ = the answers, orange = the value the hours
+    # will use.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 700,
+        height: 46,
+        text: "White space · အသုံးများတဲ့ တန်ဖိုး ငါးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-h-space,
+        kind: text,
+        x: 470,
+        y: 230,
+        width: 200,
+        height: 36,
+        text: "space ပေါင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-h-wrap,
+        kind: text,
+        x: 720,
+        y: 230,
+        width: 90,
+        height: 36,
+        text: "wrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-h-break,
+        kind: text,
+        x: 860,
+        y: 230,
+        width: 190,
+        height: 36,
+        text: "line break ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-normal,
+        kind: text,
+        x: 300,
+        y: 284,
+        width: 170,
+        height: 36,
+        text: "normal",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-normal-1,
+        kind: text,
+        x: 540,
+        y: 284,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-normal-2,
+        kind: text,
+        x: 740,
+        y: 284,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-normal-3,
+        kind: text,
+        x: 930,
+        y: 284,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap,
+        kind: text,
+        x: 300,
+        y: 334,
+        width: 170,
+        height: 36,
+        text: "nowrap",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap-1,
+        kind: text,
+        x: 540,
+        y: 334,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap-2,
+        kind: text,
+        x: 740,
+        y: 334,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-nowrap-3,
+        kind: text,
+        x: 930,
+        y: 334,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-pre,
+        kind: text,
+        x: 300,
+        y: 384,
+        width: 170,
+        height: 36,
+        text: "pre",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-pre-1,
+        kind: text,
+        x: 540,
+        y: 384,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-pre-2,
+        kind: text,
+        x: 740,
+        y: 384,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-pre-3,
+        kind: text,
+        x: 930,
+        y: 384,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-prewrap,
+        kind: text,
+        x: 300,
+        y: 434,
+        width: 170,
+        height: 36,
+        text: "pre-wrap",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-prewrap-1,
+        kind: text,
+        x: 540,
+        y: 434,
+        width: 40,
+        height: 36,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-prewrap-2,
+        kind: text,
+        x: 740,
+        y: 434,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-prewrap-3,
+        kind: text,
+        x: 930,
+        y: 434,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-preline,
+        kind: text,
+        x: 300,
+        y: 484,
+        width: 170,
+        height: 36,
+        text: "pre-line",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-preline-1,
+        kind: text,
+        x: 540,
+        y: 484,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-preline-2,
+        kind: text,
+        x: 740,
+        y: 484,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-preline-3,
+        kind: text,
+        x: 930,
+        y: 484,
+        width: 40,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-preline-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 524,
+        width: 720,
+        height: 16,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-hours,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 600,
+        height: 36,
+        text: "ဖွင့်ချိန် · လိပ်စာ → pre-line",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board D — breaking long words. Blue = overflow-wrap, orange/green = its
+    # two values (green = the one we used) and their two boxes, red =
+    # break-all, violet = keep-all, green = the Burmese advice.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 680,
+        height: 46,
+        text: "စကားလုံး ရှည်ကို ဘယ်လို ခွဲမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-ow,
+        kind: text,
+        x: 300,
+        y: 226,
+        width: 640,
+        height: 36,
+        text: "overflow-wrap → မဆံ့မှ ခွဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-bw,
+        kind: text,
+        x: 340,
+        y: 278,
+        width: 700,
+        height: 36,
+        text: "break-word · box က စကားလုံးထက် မကျုံ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-any,
+        kind: text,
+        x: 340,
+        y: 326,
+        width: 700,
+        height: 36,
+        text: "anywhere · box က ပိုကျုံ့လို့ ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Two content-sized boxes holding the same long word: orange (break-word)
+    # stays as wide as the word, green (anywhere) shrinks and breaks it.
+    - {
+        id: d-bw-box,
+        kind: rectangle,
+        x: 340,
+        y: 380,
+        width: 270,
+        height: 52,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-bw-word,
+        kind: text,
+        x: 354,
+        y: 388,
+        width: 240,
+        height: 36,
+        text: "ShweLaphetYay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-any-box,
+        kind: rectangle,
+        x: 690,
+        y: 380,
+        width: 150,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-any-w1,
+        kind: text,
+        x: 704,
+        y: 386,
+        width: 120,
+        height: 36,
+        text: "ShweLa",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-any-w2,
+        kind: text,
+        x: 704,
+        y: 424,
+        width: 120,
+        height: 36,
+        text: "phetYay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-wb,
+        kind: text,
+        x: 300,
+        y: 494,
+        width: 720,
+        height: 36,
+        text: "word-break: break-all → ဘယ်စာလုံးကြားမဆို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-ka,
+        kind: text,
+        x: 300,
+        y: 546,
+        width: 680,
+        height: 36,
+        text: "keep-all → CJK စကားလုံးထဲ မခွဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-my,
+        kind: text,
+        x: 300,
+        y: 604,
+        width: 720,
+        height: 36,
+        text: "မြန်မာစာ → dictionary နဲ့ ခွဲ · normal ထား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board E — two clipping tools and the three-part recipe. Blue = overflow
+    # (the box), orange = text-overflow (the cut end), green/blue/orange =
+    # the three steps, red = all three are needed.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 46,
+        text: "ဖြတ်တဲ့ tool နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-box1,
+        kind: rectangle,
+        x: 300,
+        y: 226,
+        width: 420,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-text1,
+        kind: text,
+        x: 316,
+        y: 236,
+        width: 440,
+        height: 36,
+        text: "Special Shan noodles with extra",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-l1,
+        kind: text,
+        x: 820,
+        y: 236,
+        width: 180,
+        height: 36,
+        text: "overflow",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-box2,
+        kind: rectangle,
+        x: 300,
+        y: 306,
+        width: 420,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-text2,
+        kind: text,
+        x: 316,
+        y: 316,
+        width: 360,
+        height: 36,
+        text: "Special Shan noodles w…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-l2,
+        kind: text,
+        x: 820,
+        y: 316,
+        width: 220,
+        height: 36,
+        text: "text-overflow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-r1,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 520,
+        height: 36,
+        text: "① white-space: nowrap",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-r2,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 620,
+        height: 36,
+        text: "② overflow: hidden · block box",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-r3,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 560,
+        height: 36,
+        text: "③ text-overflow: ellipsis",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-need,
+        kind: text,
+        x: 300,
+        y: 578,
+        width: 620,
+        height: 36,
+        text: "တစ်ခု မပါရင် … မပေါ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board F — the closing quiz. Black = question and options, green ✓ =
+    # answer, orange = keeps spaces, red = no line breaks.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "ဘယ် တန်ဖိုးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 700,
+        height: 36,
+        text: "space ပေါင်း · line break ထား · wrap ဖြစ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-o1,
+        kind: text,
+        x: 300,
+        y: 304,
+        width: 200,
+        height: 36,
+        text: "pre",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-o2,
+        kind: text,
+        x: 300,
+        y: 358,
+        width: 200,
+        height: 36,
+        text: "pre-wrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-o3,
+        kind: text,
+        x: 300,
+        y: 412,
+        width: 200,
+        height: 36,
+        text: "pre-line",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-o4,
+        kind: text,
+        x: 300,
+        y: 466,
+        width: 200,
+        height: 36,
+        text: "nowrap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a1,
+        kind: text,
+        x: 560,
+        y: 304,
+        width: 300,
+        height: 36,
+        text: "space ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-a2,
+        kind: text,
+        x: 560,
+        y: 358,
+        width: 300,
+        height: 36,
+        text: "space ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-a3,
+        kind: text,
+        x: 560,
+        y: 412,
+        width: 60,
+        height: 36,
+        text: "✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-a4,
+        kind: text,
+        x: 560,
+        y: 466,
+        width: 340,
+        height: 36,
+        text: "line break ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4131
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: text-intro
+    chapter: "စာသားကို ဘယ်လို စီမလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ web font တွေကို ထည့်ပြီး၊ စာလုံးရဲ့ ပုံစံ၊ အရွယ်အစားနဲ့ အထူကို သတ်မှတ်ခဲ့ပါတယ်။
+      ဒီ lesson မှာတော့ အဲဒီ စာသားကို page ပေါ်မှာ ဘယ်လို စီမလဲ ကြည့်ပါမယ်။ [[mark:start-server]] ဒီလို
+      ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-case]] ပထမက စာလုံး အကြီး အသေးပါ။
+      HTML ကို မပြင်ဘဲ၊ အင်္ဂလိပ် စာလုံးတွေကို CSS နဲ့ အကြီးတွေ အဖြစ် ပြလို့ ရပါတယ်။ [[mark:draw-lines]]
+      ဒုတိယက link ရဲ့ အောက်မျဉ်း၊ ဈေးနှုန်း အဟောင်းပေါ်က ဖြတ်မျဉ်း စတဲ့ စာပေါ်က မျဉ်းတွေပါ။
+      [[mark:draw-align]] တတိယက ညှိတာပါ။ စာကြောင်းတွေကို box ထဲမှာ ဘယ်နေရာ ထားမလဲ ဆိုတာပါ။
+      [[mark:draw-space]] စတုတ္ထက white space ပါ။ HTML ထဲမှာ ရေးထားတဲ့ space တွေ၊ line break တွေကို page
+      ပေါ်မှာ ပြမလား ဆိုတာပါ။ [[mark:draw-wrap]] ပဉ္စမက wrap ပါ။ စာကြောင်း ရှည်ကို ဘယ်မှာ ခွဲမလဲ၊
+      ခေါင်းစဉ်ရဲ့ စကားလုံးတွေကို စာကြောင်းတွေကြား ဘယ်လို ဝေမလဲ ဆိုတာပါ။ [[mark:draw-cut]] နောက်ဆုံးကတော့
+      မဆံ့တဲ့ စာကြောင်းကို ဖြတ်ပြီး၊ အစက် သုံးစက်နဲ့ ဆုံးစေတာပါ။ lesson 24 က ဒီ lesson အတွက် ချန်ထားခဲ့တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Text and typography"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — Fundamental text and font styling"
+        url: "https://developer.mozilla.org/docs/Learn_web_development/Core/Text_styling/Fundamentals"
+      - title: "CSS Text Module Level 3"
+        url: "https://www.w3.org/TR/css-text-3/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-case
+        type: whiteboard.apply
+        at: { mark: draw-case }
+        upsertIds: [a-case]
+        drawMs: 1400
+      - id: draw-lines
+        type: whiteboard.apply
+        at: { mark: draw-lines }
+        upsertIds: [a-lines]
+        drawMs: 1400
+      - id: draw-align
+        type: whiteboard.apply
+        at: { mark: draw-align }
+        upsertIds: [a-align]
+        drawMs: 1200
+      - id: draw-space
+        type: whiteboard.apply
+        at: { mark: draw-space }
+        upsertIds: [a-space]
+        drawMs: 1400
+      - id: draw-wrap
+        type: whiteboard.apply
+        at: { mark: draw-wrap }
+        upsertIds: [a-wrap]
+        drawMs: 1400
+      - id: draw-cut
+        type: whiteboard.apply
+        at: { mark: draw-cut }
+        upsertIds: [a-cut]
+        drawMs: 1400
+
+  - id: open-project
+    narration: >
+      [[mark:close-intro]] ကဲ၊ project ကို ကြည့်ရအောင်။ [[mark:open-styles]] ဒါက CSS ဖိုင်ပါ။ အခု အလွတ်
+      ဖြစ်လို့၊ စာသားတွေက browser ရဲ့ default style နဲ့ base CSS ဖိုင်အတိုင်းပဲ ရှိပါသေးတယ်။
+      [[mark:preview-opens]] preview ပွင့်လာပါပြီ။ header ထဲက ဆိုင်ရဲ့ မြန်မာ နာမည် အောက်မှာ အင်္ဂလိပ်
+      စာကြောင်း တစ်ကြောင်း ရှိပါတယ်။ မြို့နာမည်နဲ့ ဆိုင် စဖွင့်ခဲ့တဲ့ နှစ်ကို ပြတဲ့ tagline ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Text and typography"
+        url: "https://web.dev/learn/css/typography"
+    actions:
+      - id: close-intro
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-tagline-start
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: tagline }
+        textContains: "Yangon · since 1998"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-hero-start
+        type: expect.preview
+        at: { afterAction: expect-tagline-start }
+        timeoutMs: 5000
+        target: { by: testId, value: hero-title }
+        textContains: "ကြိုဆိုပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-hero-start }
+
+  - id: text-case
+    chapter: "စာလုံး အကြီး အသေး"
+    narration: >
+      [[mark:type-case]] အဲဒီ အင်္ဂလိပ် စာကြောင်းကနေ စကြည့်ရအောင်။ tagline ရော ဆိုင် နာမည်ကိုပါ၊ စာလုံး
+      တိုင်းကို အကြီး ပြပေးတဲ့ text transform ပေးပါမယ်။ ရိုက်နေတုန်း header ကို လိုက်ကြည့်ပါ။
+      [[mark:after-case]] tagline က စာလုံး အကြီးတွေ ဖြစ်သွားပေမယ့်၊ ဆိုင် နာမည်ကတော့ မပြောင်းပါဘူး။
+      မြန်မာစာမှာ စာလုံး အကြီး အသေး ဆိုတာ မရှိလို့ပါ။ [[mark:select-transform]] ဒီ
+      text transform declaration ကို ကြည့်ပါ။ သူက စာသား ပေါ်ပုံကိုပဲ ပြောင်းပြီး၊ HTML ထဲက စာလုံးတွေကတော့
+      မူလအတိုင်းပါ။ HTML မှာ စာလုံး အကြီးချည်း ရေးထားရင် screen reader တချို့က စာလုံး တစ်လုံးချင်း
+      ပေါင်းဖတ်တတ်လို့၊ အကြီး ပြချင်ရင် CSS နဲ့ပဲ ပြောင်းပါ။ [[mark:explain-case-values]] uppercase အပြင် lowercase လည်း ရှိပြီး၊
+      capitalize ကတော့ စကားလုံး တိုင်းရဲ့ ပထမ စာလုံးကို အကြီး လုပ်ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Typography: change the case of text"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — text-transform"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-transform"
+      - title: "W3C — Myanmar Layout Requirements"
+        url: "https://www.w3.org/TR/mlreq/"
+    actions:
+      - id: type-case
+        type: editor.type
+        at: { mark: type-case }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".tagline,\n.shop-name {\n  text-transform: uppercase;\n}\n"
+      # The DOM text is unchanged: text-transform is display only.
+      - id: expect-case
+        type: expect.preview
+        at: { mark: after-case }
+        timeoutMs: 4000
+        target: { by: testId, value: tagline }
+        textContains: "Yangon · since 1998"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-transform
+        type: editor.select
+        at: { mark: select-transform }
+        target: { file: styles.css, text: "text-transform: uppercase;", occurrence: 1 }
+
+  - id: decoration
+    chapter: "စာပေါ်က မျဉ်းတွေ"
+    narration: >
+      [[mark:scroll-drinks]] သောက်စရာတွေဆီ ဆင်းကြည့်ရအောင်။ [[mark:type-wavy]] ဒီနေ့ အထူး လက်ဖက်ရည်ကို
+      ထင်ရှားအောင် လုပ်ရအောင်။ နာမည်ကို text decoration ပေးပြီး၊ declaration တစ်ခုထဲမှာ တန်ဖိုး သုံးခု
+      ရေးပါမယ်။ အောက်မျဉ်း၊ လှိုင်းတွန့် ပုံစံနဲ့ အစိမ်းရောင်ပါ။ ပထမ card ကို လိုက်ကြည့်ပါ။
+      [[mark:after-wavy]] နာမည် အောက်မှာ အစိမ်းရောင် လှိုင်းတွန့် မျဉ်း ပေါ်လာပါပြီ။ shorthand တစ်ခုတည်းနဲ့
+      မျဉ်း၊ ပုံစံနဲ့ အရောင်ကို တစ်ခါတည်း ပေးလိုက်တာပါ။ [[mark:open-index-old]] နောက်တစ်ခုက ကော်ဖီ card ပါ။
+      [[mark:select-old]] HTML မှာ သူ့ ဈေးနှုန်း အဟောင်းက s element ထဲမှာ ရှိပါတယ်။ s element က မမှန်တော့တဲ့
+      စာကို မှတ်ပေးတာပါ။ [[mark:explain-ua-strike]] browser ရဲ့ default style က အဲဒီ စာပေါ်မှာ ဖြတ်မျဉ်း
+      ဆွဲထားပြီးသားပါ။ ခုနက text decoration နဲ့ပဲ ဆွဲထားတာပါ။ [[mark:open-styles-old]] CSS ဖိုင်ဆီ
+      ပြန်သွားရအောင်။ [[mark:type-strike]] ဒီတစ်ခါတော့ shorthand ကို မသုံးပါဘူး။ shorthand က မရေးတဲ့
+      အပိုင်းတွေကို default ပြန်ထားလို့ ဖြတ်မျဉ်း ပျောက်သွားမှာပါ။ ဒါကြောင့် အရောင်နဲ့ အထူကိုပဲ longhand နဲ့
+      ပေးပါမယ်။ ငရုတ်သီး အနီရောင်နဲ့ ပိုထူတဲ့ မျဉ်းပါ။ ဈေးနှုန်း အဟောင်းကို လိုက်ကြည့်ပါ။
+      [[mark:after-strike]] ဈေးနှုန်း အဟောင်းပေါ်က မျဉ်းက အနီရောင် ဖြစ်ပြီး ပိုထူလာပါပြီ။ မျဉ်းအသစ် ဆွဲတာ
+      မဟုတ်ဘဲ၊ browser ရဲ့ မျဉ်းကိုပဲ အရောင်နဲ့ အထူ ပြောင်းလိုက်တာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Typography: underlines, overlines and line-throughs"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — text-decoration"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration"
+      - title: "MDN — The s element"
+        url: "https://developer.mozilla.org/docs/Web/HTML/Element/s"
+      - title: "HTML Standard — rendering: phrasing content (s, u and a defaults)"
+        url: "https://html.spec.whatwg.org/multipage/rendering.html#phrasing-content-3"
+    actions:
+      - id: scroll-drinks
+        type: preview.scroll
+        at: { mark: scroll-drinks }
+        timeoutMs: 5000
+        top: 300
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-drinks
+        type: expect.preview
+        at: { afterAction: scroll-drinks }
+        timeoutMs: 4000
+        target: { by: testId, value: card-laphet-yay }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-wavy
+        type: editor.type
+        at: { mark: type-wavy }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-transform: uppercase;\n}\n", occurrence: 1 }
+        text: "\n.featured .name {\n  text-decoration: underline wavy seagreen;\n}\n"
+      - id: open-index-old
+        type: workspace.openFile
+        at: { mark: open-index-old }
+        path: index.html
+      - id: select-old
+        type: editor.select
+        at: { mark: select-old }
+        target:
+          {
+            file: index.html,
+            text: '<s class="old-price" data-testid="old-price">2,000 ကျပ်</s>',
+            occurrence: 1,
+          }
+      - id: open-styles-old
+        type: workspace.openFile
+        at: { mark: open-styles-old }
+        path: styles.css
+      - id: type-strike
+        type: editor.type
+        at: { mark: type-strike }
+        cadence: line-by-line
+        target:
+          {
+            file: styles.css,
+            after: "  text-decoration: underline wavy seagreen;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.old-price {\n  text-decoration-color: var(--chili);\n  text-decoration-thickness: 2px;\n}\n"
+      - id: expect-strike
+        type: expect.preview
+        at: { mark: after-strike }
+        timeoutMs: 4000
+        target: { by: testId, value: old-price }
+        textContains: "2,000"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: decoration-board
+    narration: >
+      [[mark:open-deco-board]] ဆိုတော့ text decoration က property လေးခုရဲ့ shorthand ပါ။
+      [[mark:draw-deco-line]] line က မျဉ်းကို ဘယ်မှာ ဆွဲမလဲ ဆိုတာပါ။ စာရဲ့ အောက်၊ အပေါ် ဒါမှမဟုတ် စာကို
+      ဖြတ်ပြီး ဆွဲနိုင်ပြီး၊ တစ်ခုထက် ပိုလည်း ပေးလို့ ရပါတယ်။ [[mark:draw-deco-style]] style မှာ
+      မျဉ်းဖြောင့်၊ မျဉ်း နှစ်ထပ်၊ အစက်၊ မျဉ်းပြတ်နဲ့ လှိုင်းတွန့် ရှိပါတယ်။ [[mark:draw-deco-color]] color
+      ရဲ့ default က စာလုံး အရောင်ပါ။ [[mark:draw-deco-thick]] thickness ကတော့ မျဉ်း ဘယ်လောက် ထူမလဲ ဆိုတာပါ။
+      [[mark:draw-deco-prop]] သတိထားစရာ တစ်ခု ရှိပါတယ်။ text decoration က inherit မဖြစ်ပါဘူး။ ဒါပေမဲ့
+      browser က parent ရဲ့ မျဉ်းကို child တွေရဲ့ စာပေါ်မှာပါ ဆက်ဆွဲပေးလို့၊ child ဘက်က none ပေးပြီး ဖျက်လို့
+      မရပါဘူး။
+    sources:
+      - title: "MDN — text-decoration (constituent properties)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration"
+      - title: "MDN — text-decoration-line"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration-line"
+      - title: "MDN — text-decoration-style"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration-style"
+      - title: "MDN — text-decoration-color"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration-color"
+      - title: "MDN — text-decoration-thickness"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-decoration-thickness"
+      - title: "CSS Text Decoration Module Level 3 — line decoration propagation"
+        url: "https://www.w3.org/TR/css-text-decor-3/#line-decoration"
+    actions:
+      - id: open-deco-board
+        type: whiteboard.apply
+        at: { mark: open-deco-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-deco-line
+        type: whiteboard.apply
+        at: { mark: draw-deco-line }
+        upsertIds: [b-line]
+        drawMs: 1600
+      - id: draw-deco-style
+        type: whiteboard.apply
+        at: { mark: draw-deco-style }
+        upsertIds: [b-style]
+        drawMs: 1600
+      - id: draw-deco-color
+        type: whiteboard.apply
+        at: { mark: draw-deco-color }
+        upsertIds: [b-color]
+        drawMs: 1200
+      - id: draw-deco-thick
+        type: whiteboard.apply
+        at: { mark: draw-deco-thick }
+        upsertIds: [b-thick]
+        drawMs: 1000
+      - id: draw-deco-prop
+        type: whiteboard.apply
+        at: { mark: draw-deco-prop }
+        upsertIds: [b-prop, b-prop-line]
+        drawMs: 1800
+
+  - id: underline-offset
+    narration: >
+      [[mark:close-deco-board]] link တွေမှာလည်း browser က အောက်မျဉ်း ပေးထားပါတယ်။ [[mark:scroll-about]]
+      ဆိုင်အကြောင်း အပိုင်းဆီ ဆင်းကြည့်ရအောင်။ [[mark:point-link]] စာပိုဒ် အဆုံးမှာ link တစ်ခု ရှိပါတယ်။ သူ့
+      အောက်မျဉ်းက မြန်မာ စာလုံးတွေရဲ့ အောက်က သင်္ကေတတွေနဲ့ ထိနေလို့၊ browser က အဲဒီ နေရာတွေမှာ မျဉ်းကို
+      ကျော်ပြီး အပြတ်ပြတ် ဆွဲထားပါတယ်။ [[mark:type-offset]] ဒီ အပိုင်းထဲက link တွေကို text underline offset
+      ပေးပါမယ်။ သူက အောက်မျဉ်းကို စာနဲ့ ပိုခွာပေးပါတယ်။ em နဲ့ ပေးထားလို့ စာလုံး ကြီးရင် အကွာအဝေးလည်း
+      လိုက်ကြီးပါတယ်။ link ကို လိုက်ကြည့်ပါ။ [[mark:after-offset]] အောက်မျဉ်းက သင်္ကေတတွေ အောက်ကို
+      ဆင်းသွားပြီး၊ တစ်ဆက်တည်း မျဉ်း ဖြစ်သွားပါပြီ။ [[mark:explain-position]] သူနဲ့ ဆင်တဲ့ text underline
+      position ကတော့ အကွာအဝေး မပေးဘဲ နေရာကို ရွေးတာပါ။ ဥပမာ under ပေးရင်၊ browser က မျဉ်းကို စာလုံးတွေရဲ့
+      အောက်ဆုံး အစွန်းရဲ့ အောက်မှာ ဆွဲပါတယ်။
+    sources:
+      - title: "MDN — text-underline-offset"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-underline-offset"
+      - title: "MDN — text-underline-position"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-underline-position"
+      - title: "CSS Text Decoration Module Level 4 — underline offset and position"
+        url: "https://drafts.csswg.org/css-text-decor-4/#underline-offset"
+    actions:
+      - id: close-deco-board
+        type: whiteboard.apply
+        at: { mark: close-deco-board }
+        open: false
+      - id: scroll-about
+        type: preview.scroll
+        at: { mark: scroll-about }
+        timeoutMs: 5000
+        top: 860
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-about-link
+        type: expect.preview
+        at: { afterAction: scroll-about }
+        timeoutMs: 4000
+        target: { by: testId, value: about-link }
+        attribute: { name: href, value: "#hours" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-offset
+        type: editor.type
+        at: { mark: type-offset }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-decoration-thickness: 2px;\n}\n", occurrence: 1 }
+        text: "\n.about a {\n  text-underline-offset: 0.6em;\n}\n"
+
+  - id: alignment
+    chapter: "စာကြောင်းတွေကို ညှိကြည့်ရအောင်"
+    narration: >
+      [[mark:scroll-top-align]] အပေါ်ကို ပြန်တက်ရအောင်။ [[mark:type-center]] ကြိုဆိုတဲ့ အပိုင်းက အလယ်မှာ
+      ဆိုရင် ပိုကြည့်ကောင်းမှာ ဖြစ်လို့၊ သူ့ကို text align နဲ့ အလယ်ညှိ ပေးပါမယ်။ [[mark:after-center]]
+      ခေါင်းစဉ်၊ စာကြောင်းနဲ့ မှာယူရန် link က အလယ်ကို ရောက်သွားပါပြီ။ link က inline-block ဖြစ်လို့
+      စာလုံးတွေနဲ့ အတူ လိုက်ညှိတာပါ။ နို့နှစ်ရောင် box ကိုယ်တိုင်ကတော့ မရွေ့ပါဘူး။ text align က box ထဲက
+      စာကြောင်းတွေကိုပဲ ရွှေ့လို့ပါ။ [[mark:scroll-story]] အခု စာပိုဒ်ကို ကြည့်ရအောင်။ [[mark:type-justify]]
+      justify ကို စမ်းကြည့်ရအောင်။ သူက space ကို ချဲ့ပြီး၊ ပြည့်နေတဲ့ စာကြောင်းတွေကို အစွန်း နှစ်ဘက်လုံး
+      ထိစေပါတယ်။ [[mark:after-justify]] နေရာလွတ်တွေကို ကြည့်ပါ။ မြန်မာစာမှာ space ကို စကားစုတွေကြားမှာပဲ
+      ခြားလို့၊ ချဲ့စရာ space နည်းပြီး တချို့ နေရာလွတ်တွေ အရမ်း ကျယ်သွားပါတယ်။ ဒါကြောင့် မြန်မာ
+      စာပိုဒ်တွေမှာ justify ကို ရှောင်ပါ။ [[mark:type-start]] အောက်မှာ start ထပ်ရေးပါမယ်။ နောက်မှ ရေးတဲ့
+      declaration က နိုင်ပါတယ်။ [[mark:after-start]] start က default ဖြစ်လို့ စာပိုဒ်က မူလအတိုင်း
+      ပြန်ဖြစ်သွားပါပြီ။ lesson 21 မှာ ကြည့်ခဲ့သလို start ဆိုတာ စာကြောင်း စတဲ့ ဘက်ပါ။ မြန်မာစာနဲ့
+      အင်္ဂလိပ်စာမှာ ဘယ်ဘက်၊ Arabic စာမှာတော့ ညာဘက်ပါ။ end ကတော့ ဆန့်ကျင်ဘက်ပါ။ [[mark:type-indent]]
+      နောက်တစ်ခုက text indent ပါ။ ပထမ စာကြောင်းကိုပဲ အထဲကို ဝင်စေပါတယ်။ [[mark:after-indent]] ပထမ စာကြောင်းက
+      အထဲ ဝင်ပြီး စသွားပါပြီ။ အနုတ် တန်ဖိုး ပေးရင်တော့ ပထမ စာကြောင်းက အပြင်ကို ထွက်နေပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Typography: change text alignment"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — text-align"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-align"
+      - title: "MDN — text-indent"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-indent"
+      - title: "W3C — Myanmar Layout Requirements (justification)"
+        url: "https://www.w3.org/TR/mlreq/"
+    actions:
+      - id: scroll-top-align
+        type: preview.scroll
+        at: { mark: scroll-top-align }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-center
+        type: editor.type
+        at: { mark: type-center }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-underline-offset: 0.6em;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  text-align: center;\n}\n"
+      - id: expect-center
+        type: expect.preview
+        at: { mark: after-center }
+        timeoutMs: 4000
+        target: { by: testId, value: hero }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-story
+        type: preview.scroll
+        at: { mark: scroll-story }
+        timeoutMs: 5000
+        top: 860
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-justify
+        type: editor.type
+        at: { mark: type-justify }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-align: center;\n}\n", occurrence: 1 }
+        text: "\n.story {\n  text-align: justify;\n}\n"
+      - id: expect-justify
+        type: expect.preview
+        at: { mark: after-justify }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်းက"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-start
+        type: editor.type
+        at: { mark: type-start }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-align: justify;\n", occurrence: 1 }
+        text: "  text-align: start;\n"
+      - id: type-indent
+        type: editor.type
+        at: { mark: type-indent }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-align: start;\n", occurrence: 1 }
+        text: "  text-indent: 2em;\n"
+
+  - id: white-space
+    chapter: "White space"
+    narration: >
+      စာပိုဒ်ရဲ့ အောက်မှာ ဖွင့်ချိန်တွေ ရှိပါတယ်။ [[mark:open-index-hours]] HTML ကို ကြည့်ရအောင်။
+      [[mark:select-hours]] ဒီ စာပိုဒ်ထဲမှာ ဖွင့်ချိန် နှစ်ကြောင်းကို အပေါ်အောက် ခွဲရေးထားပြီး၊ line break
+      element တော့ မထည့်ထားပါဘူး။ [[mark:explain-collapse]] ဒါပေမဲ့ preview ကို ကြည့်ပါ၊ စနေနေ့က ပထမ
+      စာကြောင်းရဲ့ နောက်မှာ ကပ်နေပါတယ်။ default အားဖြင့် browser က line break ကို space လို သဘောထားပြီး၊ ဆက်တိုက် ရှိတဲ့ space
+      တွေကို တစ်ခုတည်း ပေါင်းလို့ပါ။ [[mark:open-ws-board]] ဒါကို white space property က ထိန်းပါတယ်။
+      [[mark:draw-ws-head]] တန်ဖိုး တစ်ခုစီအတွက် မေးခွန်း သုံးခု မေးကြည့်ပါ။ space တွေကို ပေါင်းသလား၊
+      စာကြောင်း ရှည်ကို wrap လုပ်သလား၊ line break ကို ထားသလား ဆိုတာပါ။ [[mark:draw-ws-normal]] default
+      ဖြစ်တဲ့ normal က space ပေါင်းပြီး wrap လုပ်ပေမယ့်၊ line break ကိုတော့ မထားပါဘူး။
+      [[mark:draw-ws-nowrap]] nowrap က normal လိုပဲ ဖြစ်ပေမယ့် wrap မလုပ်ပါဘူး။ [[mark:draw-ws-pre]] pre
+      ကတော့ code ပြတဲ့ pre element လိုပဲ၊ space နဲ့ line break အားလုံးကို ရေးထားတဲ့အတိုင်း ထားပြီး wrap
+      မလုပ်ပါဘူး။ [[mark:draw-ws-prewrap]] pre wrap ကလည်း အကုန် ထားပေမယ့်၊ wrap တော့ လုပ်ပါတယ်။
+      [[mark:draw-ws-preline]] pre line ကတော့ space တွေကို ပေါင်းပေမယ့် line break ကို ထားပြီး၊ wrap လည်း
+      လုပ်ပါတယ်။ [[mark:draw-ws-use]] လိပ်စာ၊ ဖွင့်ချိန် လို စာတွေမှာ pre line ကို အသုံးများပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Typography: control white-space"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — white-space"
+        url: "https://developer.mozilla.org/docs/Web/CSS/white-space"
+      - title: "CSS Text Module Level 3 — white space processing"
+        url: "https://www.w3.org/TR/css-text-3/#white-space-property"
+    actions:
+      - id: open-index-hours
+        type: workspace.openFile
+        at: { mark: open-index-hours }
+        path: index.html
+      - id: select-hours
+        type: editor.select
+        at: { mark: select-hours }
+        target:
+          {
+            file: index.html,
+            text: "တနင်္လာ မှ သောကြာ — မနက် ၆ နာရီ မှ ည ၈ နာရီ\n          စနေ၊ တနင်္ဂနွေ — မနက် ၇ နာရီ မှ ည ၉ နာရီ",
+            occurrence: 1,
+          }
+      - id: expect-hours
+        type: expect.preview
+        at: { mark: explain-collapse }
+        timeoutMs: 4000
+        target: { by: testId, value: hours-text }
+        textContains: "စနေ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-ws-board
+        type: whiteboard.apply
+        at: { mark: open-ws-board }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-ws-head
+        type: whiteboard.apply
+        at: { mark: draw-ws-head }
+        upsertIds: [c-h-space, c-h-wrap, c-h-break]
+        drawMs: 1600
+      - id: draw-ws-normal
+        type: whiteboard.apply
+        at: { mark: draw-ws-normal }
+        upsertIds: [c-normal, c-normal-1, c-normal-2, c-normal-3]
+        drawMs: 1400
+      - id: draw-ws-nowrap
+        type: whiteboard.apply
+        at: { mark: draw-ws-nowrap }
+        upsertIds: [c-nowrap, c-nowrap-1, c-nowrap-2, c-nowrap-3]
+        drawMs: 1400
+      - id: draw-ws-pre
+        type: whiteboard.apply
+        at: { mark: draw-ws-pre }
+        upsertIds: [c-pre, c-pre-1, c-pre-2, c-pre-3]
+        drawMs: 1400
+      - id: draw-ws-prewrap
+        type: whiteboard.apply
+        at: { mark: draw-ws-prewrap }
+        upsertIds: [c-prewrap, c-prewrap-1, c-prewrap-2, c-prewrap-3]
+        drawMs: 1400
+      - id: draw-ws-preline
+        type: whiteboard.apply
+        at: { mark: draw-ws-preline }
+        upsertIds: [c-preline, c-preline-1, c-preline-2, c-preline-3]
+        drawMs: 1400
+      - id: draw-ws-use
+        type: whiteboard.apply
+        at: { mark: draw-ws-use }
+        upsertIds: [c-preline-mark, c-hours]
+        drawMs: 1400
+
+  - id: white-space-code
+    narration: >
+      [[mark:close-ws-board]] pre ကို အရင် စမ်းကြည့်ရအောင်။ [[mark:open-styles-ws]] CSS ဖိုင်ဆီ
+      ပြန်သွားပါမယ်။ [[mark:type-pre]] ဖွင့်ချိန် စာပိုဒ်မှာ white space ကို pre ပေးပါမယ်။ ဖွင့်ချိန်
+      နှစ်ကြောင်းကို လိုက်ကြည့်ပါ။ [[mark:after-pre]] စနေနေ့က ဒုတိယ စာကြောင်းကို ဆင်းသွားပါပြီ။ ဒါပေမဲ့
+      အဲဒီ စာကြောင်းက အထဲ ဝင်ပြီးမှ စပါတယ်။ HTML ဖိုင်ထဲမှာ code သပ်ရပ်အောင် ထည့်ထားတဲ့ ရှေ့က space တွေကို pre က
+      ထားလိုက်လို့ပါ။ [[mark:type-pre-line]] ဒါကြောင့် အောက်မှာ pre line ထပ်ရေးပါမယ်။
+      [[mark:after-pre-line]] အခု ရှေ့က space အပိုတွေ ပျောက်သွားပြီး၊ line break ကတော့ ကျန်နေပါတယ်။ screen
+      ကျဉ်းရင် ရှည်တဲ့ စာကြောင်းက wrap လည်း ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - title: "MDN — white-space (values)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/white-space#values"
+      - title: "web.dev Learn CSS — Typography: control white-space"
+        url: "https://web.dev/learn/css/typography"
+    actions:
+      - id: close-ws-board
+        type: whiteboard.apply
+        at: { mark: close-ws-board }
+        open: false
+      - id: open-styles-ws
+        type: workspace.openFile
+        at: { mark: open-styles-ws }
+        path: styles.css
+      - id: type-pre
+        type: editor.type
+        at: { mark: type-pre }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-indent: 2em;\n}\n", occurrence: 1 }
+        text: "\n.hours-text {\n  white-space: pre;\n}\n"
+      - id: type-pre-line
+        type: editor.type
+        at: { mark: type-pre-line }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  white-space: pre;\n", occurrence: 1 }
+        text: "  white-space: pre-line;\n"
+      - id: expect-pre-line
+        type: expect.preview
+        at: { mark: after-pre-line }
+        timeoutMs: 4000
+        target: { by: testId, value: hours-text }
+        textContains: "တနင်္ဂနွေ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: overflow-wrap
+    chapter: "စာကြောင်းကို ဘယ်မှာ ခွဲမလဲ"
+    narration: >
+      အခု အောက်ဆုံးက footer ပါ။ ဆိုင်ရဲ့ Facebook လိပ်စာက space မပါတဲ့ စကားလုံး ရှည်ကြီး တစ်လုံး ဖြစ်လို့၊
+      browser က ခွဲစရာ နေရာ မတွေ့ပါဘူး။ ဒါကြောင့် ညာဘက် အစွန်းကို ကျော်ထွက်ပြီး၊ page တစ်ခုလုံး ဘေးတိုက်
+      scroll လုပ်လို့ ရနေပါတယ်။ [[mark:type-wrap]] footer မှာ overflow wrap ကို anywhere ပေးပါမယ်။ သူက
+      စကားလုံး မဆံ့တော့မှပဲ၊ ဘယ်နေရာမှာ မဆို ခွဲခွင့် ပေးပါတယ်။ လိပ်စာကို လိုက်ကြည့်ပါ။ [[mark:after-wrap]]
+      လိပ်စာက နှစ်ကြောင်း ခွဲသွားပြီး၊ footer ထဲမှာပဲ ဆံ့သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Typography: control how words break"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — overflow-wrap"
+        url: "https://developer.mozilla.org/docs/Web/CSS/overflow-wrap"
+    actions:
+      - id: type-wrap
+        type: editor.type
+        at: { mark: type-wrap }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  white-space: pre-line;\n}\n", occurrence: 1 }
+        text: "\n.site-footer {\n  overflow-wrap: anywhere;\n}\n"
+      - id: expect-wrap
+        type: expect.preview
+        at: { mark: after-wrap }
+        timeoutMs: 4000
+        target: { by: testId, value: fb-page }
+        textContains: "facebook.com/"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: break-board
+    narration: >
+      [[mark:open-break-board]] overflow wrap မှာ စကားလုံးကို ခွဲပေးတဲ့ တန်ဖိုး နှစ်ခု ရှိပါတယ်။
+      [[mark:draw-break-both]] break word ရော anywhere ရော မဆံ့မယ့် စကားလုံးကို ခွဲပေးပါတယ်။ ကွာတာက flex
+      item လို content ပေါ် မူတည်ပြီး အကျယ် ယူတဲ့ box မှာ ပေါ်ပါတယ်။ anywhere ဆိုရင် box က စကားလုံး ရှည်ထက်
+      ကျဉ်းအောင် ကျုံ့နိုင်ပါတယ်။ break word ဆိုရင်တော့ box က အဲဒီ စကားလုံး အကျယ်ထက် မကျုံ့ပါဘူး။
+      [[mark:draw-word-break]] word break က property သီးသန့်ပါ။ စာကြောင်းကို ဘယ်မှာ ခွဲခွင့် ရှိလဲ ဆိုတာကို
+      ပြောင်းပါတယ်။ break all ဆိုရင် ဘယ် စာလုံး နှစ်လုံးကြားမှာမဆို ခွဲပါတယ်။ [[mark:draw-keep-all]] keep
+      all ကတော့ ပြောင်းပြန်ပါ။ တရုတ်၊ ဂျပန်၊ ကိုရီးယား စာမှာ စကားလုံး အထဲကို မခွဲပါဘူး။
+      [[mark:draw-burmese-break]] မြန်မာစာမှာ စကားလုံးကြား space မခြားလို့၊ browser က dictionary နဲ့
+      စကားလုံး ဘယ်မှာ ဆုံးလဲ ရှာပါတယ်။ break all က အဲဒါကို မကြည့်ဘဲ syllable ကိုတောင် ခွဲနိုင်လို့၊
+      မြန်မာစာမှာ word break ကို normal ပဲ ထားပါ။
+    sources:
+      - title: "MDN — overflow-wrap (anywhere vs break-word)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/overflow-wrap#values"
+      - title: "MDN — word-break"
+        url: "https://developer.mozilla.org/docs/Web/CSS/word-break"
+      - title: "CSS Text Module Level 3 — line breaking and word boundaries"
+        url: "https://www.w3.org/TR/css-text-3/#line-breaking"
+      - title: "W3C — Myanmar Layout Requirements (line breaking)"
+        url: "https://www.w3.org/TR/mlreq/"
+    actions:
+      - id: open-break-board
+        type: whiteboard.apply
+        at: { mark: open-break-board }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-ow]
+      - id: draw-break-both
+        type: whiteboard.apply
+        at: { mark: draw-break-both }
+        upsertIds: [d-bw, d-bw-box, d-bw-word, d-any, d-any-box, d-any-w1, d-any-w2]
+        drawMs: 3200
+      - id: draw-word-break
+        type: whiteboard.apply
+        at: { mark: draw-word-break }
+        upsertIds: [d-wb]
+        drawMs: 1600
+      - id: draw-keep-all
+        type: whiteboard.apply
+        at: { mark: draw-keep-all }
+        upsertIds: [d-ka]
+        drawMs: 1400
+      - id: draw-burmese-break
+        type: whiteboard.apply
+        at: { mark: draw-burmese-break }
+        upsertIds: [d-my]
+        drawMs: 1600
+
+  - id: text-wrap
+    narration: >
+      [[mark:close-break-board]] ခေါင်းစဉ်ဆီ ပြန်တက်ရအောင်။ [[mark:look-headline]] ပထမ စာကြောင်း
+      ပြည့်နေပြီး၊ ဒုတိယ စာကြောင်းမှာ စာ နည်းနည်းပဲ ကျန်နေပါတယ်။ ဒီလို ဆိုရင် ခေါင်းစဉ်က ကြည့်ရ မညီဘဲ ဖတ်ရလည်း
+      ခက်ပါတယ်။ [[mark:type-balance]] ခေါင်းစဉ်မှာ text wrap ကို balance ပေးပါမယ်။ ဒါဆို browser က
+      စာကြောင်းတွေ အရှည် မျှမျှ ဖြစ်အောင် ခွဲမယ့် နေရာကို ရွေးပေးပါတယ်။ ခေါင်းစဉ်ကို လိုက်ကြည့်ပါ။
+      [[mark:after-balance]] စာကြောင်း နှစ်ကြောင်း အရှည် နီးပါး တူသွားပါပြီ။ balance လုပ်ဖို့ browser က
+      အလုပ် ပိုလုပ်ရလို့၊ Chrome မှာ 6 ကြောင်း အထိ ရှိတဲ့ စာကိုပဲ လုပ်ပေးပါတယ်။ ဒါကြောင့်
+      ခေါင်းစဉ်မှာ သုံးပါ။ [[mark:explain-pretty]] စာပိုဒ်အတွက်တော့ pretty ရှိပါတယ်။ နောက်ဆုံး စာကြောင်းမှာ
+      စကားလုံး တစ်လုံးတည်း ကျန်မနေအောင် လုပ်ပေးပါတယ်။ Chrome နဲ့ Safari မှာ ရပြီး၊ Firefox မှာ မရသေးလို့
+      ပုံမှန် wrap ဖြစ်ပါတယ်။ [[mark:explain-stable]] text wrap မှာ default ဖြစ်တဲ့ wrap၊ nowrap
+      နဲ့ stable လည်း ရှိပါတယ်။ stable က textarea ထဲမှာ စာ ပြင်နေတုန်း၊ ပြင်နေတဲ့ စာကြောင်းရဲ့ အပေါ်က စာကြောင်းတွေကို
+      မရွေ့အောင် ထားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Typography: control how text wraps"
+        url: "https://web.dev/learn/css/typography"
+      - title: "MDN — text-wrap"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-wrap"
+      - title: "Chrome for Developers — CSS text-wrap: balance"
+        url: "https://developer.chrome.com/docs/css-ui/css-text-wrap-balance"
+      - title: "CSS Text Module Level 4 — text-wrap-style"
+        url: "https://drafts.csswg.org/css-text-4/#text-wrap-style"
+    actions:
+      - id: close-break-board
+        type: whiteboard.apply
+        at: { mark: close-break-board }
+        open: false
+      - id: scroll-top-balance
+        type: preview.scroll
+        at: { mark: close-break-board }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-balance
+        type: editor.type
+        at: { mark: type-balance }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow-wrap: anywhere;\n}\n", occurrence: 1 }
+        text: "\n.hero-title {\n  text-wrap: balance;\n}\n"
+      - id: expect-balance
+        type: expect.preview
+        at: { mark: after-balance }
+        timeoutMs: 4000
+        target: { by: testId, value: hero-title }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: clip-board
+    chapter: "မဆံ့တဲ့ စာကြောင်းကို ဖြတ်ကြည့်ရအောင်"
+    narration: >
+      [[mark:open-clip-board]] နောက်ဆုံး အကြောင်းအရာက မဆံ့တဲ့ စာကြောင်းပါ။ CSS မှာ ဖြတ်တဲ့ tool နှစ်ခု
+      ရှိပါတယ်။ [[mark:draw-clip-box]] lesson 24 မှာ ကြည့်ခဲ့တဲ့ overflow က box ပေါ်မှာ အလုပ်လုပ်ပါတယ်။
+      လျှံထွက်နေတဲ့ content ကို ပြမလား၊ ဖြတ်မလား၊ scroll လုပ်ခိုင်းမလား ဆုံးဖြတ်ပါတယ်။
+      [[mark:draw-clip-text]] text overflow ကတော့ စာကြောင်း တစ်ကြောင်းပေါ်မှာ အလုပ်လုပ်ပါတယ်။ ဖြတ်ခံရတဲ့
+      စာကြောင်းရဲ့ အဆုံးကို ဘယ်လို ပြမလဲ ဆုံးဖြတ်ပါတယ်။ default က ရိုးရိုး ပြတ်နေပြီး၊ ellipsis ပေးရင် အစက်
+      သုံးစက် ပေါ်ပါတယ်။ [[mark:draw-recipe]] text overflow က သူ့ဘာသာ ဘာကိုမှ မဖြတ်ပါဘူး။ element
+      တစ်ခုတည်းမှာ သုံးခု လိုပါတယ်။ wrap မဖြစ်တဲ့ စာကြောင်း၊ အကျယ် ကန့်သတ်ထားပြီး လျှံထွက်တာကို
+      ဖျောက်ထားတဲ့ block box နဲ့ အစက်တွေ ဆွဲပေးမယ့် text overflow ပါ။ [[mark:draw-recipe-need]] တစ်ခုခု မပါရင် အစက် သုံးစက် မပေါ်ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: single line overflow with text-overflow"
+        url: "https://web.dev/learn/css/overflow#single_line_overflow_with_text-overflow"
+      - title: "MDN — text-overflow"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-overflow"
+      - title: "MDN — overflow"
+        url: "https://developer.mozilla.org/docs/Web/CSS/overflow"
+    actions:
+      - id: open-clip-board
+        type: whiteboard.apply
+        at: { mark: open-clip-board }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-clip-box
+        type: whiteboard.apply
+        at: { mark: draw-clip-box }
+        upsertIds: [e-box1, e-text1, e-l1]
+        drawMs: 1800
+      - id: draw-clip-text
+        type: whiteboard.apply
+        at: { mark: draw-clip-text }
+        upsertIds: [e-box2, e-text2, e-l2]
+        drawMs: 1800
+      - id: draw-recipe
+        type: whiteboard.apply
+        at: { mark: draw-recipe }
+        upsertIds: [e-r1, e-r2, e-r3]
+        drawMs: 2400
+      - id: draw-recipe-need
+        type: whiteboard.apply
+        at: { mark: draw-recipe-need }
+        upsertIds: [e-need]
+        drawMs: 1000
+
+  - id: ellipsis
+    narration: >
+      [[mark:close-clip-board]] စားစရာတွေဆီ သွားရအောင်။ [[mark:look-long]] ရှမ်းခေါက်ဆွဲ အထူး card မှာ နာမည်
+      ရှည်ရှည် ရှိပြီး၊ စာကြောင်း နှစ်ကြောင်း ဖြစ်နေပါတယ်။ [[mark:type-nowrap]] ပထမ အဆင့်က white space ကို
+      nowrap ပေးပြီး၊ နာမည်ကို wrap မဖြစ်အောင် တားတာပါ။ နောက်ဆုံး card ကို လိုက်ကြည့်ပါ။
+      [[mark:after-nowrap]] နာမည်က တစ်ကြောင်းတည်း ဖြစ်သွားပေမယ့်၊ card ကနေ လျှံထွက်ပြီး page ရဲ့ အစွန်းကိုပါ
+      ကျော်သွားပါပြီ။ [[mark:type-hidden]] ဒုတိယ အဆင့်က ဒီ နာမည်မှာပဲ overflow hidden ပေးတာပါ။
+      [[mark:after-hidden]] စာကြောင်းက နာမည်ရဲ့ box အစွန်းမှာ ပြတ်သွားပါပြီ။ သပ်ရပ်သွားပေမယ့်၊ နာမည်
+      တစ်ပိုင်း ပျောက်နေတယ် ဆိုတာ ဖတ်တဲ့သူ မသိနိုင်ပါဘူး။ [[mark:type-ellipsis]] တတိယ အဆင့်က text overflow
+      ကို ellipsis ပေးတာပါ။ ဒါက အစက်တွေကို ဆွဲပေးတဲ့ အဆင့်ပါ။ [[mark:after-ellipsis]] စာကြောင်း အဆုံးမှာ
+      အစက် သုံးစက် ပေါ်လာလို့၊ နာမည်က ဒီထက် ရှည်သေးတယ် ဆိုတာ ဖတ်တဲ့သူ သိပါပြီ။ နာမည် အပြည့်က HTML ထဲမှာ
+      ရှိနေဆဲ ဖြစ်လို့၊ screen reader က အကုန် ဖတ်ပါတယ်။ [[mark:select-long-rule]] ဒီ rule ကို ကြည့်ပါ။
+      စာသားကိုယ်တိုင်က text node ထဲမှာ ရှိပေမယ့်၊ CSS က text node ကို ရွေးလို့ မရလို့၊ သူ့ကို ထုပ်ထားတဲ့
+      နာမည်မှာ ပေးရတာပါ။ နာမည်က card ရဲ့ အကျယ်အတိုင်း ရှိတဲ့ block ဖြစ်လို့ အလုပ်လုပ်တာပါ။ span လို inline
+      element မှာဆိုရင် text overflow က အလုပ် မလုပ်ပါဘူး။ [[mark:explain-clamp]] စာကြောင်း အနည်းငယ် ပြပြီးမှ ဖြတ်ချင်ရင်တော့ line clamp
+      ရှိပါတယ်။ အခုလောလောဆယ် webkit prefix နဲ့ display တန်ဖိုး အထူး တစ်ခုကို တွဲရေးရပေမယ့်၊ browser အဓိက
+      အားလုံးမှာ ရပါတယ်။ [[mark:explain-measure]] ပြီးတော့ စာကြောင်း ရှည်လွန်းရင် ဖတ်ရ မောလို့၊
+      စာပိုဒ်တွေကို အရမ်း မကျယ်အောင် ထားပါ။ အင်္ဂလိပ်စာအတွက် သုည 65 လုံးစာ အကျယ် ဖြစ်တဲ့ 65 ch လောက်ကို max
+      width အဖြစ် သုံးလေ့ ရှိပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Overflow: single line overflow with text-overflow"
+        url: "https://web.dev/learn/css/overflow#single_line_overflow_with_text-overflow"
+      - title: "MDN — text-overflow"
+        url: "https://developer.mozilla.org/docs/Web/CSS/text-overflow"
+      - title: "MDN — line-clamp"
+        url: "https://developer.mozilla.org/docs/Web/CSS/line-clamp"
+      - title: "MDN — Fundamental text and font styling (line length)"
+        url: "https://developer.mozilla.org/docs/Learn_web_development/Core/Text_styling/Fundamentals"
+    actions:
+      - id: close-clip-board
+        type: whiteboard.apply
+        at: { mark: close-clip-board }
+        open: false
+      - id: scroll-snacks
+        type: preview.scroll
+        at: { mark: close-clip-board }
+        timeoutMs: 5000
+        top: 560
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-long-start
+        type: expect.preview
+        at: { afterAction: scroll-snacks }
+        timeoutMs: 4000
+        target: { by: testId, value: long-name }
+        textContains: "Special Shan noodles"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-nowrap
+        type: editor.type
+        at: { mark: type-nowrap }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-wrap: balance;\n}\n", occurrence: 1 }
+        text: "\n.long-name {\n  white-space: nowrap;\n}\n"
+      - id: type-hidden
+        type: editor.type
+        at: { mark: type-hidden }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  white-space: nowrap;\n", occurrence: 1 }
+        text: "  overflow: hidden;\n"
+      - id: type-ellipsis
+        type: editor.type
+        at: { mark: type-ellipsis }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  overflow: hidden;\n", occurrence: 1 }
+        text: "  text-overflow: ellipsis;\n"
+      # The DOM keeps the whole name: the dots are drawn, not written.
+      - id: expect-ellipsis
+        type: expect.preview
+        at: { mark: after-ellipsis }
+        timeoutMs: 4000
+        target: { by: testId, value: long-name }
+        textContains: "with extra toppings"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-long-rule
+        type: editor.select
+        at: { mark: select-long-rule }
+        target: { file: styles.css, text: ".long-name {", occurrence: 1 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-quiz]] မပြီးခင် မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ space ပေါင်းမယ်၊ line break ထားမယ်၊ wrap
+      လည်း ဖြစ်မယ့် white space တန်ဖိုးက ဘယ်ဟာလဲ။ [[mark:quiz-answer]] အဖြေက ဖွင့်ချိန်မှာ သုံးခဲ့တဲ့ pre
+      line ပါ။ pre နဲ့ pre wrap က space အပိုတွေကိုပါ ထားပြီး၊ nowrap ကတော့ line break တွေကို ဖယ်ပစ်ပါတယ်။
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ text transform က စာလုံး အကြီး အသေးကို ပေါ်ပုံမှာပဲ ပြောင်းပြီး
+      မြန်မာစာကို မပြောင်းပါဘူး။ text decoration က စာပေါ်မှာ မျဉ်း ဆွဲပြီး၊ underline offset က အောက်မျဉ်းကို
+      သင်္ကေတတွေနဲ့ ခွာပါတယ်။ text align က box ထဲမှာ စာကြောင်းတွေကို ညှိပါတယ်။ white space က space နဲ့ line
+      break ကို ထိန်းပြီး၊ overflow wrap နဲ့ text wrap က စာကြောင်း ခွဲမယ့် နေရာကို ရွေးပါတယ်။ nowrap၊
+      overflow hidden နဲ့ text overflow ပေါင်းမှ အစက် သုံးစက် ရပါတယ်။ [[mark:next-lesson]] ဒါနဲ့ course ရဲ့
+      စာသား အပိုင်း ပြီးပါပြီ။ နောက် lesson မှာတော့ အလှဆင်တဲ့ အပိုင်းကို gradient နဲ့ စပြီး၊ အရောင် တစ်ခုကနေ
+      တစ်ခုကို ဖြည်းဖြည်း ကူးသွားတဲ့ နောက်ခံတွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Text and typography"
+        url: "https://web.dev/learn/css/typography"
+      - title: "web.dev Learn CSS — Overflow"
+        url: "https://web.dev/learn/css/overflow"
+      - title: "web.dev Learn CSS — Gradients (next lesson)"
+        url: "https://web.dev/learn/css/gradients"
+    actions:
+      - id: open-quiz
+        type: whiteboard.apply
+        at: { mark: open-quiz }
+        open: true
+        clear: true
+        upsertIds: [f-title, f-q, f-o1, f-o2, f-o3, f-o4]
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [f-a3, f-a1, f-a2, f-a4]
+        drawMs: 2400
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".tagline,\n.shop-name {\n  text-transform: uppercase;\n}\n\n.featured .name {\n  text-decoration: underline wavy seagreen;\n}\n\n.old-price {\n  text-decoration-color: var(--chili);\n  text-decoration-thickness: 2px;\n}\n\n.about a {\n  text-underline-offset: 0.6em;\n}\n\n.hero {\n  text-align: center;\n}\n\n.story {\n  text-align: justify;\n  text-align: start;\n  text-indent: 2em;\n}\n\n.hours-text {\n  white-space: pre;\n  white-space: pre-line;\n}\n\n.site-footer {\n  overflow-wrap: anywhere;\n}\n\n.hero-title {\n  text-wrap: balance;\n}\n\n.long-name {\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
