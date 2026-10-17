@@ -1,0 +1,2291 @@
+# CSS course (Burmese), lesson 10 of 43: units and sizing.
+#
+# Narration is Burmese (voice-script.md next to this file is its source;
+# DESIGN.md is the span-by-span brief). Every [[mark:…]] sits where its action
+# begins, at a sentence end; each span carries one piece of meaning.
+# Everything the learner sees (title, chapters, whiteboard labels, UI strings)
+# is Burmese already.
+#
+# Shape: board (recall lesson 9; three kinds of value: number, percentage,
+# length; absolute vs relative; the unitless zero) → code tour (index.html:
+# the sale stamp, the about story, the new nested sweetness levels, the
+# sold-out card; empty styles.css) → opacity 0.5 on the sold-out card →
+# line height 16px crowds the Burmese story, a plain 1.8 lets it breathe →
+# board (a pixel line height is inherited as a length, a number as a number)
+# → board (a percentage of what?) → the first snack card at width 50%, a
+# surprise padding-top 25% (from the list's WIDTH), height 50% does nothing →
+# board (absolute ladder, px as a reference pixel, the relative units) → em
+# compounds down the nested levels, board (16 → 19.2 → 23.04 → 27.65 vs rem
+# flat 19.2), rem makes them equal → em padding on the stamp grows with its
+# font size; rem and the reader's text-size setting → max-width 30ch on the
+# story; lh, ex, cap, ic and the root units named → min-height 100vh fills the
+# preview (the preview IS the viewport) → board (svh / lvh / dvh on a phone),
+# then min-height 100svh typed under the 100vh (later wins; no change on a
+# desktop) → board (angles, time, resolution, container units), quiz (question
+# first, answer after a pause) → recap, hand-off to custom properties (lesson 11).
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(; no postcss config; no reload.
+# Mid-typing prefixes: a line height or opacity typed keystroke by keystroke
+# passes through valid unitless numbers ("line-height: 1" = 16px, "2" = twice
+# the font, "opacity: 0" = invisible), so those three declarations are typed
+# line-by-line (each line lands whole). Every keystroke-typed value has no
+# misleading valid prefix (unitless "width: 50", "font-size: 1.2", "min-height:
+# 100" are invalid and ignored).
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   bun scripts/studio-verify-lesson.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: css-course-10-sizing-units
+  title: "CSS course 10: Unit တွေနဲ့ အရွယ်အစား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: CSS Course 10
+    entryFilePath: styles.css
+    files:
+      package.json: |
+        {
+          "name": "css-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      # index.html: kit blocks hero (with the lesson block stamp), about,
+      # snacks (the sold-out card last) and the lesson block levels (a
+      # three-deep nested list of sweetness levels). No kit.js: nothing is
+      # clicked. Order: hero, about, levels, snacks, so the demos that share
+      # the first screen (stamp, story, levels) need little scrolling.
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <main class="page" id="main">
+              <!-- kit block: hero (with lesson block: stamp) -->
+              <section class="hero" data-testid="hero">
+                <h2 class="hero-title">မင်္ဂလာပါ</h2>
+                <span class="stamp" data-testid="stamp">ဈေးလျှော့</span>
+                <p>ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <a class="order-link" href="#order" data-testid="order-link">မှာယူရန်</a>
+              </section>
+
+              <!-- kit block: about -->
+              <section class="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story" data-testid="story">ဗဟန်းက လမ်းထောင့်လေးမှာ နှစ်ပေါင်း နှစ်ဆယ်ကျော် ဖွင့်ခဲ့တဲ့ ဆိုင်ပါ။ မနက်တိုင်း လက်ဖက်ရည်ကို အသစ်ဖျော်ပြီး ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ကြိုက်သလို မှာလို့ ရပါတယ်။ ပလာတာနဲ့ အီကြာကွေးကလည်း ပူပူနွေးနွေး ရပါတယ်။</p>
+              </section>
+
+              <!-- lesson block: levels -->
+              <section class="taste" data-testid="taste">
+                <h2>အချို အဆင့်</h2>
+                <ul class="levels" data-testid="levels">
+                  <li>လက်ဖက်ရည်
+                    <ul>
+                      <li>ချိုဆိမ့်
+                        <ul>
+                          <li data-testid="level-3">ပိုချို</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </section>
+
+              <!-- kit block: snacks -->
+              <section class="menu-section snacks" id="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-palata">
+                    <h3 class="name">ပလာတာ</h3>
+                    <p class="desc">ပဲဟင်းနဲ့ ပူပူ</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-e-kya-kwe">
+                    <h3 class="name">အီကြာကွေး</h3>
+                    <p class="desc">လက်ဖက်ရည်ထဲ တို့စားရန်</p>
+                    <span class="price">600 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-laphet-thoke">
+                    <h3 class="name">လက်ဖက်သုပ်</h3>
+                    <p class="desc">ပဲကြော်နဲ့ နှမ်း</p>
+                    <span class="price">2,000 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                    <span class="status">ကုန်သွားပြီ</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+          </body>
+        </html>
+      # base.css: sections A, B, B2 and C of the course kit, WITHOUT the body
+      # line height (the page starts at the browser's "normal"; the lesson
+      # types line heights) and WITHOUT the sold-out opacity (the lesson types
+      # it). Section D is not needed. Section E pins the sale stamp's look (a
+      # gold pill, inline-block) so the lesson types only its font size and
+      # padding.
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and the page furniture, so the CSS a lesson types can
+          focus on one idea. Lesson 10 keeps sections A, B, B2 and C without the
+          body line height and the sold-out opacity (the lesson types both kinds of
+          value), and pins the sale stamp's look in section E.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* Status lines that only expect.preview reads (kit.js data-report, data-say). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset (lesson 2 teaches it; every later lesson keeps it) == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          margin: 8px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .badge {
+          padding: 0 8px;
+          border-radius: 999px;
+          background: var(--leaf);
+          color: #fff;
+          font-size: 13px;
+        }
+
+        .order-link,
+        .order-btn {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-list {
+          margin: 0;
+          padding-left: 20px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 10: the sale stamp is a gold pill; its size and padding are typed. */
+        .stamp {
+          display: inline-block;
+          border-radius: 999px;
+          background: var(--gold);
+          color: var(--tea-dark);
+        }
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — three kinds of value, absolute vs relative, the unitless zero.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "CSS တန်ဖိုး သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-num,
+        kind: text,
+        x: 310,
+        y: 235,
+        width: 100,
+        height: 60,
+        text: "1.8",
+        strokeColor: "#2f9e44",
+        fontSize: 48,
+      }
+    - {
+        id: a-num-label,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 130,
+        height: 36,
+        text: "ဂဏန်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-pct,
+        kind: text,
+        x: 570,
+        y: 235,
+        width: 110,
+        height: 60,
+        text: "50%",
+        strokeColor: "#f08c00",
+        fontSize: 48,
+      }
+    - {
+        id: a-pct-label,
+        kind: text,
+        x: 545,
+        y: 310,
+        width: 190,
+        height: 36,
+        text: "ရာခိုင်နှုန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-len,
+        kind: text,
+        x: 830,
+        y: 235,
+        width: 130,
+        height: 60,
+        text: "16px",
+        strokeColor: "#1971c2",
+        fontSize: 48,
+      }
+    - {
+        id: a-len-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 880,
+        y: 280,
+        width: 70,
+        height: 20,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-len-label,
+        kind: text,
+        x: 810,
+        y: 310,
+        width: 200,
+        height: 36,
+        text: "ဂဏန်း + unit",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-abs,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 560,
+        height: 36,
+        text: "absolute · ဘယ်နေရာမှာမဆို အရွယ် တူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-rel,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 620,
+        height: 36,
+        text: "relative · font size၊ viewport ပေါ် မူတည်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-zero-ok,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 220,
+        height: 36,
+        text: "margin: 0  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-zero-bad,
+        kind: text,
+        x: 620,
+        y: 540,
+        width: 240,
+        height: 36,
+        text: "margin: 10  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-zero-note,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 420,
+        height: 36,
+        text: "သုညမှာ unit မလို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B — how line height is inherited: a length vs a plain number.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Line height ဘယ်လို inherit ဖြစ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-px-head,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 290,
+        height: 36,
+        text: "line-height: 16px",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-px-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 380,
+        y: 275,
+        width: 40,
+        height: 55,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-px-child,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 260,
+        height: 36,
+        text: "h2 · font 32px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-px-line1,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 260,
+        height: 44,
+        text: "ဆိုင်အကြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: b-px-line2,
+        kind: text,
+        x: 300,
+        y: 414,
+        width: 260,
+        height: 44,
+        text: "ဆိုင်အကြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: b-px-note,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 280,
+        height: 36,
+        text: "16px ပဲ ရ  ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-num-head,
+        kind: text,
+        x: 720,
+        y: 230,
+        width: 270,
+        height: 36,
+        text: "line-height: 1.8",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-num-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 800,
+        y: 275,
+        width: 40,
+        height: 55,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-num-child,
+        kind: text,
+        x: 720,
+        y: 340,
+        width: 260,
+        height: 36,
+        text: "h2 · font 32px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-num-calc,
+        kind: text,
+        x: 720,
+        y: 400,
+        width: 300,
+        height: 36,
+        text: "1.8 × 32 = 57.6px",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-num-note,
+        kind: text,
+        x: 720,
+        y: 490,
+        width: 260,
+        height: 36,
+        text: "57.6px ရ  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-also,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 600,
+        height: 36,
+        text: "% နဲ့ em လည်း px လိုပဲ inherit ဖြစ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+    # Board C — a percentage of what? One row per property.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "ဘာရဲ့ ရာခိုင်နှုန်းလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-width-k,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 36,
+        text: "width",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-width-v,
+        kind: text,
+        x: 610,
+        y: 240,
+        width: 360,
+        height: 36,
+        text: "→ parent ရဲ့ အကျယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-pad-k,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 260,
+        height: 36,
+        text: "padding · margin",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-pad-v,
+        kind: text,
+        x: 610,
+        y: 305,
+        width: 440,
+        height: 36,
+        text: "→ parent ရဲ့ အကျယ် (အပေါ်အောက်ပါ)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-pad-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 580,
+        y: 290,
+        width: 515,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-height-k,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 200,
+        height: 36,
+        text: "height",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-height-v,
+        kind: text,
+        x: 610,
+        y: 370,
+        width: 440,
+        height: 36,
+        text: "→ parent ရဲ့ အမြင့် (ပုံသေ ပေးထားမှ)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-tr-k,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 200,
+        height: 36,
+        text: "translate",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-tr-v,
+        kind: text,
+        x: 610,
+        y: 435,
+        width: 380,
+        height: 36,
+        text: "→ ကိုယ်ပိုင် အရွယ်အစား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-fs-k,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 200,
+        height: 36,
+        text: "font-size",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-fs-v,
+        kind: text,
+        x: 610,
+        y: 500,
+        width: 380,
+        height: 36,
+        text: "→ parent ရဲ့ font size",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board D — absolute units (fixed to each other, print) and the relative
+    # units with what each one measures from.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Absolute unit နဲ့ relative unit",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-abs-head,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 180,
+        height: 36,
+        text: "absolute",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-l1,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 260,
+        height: 36,
+        text: "1in = 96px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-l2,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 260,
+        height: 36,
+        text: "1in = 2.54cm",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-l3,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 300,
+        height: 36,
+        text: "1in = 72pt = 6pc",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-l4,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 260,
+        height: 36,
+        text: "1mm = 4Q",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-print,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 360,
+        height: 36,
+        text: "cm · mm · in · pt → print",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-px,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 420,
+        height: 36,
+        text: "CSS pixel ≠ screen ရဲ့ အစက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-rel-head,
+        kind: text,
+        x: 760,
+        y: 225,
+        width: 160,
+        height: 36,
+        text: "relative",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r1,
+        kind: text,
+        x: 760,
+        y: 275,
+        width: 250,
+        height: 36,
+        text: "em → font size",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r2,
+        kind: text,
+        x: 760,
+        y: 320,
+        width: 300,
+        height: 36,
+        text: "rem → root font size",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r3,
+        kind: text,
+        x: 760,
+        y: 365,
+        width: 260,
+        height: 36,
+        text: "ch → 0 ရဲ့ အကျယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-r4,
+        kind: text,
+        x: 760,
+        y: 410,
+        width: 280,
+        height: 36,
+        text: "vw · vh → viewport",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board E — em compounds down the nesting, rem stays flat (default 16px).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 46,
+        text: "Em နဲ့ rem",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-root,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 220,
+        height: 36,
+        text: "html · 16px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-em-head,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 80,
+        height: 46,
+        text: "em",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: e-em-1,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 140,
+        height: 36,
+        text: "19.2px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-em-2,
+        kind: text,
+        x: 340,
+        y: 400,
+        width: 150,
+        height: 36,
+        text: "23.04px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-em-3,
+        kind: text,
+        x: 380,
+        y: 460,
+        width: 150,
+        height: 36,
+        text: "27.65px",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-em-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 340,
+        height: 36,
+        text: "parent × 1.2 → ကြီးကြီးလာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-lv-1,
+        kind: text,
+        x: 600,
+        y: 340,
+        width: 110,
+        height: 36,
+        text: "အဆင့် 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-lv-2,
+        kind: text,
+        x: 600,
+        y: 400,
+        width: 110,
+        height: 36,
+        text: "အဆင့် 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-lv-3,
+        kind: text,
+        x: 600,
+        y: 460,
+        width: 110,
+        height: 36,
+        text: "အဆင့် 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-rem-head,
+        kind: text,
+        x: 800,
+        y: 280,
+        width: 90,
+        height: 46,
+        text: "rem",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: e-rem-1,
+        kind: text,
+        x: 800,
+        y: 340,
+        width: 140,
+        height: 36,
+        text: "19.2px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-rem-2,
+        kind: text,
+        x: 800,
+        y: 400,
+        width: 140,
+        height: 36,
+        text: "19.2px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-rem-3,
+        kind: text,
+        x: 800,
+        y: 460,
+        width: 140,
+        height: 36,
+        text: "19.2px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-rem-note,
+        kind: text,
+        x: 720,
+        y: 545,
+        width: 330,
+        height: 36,
+        text: "root × 1.2 → အတူတူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board F — three viewport heights on a phone: toolbars shown (small),
+    # hidden (large = plain vh), and the current one (dynamic).
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "ဖုန်းမှာ viewport အမြင့် သုံးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-s-body,
+        kind: rectangle,
+        x: 310,
+        y: 215,
+        width: 150,
+        height: 280,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-s-top,
+        kind: rectangle,
+        x: 310,
+        y: 215,
+        width: 150,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-s-bottom,
+        kind: rectangle,
+        x: 310,
+        y: 459,
+        width: 150,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-s-area,
+        kind: rectangle,
+        x: 322,
+        y: 259,
+        width: 126,
+        height: 192,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: f-s-label,
+        kind: text,
+        x: 350,
+        y: 510,
+        width: 80,
+        height: 36,
+        text: "svh",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-s-note,
+        kind: text,
+        x: 310,
+        y: 555,
+        width: 170,
+        height: 36,
+        text: "အနိမ့်ဆုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-l-body,
+        kind: rectangle,
+        x: 560,
+        y: 215,
+        width: 150,
+        height: 280,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-l-area,
+        kind: rectangle,
+        x: 572,
+        y: 227,
+        width: 126,
+        height: 256,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: f-l-label,
+        kind: text,
+        x: 570,
+        y: 510,
+        width: 150,
+        height: 36,
+        text: "lvh = vh",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-l-note,
+        kind: text,
+        x: 560,
+        y: 555,
+        width: 170,
+        height: 36,
+        text: "အမြင့်ဆုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-d-body,
+        kind: rectangle,
+        x: 810,
+        y: 215,
+        width: 150,
+        height: 280,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-d-top,
+        kind: rectangle,
+        x: 810,
+        y: 215,
+        width: 150,
+        height: 20,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: f-d-area,
+        kind: rectangle,
+        x: 822,
+        y: 245,
+        width: 126,
+        height: 238,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: f-d-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 990,
+        y: 250,
+        width: 40,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-d-label,
+        kind: text,
+        x: 850,
+        y: 510,
+        width: 80,
+        height: 36,
+        text: "dvh",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-d-note,
+        kind: text,
+        x: 820,
+        y: 555,
+        width: 150,
+        height: 36,
+        text: "လက်ရှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 460,
+        height: 36,
+        text: "screen အပြည့် → 100svh  ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+    # Board G — units that are not lengths, and the quiz.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "Length မဟုတ်တဲ့ unit တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-ang-k,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 330,
+        height: 36,
+        text: "deg · turn · rad · grad",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-ang-v,
+        kind: text,
+        x: 720,
+        y: 240,
+        width: 260,
+        height: 36,
+        text: "1turn = 360deg",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-time-k,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 160,
+        height: 36,
+        text: "s · ms",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-time-v,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 340,
+        height: 36,
+        text: "transition · animation",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-res-k,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 200,
+        height: 36,
+        text: "dpi · dppx",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-res-v,
+        kind: text,
+        x: 720,
+        y: 380,
+        width: 220,
+        height: 36,
+        text: "media query",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-cq-k,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 240,
+        height: 36,
+        text: "cqi · cqw …",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-cq-v,
+        kind: text,
+        x: 720,
+        y: 450,
+        width: 300,
+        height: 36,
+        text: "container query",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # The question is drawn first; the answer and its check only when spoken.
+    - {
+        id: g-quiz-q,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 300,
+        height: 36,
+        text: "viewport unit → ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-quiz-a,
+        kind: text,
+        x: 660,
+        y: 550,
+        width: 140,
+        height: 36,
+        text: "relative",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-quiz-check,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 540,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 4110
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: recall-values
+    chapter: "CSS တန်ဖိုး အမျိုးအစားတွေ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အရောင်ကို ပုံစံ အမျိုးမျိုးနဲ့ ရေးခဲ့ပြီး၊ ဖောက်ထွင်း မြင်ရအောင် လုပ်တဲ့
+      alpha လို တန်ဖိုးတွေကို ဂဏန်း ဒါမှမဟုတ် ရာခိုင်နှုန်းနဲ့ ရေးခဲ့ပါတယ်။ [[mark:start-server]]
+      ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-types]] ဒီနေ့
+      အရွယ်အစားတွေ အကြောင်းပါ။ CSS မှာ ရေးတဲ့ အရွယ်အစား တိုင်းက တန်ဖိုး သုံးမျိုးထဲက တစ်မျိုးပါ။
+      [[mark:draw-number]] ပထမက 1.8 လို unit မပါတဲ့ ဂဏန်းပါ။ unit က ဂဏန်းကို ဘာနဲ့ တိုင်းလဲ ပြပါတယ်။
+      unit မပါတော့ အဓိပ္ပာယ်ကို property က ပေးပါတယ်။ [[mark:draw-percent]] ဒုတိယက ရာခိုင်နှုန်းပါ။
+      ရာခိုင်နှုန်းက တခြား တစ်ခုခုရဲ့ အစိတ်အပိုင်း အမြဲ ဖြစ်ပြီး၊ ဘာရဲ့ အစိတ်အပိုင်းလဲ ဆိုတာ property
+      ပေါ် မူတည်ပါတယ်။ [[mark:draw-length]] တတိယက length ပါ။ 16 pixel လိုမျိုး ဂဏန်းနောက်မှာ unit
+      ကပ်ပါနေတဲ့ တန်ဖိုးပါ။ unit ပါတဲ့ ဂဏန်းကို dimension လို့ ခေါ်ပြီး၊ အကွာအဝေးကို တိုင်းတဲ့
+      dimension တွေကို length လို့ ခေါ်ပါတယ်။ [[mark:draw-abs-rel]] length တွေမှာ အုပ်စု နှစ်စု
+      ရှိပါတယ်။ absolute unit က ပုံသေ ဖြစ်လို့ ဘယ်နေရာမှာ မဆို အရွယ် တူပါတယ်။ relative unit ကတော့ font
+      size ဒါမှမဟုတ် window ရဲ့ အရွယ်အစားလို တခြား တစ်ခုခုကို အခြေခံပြီး ပြောင်းပါတယ်။
+      [[mark:draw-zero]] သုညကတော့ ဘယ် unit နဲ့ ရေးရေး အတူတူ
+      ဖြစ်လို့ unit မလိုပါဘူး။ ကျန်တဲ့ length တိုင်းမှာတော့ unit ပါရပြီး၊ မပါရင် browser က အဲဒီ
+      declaration ကို ကျော်သွားပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units"
+        url: "https://web.dev/learn/css/sizing"
+      - title: "web.dev Learn CSS — Sizing units: dimensions and lengths"
+        url: "https://web.dev/learn/css/sizing#dimensions-and-lengths"
+      - title: "MDN — CSS values and units"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Values_and_units"
+      - title: "MDN — <length> (unitless zero)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length"
+    actions:
+      - id: open-values-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Runs in the background (boot + pnpm install + spawn); waitForReady sits
+      # on the preview mark in the next scene, well over 40 s of narration
+      # later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-number
+        type: whiteboard.apply
+        at: { mark: draw-number }
+        upsertIds: [a-num, a-num-label]
+        drawMs: 1200
+      - id: draw-percent
+        type: whiteboard.apply
+        at: { mark: draw-percent }
+        upsertIds: [a-pct, a-pct-label]
+        drawMs: 1200
+      - id: draw-length
+        type: whiteboard.apply
+        at: { mark: draw-length }
+        upsertIds: [a-len, a-len-underline, a-len-label]
+        drawMs: 1800
+      - id: draw-abs-rel
+        type: whiteboard.apply
+        at: { mark: draw-abs-rel }
+        upsertIds: [a-abs, a-rel]
+        drawMs: 3000
+      - id: draw-zero
+        type: whiteboard.apply
+        at: { mark: draw-zero }
+        upsertIds: [a-zero-ok, a-zero-bad, a-zero-note]
+        drawMs: 2400
+
+  - id: code-tour
+    narration: >
+      [[mark:close-values]] project ကို ကြည့်ရအောင်။ [[mark:open-index]] HTML က လက်ဖက်ရည်ဆိုင်
+      အတိုင်းပါပဲ။ အပေါ်ဆုံးမှာ ကြိုဆိုတဲ့ အပိုင်း ရှိပါတယ်။ [[mark:select-stamp]] အဲဒီ အပိုင်းထဲမှာ
+      ရွှေရောင် ဈေးလျှော့ တံဆိပ်လေး ရှိပါတယ်။ [[mark:select-story]] သူ့အောက်က ဆိုင်အကြောင်း အပိုင်းမှာ စာပိုဒ် အရှည် တစ်ခု
+      ရှိပါတယ်။ line height နဲ့ စာကြောင်း အရှည်ကို ဒီ စာပိုဒ်နဲ့ ကြည့်ပါမယ်။ [[mark:select-levels]]
+      နောက်မှာ အချို အဆင့် list အသစ် ပါလာပါတယ်။ လက်ဖက်ရည်၊ ချိုဆိမ့်၊ ပိုချို ဆိုပြီး တစ်ခုထဲမှာ တစ်ခု
+      သုံးဆင့် ဆင့်ထားပါတယ်။ font ကို အခြေခံတဲ့ unit တွေ ဘယ်လို ကွာလဲ ဆိုတာ ဒီ list မှာ မြင်ရပါမယ်။
+      [[mark:select-sold-out]] စားစရာ menu ရဲ့ နောက်ဆုံး card ကတော့ ကုန်သွားတဲ့ ရှမ်းခေါက်ဆွဲပါ။
+      [[mark:open-styles]] ကိုယ့် CSS ဖိုင်က အလွတ်ပါ။ ဆိုင်ရဲ့ အရောင်တွေနဲ့ card တွေကို base ဖိုင်က
+      ပေးထားပေမယ့်၊ ဆိုင်အကြောင်း စာပိုဒ်ရဲ့ line height နဲ့ ကုန်သွားတဲ့ card ကို မှိန်အောင် လုပ်တာကိုတော့
+      ဒီနေ့ ကိုယ်တိုင် ရေးမှာမို့ ချန်ထားပါတယ်။ [[mark:preview-opens]] dev server အသင့် ဖြစ်လို့ preview
+      ပွင့်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units"
+        url: "https://web.dev/learn/css/sizing"
+      - title: "MDN — <ul>: the Unordered List element (nested lists)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/ul"
+    actions:
+      - id: close-values-board
+        type: whiteboard.apply
+        at: { mark: close-values }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-stamp
+        type: editor.select
+        at: { mark: select-stamp }
+        target:
+          {
+            file: index.html,
+            text: '<span class="stamp" data-testid="stamp">ဈေးလျှော့</span>',
+            occurrence: 1,
+          }
+      - id: select-story
+        type: editor.select
+        at: { mark: select-story }
+        target: { file: index.html, text: '<p class="story" data-testid="story">', occurrence: 1 }
+      - id: select-levels
+        type: editor.select
+        at: { mark: select-levels }
+        target:
+          {
+            file: index.html,
+            text: "<li>လက်ဖက်ရည်\n            <ul>\n              <li>ချိုဆိမ့်\n                <ul>\n                  <li data-testid=\"level-3\">ပိုချို</li>",
+            occurrence: 1,
+          }
+      - id: select-sold-out
+        type: editor.select
+        at: { mark: select-sold-out }
+        target:
+          {
+            file: index.html,
+            text: '<li class="menu-card sold-out" data-testid="card-shan-noodles">',
+            occurrence: 1,
+          }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-hero
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: hero }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-story
+        type: expect.preview
+        at: { afterAction: expect-hero }
+        timeoutMs: 5000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-story }
+
+  - id: plain-numbers
+    chapter: "Unit မပါတဲ့ ဂဏန်း"
+    narration: >
+      [[mark:scroll-sold-out]] အောက်ဆုံးက ကုန်သွားတဲ့ card နဲ့ unit မပါတဲ့ ဂဏန်းကို စကြည့်ရအောင်။
+      [[mark:type-opacity]] သူ့ opacity ကို တစ်ဝက် ပေးပါမယ်။ opacity က သုညကနေ တစ်အထိ ဂဏန်းကို ယူပြီး၊
+      သုည ဆိုရင် လုံးဝ မမြင်ရဘဲ၊ တစ် ဆိုရင် အပြည့် မြင်ရပါတယ်။ [[mark:after-opacity]] ကုန်သွားတဲ့ card
+      က တစ်ဝက်လောက် ဖောက်ထွင်း မြင်ရပါပြီ။ ဖတ်လို့ ရနေသေးပေမယ့်၊ မှာလို့ မရတော့ဘူး ဆိုတာ
+      သိသာပါတယ်။ [[mark:other-numbers]] ဒီ တစ်ဝက် ဆိုတဲ့ ဂဏန်းလိုပဲ၊ တခြား property တွေကလည်း unit
+      မပါတဲ့ ဂဏန်းကို ယူပြီး အဓိပ္ပာယ် ကိုယ်စီ ရှိပါတယ်။ scale 1.2 က 20 ရာခိုင်နှုန်း ပိုကြီးစေပြီး၊
+      z-index 2 က 1 ရဲ့ အပေါ်မှာ ထပ်ပါတယ်။ font weight 700 ကတော့ စာလုံးထူပါ။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: numbers"
+        url: "https://web.dev/learn/css/sizing#numbers"
+      - title: "MDN — <number>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/number"
+      - title: "MDN — opacity"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/opacity"
+    actions:
+      - id: scroll-sold-out
+        type: preview.scroll
+        at: { mark: scroll-sold-out }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: keystroke typing would pass through "opacity: 0"
+      # (the card vanishes for a keystroke).
+      - id: type-opacity
+        type: editor.type
+        at: { mark: type-opacity }
+        cadence: line-by-line
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".sold-out {\n  opacity: 0.5;\n}\n"
+      - id: expect-sold-out
+        type: expect.preview
+        at: { mark: after-opacity }
+        timeoutMs: 4000
+        target: { by: testId, value: card-shan-noodles }
+        textContains: "ကုန်သွားပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-opacity
+        type: editor.select
+        at: { mark: other-numbers }
+        target: { file: styles.css, text: "0.5", occurrence: 1 }
+
+  - id: line-height
+    narration: >
+      [[mark:scroll-story]] unit မပါတဲ့ ဂဏန်း အသုံးအဝင်ဆုံး နေရာက line height ပါ။ line height ဆိုတာ
+      စာကြောင်း တစ်ကြောင်းစီရဲ့ အမြင့်ပါ။ အခု စာပိုဒ်က browser ရဲ့ ပုံမှန် line height ကို သုံးနေပြီး၊
+      အဲဒါက font ပေါ် မူတည်ပါတယ်။ [[mark:type-lh-px]] အရင်ဆုံး ဒီ စာပိုဒ်ကို line height 16 pixel
+      ပုံသေ ပေးကြည့်ပါမယ်။ သူ့ font size နဲ့ အတူတူပါ။ [[mark:after-lh-px]] စာကြောင်းတွေ ကပ်သွားပါပြီ။
+      မြန်မာစာမှာ စာလုံးရဲ့ အပေါ်နဲ့ အောက်မှာ သင်္ကေတတွေ ဆင့်ပါတတ်လို့၊ နေရာ အပို မရှိရင်
+      စာကြောင်းချင်း ထပ်သွားပါတယ်။ [[mark:type-lh-num]] အခု အောက်မှာ unit မပါတဲ့ ဂဏန်းနဲ့ line height
+      ထပ်ထည့်ပါမယ်။ နောက်မှ ရေးတဲ့ declaration က နိုင်ပါတယ်။ [[mark:after-lh-num]] စာကြောင်းတွေ
+      ပြန်ချောင်ပါပြီ။ [[mark:select-lh-num]] ဒီ line height ကို ကြည့်ပါ။ unit မပါတဲ့ ဂဏန်းက font size
+      နဲ့ မြှောက်ရမယ့် အဆပါ။ 16 pixel ရဲ့ 1.8 ဆ ဆိုတော့ တစ်ကြောင်းကို 29 pixel နီးပါး ရပါတယ်။
+      အင်္ဂလိပ်စာအတွက် တစ်ဆခွဲလောက် လုံလောက်ပေမယ့်၊ မြန်မာစာက ပိုလိုပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Typography: line height"
+        url: "https://web.dev/learn/css/typography#line-height"
+      - title: "MDN — line-height"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/line-height"
+      - title: "MDN — Fundamental text and font styling"
+        url: "https://developer.mozilla.org/docs/Learn_web_development/Core/Text_styling/Fundamentals"
+    actions:
+      - id: scroll-story
+        type: preview.scroll
+        at: { mark: scroll-story }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # line-by-line: a keystroke-typed "line-height: 16px" passes through
+      # "1" (16px) and "16" (sixteen times the font size).
+      - id: type-lh-px
+        type: editor.type
+        at: { mark: type-lh-px }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  opacity: 0.5;\n}\n", occurrence: 1 }
+        text: "\n.about p {\n  line-height: 16px;\n}\n"
+      - id: type-lh-num
+        type: editor.type
+        at: { mark: type-lh-num }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  line-height: 16px;\n", occurrence: 1 }
+        text: "  line-height: 1.8;\n"
+      - id: expect-story-lh
+        type: expect.preview
+        at: { mark: after-lh-num }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-lh-num
+        type: editor.select
+        at: { mark: select-lh-num }
+        target: { file: styles.css, text: "  line-height: 1.8;", occurrence: 1 }
+
+  - id: line-height-board
+    narration: >
+      [[mark:open-lh-board]] ဒါဆို ဘာလို့ length မဟုတ်ဘဲ unit မပါတဲ့ ဂဏန်းကို သုံးကြတာလဲ။ line height
+      က inherit ဖြစ်ပြီး၊ length နဲ့ ဂဏန်းက inherit ဖြစ်ပုံ မတူလို့ပါ။ [[mark:draw-lh-px]] parent မှာ
+      line height 16 pixel ပေးထားရင်၊ child တွေက အဲဒီ length ကိုပဲ inherit ဖြစ်ပါတယ်။ ဒါကြောင့် အထဲက
+      ခေါင်းစဉ် စာလုံးကြီးလည်း တစ်ကြောင်းကို 16 pixel ပဲ ရလို့၊ နှစ်ကြောင်း ဖြစ်ရင် စာကြောင်းတွေ
+      ထပ်ကုန်ပါတယ်။ [[mark:draw-lh-num]] unit မပါတဲ့ ဂဏန်းကတော့ ဂဏန်းအတိုင်းပဲ inherit ဖြစ်ပါတယ်။
+      ခေါင်းစဉ်က အဲဒီ ဂဏန်းကို သူ့ font size နဲ့ ပြန်မြှောက်လို့၊ စာလုံး ကြီးရင် စာကြောင်း မြင့်ပြီး၊
+      သေးရင် နိမ့်ပါတယ်။ [[mark:draw-lh-also]] line height ကို ရာခိုင်နှုန်း ဒါမှမဟုတ် font size ကို
+      အခြေခံတဲ့ em နဲ့ ပေးရင်လည်း pixel လိုပါပဲ။ parent မှာ တွက်ပြီးမှ ရောက်လို့ child တွေက ပုံသေ
+      length ပဲ ရပါတယ်။ ဒါကြောင့် unit မပါတဲ့ ဂဏန်းကို ရွေးကြတာပါ။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: numbers (unitless line-height)"
+        url: "https://web.dev/learn/css/sizing#numbers"
+      - title: "MDN — line-height: prefer unitless numbers"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/line-height#prefer_unitless_numbers_for_line-height_values"
+      - title: "CSS Inline Layout Module Level 3 — line-height"
+        url: "https://www.w3.org/TR/css-inline-3/#line-height-property"
+    actions:
+      - id: open-lh-board
+        type: whiteboard.apply
+        at: { mark: open-lh-board }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-lh-px
+        type: whiteboard.apply
+        at: { mark: draw-lh-px }
+        upsertIds: [b-px-head, b-px-arrow, b-px-child, b-px-line1, b-px-line2, b-px-note]
+        drawMs: 3600
+      - id: draw-lh-num
+        type: whiteboard.apply
+        at: { mark: draw-lh-num }
+        upsertIds: [b-num-head, b-num-arrow, b-num-child, b-num-calc, b-num-note]
+        drawMs: 3200
+      - id: draw-lh-also
+        type: whiteboard.apply
+        at: { mark: draw-lh-also }
+        upsertIds: [b-also]
+        drawMs: 1600
+
+  - id: percent-board
+    chapter: "ဘာရဲ့ ရာခိုင်နှုန်းလဲ"
+    narration: >
+      [[mark:open-percent]] အခု ရာခိုင်နှုန်းကို ကြည့်ရအောင်။ ရေးတိုင်း ဘာရဲ့ ရာခိုင်နှုန်းလဲ လို့
+      အရင် မေးကြည့်ပါ။ [[mark:draw-pct-width]] အကျယ်အတွက်ဆိုရင် parent ရဲ့ content အကျယ်ပါ။ 50
+      ရာခိုင်နှုန်း ဆိုတာ parent ပေးထားတဲ့ နေရာရဲ့ တစ်ဝက်ပါ။ [[mark:draw-pct-pad]] padding နဲ့ margin
+      အတွက်လည်း parent ရဲ့ အကျယ်ပါပဲ။ အပေါ်နဲ့ အောက်မှာတောင် အကျယ်ကိုပဲ ယူတာကို လူအများစု
+      မထင်ထားကြပါဘူး။ [[mark:draw-pct-height]] အမြင့်ကတော့ parent ရဲ့ အမြင့်ပါ။ ဒါပေမဲ့ parent ရဲ့
+      အမြင့်ကို ပုံသေ ပေးထားမှ ရပါတယ်။ [[mark:draw-pct-translate]] translate နဲ့ element ကို
+      ရွှေ့တဲ့အခါမှာတော့ ရာခိုင်နှုန်းက element ကိုယ်တိုင်ရဲ့ အရွယ်အစားကနေ တွက်ပါတယ်။
+      [[mark:draw-pct-font]] font size ကို ရာခိုင်နှုန်းနဲ့ ပေးရင်တော့ parent ရဲ့ font size ကနေ
+      တွက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: percentages"
+        url: "https://web.dev/learn/css/sizing#percentages"
+      - title: "MDN — <percentage>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/percentage"
+      - title: "MDN — padding (percentages refer to the containing block's width)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding"
+      - title: "MDN — height (percentages need a definite containing-block height)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/height"
+    actions:
+      - id: open-percent
+        type: whiteboard.apply
+        at: { mark: open-percent }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-pct-width
+        type: whiteboard.apply
+        at: { mark: draw-pct-width }
+        upsertIds: [c-width-k, c-width-v]
+        drawMs: 1500
+      - id: draw-pct-pad
+        type: whiteboard.apply
+        at: { mark: draw-pct-pad }
+        upsertIds: [c-pad-k, c-pad-v, c-pad-circle]
+        drawMs: 2600
+      - id: draw-pct-height
+        type: whiteboard.apply
+        at: { mark: draw-pct-height }
+        upsertIds: [c-height-k, c-height-v]
+        drawMs: 2000
+      - id: draw-pct-translate
+        type: whiteboard.apply
+        at: { mark: draw-pct-translate }
+        upsertIds: [c-tr-k, c-tr-v]
+        drawMs: 1600
+      - id: draw-pct-font
+        type: whiteboard.apply
+        at: { mark: draw-pct-font }
+        upsertIds: [c-fs-k, c-fs-v]
+        drawMs: 1600
+
+  - id: percent-live
+    narration: >
+      [[mark:close-percent]] ဒီ အချက်တွေကို ပထမ စားစရာ card ပေါ်မှာ စမ်းကြည့်ရအောင်။
+      [[mark:type-width]] lesson 4 မှာ တွေ့ခဲ့တဲ့ first-child နဲ့ list ထဲက ပထမဆုံး card ကို ရွေးပြီး၊
+      အကျယ် 50 ရာခိုင်နှုန်း ပေးပါမယ်။
+      [[mark:after-width]] မုန့်ဟင်းခါး card က list ရဲ့ တစ်ဝက်အထိ ကျဉ်းသွားပါပြီ။ [[mark:type-padtop]]
+      အခု အပေါ်ဘက် padding 25 ရာခိုင်နှုန်း ထည့်ပါမယ်။ [[mark:after-padtop]] card က အများကြီး
+      မြင့်လာပြီး၊ နာမည်ရဲ့ အပေါ်မှာ နေရာလွတ် ပေါ်လာပါပြီ။ [[mark:select-padtop]] ဒီ padding ကို
+      ကြည့်ပါ။ အဲဒီ နေရာလွတ်က card ရဲ့ အမြင့်ကနေ တွက်တာ မဟုတ်ဘဲ၊ list အကျယ်ရဲ့ လေးပုံ တစ်ပုံပါ။ padding
+      ရာခိုင်နှုန်းက အမြဲ အကျယ်ကို လိုက်လို့ပါ။ [[mark:type-height]] နောက်ဆုံး အမြင့် 50
+      ရာခိုင်နှုန်းပါ။ [[mark:after-height]] ဘာမှ မပြောင်းပါဘူး။ list ရဲ့ အမြင့်က card တွေကနေ လာလို့၊
+      တစ်ဝက် ယူစရာ ပုံသေ အမြင့် မရှိပါဘူး။ ဒါကြောင့် browser က ဒီ အမြင့်ကို auto လိုပဲ တွက်လိုက်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: percentages"
+        url: "https://web.dev/learn/css/sizing#percentages"
+      - title: "MDN — width"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/width"
+      - title: "MDN — padding-top"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/padding-top"
+      - title: "CSS Box Sizing Module Level 3 — percentage sizes"
+        url: "https://www.w3.org/TR/css-sizing-3/#percentage-sizing"
+    actions:
+      - id: close-percent
+        type: whiteboard.apply
+        at: { mark: close-percent }
+        open: false
+      - id: scroll-snacks
+        type: preview.scroll
+        at: { mark: close-percent, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 579
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-width
+        type: editor.type
+        at: { mark: type-width }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  line-height: 1.8;\n}\n", occurrence: 1 }
+        text: "\n.menu-card:first-child {\n  width: 50%;\n}\n"
+      - id: expect-first-card
+        type: expect.preview
+        at: { mark: after-width }
+        timeoutMs: 4000
+        target: { by: testId, value: card-mohinga }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-padtop
+        type: editor.type
+        at: { mark: type-padtop }
+        cadence: natural
+        target: { file: styles.css, after: "  width: 50%;\n", occurrence: 1 }
+        text: "  padding-top: 25%;\n"
+      - id: select-padtop
+        type: editor.select
+        at: { mark: select-padtop }
+        target: { file: styles.css, text: "  padding-top: 25%;", occurrence: 1 }
+      - id: type-height
+        type: editor.type
+        at: { mark: type-height }
+        cadence: natural
+        target: { file: styles.css, after: "  padding-top: 25%;\n", occurrence: 1 }
+        text: "  height: 50%;\n"
+
+  - id: lengths-board
+    chapter: "Absolute unit နဲ့ relative unit"
+    narration: >
+      [[mark:open-lengths]] အခု length တွေကို ကြည့်ရအောင်။ ဘယ်ဘက်က absolute unit တွေနဲ့ စပါမယ်။
+      [[mark:draw-ladder]] သူတို့ အားလုံးကြားမှာ အချိုး ပုံသေ ရှိပါတယ်။ 1 inch က 96 pixel၊ 2.54
+      centimetre၊ 72 point၊ 6 pica နဲ့ ညီပါတယ်။ millimetre က centimetre ရဲ့ ဆယ်ပုံ တစ်ပုံ၊ Q unit က
+      millimetre ရဲ့ လေးပုံ တစ်ပုံပါ။ [[mark:draw-print]] ဒါပေမဲ့ screen ပေါ်က CSS centimetre က
+      ပေတံနဲ့ တိုင်းရင် တကယ့် centimetre မဟုတ်ပါဘူး။ ဒါကြောင့် centimetre၊ inch၊ point တွေကို print
+      ထုတ်တဲ့အခါမှာ အဓိက သုံးပါတယ်။ [[mark:draw-px-note]] screen အတွက် absolute unit က pixel ပါ။ CSS
+      pixel က screen ရဲ့ အစက် တစ်စက် မဟုတ်ဘဲ၊ တိုင်းဖို့ သတ်မှတ်ထားတဲ့ အရွယ်အစားပါ။ ပြတ်သားတဲ့ ဖုန်း
+      screen မှာ CSS pixel တစ်ခုက ဘေးတိုက်ရော ဒေါင်လိုက်ပါ တကယ့် အစက် နှစ်စက်၊ သုံးစက်စီ ဖုံးပါတယ်။
+      [[mark:draw-relative]] ညာဘက်မှာတော့ relative unit တွေ ရှိပြီး၊ တစ်ခုစီက တခြား တစ်ခုခုကနေ
+      တိုင်းပါတယ်။ em က font size ကနေ၊ rem က root ရဲ့ font size ကနေ၊ ch က သုည ဂဏန်းရဲ့ အကျယ်ကနေ၊
+      viewport unit တွေကတော့ window ကနေ တိုင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: absolute lengths"
+        url: "https://web.dev/learn/css/sizing#absolute-lengths"
+      - title: "web.dev Learn CSS — Sizing units: relative lengths"
+        url: "https://web.dev/learn/css/sizing#relative-lengths"
+      - title: "CSS Values and Units Module Level 4 — absolute lengths"
+        url: "https://www.w3.org/TR/css-values-4/#absolute-lengths"
+      - title: "MDN — <length>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length"
+    actions:
+      - id: open-lengths
+        type: whiteboard.apply
+        at: { mark: open-lengths }
+        open: true
+        clear: true
+        upsertIds: [d-title, d-abs-head]
+      - id: draw-ladder
+        type: whiteboard.apply
+        at: { mark: draw-ladder }
+        upsertIds: [d-l1, d-l2, d-l3, d-l4]
+        drawMs: 4000
+      - id: draw-print
+        type: whiteboard.apply
+        at: { mark: draw-print }
+        upsertIds: [d-print]
+        drawMs: 1600
+      - id: draw-px-note
+        type: whiteboard.apply
+        at: { mark: draw-px-note }
+        upsertIds: [d-px]
+        drawMs: 1600
+      - id: draw-relative
+        type: whiteboard.apply
+        at: { mark: draw-relative }
+        upsertIds: [d-rel-head, d-r1, d-r2, d-r3, d-r4]
+        drawMs: 4500
+
+  - id: em-rem
+    chapter: "Em နဲ့ rem"
+    narration: >
+      [[mark:close-lengths]] အချို အဆင့် list ပေါ်မှာ em နဲ့ စကြည့်ရအောင်။ [[mark:type-em]] item
+      တိုင်းကို font size 1.2 em ပေးပါမယ်။ em က font size ကို အခြေခံတဲ့ unit ပါ။ font size မှာဆို 1 em
+      က parent ရဲ့ font size ပါ။ [[mark:after-em]] အဆင့် တစ်ခုစီက သူ့ အပေါ်က အဆင့်ထက် ကြီးလာပြီး၊
+      အောက်ဆုံးက ပိုချိုက အကြီးဆုံး ဖြစ်နေပါတယ်။ [[mark:open-em-board]] ဘာကြောင့်လဲ။
+      [[mark:draw-em-tree]] page ရဲ့ font size က 16 pixel နဲ့ စပါတယ်။ ပထမ အဆင့်က အဲဒီရဲ့ 1.2 ဆ၊ 19
+      pixel လောက်ပါ။ ဒုတိယ အဆင့်ရဲ့ parent က ပထမ အဆင့် ဖြစ်လို့၊ 19 ရဲ့ 1.2 ဆ၊ 23 လောက်ပါ။ တတိယ အဆင့်က
+      ထပ်ကြီးပြီး 28 နီးပါး ဖြစ်ပါတယ်။ ဆိုတော့ em က အဆင့်တိုင်းမှာ ထပ်ထပ် မြှောက်သွားတာပါ။
+      [[mark:draw-rem-col]] rem ကတော့ root em ကို ဆိုလိုပါတယ်။ root element ဖြစ်တဲ့ html element ရဲ့
+      font size ကနေ အမြဲ တိုင်းလို့၊ 1.2 rem က ဘယ် အဆင့်မှာ မဆို 19 pixel လောက်ပဲ ရပါတယ်။
+      [[mark:close-em-board]] rem ကို em ရဲ့ အောက်မှာ ထည့်ကြည့်ရအောင်။ [[mark:type-rem]] font size ကို
+      1.2 rem ထပ်ပေးပါမယ်။ [[mark:after-rem]] အခု အဆင့် သုံးဆင့်လုံး အရွယ် တူသွားပါပြီ။ ဘယ်လောက်
+      နက်နက် ဆင့်ထားထား rem က မပြောင်းပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: font-size-relative units"
+        url: "https://web.dev/learn/css/sizing#font-size-relative-units"
+      - title: "web.dev Learn CSS — Typography: font-size"
+        url: "https://web.dev/learn/css/typography#font-size"
+      - title: "MDN — <length>: em and rem"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length#relative_length_units_based_on_font"
+    actions:
+      - id: close-lengths
+        type: whiteboard.apply
+        at: { mark: close-lengths }
+        open: false
+      - id: scroll-levels
+        type: preview.scroll
+        at: { mark: close-lengths, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 412
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-em
+        type: editor.type
+        at: { mark: type-em }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  height: 50%;\n}\n", occurrence: 1 }
+        text: "\n.levels li {\n  font-size: 1.2em;\n}\n"
+      - id: expect-levels
+        type: expect.preview
+        at: { mark: after-em }
+        timeoutMs: 4000
+        target: { by: testId, value: level-3 }
+        textContains: "ပိုချို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-em-board
+        type: whiteboard.apply
+        at: { mark: open-em-board }
+        open: true
+        clear: true
+        upsertIds: [e-title, e-root]
+      - id: draw-em-tree
+        type: whiteboard.apply
+        at: { mark: draw-em-tree }
+        upsertIds: [e-em-head, e-lv-1, e-em-1, e-lv-2, e-em-2, e-lv-3, e-em-3, e-em-note]
+        drawMs: 5600
+      - id: draw-rem-col
+        type: whiteboard.apply
+        at: { mark: draw-rem-col }
+        upsertIds: [e-rem-head, e-rem-1, e-rem-2, e-rem-3, e-rem-note]
+        drawMs: 3200
+      - id: close-em-board
+        type: whiteboard.apply
+        at: { mark: close-em-board }
+        open: false
+      - id: type-rem
+        type: editor.type
+        at: { mark: type-rem }
+        cadence: natural
+        target: { file: styles.css, after: "  font-size: 1.2em;\n", occurrence: 1 }
+        text: "  font-size: 1.2rem;\n"
+      - id: expect-levels-rem
+        type: expect.preview
+        at: { mark: after-rem }
+        timeoutMs: 4000
+        target: { by: testId, value: levels }
+        textContains: "ချိုဆိမ့်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: em-padding
+    narration: >
+      [[mark:scroll-top]] ဒါဆို em က ပြဿနာပဲလား။ မဟုတ်ပါဘူး။ font size မဟုတ်တဲ့ property မှာ 1 em က
+      element ကိုယ်ပိုင် font size ဖြစ်လို့ အသုံးဝင်ပါတယ်။ [[mark:type-stamp]] ဈေးလျှော့ တံဆိပ်ကို
+      font size 14 pixel ပေးပါမယ်။ ပြီးတော့ padding ကို pixel နဲ့ မပေးဘဲ em နဲ့ ပေးပါမယ်။
+      အပေါ်အောက်မှာ em တစ်ဝက်၊ ဘယ်ညာမှာ 1 em ပါ။ [[mark:after-stamp]] တံဆိပ်ရဲ့ စာလုံး ပတ်လည်မှာ
+      နေရာလွတ် နည်းနည်း ရလာပါပြီ။ [[mark:type-stamp-big]] အခု အောက်မှာ font size ကို 22 pixel
+      ထပ်ပေးပါမယ်။ [[mark:after-stamp-big]] စာလုံး ကြီးလာတာနဲ့အမျှ၊ padding ကို မပြင်ရဘဲ နေရာလွတ်ပါ
+      လိုက်ကြီးလာပါတယ်။ [[mark:select-stamp-pad]] ဒီ padding ကို ကြည့်ပါ။ တံဆိပ်ရဲ့ font size နဲ့
+      တိုင်းထားလို့၊ နေရာလွတ်က စာလုံးနဲ့ အမြဲ အချိုးကျပါတယ်။ [[mark:rem-access]] font size အတွက်တော့
+      rem က ပိုကောင်းပါတယ်။ root ရဲ့ font size က default 16 pixel ဖြစ်ပေမယ့်၊ ဖတ်တဲ့သူက browser
+      setting မှာ စာလုံး ပိုကြီးအောင် ရွေးထားနိုင်ပါတယ်။ rem က အဲဒီ setting ကို လိုက်ပေမယ့် pixel က
+      မလိုက်ပါဘူး။ ဒါကြောင့် font size ကို rem နဲ့၊ စာလုံးနဲ့ အချိုးကျရမယ့် နေရာလွတ်ကို em နဲ့ ပေးပါ။
+      တံဆိပ်မှာ pixel သုံးခဲ့တာက ပြောင်းလဲမှု မြင်သာအောင်ပဲ ဖြစ်ပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: font-size-relative units"
+        url: "https://web.dev/learn/css/sizing#font-size-relative-units"
+      - title: "MDN — font-size: rem values and accessibility"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-size#accessibility_concerns"
+      - title: "CSS Values and Units Module Level 4 — font-relative lengths"
+        url: "https://www.w3.org/TR/css-values-4/#font-relative-lengths"
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-stamp
+        type: editor.type
+        at: { mark: type-stamp }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-size: 1.2rem;\n}\n", occurrence: 1 }
+        text: "\n.stamp {\n  font-size: 14px;\n  padding: 0.5em 1em;\n}\n"
+      - id: expect-stamp
+        type: expect.preview
+        at: { mark: after-stamp }
+        timeoutMs: 4000
+        target: { by: testId, value: stamp }
+        textContains: "ဈေးလျှော့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-stamp-big
+        type: editor.type
+        at: { mark: type-stamp-big }
+        cadence: natural
+        target: { file: styles.css, after: "  padding: 0.5em 1em;\n", occurrence: 1 }
+        text: "  font-size: 22px;\n"
+      - id: select-stamp-pad
+        type: editor.select
+        at: { mark: select-stamp-pad }
+        target: { file: styles.css, text: "  padding: 0.5em 1em;", occurrence: 1 }
+
+  - id: font-units
+    chapter: "စာလုံးကို အခြေခံတဲ့ unit တွေ"
+    narration: >
+      ဆိုင်အကြောင်း စာပိုဒ်ကို ပြန်ကြည့်ရအောင်။ စာကြောင်း အရမ်း ရှည်ရင်၊ နောက်တစ်ကြောင်း အစကို
+      ပြန်သွားတဲ့အခါ မျက်စိက နေရာ မှားတတ်လို့ ဖတ်ရ ခက်ပါတယ်။ [[mark:type-ch]] စာပိုဒ်ကို အကျယ်
+      အများဆုံး 30 ch ပေးပါမယ်။ 1 ch ဆိုတာ element ရဲ့ font မှာ သုည ဂဏန်း တစ်လုံးရဲ့ အကျယ်ပါ။
+      [[mark:after-ch]] စာပိုဒ် ကျဉ်းသွားပြီး၊ စာကြောင်းတွေ တိုသွားပါပြီ။ အင်္ဂလိပ်စာအတွက်
+      တစ်ကြောင်းကို စာလုံး 45 ကနေ 75 လောက်ဆို ဖတ်ရ အဆင်ပြေပေမယ့်၊ ဒီ preview က ကျဉ်းလို့ 30 ကို
+      ရွေးထားပါတယ်။ [[mark:ch-estimate]] ဒီ 30 ch ကို ကြည့်ပါ။ စာလုံးတွေရဲ့ အကျယ်က သုညနဲ့ အမြဲ မတူပါဘူး၊
+      မြန်မာ စာလုံးဆို ပိုကွာပါတယ်။ ဒါကြောင့် ch က ခန့်မှန်းခြေပဲ ဖြစ်ပါတယ်။ [[mark:lh-unit]] lh
+      ဆိုတဲ့ unit လည်း ရှိပါတယ်။ 1 lh က element ရဲ့ line height ပါ။ box ကို စာကြောင်း သုံးကြောင်းစာ
+      အမြင့် ပေးတာ၊ တစ်ကြောင်းစာ နေရာလွတ် ခြားတာမျိုး လုပ်နိုင်ပါတယ်။ [[mark:other-font-units]] font
+      ကို အခြေခံတဲ့ unit နောက်ထပ် တချို့လည်း ရှိပါတယ်။ ex က x အသေး တစ်လုံးရဲ့ အမြင့်၊ cap က အင်္ဂလိပ်
+      စာလုံးကြီးတွေရဲ့ အမြင့်၊ ic က တရုတ် စာလုံး တစ်လုံးရဲ့ အကျယ်ပါ။ တစ်ခုစီမှာ rch၊ rlh လို root
+      version လည်း ရှိပြီး၊ rem လိုပဲ root ရဲ့ font ကနေ တိုင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: font-size-relative units"
+        url: "https://web.dev/learn/css/sizing#font-size-relative-units"
+      - title: "MDN — <length>: ch, ex, cap, ic, lh and the root versions"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length"
+      - title: "CSS Values and Units Module Level 4 — font-relative lengths"
+        url: "https://www.w3.org/TR/css-values-4/#font-relative-lengths"
+    actions:
+      - id: type-ch
+        type: editor.type
+        at: { mark: type-ch }
+        cadence: natural
+        target: { file: styles.css, after: "  line-height: 1.8;\n", occurrence: 1 }
+        text: "  max-width: 30ch;\n"
+      - id: expect-story-ch
+        type: expect.preview
+        at: { mark: after-ch }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "အီကြာကွေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-ch
+        type: editor.select
+        at: { mark: ch-estimate }
+        target: { file: styles.css, text: "30ch", occurrence: 1 }
+
+  - id: viewport-units
+    chapter: "Viewport unit တွေ"
+    narration: >
+      နောက်ဆုံး relative unit အုပ်စုက viewport ပေါ် မူတည်ပါတယ်။ viewport ဆိုတာ browser ထဲမှာ page ကို
+      မြင်ရတဲ့ နေရာပါ။ 1 vw က viewport အကျယ်ရဲ့ 1 ရာခိုင်နှုန်း၊ 1 vh က အမြင့်ရဲ့ 1 ရာခိုင်နှုန်းပါ။
+      [[mark:type-vh]] ကြိုဆိုတဲ့ အပိုင်းကို အမြင့် အနည်းဆုံး 100 vh ပေးပါမယ်။ viewport ရဲ့ အမြင့်
+      အပြည့်ပါ။ [[mark:after-vh]] ကြိုဆိုတဲ့ အပိုင်းက preview တစ်ခုလုံးလောက် မြင့်သွားပါပြီ။ preview က
+      ဒီ page ကို frame တစ်ခုထဲမှာ ပြတာ ဖြစ်လို့၊ ဒီမှာ viewport ဆိုတာ ကိုယ့် screen မဟုတ်ဘဲ preview
+      ပါ။ [[mark:more-viewport]] ဒီ 100 vh ကို ကြည့်ပါ။ vh အပြင် vmin က viewport ရဲ့ အကျယ်နဲ့
+      အမြင့်ထဲက ငယ်တဲ့ဘက်၊ vmax က ကြီးတဲ့ဘက်ကို ယူပါတယ်။ vi နဲ့ vb ကတော့ စာ ရေးသွားတဲ့ ဦးတည်ရာကို
+      လိုက်ပြီး၊ lesson 21 မှာ writing mode နဲ့အတူ တွေ့ရပါမယ်။ စာလုံးကို vw နဲ့ ပေးရင် window နဲ့အတူ
+      ကြီးလိုက် သေးလိုက် ဖြစ်လို့၊ အငယ်ဆုံးနဲ့ အကြီးဆုံး အရွယ်ကို ကန့်သတ်ပေးရပါတယ်။ lesson 12 မှာ
+      ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: viewport-relative units"
+        url: "https://web.dev/learn/css/sizing#viewport-relative-units"
+      - title: "MDN — <length>: viewport-percentage lengths"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/length#relative_length_units_based_on_viewport"
+      - title: "CSS Values and Units Module Level 4 — viewport-percentage lengths"
+        url: "https://www.w3.org/TR/css-values-4/#viewport-relative-lengths"
+    actions:
+      - id: type-vh
+        type: editor.type
+        at: { mark: type-vh }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  font-size: 22px;\n}\n", occurrence: 1 }
+        text: "\n.hero {\n  min-height: 100vh;\n}\n"
+      - id: expect-hero-vh
+        type: expect.preview
+        at: { mark: after-vh }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-vh
+        type: editor.select
+        at: { mark: more-viewport }
+        target: { file: styles.css, text: "100vh", occurrence: 1 }
+
+  - id: phone-board
+    narration: >
+      [[mark:open-phone]] ဖုန်းမှာဆိုရင် viewport ရဲ့ အမြင့်က တစ်မျိုးတည်း မဟုတ်ပါဘူး။
+      [[mark:draw-small]] page ပွင့်ပွင့်ချင်းမှာ browser ရဲ့ toolbar တွေ ပေါ်နေပါတယ်။ toolbar တွေ
+      ပေါ်နေတုန်း viewport အမြင့်က အနိမ့်ဆုံး ဖြစ်ပြီး၊ အဲဒါကို small viewport လို့ ခေါ်ပါတယ်။ 1 svh
+      က အဲဒီ အမြင့်ရဲ့ 1 ရာခိုင်နှုန်းပါ။ [[mark:draw-large]] scroll ဆင်းလိုက်ရင် toolbar တွေ ပျောက်ပြီး
+      viewport မြင့်လာပါတယ်။ အမြင့်ဆုံး အမြင့်ကို large viewport လို့ ခေါ်ပြီး၊ lvh နဲ့ ရေးပါတယ်။
+      ရိုးရိုး vh က ဒီ အမြင့်ကို သုံးလို့၊ 100 vh မြင့်တဲ့ အပိုင်းရဲ့ အောက်ခြေက toolbar နောက်မှာ
+      ကွယ်နေနိုင်ပါတယ်။ [[mark:draw-dynamic]] dynamic viewport ဖြစ်တဲ့ dvh ကတော့ လက်ရှိ အမြင့်ကို
+      လိုက်ပြီး၊ toolbar တွေ ရွေ့တိုင်း ပြောင်းပါတယ်။ ဒါပေမဲ့ toolbar ရွေ့နေတုန်း browser က layout ကို
+      ခဏခဏ ပြန်တွက်ရလို့၊ dvh ကို တကယ် လိုမှ သုံးပါ။ [[mark:draw-rule]] ဒါကြောင့် ကိုယ့် ကြိုဆိုတဲ့
+      အပိုင်းလို screen အပြည့် ယူမယ့် အပိုင်းအတွက် 100 svh က အမြဲ ဆံ့လို့ စိတ်ချရပါတယ်။
+      [[mark:type-svh]] ကြိုဆိုတဲ့ အပိုင်းမှာ 100 svh ကို အောက်က ထပ်ထည့်ပါမယ်။ နောက်မှ ရေးတာ
+      ဖြစ်လို့ သူက နိုင်ပါတယ်။ ကွန်ပျူတာမှာ viewport သုံးမျိုးလုံး တူလို့ preview မှာ ဘာမှ
+      မပြောင်းပေမယ့်၊ ဖုန်းမှာတော့ အောက်ခြေ မကွယ်တော့ပါဘူး။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: alternative viewport-relative units"
+        url: "https://web.dev/learn/css/sizing#alternative-viewport-relative-units"
+      - title: "web.dev — The large, small, and dynamic viewport units"
+        url: "https://web.dev/blog/viewport-units"
+      - title: "CSS Values and Units Module Level 4 — small, large and dynamic viewport sizes"
+        url: "https://www.w3.org/TR/css-values-4/#viewport-variants"
+    actions:
+      - id: open-phone
+        type: whiteboard.apply
+        at: { mark: open-phone }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+      - id: draw-small
+        type: whiteboard.apply
+        at: { mark: draw-small }
+        upsertIds: [f-s-body, f-s-top, f-s-bottom, f-s-area, f-s-label, f-s-note]
+        drawMs: 3600
+      - id: draw-large
+        type: whiteboard.apply
+        at: { mark: draw-large }
+        upsertIds: [f-l-body, f-l-area, f-l-label, f-l-note]
+        drawMs: 3000
+      - id: draw-dynamic
+        type: whiteboard.apply
+        at: { mark: draw-dynamic }
+        upsertIds: [f-d-body, f-d-top, f-d-area, f-d-arrow, f-d-label, f-d-note]
+        drawMs: 3600
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [f-rule]
+        drawMs: 1800
+      - id: close-phone
+        type: whiteboard.apply
+        at: { mark: type-svh }
+        open: false
+      # natural keystrokes: "1", "10", "100", "100s" and "100sv" are invalid
+      # min-height values (ignored); only "100svh" applies, and on a desktop
+      # it equals 100vh, so the preview never moves while it is typed.
+      - id: type-svh
+        type: editor.type
+        at: { mark: type-svh, offsetMs: 400 }
+        cadence: natural
+        target: { file: styles.css, after: "  min-height: 100vh;\n", occurrence: 1 }
+        text: "  min-height: 100svh;\n"
+      - id: expect-hero-svh
+        type: expect.preview
+        at: { afterAction: type-svh }
+        timeoutMs: 4000
+        target: { by: testId, value: order-link }
+        textContains: "မှာယူရန်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: other-units
+    chapter: "Length မဟုတ်တဲ့ unit တွေ"
+    narration: >
+      [[mark:open-other]] unit တိုင်းက length မဟုတ်ပါဘူး။ [[mark:draw-angles]] ထောင့်ကို တိုင်းတဲ့
+      unit တွေ ရှိပါတယ်။ ဒီဂရီ၊ turn၊ radian နဲ့ gradian ဖြစ်ပြီး၊ 1 turn ဆိုတဲ့ တစ်ပတ်က 360 ဒီဂရီပါ။
+      ပြီးခဲ့တဲ့ lesson မှာ hue ကို ထောင့်နဲ့ ရေးခဲ့သလို၊ element ကို လှည့်တဲ့အခါမှာလည်း သုံးပါတယ်။
+      [[mark:draw-time]] အချိန်ကို စက္ကန့်၊ millisecond နဲ့ ရေးပြီး transition၊ animation တွေမှာ
+      သုံးပါတယ်။ [[mark:draw-resolution]] dpi နဲ့ dppx လို resolution unit တွေကိုတော့ ပြတ်သားတဲ့
+      screen တွေကို ပိုပြတ်သားတဲ့ ပုံ ပေးဖို့ media query မှာ အဓိက သုံးပါတယ်။ [[mark:draw-container]]
+      container unit တွေက viewport unit နဲ့ တူပေမယ့် container ကို တိုင်းပါတယ်။ lesson 25 မှာ
+      container query နဲ့အတူ တွေ့ရပါမယ်။ [[mark:draw-quiz]] မေးခွန်း တစ်ခု မေးကြည့်ရအောင်။ viewport
+      unit က absolute လား၊ relative လား။ ခဏ စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] relative ပါ။ window
+      ပေါ် မူတည်လို့၊ window ပြောင်းရင် လိုက်ပြောင်းပါတယ်။ unit တစ်ခုခု
+      မသေချာရင် MDN မှာ ရှာကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units: miscellaneous units"
+        url: "https://web.dev/learn/css/sizing#miscellaneous-units"
+      - title: "MDN — <angle>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/angle"
+      - title: "MDN — <resolution>"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/resolution"
+      - title: "MDN — Container query length units"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries#container_query_length_units"
+      - title: "MDN — CSS values and units"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Values_and_units"
+    actions:
+      - id: open-other
+        type: whiteboard.apply
+        at: { mark: open-other }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-angles
+        type: whiteboard.apply
+        at: { mark: draw-angles }
+        upsertIds: [g-ang-k, g-ang-v]
+        drawMs: 2400
+      - id: draw-time
+        type: whiteboard.apply
+        at: { mark: draw-time }
+        upsertIds: [g-time-k, g-time-v]
+        drawMs: 1800
+      - id: draw-resolution
+        type: whiteboard.apply
+        at: { mark: draw-resolution }
+        upsertIds: [g-res-k, g-res-v]
+        drawMs: 1800
+      - id: draw-container
+        type: whiteboard.apply
+        at: { mark: draw-container }
+        upsertIds: [g-cq-k, g-cq-v]
+        drawMs: 1800
+      - id: draw-quiz
+        type: whiteboard.apply
+        at: { mark: draw-quiz }
+        upsertIds: [g-quiz-q]
+        drawMs: 1200
+      - id: draw-quiz-answer
+        type: whiteboard.apply
+        at: { mark: quiz-answer }
+        upsertIds: [g-quiz-a, g-quiz-check]
+        drawMs: 1400
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ unit မပါတဲ့ ဂဏန်းက property ကနေ အဓိပ္ပာယ် ရပြီး၊ line height
+      အတွက် အကောင်းဆုံးပါ။ ရာခိုင်နှုန်းက တစ်ခုခုရဲ့ အစိတ်အပိုင်း ဖြစ်လို့ ဘာရဲ့လဲ ဆိုတာ အမြဲ
+      မေးရပါမယ်။ pixel က ပုံသေ ဖြစ်ပြီး၊ em က font size ကို၊ rem က root ရဲ့ font size ကို၊ viewport
+      unit တွေက window ကို လိုက်ပါတယ်။ [[mark:next-lesson]] နောက် lesson မှာတော့ ဒီလို တန်ဖိုးတွေကို
+      custom property နဲ့ နာမည် ပေးပြီး၊ တစ်နေရာ ပြင်ရုံနဲ့ အကုန် ပြောင်းအောင် လုပ်တာကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn CSS — Sizing units"
+        url: "https://web.dev/learn/css/sizing"
+      - title: "MDN — CSS values and units"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Values_and_units"
+      - title: "web.dev Learn CSS — Custom properties (next lesson)"
+        url: "https://web.dev/learn/css/custom-properties"
+    actions:
+      - id: expect-final-css
+        type: expect.file
+        at: { mark: recap }
+        path: styles.css
+        contains: ".sold-out {\n  opacity: 0.5;\n}\n\n.about p {\n  line-height: 16px;\n  line-height: 1.8;\n  max-width: 30ch;\n}\n\n.menu-card:first-child {\n  width: 50%;\n  padding-top: 25%;\n  height: 50%;\n}\n"
+      - id: expect-final-css-2
+        type: expect.file
+        at: { afterAction: expect-final-css }
+        path: styles.css
+        contains: ".levels li {\n  font-size: 1.2em;\n  font-size: 1.2rem;\n}\n\n.stamp {\n  font-size: 14px;\n  padding: 0.5em 1em;\n  font-size: 22px;\n}\n\n.hero {\n  min-height: 100vh;\n  min-height: 100svh;\n}\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
