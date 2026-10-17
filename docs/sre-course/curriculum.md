@@ -263,8 +263,11 @@ lines; anything more gets its own page advance or board step, or is left out.
 ### Slide page kit
 
 Pages are 720 × 405 pt on the brand background `#F0EFE9` with white cards and 2 pt black borders.
-Every text box with Burmese uses **Noto Sans Myanmar** with line spacing of at least 1.3; Google Sans
-is only for English-only headers and the `{ Next Editor }` badge. One idea per page, Burmese page titles
+Every text box uses **Google Sans**, Burmese included, with line spacing of at least 1.3. Google's
+renderer draws the Myanmar letters in its own Myanmar font and keeps English terms in Google Sans, so
+mixed lines read as one style (checked on the probe page, 2026-10-17). Don't set Noto Sans Myanmar on a
+box: Google then draws the English words in a serif fallback. Titles set `weightedFontFamily`
+{ Google Sans, 700 } as well as `bold`, or they render at regular weight. One idea per page, Burmese page titles
 of at most about 20 code points, no Google-hosted images. Burmese runs about 1.5–2× the code points of
 the English specs below, so the English limits are strict.
 
@@ -376,7 +379,9 @@ for Chan.
   re-rendering only that lesson. Never delete and re-create a page id (that breaks later renders with
   `SlideResolutionError`); inserting or reordering pages is safe.
 - **Build order:** one Myanmar probe page first (Burmese title and three mixed Burmese/English lines,
-  Noto Sans Myanmar, 1.3 spacing). Chan publishes it, the Director fetches it, and the shaping is
+  Google Sans, 1.3 spacing). It is page `probe_mm2` in deck SRE 1
+  ([Next Editor · SRE 1 · Why SRE](https://docs.google.com/presentation/d/1C9xeoD0ksYQ53VJi5r8S5gFbu_6RBb91kui2eONaf0I/edit),
+  built 2026-10-17; the API thumbnail shapes correctly). Chan publishes it, the Director fetches it, and the shaping is
   checked in the pinned SVG. Measure KB per page then; if a deck would pass about 4 MB, split it
   before building. Only then build deck 1.
 
@@ -2858,8 +2863,8 @@ course teaches the ideas and builds everything else itself:
 
 **Week 0, three probes before any deck or voice work:**
 
-1. **Myanmar probe page** in a copied template deck (Noto Sans Myanmar, line spacing 1.3, mixed English
-   terms). Chan publishes it, the Director fetches it, and the shaping is checked in the pinned SVG.
+1. **Myanmar probe page** in a copied template deck (Google Sans, line spacing 1.3, mixed English
+   terms; page `probe_mm2` in deck SRE 1). Chan publishes it, the Director fetches it, and the shaping is checked in the pinned SVG.
    This gates every deck, and its KB-per-page decides whether any deck must split further.
 2. **VoxCPM2 pronunciation probe** for SRE, SLO, SLI, SLA, RPO, RTO, MTTR, STPA, CAST, on-call,
    postmortem, toil, rollout, canary and numbers like 99.9% and 3,000. Chan picks the spoken forms, and
