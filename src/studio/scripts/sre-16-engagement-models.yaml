@@ -1,0 +1,1318 @@
+# SRE from zero, lesson 16: Working with product teams (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-16-engagement-models.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-16-engagement-models.md \
+#     src/studio/scripts/sre-16-engagement-models.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Six marks add no spoken text and sit at an existing ။ or ?:
+# hook-billpay and p01b-levels split the hook's narration and l16_p01b's
+# narration at their paragraph breaks (one 491- or 475-character dialog would
+# pass the 450-character limit; no action uses them); b2-s1b and b2-s3b let
+# board B2's top lane and bottom lane land as the narration names them, so no
+# step adds more than three labelled boxes at once (the top lane's four boxes
+# are split two and two, as Module 1 split its four-box rows, and the bottom
+# lane's two rows are two applies, the second after the first); b1-s4b lands
+# B1's "re-rank every quarter" label on the sentence that says it; and
+# ask-question is the voice script's ⟪select မေးခွန်း⟫, which already starts
+# the question's own dialog, so the question-line select hangs off it for the
+# ⟪pause 3s⟫, as in Module 1.
+#
+# ⟪close board⟫ straight into the next board (scenes 5 and 6) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, so
+# the editor does not flash between two boards, as in lesson 8; the next board
+# then draws with open: true, clear: true as usual. A board followed by a deck
+# page closes the panel (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards (B1 a column of four ranked cards, B2 P6 lanes, B3 P1 flow). Colour
+# jobs: #1e1e1e ink (paints white) for arrows; blue the thing named (the ranked
+# outcomes, the design/launch steps, Bill Pay's lane); green healthy or done
+# (the planned handback, v1 shipping ready); red failure or limit spent (SRE
+# stuck with the pager, the SRE-capacity line); orange the caveat (developers
+# moving on); violet the result (the joint project, the always-on basics, the
+# design that follows the SLO). A label on two or three lines is one text asset
+# per line, so each line meets the 0.55 em width rule on its own; every label
+# was also measured in Chrome with Excalidraw's Virgil font and fits its box.
+# B3 runs top to bottom, not left to right as the voice script sketches it:
+# its widest lines ("dashboard · runbook", "queue · order key", 17-19 code
+# points) need boxes of 262-293 px under the 0.55 rule, and three of those
+# plus two arrows do not fit across the 850 px visible area.
+#
+# Deck pages: deck "Next Editor · SRE 4 · People and teams". The /pub URL
+# below is a placeholder until Chan publishes the deck with this lesson's
+# pages; until then the Director reports the deck unreachable or, while the
+# published copy still holds only the kit pages, the l16 pages missing. The
+# voice script asks for l16_p05b as two plain K3 columns (no better/worse
+# colouring). Page plan:
+# ~/Documents/sre-course/work/pages/sre-16-engagement-models.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-16-engagement-models.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-16-engagement-models.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-16-engagement-models
+  title: "SRE from zero 16: Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ
+
+        - engagement — SRE နဲ့ product team ဘယ်လို တွဲလုပ်မလဲ၊ ဘယ်တော့ ပြီးမလဲ ရေးထားတဲ့ သဘောတူညီချက်
+        - အစဉ်စီထားတဲ့ ရလဒ် — task မဟုတ်ဘဲ ရလဒ်၊ ထိပ်ဆုံးတွေကို အချိန် ကန့်သတ်ထားတဲ့ project နဲ့ လုပ်
+        - on-call ခွဲယူတာ — app page က developer၊ database နဲ့ gateway page က SRE
+        - ကြိုစီစဉ်ထားတဲ့ handback — ရက်စွဲ၊ runbook၊ training နဲ့ on-call ပြန်လွှဲ
+        - nonfunctional requirement — ဘယ်လောက် မြန်ရမလဲ၊ စိတ်ချရရမလဲ
+        - Hyrum's law — ကတိ မပေးထားတဲ့ အပြုအမူကိုတောင် တစ်ယောက်ယောက် အားကိုး
+        - စစ်စရာ လေးခု — reliability ပေါ်မှာလား · business အကျိုး အများဆုံးလား · SRE အလုပ် မပိဘူးလား · တွဲလုပ်ရ လွယ်လား
+
+        မေးခွန်း: Bill Pay က pager တစ်ခုလုံး ယူပေးပါလို့ ထပ်တောင်းရင် pager အစား ဘာ ကမ်းလှမ်းမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 16</p>
+              <h1>Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l16-p01
+      contentType: google
+      name: "Cover: please carry our pager"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p01
+    - id: l16-p01b
+      contentType: google
+      name: What saying yes used to cost
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p01b
+    - id: l16-p02
+      contentType: google
+      name: What an engagement holds
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p02
+    - id: l16-p03
+      contentType: google
+      name: Team shapes and their traps
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p03
+    - id: l16-p03b
+      contentType: google
+      name: "Padauk's future mix"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p03b
+    - id: l16-p04
+      contentType: google
+      name: Questions we stopped answering
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p04
+    - id: l16-p04b
+      contentType: google
+      name: Scaling SRE help
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p04b
+    - id: l16-p04c
+      contentType: google
+      name: The settlement file change
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p04c
+    - id: l16-p05
+      contentType: google
+      name: When one customer matters a lot
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p05
+    - id: l16-p05b
+      contentType: google
+      name: Millions of users or one big customer
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p05b
+    - id: l16-p06
+      contentType: google
+      name: Bill Pay now and next year
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p06
+    - id: l16-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l16_p07
+  whiteboardAssets:
+    # ---- Board B1: Bill Pay's ranked outcomes, a column of four cards ----------
+    - {
+        id: l16-b1-c1,
+        kind: rectangle,
+        x: 255,
+        y: 160,
+        width: 380,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b1-c1-t1,
+        kind: text,
+        x: 265,
+        y: 167,
+        width: 360,
+        height: 35,
+        text: "1 · pending မှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c1-t2,
+        kind: text,
+        x: 265,
+        y: 202,
+        width: 360,
+        height: 35,
+        text: "ပိတ်မိတာ မရှိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c2,
+        kind: rectangle,
+        x: 255,
+        y: 250,
+        width: 380,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b1-c2-t1,
+        kind: text,
+        x: 265,
+        y: 257,
+        width: 360,
+        height: 35,
+        text: "2 · reminder peak မှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c2-t2,
+        kind: text,
+        x: 265,
+        y: 292,
+        width: 360,
+        height: 35,
+        text: "Wallet မနှေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c3,
+        kind: rectangle,
+        x: 255,
+        y: 362,
+        width: 380,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b1-c3-t1,
+        kind: text,
+        x: 265,
+        y: 369,
+        width: 360,
+        height: 35,
+        text: "3 · ပြေစာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c3-t2,
+        kind: text,
+        x: 265,
+        y: 404,
+        width: 360,
+        height: 35,
+        text: "1 မိနစ်အတွင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c4,
+        kind: rectangle,
+        x: 255,
+        y: 454,
+        width: 380,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b1-c4-t1,
+        kind: text,
+        x: 265,
+        y: 461,
+        width: 360,
+        height: 35,
+        text: "4 · file အမှားကို",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-c4-t2,
+        kind: text,
+        x: 265,
+        y: 496,
+        width: 360,
+        height: 35,
+        text: "မနက် 6 မတိုင်ခင် ဖမ်းမိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-cap,
+        kind: rectangle,
+        x: 255,
+        y: 342,
+        width: 380,
+        height: 8,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l16-b1-cap-t,
+        kind: text,
+        x: 645,
+        y: 328,
+        width: 220,
+        height: 35,
+        text: "SRE လူအင်အား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 645,
+        y: 226,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b1-proj,
+        kind: rectangle,
+        x: 715,
+        y: 200,
+        width: 240,
+        height: 92,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l16-b1-proj-t1,
+        kind: text,
+        x: 727,
+        y: 209,
+        width: 210,
+        height: 35,
+        text: "8–10 ပတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-proj-t2,
+        kind: text,
+        x: 727,
+        y: 244,
+        width: 210,
+        height: 35,
+        text: "အတူ project",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-base,
+        kind: rectangle,
+        x: 255,
+        y: 552,
+        width: 760,
+        height: 88,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l16-b1-base-t1,
+        kind: text,
+        x: 267,
+        y: 561,
+        width: 500,
+        height: 35,
+        text: "အမြဲ ရ: postmortem review ·",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-base-t2,
+        kind: text,
+        x: 267,
+        y: 596,
+        width: 600,
+        height: 35,
+        text: "office hours · incident ကြီးမှာ ကူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b1-rerank,
+        kind: text,
+        x: 715,
+        y: 432,
+        width: 320,
+        height: 35,
+        text: "သုံးလ တစ်ခါ ပြန်စီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B2: who carries which pager, three lanes (P6) ------------------
+    - {
+        id: l16-b2-r1,
+        kind: rectangle,
+        x: 255,
+        y: 160,
+        width: 130,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r1-t,
+        kind: text,
+        x: 265,
+        y: 183,
+        width: 110,
+        height: 35,
+        text: design,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 389,
+        y: 181,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r2,
+        kind: rectangle,
+        x: 433,
+        y: 160,
+        width: 130,
+        height: 82,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r2-t,
+        kind: text,
+        x: 443,
+        y: 183,
+        width: 110,
+        height: 35,
+        text: launch,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 567,
+        y: 181,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r3,
+        kind: rectangle,
+        x: 611,
+        y: 160,
+        width: 175,
+        height: 82,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l16-b2-r3-t1,
+        kind: text,
+        x: 621,
+        y: 166,
+        width: 155,
+        height: 35,
+        text: developer,
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-r3-t2,
+        kind: text,
+        x: 621,
+        y: 201,
+        width: 155,
+        height: 35,
+        text: "တွေ ရွှေ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 790,
+        y: 181,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r4,
+        kind: rectangle,
+        x: 834,
+        y: 160,
+        width: 190,
+        height: 82,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l16-b2-r4-t1,
+        kind: text,
+        x: 844,
+        y: 166,
+        width: 170,
+        height: 35,
+        text: "SRE မှာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-r4-t2,
+        kind: text,
+        x: 844,
+        y: 201,
+        width: 170,
+        height: 35,
+        text: "pager ကျန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-lane2,
+        kind: text,
+        x: 260,
+        y: 262,
+        width: 500,
+        height: 45,
+        text: "ကြိုစီစဉ်ထားတဲ့ handback",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: l16-b2-r5,
+        kind: rectangle,
+        x: 255,
+        y: 317,
+        width: 455,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l16-b2-r5-t,
+        kind: text,
+        x: 265,
+        y: 329,
+        width: 435,
+        height: 35,
+        text: "ရက်စွဲ + runbook + training",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 714,
+        y: 327,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r6,
+        kind: rectangle,
+        x: 758,
+        y: 317,
+        width: 320,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l16-b2-r6-t,
+        kind: text,
+        x: 768,
+        y: 329,
+        width: 300,
+        height: 35,
+        text: "office hours ဆက်ရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-lane3,
+        kind: text,
+        x: 260,
+        y: 400,
+        width: 180,
+        height: 45,
+        text: "Bill Pay",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: l16-b2-r7,
+        kind: rectangle,
+        x: 255,
+        y: 455,
+        width: 160,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r7-t,
+        kind: text,
+        x: 265,
+        y: 467,
+        width: 140,
+        height: 35,
+        text: "app page",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a7,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 419,
+        y: 465,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r8,
+        kind: rectangle,
+        x: 463,
+        y: 455,
+        width: 175,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r8-t,
+        kind: text,
+        x: 473,
+        y: 467,
+        width: 155,
+        height: 35,
+        text: developer,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-r9,
+        kind: rectangle,
+        x: 255,
+        y: 530,
+        width: 400,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r9-t,
+        kind: text,
+        x: 265,
+        y: 542,
+        width: 380,
+        height: 35,
+        text: "database + gateway page",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b2-a9,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 659,
+        y: 540,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b2-r10,
+        kind: rectangle,
+        x: 703,
+        y: 530,
+        width: 100,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b2-r10-t,
+        kind: text,
+        x: 713,
+        y: 542,
+        width: 80,
+        height: 35,
+        text: SRE,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B3: an SLO before any code, a top-to-bottom flow (P1) ----------
+    - {
+        id: l16-b3-r1,
+        kind: rectangle,
+        x: 475,
+        y: 165,
+        width: 400,
+        height: 115,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l16-b3-r1-t1,
+        kind: text,
+        x: 490,
+        y: 172,
+        width: 370,
+        height: 35,
+        text: "SLO အရင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r1-t2,
+        kind: text,
+        x: 490,
+        y: 207,
+        width: 370,
+        height: 35,
+        text: "45 စက္ကန့်အတွင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r1-t3,
+        kind: text,
+        x: 490,
+        y: 242,
+        width: 370,
+        height: 35,
+        text: "95%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 286,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b3-r2,
+        kind: rectangle,
+        x: 475,
+        y: 332,
+        width: 400,
+        height: 115,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l16-b3-r2-t1,
+        kind: text,
+        x: 490,
+        y: 339,
+        width: 370,
+        height: 35,
+        text: "design ကို ညှိ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r2-t2,
+        kind: text,
+        x: 490,
+        y: 374,
+        width: 370,
+        height: 35,
+        text: "queue · order key",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r2-t3,
+        kind: text,
+        x: 490,
+        y: 409,
+        width: 370,
+        height: 35,
+        text: "ဓာတ်ပုံ ပိတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 453,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l16-b3-r3,
+        kind: rectangle,
+        x: 475,
+        y: 499,
+        width: 400,
+        height: 115,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l16-b3-r3-t1,
+        kind: text,
+        x: 490,
+        y: 506,
+        width: 370,
+        height: 35,
+        text: "v1 မှာ ပါပြီးသား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r3-t2,
+        kind: text,
+        x: 490,
+        y: 541,
+        width: 370,
+        height: 35,
+        text: "dashboard · runbook",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l16-b3-r3-t3,
+        kind: text,
+        x: 490,
+        y: 576,
+        width: 370,
+        height: 35,
+        text: rollback,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2616
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: pager ကို ယူပေးပါ
+    narration: >
+      [[mark:show-p01]] မသီရိ၊ ကိုဇော်နဲ့ နောက်တစ်ယောက် ပါတဲ့ Site Reliability Engineering၊ SRE အဖွဲ့က Wallet နဲ့ Top-up အတွက် charter တစ်ခုနဲ့ အလုပ်စလိုက်ပြီး လစဉ် review မှာလည်း ဘယ်အဖွဲ့ကိုမှ အဆင့် မစီတော့ပါဘူး။
+      [[mark:hook-billpay]] မကြာခင်မှာပဲ မီတာခ၊ ရေခ ပေးလို့ရတဲ့ Bill Pay ရဲ့ ခေါင်းဆောင်က ပြင်လို့မရတဲ့ vendor billing system ကြောင့် ညတိုင်းလိုလို page ဝင်လာလို့ အဖွဲ့ ပင်ပန်းနေပြီ၊ အဲဒီ page တွေ ဖြေရတဲ့ on-call တာဝန်၊ pager ကို SRE က အပြည့် ယူပေးပါလို့ လာတောင်းပါတယ်။ လူ သုံးယောက်ပဲ ရှိတဲ့ SRE အဖွဲ့က pager အစား ဘာကို ယူသင့်လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l16-p01,
+        }
+
+  - id: agreement
+    chapter: Engagement ဆိုတာ
+    narration: >
+      [[mark:show-p01b]] ရပါတယ်လို့ ဖြေလိုက်ရင် လွယ်ပေမဲ့ အရင်က လုပ်ခဲ့ပုံတွေက အဲဒီ တစ်ခွန်းရဲ့ ကုန်ကျစရိတ်ကို သင်ပေးခဲ့ပါတယ်။ review ကြီး အောင်မှ SRE က လက်ခံရင် design ပြောင်းဖို့ နောက်ကျမှ ရောက်လာပါတယ်။ pager ကို တစ်ခါ ယူပြီးရင် ပြန်ပေးရ ခက်ပြီး developer တွေလည်း production ကို ဆက်မသင်တော့ပါဘူး။
+      [[mark:p01b-levels]] pager ဘယ်သူ ယူလဲ ဆိုတာနဲ့ support အဆင့် ခွဲရင် အဖွဲ့တိုင်းက Bill Pay လိုပဲ pager ပါတဲ့ အဆင့်ကို လိုချင်ကြပါတယ်။ launch တိုင်းကို review လုပ်ရင်လည်း launch တွေ များလာတာကို SRE လူ တိုးတာနဲ့ မမီတော့ပါဘူး။
+      [[mark:show-p02]] ဒါကြောင့် မသီရိက ရတယ်၊ မရဘူးလို့ မဖြေဘဲ engagement တစ်ခု အတူ ရေးကြရအောင်လို့ ပြောပါတယ်။ engagement ဆိုတာ SRE နဲ့ product team ဘယ်လို တွဲလုပ်မလဲ ရေးထားတဲ့ တိုတိုလေး သဘောတူညီချက်ပါ။ ဘယ်သူ ဘာ ပိုင်လဲ၊ ဘယ် ရလဒ်တွေ ရယူမလဲ၊ on-call ကို ဘယ်လို ခွဲယူမလဲ၊ ဘယ်တော့ ဘယ်လို ပြီးမလဲ ဆိုတာ ပါရပါမယ်။
+      အဆုံးကို အစကတည်းက ရေးထားမှ engagement က အဆုံးမဲ့ မဖြစ်မှာပါ။ business အတွက် ဘယ် risk တွေ အရေးအကြီးဆုံးလဲ ဆိုတာကိုလည်း နှစ်ဖက် အရင် သဘောတူရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+    actions:
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l16-p01b }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l16-p02 }
+
+  - id: team-shapes
+    chapter: SRE အဖွဲ့ ပုံစံတွေ
+    narration: >
+      [[mark:show-p03]] Bill Pay တောင်းတာကို လက်ခံရင် မသီရိရဲ့ အဖွဲ့က ဘာမဆို on-call ယူပေးတဲ့ kitchen sink အဖွဲ့ ဖြစ်သွားပြီး engineering လုပ်ချိန် မကျန်တော့ပါဘူး။ ops အဖွဲ့ကို SRE လို့ နာမည်ပဲ ပြောင်းပြီး ဘယ်သူမှ code မရေးရင်လည်း ဒီ ပုံစံပဲ ဖြစ်ပြီး ဘာမှ မပြောင်းပါဘူး။
+      product team ထဲ ဝင်လုပ်တဲ့ embedded SRE က system ကို နီးနီးကပ်ကပ် သိပေမဲ့ တစ်ယောက်တည်း ဖြစ်လို့ တခြား SRE တွေနဲ့ လုပ်ပုံ ကွဲသွားတတ်ပါတယ်။ လိုမှ လာမေးတဲ့ consulting ကတော့ system ကို နက်နက် မသိပါဘူး။
+      [[mark:show-p03b]] product SRE၊ infrastructure SRE၊ tool ဆောက်တဲ့ tools SRE လို ပုံစံတွေလည်း ရှိပြီး ကုမ္ပဏီ အများစုက ရောသုံးကြပါတယ်။ Padauk ကြီးလာရင် Wallet မှာ product SRE၊ rider tracking ထဲမှာ embedded SRE၊ မျှသုံးတဲ့ cluster မှာ infrastructure SRE ထားပြီး ကျန်တဲ့ အဖွဲ့တွေကို အပတ်စဉ် လာမေးလို့ရတဲ့ office hours နဲ့ ကူဖို့ မသီရိ ပုံကြမ်း ဆွဲထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      # Listed for this lesson in the curriculum: the public list of team shapes.
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l16-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l16-p03b }
+
+  - id: outcomes
+    chapter: Bill Pay ရဲ့ ရလဒ်တွေ
+    narration: >
+      [[mark:close-p03b]] [[mark:b1-s1]] engagement ရေးတဲ့နေ့မှာ မသီရိနဲ့ Bill Pay ခေါင်းဆောင်က user တွေနဲ့ business ကို ဘာက ဒုက္ခ အပေးဆုံးလဲ မေးပြီး ရလဒ်တွေကို အရေးကြီးတဲ့ အစဉ်နဲ့ စီပါတယ်။ ပထမက ဘေလ် ကောက်တဲ့ဘက်က timeout ကြောင့် pending မှာ ပိတ်မိနေတဲ့ ငွေချေမှု မရှိရ၊ ဒုတိယက ဘေလ် နောက်ဆုံးရက် reminder တွေ ပို့ချိန် လူတွေ တပြိုင်နက် ဝင်လာလည်း Wallet မနှေးရ ဆိုတာပါ။
+      [[mark:b1-s2]] တတိယက ပြေစာ တစ်မိနစ်အတွင်း ရောက်ရ၊ စတုတ္ထက vendor ဆီက file အမှားကို မနက် ၆ နာရီ မတိုင်ခင် ဖမ်းမိရ ဆိုတာပါ။ ဒါတွေက SRE လုပ်ပေးရမယ့် task စာရင်း မဟုတ်ဘဲ user နဲ့ business တကယ် ခံစားရမယ့် ရလဒ်တွေပါ။ ဘယ်သူ ဘာ လုပ်မလဲ ဆိုတာကိုတော့ ရလဒ်တွေ သဘောတူပြီးမှ ခွဲပါတယ်။
+      [[mark:b1-s3]] SRE သုံးယောက်မှာ Wallet နဲ့ Top-up အလုပ်လည်း ရှိလို့ လူအင်အားက ထိပ်ဆုံး နှစ်ခုအတွက်ပဲ လောက်ပါတယ်။ အဲဒီ နှစ်ခုအတွက် နှစ်ဖက်က engineer တွေ ၈ ပတ်ကနေ ၁၀ ပတ်အထိ အတူ လုပ်မယ့် project တွေ ဖွဲ့ပြီး project ပြီးရင် SRE က နောက် ရလဒ်ဆီ ရွှေ့ပါတယ်။ engagement တစ်ခုလုံးအတွက် တာဝန်ခံ tech lead ကတော့ ကိုဇော်ပါ။
+      [[mark:b1-s4]] ticket၊ မေးခွန်းလို ကြားဖြတ် အလုပ်ကိုတော့ အဖွဲ့ နှစ်ခုလုံး ခွဲယူပါတယ်။ project မရတဲ့ အဖွဲ့တွေတောင် postmortem review၊ office hours၊ incident ကြီးမှာ ဝင်ကူတာလို အခြေခံ အကူအညီကို အမြဲ ရပါတယ်။ [[mark:b1-s4b]] ရလဒ် စာရင်းကိုလည်း သုံးလ တစ်ခါ ပြန်စီပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l16-b1-c1, l16-b1-c1-t1, l16-b1-c1-t2, l16-b1-c2, l16-b1-c2-t1, l16-b1-c2-t2]
+        drawMs: 1800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l16-b1-c3, l16-b1-c3-t1, l16-b1-c3-t2, l16-b1-c4, l16-b1-c4-t1, l16-b1-c4-t2]
+        drawMs: 1800
+      # The SRE-capacity line under card 2, the arrow from cards 1-2, the joint project.
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds:
+          [l16-b1-cap, l16-b1-cap-t, l16-b1-a1, l16-b1-proj, l16-b1-proj-t1, l16-b1-proj-t2]
+        drawMs: 2200
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l16-b1-base, l16-b1-base-t1, l16-b1-base-t2]
+        drawMs: 1600
+      # "Re-rank every quarter" lands as the last sentence says it, not ~16 s early.
+      - id: b1-s4b
+        type: whiteboard.apply
+        at: { mark: b1-s4b }
+        upsertIds: [l16-b1-rerank]
+        drawMs: 800
+
+  - id: pagers
+    chapter: ဘယ် pager ကို ဘယ်သူ ယူမလဲ
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို pager ကို SRE က ဘာလို့ မယူတာလဲ? ပြီးခဲ့တဲ့ သင်္ကြန်က ကံစမ်းမဲ service ကို ကြည့်ပါ။ [[mark:b2-s1b]] ပွဲတော် ခဏပဲ ဆိုပြီး SRE က pager ကို ယူပေးခဲ့ပေမဲ့ launch ပြီးတော့ developer တွေက project အသစ်ဆီ ရွှေ့သွားလို့ လတွေ ကြာတဲ့အထိ ပိုင်ရှင်မဲ့ service ရဲ့ page တွေကို SRE ကပဲ ဖြေနေရပါတယ်။
+      [[mark:b2-s2]] ဒါကြောင့် အဲဒီ service ကို ဆောက်ခဲ့တဲ့ အဖွဲ့ဆီ ပြန်ပေးပါတယ်။ on-call တာဝန်ကို developer တွေဆီ ပြန်လွှဲတာကို handback လို့ ခေါ်ပြီး ဒီတစ်ခါတော့ ရက်စွဲ၊ runbook၊ training နဲ့ ကြိုစီစဉ်ပြီး လွှဲတာပါ၊ office hours လည်း ဆက်ရှိပါတယ်။ lesson ၃ မှာတော့ service က သဘောတူထားတဲ့ reliability ပစ်မှတ်၊ SLO ကို ခဏခဏ မမီလို့ ပြန်လွှဲတာပါ။
+      [[mark:b2-s3]] Bill Pay အတွက်တော့ on-call ကို ခွဲယူပါတယ်။ [[mark:b2-s3b]] app ရဲ့ page တွေကို developer တွေက အရင် ဖြေပြီး မျှသုံးတဲ့ database နဲ့ ဘေလ် ကောက်တဲ့ ကုမ္ပဏီတွေဆီ ချိတ်တဲ့ gateway ရဲ့ page တွေကိုတော့ SRE က ယူပါတယ်။ ဒီနေ့ release မှာ ဘာ ပြောင်းသွားလဲ ဆိုတာ developer တွေပဲ သိလို့ ညဘက်မှာလည်း ဆက်သွယ်လို့ ရနေရပါတယ်။ on-call ကနေ နှစ်ဖက်လုံး production ကို သင်ယူကြပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      # Top lane, two boxes and two: design and launch first, then (b2-s1b) the
+      # developers moving on and SRE left with the pager as the narration says so.
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l16-b2-r1, l16-b2-r1-t, l16-b2-a1, l16-b2-r2, l16-b2-r2-t]
+        drawMs: 1400
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds:
+          [
+            l16-b2-a2,
+            l16-b2-r3,
+            l16-b2-r3-t1,
+            l16-b2-r3-t2,
+            l16-b2-a3,
+            l16-b2-r4,
+            l16-b2-r4-t1,
+            l16-b2-r4-t2,
+          ]
+        drawMs: 4000
+      - { id: b2-s2, type: whiteboard.apply, at: { mark: b2-s2 }, upsertIds: [l16-b2-lane2] }
+      - id: b2-s2-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s2 }
+        upsertIds: [l16-b2-r5, l16-b2-r5-t, l16-b2-a5, l16-b2-r6, l16-b2-r6-t]
+        drawMs: 1800
+      # Bottom lane: the "Bill Pay" title as the narration names it, then the
+      # two rows drawn one after the other through the sentence that names them
+      # (app pages to developers, database and gateway pages to SRE). Two applies
+      # of two boxes each, so no apply adds more than three labelled boxes; the
+      # second row starts as the first finishes, about when "database" is said.
+      - { id: b2-s3, type: whiteboard.apply, at: { mark: b2-s3 }, upsertIds: [l16-b2-lane3] }
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l16-b2-r7, l16-b2-r7-t, l16-b2-a7, l16-b2-r8, l16-b2-r8-t]
+        drawMs: 2800
+      - id: b2-s3c
+        type: whiteboard.apply
+        at: { afterAction: b2-s3b }
+        upsertIds: [l16-b2-r9, l16-b2-r9-t, l16-b2-a9, l16-b2-r10, l16-b2-r10-t]
+        drawMs: 2600
+
+  - id: slo-first
+    chapter: code မရေးခင် SLO
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] SRE အကူအညီက architecture ပြောင်းရတာ အသက်သာဆုံး ဖြစ်တဲ့ design အဆင့်မှာ အထိရောက်ဆုံးပါ။ ဒါကြောင့် Eats ရဲ့ rider matching ကို စတော့ product manager မနှင်းက code မရေးခင် မသီရိနဲ့ SLO ကို အရင် သတ်မှတ်ပါတယ်၊ order ၉၅ ရာခိုင်နှုန်းကို စက္ကန့် ၄၅ အတွင်း rider နဲ့ တွဲပေးရမယ် ဆိုတာပါ။
+      ပစ်မှတ်ကို Wallet ထက် နိမ့်ထားတာက rider တွေ ဒီ feature ကို မြန်မြန် လိုချင်လို့ပါ၊ ဘာလို့ နိမ့်လဲ၊ ဘယ်တော့ မြှင့်မလဲ ဆိုတာကိုလည်း ချရေးထားပါတယ်။
+      [[mark:b3-s2]] SLO ကို အရင် သိတော့ design ကိုလည်း ညှိပါတယ်။ peak ချိန်မှာ order တွေ fail မဖြစ်ဘဲ တန်းစီ စောင့်နိုင်အောင် queue ထည့်တယ်၊ retry လုပ်မိလည်း rider နှစ်ယောက်နဲ့ မတွဲမိအောင် order တိုင်းမှာ key တစ်ခု ပါတယ်၊ peak မှာ ဓာတ်ပုံလို အရေးမကြီးတဲ့ အပိုင်းကို ခဏ ပိတ်ပါတယ်။
+      [[mark:b3-s3]] ပထမ version ကလည်း dashboard၊ runbook နဲ့ rollback လုပ်နည်း ပါပြီးသား ထွက်ပါတယ်။ ဘာလုပ်လဲ မဟုတ်ဘဲ ဘယ်လောက် မြန်ရမလဲ၊ စိတ်ချရရမလဲ ဆိုတဲ့ လိုအပ်ချက်တွေကို nonfunctional requirement လို့ ခေါ်ပြီး roadmap မှာ မေ့ကျန်တတ်လို့ SRE က အသံ ထွက်ပေးရပါတယ်။
+      ဥပမာ ပြီးခဲ့တဲ့ ညစာ peak မှာ Eats နှေးတုန်းက မသီရိက ဆုံးရှုံးခဲ့တဲ့ order နဲ့ refund တွေကို ငွေနဲ့ တွက်ပြပြီး postmortem ကိုလည်း မနှင်းကို အဓိက ရည်ရွယ်ပြီး ရေးခဲ့ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: Launch Coordination Checklist",
+          url: "https://sre.google/sre-book/launch-checklist/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l16-b3-r1, l16-b3-r1-t1, l16-b3-r1-t2, l16-b3-r1-t3]
+        drawMs: 1600
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l16-b3-a1, l16-b3-r2, l16-b3-r2-t1, l16-b3-r2-t2, l16-b3-r2-t3]
+        drawMs: 1800
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l16-b3-a2, l16-b3-r3, l16-b3-r3-t1, l16-b3-r3-t2, l16-b3-r3-t3]
+        drawMs: 1800
+
+  - id: stopped-questions
+    chapter: ဂိတ်စောင့်ကနေ ကူညီသူ
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] ဒါပေမဲ့ လူ သုံးယောက်နဲ့ design တိုင်းမှာ ဝင်ထိုင်လို့ မရပါဘူး။ မသီရိဆီ Viber ကနေ alert ဘယ်လို ထည့်ရမလဲ၊ လစာထုတ်ရက်မှာ deploy လုပ်လို့ ရလား ဆိုတဲ့ မေးခွန်းတွေလည်း နေ့တိုင်း ဝင်လာလို့ အပတ်တိုင်း ရေတွက်ကြည့်ပါတယ်။ အများဆုံး မေးတဲ့ သုံးခုကို lesson ၄ က service အသစ် ဆောက်တိုင်း သုံးတဲ့ golden path template ထဲမှာ check တွေ အဖြစ် ထည့်လိုက်တော့ နောက်တစ်လမှာ အဲဒီ မေးခွန်းတွေ မလာတော့ပါဘူး။
+      [[mark:show-p04b]] ဒါက SRE အကူအညီကို ချဲ့တဲ့ လှေကားပါ။ မေးတာကို ဖြေပေးတာကနေ ကိုယ်တိုင် ဖြေတတ်အောင် သင်ပေးတာ၊ နောက်ဆုံး template ထဲက check တွေနဲ့ မေးစရာကိုပါ မလိုအောင် လုပ်ပေးတာအထိ တက်သွားပါတယ်။ ဒီလိုနဲ့ SRE က launch တိုင်းကို တားစစ်တဲ့ ဂိတ်စောင့်ကနေ ကူညီပေးသူ ဖြစ်လာပြီး risk များတဲ့ launch ကိုပဲ review လုပ်ပါတော့တယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: Reliable Product Launches at Scale",
+          url: "https://sre.google/sre-book/reliable-product-launches/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l16-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l16-p04b }
+
+  - id: big-customer
+    chapter: customer ကြီး တစ်ခု
+    narration: >
+      [[mark:show-p04c]] အဲဒီ သုံးလပတ်ထဲမှာပဲ Padauk for Business ရဲ့ developer တစ်ယောက်က merchant တွေဆီ နေ့တိုင်း ပို့တဲ့ settlement file ထဲက column တစ်ခုကို နေရာ ရွှေ့လိုက်ပါတယ်။ SLO တိုင်း အစိမ်းရောင် ဖြစ်နေပေမဲ့ နောက်တစ်မနက် အကြီးဆုံး customer ဖြစ်တဲ့ supermarket chain က ထပ်ပြီး ဖုန်းဆက်လာပါတယ်၊ သူတို့ရဲ့ import script က file ကို ဖတ်မရတော့လို့ပါ။
+      [[mark:show-p05]] chain က ကတိ မပေးထားတဲ့ column အစဉ်ကို အားကိုးနေခဲ့တာပါ။ lesson ၇ က Hyrum's law အတိုင်းပဲ user များလာရင် ကတိ မပေးထားတဲ့ အပြုအမူကိုတောင် တစ်ယောက်ယောက်က အားကိုးလာတတ်ပါတယ်။
+      SLO က user အများကြီးကို ပေါင်းကြည့်တာမို့ complaint တစ်ခုက သိပ်မပေါ်ပါဘူး။ ဒါပေမဲ့ customer ကြီး တစ်ခုရဲ့ complaint ကတော့ outage တစ်ခုလောက် အရေးကြီးလို့ သူ့ account manager ကနေ အရင် ပြောရပါတယ်။
+      [[mark:show-p05b]] တခြား merchant တွေက ပုံစံသစ်နဲ့ အဆင်ပြေနေလို့ rollback မလုပ်ဘဲ merchant အလိုက် file ပုံစံဟောင်းကို ရွေးလို့ရတဲ့ setting ထည့်ပေးပါတယ်။ user သန်းချီ ဆိုရင်တော့ rollback ကို အရင် လုပ်ပါတယ်၊ ပြင်တာလည်း အားလုံးအတွက် တစ်ခါတည်းပါ။ customer ကြီး တစ်ခုအတွက်တော့ အရင် ပြောပြီးမှ ပြင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+    actions:
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l16-p04c }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l16-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l16-p05b }
+
+  - id: now-next-year
+    chapter: Bill Pay အခုနဲ့ နောက်နှစ်
+    narration: >
+      [[mark:show-p06]] သုံးလ ကြာတော့ engagement ကို ပြန်ကြည့်ပါတယ်။ အခု SRE က Bill Pay ရဲ့ မီးတွေကို ငြိမ်းပေးနေတုန်းပါ၊ စဖို့ သင့်တော်တဲ့ နေရာ ဖြစ်ပေမဲ့ အမြဲ နေရမယ့် နေရာ မဟုတ်ပါဘူး။ နောက်နှစ်မှာ Bill Pay အဖွဲ့က ကိုယ်တိုင် run ပြီး SRE က product တစ်ခုကို နက်နက် ကူတာနဲ့အတူ product တိုင်း သုံးတဲ့ ဘုံ check တွေကိုလည်း ဆောက်ပါမယ်။
+      အောင်မြင်မှုကိုလည်း outage မရှိတာထက် ဘေလ် ငွေ အချိန်မီ ရောက်တာ၊ refund နည်းလာတာနဲ့ တိုင်းပြီး business ပြောင်းရင် engagement ကို ပြန်ရေးပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l16-p06 }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] တခြား အဖွဲ့ တစ်ခုနဲ့ တွဲလုပ်နေရင် ဒီအပတ် ဒီ သုံးခုကို စမ်းကြည့်ပါ။ အဲဒီ အဖွဲ့နဲ့ ကိုယ့် engagement ကို စာကြောင်း ငါးကြောင်းနဲ့ ရေးကြည့်ပါ။ task တွေ မဟုတ်ဘဲ ရယူချင်တဲ့ ရလဒ် သုံးခုကို အရေးကြီးတဲ့ အစဉ်နဲ့ စီကြည့်ပါ။ ပြီးတော့ ဘယ် page ကို ဘယ်သူ ယူမလဲ ဆိုတာ အတူ သဘောတူထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l16-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] Bill Pay နဲ့ တွဲလုပ်ခဲ့ပုံကို ပြန်ကြည့်ရအောင်။ [[mark:sel-engagement]] engagement က SRE နဲ့ product team ဘယ်လို တွဲလုပ်မလဲ၊ ဘယ်တော့ ပြီးမလဲ ရေးထားတဲ့ သဘောတူညီချက်ပါ။ [[mark:sel-outcomes]] အစဉ်စီထားတဲ့ ရလဒ်က အလုပ်ကို task နဲ့ မဟုတ်ဘဲ ရလဒ်နဲ့ စီတာပါ၊ ထိပ်ဆုံးတွေကို အချိန် ကန့်သတ်ထားတဲ့ project တွေနဲ့ လုပ်ပါတယ်။
+      [[mark:sel-shared-oncall]] on-call ခွဲယူတာက app page ကို developer က၊ database နဲ့ gateway page ကို SRE က ယူတာပါ။ [[mark:sel-handback]] ကြိုစီစဉ်ထားတဲ့ handback က ရက်စွဲ၊ runbook၊ training နဲ့ on-call ပြန်လွှဲတာပါ။ [[mark:sel-nfr]] nonfunctional requirement က ဘယ်လောက် မြန်ရမလဲ၊ စိတ်ချရရမလဲ ဆိုတာပါ၊ [[mark:sel-hyrum]] Hyrum's law ကတော့ ကတိ မပေးထားတာကိုတောင် တစ်ယောက်ယောက် အားကိုးလာမယ် ဆိုတာပါ။
+      [[mark:sel-four-checks]] engagement တိုင်းမှာ စစ်စရာ လေးခု ရှိပါတယ်၊ SRE ကို reliability အလုပ်ပေါ်မှာ ထားသလား၊ business ကို အကျိုး အများဆုံး ပေးသလား၊ SRE ကို အလုပ် မပိစေဘူးလား၊ တွဲလုပ်ရ လွယ်သလား ဆိုတာပါ။ [[mark:ask-question]] Bill Pay က pager တစ်ခုလုံး ယူပေးပါလို့ ထပ်တောင်းရင် အဲဒီအစား ဘာ ကမ်းလှမ်းမလဲ?
+      [[mark:pause-question]] အစဉ်စီထားတဲ့ ရလဒ်တွေ၊ အတူ လုပ်မယ့် project တစ်ခုနဲ့ ပြီးမယ့် ရက် ပါတဲ့ on-call ခွဲယူမှုကို ကမ်းလှမ်းနိုင်ပါတယ်။ Module ၅ မှာ SRE အဖွဲ့ လေးယောက် ဖြစ်လာပေမဲ့ အလုပ်ချိန်ကို တိုင်းကြည့်တော့ တစ်ပတ်ရဲ့ တစ်ဝက်ကျော်က လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ toil ဖြစ်နေပါတယ်။ ဘယ်ကနေ စမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Engagement Model",
+          url: "https://sre.google/workbook/engagement-model/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolving SRE Engagement Model",
+          url: "https://sre.google/sre-book/evolving-sre-engagement-model/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-engagement,
+          type: editor.select,
+          at: { mark: sel-engagement },
+          target: { file: notes.md, text: "engagement", occurrence: 1 },
+        }
+      - {
+          id: sel-outcomes,
+          type: editor.select,
+          at: { mark: sel-outcomes },
+          target: { file: notes.md, text: "အစဉ်စီထားတဲ့ ရလဒ်", occurrence: 1 },
+        }
+      - {
+          id: sel-shared-oncall,
+          type: editor.select,
+          at: { mark: sel-shared-oncall },
+          target: { file: notes.md, text: "on-call ခွဲယူတာ", occurrence: 1 },
+        }
+      - {
+          id: sel-handback,
+          type: editor.select,
+          at: { mark: sel-handback },
+          target: { file: notes.md, text: "ကြိုစီစဉ်ထားတဲ့ handback", occurrence: 1 },
+        }
+      - {
+          id: sel-nfr,
+          type: editor.select,
+          at: { mark: sel-nfr },
+          target: { file: notes.md, text: "nonfunctional requirement", occurrence: 1 },
+        }
+      - {
+          id: sel-hyrum,
+          type: editor.select,
+          at: { mark: sel-hyrum },
+          target: { file: notes.md, text: "Hyrum's law", occurrence: 1 },
+        }
+      - {
+          id: sel-four-checks,
+          type: editor.select,
+          at: { mark: sel-four-checks },
+          target: { file: notes.md, text: "စစ်စရာ လေးခု", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ (ask-question) already starts
+      # the question's own dialog, but a select right there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question with an
+      # offset: it starts about as the question ends, its drag runs in silence,
+      # and the answer at pause-question waits for it. The question is 77
+      # characters, so 5790 (400 + 77 x 70) starts the drag as the question ends
+      # at 70 ms per char and leaves about 2.8 / 1.6 / 0.5 s of quiet before the
+      # answer at 55 / 70 / 95; an offset above ~6000 trips compile-check's
+      # 2.5 s inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 5790 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: Bill Pay က pager တစ်ခုလုံး ယူပေးပါလို့ ထပ်တောင်းရင် pager အစား ဘာ ကမ်းလှမ်းမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
