@@ -1,0 +1,1227 @@
+# SRE from zero, lesson 10: Working an incident (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-10-working-an-incident.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-10-working-an-incident.md \
+#     src/studio/scripts/sre-10-working-an-incident.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Five marks add no spoken text and sit at an existing ။ or ၊:
+# b1-s1b draws the first two timeline ticks as "6:40" is said (the board opens
+# on the bare axis while the first sentence gives the answer); b2-s1b draws the
+# three hypothesis cards right after the ၊ that introduces them, so board B2's
+# first step adds the IC alone and the cards land as they are named (at most
+# three new elements per step); b2-s3b strikes the second hypothesis when the
+# narration reaches the database check (B3 step 3 is likewise split in two,
+# by an offset on b3-s3, so its two flows land as each is named); p03b-split
+# and p03c-split only split a dialog that would pass 450 characters (no action
+# uses them). The voice
+# script's ⟪select မေးခွန်း⟫ became ask-question: it already starts the
+# question's own dialog, so the question-line select hangs off it for the
+# ⟪pause 3s⟫, as in Module 1.
+#
+# No page or board step holds longer than ~34 s at 70 ms/char, so the lesson
+# needs no pacing pages beyond the voice script's own.
+#
+# Boards (B1 P8 timeline, B2 P2 comb downward, B3 P6 lanes). Colour jobs:
+# #1e1e1e ink (paints white) for the axis, arrows, the bus, tick times and
+# the neutral hypothesis cards; blue the person named (IC, Ko Min); green
+# healthy or done; red failure; orange the threshold (the burn-rate page) or
+# the caveat (the banner over marketing's objection); violet the result of a
+# redirect. A label on two lines is two text assets, one per line, so each
+# line meets the 0.55 em width rule on its own. Every label was also measured
+# in Chrome with the Virgil font and is narrower than its box.
+#
+# Deck pages: deck "Next Editor · SRE 3 · Respond and learn", published at the
+# /pub URL below. Until this lesson's pages are built into it, the Director
+# reports page l10_p01 missing from the deck; that error is expected until
+# then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-10-working-an-incident.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-10-working-an-incident.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-10-working-an-incident.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-10-working-an-incident
+  title: "SRE from zero 10: Incident တစ်ခုကို အစကနေ အဆုံးထိ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Incident တစ်ခုကို အစကနေ အဆုံးထိ
+
+        - triage — user ဘာ ခံစားနေရလဲကနေ ဘယ်လောက် ပြင်းလဲ မြန်မြန် ချိန်
+        - hypothesis — ဘာကြောင့်လဲ ယူဆချက်၊ owner က မှားကြောင်း သက်သေပြဖို့ ကြိုးစား
+        - mitigation — အကြောင်းရင်း မသိခင် user ကို အရင် အဆင်ပြေအောင်
+        - စောင့်ကြည့်ချိန် — fix ပြီးတာနဲ့ မပိတ်ဘဲ တည်ငြိမ်လား ခဏ စောင့်ကြည့်
+        - outcome bias — ရလဒ် ဆိုးလို့ ဆုံးဖြတ်ချက်ကိုပါ ဆိုးတယ်လို့ ထင်မိတာ
+
+        မေးခွန်း: engineer နှစ်ယောက်က မတူတဲ့ fix တွေကို တစ်ပြိုင်နက် ထည့်ချင်တယ်။ စည်းမျဉ်းက ဘာလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Incident တစ်ခုကို အစကနေ အဆုံးထိ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 10</p>
+              <h1>Incident တစ်ခုကို အစကနေ အဆုံးထိ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l10-p01
+      contentType: google
+      name: "Cover: payday, 6:40 p.m."
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p01
+    - id: l10-p01b
+      contentType: google
+      name: Top-ups an hour on payday
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p01b
+    - id: l10-p02
+      contentType: google
+      name: Ma Su's first three facts
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p02
+    - id: l10-p02b
+      contentType: google
+      name: The bigger the harm, the bolder the fix
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p02b
+    - id: l10-p03
+      contentType: google
+      name: Make users OK first
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p03
+    - id: l10-p03b
+      contentType: google
+      name: Judge by what was known then
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p03b
+    - id: l10-p03c
+      contentType: google
+      name: Can we close it?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p03c
+    - id: l10-p04
+      contentType: google
+      name: Padauk's drill card
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p04
+    - id: l10-p04b
+      contentType: google
+      name: Skills you can practise
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p04b
+    - id: l10-p04c
+      contentType: google
+      name: Before tools
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p04c
+    - id: l10-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l10_p05
+  whiteboardAssets:
+    # ---- Board B1: the payday timeline (P8) ----------------------------------
+    # An underline axis at y ≈ 400 with short filled ticks; the time sits next
+    # to the axis and the event beyond it, alternating above and below. Ticks
+    # are spaced roughly by time (5, 10, 10, then the 20-minute watch).
+    - {
+        id: l10-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 270,
+        y: 370,
+        width: 820,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b1-k1,
+        kind: rectangle,
+        x: 280,
+        y: 380,
+        width: 6,
+        height: 40,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l10-b1-k1-time,
+        kind: text,
+        x: 272,
+        y: 338,
+        width: 100,
+        height: 35,
+        text: "18:40",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k1-text,
+        kind: text,
+        x: 272,
+        y: 298,
+        width: 230,
+        height: 35,
+        text: "page + ticket",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k2,
+        kind: rectangle,
+        x: 370,
+        y: 380,
+        width: 6,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l10-b1-k2-time,
+        kind: text,
+        x: 362,
+        y: 428,
+        width: 100,
+        height: 35,
+        text: "18:45",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k2-text,
+        kind: text,
+        x: 362,
+        y: 468,
+        width: 170,
+        height: 35,
+        text: "IC: မသီရိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k3,
+        kind: rectangle,
+        x: 530,
+        y: 380,
+        width: 6,
+        height: 40,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l10-b1-k3-time,
+        kind: text,
+        x: 522,
+        y: 338,
+        width: 100,
+        height: 35,
+        text: "18:55",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k3-text,
+        kind: text,
+        x: 522,
+        y: 298,
+        width: 300,
+        height: 35,
+        text: "rollback: မပြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k4,
+        kind: rectangle,
+        x: 680,
+        y: 380,
+        width: 6,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l10-b1-k4-time,
+        kind: text,
+        x: 672,
+        y: 428,
+        width: 100,
+        height: 35,
+        text: "19:05",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k4-text1,
+        kind: text,
+        x: 672,
+        y: 468,
+        width: 300,
+        height: 35,
+        text: "backup endpoint ဆီ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k4-text2,
+        kind: text,
+        x: 672,
+        y: 508,
+        width: 90,
+        height: 35,
+        text: "လွှဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k5,
+        kind: rectangle,
+        x: 860,
+        y: 380,
+        width: 6,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l10-b1-k5-time,
+        kind: text,
+        x: 852,
+        y: 338,
+        width: 100,
+        height: 35,
+        text: "19:25",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k5-text1,
+        kind: text,
+        x: 852,
+        y: 258,
+        width: 240,
+        height: 35,
+        text: "စောင့်ကြည့်ပြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b1-k5-text2,
+        kind: text,
+        x: 852,
+        y: 298,
+        width: 90,
+        height: 35,
+        text: "ပိတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: three hypotheses at once (P2 comb, downward) -------------
+    # IC at the top, arrow down into a thin horizontal bus, an arrow down from
+    # the bus into each of three cards (x 262 / 549 / 836). Ko Min's label sits
+    # under the Operator A card; the mitigation box hangs below it.
+    - {
+        id: l10-b2-ic,
+        kind: rectangle,
+        x: 603,
+        y: 160,
+        width: 150,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l10-b2-ic-t,
+        kind: text,
+        x: 660,
+        y: 172,
+        width: 50,
+        height: 35,
+        text: "IC",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-ic-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 658,
+        y: 222,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-bus,
+        kind: rectangle,
+        x: 388,
+        y: 266,
+        width: 580,
+        height: 8,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 371,
+        y: 278,
+        width: 40,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c1,
+        kind: rectangle,
+        x: 262,
+        y: 330,
+        width: 258,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c1-t,
+        kind: text,
+        x: 274,
+        y: 347,
+        width: 225,
+        height: 35,
+        text: "မနေ့က release",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 658,
+        y: 278,
+        width: 40,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c2,
+        kind: rectangle,
+        x: 549,
+        y: 330,
+        width: 258,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c2-t,
+        kind: text,
+        x: 561,
+        y: 347,
+        width: 225,
+        height: 35,
+        text: "database pool",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 945,
+        y: 278,
+        width: 40,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c3,
+        kind: rectangle,
+        x: 836,
+        y: 330,
+        width: 258,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-c3-t,
+        kind: text,
+        x: 848,
+        y: 347,
+        width: 240,
+        height: 35,
+        text: "Operator A နှေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-km,
+        kind: text,
+        x: 846,
+        y: 408,
+        width: 250,
+        height: 35,
+        text: "ကိုမင်း · 7 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-x1,
+        kind: freedraw,
+        stroke: strike,
+        x: 270,
+        y: 345,
+        width: 240,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l10-b2-x2,
+        kind: freedraw,
+        stroke: strike,
+        x: 557,
+        y: 345,
+        width: 240,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l10-b2-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1040,
+        y: 284,
+        width: 50,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l10-b2-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 945,
+        y: 448,
+        width: 40,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b2-fix,
+        kind: rectangle,
+        x: 836,
+        y: 500,
+        width: 258,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l10-b2-fix-t1,
+        kind: text,
+        x: 848,
+        y: 512,
+        width: 240,
+        height: 35,
+        text: "backup endpoint",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b2-fix-t2,
+        kind: text,
+        x: 848,
+        y: 552,
+        width: 120,
+        height: 35,
+        text: "ဆီ လွှဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3: the Eats lunch call (P6 lanes) ----------------------------
+    # Top lane: the crowded call → the small core, with the banner note beside
+    # it. Middle lane: two redirect flows. Bottom lane: the extra people
+    # released. The arrows of the lower two lanes share one column (x 535).
+    - {
+        id: l10-b3-call,
+        kind: rectangle,
+        x: 270,
+        y: 180,
+        width: 190,
+        height: 95,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l10-b3-call-t1,
+        kind: text,
+        x: 282,
+        y: 190,
+        width: 170,
+        height: 35,
+        text: "call ထဲမှာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-call-t2,
+        kind: text,
+        x: 282,
+        y: 228,
+        width: 100,
+        height: 35,
+        text: "လူ 25",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 466,
+        y: 207,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b3-core,
+        kind: rectangle,
+        x: 522,
+        y: 180,
+        width: 290,
+        height: 95,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l10-b3-core-t1,
+        kind: text,
+        x: 534,
+        y: 190,
+        width: 270,
+        height: 35,
+        text: "IC + comms + ops",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-core-t2,
+        kind: text,
+        x: 534,
+        y: 228,
+        width: 230,
+        height: 35,
+        text: "ကျွမ်းကျင်သူ 3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-promo-t1,
+        kind: text,
+        x: 835,
+        y: 190,
+        width: 240,
+        height: 35,
+        text: "promo banner:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-promo-t2,
+        kind: text,
+        x: 835,
+        y: 228,
+        width: 90,
+        height: 35,
+        text: "ပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-m1,
+        kind: text,
+        x: 280,
+        y: 335,
+        width: 215,
+        height: 35,
+        text: "redesign အကြံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-m1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 332,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b3-m1-to,
+        kind: text,
+        x: 595,
+        y: 335,
+        width: 280,
+        height: 35,
+        text: "postmortem စာရင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-m2,
+        kind: text,
+        x: 280,
+        y: 405,
+        width: 245,
+        height: 35,
+        text: "အခြေခံ မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-m2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 402,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b3-m2-to,
+        kind: text,
+        x: 595,
+        y: 405,
+        width: 120,
+        height: 35,
+        text: "doc တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-rest,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 215,
+        height: 35,
+        text: "ကျန်တဲ့ လူတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l10-b3-rest-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 537,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l10-b3-rest-to,
+        kind: text,
+        x: 595,
+        y: 540,
+        width: 140,
+        height: 35,
+        text: "လွှတ်ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2610
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: လစာထုတ်ရက် ညနေ 6:40
+    narration: >
+      [[mark:show-p01]] လူ ၆၀ ရှိတဲ့ Viber group အစား Padauk က service တစ်ခုချင်းရဲ့ rotation တွေ၊ ဆန္ဒရှိတဲ့ senior တွေရဲ့ swarm နဲ့ incident role တွေကို သုံးနေပါပြီ။ လစာထုတ်ရက် ညနေ ၆ နာရီ ၄၀ မှာ Top-up ရဲ့ burn-rate page ဝင်လာပါတယ်၊ error budget ကို ပုံမှန်ထက် အများကြီး မြန်မြန် သုံးနေလို့ on-call ကျနေသူကို ခေါ်တဲ့ page ပါ။
+      [[mark:show-p01b]] အဲဒီ မိနစ်မှာပဲ support lead မစုဆီကိုလည်း ငွေဖြတ်သွားပေမဲ့ ဖုန်းဘေလ် မဝင်ဘူး ဆိုတဲ့ message တွေ ဝင်လာပါတယ်။ တစ်နာရီကို top-up ၁၀၀၀၀ လောက် ဝင်နေတဲ့ အချိန်မှာ on-call ကျနေတဲ့ မသီရိ ဘယ်ကနေ စမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l10-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l10-p01b }
+
+  - id: timeline
+    chapter: မိနစ် 45 ရဲ့ timeline
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] အဖြေက graph တွေကနေ မစဘဲ ဦးဆောင်မယ့်သူကို နာမည်နဲ့ သတ်မှတ်ပြီး user တွေ ဘာ ခံစားနေရလဲ မေးတာကနေ စတာပါ။ [[mark:b1-s1b]] ၆ နာရီ ၄၀ မှာ page နဲ့ support ticket တွေ အတူ ရောက်လာပြီး နှစ်ခုလုံးက အရေးကြီးတဲ့ signal ပါ။ ၆ နာရီ ၄၅ မှာ မသီရိက incident ကြေညာပြီး incident commander ဖြစ်လာပါတယ်၊ incident တစ်ခုလုံးကို ညှိနှိုင်းပြီး ဆုံးဖြတ်ချက်ချတဲ့သူပါ။
+      [[mark:b1-s2]] ၆ နာရီ ၅၅ မှာ မနေ့က release ကို rollback လုပ်ပေမဲ့ ဘာမှ မပြောင်းပါဘူး။ ၇ နာရီ ၅ မိနစ်မှာ backup endpoint ဆီ traffic လွှဲတော့မှ ဖုန်းဘေလ်တွေ ပြန်ဝင်လာပါတယ်။ incident မှာ ပြဿနာကို သိတာ၊ ဘယ်လောက် ဆိုးလဲ ချိန်တာ၊ အကြောင်းရင်း ရှာတာ၊ user ကို အဆင်ပြေအောင် လုပ်တာ၊ အပြီးတိုင် ပြင်တာ၊ သင်ယူတာ ဆိုတဲ့ အဆင့်တွေ ရှိပေမဲ့ ဒီညကလို fix မအောင်မြင်ရင် ရှာတဲ့ အဆင့်ကို ပြန်ရောက်လို့ မျဉ်းဖြောင့်အတိုင်း မသွားပါဘူး။
+      [[mark:b1-s3]] graph တွေ အစိမ်းရောင် ပြန်ဖြစ်ပေမဲ့ မိနစ် ၂၀ စောင့်ကြည့်ပြီးမှ ၇ နာရီ ၂၅ မှာ ပိတ်ကြောင်း ကြေညာပါတယ်။ ဒီ timeline က lesson ရဲ့ ကျောရိုးမို့ တစ်ဆင့်ချင်း ချဲ့ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      # The bare axis is furniture: it lands with the board, without drawMs.
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l10-b1-axis],
+        }
+      # The 18:40 and 18:45 ticks as the narration reaches "6:40".
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [l10-b1-k1, l10-b1-k1-time, l10-b1-k1-text, l10-b1-k2, l10-b1-k2-time, l10-b1-k2-text]
+        drawMs: 2000
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds:
+          [
+            l10-b1-k3,
+            l10-b1-k3-time,
+            l10-b1-k3-text,
+            l10-b1-k4,
+            l10-b1-k4-time,
+            l10-b1-k4-text1,
+            l10-b1-k4-text2,
+          ]
+        drawMs: 2400
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l10-b1-k5, l10-b1-k5-time, l10-b1-k5-text1, l10-b1-k5-text2]
+        drawMs: 1400
+
+  - id: triage
+    chapter: User ဘက်ကနေ triage
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] မသီရိက dashboard မဖွင့်ခင် မစုဆီက အချက် သုံးခု အရင် တောင်းပါတယ်၊ ငွေဖြတ်ပြီး ဖုန်းဘေလ် မဝင်တာ တကယ်လား၊ ဘယ် operator လဲ၊ များလာနေလား ဆိုတာပါ။ ဒီလို user ဘာ ခံစားနေရလဲ ဆိုတာကနေ ပြဿနာ ဘယ်လောက် ပြင်းလဲ မြန်မြန် ချိန်ပြီး ဘာကို အရင် လုပ်မလဲ ဆုံးဖြတ်တာကို triage လို့ ခေါ်ပါတယ်။
+      [[mark:show-p02b]] အဖြေက ငွေ တကယ် ဖြတ်သွားတယ်၊ ticket အများစုက Operator A ကနေ လာတယ်၊ များလာနေတယ် ဆိုတာပါ။ အချက် မစုံသေးပေမဲ့ လစာထုတ်ရက်မှာ ငွေ ဖြတ်ခံနေရတဲ့ user တွေ များလာပြီး ထိခိုက်မှု ကြီးနေတော့ မသီရိက ပိုရဲတဲ့ fix ကိုပါ လက်ခံမယ်လို့ ဆုံးဖြတ်ပါတယ်၊ ထိခိုက်မှု သေးရင်တော့ သတိထားပြီး ဖြည်းဖြည်း လုပ်ရပါတယ်။ PagerDuty ရဲ့ public incident လမ်းညွှန်ထဲက severity အဆင့်တွေနဲ့လည်း ထိခိုက်မှုကို ချိန်လို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+      - {
+          title: "PagerDuty Incident Response docs: Severity Levels",
+          url: "https://response.pagerduty.com/before/severity_levels/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l10-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l10-p02b }
+
+  - id: hypotheses
+    chapter: Hypothesis သုံးခု တစ်ပြိုင်နက်
+    narration: >
+      [[mark:close-p02b]] [[mark:b2-s1]] မသီရိက ဘာကြောင့် ဖြစ်နေလဲ ဆိုတဲ့ ယူဆချက်၊ hypothesis သုံးခုကို ချရေးပါတယ်၊ [[mark:b2-s1b]] မနေ့က release၊ database connection pool ပြည့်နေတာနဲ့ Operator A နှေးနေတာပါ။ တစ်ခုစီကို owner တစ်ယောက်စီ ပေးပြီး မှန်ကြောင်း မဟုတ်ဘဲ မှားကြောင်း သက်သေပြဖို့ ကြိုးစားခိုင်းပါတယ်၊ ဒါမှ ကိုယ်ထင်ထားတာကိုပဲ မြင်မိတဲ့ confirmation bias ကို ကာကွယ်နိုင်ပါတယ်။
+      [[mark:b2-s2]] Operator A ကိုတော့ Top-up developer ကိုမင်းကို ပေးပါတယ်၊ ကိုမင်း၊ latency ကို စစ်ပြီး ၇ နာရီမှာ ပြန်ပြောပါလို့ နာမည်နဲ့ အချိန် တပ်ပြီး ခိုင်းတာပါ။ ကိုမင်းက operator အလိုက် latency ကို ဘယ်မှာ ကြည့်ရမလဲ မသိလို့ ၁၀ မိနစ်ထဲက အများစုဟာ မှန်တဲ့ dashboard ရှာရင်း ကုန်သွားပါတယ်။ ဒါ သူ့ အပြစ် မဟုတ်ပါဘူး၊ tool တွေကို incident မတိုင်ခင် ကြိုသုံးတတ်ထားရပါမယ်။
+      [[mark:b2-s3]] ပြင်တဲ့ အလုပ်ကို ဦးဆောင်တဲ့ operations lead က rollback လုပ်ကြည့်တော့ ဘာမှ မပြောင်းလို့ ပထမ hypothesis ပြုတ်သွားပါတယ်။ [[mark:b2-s3b]] swarm ထဲက volunteer တစ်ယောက်ကလည်း database မှာ connection တွေ လွတ်နေတာ တွေ့လို့ ဒုတိယ တစ်ခုလည်း ပြုတ်ပါတယ်။ စစ်တာ သုံးခု တစ်ပြိုင်နက် လုပ်ပေမဲ့ production ပြောင်းတာကိုတော့ operations lead ကနေ တစ်ကြိမ်မှာ တစ်ခုပဲ လုပ်ပါတယ်၊ နှစ်ခု တစ်ပြိုင်နက် ဝင်ရင် ဘယ်ဟာက ဘာ ဖြစ်စေလဲ မသိနိုင်တော့လို့ပါ။
+      [[mark:b2-s4]] ၇ နာရီမှာ ကိုမင်းက Operator A မှာ timeout တွေ တွေ့ကြောင်း ပြောတော့ operations lead က backup endpoint ဆီ traffic လွှဲလိုက်ပါတယ်။ ကြည့်၊ နားလည်၊ ဆုံးဖြတ်၊ လုပ်တဲ့ စက်ဝိုင်းကို hypothesis တစ်ခုချင်း ပတ်ရင် နှေးလို့ လူ သုံးယောက် ရှိတော့ သုံးခု တစ်ပြိုင်နက် စစ်တာပါ။ ရှာတာကလည်း fix ရွေးနိုင်ဖို့ပါ၊ root cause တစ်ခုတည်းကို လိုက်ရှာဖို့ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+      - { title: "OODA loop (Wikipedia)", url: "https://en.wikipedia.org/wiki/OODA_loop" }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      # Step 1 in two: the IC, its arrow and the bus land with the board; the
+      # three cards are drawn in right after the ၊ that introduces them.
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l10-b2-ic, l10-b2-ic-t, l10-b2-ic-a, l10-b2-bus],
+        }
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds:
+          [
+            l10-b2-a1,
+            l10-b2-c1,
+            l10-b2-c1-t,
+            l10-b2-a2,
+            l10-b2-c2,
+            l10-b2-c2-t,
+            l10-b2-a3,
+            l10-b2-c3,
+            l10-b2-c3-t,
+          ]
+        drawMs: 2400
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l10-b2-km],
+          drawMs: 900,
+        }
+      # Step 3 in two: each strike lands as the narration rules that idea out.
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l10-b2-x1],
+          drawMs: 800,
+        }
+      - {
+          id: b2-s3b,
+          type: whiteboard.apply,
+          at: { mark: b2-s3b },
+          upsertIds: [l10-b2-x2],
+          drawMs: 800,
+        }
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l10-b2-ok, l10-b2-a4, l10-b2-fix, l10-b2-fix-t1, l10-b2-fix-t2]
+        drawMs: 2000
+
+  - id: mitigate-first
+    chapter: User ကို အရင် အဆင်ပြေအောင်
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] Operator A ဘာကြောင့် နှေးလဲ မသိသေးဘဲ backup endpoint ဆီ လွှဲလိုက်သလို အကြောင်းရင်း မသိခင် user ထိခိုက်မှုကို ရပ်အောင် ဒါမှမဟုတ် လျှော့အောင် လုပ်တာက mitigation ပါ။ user ကို အရင် အဆင်ပြေအောင် လုပ်ရပါတယ်၊ တစ်စိတ်တစ်ပိုင်း သက်သာတာတောင် ကောင်းပါတယ်။
+      ဒီညပြီးတော့ Padauk က ဘယ်ပြဿနာမှာမဆို သုံးလို့ရတဲ့ fix စာရင်းကို ရေးထားပါတယ်၊ rollback၊ capacity တိုးတာ၊ restart လုပ်တာ၊ traffic လွှဲတာ၊ feature ပိတ်တာနဲ့ provider ပြောင်းတာပါ။
+      [[mark:show-p03b]] fix တိုင်းက စမ်းသပ်ချက်လည်း ဖြစ်ပါတယ်။ ဒီညက rollback က user ကို မကယ်နိုင်ပေမဲ့ release ကို သံသယ စာရင်းက ဖယ်ပေးခဲ့ပါတယ်၊ version အဟောင်းက data အသစ်ကို ဖတ်နိုင်လို့သာ လုပ်လို့ရခဲ့တာပါ။ အဲဒါကို အချိန်ဖြုန်းတာလို့ ပြောရင် ရလဒ် ဆိုးလို့ ဆုံးဖြတ်ချက်ကိုပါ ဆိုးတယ်လို့ ထင်မိတဲ့ outcome bias ပါ၊ အဲဒီတုန်းက သိတာနဲ့ ချိန်ရင် ဆီလျော်ပါတယ်။
+      [[mark:p03b-split]] ဆီလျော်တဲ့ fix က ပိုဆိုးသွားလို့ အပြစ်ပေးရင် လူတွေ ချီတုံချတုံ ဖြစ်လာမှာပါ၊ ဘာမှ မလုပ်ဘဲ စောင့်တာလည်း ကုန်ကျစရိတ် ရှိတဲ့ ရွေးချယ်မှုပါ။
+      [[mark:show-p03c]] ဒါဆို incident ကို ဘယ်တော့ ပိတ်မလဲ? fix ပြီးတာနဲ့ မပိတ်ဘဲ စောင့်ကြည့်ချိန် ထားပြီး တည်ငြိမ်ရဲ့လား ခဏ ကြည့်ရပါတယ်။ ကျန်တဲ့ အလုပ်ကို ပုံမှန် အလုပ်ချိန်ထဲ လုပ်လို့ရပြီလား၊ မှားတဲ့ ပြောင်းလဲမှုကို rollback လုပ်ပြီး ပြန်မဝင်အောင် တားထားပြီလား၊ ဘာကြောင့်လဲ သိပြီး ထပ်မဖြစ်တော့ဘူးလား၊ အဲဒီထဲက တစ်ခု ဟုတ်ရင် ပိတ်လို့ရပါတယ်။
+      [[mark:p03c-split]] ဒီညက ပထမ တစ်ခုပါ၊ ပင်မ endpoint ကို ပြန်သုံးဖို့ အပြီးတိုင် ပြင်တဲ့ resolution ကို နောက်နေ့ လုပ်နိုင်လို့ ပိတ်ကြောင်း channel တိုင်းမှာ ကြေညာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l10-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l10-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l10-p03c }
+
+  - id: eats-call
+    chapter: လူ 25 ယောက်ရဲ့ call
+    narration: >
+      [[mark:close-p03c]] [[mark:b3-s1]] အဲဒီ လထဲမှာပဲ Padauk Eats မှာ နေ့လယ်စာချိန် order တင်မရတဲ့ outage ဖြစ်တော့ incident call ထဲကို လူ ၂၅ ယောက် ရောက်လာပါတယ်။ marketing က ဘယ်တော့ ပြီးမလဲလို့ ခဏခဏ မေးနေပြီး senior developer တစ်ယောက်ကလည်း dispatch service ကို ပြန်ရေးရမယ်လို့ ငြင်းနေပါတယ်။
+      [[mark:b3-s2]] Eats အဖွဲ့က အလယ်အလတ်အဆင့် engineer ဖြစ်တဲ့ incident commander က communications lead ကို ခန့်ပြီး update တွေကို channel တစ်ခုတည်းမှာ တင်ခိုင်းပါတယ်၊ call ထဲမှာတော့ operations lead နဲ့ ကျွမ်းကျင်သူ သုံးယောက်ပဲ ချန်ထားပါတယ်။
+      [[mark:b3-s3]] redesign အကြံကို incident ပြီးမှ လုပ်မယ့် postmortem စာရင်းထဲ မှတ်ခိုင်းပြီး အခြေခံ မေးခွန်းတွေကို doc တွေဆီ လမ်းညွှန်ပါတယ်။ incident commander က ရာထူး မရွေး ဦးဆောင်တာမို့ senior တွေကလည်း လိုက်နာကြပါတယ်။ [[mark:b3-s4]] ကျန်တဲ့ လူတွေကိုတော့ ကျေးဇူးတင်ပြီး လွှတ်ပေးပါတယ်၊ လိုရင် chat ထဲမှာ နာမည် တပ်ရုံ မဟုတ်ဘဲ page ပို့ပြီး ခေါ်မှာပါ။
+      [[mark:b3-s5]] incident commander ကိုယ်တိုင် ဝင်မပြင်ဘဲ ညှိတာကိုပဲ လုပ်ပါတယ်။ promo banner ကြောင့် တိုးလာတဲ့ traffic က database ကို ဝန်ပိနေတာ တွေ့တော့ ပြဿနာက dispatch မဟုတ်ဘူး ဆိုတာ အားလုံး ကြားအောင် ပြောပြီး marketing ကန့်ကွက်ပေမဲ့ banner ကို ပိတ်ခိုင်းလိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "PagerDuty Incident Response docs: Different Roles",
+          url: "https://response.pagerduty.com/before/different_roles/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l10-b3-call, l10-b3-call-t1, l10-b3-call-t2],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l10-b3-a1, l10-b3-core, l10-b3-core-t1, l10-b3-core-t2],
+          drawMs: 1600,
+        }
+      # Step 3 in two, so no apply adds more than three labels: the redesign
+      # flow lands at the mark, and the basic-questions flow lands as the
+      # sentence reaches "အခြေခံ မေးခွန်း" (77 characters in). That sentence
+      # has no ၊ to carry a mark of its own, so the second half hangs off b3-s3
+      # with an offset: by the compiler's word estimate it lands on the words at
+      # 70 ms/char, ~1.1 s after them at 55 and ~1.7 s before them at 95.
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l10-b3-m1, l10-b3-m1-a, l10-b3-m1-to],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s3b,
+          type: whiteboard.apply,
+          at: { mark: b3-s3, offsetMs: 5000 },
+          upsertIds: [l10-b3-m2, l10-b3-m2-a, l10-b3-m2-to],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s4,
+          type: whiteboard.apply,
+          at: { mark: b3-s4 },
+          upsertIds: [l10-b3-rest, l10-b3-rest-a, l10-b3-rest-to],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s5,
+          type: whiteboard.apply,
+          at: { mark: b3-s5 },
+          upsertIds: [l10-b3-promo-t1, l10-b3-promo-t2],
+          drawMs: 1000,
+        }
+
+  - id: drill-card
+    chapter: Padauk ရဲ့ drill card
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] ဒီ incident နှစ်ခုကနေ Padauk က စည်းမျဉ်း သုံးခု ပါတဲ့ drill card လေး တစ်ခု ထုတ်ပါတယ်။ ပထမက နာမည်နဲ့ အချိန် တပ်ပြီး ခိုင်းဖို့ပါ၊ ဘယ်သူ ကြည့်ပေးမလဲလို့ မေးရင် lesson ၉ က bystander effect လို လူတိုင်း တခြားသူကို စောင့်နေကြလို့ပါ။ ခိုင်းခံရသူကလည်း မရှင်းရင် မေးရဲရပါမယ်။ ဒုတိယက redesign စကားကို postmortem အထိ ချန်ထားဖို့၊ တတိယက မလိုတော့တဲ့ လူကို အသံထွက်ပြီး လွှတ်ပေးဖို့ပါ။
+      [[mark:show-p04b]] system တစ်ခုလုံးကို မြင်တာ၊ အချက် မစုံခင် ဆုံးဖြတ်ရဲတာ၊ နာမည်နဲ့ ရှင်းရှင်း ခိုင်းတာ၊ ဖိအားအောက်မှာ စိတ်ငြိမ်တာ ဆိုတဲ့ စွမ်းရည်တွေက မွေးရာပါ မဟုတ်ဘဲ လေ့ကျင့်လို့ရပါတယ်။ ဒါကြောင့် Padauk က လတိုင်း မိနစ် ၃၀ ကြာ incident ဟောင်း တစ်ခုကို ပြန်သရုပ်ဆောင်တဲ့ role-play လုပ်ပြီး အတွေ့အကြုံ ရှိသူတွေက ဘာကြောင့် ဒီလို ဆုံးဖြတ်လဲ အသံထွက် တွေးပြပါတယ်။
+      [[mark:show-p04c]] tool အသစ် မဝယ်ခင် ယဉ်ကျေးမှုနဲ့ role တွေကို အရင် ခိုင်မာအောင် လုပ်ပါ၊ အပြစ်တင်ခံရမှာ ကြောက်တဲ့ အဖွဲ့က ဘယ် tool နဲ့မဆို အမှားကို ဖုံးထားကြမှာပါ။ role ရှင်းပြီး လေ့ကျင့်ထားတဲ့ အဖွဲ့က အလောတကြီး မလုပ်ဘဲ incident ကို ပိုမြန်မြန် ပြီးစေပါတယ်။ incident ပိတ်လိုက်ပေမဲ့ loop ရဲ့ နောက်တစ်ဆင့်၊ သင်ယူတာ ကျန်ပါသေးတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l10-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l10-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l10-p04c }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p05]] နောက် incident မတိုင်ခင် ဒီအပတ် လုပ်ထားစရာ သုံးခုပါ။ ကိုယ့် service အတွက် ဘယ်ပြဿနာမှာမဆို သုံးလို့ရတဲ့ fix စာရင်းကို ရေးထားပါ။ incident ဟောင်း တစ်ခုကို အဖွဲ့လိုက် role-play လုပ်ကြည့်ပါ။ ပြီးတော့ ကိုမင်း၊ ဒါကို ၇ နာရီမှာ စစ်ပြီး ပြန်ပြောပါ ဆိုသလို ခိုင်းတာကို လေ့ကျင့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l10-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] အဲဒီ ၄၅ မိနစ်ကို ချုံ့ကြည့်ရအောင်။ [[mark:sel-triage]] triage က user တွေ ဘာ ခံစားနေရလဲကနေ ပြဿနာ ဘယ်လောက် ပြင်းလဲ မြန်မြန် ချိန်တာပါ။ [[mark:sel-hypothesis]] hypothesis က ဘာကြောင့်လဲ ဆိုတဲ့ ယူဆချက်ဖြစ်ပြီး owner တစ်ယောက်က မှားကြောင်း သက်သေပြဖို့ ကြိုးစားရပါတယ်။
+      [[mark:sel-mitigation]] mitigation က အကြောင်းရင်း မသိခင် user တွေကို အရင် အဆင်ပြေအောင် လုပ်တာပါ။ [[mark:sel-watch]] စောင့်ကြည့်ချိန်က fix ပြီးတာနဲ့ မပိတ်ဘဲ တည်ငြိမ်ရဲ့လား ခဏ စောင့်ကြည့်တာဖြစ်ပြီး၊ [[mark:sel-outcome]] outcome bias ကတော့ ရလဒ် ဆိုးလို့ ဆုံးဖြတ်ချက်ကိုပါ ဆိုးတယ်လို့ ထင်မိတာပါ။
+      [[mark:ask-question]] ဒါဆို incident တစ်ခုအတွင်း engineer နှစ်ယောက်က မတူတဲ့ fix တွေကို တစ်ချိန်တည်း production ထဲ ထည့်ချင်နေရင် စည်းမျဉ်းက ဘာလဲ?
+      [[mark:pause-question]] operations lead ကနေ တစ်ကြိမ်မှာ ပြောင်းလဲမှု တစ်ခုပဲ ထည့်ရပါမယ်။ တစ်ပတ်အကြာ promotion တစ်ခုအတွင်း Wallet က user တချို့ဆီက ငွေ နှစ်ခါ ဖြတ်မိသွားပါတယ်။ code အပြောင်းအလဲကို ရေးခဲ့တဲ့သူကို အပြစ်မရှာဘဲ ဒီ incident ကနေ ဘာ သင်ခန်းစာ ယူမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+      - { title: "OODA loop (Wikipedia)", url: "https://en.wikipedia.org/wiki/OODA_loop" }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-triage,
+          type: editor.select,
+          at: { mark: sel-triage },
+          target: { file: notes.md, text: "triage", occurrence: 1 },
+        }
+      - {
+          id: sel-hypothesis,
+          type: editor.select,
+          at: { mark: sel-hypothesis },
+          target: { file: notes.md, text: "hypothesis", occurrence: 1 },
+        }
+      - {
+          id: sel-mitigation,
+          type: editor.select,
+          at: { mark: sel-mitigation },
+          target: { file: notes.md, text: "mitigation", occurrence: 1 },
+        }
+      - {
+          id: sel-watch,
+          type: editor.select,
+          at: { mark: sel-watch },
+          target: { file: notes.md, text: "စောင့်ကြည့်ချိန်", occurrence: 1 },
+        }
+      - {
+          id: sel-outcome,
+          type: editor.select,
+          at: { mark: sel-outcome },
+          target: { file: notes.md, text: "outcome bias", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. The ⟪select မေးခွန်း⟫ mark (ask-question) already
+      # starts the question's own dialog, but a select right there would drag
+      # under the question and leave no pause, and one at pause-question would
+      # drag under the answer's first words (the scheduler holds only the dialog
+      # after its anchor's). So the question-line select hangs off ask-question
+      # with an offset of about the question's length: it starts about as the
+      # question ends, its drag runs in silence, and the answer at
+      # pause-question waits for it. The question is 122 characters with no ၊
+      # to split at, so the quiet depends on the voice's speed: 8450 leaves
+      # about 2.8 / 1.0 / 0.35 s before the answer at 55 / 70 / 95 ms per char
+      # (at 95 the drag starts under the question's last words, as in lesson 7);
+      # an offset above ~8480 trips compile-check's 2.5 s inserted-silence
+      # warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 8450 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: engineer နှစ်ယောက်က မတူတဲ့ fix တွေကို တစ်ပြိုင်နက် ထည့်ချင်တယ်။ စည်းမျဉ်းက ဘာလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
