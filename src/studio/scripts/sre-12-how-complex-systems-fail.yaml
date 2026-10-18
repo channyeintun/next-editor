@@ -1,0 +1,1272 @@
+# SRE from zero, lesson 12: How complex systems fail (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-12-how-complex-systems-fail.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-12-how-complex-systems-fail.md \
+#     src/studio/scripts/sre-12-how-complex-systems-fail.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# One mark adds no spoken text and sits at an existing ၊: b1-s1b splits board
+# B1's first step so no step adds more than three labelled elements (the first
+# two cheese slices land with "let's draw it", the last two as the narration
+# reaches the canary). The voice script's own pacing pages (l12_p01b, p01c,
+# p01d, p02b, p02c, p02d, p03b, p03c, p04b) keep every page or board step under
+# ~30 s at 70 ms/char, so no other pacing mark was needed.
+#
+# ⟪close board⟫ straight into the next board (scene 4) wipes the open board
+# 400 ms early (whiteboard.apply clear) instead of closing the panel, as in
+# lesson 8, so the editor does not flash between two boards; the next board
+# then draws with open: true, clear: true as usual. A board followed by a deck
+# page closes the panel (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards (B1 Swiss cheese slices, B2 drift toward a red boundary, B3 P5 bars).
+# Colour jobs: #1e1e1e ink (paints white) for titles, arrows, holes and the
+# axis; blue the thing named (the defence layers, the Wallet team's shortcuts,
+# the spare-capacity bars); green healthy or done (luck, the safe zone, the
+# fixes, success still fine); red failure (the push, the boundary, the outage,
+# the cliff); orange the caveat (the long-standing gap, "root cause", the
+# pressures, where postmortems react, what to watch). A label on two lines is
+# two text assets, one per line, so each line meets the 0.55 em width rule on
+# its own.
+#
+# Deck pages: deck "Next Editor · SRE 3 · Respond and learn", published at the
+# /pub URL below. Until Lesson 12's pages are built in it, the Director stops
+# at 'page "l12_p01" is not in the published deck' (expected before the pages
+# step; schema, marks, dialogs and critic pass). Page plan:
+# ~/Documents/sre-course/work/pages/sre-12-how-complex-systems-fail.json
+# The cover title keeps the voice script's 37 code points, past the K1 title's
+# safe 34 (a pure-Burmese bound): 27 of them are Burmese, and even at 0.54 em
+# per code point the line is ~565 of 586 pt; deck-kit.md measured a 37-code-
+# point mixed title at the same 30 pt bold at 492 pt. Confirm on the thumbnail.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-12-how-complex-systems-fail.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-12-how-complex-systems-fail.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-12-how-complex-systems-fail
+  title: "SRE from zero 12: ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ
+
+        - complex system — အပိုင်းတိုင်း ကောင်းလည်း ဆက်ဆံရာကနေ ပျက်နိုင်
+        - Swiss cheese — အလွှာတွေရဲ့ အပေါက်တွေ တစ်တန်းတည်း ကျမှ incident
+        - near miss — ကံကြောင့်သာ အကြီးအကျယ် မဖြစ်လိုက်တဲ့ အဖြစ်
+        - drift — ဖြတ်လမ်းတွေ ပုံမှန်ဖြစ်ပြီး အန္တရာယ်ဆီ မသိမသာ ရွေ့
+        - Safety-II — ပုံမှန် နေ့တွေ ဘာကြောင့် အောင်မြင်လဲ လေ့လာ
+        - ချောက်ကမ်းပါး ပြုတ်ကျ (decompensation) — ငြိမ်ငြိမ်ခံရင်း အပို ကုန်တော့ ရုတ်တရက် ပြို
+
+        မေးခွန်း: ကိုယ့် system ထဲမှာ လနဲ့ချီပြီး ပွင့်နေတဲ့ အပေါက် တစ်ခုကို နာမည် တပ်ပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 12</p>
+              <h1>ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l12-p01
+      contentType: google
+      name: "Cover: a near miss on payday"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p01
+    - id: l12-p01b
+      contentType: google
+      name: What happened
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p01b
+    - id: l12-p01c
+      contentType: google
+      name: Near miss
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p01c
+    - id: l12-p01d
+      contentType: google
+      name: Which part broke?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p01d
+    - id: l12-p02
+      contentType: google
+      name: Simple versus complex
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p02
+    - id: l12-p02b
+      contentType: google
+      name: People are part of the system
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p02b
+    - id: l12-p02c
+      contentType: google
+      name: A new question
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p02c
+    - id: l12-p02d
+      contentType: google
+      name: A payday that went well
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p02d
+    - id: l12-p03
+      contentType: google
+      name: Learn from good days
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p03
+    - id: l12-p03b
+      contentType: google
+      name: Turn a good trick into a tool
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p03b
+    - id: l12-p03c
+      contentType: google
+      name: Always partly broken
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p03c
+    - id: l12-p04
+      contentType: google
+      name: Ready-made moves
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p04
+    - id: l12-p04b
+      contentType: google
+      name: Did the learning work?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p04b
+    - id: l12-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l12_p05
+  whiteboardAssets:
+    # ---- Board B1: Swiss cheese, four slices left to right -------------------
+    # Slices sit 240 px apart so the hole labels fit in the gaps; the holes on
+    # the arrow row (y 287) line up in slices 1-3 and slice 4 has none there.
+    - {
+        id: l12-b1-s1,
+        kind: rectangle,
+        x: 280,
+        y: 230,
+        width: 60,
+        height: 240,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l12-b1-s1-h1,
+        kind: ellipse,
+        x: 292,
+        y: 287,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s1-h2,
+        kind: ellipse,
+        x: 292,
+        y: 395,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s1-t,
+        kind: text,
+        x: 280,
+        y: 485,
+        width: 175,
+        height: 35,
+        text: "code review",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-s2,
+        kind: rectangle,
+        x: 520,
+        y: 230,
+        width: 60,
+        height: 240,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l12-b1-s2-h1,
+        kind: ellipse,
+        x: 532,
+        y: 287,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s2-h2,
+        kind: ellipse,
+        x: 532,
+        y: 425,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s2-t,
+        kind: text,
+        x: 520,
+        y: 485,
+        width: 190,
+        height: 35,
+        text: "config check",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-s3,
+        kind: rectangle,
+        x: 760,
+        y: 230,
+        width: 60,
+        height: 240,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l12-b1-s3-h1,
+        kind: ellipse,
+        x: 772,
+        y: 287,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s3-h2,
+        kind: ellipse,
+        x: 772,
+        y: 370,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s3-t,
+        kind: text,
+        x: 760,
+        y: 485,
+        width: 150,
+        height: 35,
+        text: "5% canary",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-s4,
+        kind: rectangle,
+        x: 1000,
+        y: 230,
+        width: 60,
+        height: 240,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l12-b1-s4-h1,
+        kind: ellipse,
+        x: 1012,
+        y: 355,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s4-h2,
+        kind: ellipse,
+        x: 1012,
+        y: 425,
+        width: 36,
+        height: 26,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b1-s4-t1,
+        kind: text,
+        x: 950,
+        y: 485,
+        width: 145,
+        height: 35,
+        text: "support +",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-s4-t2,
+        kind: text,
+        x: 950,
+        y: 520,
+        width: 85,
+        height: 35,
+        text: "alert",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 335,
+        y: 280,
+        width: 185,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l12-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 575,
+        y: 280,
+        width: 185,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l12-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 815,
+        y: 280,
+        width: 182,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l12-b1-luck,
+        kind: text,
+        x: 1012,
+        y: 282,
+        width: 40,
+        height: 35,
+        text: "ကံ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-active-1,
+        kind: text,
+        x: 345,
+        y: 330,
+        width: 160,
+        height: 35,
+        text: "ချက်ချင်း:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-active-2,
+        kind: text,
+        x: 345,
+        y: 365,
+        width: 70,
+        height: 35,
+        text: "push",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-latent-1,
+        kind: text,
+        x: 585,
+        y: 330,
+        width: 130,
+        height: 35,
+        text: "လနဲ့ချီ:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-latent-2,
+        kind: text,
+        x: 585,
+        y: 365,
+        width: 160,
+        height: 35,
+        text: "check မရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b1-root,
+        kind: text,
+        x: 280,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "root cause = မေးတာ ရပ်တဲ့ နေရာ",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: l12-b1-fix,
+        kind: text,
+        x: 280,
+        y: 580,
+        width: 560,
+        height: 35,
+        text: "+ endpoint check · + ဘေလ် ဝင်လား စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: drift toward a red boundary --------------------------------
+    - {
+        id: l12-b2-zone,
+        kind: rectangle,
+        x: 255,
+        y: 300,
+        width: 260,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l12-b2-zone-t,
+        kind: text,
+        x: 268,
+        y: 337,
+        width: 235,
+        height: 35,
+        text: "ဘေးကင်းတဲ့ ဇုန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 525,
+        y: 335,
+        width: 58,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 591,
+        y: 335,
+        width: 58,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b2-line,
+        kind: rectangle,
+        x: 800,
+        y: 190,
+        width: 12,
+        height: 400,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l12-b2-line-t,
+        kind: text,
+        x: 830,
+        y: 195,
+        width: 130,
+        height: 35,
+        text: "အန္တရာယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 657,
+        y: 335,
+        width: 58,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b2-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 723,
+        y: 335,
+        width: 74,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b2-wallet,
+        kind: text,
+        x: 385,
+        y: 425,
+        width: 410,
+        height: 35,
+        text: "Wallet: 6 လ၊ ဖြတ်လမ်း 4 ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-hit,
+        kind: freedraw,
+        stroke: circle,
+        x: 765,
+        y: 318,
+        width: 70,
+        height: 74,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l12-b2-outage-1,
+        kind: text,
+        x: 830,
+        y: 400,
+        width: 235,
+        height: 35,
+        text: "သင်္ကြန် အကြို:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-outage-2,
+        kind: text,
+        x: 830,
+        y: 435,
+        width: 265,
+        height: 35,
+        text: "Wallet 1 နာရီ ရပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-push-1,
+        kind: text,
+        x: 530,
+        y: 245,
+        width: 250,
+        height: 35,
+        text: "ပိုမြန်မြန် ထုတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-push-2,
+        kind: text,
+        x: 530,
+        y: 285,
+        width: 235,
+        height: 35,
+        text: "ပိုလွယ်တဲ့ နည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-safety,
+        kind: rectangle,
+        x: 410,
+        y: 500,
+        width: 385,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l12-b2-safety-t,
+        kind: text,
+        x: 422,
+        y: 512,
+        width: 360,
+        height: 35,
+        text: "safety အလုပ်က ပြန်တွန်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-pm-1,
+        kind: text,
+        x: 830,
+        y: 500,
+        width: 190,
+        height: 35,
+        text: "postmortem က",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b2-pm-2,
+        kind: text,
+        x: 830,
+        y: 535,
+        width: 115,
+        height: 35,
+        text: "ဒီမှာမှ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: spare capacity as servers fail (P5 bars) ------------------
+    - {
+        id: l12-b3-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 485,
+        height: 45,
+        text: "rider location: server 8",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l12-b3-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 430,
+        width: 760,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l12-b3-caption,
+        kind: text,
+        x: 280,
+        y: 475,
+        width: 190,
+        height: 35,
+        text: "server ပျက်:",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-t0,
+        kind: text,
+        x: 510,
+        y: 475,
+        width: 30,
+        height: 35,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-t2,
+        kind: text,
+        x: 730,
+        y: 475,
+        width: 30,
+        height: 35,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-t4,
+        kind: text,
+        x: 950,
+        y: 475,
+        width: 30,
+        height: 35,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-bar0,
+        kind: rectangle,
+        x: 480,
+        y: 300,
+        width: 80,
+        height: 160,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l12-b3-bar0-t,
+        kind: text,
+        x: 470,
+        y: 262,
+        width: 140,
+        height: 35,
+        text: "အပို 40%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-bar2,
+        kind: rectangle,
+        x: 700,
+        y: 380,
+        width: 80,
+        height: 80,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l12-b3-bar2-t,
+        kind: text,
+        x: 690,
+        y: 342,
+        width: 140,
+        height: 35,
+        text: "အပို 20%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-ok0,
+        kind: freedraw,
+        stroke: check,
+        x: 495,
+        y: 212,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l12-b3-ok2,
+        kind: freedraw,
+        stroke: check,
+        x: 715,
+        y: 292,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l12-b3-x4,
+        kind: freedraw,
+        stroke: strike,
+        x: 920,
+        y: 395,
+        width: 80,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l12-b3-storm,
+        kind: text,
+        x: 890,
+        y: 355,
+        width: 180,
+        height: 35,
+        text: "retry storm",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-cliff-1,
+        kind: text,
+        x: 890,
+        y: 270,
+        width: 205,
+        height: 35,
+        text: "ချောက်ကမ်းပါး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-cliff-2,
+        kind: text,
+        x: 890,
+        y: 305,
+        width: 115,
+        height: 35,
+        text: "ပြုတ်ကျ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l12-b3-watch,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 620,
+        height: 35,
+        text: "success ချည်း မဟုတ်၊ အပိုကို စောင့်ကြည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2612
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: လစာထုတ်ရက်ရဲ့ near miss
+    narration: >
+      [[mark:show-p01]] ငွေ နှစ်ခါ ဖြတ်ခဲ့တဲ့ ည နောက်မှာ Wallet ကိုလည်း idempotency key တွေ တပ်ပြီးပြီ၊ postmortem template ကလည်း ကံကောင်းခဲ့တာကိုပါ မေးလာပါပြီ။ နောက်လ လစာထုတ်ရက် ညနေမှာတော့ Operator B က endpoint ပြောင်းလိုက်လို့ Top-up engineer တစ်ယောက်က doc ဟောင်းထဲက address ကို config ထဲ ကူးထည့်ပြီး push လုပ်လိုက်ပါတယ်။
+      [[mark:show-p01b]] အဲဒီ address က Operator B ရဲ့ test endpoint ဟောင်း ဖြစ်နေပါတယ်။ test endpoint က top-up တိုင်းကို အောင်မြင်တယ်လို့ ပြန်ဖြေလို့ dashboard တွေက အစိမ်းရောင်ပဲ ပြနေပေမဲ့ user တွေရဲ့ ဖုန်းထဲကို ဘေလ် တကယ် မဝင်ပါဘူး။ code review ရော၊ config check ရော၊ canary ရော ဒါကို မဖမ်းမိခဲ့ပါဘူး။
+      [[mark:show-p01c]] ၁၀ မိနစ်လောက် ကြာတော့ support lead မစုက ဘေလ် မဝင်ဘူး ဆိုတဲ့ ဒေါသထွက်တဲ့ Facebook post တွေကို တိုက်ဆိုင်ပြီး မြင်လို့ on-call ကို ဖုန်းဆက်တော့မှ rollback လုပ်ဖြစ်ပါတယ်။ top-up ရာဂဏန်းလောက်ပဲ fail ခဲ့ပေမဲ့ ကံ နည်းနည်း မကောင်းရင် တစ်ညလုံး ပျက်နိုင်တဲ့ ဒီလို အဖြစ်ကို near miss လို့ ခေါ်ပါတယ်။ ဘယ်သူမှ ထူးထူးဆန်းဆန်း မမှားခဲ့ပါဘူး။ ဒါဆို ရှုပ်ထွေးတဲ့ system တွေက ဘာကြောင့် ဒီလို ပျက်တတ်တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l12-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l12-p01b }
+      - { id: show-p01c, type: slide.show, at: { mark: show-p01c }, slideId: l12-p01c }
+
+  - id: two-kinds
+    chapter: Complex system
+    narration: >
+      [[mark:show-p01d]] Padauk က ဒီ near miss အတွက်လည်း လူကို အပြစ်မရှာဘဲ system ကို ကြည့်တဲ့ blameless postmortem ရေးတော့ ပျက်နေတဲ့ အပိုင်း ဘာမှ မတွေ့ပါဘူး။ reviewer က ပြောင်းထားတဲ့ စာကြောင်းကို စစ်ခဲ့တယ်၊ test endpoint က သူ့အလုပ်ကို လုပ်ခဲ့တယ်၊ engineer ကလည်း doc ကို ယုံခဲ့တာပါ။
+      [[mark:show-p02]] နာရီ တစ်လုံးလို ရိုးရှင်းတဲ့ system ကို အပိုင်းလိုက် နားလည်လို့ရပြီး ပျက်တဲ့အခါလည်း အကြောင်းရင်း ကွင်းဆက်ကို လိုက်ပြီး ကျိုးနေတဲ့ အပိုင်းကို လဲလိုက်ရုံပါပဲ။ Padauk လို complex system မှာတော့ service တွေ၊ operator တွေနဲ့ လူတွေက တစ်ခုနဲ့ တစ်ခု အမြဲ လိုက်ညှိနေကြလို့ အပိုင်းတိုင်း ကောင်းနေရင်တောင် အားလုံး ပေါင်းလိုက်တော့ ပျက်နိုင်ပါတယ်။ ဒါကြောင့် ပြင်ရမှာက အပိုင်း တစ်ခု မဟုတ်ဘဲ သူတို့ ဆက်ဆံပုံပါ။
+      [[mark:show-p02b]] doc ရေးခဲ့သူ၊ reviewer နဲ့ Facebook ကြည့်နေတဲ့ မစုလို လူတွေဟာလည်း code လိုပဲ ဒီ system ရဲ့ အစိတ်အပိုင်းပါ။ ဒီ lesson က model တွေကလည်း အမှန်တရား မဟုတ်ဘဲ စဉ်းစားဖို့ ကူညီတဲ့ tool တွေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+      - {
+          title: 'Reason, "Human error: models and management" (BMJ, PMC)',
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1117770/",
+        }
+    actions:
+      - { id: show-p01d, type: slide.show, at: { mark: show-p01d }, slideId: l12-p01d }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l12-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l12-p02b }
+
+  - id: swiss-cheese
+    chapter: Swiss cheese model
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] အဲဒီညကို ပုံဆွဲကြည့်ရအောင်။ Top-up ကို ကာကွယ်တဲ့ အလွှာ လေးခု ရှိပါတယ်၊ code review၊ config check၊ [[mark:b1-s1b]] traffic ၅ ရာခိုင်နှုန်းကို အရင် ပို့ကြည့်တဲ့ canary နဲ့ support ရော alert ရော ပါတဲ့ နောက်ဆုံး အလွှာပါ။ အလွှာတိုင်းက အပေါက်ပေါက်နေတဲ့ ဒိန်ခဲ အချပ်လိုပါပဲ။
+      [[mark:b1-s2]] အဲဒီညက config ပြောင်းလဲမှုဟာ အလွှာ သုံးခုရဲ့ အပေါက်တွေကို တစ်တန်းတည်း ဖြတ်သွားပါတယ်။ reviewer က test address ကို ခွဲမသိခဲ့ပါဘူး၊ lesson ၂ က config check ကလည်း ဝန်ဆောင်ခကိုပဲ စစ်ပါတယ်၊ canary နဲ့ alert တွေကတော့ test endpoint ရဲ့ အောင်မြင်တယ် ဆိုတဲ့ အဖြေကို ယုံခဲ့ပါတယ်။ နောက်ဆုံး အလွှာမှာ ရပ်သွားတာက မစု Facebook ကြည့်မိခဲ့တဲ့ ကံကြောင့်ပါ။
+      [[mark:b1-s3]] အပေါက်တွေ တစ်တန်းတည်း ကျမှ incident ဖြစ်တယ် ဆိုတဲ့ ဒီ ပုံက စိတ်ပညာရှင် James Reason ရဲ့ Swiss cheese model ပါ။ အပေါက် နှစ်မျိုး ရှိပါတယ်၊ push လုပ်တာက အဲဒီည ချက်ချင်း ပွင့်တဲ့ အပေါက်ဖြစ်ပြီး operator address ကို စစ်တဲ့ check မရှိတာကတော့ လနဲ့ချီပြီး သတိမထားမိဘဲ ပွင့်နေခဲ့တဲ့ အပေါက်ပါ။
+      [[mark:b1-s4]] ဒါဆို အခြေခံ အကြောင်းရင်း၊ root cause က ဘယ်အပေါက်လဲ? ဘယ်တစ်ခုကို ရွေးရွေး အဖြေ တစ်ခုတည်း လိုချင်လို့ မေးတာ ရပ်လိုက်တဲ့ နေရာ သက်သက်ပါ၊ ဘယ်ဟာ ရွေးမလဲ ဆိုတာကလည်း ကိုယ့် ခေါင်းထဲက model ပေါ် မူတည်ပါတယ်။ push လုပ်တဲ့သူကို အပြစ်တင်တာက အားအနည်းဆုံး အဖြေပါ၊ သူ့နေရာမှာ ဘယ်သူ ရှိရှိ အဲဒီ doc ကို ယုံမှာမို့ပါ။
+      [[mark:b1-s5]] Padauk က ကြာကြာ ပွင့်နေခဲ့တဲ့ အပေါက်ကို အရင် ပိတ်ပါတယ်။ endpoint တွေကို production စာရင်းနဲ့ တိုက်စစ်တဲ့ check ထည့်ပြီး prober ကိုလည်း operator တိုင်းမှာ ဘေလ် တကယ် ဝင်လား စစ်ခိုင်းပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: 'Reason, "Human error: models and management" (BMJ, PMC)',
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1117770/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      # Step 1 is split in two (at most three labelled elements per step): the first
+      # two slices draw in with "let's draw it", the last two as the canary is named.
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l12-b1-s1,
+            l12-b1-s1-h1,
+            l12-b1-s1-h2,
+            l12-b1-s1-t,
+            l12-b1-s2,
+            l12-b1-s2-h1,
+            l12-b1-s2-h2,
+            l12-b1-s2-t,
+          ]
+        drawMs: 2400
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [
+            l12-b1-s3,
+            l12-b1-s3-h1,
+            l12-b1-s3-h2,
+            l12-b1-s3-t,
+            l12-b1-s4,
+            l12-b1-s4-h1,
+            l12-b1-s4-h2,
+            l12-b1-s4-t1,
+            l12-b1-s4-t2,
+          ]
+        drawMs: 2400
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l12-b1-a1, l12-b1-a2, l12-b1-a3, l12-b1-luck]
+        drawMs: 2000
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l12-b1-active-1, l12-b1-active-2, l12-b1-latent-1, l12-b1-latent-2]
+        drawMs: 1800
+      - {
+          id: b1-s4,
+          type: whiteboard.apply,
+          at: { mark: b1-s4 },
+          upsertIds: [l12-b1-root],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-s5,
+          type: whiteboard.apply,
+          at: { mark: b1-s5 },
+          upsertIds: [l12-b1-fix],
+          drawMs: 1400,
+        }
+
+  - id: drift
+    chapter: Drift
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] တချို့ အပေါက်တွေကတော့ လနဲ့ချီပြီး ဖြည်းဖြည်းချင်း ပွင့်လာတာပါ။ Wallet အဖွဲ့က campaign တွေ မြန်မြန် ထုတ်ချင်လို့ ခြောက်လအတွင်း ဖြတ်လမ်း လေးခု လိုက်ခဲ့ပါတယ်။ release ကို အကုန် မဖြန့်ခင် တစ်ရက် စောင့်ကြည့်တဲ့ အဆင့်ကို ကျော်လိုက်တယ်၊ နှေးလွန်းတဲ့ test တစ်ခုကိုလည်း ပိတ်ထားလိုက်ပါတယ်။
+      [[mark:b2-s2]] ပြီးတော့ နှေးတဲ့ query တွေကို ပြင်မယ့်အစား database connection limit ကို မြှင့်လိုက်ပြီး လူ မလောက်လို့ engineer တစ်ယောက်တည်းကို on-call ခဏခဏ ယူခိုင်းပါတယ်။ တစ်ခုချင်းက အဲဒီအချိန်မှာ အဓိပ္ပာယ် ရှိပြီး ဘာမှလည်း မပျက်လို့ ဒီ ဖြတ်လမ်းတွေက ပုံမှန် ဖြစ်သွားပါတယ်။
+      [[mark:b2-s3]] သင်္ကြန် အကြိုညမှာတော့ မစောင့်ဘဲ ထုတ်လိုက်တဲ့ ပြောင်းလဲမှု သေးသေးလေး တစ်ခုက peak traffic အောက်မှာ နှေးတဲ့ query နဲ့ ဆုံပြီး Wallet တစ်နာရီလောက် ရပ်သွားပါတယ်။ ဒါပေမဲ့ postmortem မှာ ဆုံးဖြတ်ချက် ဆိုးဆိုး တစ်ခုမှ ရှာမတွေ့ပါဘူး။
+      [[mark:b2-s4]] ဘယ်သူမှ အန္တရာယ်ကို ရွေးခဲ့တာ မဟုတ်ပါဘူး။ ပိုမြန်မြန် ထုတ်ချင်တဲ့ business ဖိအားနဲ့ ပိုလွယ်တဲ့ နည်းကို ရွေးချင်တဲ့ လူ့သဘာဝက အမြဲ တွန်းနေတာပါ။ safety ပညာရှင် Jens Rasmussen က ဒီ ဖိအား နှစ်ခုကြောင့် အဖွဲ့အစည်းတွေ အန္တရာယ် အစွန်းဆီ မသိမသာ ရွေ့သွားတတ်တာကို ရှင်းပြခဲ့ပြီး ဒါကို drift လို့ ခေါ်ပါတယ်။
+      [[mark:b2-s5]] postmortem က မျဉ်းကို ကျော်ပြီးမှ တုံ့ပြန်တာမို့ မကျော်ခင်ကတည်းက ပြန်တွန်းနေတဲ့ safety အလုပ် လိုပါတယ်။ ဖြတ်လမ်း ယူပြီး ဘာမှ မဖြစ်တိုင်း ဒါ ဘေးကင်းတယ်လို့ ပိုယုံလာတတ်လို့ပါ။ Padauk ကတော့ အခု သုံးလ တစ်ခါ ပုံမှန်လို့ ခေါ်နေတဲ့ ဖြတ်လမ်းတွေကို ပြန်စစ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Defence at the Boundary of Acceptable Performance (SREcon24 Americas)",
+          url: "https://www.usenix.org/conference/srecon24americas/presentation/hatch",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l12-b2-zone, l12-b2-zone-t, l12-b2-a1, l12-b2-a2, l12-b2-line, l12-b2-line-t]
+        drawMs: 2400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l12-b2-a3, l12-b2-a4, l12-b2-wallet]
+        drawMs: 1800
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l12-b2-hit, l12-b2-outage-1, l12-b2-outage-2]
+        drawMs: 1800
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l12-b2-push-1, l12-b2-push-2]
+        drawMs: 1600
+      - id: b2-s5
+        type: whiteboard.apply
+        at: { mark: b2-s5 }
+        upsertIds: [l12-b2-safety, l12-b2-safety-t, l12-b2-pm-1, l12-b2-pm-2]
+        drawMs: 2200
+
+  - id: good-days
+    chapter: အဆင်ပြေခဲ့တဲ့ နေ့တွေ
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02c]] ပျက်ခဲ့တဲ့ ညတွေ ပြီးတော့ မသီရိက မေးခွန်းကို ပြောင်းမေးပါတယ်။ လစာထုတ်ရက် အများစုက ဘာလို့ အဆင်ပြေပြေ ပြီးသွားတာလဲ? အဲဒါ သိဖို့ ဘာမှ မဖြစ်ခဲ့တဲ့ လစာထုတ်ရက် တစ်ရက်ကို incident လိုပဲ လေ့လာပြီး on-call ကျခဲ့တဲ့ Wallet engineer ကို မေးကြည့်ပါတယ်။
+      [[mark:show-p02d]] Bank X နှေးလာတိုင်း သူက အဲဒီ bank ဆီ ငွေလွှဲနှုန်းကို လက်နဲ့ လျှော့တဲ့ throttle လုပ်ပြီး ငွေလွှဲတာ နောက်ကျနိုင်ပါတယ် ဆိုတဲ့ banner ကို ဖွင့်ထားတာ တွေ့ရပါတယ်။ ဘယ်သူမှ မသိခဲ့ပေမဲ့ လစာထုတ်ရက်တွေ ချောမွေ့နေခဲ့တာ သူ့ကြောင့်ပါ။
+      [[mark:show-p03]] safety သုတေသီ Erik Hollnagel က safety ကို ကြည့်ပုံ နှစ်မျိုး ခွဲပြပါတယ်။ ပျက်ခဲ့တာကို လေ့လာပြီး ထပ်မဖြစ်အောင် တားတာက Safety-I ဖြစ်ပြီး ပုံမှန် နေ့တွေ ဘာကြောင့် အောင်မြင်လဲ လေ့လာပြီး အဲဒီ အောင်မြင်မှု ပိုဖြစ်လာအောင် လုပ်တာက Safety-II ပါ။ Safety-II က လူကို အမှား လုပ်တတ်သူ အဖြစ် မကြည့်ဘဲ system ကို တိတ်တိတ်လေး ညှိပေးနေသူ အဖြစ် ကြည့်ပါတယ်။
+      [[mark:show-p03b]] ဒါပေမဲ့ throttle နည်းက သူ့ ခေါင်းထဲမှာပဲ ရှိနေရင် lesson ၅ က ကိုအောင်လိုပဲ သူ ခွင့်ယူတဲ့နေ့မှာ ဘယ်သူမှ မလုပ်တတ်တော့ပါဘူး။ ဒါကြောင့် Padauk က throttle ကို စမ်းသပ်ပြီးသား tool အဖြစ် ဆောက်ပြီး runbook ထဲ ထည့်ပါတယ်၊ drill မှာလည်း လေ့ကျင့်ပါတယ်။ ဒီလို နည်းကောင်းတွေက service ကို ကိုယ်တိုင် run တဲ့ အဖွဲ့ထဲမှာ ပေါ်လာတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: 'Hollnagel, Wears & Braithwaite, "From Safety-I to Safety-II: A White Paper" (NHS England PDF)',
+          url: "https://www.england.nhs.uk/signuptosafety/wp-content/uploads/sites/16/2015/10/safety-1-safety-2-whte-papr.pdf",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l12-p02c }
+      - { id: show-p02d, type: slide.show, at: { mark: show-p02d }, slideId: l12-p02d }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l12-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l12-p03b }
+
+  - id: partly-broken
+    chapter: ချောက်ကမ်းပါး ပြုတ်ကျ
+    narration: >
+      [[mark:show-p03c]] ပုံမှန် နေ့တွေမှာလည်း server တစ်လုံးလုံး restart ဖြစ်နေတာ အမြဲ ရှိပါတယ်။ သုတေသီ Richard Cook က ရှုပ်ထွေးတဲ့ system တွေဟာ တစ်စိတ်တစ်ပိုင်း ပျက်နေရင်းနဲ့ပဲ အမြဲ run နေတယ်လို့ ထောက်ပြပါတယ်။ ကာကွယ်ရေး အလွှာတွေ များလို့ ကြီးကြီးမားမား ပျက်ဖို့ဆိုရင် ပြဿနာ အများကြီး တစ်ပြိုင်နက် ဆုံရပေမဲ့ အဲဒီလို ဆုံတာက ဘယ်နေ့မဆို ဖြစ်နိုင်ပါတယ်။
+      [[mark:close-p03c]] [[mark:b3-s1]] Padauk Eats မှာ rider တွေ ဘယ်နားရောက်နေလဲ ပြတဲ့ rider location service က server ၈ လုံးပေါ်မှာ run ပြီး ပုံမှန်ဆို capacity ရဲ့ ၄၀ ရာခိုင်နှုန်းက အပိုပါ။
+      [[mark:b3-s2]] memory leak ကြောင့် server တွေ တစ်လုံးပြီး တစ်လုံး ပျက်ပါတယ်။ နှစ်လုံး ပျက်တော့ အပိုက ၂၀ ရာခိုင်နှုန်းပဲ ကျန်ပေမဲ့ app က rider နေရာကို နည်းနည်း နောက်ကျပြီး ပြရုံပဲမို့ success rate က အစိမ်းရောင်ပါပဲ။
+      [[mark:b3-s3]] သောကြာနေ့ ညစာချိန် peak မှာ လေးလုံးမြောက် ပျက်တော့ အပို လုံးဝ မကျန်တော့ပါဘူး။ ကျန်တဲ့ server တွေ ဝန်ပိုလာပြီး app တွေ အားလုံးက တစ်ပြိုင်နက် ပြန်ကြိုးစားကြတဲ့ retry storm ဖြစ်တော့ rider နေရာ ပြတာရော အဲဒါကို သုံးပြီး order ခွဲတာပါ တစ်မြို့လုံးမှာ ရပ်ကုန်ပါတယ်။
+      [[mark:b3-s4]] သုတေသီ David Woods က system တစ်ခုဟာ ပျက်တာတွေကို ငြိမ်ငြိမ်လေး ခံထားနိုင်ပေမဲ့ ခံနိုင်တာထက် ပိုလာတဲ့နေ့ ရုတ်တရက် ပြိုတတ်တယ်လို့ ဆိုပါတယ်၊ ဒီ lesson မှာ ဒါကို ချောက်ကမ်းပါး ပြုတ်ကျတာလို့ ခေါ်ပါမယ်။ ကြိုသိဖို့ success rate ကိုချည်း မကြည့်ဘဲ ကျန်နေတဲ့ အပို capacity ပေါ်မှာ alert ထားရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+      - {
+          title: "Paper notes: Going Solid (Cook & Rasmussen)",
+          url: "https://ferd.ca/notes/paper-going-solid.html",
+        }
+    actions:
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l12-p03c }
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      # The title and axis are furniture (no drawMs); the axis labels and the first
+      # bar draw in as the narration names the service.
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l12-b3-title, l12-b3-axis],
+        }
+      - id: b3-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds: [l12-b3-caption, l12-b3-t0, l12-b3-t2, l12-b3-t4, l12-b3-bar0, l12-b3-bar0-t]
+        drawMs: 2000
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l12-b3-bar2, l12-b3-bar2-t, l12-b3-ok0, l12-b3-ok2]
+        drawMs: 2000
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l12-b3-x4, l12-b3-storm]
+        drawMs: 1400
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l12-b3-cliff-1, l12-b3-cliff-2, l12-b3-watch]
+        drawMs: 2000
+
+  - id: ready-moves
+    chapter: အသင့် ခလုတ်တွေ
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] အဲဒီညက rider နေရာ မသိရင်တောင် ရပ်ကွက်အလိုက် order ခွဲပေးတဲ့ ခလုတ် ရှိခဲ့ရင် order တွေ ဆက်သွားမှာပါ။ Padauk က ဒီ ခလုတ်နဲ့ Bank X throttle ကို lesson ၁၀ က ဘယ်ပြဿနာမှာမဆို သုံးလို့ရတဲ့ fix စာရင်းထဲ ထည့်ပါတယ်။ zone တစ်ခုကို traffic မပို့တော့တဲ့ drain၊ rollback၊ failover၊ feature ပိတ်တာလို ခလုတ်တိုင်းဟာ မြန်ရမယ်၊ နှိပ်ရ ဘေးကင်းရမယ်၊ မလိုခင်ကတည်းက drill မှာ လေ့ကျင့်ထားရပါမယ်။
+      [[mark:show-p04b]] သင်ယူတာ အလုပ်ဖြစ်လား သိချင်ရင် နောက် အလားတူ incident မှာ ထိခိုက်တဲ့ user၊ ပြန်ကောင်းဖို့ ကြာချိန်နဲ့ on-call ရဲ့ ပင်ပန်းမှု လျော့လား နှိုင်းယှဉ်ကြည့်ပါ။ Swiss cheese လို model တွေက အကြောင်းရင်းကို ကွင်းဆက် တစ်ကြောင်းလို ကြည့်လို့ အပိုင်းတွေ ဆက်ဆံရာကနေ ပေါ်လာတဲ့ ပြဿနာကို လွတ်သွားတတ်ပါတယ်၊ ဒါက lesson ၁၃ ရဲ့ ခေါင်းစဉ်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l12-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l12-p04b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p05]] ကိုယ့်အဖွဲ့ရဲ့ ဒိန်ခဲ အချပ်တွေမှာလည်း အပေါက်တွေ ရှိမှာပါ၊ ဒီအပတ် ရှာကြည့်ပါ။ ပုံမှန်လို့ ခေါ်နေကြတဲ့ ဖြတ်လမ်းတွေကို စာရင်း ချရေးကြည့်ပါ။ အဆင်ပြေခဲ့တဲ့ နေ့ တစ်ရက်ကို incident လိုပဲ လေ့လာပြီး ဘယ်သူ ဘာကို တိတ်တိတ်လေး ညှိပေးနေလဲ ရှာကြည့်ပါ။ ပြီးတော့ success rate ဘေးမှာ ကျန်နေတဲ့ အပို capacity ကိုပါ dashboard မှာ ထည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Defence at the Boundary of Acceptable Performance (SREcon24 Americas)",
+          url: "https://www.usenix.org/conference/srecon24americas/presentation/hatch",
+        }
+      - {
+          title: 'Hollnagel, Wears & Braithwaite, "From Safety-I to Safety-II: A White Paper" (NHS England PDF)',
+          url: "https://www.england.nhs.uk/signuptosafety/wp-content/uploads/sites/16/2015/10/safety-1-safety-2-whte-papr.pdf",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l12-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] near miss ကနေ ချောက်ကမ်းပါးအထိ ဒီနေ့ ခရီး ရှည်ခဲ့ပါတယ်။ [[mark:sel-complex]] complex system က အပိုင်းတိုင်း ကောင်းနေရင်တောင် ဆက်ဆံရာကနေ ပျက်နိုင်တဲ့ system ပါ။ [[mark:sel-swiss]] Swiss cheese model က အလွှာတွေရဲ့ အပေါက်တွေ တစ်တန်းတည်း ကျမှ incident ဖြစ်တယ်လို့ ပြပြီး၊ [[mark:sel-near-miss]] near miss ကတော့ ကံကြောင့်သာ အကြီးအကျယ် မဖြစ်လိုက်တဲ့ အဖြစ်ပါ။
+      [[mark:sel-drift]] drift က ဖြတ်လမ်းတွေ ပုံမှန် ဖြစ်လာရင်း အန္တရာယ် အစွန်းဆီ မသိမသာ ရွေ့သွားတာပါ။ [[mark:sel-safety-ii]] Safety-II က ပုံမှန် နေ့တွေ ဘာကြောင့် အောင်မြင်လဲ လေ့လာတာ ဖြစ်ပြီး၊ [[mark:sel-cliff]] ချောက်ကမ်းပါး ပြုတ်ကျတာကတော့ ပျက်တာတွေကို ငြိမ်ငြိမ်လေး ခံထားရင်း အပို ကုန်တဲ့နေ့ ရုတ်တရက် ပြိုကျတာပါ။ [[mark:sel-question]] ကိုယ့် system ထဲမှာ လနဲ့ချီပြီး ပွင့်နေခဲ့တဲ့ အပေါက် တစ်ခုကို နာမည် တပ်ပြနိုင်မလား?
+      [[mark:pause-question]] အဖြေက လူတိုင်း မတူပါဘူး၊ ဥပမာ ဘယ်သူမှ restore မစမ်းဖူးတဲ့ backup ဒါမှမဟုတ် တစ်ယောက်တည်းပဲ သိတဲ့ အလုပ် ဖြစ်နိုင်ပါတယ်။ နောက် လစာထုတ်ရက် မနက်ကျ လစာ ထည့်ပေးတဲ့ payroll batch ရော လိမ်လည်တဲ့ ငွေလွှဲတွေကို ပိတ်ပေးတဲ့ fraud engine ရော design အတိုင်း အလုပ်လုပ်ခဲ့ရက်နဲ့ wallet ၂၈၀၀ ပိတ်ခံလိုက်ရပါတယ်။ ဒီတစ်ခါ root cause က ဘယ်မှာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: 'Reason, "Human error: models and management" (BMJ, PMC)',
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1117770/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-complex,
+          type: editor.select,
+          at: { mark: sel-complex },
+          target: { file: notes.md, text: "complex system", occurrence: 1 },
+        }
+      - {
+          id: sel-swiss,
+          type: editor.select,
+          at: { mark: sel-swiss },
+          target: { file: notes.md, text: "Swiss cheese", occurrence: 1 },
+        }
+      - {
+          id: sel-near-miss,
+          type: editor.select,
+          at: { mark: sel-near-miss },
+          target: { file: notes.md, text: "near miss", occurrence: 1 },
+        }
+      - {
+          id: sel-drift,
+          type: editor.select,
+          at: { mark: sel-drift },
+          target: { file: notes.md, text: "drift", occurrence: 1 },
+        }
+      - {
+          id: sel-safety-ii,
+          type: editor.select,
+          at: { mark: sel-safety-ii },
+          target: { file: notes.md, text: "Safety-II", occurrence: 1 },
+        }
+      - {
+          id: sel-cliff,
+          type: editor.select,
+          at: { mark: sel-cliff },
+          target: { file: notes.md, text: "ချောက်ကမ်းပါး ပြုတ်ကျ", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts the
+      # select, and the question is the whole dialog that follows it. A select at the
+      # mark would drag under the question and leave no pause, and one at
+      # pause-question would drag under the answer's first words (the scheduler holds
+      # only the dialog after its anchor's). So the question-line select hangs off
+      # sel-question by about the question's length: it starts about as the question
+      # ends, its drag runs in silence, and the answer at pause-question waits for it.
+      # The question is 83 characters with no ၊ to split at, so the quiet depends on
+      # the voice's speed: 6300 leaves about 2.8 / 1.6 / 0.35 s before the answer at
+      # 55 / 70 / 95 ms per char (at 95 the drag starts under the question's last
+      # words, as in lessons 2 and 7); 6400 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: sel-question, offsetMs: 6300 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: ကိုယ့် system ထဲမှာ လနဲ့ချီပြီး ပွင့်နေတဲ့ အပေါက် တစ်ခုကို နာမည် တပ်ပါ။"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
