@@ -1,0 +1,1106 @@
+# SRE from zero, lesson 15: Where SRE lives (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-15-where-sre-lives.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-15-where-sre-lives.md \
+#     src/studio/scripts/sre-15-where-sre-lives.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: Ko Zaw starts, but two SREs are still not a rotation (cover). Board
+# B1 (P5 bars): production hours per sprint against the quarter-sprint line.
+# Board B2 (slider): centralized to embedded, the hybrid knob, Conway's law,
+# and Eats drifting into shadow SRE. Pages: the three placements, Padauk's
+# hybrid choice, holding the middle; limits on ops work, the 3 + 5 = 8
+# rotation, the charter; changing the org like a canary. Board B3 (P5
+# two-axis placement): how bad and how often decide how much SRE help a
+# service gets. Pages: scorecards, the 4 → 0 ranking, Padauk's review rule,
+# structure and culture, this week; recap on notes.md.
+#
+# Every mark is one of the voice script's own ⟪…⟫ markers; none was added.
+# The voice script already carries its pacing pages (p01b, p02b, p02c, p03b,
+# p03c, p05b, p06b), every dialog stays under 450 characters, and no page or
+# board step holds longer than ~31 s at 70 ms/char (l15_p03, 433
+# characters), so no pacing page or board step was needed. ask-question is the
+# voice script's ⟪select မေးခွန်း⟫: it sits right before the question, so the
+# question is already its own dialog and the question-line select hangs off it
+# for the ⟪pause 3s⟫, as the Module 1 reviewers fixed the pause.
+#
+# ⟪close board⟫ straight into the next board (scene 3) wipes B1 400 ms early
+# (whiteboard.apply clear) instead of closing the panel, as lesson 8 does, so
+# the editor does not flash between two boards; B2 then draws with open: true,
+# clear: true as usual. A board followed by a deck page closes the panel
+# (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for titles, axes, the slider
+# and arrows; blue the thing named (the outgrown-model label, the placements,
+# Conway's law, the services placed on B3); red toil and failure (the
+# production-hour bars, Eats's shadow ops person and tool); orange the limit
+# (the quarter-sprint line, low help by choice); violet the result (the hybrid
+# knob). A label on two lines is two text assets, one per line: the overflow
+# rule counts a whole text's length. Mostly-Latin labels get extra width,
+# since Virgil's Latin and digits run wider than the 0.55 em rule.
+#
+# Deck pages: deck "Next Editor · SRE 4 · People and teams". The /pub URL
+# below is a placeholder until Chan publishes the deck with this lesson's
+# pages; until then the Director reports the deck unreachable or, while the
+# published copy still holds only the kit pages, the l15 pages missing. Page
+# plan: ~/Documents/sre-course/work/pages/sre-15-where-sre-lives.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-15-where-sre-lives.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-15-where-sre-lives.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-15-where-sre-lives
+  title: "SRE from zero 15: SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ
+
+        - Conway's law — system ပုံစံက ဆောက်တဲ့ အဖွဲ့တွေ ဆက်သွယ်ပုံအတိုင်း ထွက်လာ
+        - charter — ရည်ရွယ်ချက်၊ နယ်ပယ်၊ ရက်စွဲပါတဲ့ အောင်မြင်မှု
+        - ops အလုပ် ကန့်သတ်ချက် — engineering အနည်းဆုံး တစ်ဝက်၊ on-call အများဆုံး လေးပုံတစ်ပုံ၊ ပန်းတိုင် မဟုတ်
+        - shadow SRE — တရားဝင် အကူအညီ နှေးလို့ ပေါ်လာတဲ့ ကိုယ်ပိုင် ops လူနဲ့ tool
+        - scorecard — ကျန်းမာရေးကို ကိန်းဂဏန်း အနည်းငယ်နဲ့ ပြ
+        - Goodhart's law — ပစ်မှတ် ဖြစ်သွားတဲ့ ကိန်းဂဏန်းက အခြေအနေကို မပြတော့
+
+        မေးခွန်း: ရုံး တစ်ခုတည်းက 5 ယောက်က ညတွေကိုပါ on-call ယူနေတယ်။ ဘာ အကြံပေးမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 15</p>
+              <h1>SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l15-p01
+      contentType: google
+      name: "Cover: two SREs are not a rotation"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p01
+    - id: l15-p01b
+      contentType: google
+      name: Two SREs alone
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p01b
+    - id: l15-p02
+      contentType: google
+      name: Centralized, embedded, hybrid
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p02
+    - id: l15-p02b
+      contentType: google
+      name: "Padauk's choice: hybrid"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p02b
+    - id: l15-p02c
+      contentType: google
+      name: Holding the middle
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p02c
+    - id: l15-p03
+      contentType: google
+      name: Keep ops work in check
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p03
+    - id: l15-p03b
+      contentType: google
+      name: "Padauk's rotation: 3 + 5 = 8"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p03b
+    - id: l15-p03c
+      contentType: google
+      name: The team's charter
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p03c
+    - id: l15-p04
+      contentType: google
+      name: Change the org like a canary
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p04
+    - id: l15-p05
+      contentType: google
+      name: "Scorecards: useful, but"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p05
+    - id: l15-p05b
+      contentType: google
+      name: "After the ranking: 4 to 0"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p05b
+    - id: l15-p06
+      contentType: google
+      name: "Padauk's review rule"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p06
+    - id: l15-p06b
+      contentType: google
+      name: Structure and culture
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p06b
+    - id: l15-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l15_p07
+  whiteboardAssets:
+    # ---- Board B1: production hours per sprint (P5 bars, 9 px per hour) ----
+    # Step 1: title and axis (furniture), then the three red bars, each with
+    # its label under the axis. Bars stand on y 565; heights 30 / 26 / 8 h.
+    - {
+        id: l15-b1-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 790,
+        height: 45,
+        text: "sprint တစ်ခုမှာ production အလုပ် (နာရီ)",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l15-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 540,
+        width: 760,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b1-wallet,
+        kind: rectangle,
+        x: 330,
+        y: 295,
+        width: 100,
+        height: 270,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l15-b1-wallet-t,
+        kind: text,
+        x: 320,
+        y: 585,
+        width: 170,
+        height: 35,
+        text: "Wallet 30",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b1-topup,
+        kind: rectangle,
+        x: 530,
+        y: 331,
+        width: 100,
+        height: 234,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l15-b1-topup-t,
+        kind: text,
+        x: 520,
+        y: 585,
+        width: 170,
+        height: 35,
+        text: "Top-up 26",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b1-eats,
+        kind: rectangle,
+        x: 730,
+        y: 493,
+        width: 100,
+        height: 72,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l15-b1-eats-t,
+        kind: text,
+        x: 735,
+        y: 585,
+        width: 110,
+        height: 35,
+        text: "Eats 8",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 2: the quarter-sprint line at 20 h (y 565 - 180), labelled above it
+    # on the right, clear of the Wallet and Top-up bars.
+    - {
+        id: l15-b1-limit,
+        kind: rectangle,
+        x: 300,
+        y: 383,
+        width: 740,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l15-b1-limit-t1,
+        kind: text,
+        x: 660,
+        y: 305,
+        width: 370,
+        height: 35,
+        text: "sprint ရဲ့ လေးပုံတစ်ပုံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b1-limit-t2,
+        kind: text,
+        x: 660,
+        y: 342,
+        width: 130,
+        height: 35,
+        text: "20 နာရီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 3: the blue label over the two bars that cross the line.
+    - {
+        id: l15-b1-outgrew,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 600,
+        height: 35,
+        text: "you build it, you run it ထက် ကြီးလာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B2: the centralized-embedded slider -------------------------
+    # Step 1: the slider and its two ends, each end label on two lines.
+    - {
+        id: l15-b2-slider,
+        kind: rectangle,
+        x: 300,
+        y: 270,
+        width: 750,
+        height: 20,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b2-left1,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 210,
+        height: 35,
+        text: "centralized:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-left2,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 200,
+        height: 35,
+        text: "စံ တစ်ခုတည်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-right1,
+        kind: text,
+        x: 745,
+        y: 305,
+        width: 170,
+        height: 35,
+        text: "embedded:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-right2,
+        kind: text,
+        x: 745,
+        y: 342,
+        width: 340,
+        height: 35,
+        text: "product ကို နက်နက် သိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Step 2: the violet hybrid knob in the middle, Conway's law above.
+    - {
+        id: l15-b2-knob,
+        kind: ellipse,
+        x: 625,
+        y: 250,
+        width: 100,
+        height: 60,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l15-b2-hybrid,
+        kind: text,
+        x: 622,
+        y: 318,
+        width: 105,
+        height: 35,
+        text: "hybrid",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-conway,
+        kind: text,
+        x: 300,
+        y: 185,
+        width: 700,
+        height: 35,
+        text: "Conway's law: အဖွဲ့ ဆက်သွယ်ပုံ → system ပုံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Step 3: an arrow down from the knob into Eats's red box (two lines).
+    - {
+        id: l15-b2-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 360,
+        width: 50,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b2-eats,
+        kind: rectangle,
+        x: 400,
+        y: 430,
+        width: 440,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l15-b2-eats1,
+        kind: text,
+        x: 420,
+        y: 445,
+        width: 330,
+        height: 35,
+        text: "Eats: ops လူ 1 ယောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-eats2,
+        kind: text,
+        x: 420,
+        y: 485,
+        width: 410,
+        height: 35,
+        text: "monitoring tool နောက်တစ်ခု",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Step 4: shadow SRE, beside the box.
+    - {
+        id: l15-b2-shadow1,
+        kind: text,
+        x: 860,
+        y: 445,
+        width: 230,
+        height: 35,
+        text: "လွင့်လွန်းရင်:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b2-shadow2,
+        kind: text,
+        x: 860,
+        y: 485,
+        width: 180,
+        height: 35,
+        text: "shadow SRE",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B3: how much help a service gets (P5 two-axis placement) -----
+    # Step 1: the two axes (how bad, up; how often, right) and their labels.
+    # The horizontal label measures 394 px in system Chrome (ခဏခဏ is wide),
+    # past the 0.55 rule's 323, so its box is 410 wide and ends at x 1090.
+    - {
+        id: l15-b3-vaxis,
+        kind: rectangle,
+        x: 300,
+        y: 205,
+        width: 4,
+        height: 365,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b3-vlabel,
+        kind: text,
+        x: 315,
+        y: 160,
+        width: 390,
+        height: 35,
+        text: "ပျက်ရင် ဘယ်လောက် ဆိုးလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-haxis,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 545,
+        width: 780,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b3-hlabel,
+        kind: text,
+        x: 680,
+        y: 590,
+        width: 410,
+        height: 35,
+        text: "ဘယ်လောက် ခဏခဏ ပျက်လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Step 2: three services as small blue dots with labels.
+    - {
+        id: l15-b3-wallet-dot,
+        kind: ellipse,
+        x: 980,
+        y: 205,
+        width: 40,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l15-b3-wallet,
+        kind: text,
+        x: 865,
+        y: 207,
+        width: 105,
+        height: 35,
+        text: "Wallet",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-eats-dot,
+        kind: ellipse,
+        x: 760,
+        y: 360,
+        width: 40,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l15-b3-eats,
+        kind: text,
+        x: 685,
+        y: 362,
+        width: 70,
+        height: 35,
+        text: "Eats",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-eats-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 808,
+        y: 360,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b3-eats-after,
+        kind: text,
+        x: 685,
+        y: 410,
+        width: 350,
+        height: 35,
+        text: "incident တွေ ပြီးနောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-pilot-dot,
+        kind: ellipse,
+        x: 340,
+        y: 490,
+        width: 40,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l15-b3-pilot1,
+        kind: text,
+        x: 395,
+        y: 470,
+        width: 350,
+        height: 35,
+        text: "ဝန်ထမ်း ကုန်စုံ pilot:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-pilot2,
+        kind: text,
+        x: 395,
+        y: 507,
+        width: 220,
+        height: 35,
+        text: "တမင် အကူ နည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Step 3: the old scratch-card vouchers, in ink, stepping down.
+    - {
+        id: l15-b3-voucher-dot,
+        kind: ellipse,
+        x: 470,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b3-voucher,
+        kind: text,
+        x: 520,
+        y: 257,
+        width: 370,
+        height: 35,
+        text: "ခြစ်ကတ် voucher အဟောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l15-b3-voucher-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 470,
+        y: 305,
+        width: 40,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l15-b3-voucher-down,
+        kind: text,
+        x: 520,
+        y: 318,
+        width: 170,
+        height: 35,
+        text: "အောက်ဆင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2615
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: SRE နှစ်ယောက်နဲ့ rotation မဖြစ်သေး
+    narration: >
+      [[mark:show-p01]] ကိုဇော် အလုပ်စတဲ့ တနင်္လာနေ့မှာ သူ့အတွက် action တွေနဲ့ ရေးထားတဲ့ on-call checklist ရှိနေပြီး ကိုအောင်နဲ့ တွဲလုပ်ဖို့လည်း စီစဉ်ထားပါတယ်။ အခု Padauk မှာ Site Reliability Engineer၊ SRE နှစ်ယောက် ဖြစ်လာပါပြီ။ ဒီ နှစ်ယောက်ကို ဘယ်မှာ ထားပြီး ဘာတွေကို တာဝန်ယူခိုင်းမလဲ?
+      [[mark:show-p01b]] ပြဿနာက နှစ်ယောက်တည်း on-call ယူရင် တစ်ယောက်ချင်း တစ်ပတ်ခြား ကျပြီး ညတွေရဲ့ တစ်ဝက်ကို page စောင့်ရင်း အိပ်ရမှာပါ။ တစ်ယောက် ခွင့်ယူတာနဲ့ ကျန်တစ်ယောက်က အကုန် ယူရလို့ on-call ကို အလှည့်ကျ ခွဲယူတဲ့ rotation တစ်ခု မဖြစ်သေးပါဘူး။ ဒါကြောင့် အချိန်ပြည့် SRE ဖြစ်ကတည်းက မသီရိ တစ်ရက်မှ ခွင့် မယူနိုင်သေးပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      # -1750 / -1450, as Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l15-p01,
+        }
+      # The voice script's own continuation page: why two people are not a rotation.
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l15-p01b }
+
+  - id: where-the-pain-is
+    chapter: ဝန် ဘယ်မှာ များလဲ
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] မသီရိက ဝန် ဘယ်မှာ များနေလဲ အရင် တိုင်းပါတယ်။ နှစ်ပတ် sprint တစ်ခုမှာ page ဖြေတာ၊ ticket ရှင်းတာလို production အလုပ်ထဲ နာရီ ဘယ်လောက် ကုန်လဲ မှတ်ခိုင်းတော့ developer တစ်ယောက်ရဲ့ နာရီ ၈၀ ထဲက ပျမ်းမျှ Wallet မှာ ၃၀ နာရီ၊ Top-up မှာ ၂၆ နာရီ၊ Eats မှာ ၈ နာရီ ကုန်နေပါတယ်။
+      [[mark:b1-s2]] အဲဒီ နာရီ အများစုက လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရပြီး ရေရှည် တန်ဖိုး မပေးတဲ့ toil ပါ။ တစ်ပတ်ချင်း နည်းနည်းစီ တိုးလာလို့ အကျင့်ပါသွားပြီး ဘယ်သူမှ သတိမထားမိခဲ့ပါဘူး။ Padauk က sprint ရဲ့ လေးပုံတစ်ပုံ၊ နာရီ ၂၀ မှာ မျဉ်း ဆွဲပြီး အဲဒီထက် ကျော်ရင် အဖွဲ့ကိုယ်တိုင် on-call ယူတာနဲ့ မနိုင်တော့ဘူးလို့ သဘောတူထားပါတယ်။
+      [[mark:b1-s3]] Wallet နဲ့ Top-up က မျဉ်းကို ကျော်နေပါတယ်။ ကိုယ်ရေးတဲ့ service ကို ကိုယ်တိုင် on-call ယူတဲ့ you build it, you run it ပုံစံက service ငယ်တုန်း ကောင်းပေမဲ့ ဒီ နှစ်ခုကတော့ အဲဒီ ပုံစံထက် ကြီးလာပါပြီ။ feature ဦးစားပေးတွေ ပြောင်းနေတဲ့ကြားက reliability ကို အာရုံ မပျက်ဘဲ လုပ်မယ့် သီးသန့် အဖွဲ့ လိုလာပါပြီ။ Eats ကတော့ ၈ နာရီပဲ ဆိုတော့ အဆင်ပြေပုံ ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      # The title and axis are furniture (no drawMs); the bars draw in after them.
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l15-b1-title, l15-b1-axis],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds:
+          [l15-b1-wallet, l15-b1-wallet-t, l15-b1-topup, l15-b1-topup-t, l15-b1-eats, l15-b1-eats-t]
+        drawMs: 2400
+      - {
+          id: b1-s2,
+          type: whiteboard.apply,
+          at: { mark: b1-s2 },
+          upsertIds: [l15-b1-limit, l15-b1-limit-t1, l15-b1-limit-t2],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l15-b1-outgrew],
+          drawMs: 1200,
+        }
+
+  - id: slider
+    chapter: Centralized နဲ့ embedded
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို ဒီ အဖွဲ့ကို ဘယ်မှာ ထားမလဲ? ထားနိုင်တဲ့ နေရာတွေကို slider တစ်ခုလို ကြည့်နိုင်ပါတယ်။ တစ်ဖက်စွန်းက SRE အားလုံးကို အဖွဲ့ တစ်ခုတည်းမှာ စုပြီး စံ တစ်ခုတည်းနဲ့ ကူတဲ့ centralized ပုံစံ၊ နောက်တစ်ဖက်စွန်းက SRE တွေကို product အဖွဲ့ထဲ ထည့်ပြီး နေ့တိုင်း အတူ လုပ်လို့ product ကို နက်နက် သိတဲ့ embedded ပုံစံပါ။
+      [[mark:b2-s2]] ကုမ္ပဏီ အများစုကတော့ ကြားထဲက နှစ်မျိုး ရောထားတဲ့ hybrid မှာ ရှိကြပါတယ်။ ဘယ်နေရာ ရွေးလဲ ဆိုတာက နှစ်နဲ့ချီ သက်ရောက်ပါတယ်၊ system ပုံစံဟာ ဆောက်တဲ့ အဖွဲ့တွေ ဆက်သွယ်ပုံအတိုင်း ထွက်လာတတ်လို့ပါ။ ဒါကို Conway's law လို့ ခေါ်ပါတယ်။ ဥပမာ Eats နဲ့ Wallet အဖွဲ့ တစ်ခါမှ စကား မပြောဖူးလို့ ငွေချေတဲ့ retry code ကို Eats က ကိုယ့်ဘာသာ ထပ်ရေးထားပါတယ်။
+      [[mark:b2-s3]] အဖွဲ့တွေက ရွေးထားတဲ့ နေရာကနေ တဖြည်းဖြည်း လွင့်သွားတတ်ပြီး Eats ရဲ့ ၈ နာရီ နောက်ကွယ်မှာလည်း ဒါ ဖြစ်နေတာပါ။ Eats က SRE အကူအညီကို နှစ်ပတ် စောင့်ပေမဲ့ မရတော့ ops လူ တစ်ယောက်ကို တိတ်တိတ်လေး ခန့်ပြီး monitoring tool နောက်တစ်ခုလည်း ဝယ်ထားပါတယ်။ production အလုပ်ကို အဲဒီလူက ယူထားလို့ နာရီ နည်းနေတာပါ။
+      [[mark:b2-s4]] တရားဝင် အကူအညီ နှေးလို့ ဘယ်သူနဲ့မှ မညှိဘဲ ကိုယ်ပိုင် လူ၊ ကိုယ်ပိုင် tool တွေနဲ့ လုပ်တဲ့အထိ လွင့်သွားရင် အဲဒီ reliability အလုပ်ကို shadow SRE လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+      - {
+          title: "Melvin Conway: Conway's Law",
+          url: "https://www.melconway.com/Home/Conways_Law.html",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l15-b2-slider, l15-b2-left1, l15-b2-left2, l15-b2-right1, l15-b2-right2]
+        drawMs: 2000
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l15-b2-knob, l15-b2-hybrid, l15-b2-conway],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l15-b2-arrow, l15-b2-eats, l15-b2-eats1, l15-b2-eats2],
+          drawMs: 2000,
+        }
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l15-b2-shadow1, l15-b2-shadow2],
+          drawMs: 1200,
+        }
+
+  - id: central-vs-embedded
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] centralized အဖွဲ့က စံ တစ်ခုတည်းနဲ့ ညီညွတ်ပေမဲ့ product တွေနဲ့ ဝေးလာရင် ticket ဖြေပေးရုံ ကောင်တာ ဖြစ်သွားတတ်ပါတယ်။ embedded SRE က product ကို နက်နက် သိပေမဲ့ အဖွဲ့တိုင်း ကိုယ့် tool ကိုယ် ဆောက်လို့ tool တွေ ထပ်တတ်ပါတယ်။ hybrid ကတော့ centralized အဖွဲ့ရဲ့ အကူအညီနဲ့ အရေးကြီးတဲ့ product အတွက် သီးသန့် SRE တွေကို ပေါင်းထားတာပါ။
+      [[mark:show-p02b]] ယုံကြည်မှု ဒါမှမဟုတ် senior SRE နည်းသေးရင် centralized က ပိုသင့်တော်ပြီး embedded ကတော့ နှစ်ဘက်စလုံး ယုံကြည်ပြီး senior လုံလောက်မှ အလုပ်ဖြစ်ပါတယ်။ CTO ကိုနေလင်းက နောက်တစ်ယောက် ခန့်ခွင့် ပေးလို့ SRE သုံးယောက် ဖြစ်လာပေမဲ့ product အဖွဲ့တွေထဲ ခွဲထည့်ရင် တစ်ယောက်ချင်း တစ်ယောက်တည်း ပြန်ဖြစ်မှာမို့ Padauk က အဖွဲ့ တစ်ခုတည်း စုပြီး Wallet နဲ့ Top-up ကို အာရုံစိုက်တဲ့ hybrid ကို ရွေးပါတယ်။
+      [[mark:show-p02c]] အလယ်မှာ ထိန်းထားဖို့ Padauk က အဖွဲ့တိုင်းကနေ reliability စိတ်ဝင်စားသူတွေ လတိုင်း စုတွေ့တဲ့ အုပ်စု တစ်ခု စပြီး အဲဒီ အလုပ်ကို ရာထူးတိုးတဲ့အခါ ထည့်တွက်ပါတယ်။ SRE ဆီ အကူအညီ တောင်းတဲ့ လမ်း တစ်ခုတည်း ထားပြီး အဖွဲ့ကြား plan တွေ ရွေ့နေအောင် တာဝန်ယူမယ့်သူ တစ်ယောက်လည်း ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l15-p02 }
+      # The voice script's continuation pages: Padauk's choice, then holding the middle.
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l15-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l15-p02c }
+
+  - id: ops-limits
+    chapter: Ops အလုပ်ကို ကန့်သတ်
+    narration: >
+      [[mark:show-p03]] ဘယ်မှာ ထားထား ops အလုပ်ကိုတော့ ကန့်သတ်ရပါမယ်။ on-call၊ ticket နဲ့ toil လို ops အလုပ်က အဖွဲ့ရဲ့ အချိန် တစ်ဝက်ထက် မကျော်ရဘဲ အနည်းဆုံး တစ်ဝက်ကို engineering အတွက် ထားရပါတယ်။ on-call ကတော့ တစ်ယောက်ချင်းရဲ့ အချိန် လေးပုံတစ်ပုံထက် မကျော်ရပါဘူး။ ဒါတွေက ပန်းတိုင် မဟုတ်ဘဲ မကျော်ရမယ့် မျဉ်းပါ၊ ကျန်းမာတဲ့ အဖွဲ့တွေက အများကြီး အောက်မှာ ရှိပါတယ်။ ဒီ မျဉ်းအောက်မှာ နေနိုင်ဖို့ ရုံး တစ်ခုတည်းကနေ ညတွေပါ ယူတဲ့ rotation မှာ လူ ၈ ယောက်လောက် လိုပါတယ်။
+      [[mark:show-p03b]] SRE သုံးယောက်တည်းဆိုရင် တစ်ယောက်ချင်း သုံးပတ်မှာ တစ်ပတ် ကျလို့ လေးပုံတစ်ပုံ ကျော်ပါတယ်။ ဒါကြောင့် ကိုယ်ရေးတဲ့ code ကို အသိဆုံး ဖြစ်တဲ့ Wallet နဲ့ Top-up developer ငါးယောက်က rotation ထဲ ဝင်လာပါတယ်။ on-call ကျသူက အဲဒီ အပတ်ရဲ့ ops အလုပ် အကုန် ယူနိုင်ရင် ops က ၈ ယောက်မှာ တစ်ယောက်စာလောက်ပဲ ရှိပါတော့မယ်။
+      [[mark:show-p03c]] မသီရိက အဖွဲ့ ဘာအတွက် ရှိလဲ၊ ဘာကို ပိုင်လဲ၊ အောင်မြင်ရင် ဘယ်လို သိမလဲ ဆိုတာကို charter အဖြစ် ရေးပါတယ်။ ရည်ရွယ်ချက်က user တွေ Wallet နဲ့ Top-up ကို ယုံလို့ရအောင်ပါ။ နယ်ပယ်က service အဟောင်းတွေ မဟုတ်ဘဲ ဆောက်နေဆဲ Wallet နဲ့ Top-up ပါ၊ Eats ကတော့ SRE ဆောက်ပေးတဲ့ tool တွေနဲ့ ကိုယ့် on-call ကို ကိုယ် ဆက်ယူပါတယ်။ အောင်မြင်မှုကို ရက်စွဲနဲ့ ရေးပါတယ်၊ ဥပမာ သီတင်းကျွတ်မှာ မသီရိ တစ်ပတ်လုံး ခွင့်ယူပြီး page တစ်ခုမှ မရောက်ရဘူး ဆိုတာမျိုးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l15-p03 }
+      # The rotation arithmetic, then the charter.
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l15-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l15-p03c }
+
+  - id: canary
+    chapter: အဖွဲ့ကို canary လို ပြောင်း
+    narration: >
+      [[mark:show-p04]] အဖွဲ့ ဖွဲ့ပုံ ပြောင်းတာကိုလည်း version အသစ်ကို user နည်းနည်းဆီ အရင် ပို့ပြီး ကောင်းမှ ဆက်ဖြန့်တဲ့ canary လို လုပ်ပါတယ်။ Wallet နဲ့ Top-up က အရင် စပြီး incident တွေနဲ့ လစဉ် စစ်တမ်းကို ကြည့်ပြီး အလုပ်ဖြစ်မှ ချဲ့ပါမယ်။ ပထမ လတွေမှာ ပိုဆိုးသလို ဖြစ်မယ်လို့လည်း ကြိုမျှော်ထားပါတယ်။ လူတွေ context ပျောက်တတ်ပြီး Viber ကနေ မသီရိကို တိုက်ရိုက် မေးတဲ့ အကျင့်လည်း ချက်ချင်း မပျောက်လို့ပါ။ အဖွဲ့ ပြန်ဖွဲ့တာက အချိန် တကယ် ကုန်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l15-p04 }
+
+  - id: how-much-help
+    chapter: Service တစ်ခုကို ဘယ်လောက် ကူမလဲ
+    narration: >
+      [[mark:close-p04]] [[mark:b3-s1]] ဘာလို့ Wallet နဲ့ Top-up ကိုပဲ ကူတာလဲလို့ တခြား အဖွဲ့တွေက မေးလာပါတယ်။ SRE သုံးယောက်နဲ့ service ၃၀ လောက်ကို အညီအမျှ ကူလို့ မရတော့ မသီရိက ပျက်ရင် ဘယ်လောက် ဆိုးလဲ၊ ဘယ်လောက် ခဏခဏ ပျက်လဲ ဆိုတဲ့ မေးခွန်း နှစ်ခုနဲ့ ပုံ ဆွဲပြပါတယ်။
+      [[mark:b3-s2]] Wallet က လူတွေရဲ့ ငွေကို ထိပြီး လစာထုတ်ရက် တိုင်းလိုလို ပြဿနာ တက်လို့ ညာဘက် အပေါ်ဆုံးမှာ ရှိပြီး အကူအညီ အများဆုံး ရပါတယ်။ Eats ပျက်ရင် နေ့လယ်စာ နောက်ကျတာလောက်ပဲ ဖြစ်ပေမဲ့ incident တွေ များလာလို့ ညာဘက် ရွေ့လာပါတယ်။ ဝန်ထမ်းတွေပဲ သုံးတဲ့ ကုန်စုံ pilot လေးကတော့ ထိခိုက်မှုလည်း နည်း၊ ပျက်တာလည်း ရှားလို့ အကူအညီ နည်းနည်းပဲ ပေးဖို့ တမင် ရွေးထားပါတယ်။
+      [[mark:b3-s3]] အကူအညီက ကျလည်း ကျနိုင်ပါတယ်၊ ဥပမာ ပိတ်တော့မယ့် ဖုန်းဘေလ် ခြစ်ကတ် voucher အဟောင်းက အောက်ဆင်းသွားပါတယ်။ Wallet ကို ရှားရှားပဲ ပျက်တဲ့ ဘယ်ဘက်ဆီ ရွှေ့ဖို့ကတော့ နှစ်အတော်ကြာ လုပ်ရပြီး ဂရုမစိုက်ရင် ပြန်ရွေ့လာတတ်ပါတယ်။ ဒီပုံက service ကို အမှတ်ပေးဖို့ မဟုတ်ဘဲ SRE အကူအညီ ဘယ်လောက် ပေးမလဲ ဆုံးဖြတ်ဖို့ပဲ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l15-b3-vaxis, l15-b3-vlabel, l15-b3-haxis, l15-b3-hlabel]
+        drawMs: 1800
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds:
+          [
+            l15-b3-wallet-dot,
+            l15-b3-wallet,
+            l15-b3-eats-dot,
+            l15-b3-eats,
+            l15-b3-eats-arrow,
+            l15-b3-eats-after,
+            l15-b3-pilot-dot,
+            l15-b3-pilot1,
+            l15-b3-pilot2,
+          ]
+        drawMs: 2600
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l15-b3-voucher-dot, l15-b3-voucher, l15-b3-voucher-arrow, l15-b3-voucher-down]
+        drawMs: 1600
+
+  - id: scorecards
+    chapter: Scorecard
+    narration: >
+      [[mark:close-b3]] [[mark:show-p05]] ကိုနေလင်းက အဖွဲ့တိုင်းရဲ့ SLO၊ incident နဲ့ page အရေအတွက်ကို ပြတဲ့ scorecard ကို လတိုင်း ကြည့်ပါတယ်။ scorecard က ခံစားချက်ကို လူတိုင်း တူတူ ဖတ်တဲ့ ကိန်းဂဏန်း ဖြစ်စေလို့ ငြင်းခုံစရာ မလိုတော့ပါဘူး၊ မတိုင်ထားရင်တော့ ဘယ်သူမှ မကြည့်တဲ့ အရာက မသိမသာ ဆိုးလာတတ်ပါတယ်။ ဒါပေမဲ့ ကိန်းဂဏန်းက တကယ့် ကျန်းမာရေးကို အစားထိုး တိုင်းထားတာမို့ ပြဿနာ မပြင်ဘဲ ကိန်းဂဏန်းကိုပဲ လှအောင် လုပ်လို့ရပါတယ်။ ranking က ပြဿနာကိုတောင် ဖုံးတတ်ပါတယ်။
+      [[mark:show-p05b]] ဥပမာ Padauk က incident အနည်းဆုံး အဖွဲ့ကို ထိပ်ဆုံး ထားတဲ့ လစဉ် ranking ကို ပြလိုက်တော့ နောက်လမှာ အဖွဲ့ တစ်ဖွဲ့ရဲ့ incident က လေးခုကနေ သုည ဖြစ်သွားပါတယ်။ ဒါပေမဲ့ support lead မစုဆီ ရောက်တဲ့ complaint တွေကတော့ တက်လာပါတယ်၊ incident သေးသေးလေးတွေကို ကြေညာတာ ရပ်လိုက်လို့ပါ။ ကိန်းဂဏန်း တစ်ခုကို ပစ်မှတ် လုပ်လိုက်တာနဲ့ လူတွေက အဲဒီ ကိန်းဂဏန်းကိုပဲ လိုက်ပြင်လို့ တကယ့် အခြေအနေကို မပြတော့တာကို Goodhart's law လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "DORA Quick Check", url: "https://dora.dev/quickcheck/" }
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l15-p05 }
+      # The ranking that backfired, as the narration tells it.
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l15-p05b }
+
+  - id: review-rule
+    chapter: Padauk ရဲ့ review စည်းကမ်း
+    narration: >
+      [[mark:show-p06]] ဒါကြောင့် Padauk က scorecard ကို ဆက်ထားပေမဲ့ ranking ကို ဖြုတ်ပြီး review စည်းကမ်း တစ်ခု ထားပါတယ်။ ကိန်းဂဏန်းက စကား စဖို့ပဲ ဖြစ်ပြီး နောက်ကွယ်က အကြောင်းကို အဖွဲ့ကိုယ်တိုင် ရှင်းပြပါတယ်၊ ဘယ်အဖွဲ့ကိုမှ အဆင့် မစီပါဘူး။ DORA သုတေသနကလည်း delivery ကိန်းဂဏန်းတွေနဲ့ အဖွဲ့တွေကို အချင်းချင်း မနှိုင်းယှဉ်ဖို့ သတိပေးထားပါတယ်။
+      [[mark:show-p06b]] review မှာ လူတွေ ပြောရဲလာတော့ incident ဖုံးခဲ့တဲ့ အဖွဲ့ဟာ အသေးလေးတွေကို ပြန်ကြေညာလာပါတယ်။ SRE ကို ဘယ်မှာ ထားလဲ ဆိုတဲ့ ဖွဲ့စည်းပုံနဲ့ သတင်းဆိုးကို ဘယ်လို ဆက်ဆံလဲ ဆိုတဲ့ ယဉ်ကျေးမှုက တစ်ခုကို တစ်ခု အားပေးပါတယ်၊ ဒါကြောင့် ဘယ် ကိန်းဂဏန်းထက်မဆို ပြောရဲတဲ့ review က ပိုအရေးကြီးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA's software delivery performance metrics (dora.dev)",
+          url: "https://dora.dev/guides/dora-metrics-four-keys/",
+        }
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l15-p06 }
+      # Structure and culture feed each other.
+      - { id: show-p06b, type: slide.show, at: { mark: show-p06b }, slideId: l15-p06b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] ကိုယ့်အဖွဲ့ကို ပြန်မဖွဲ့ခင် ဒီအပတ် အရင် လုပ်ကြည့်သင့်တာ သုံးခုပါ။ အဖွဲ့ ဘာအတွက် ရှိလဲ၊ ဘယ် service တွေ ပိုင်လဲ၊ ဘယ်လိုဆိုရင် အောင်မြင်လဲ ဆိုတာကို သုံးကြောင်းနဲ့ charter ရေးကြည့်ပါ။ နောက် sprint မှာ production အလုပ် နာရီကို တိုင်းကြည့်ပါ။ ပြီးတော့ တိုင်းနေတဲ့ ကိန်းဂဏန်း တစ်ခုကို ပြဿနာ မပြင်ဘဲ လှအောင် လုပ်လို့ရလား စစ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - { title: "DORA Quick Check", url: "https://dora.dev/quickcheck/" }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l15-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ ဆုံးဖြတ်ရင် လိုမယ့် အချက်တွေပါ။ [[mark:sel-conway]] Conway's law က system ပုံစံဟာ ဆောက်တဲ့ အဖွဲ့တွေ ဆက်သွယ်ပုံအတိုင်း ထွက်လာတတ်တာပါ။ [[mark:sel-charter]] charter က ရည်ရွယ်ချက်၊ နယ်ပယ်နဲ့ ရက်စွဲပါတဲ့ အောင်မြင်မှုကို ရေးထားတဲ့ စာတမ်း ဖြစ်ပြီး၊ [[mark:sel-ops-limits]] ops အလုပ် ကန့်သတ်ချက်က engineering အနည်းဆုံး တစ်ဝက်၊ on-call အများဆုံး လေးပုံတစ်ပုံ ဆိုတဲ့ မျဉ်းပါ၊ ပန်းတိုင် မဟုတ်ပါဘူး။
+      [[mark:sel-shadow]] shadow SRE က တရားဝင် အကူအညီ နှေးလို့ တိတ်တိတ်လေး ပေါ်လာတဲ့ ကိုယ်ပိုင် ops လူနဲ့ tool တွေပါ။ [[mark:sel-scorecard]] scorecard က ကျန်းမာရေးကို ကိန်းဂဏန်း အနည်းငယ်နဲ့ ပြပေမဲ့၊ [[mark:sel-goodhart]] Goodhart's law အရ ပစ်မှတ် ဖြစ်သွားတဲ့ ကိန်းဂဏန်းက တကယ့် အခြေအနေကို မပြတော့ပါဘူး။ [[mark:ask-question]] တကယ်လို့ အဖွဲ့ တစ်ခုမှာ ရုံး တစ်ခုတည်းကနေ လူ ၅ ယောက်က ညတွေကိုပါ on-call ယူနေရင် ဘာ အကြံပေးမလဲ?
+      [[mark:pause-question]] ငါးပတ်မှာ တစ်ပတ် ကျလို့ မျဉ်းအောက်မှာ ရှိပေမဲ့ တစ်ယောက် ခွင့်ယူတာနဲ့ ကျန်တဲ့ လေးယောက်က လေးပုံတစ်ပုံ မျဉ်းပေါ် ရောက်ပါပြီ။ ဒါကြောင့် ၈ ယောက်လောက်ထိ တိုးမလား၊ ညဘက် on-call နာရီတွေကို လျှော့မလား စဉ်းစားပါ။ charter ရေးပြီး မကြာခင်မှာပဲ Bill Pay အဖွဲ့က သူတို့ on-call တစ်ခုလုံးကို မသီရိရဲ့ သုံးယောက် အဖွဲ့က ယူပေးဖို့ လာတောင်းပါတယ်။ SRE က အဲဒီအစား ဘာကို ယူသင့်လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE at Google: How to structure your SRE team (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/how-sre-teams-are-organized-and-how-to-get-started",
+        }
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-conway,
+          type: editor.select,
+          at: { mark: sel-conway },
+          target: { file: notes.md, text: "Conway's law", occurrence: 1 },
+        }
+      - {
+          id: sel-charter,
+          type: editor.select,
+          at: { mark: sel-charter },
+          target: { file: notes.md, text: "charter", occurrence: 1 },
+        }
+      - {
+          id: sel-ops-limits,
+          type: editor.select,
+          at: { mark: sel-ops-limits },
+          target: { file: notes.md, text: "ops အလုပ် ကန့်သတ်ချက်", occurrence: 1 },
+        }
+      - {
+          id: sel-shadow,
+          type: editor.select,
+          at: { mark: sel-shadow },
+          target: { file: notes.md, text: "shadow SRE", occurrence: 1 },
+        }
+      - {
+          id: sel-scorecard,
+          type: editor.select,
+          at: { mark: sel-scorecard },
+          target: { file: notes.md, text: "scorecard", occurrence: 1 },
+        }
+      - {
+          id: sel-goodhart,
+          type: editor.select,
+          at: { mark: sel-goodhart },
+          target: { file: notes.md, text: "Goodhart's law", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ sits right before the
+      # question, so its mark (ask-question) already makes the question its own
+      # dialog; a select at the mark itself would drag under the question and
+      # leave no pause, and one at pause-question would drag under the answer's
+      # first words (the scheduler holds only the dialog after its anchor's). So
+      # the question-line select hangs off ask-question with an offset: it starts
+      # about as the question ends, its drag runs in silence, and the answer at
+      # pause-question waits for it. The question is 94 characters
+      # (no ၊ to split at), so the quiet depends on the voice's speed: 6850
+      # leaves about 2.8 / 1.35 / 0.35 s before the answer at 55 / 70 / 95 ms
+      # per char (at 95 the drag starts under the question's last words, as in
+      # lessons 7 and 8); above ~6940 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 6850 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: ရုံး တစ်ခုတည်းက 5 ယောက်က ညတွေကိုပါ on-call ယူနေတယ်။ ဘာ အကြံပေးမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
