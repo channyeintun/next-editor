@@ -1,0 +1,966 @@
+# SRE from zero, lesson 9: On-call people can sustain (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-09-sustainable-on-call.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-09-sustainable-on-call.md \
+#     src/studio/scripts/sre-09-sustainable-on-call.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Two marks were added at existing sentence ends; they add no spoken text and
+# no action uses them. p02-rotation splits the l09_p02 page's 528-character
+# narration in two, and b3-s4-coordinator splits B3 step 4's 452 characters,
+# so no dialog passes the 450-character limit. The recap's ⟪select မေးခွန်း⟫
+# became ask-question, the question's own dialog, and the question-line select
+# hangs off it so the ⟪pause 3s⟫ is real silence, as in Module 1. No page or
+# board step holds longer than ~38 s at 70 ms/char, so no pacing pages were
+# needed.
+#
+# Boards (B1 nested ellipses, B2 P5 bars on a 24-hour axis, B3 P2 comb
+# downward). Colour jobs: #1e1e1e ink (paints white) for the axis, arrows,
+# the bus, the role boxes and the example label; orange the caveat (the
+# incident set, the never-paged service and the response-time notes, as the
+# voice script asks); red the outage; blue the thing named and the data bars;
+# green Wallet's full-day bar and the agreed rule; violet the result (the IC
+# rule and the coordinator). A label on two lines is two text assets, one per
+# line, so each line meets the 0.55 em width rule on its own; labels whose
+# Virgil Latin or fallback Myanmar measured wider than that rule in Chrome
+# ("outage →", "bug →", "ဘယ်သူမဆို ကြေညာ", "Eats: 7–23", the axis digits and
+# the right-hand B2 note's first line) get their measured width plus a margin.
+#
+# Deck pages: deck "Next Editor · SRE 3 · Respond and learn", published at the
+# /pub URL below. Until this lesson's pages (l09_p01 … l09_p05, m3_map) are
+# built in that deck, the Director fetches it and reports l09_p01 as missing;
+# that error is expected until then. Page plan:
+# ~/Documents/sre-course/work/pages/sre-09-sustainable-on-call.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-09-sustainable-on-call.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-09-sustainable-on-call.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-09-sustainable-on-call
+  title: "SRE from zero 9: ရေရှည် လုပ်နိုင်တဲ့ on-call"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # ရေရှည် လုပ်နိုင်တဲ့ on-call
+
+        - incident — user ဒါမှမဟုတ် business ထိခိုက်လို့ စနစ်တကျ တုံ့ပြန်ရမယ့် ပြဿနာ၊ ဘယ်သူမဆို ကြေညာ
+        - outage — service ဒါမှမဟုတ် အရေးကြီး feature လုံးဝ သုံးမရ
+        - rotation — on-call ကို အလှည့်ကျ ယူ၊ page တိုင်းမှာ နာမည်ပါ တစ်ယောက်
+        - response time — page ဝင်ပြီး ဘယ်လောက် မြန်မြန် စတုံ့ပြန်ရမလဲ
+        - incident commander — ရာထူး မရွေး ဦးဆောင်၊ ကိုယ်တိုင် မပြင်ဘဲ စီစဉ်
+
+        မေးခွန်း: service တစ်ခုက on-call ကျသူကို တစ်ညကို page 6 ခါ ပို့နေတယ်။ ဘာကို အရင် ပြောင်းမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ရေရှည် လုပ်နိုင်တဲ့ on-call</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 9</p>
+              <h1>ရေရှည် လုပ်နိုင်တဲ့ on-call</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l09-p01
+      contentType: google
+      name: "Cover: who answers at 2 a.m.?"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p01
+    - id: m3-map
+      contentType: google
+      name: "Module 3 map: respond and learn"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: m3_map
+    - id: l09-p01b
+      contentType: google
+      name: "Ma Su declares, then downgrades"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p01b
+    - id: l09-p02
+      contentType: google
+      name: "Who answers the page?"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p02
+    - id: l09-p02b
+      contentType: google
+      name: "Wallet's first week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p02b
+    - id: l09-p03
+      contentType: google
+      name: "A rotation people can sustain"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p03
+    - id: l09-p03b
+      contentType: google
+      name: "Is the rotation healthy?"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p03b
+    - id: l09-p04
+      contentType: google
+      name: "When it's big"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p04
+    - id: l09-p04b
+      contentType: google
+      name: "Slower vs faster"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p04b
+    - id: l09-p05
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l09_p05
+  whiteboardAssets:
+    # ---- Board B1: incident, outage nested inside it, bug overlapping it ----
+    - {
+        id: l09-b1-incident,
+        kind: ellipse,
+        x: 255,
+        y: 155,
+        width: 680,
+        height: 400,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l09-b1-incident-t,
+        kind: text,
+        x: 392,
+        y: 205,
+        width: 430,
+        height: 35,
+        text: "incident → စနစ်တကျ တုံ့ပြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-outage,
+        kind: ellipse,
+        x: 300,
+        y: 262,
+        width: 400,
+        height: 186,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l09-b1-outage-t1,
+        kind: text,
+        x: 345,
+        y: 313,
+        width: 150,
+        height: 35,
+        text: "outage →",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-outage-t2,
+        kind: text,
+        x: 345,
+        y: 352,
+        width: 320,
+        height: 35,
+        text: "တာဝန်ရှိသူ ချက်ချင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-bug,
+        kind: ellipse,
+        x: 790,
+        y: 245,
+        width: 300,
+        height: 220,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l09-b1-bug-t1,
+        kind: text,
+        x: 958,
+        y: 318,
+        width: 100,
+        height: 35,
+        text: "bug →",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-bug-t2,
+        kind: text,
+        x: 958,
+        y: 357,
+        width: 105,
+        height: 35,
+        text: "ticket",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-operator,
+        kind: text,
+        x: 470,
+        y: 470,
+        width: 245,
+        height: 35,
+        text: "Operator B နှေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-rule-t1,
+        kind: text,
+        x: 275,
+        y: 572,
+        width: 350,
+        height: 35,
+        text: "ကြိုရေးထားတဲ့ စံနှုန်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b1-rule-t2,
+        kind: text,
+        x: 275,
+        y: 610,
+        width: 270,
+        height: 35,
+        text: "ဘယ်သူမဆို ကြေညာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B2: who covers which hours (P5 bars over a 0-24 h axis, 30 px an hour) ----
+    - {
+        id: l09-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 440,
+        width: 720,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b2-zero,
+        kind: text,
+        x: 290,
+        y: 478,
+        width: 30,
+        height: 35,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-24,
+        kind: text,
+        x: 1001,
+        y: 478,
+        width: 50,
+        height: 35,
+        text: "24",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-wallet-bar,
+        kind: rectangle,
+        x: 300,
+        y: 200,
+        width: 720,
+        height: 30,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l09-b2-wallet-t,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 380,
+        height: 35,
+        text: "Wallet: 24 နာရီ၊ 5 မိနစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-eats-bar,
+        kind: rectangle,
+        x: 510,
+        y: 285,
+        width: 480,
+        height: 30,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l09-b2-eats-t,
+        kind: text,
+        x: 510,
+        y: 245,
+        width: 175,
+        height: 35,
+        text: "Eats: 7–23",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-settle-bar,
+        kind: rectangle,
+        x: 570,
+        y: 370,
+        width: 240,
+        height: 30,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l09-b2-settle-t,
+        kind: text,
+        x: 570,
+        y: 330,
+        width: 260,
+        height: 35,
+        text: "settlement: 9–17",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-promo-t,
+        kind: text,
+        x: 300,
+        y: 412,
+        width: 380,
+        height: 35,
+        text: "promo banner: page မပို့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-note5-t1,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 320,
+        height: 35,
+        text: "5 မိနစ်: laptop အမြဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-note5-t2,
+        kind: text,
+        x: 280,
+        y: 578,
+        width: 305,
+        height: 35,
+        text: "primary → secondary",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-note3-t1,
+        kind: text,
+        x: 690,
+        y: 540,
+        width: 340,
+        height: 35,
+        text: "3 မိနစ်အောက်: 2 ယောက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b2-note3-t2,
+        kind: text,
+        x: 690,
+        y: 578,
+        width: 320,
+        height: 35,
+        text: "30 မိနစ်: ပုံမှန် ဘဝ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: incident roles (P2 comb, downward), the coordinator to the right ----
+    - {
+        id: l09-b3-ic,
+        kind: rectangle,
+        x: 400,
+        y: 215,
+        width: 340,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l09-b3-ic-t,
+        kind: text,
+        x: 443,
+        y: 232,
+        width: 290,
+        height: 35,
+        text: "incident commander",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-ic-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 555,
+        y: 290,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-bus,
+        kind: rectangle,
+        x: 380,
+        y: 335,
+        width: 590,
+        height: 8,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 380,
+        y: 347,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-comms,
+        kind: rectangle,
+        x: 265,
+        y: 395,
+        width: 260,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-comms-t,
+        kind: text,
+        x: 296,
+        y: 412,
+        width: 220,
+        height: 35,
+        text: "communications",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 347,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-ops,
+        kind: rectangle,
+        x: 545,
+        y: 395,
+        width: 260,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-ops-t,
+        kind: text,
+        x: 604,
+        y: 412,
+        width: 160,
+        height: 35,
+        text: "operations",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 940,
+        y: 347,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-scribe,
+        kind: rectangle,
+        x: 825,
+        y: 395,
+        width: 260,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l09-b3-scribe-t,
+        kind: text,
+        x: 916,
+        y: 412,
+        width: 100,
+        height: 35,
+        text: "scribe",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-rank-t,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 600,
+        height: 35,
+        text: "ရာထူး မရွေး incident commander ဦးဆောင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-coord,
+        kind: rectangle,
+        x: 782,
+        y: 205,
+        width: 313,
+        height: 105,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l09-b3-coord-t1,
+        kind: text,
+        x: 798,
+        y: 220,
+        width: 135,
+        height: 35,
+        text: "ညှိပေးသူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l09-b3-coord-t2,
+        kind: text,
+        x: 798,
+        y: 260,
+        width: 285,
+        height: 35,
+        text: "အဖွဲ့ များရင် ခေါ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2609
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "မနက် 2 နာရီ ဘယ်သူ ဖြေမလဲ"
+    narration: >
+      [[mark:show-p01]] Padauk ရဲ့ alert တွေကို အခု ယုံလို့ရပါပြီ၊ user အဆင့် check တွေနဲ့ အထောက်အထား ခိုင်လုံမှ တက်တဲ့ alert တွေ ရှိလာလို့ပါ။ ဒါပေမဲ့ တစ်ည မနက် ၂ နာရီမှာ Wallet ရဲ့ alert တက်လာတော့ လူ ၆၀ ရှိတဲ့ Viber group ထဲ ရောက်သွားပြီး အဲဒီ group ကို လူတိုင်းက အသံပိတ်ထားကြပါတယ်။
+      ဘယ်သူမှ မဖြေလို့ Bank X ဆီ ငွေလွှဲတာတွေ မနက်အထိ fail နေခဲ့ပါတယ်။ မနက်ကျတော့ support lead မစုက လုပ်နေကျအတိုင်း CTO ကိုနေလင်းကိုပဲ ဖုန်းဆက်ပါတယ်။ ဒါဆို မနက် ၂ နာရီမှာ ဘယ်သူ ဖြေမလဲ?
+      [[mark:show-m3-map]] Module ၃ မှာ reliability loop ရဲ့ တုံ့ပြန်တဲ့ အဆင့်နဲ့ သင်ယူတဲ့ အဆင့်ကို ဖြတ်သွားပါမယ်။ Padauk မှာ engineer ၄၀ လောက် ရှိပေမဲ့ reliability ကို အချိန်ပြည့် ကြည့်တာ မသီရိ တစ်ယောက်တည်းမို့ product အဖွဲ့တိုင်းက ကိုယ့် service ရဲ့ on-call ကို ကိုယ် ယူရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l09-p01,
+        }
+      # Module 3's first lesson: the module map, about 14-24 s at 55-95 ms/char.
+      - { id: show-m3-map, type: slide.show, at: { mark: show-m3-map }, slideId: m3-map }
+
+  - id: bug-incident-outage
+    chapter: "Bug၊ incident၊ outage"
+    narration: >
+      [[mark:close-m3-map]] [[mark:b1-s1]] မသီရိက Viber group ကို ပြန်ဖတ်ကြည့်တော့ ပြဿနာ သုံးမျိုး ရောနေတာ တွေ့ရပါတယ်။ user ဒါမှမဟုတ် business ကို ထိခိုက်နေလို့ စနစ်တကျ ညှိပြီး တုံ့ပြန်ရမယ့် ပြဿနာက incident ပါ။ အဲဒီထဲက Wallet ငွေလွှဲ လုံးဝ မရတာလို service ဒါမှမဟုတ် အရေးကြီး feature တစ်ခု သုံးမရတာကတော့ outage မို့ တာဝန်ရှိသူတွေ ချက်ချင်း ဝင်ရပါတယ်။
+      [[mark:b1-s2]] software က ရည်ရွယ်ထားတဲ့အတိုင်း အလုပ် မလုပ်တာကတော့ bug ပါ။ promo banner ပေါ်က စာ ပြတ်နေတာလို bug အများစုက ticket ဖွင့်ပြီး အလုပ်ချိန်ထဲ ပြင်ရုံပါပဲ၊ ငွေလွှဲ fail စေတဲ့ bug လို တချို့ကမှ incident ဖြစ်လာတာပါ။
+      [[mark:b1-s3]] incident တိုင်းကလည်း bug ကနေ လာတာ မဟုတ်ပါဘူး။ Operator B ရဲ့ system နှေးနေရင် Padauk ရဲ့ code မှာ အမှား မရှိပေမဲ့ top-up တွေ fail နေလို့ incident ပါပဲ။
+      [[mark:b1-s4]] ပြဿနာ စတက်ချိန်မှာ ဘယ်အမျိုးအစားလဲ ခွဲရ ခက်လို့ Padauk က ဘာဆိုရင် incident လဲ ဆိုတဲ့ စံနှုန်းကို ကြိုရေးထားပြီး ဘယ်သူမဆို incident ကြေညာလို့ရပါတယ်။ Viber bot ကို command တစ်ကြောင်း ပို့ရုံနဲ့ incident ဖွင့်လို့ရပြီး ပြင်းထန်မှု အဆင့်၊ severity ကိုလည်း default နဲ့ စပေးလို့ လိုရင် နောက်မှ ပြင်ရုံပါပဲ။
+      [[mark:close-b1]] [[mark:show-p01b]] တစ်ညနေမှာ balance မှားနေတယ် ဆိုတဲ့ message တွေ ဝင်လာတော့ မစုက ကိုယ်တိုင် incident ကြေညာပါတယ်။ မိနစ် ၂၀ အတွင်း app က balance အဟောင်းကို ခဏ ပြနေတာပဲ ဆိုတာ သိရလို့ bug ticket အဖြစ် အဆင့်လျှော့ပါတယ်။ ကိုနေလင်းက မစုကို အားလုံး ရှေ့မှာ ကျေးဇူးတင်ပါတယ်၊ အဆင့်လျှော့တာက ဘာမှ မကုန်ပေမဲ့ မကြေညာဘဲ နေတာကတော့ Bank X ညလို အများကြီး ကုန်လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - { id: close-m3-map, type: slide.close, at: { mark: close-m3-map, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [l09-b1-incident, l09-b1-incident-t, l09-b1-outage, l09-b1-outage-t1, l09-b1-outage-t2]
+        drawMs: 2200
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l09-b1-bug, l09-b1-bug-t1, l09-b1-bug-t2]
+        drawMs: 1200
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l09-b1-operator]
+        drawMs: 900
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l09-b1-rule-t1, l09-b1-rule-t2]
+        drawMs: 1400
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l09-p01b }
+
+  - id: who-answers
+    chapter: "Page ကို ဘယ်သူ ဖြေမလဲ"
+    narration: >
+      [[mark:show-p02]] ဒါဆို လူကို ချက်ချင်း နှိုးတဲ့ alert၊ page ကို ဘယ်သူ ဖြေမလဲ? လူတိုင်းဆီ ပို့ရင် တစ်ယောက်ယောက် ဖြေမှာပါလို့ အားလုံး ထင်ပြီး ဘယ်သူမှ မဖြေဖြစ်ပါဘူး၊ ဒါကို bystander effect လို့ ခေါ်ပါတယ်။ ကိုနေလင်းလို ခေါင်းဆောင် တစ်ယောက်ကိုပဲ အားကိုးရင်လည်း သူ လေယာဉ်ပေါ် ရောက်နေတဲ့နေ့ အကုန် ရပ်မှာမို့ single point of failure ဖြစ်ပါတယ်။
+      [[mark:p02-rotation]] ဒါကြောင့် မနက် ၂ နာရီ မေးခွန်းအတွက် Padauk ရဲ့ အဖြေက ချက်ချင်း ဖြေရမယ့် on-call တာဝန်ကို အလှည့်ကျ ယူတဲ့ rotation ပါ။ ဒီည ဘယ်သူ ဖြေရမလဲ ဆိုတာ schedule မှာ နာမည်နဲ့ ပါလို့ ကျန်တဲ့သူတွေ စိတ်အေးအေး အိပ်လို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+    actions:
+      # Advances in place from l09_p01b; p02-rotation only splits the dialog.
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l09-p02 }
+
+  - id: coverage-clock
+    chapter: "ဘယ်အချိန်၊ ဘယ်လောက် မြန်မြန်"
+    narration: >
+      [[mark:close-p02]] [[mark:b2-s1]] rotation ဆွဲဖို့ မသီရိက service တိုင်းအတွက် မေးခွန်း တစ်ခုတည်း မေးပါတယ်၊ ဒီ page ကို မနက် ၇ နာရီအထိ စောင့်ခိုင်းရင် ဘာ ဆုံးရှုံးမလဲ ဆိုတာပါ။ Wallet ရဲ့ burn-rate page က သဘောတူထားတဲ့ ပစ်မှတ်၊ SLO ရဲ့ ပျက်ခွင့်ကို အရမ်း မြန်မြန် သုံးနေမှ ဝင်လာတာမို့ စောင့်ခိုင်းရင် ငွေလွှဲတဲ့ user တွေ မိနစ်တိုင်း ပိုဒုက္ခရောက်ပါမယ်။ ဒါကြောင့် Wallet ကို တစ်နေ့ ၂၄ နာရီ၊ ရက်တိုင်း စောင့်ပြီး ၅ မိနစ်အတွင်း စတုံ့ပြန်ရပါတယ်။
+      [[mark:b2-s2]] Eats ကတော့ ညဘက် ဆိုင်တွေ ပိတ်လို့ မနက် ၇ နာရီကနေ ည ၁၁ နာရီအထိပဲ စောင့်ပါတယ်။ merchant တွေဆီ ငွေလွှဲတဲ့ settlement job ကလည်း ပျက်ရင် နာရီအနည်းငယ် နောက်မှ ပြန် run လို့ရလို့ ရုံးချိန်ထဲမှာပဲ ကြည့်ပါတယ်။
+      [[mark:b2-s3]] promo banner ပြတဲ့ service ကတော့ ပျက်ရင် app က banner မပြရုံပဲမို့ page လုံးဝ မပို့ဘဲ မနက်ကျမှ ticket နဲ့ ပြင်ပါတယ်။ တစ်နေ့ ၂၄ နာရီ on-call က ပိုက်ဆံလည်း ကုန်၊ လူလည်း ပင်ပန်းလို့ တကယ် လိုမှ ထားရပါတယ်။
+      [[mark:b2-s4]] page ဝင်ပြီး စတုံ့ပြန်ရမယ့် ကြာချိန်ကို response time လို့ ခေါ်ပါတယ်။ ၅ မိနစ်ဆိုရင် laptop ကို ဘယ်သွားသွား ယူသွားရပြီး ရုံးသွားတဲ့ လမ်းပေါ် မရောက်ခင် နောက်လူကို လွှဲထားရပါတယ်။ page က primary ဆီ အရင် ရောက်ပြီး သူက ကြည့်နေပါပြီလို့ ack မလုပ်ရင် secondary ဆီ ဆက်သွားပါတယ်။
+      [[mark:b2-s5]] ၃ မိနစ်ထက် မြန်ရရင်တော့ ဖုန်း အားသွင်းဖို့ ခဏ ထားခဲ့ရင်တောင် မမီတော့လို့ အမြဲ အသင့်ဖြစ်နေတဲ့ လူ နှစ်ယောက် လိုပြီး၊ မိနစ် ၃၀ ဆိုရင်တော့ ကလေး ကျောင်းကြိုတာလို ပုံမှန် ဘဝ နေလို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+    actions:
+      - { id: close-p02, type: slide.close, at: { mark: close-p02, offsetMs: -400 } }
+      # The 24-hour axis is furniture (no drawMs); Wallet's bar is drawn in after it.
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l09-b2-axis, l09-b2-zero, l09-b2-24]
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l09-b2-wallet-bar, l09-b2-wallet-t]
+        drawMs: 1400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l09-b2-eats-bar, l09-b2-eats-t, l09-b2-settle-bar, l09-b2-settle-t]
+        drawMs: 1800
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l09-b2-promo-t]
+        drawMs: 900
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l09-b2-note5-t1, l09-b2-note5-t2]
+        drawMs: 1400
+      - id: b2-s5
+        type: whiteboard.apply
+        at: { mark: b2-s5 }
+        upsertIds: [l09-b2-note3-t1, l09-b2-note3-t2]
+        drawMs: 1400
+
+  - id: sustainable-rotation
+    chapter: "ရေရှည် လုပ်နိုင်တဲ့ rotation"
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02b]] rotation စတဲ့ ပထမ အပတ်မှာ Wallet ရဲ့ on-call ကျနေသူဆီ တစ်ညကို page ၁၀ ခုလောက် ဝင်ပါတယ်။ အများစုက Viber group ထဲမှာ ဘယ်သူမှ မဖတ်ခဲ့လို့ မပြင်ခဲ့တဲ့ alert အဟောင်းတွေမို့ မသီရိက လူ ထပ်မထည့်ခင် အဲဒီ alert တွေကို အရင် ပြင်ခိုင်းပါတယ်၊ မဟုတ်ရင် page တွေကို လူတွေ ပြန်လျစ်လျူရှု လာမှာပါ။
+      [[mark:show-p03]] incident တစ်ခုကို ပြင်ပြီး မှတ်တမ်းတင်တာ နာရီ အတော်များများ ကြာတတ်လို့ တစ်ယောက်ရဲ့ တာဝန်ကာလ၊ shift တစ်ခုမှာ incident နှစ်ခုလောက်က အများဆုံးပါ၊ ဒီထက် များရင် ပြင်တာ နှေးပြီး သင်ယူဖို့ အချိန် မကျန်တော့ပါဘူး။ မီးပျက်တာ၊ လိုင်းကျတာ ခဏခဏ ဖြစ်လို့ on-call ကျသူတိုင်း အရန် မီးနဲ့ ဒုတိယ SIM ကတ်လည်း ထားပါတယ်။ Eats လို လူ နည်းတဲ့ အဖွဲ့မှာ schedule မကိုက်ရင်တော့ လူကို burnout မဖြစ်စေဘဲ response time ပစ်မှတ်ကို ဖြေလျှော့ပါတယ်။
+      [[mark:show-p03b]] page နည်းလွန်းရင်လည်း တကယ် ဝင်လာတဲ့နေ့ကျ tool တွေကို ဘယ်လို သုံးရမလဲ မေ့နေတတ်ပါတယ်။ ဒါကြောင့် မသီရိက rotation ကျန်းမာလား သိဖို့ ဈေးအပေါဆုံး ကိန်းဂဏန်း နှစ်ခုကို လတိုင်း ရေတွက်ပါတယ်၊ shift တစ်ခုစီရဲ့ page အရေအတွက်နဲ့ alert မတက်ခင် user က တွေ့ခဲ့တဲ့ incident အရေအတွက်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l09-p02b }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l09-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l09-p03b }
+
+  - id: incident-roles
+    chapter: "Incident commander နဲ့ role တွေ"
+    narration: >
+      [[mark:close-p03b]] [[mark:b3-s1]] တစ်လလောက် ကြာတော့ စနေနေ့ ညနေမှာ Bank X ဆီ ငွေလွှဲတာတွေ ထပ် fail လာပါတယ်။ ဒီတစ်ခါတော့ Wallet ရဲ့ on-call ကျနေတဲ့ junior developer က ၂ မိနစ်အတွင်း ack လုပ်ပြီး incident ကြေညာပါတယ်၊ သူပဲ incident commander အဖြစ် ဦးဆောင်ပါတယ်။ incident commander က incident တစ်ခုလုံးကို ညှိပြီး ဆုံးဖြတ်တဲ့သူပါ၊ ကိုယ်တိုင် ပြင်တာထက် လူတိုင်း ဘာလုပ်ရမလဲ သိအောင် စီစဉ်ပေးတာက သူ့ အလုပ်ပါ။
+      [[mark:b3-s2]] သူက role သုံးခု ခွဲပေးပါတယ်။ communications lead က support နဲ့ ကိုနေလင်းကို ပုံမှန် update ပေးလို့ ပြင်နေတဲ့သူတွေကို ဘယ်သူမှ လာမမေးတော့ပါဘူး။ secondary က operations lead အဖြစ် တကယ် ပြင်တဲ့ အလုပ်ကို ဦးဆောင်ပြီး scribe က ဘာဖြစ်လဲ၊ ဘာဆုံးဖြတ်လဲ အချိန်နဲ့ တကွ မှတ်ပါတယ်။ incident သေးရင် တစ်ယောက်က role နှစ်ခု ယူလို့ရပါတယ်။
+      [[mark:b3-s3]] ကိုနေလင်း call ထဲ ဝင်လာပေမဲ့ incident commander က CTO ဘာပြောမလဲ စောင့်မနေဘဲ သူ့ကို Bank X ရဲ့ တာဝန်ရှိသူဆီ ဖုန်းဆက်ဖို့ အလုပ် ခွဲပေးလိုက်ပါတယ်။ ရာထူး ဘယ်လောက်ပဲ ရှိရှိ incident commander က ဦးဆောင်တယ်လို့ ကြိုသဘောတူထားလို့ပါ။
+      [[mark:b3-s4]] ဒါပေမဲ့ Wallet နဲ့ Top-up နှစ်ဖွဲ့လုံး ပါလာပြီး Wallet ကို ကယ်ဖို့ Top-up ကို ခဏ ပိတ်မလားလို ဘယ်အဖွဲ့က ဆုံးဖြတ်ရမလဲ မရှင်းတဲ့ incident တွေလည်း ရှိပါတယ်။ [[mark:b3-s4-coordinator]] အဲဒီအခါ ကုမ္ပဏီ တစ်ခုလုံးရဲ့ rotation သေးသေးလေးကနေ အဖွဲ့တွေကြား ညှိပေးသူ တစ်ယောက် ခေါ်ပါတယ်။ သူက ကိုယ်တိုင် မပြင်ဘဲ ဆုံးဖြတ်ချက်တွေ မြန်မြန် ထွက်အောင် လုပ်ပေးပြီး နောက်ဆက်တွဲ အလုပ်ကိုတော့ service ပိုင်တဲ့ အဖွဲ့က ယူပါတယ်။ incident အရမ်းကြီးရင် အဖွဲ့တွေရဲ့ incident commander တွေကို အပေါ်ကနေ ညှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+      - {
+          title: "PagerDuty Incident Response docs: Different Roles",
+          url: "https://response.pagerduty.com/before/different_roles/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l09-b3-ic, l09-b3-ic-t, l09-b3-ic-arrow, l09-b3-bus]
+        drawMs: 1800
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds:
+          [
+            l09-b3-a1,
+            l09-b3-comms,
+            l09-b3-comms-t,
+            l09-b3-a2,
+            l09-b3-ops,
+            l09-b3-ops-t,
+            l09-b3-a3,
+            l09-b3-scribe,
+            l09-b3-scribe-t,
+          ]
+        drawMs: 2600
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l09-b3-rank-t]
+        drawMs: 1400
+      # b3-s4-coordinator only splits the dialog.
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l09-b3-coord, l09-b3-coord-t1, l09-b3-coord-t2]
+        drawMs: 1600
+
+  - id: when-its-big
+    chapter: "Incident ကြီးတဲ့အခါ"
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] ဒီ rotation မှာ ဘယ်သူတွေ ပါလဲ? Padauk မှာ reliability အဖွဲ့ သီးသန့် မရှိသေးလို့ ဆန္ဒရှိတဲ့ senior engineer ငါးယောက်က ကိုယ့် product အလုပ်ကို ဆက်လုပ်ရင်း incident ကြီးမှပဲ page ခံမယ့် swarm တစ်ခု ဖွဲ့ကြပါတယ်။ incident ကြီးရင်လည်း CTO မဟုတ်ဘဲ incident commander က ဦးဆောင်မယ်လို့ ကြိုသဘောတူထားပြီး business အကြောင်းကို ကြိုမျှထားပါတယ်။
+      [[mark:show-p04b]] လူစုံ သဘောတူမှ ဆုံးဖြတ်တာရော CTO ကို စောင့်တာရော ပိုနှေးပါတယ်။ ခေါင်းဆောင်တွေက engineer တွေ business ကို မသိမှာ မစိုးရိမ်ရအောင် swarm က အကြီးဆုံး merchant တွေ၊ ချိတ်ထားတဲ့ bank တွေ၊ ဒီအပတ် run နေတဲ့ promo တွေကို စာမျက်နှာ တစ်ခုထဲမှာ ကြိုရေးထားပါတယ်။
+      swarm ကို စောစော ခေါ်ရပေမဲ့ ခက်တဲ့ incident တိုင်း လွှဲပေးနေရင် product အဖွဲ့တွေ ကိုယ့် system ကို ကိုယ် မပြင်တတ်တော့ပါဘူး။ swarm အလုပ်ကိုလည်း ရာထူးတိုးတဲ့အခါ ထည့်တွက်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+      - {
+          title: "Workbook: Incident Response",
+          url: "https://sre.google/workbook/incident-response/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l09-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l09-p04b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p05]] မနက် ၂ နာရီ မေးခွန်းကို ကိုယ့်အဖွဲ့မှာလည်း ဒီအပတ် ဖြေထားလို့ရပါတယ်။ ဘာဆိုရင် incident လဲ ဆိုတာကို စာကြောင်း အနည်းငယ်နဲ့ ချရေးပါ။ group chat ထဲ ပို့နေတဲ့ alert တစ်ခုကို rotation ဆီ ပြောင်းပို့ပါ။ ပြီးတော့ ဘယ်သူတွေ incident commander လုပ်နိုင်လဲ ကြိုသဘောတူထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+      - {
+          title: "Google SRE Incident Management Guide (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/incident-management-guide/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l09-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] Viber group ကနေ rotation ဆီ ရောက်လာတဲ့ လမ်းကို ပြန်လျှောက်ကြည့်ရအောင်။ [[mark:sel-incident]] incident က user ဒါမှမဟုတ် business ကို ထိခိုက်လို့ စနစ်တကျ တုံ့ပြန်ရမယ့် ပြဿနာဖြစ်ပြီး ဘယ်သူမဆို ကြေညာလို့ရပါတယ်။ [[mark:sel-outage]] outage က အဲဒီထဲက service ဒါမှမဟုတ် အရေးကြီး feature လုံးဝ သုံးမရတာပါ။ [[mark:sel-rotation]] rotation က page တိုင်းမှာ နာမည်ပါတဲ့ တစ်ယောက် ရှိအောင် on-call ကို အလှည့်ကျ ယူတာပါ။
+      [[mark:sel-response-time]] response time က page ဝင်ပြီး ဘယ်လောက် မြန်မြန် စတုံ့ပြန်ရမလဲ ဆိုတာ ဖြစ်ပြီး၊ [[mark:sel-incident-commander]] incident commander က ရာထူး မရွေး incident ကို ဦးဆောင်ပြီး လူတိုင်း ဘာလုပ်ရမလဲ စီစဉ်ပေးသူပါ။ [[mark:ask-question]] service တစ်ခုက on-call ကျသူကို တစ်ညကို ၆ ခါ page ပို့နေရင် ဘာကို အရင် ပြောင်းမလဲ?
+      [[mark:pause-question]] လူ ထပ်ထည့်ဖို့ မဟုတ်ပါဘူး။ အလကား တက်နေတဲ့ alert တွေကို အရင် ပြင်ပါ၊ ဒါမှမဟုတ် ပိတ်ပါ၊ ပြီးမှ response time ပစ်မှတ်ကို ပြန်စစ်ပါ။ လစာထုတ်ရက် ညနေ ၆ နာရီ ၄၀ မှာတော့ Top-up ရဲ့ burn-rate page ဝင်လာပြီး support ကလည်း ဖုန်းဘေလ် မဝင်ဘူးလို့ ပြောလာပါတယ်။ ဘယ်ကနေ စမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: On-Call", url: "https://sre.google/workbook/on-call/" }
+      - {
+          title: "SRE book, 1st ed: Managing Incidents",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-incident,
+          type: editor.select,
+          at: { mark: sel-incident },
+          target: { file: notes.md, text: "incident", occurrence: 1 },
+        }
+      - {
+          id: sel-outage,
+          type: editor.select,
+          at: { mark: sel-outage },
+          target: { file: notes.md, text: "outage", occurrence: 1 },
+        }
+      - {
+          id: sel-rotation,
+          type: editor.select,
+          at: { mark: sel-rotation },
+          target: { file: notes.md, text: "rotation", occurrence: 1 },
+        }
+      - {
+          id: sel-response-time,
+          type: editor.select,
+          at: { mark: sel-response-time },
+          target: { file: notes.md, text: "response time", occurrence: 1 },
+        }
+      - {
+          id: sel-incident-commander,
+          type: editor.select,
+          at: { mark: sel-incident-commander },
+          target: { file: notes.md, text: "incident commander", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, as in Module 1. The
+      # marker opens the question's own dialog (ask-question), so the question-line
+      # select hangs off it: it starts about as the question ends, its drag runs in
+      # silence, and the answer at pause-question waits for it. A select anchored
+      # at pause-question would drag under the answer's first words instead.
+      # 6070 ms is the 81-character question's end at 70 ms/char; it leaves about
+      # 2.8 / 1.6 / 0.5 s of quiet after the question at 55 / 70 / 95 ms per
+      # character. An offset above ~6230 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 6070 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: service တစ်ခုက on-call ကျသူကို တစ်ညကို page 6 ခါ ပို့နေတယ်။ ဘာကို အရင် ပြောင်းမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
