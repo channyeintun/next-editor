@@ -1,0 +1,1109 @@
+# SRE from zero, lesson 11: A postmortem that teaches (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-11-postmortems.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-11-postmortems.md \
+#     src/studio/scripts/sre-11-postmortems.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Pacing: no page or board step holds longer than about 31 s at 70 ms/char
+# (l11_p04, whose two paragraphs name the problem and then the three action
+# items the page lists), so no marks were added beyond the voice script's own.
+#
+# Boards (B1 P8 timeline, B2 left-to-right blame flow, B3 P6 lanes). Colour
+# jobs: #1e1e1e ink (paints white) for the axis, neutral ticks, the quote and
+# arrows; blue the thing named (our post, the automatic refunds); green healthy
+# or done (the mitigation, the better question, the better message); red
+# failure (double charges, blame, our retry, nobody told users); orange the
+# caveat (the two biases, the silent gap, 1,500 calls). A label on two lines is
+# two text assets, one per line, so each line meets the 0.55 em width rule on
+# its own. "Three new elements per step" counts a tick or box with its label as
+# one element, as in Module 1.
+#
+# Deck pages: deck "Next Editor · SRE 3 · Respond and learn". The /pub URL
+# below is the deck's published link; until this lesson's pages are built
+# into it, the published copy holds only the kit pages and the Director
+# reports the l11 pages missing. Page plan:
+# ~/Documents/sre-course/work/pages/sre-11-postmortems.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-11-postmortems.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-11-postmortems.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-11-postmortems
+  title: "SRE from zero 11: သင်ခန်းစာ ရတဲ့ postmortem"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # သင်ခန်းစာ ရတဲ့ postmortem
+
+        - postmortem — ဘာဖြစ် · ဘယ်သူ ထိခိုက် · ဘာက ဖြစ်စေ · ဘာ ပိုသိ
+        - timeline — ဘာကြောင့်လဲ မမေးခင် သဘောတူတဲ့ မှတ်တမ်း
+        - local rationality — အဲဒီအချိန်က သိထားတာနဲ့ အဓိပ္ပာယ် ရှိခဲ့
+        - hindsight bias — အဖြေ သိမှ "သိသာခဲ့တယ်"
+        - outcome bias — ရလဒ်ဆိုး = ဆုံးဖြတ်ချက်ဆိုး လို့ ထင်တာ
+        - restorative accountability — အပြစ်ပေးမယ့်အစား ပြင်ရာမှာ ပါဝင်ပြီး တာဝန်ယူ
+
+        မေးခွန်း: "log တွေကို ဘာလို့ မစစ်ခဲ့တာလဲ?" ကို အခြေအနေကို မေးတဲ့ မေးခွန်း ဖြစ်အောင် ပြန်ရေးပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>သင်ခန်းစာ ရတဲ့ postmortem</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 11</p>
+              <h1>သင်ခန်းစာ ရတဲ့ postmortem</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l11-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p01
+    - id: l11-p01b
+      contentType: google
+      name: How users were charged twice
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p01b
+    - id: l11-p01c
+      contentType: google
+      name: Who deployed this?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p01c
+    - id: l11-p01d
+      contentType: google
+      name: Who leads the postmortem
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p01d
+    - id: l11-p01e
+      contentType: google
+      name: Four postmortem questions
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p01e
+    - id: l11-p02
+      contentType: google
+      name: Not this, but this
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p02
+    - id: l11-p02b
+      contentType: google
+      name: Half the debt repaid
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p02b
+    - id: l11-p02c
+      contentType: google
+      name: Local rationality
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p02c
+    - id: l11-p03
+      contentType: google
+      name: Wrong, right, lucky
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p03
+    - id: l11-p03b
+      contentType: google
+      name: That night
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p03b
+    - id: l11-p04
+      contentType: google
+      name: Padauk's action items
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p04
+    - id: l11-p04b
+      contentType: google
+      name: A good action item
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p04b
+    - id: l11-p04c
+      contentType: google
+      name: Restorative accountability
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p04c
+    - id: l11-p04d
+      contentType: google
+      name: Who checks the review
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p04d
+    - id: l11-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l11_p05
+  whiteboardAssets:
+    # ---- Board B1 (P8 timeline): the night on one axis ----------------------
+    # The axis line runs along y 400 (an underline draws along its box's bottom
+    # edge); ticks are 6 px filled bars across it. Labels alternate above
+    # (y 325) and below (y 440, second line y 475). Step 3's orange circle sits
+    # on the axis between "double charges start" (x 600) and "alert" (x 860),
+    # around the support tick, with its two orange labels under the lanes.
+    - {
+        id: l11-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 260,
+        y: 370,
+        width: 820,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b1-tick-deploy,
+        kind: rectangle,
+        x: 270,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b1-deploy,
+        kind: text,
+        x: 270,
+        y: 325,
+        width: 310,
+        height: 35,
+        text: "retry change deploy",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-tick-slow,
+        kind: rectangle,
+        x: 430,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b1-slow,
+        kind: text,
+        x: 430,
+        y: 440,
+        width: 185,
+        height: 35,
+        text: "Bank X နှေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-tick-double,
+        kind: rectangle,
+        x: 600,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l11-b1-double,
+        kind: text,
+        x: 600,
+        y: 325,
+        width: 245,
+        height: 35,
+        text: "နှစ်ခါ ဖြတ်တာ စ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-tick-support,
+        kind: rectangle,
+        x: 660,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b1-support,
+        kind: text,
+        x: 660,
+        y: 440,
+        width: 245,
+        height: 35,
+        text: "support: refund",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-support2,
+        kind: text,
+        x: 660,
+        y: 475,
+        width: 215,
+        height: 35,
+        text: "တောင်းတာ မြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-tick-alert,
+        kind: rectangle,
+        x: 860,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b1-alert,
+        kind: text,
+        x: 860,
+        y: 325,
+        width: 95,
+        height: 35,
+        text: "alert",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-tick-mitigate,
+        kind: rectangle,
+        x: 925,
+        y: 383,
+        width: 6,
+        height: 34,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l11-b1-mitigate,
+        kind: text,
+        x: 925,
+        y: 440,
+        width: 150,
+        height: 35,
+        text: "mitigate:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-mitigate2,
+        kind: text,
+        x: 925,
+        y: 475,
+        width: 165,
+        height: 35,
+        text: "retry ပိတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-gap-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 612,
+        y: 366,
+        width: 240,
+        height: 68,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l11-b1-gap,
+        kind: text,
+        x: 560,
+        y: 545,
+        width: 430,
+        height: 35,
+        text: "အစောဆုံး သိနိုင်ခဲ့တဲ့ နေရာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b1-gap-minutes,
+        kind: text,
+        x: 560,
+        y: 590,
+        width: 150,
+        height: 35,
+        text: "~40 မိနစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: two biases lead back to blame, then the better question --
+    # The quote on top; two orange boxes on the left; one tall red box on the
+    # right that both arrows reach (arrows are horizontal only); the green box
+    # under the red one with an arrow-down.
+    - {
+        id: l11-b2-quote,
+        kind: text,
+        x: 280,
+        y: 165,
+        width: 260,
+        height: 45,
+        text: '"သိသာပါတယ်"',
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l11-b2-hind,
+        kind: rectangle,
+        x: 260,
+        y: 235,
+        width: 460,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l11-b2-hind-t,
+        kind: text,
+        x: 272,
+        y: 252,
+        width: 420,
+        height: 35,
+        text: "hindsight: သိသာခဲ့တာပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-out,
+        kind: rectangle,
+        x: 260,
+        y: 345,
+        width: 460,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l11-b2-out-t1,
+        kind: text,
+        x: 272,
+        y: 357,
+        width: 140,
+        height: 35,
+        text: "outcome:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-out-t2,
+        kind: text,
+        x: 272,
+        y: 395,
+        width: 440,
+        height: 35,
+        text: "ရလဒ်ဆိုး = ဆုံးဖြတ်ချက်ဆိုး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 726,
+        y: 250,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 726,
+        y: 375,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b2-blame,
+        kind: rectangle,
+        x: 782,
+        y: 235,
+        width: 200,
+        height: 210,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l11-b2-blame-t1,
+        kind: text,
+        x: 794,
+        y: 300,
+        width: 170,
+        height: 35,
+        text: "အပြစ်ရှာတာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-blame-t2,
+        kind: text,
+        x: 794,
+        y: 340,
+        width: 170,
+        height: 35,
+        text: "ပြန်ရောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 862,
+        y: 452,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b2-know,
+        kind: rectangle,
+        x: 760,
+        y: 510,
+        width: 245,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l11-b2-know-t1,
+        kind: text,
+        x: 772,
+        y: 522,
+        width: 180,
+        height: 35,
+        text: "အဲဒီအချိန်က",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b2-know-t2,
+        kind: text,
+        x: 772,
+        y: 560,
+        width: 215,
+        height: 35,
+        text: "သူ ဘာသိခဲ့လဲ?",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3 (P6 lanes): what customers heard --------------------------
+    # Top lane y 200-270: our post -> it was our retry. Bottom lane y 330-430:
+    # refunds were automatic -> nobody told users -> 1,500 calls. The green
+    # message rule sits under both lanes.
+    - {
+        id: l11-b3-post,
+        kind: rectangle,
+        x: 260,
+        y: 200,
+        width: 335,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l11-b3-post-t,
+        kind: text,
+        x: 272,
+        y: 217,
+        width: 315,
+        height: 35,
+        text: 'post: "Bank X ပြဿနာ"',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 602,
+        y: 215,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b3-ours,
+        kind: rectangle,
+        x: 660,
+        y: 200,
+        width: 335,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l11-b3-ours-t,
+        kind: text,
+        x: 672,
+        y: 217,
+        width: 315,
+        height: 35,
+        text: "ကိုယ့် retry ကြောင့်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-refund,
+        kind: rectangle,
+        x: 260,
+        y: 330,
+        width: 200,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l11-b3-refund-t1,
+        kind: text,
+        x: 272,
+        y: 342,
+        width: 120,
+        height: 35,
+        text: "refund:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-refund-t2,
+        kind: text,
+        x: 272,
+        y: 380,
+        width: 180,
+        height: 35,
+        text: "အလိုအလျောက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 466,
+        y: 360,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b3-told,
+        kind: rectangle,
+        x: 516,
+        y: 345,
+        width: 245,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l11-b3-told-t,
+        kind: text,
+        x: 528,
+        y: 362,
+        width: 225,
+        height: 35,
+        text: "user ကို မပြော",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 767,
+        y: 360,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l11-b3-calls,
+        kind: rectangle,
+        x: 817,
+        y: 345,
+        width: 200,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l11-b3-calls-t,
+        kind: text,
+        x: 829,
+        y: 362,
+        width: 180,
+        height: 35,
+        text: "ဖုန်း 1,500",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l11-b3-msg,
+        kind: rectangle,
+        x: 260,
+        y: 480,
+        width: 625,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l11-b3-msg-t,
+        kind: text,
+        x: 272,
+        y: 497,
+        width: 600,
+        height: 35,
+        text: "message: သေချာတာ · ခန့်မှန်းတာ ခွဲပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2611
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: ငွေ နှစ်ခါ ဖြတ်ခံရတဲ့ ည
+    narration: >
+      [[mark:show-p01]] လစာထုတ်ရက် incident ကနေ Padauk ထုတ်ခဲ့တာ သုံးခုပါ၊ ဘယ်ပြဿနာမှာမဆို သုံးလို့ရတဲ့ fix စာရင်း၊ drill card နဲ့ လစဉ် incident role-play ပါ။ တစ်ပတ်အကြာ Wallet promotion မစခင်မှာ developer ကိုမင်းက Bank X နှေးရင်တောင် ငွေချေမှုတွေ fail မဖြစ်အောင် payment call မှာ retry ထည့်လိုက်ပါတယ်။
+      [[mark:show-p01b]] promotion စတဲ့ ညနေ ၇ နာရီကျော်မှာ Bank X တကယ်ပဲ နှေးလာပါတယ်။ Bank X က ငွေ ဖြတ်ပြီးသား ဖြစ်ပေမဲ့ အဖြေ နောက်ကျတော့ Padauk ဘက်က မအောင်မြင်ဘူး ထင်ပြီး ထပ်ပို့လိုက်လို့ user တချို့ ငွေ နှစ်ခါ ဖြတ်ခံရပါတယ်။ အဖွဲ့က retry ကို ပိတ်လိုက်ပါတယ်၊ ဒါက အကြောင်းရင်း မသိခင် user ထိခိုက်တာကို အရင် ရပ်တဲ့ mitigation ပါ။ ဒါပေမဲ့ refund တောင်းတာတွေ ပုံလာလို့ ဒေါသထွက်နေတဲ့ user တွေကို ဖြေရင်း ညတစ်ညလုံး ကုန်သွားပါတယ်။
+      [[mark:show-p01c]] နောက်တစ်နေ့ မနက် team chat ထဲမှာ ဒါ ဘယ်သူ deploy လုပ်တာလဲ ဆိုတဲ့ message ပေါ်လာတော့ ကိုမင်း တိတ်သွားပါတယ်။ ကိုမင်းကို အပြစ်မရှာဘဲ ဒီ incident ကနေ ဘာ သင်ခန်းစာ ယူမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l11-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l11-p01b }
+      - { id: show-p01c, type: slide.show, at: { mark: show-p01c }, slideId: l11-p01c }
+
+  - id: the-meeting
+    chapter: Timeline ကနေ စတဲ့ postmortem
+    narration: >
+      [[mark:show-p01d]] မသီရိက ဒီ postmortem ကို incident မှာ မပါခဲ့တဲ့ Eats အဖွဲ့က lead တစ်ယောက်ကို ဦးဆောင်ခိုင်းပါတယ်။ အပြင်လူမို့ ဘက်မလိုက်ဘဲ ကြည့်နိုင်ပြီး တစ်ညလုံး မအိပ်ရတဲ့ Wallet အဖွဲ့လည်း အနားယူရပါတယ်။ ပြဿနာက အဖွဲ့ နှစ်ဖွဲ့ကြားမှာ ဖြစ်ခဲ့လို့ စာကိုတော့ Wallet အဖွဲ့နဲ့ Bank X ချိတ်ဆက်မှုကို ပိုင်တဲ့ engineer က အတူ ရေးပါတယ်။
+      [[mark:show-p01e]] postmortem ဆိုတာ incident ပြီးရင် စာနဲ့ ရေးပြီး အဖွဲ့လိုက် သင်ယူတာပါ၊ lesson ၅ က blameless review လိုပဲ လူကို အပြစ်မရှာဘဲ system ထဲက အားနည်းချက်ကို ရှာပါတယ်။ ဘာဖြစ်ခဲ့လဲ၊ ဘယ်သူတွေ ထိခိုက်ခဲ့လဲ၊ ဘာတွေက ဖြစ်စေခဲ့လဲ၊ ဘာ ပိုသိလာလဲ ဆိုတဲ့ မေးခွန်း လေးခုကို ဖြေရပါတယ်။ ဖြစ်စေခဲ့တဲ့ အကြောင်းရင်းကတော့ တစ်ခုတည်း ရှိလေ့ မရှိပါဘူး။
+      [[mark:close-p01e]] [[mark:b1-s1]] Eats lead က ဘာကြောင့်လဲ မမေးခင် ဘာက ဘယ်အချိန် ဖြစ်ခဲ့လဲ ဆိုတဲ့ timeline ကို အရင် စီပါတယ်။ deploy မှတ်တမ်း၊ log နဲ့ chat တွေကို စုလိုက်တော့ retry change ကို deploy လုပ်တာ၊ Bank X နှေးလာတာ၊ ငွေ နှစ်ခါ စဖြတ်တာတွေ timeline ပေါ်ကို ရောက်လာပါတယ်။
+      [[mark:b1-s2]] ပြီးတော့ support lead မစုကိုလည်း မေးကြည့်တော့ refund တောင်းတဲ့ message တွေက alert မတက်ခင် ကတည်းက ဝင်နေခဲ့တာ ပေါ်လာပါတယ်။ timeline ကို အားလုံး သဘောတူမှ ဘာကြောင့်လဲ စဆွေးနွေးပါတယ်၊ ဒီလို မလုပ်ရင် ကိုယ်စီ မှတ်မိသလို ငြင်းနေကြမှာပါ။
+      [[mark:b1-s3]] timeline က ပြဿနာကို အစောဆုံး သိနိုင်ခဲ့တဲ့ နေရာကိုလည်း ပြပါတယ်။ ငွေ နှစ်ခါ စဖြတ်တာနဲ့ alert တက်တာကြား မိနစ် ၄၀ လောက်မှာ system က ဘာမှ မပြောဘဲ user တွေကပဲ ပြောနေခဲ့ပါတယ်။ အကောင်းဆုံး fix တွေက ဒီလို ကွက်လပ်မှာ ရှိတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - { id: show-p01d, type: slide.show, at: { mark: show-p01d }, slideId: l11-p01d }
+      - { id: show-p01e, type: slide.show, at: { mark: show-p01e }, slideId: l11-p01e }
+      - { id: close-p01e, type: slide.close, at: { mark: close-p01e, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l11-b1-axis],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds:
+          [
+            l11-b1-tick-deploy,
+            l11-b1-deploy,
+            l11-b1-tick-slow,
+            l11-b1-slow,
+            l11-b1-tick-double,
+            l11-b1-double,
+          ]
+        drawMs: 2400
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds:
+          [
+            l11-b1-tick-support,
+            l11-b1-support,
+            l11-b1-support2,
+            l11-b1-tick-alert,
+            l11-b1-alert,
+            l11-b1-tick-mitigate,
+            l11-b1-mitigate,
+            l11-b1-mitigate2,
+          ]
+        drawMs: 2400
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l11-b1-gap-circle, l11-b1-gap, l11-b1-gap-minutes],
+          drawMs: 1800,
+        }
+
+  - id: made-sense
+    chapter: အဲဒီညက အဓိပ္ပာယ် ရှိခဲ့တာ
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] အစည်းအဝေးမှာ တစ်ယောက်က ကိုမင်းကို ဘာလို့ retry ထည့်တာလဲ၊ ဘာလို့ idempotency key မထည့်တာလဲလို့ မေးပါတယ်။ ဒီလို မေးခံရရင် လူက ကိုယ့်ကိုယ်ကို ကာကွယ်ဖို့ပဲ စဉ်းစားမိလို့ Eats lead က မေးခွန်းကို ပြောင်းပြီး အဲဒီညက Bank X ဘာဖြစ်နေလဲ၊ ရှိပြီးသား code က ဘယ်လို လုပ်ခဲ့လဲလို့ အခြေအနေကို မေးပါတယ်။ ဒီလို မေးမှ ပြင်လို့ရတဲ့ အချက်တွေ ပေါ်လာတာပါ။
+      [[mark:show-p02b]] ကိုမင်းက retry ကို ဘေးကင်းတယ် ထင်ခဲ့တာ သူ လုပ်နေကျ Top-up code မှာ retry နဲ့ idempotency key နှစ်ခုလုံး ရှိလို့ပါ။ ဒီ key က ငွေချေမှု တစ်ခုချင်းကို သီးသန့် နံပါတ် ပေးထားလို့ ဘယ်နှခါ ပြန်ပို့ပို့ ငွေ တစ်ခါပဲ ဖြတ်ပါတယ်။ lesson ၁ ရဲ့ အကြွေး စာရင်းထဲမှာ ဒီ key ပါခဲ့ပေမဲ့ Top-up ဘက်မှာပဲ ဆပ်ခဲ့ပြီး Wallet ဘက်က တစ်ဝက်ကို ဘယ်သူမှ မဆပ်ခဲ့ပါဘူး။
+      [[mark:show-p02c]] အဲဒီအချိန်မှာ သူ သိထားတာနဲ့ဆိုရင် လုပ်ခဲ့တာက သူ့အတွက် အဓိပ္ပာယ် ရှိခဲ့တယ်လို့ ကြည့်တာကို local rationality လို့ ခေါ်ပါတယ်။ ကိုမင်းကို ဘေးကင်းတယ်လို့ ထင်စေခဲ့တဲ့ အခြေအနေ မပြောင်းရင် နောက်လူလည်း ဒီလိုပဲ ထင်မှာမို့ ပြင်ရမှာက ကိုမင်း မဟုတ်ဘဲ အခြေအနေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+      - {
+          title: "Reason, Human error: models and management (BMJ, PMC)",
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1117770/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l11-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l11-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l11-p02c }
+
+  - id: obviously
+    chapter: Hindsight နဲ့ outcome bias
+    narration: >
+      [[mark:close-p02c]] [[mark:b2-s1]] ဆွေးနွေးရင်း တစ်ယောက်က key မပါဘဲ retry လုပ်ရင် နှစ်ခါ ဖြတ်မှာ သိသာပါတယ်လို့ ပြောလိုက်တော့ Eats lead က ဒီ စကားထဲက bias နှစ်ခုကို ထောက်ပြပါတယ်။ အဖြေ သိပြီးမှ ပြန်ကြည့်တော့ သိသာခဲ့သလို ထင်မိတာက hindsight bias ပါ၊ retry ထည့်တုန်းက ဘယ်သူမှ မမြင်ခဲ့ပါဘူး။ ရလဒ် ဆိုးလို့ ဆုံးဖြတ်ချက်ကိုပါ ဆိုးတယ်လို့ အကဲဖြတ်မိတာကတော့ outcome bias ပါ။
+      [[mark:b2-s2]] တကယ်လို့ Bank X က ငွေ မဖြတ်ဘဲ fail ပဲ ဖြစ်ခဲ့ရင် retry က ငွေချေမှုတွေကို ကယ်လို့ ကိုမင်းကို ချီးကျူးကြမှာပါ၊ ဆုံးဖြတ်ချက်က အတူတူပဲ၊ ကံပဲ ကွာသွားတာပါ။ bias နှစ်ခုလုံးက blameless review ကို အပြစ်ရှာတဲ့ဘက် တိတ်တိတ်လေး ပြန်ဆွဲသွားလို့ နောက်တစ်ခါ ဘယ်သူမှ ပွင့်ပွင့်လင်းလင်း ပြောရဲတော့မှာ မဟုတ်ပါဘူး။
+      [[mark:b2-s3]] ဒါကြောင့် Eats lead က bias ကြားတိုင်း အဲဒီအချိန်က ကိုမင်း ဘာကို သိခဲ့လဲလို့ ပြန်မေးပါတယ်။ အဖြေကတော့ Wallet မှာ key မပါကြောင်း သတိပေးမယ့် test လည်း မရှိ၊ ရေးထားတဲ့ စာ တစ်ကြောင်းလည်း မရှိခဲ့တာပါ။ ဒါတွေက အပြစ်ရှာစရာ မဟုတ်ဘဲ ပြင်စရာ နေရာတွေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+      - {
+          title: "Reason, Human error: models and management (BMJ, PMC)",
+          url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC1117770/",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l11-b2-quote],
+        }
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l11-b2-hind, l11-b2-hind-t, l11-b2-out, l11-b2-out-t1, l11-b2-out-t2]
+        drawMs: 2000
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l11-b2-a1, l11-b2-a2, l11-b2-blame, l11-b2-blame-t1, l11-b2-blame-t2]
+        drawMs: 1800
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l11-b2-a3, l11-b2-know, l11-b2-know-t1, l11-b2-know-t2],
+          drawMs: 1500,
+        }
+
+  - id: wrong-right-lucky
+    chapter: မှား၊ မှန်၊ ကံကောင်း
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] postmortem တွေက မှားခဲ့တာကိုပဲ ရေးလေ့ ရှိပေမဲ့ Padauk ကတော့ ဘာ မှန်ခဲ့လဲ၊ ဘယ်မှာ ကံကောင်းခဲ့လဲ ဆိုတာကိုပါ မေးပါတယ်။ မှားခဲ့တာကို ပြင်ပြီး မှန်ခဲ့တာကို မတော်တဆ မဟုတ်ဘဲ အမြဲ ဖြစ်အောင် default လုပ်ရပါမယ်။ ကံကောင်းခဲ့တာကိုတော့ ဆက် အားမကိုးရအောင် ပြင်ရပါမယ်၊ ကံက အမြဲ ပါမလာလို့ပါ။
+      [[mark:show-p03b]] ဥပမာ အဲဒီည refund job က မတော်တဆ စော run ခဲ့လို့ user အများစု မနက် မလင်းခင် ငွေ ပြန်ရခဲ့ပါတယ်၊ ဒါက ကံ သက်သက်ပါ။ မစုရဲ့ အဖွဲ့က မိနစ်ပိုင်းအတွင်း ရေးလိုက်တဲ့ ပြန်စာ နမူနာကတော့ အရမ်း အလုပ်ဖြစ်လို့ ငွေနဲ့ ဆိုင်တဲ့ incident တိုင်းအတွက် default ဖြစ်သွားပါတယ်။ အခု Padauk ရဲ့ postmortem template မှာ မှန်ခဲ့တာနဲ့ ကံကောင်းခဲ့တာ ဆိုတဲ့ အပိုင်း နှစ်ခု အမြဲ ပါပါပြီ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Hollnagel, Wears & Braithwaite, From Safety-I to Safety-II: A White Paper (NHS England PDF)",
+          url: "https://www.england.nhs.uk/signuptosafety/wp-content/uploads/sites/16/2015/10/safety-1-safety-2-whte-papr.pdf",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l11-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l11-p03b }
+
+  - id: action-items
+    chapter: Action item နဲ့ တာဝန်ယူမှု
+    narration: >
+      [[mark:show-p04]] အဲဒီည retry ကို ပိတ်လိုက်တာက ယာယီ patch ပါ။ ဒီအတိုင်း ထားရင် Bank X နှေးတိုင်း ငွေချေမှုတွေ fail ဖြစ်ပြီး တစ်ယောက်ယောက်က key မပါဘဲ retry ကို ပြန်ထည့်မိဦးမှာပါ။ ဒါကြောင့် လုပ်စရာ၊ action item သုံးခု ထွက်လာပါတယ်။
+      Wallet မှာ idempotency key ထည့်တာကို ကိုမင်းနဲ့ Wallet lead က ယူပါတယ်။ ငွေ နှစ်ခါ ဖြတ်ရင် တက်မယ့် alert ကို မသီရိက နှစ်ပတ်အတွင်း ထည့်ပါမယ်။ refund ကို တစ်နာရီအတွင်း ပြီးအောင် လုပ်တာကိုတော့ support နဲ့ Wallet အဖွဲ့က ယူပါတယ်။
+      [[mark:show-p04b]] ဒီ သုံးခုက ထပ်မဖြစ်အောင် တားတာ၊ စောစော သိအောင် လုပ်တာ၊ ထိခိုက်မှု လျှော့တာ ဆိုပြီး ထောင့် သုံးခုကနေ ကာထားတာပါ။ item တိုင်းမှာ နာမည်ပါတဲ့ owner၊ ဘာကြောင့် အရင်လုပ်ရမလဲ ဆိုတဲ့ အကြောင်းပြချက်နဲ့ sprint ထဲမှာ တကယ် ပေးထားတဲ့ အချိန် ရှိရပါမယ်။ item ကိုလည်း တကယ် ပြီးမှ ပိတ်ပါတယ်၊ မပြီးတဲ့ item တွေ ပုံနေရင် postmortem ရေးတာ အလကားပဲလို့ လူတွေ ထင်လာလို့ပါ။
+      [[mark:show-p04c]] ကိုမင်းကိုယ်တိုင် key ထည့်တဲ့ အလုပ်ရဲ့ owner ဖြစ်နေတာကိုလည်း သတိထားကြည့်ပါ။ blameless ဆိုတာ ဘယ်သူမှ တာဝန်မရှိဘူးလို့ မဆိုလိုပါဘူး။ ဆုံးဖြတ်ချက်နဲ့ အနီးဆုံး လူကို အပြစ်ပေးမယ့်အစား ပြင်တဲ့ အလုပ်မှာ ပါဝင်ပြီး တာဝန်ယူစေတာကို restorative accountability လို့ ခေါ်ပါတယ်။
+      [[mark:show-p04d]] postmortem ကို အဖွဲ့တိုင်း ဖတ်လို့ရအောင် မျှလို့ Eats အဖွဲ့ကလည်း ကိုယ့်ဘက်ကို ပြန်စစ်ပါတယ်။ တခြား အဖွဲ့က reviewer တစ်ယောက်က ဒီ item တွေ နောက် incident ကို တကယ် တိုစေမလား စစ်ပေးပါတယ်။ CTO ကိုနေလင်းကလည်း လတိုင်း incident trend တွေနဲ့ အဆင်ပြေခဲ့တဲ့ launch တစ်ခုကို ပြန်ကြည့်ပြီး item တွေ ပြီးဖို့ အချိန် ပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l11-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l11-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l11-p04c }
+      - { id: show-p04d, type: slide.show, at: { mark: show-p04d }, slideId: l11-p04d }
+
+  - id: customer-side
+    chapter: Customer ဘက်က review
+    narration: >
+      [[mark:close-p04d]] [[mark:b3-s1]] နောက်ဆုံးမှာ မစုက engineer တွေ မမြင်ခဲ့တဲ့ customer ဘက်ကို ပြပါတယ်။ incident စစချင်း Padauk က Facebook မှာ Bank X ပြဿနာပါလို့ post တင်ခဲ့ပေမဲ့ တကယ်တော့ ကိုယ့် retry ကြောင့် ဖြစ်တာပါ။ မသေချာတာကို သေချာသလို ပြောမိလို့ Bank X ကိုပါ အပြစ်ဖို့မိခဲ့တာပါ။
+      [[mark:b3-s2]] refund တွေက အလိုအလျောက် ပြန်ရမှာ ဖြစ်ပေမဲ့ user တွေကို ဘယ်သူမှ ကြိုမပြောခဲ့လို့ support ဆီ ဖုန်း ၁၅၀၀ လောက် ဝင်လာပါတယ်။ ဒါကြောင့် postmortem က ဘယ်နှယောက် ထိခိုက်လဲ ဆိုတာအပြင် ဘာကို ဘယ်အချိန် ပြောခဲ့လဲ ဆိုတာကိုပါ review လုပ်ပါတယ်။
+      [[mark:b3-s3]] မစုရဲ့ အဓိက အချက်ကတော့ customer ကို ပြောတဲ့ စကားကလည်း engineering ရဲ့ အစိတ်အပိုင်းမို့ code လိုပဲ review လုပ်ရမယ် ဆိုတာပါ။ နောက်ဆို incident message တွေမှာ သေချာတာနဲ့ ခန့်မှန်းတာကို ခွဲပြောပြီး refund ကို အလိုအလျောက် ပြန်ရမယ်လို့ ကြိုပြောပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+    actions:
+      - { id: close-p04d, type: slide.close, at: { mark: close-p04d, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l11-b3-post, l11-b3-post-t, l11-b3-a1, l11-b3-ours, l11-b3-ours-t]
+        drawMs: 2000
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds:
+          [
+            l11-b3-refund,
+            l11-b3-refund-t1,
+            l11-b3-refund-t2,
+            l11-b3-a2,
+            l11-b3-told,
+            l11-b3-told-t,
+            l11-b3-a3,
+            l11-b3-calls,
+            l11-b3-calls-t,
+          ]
+        drawMs: 2600
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l11-b3-msg, l11-b3-msg-t],
+          drawMs: 1200,
+        }
+
+  - id: this-week
+    narration: >
+      [[mark:close-b3]] [[mark:show-p05]] ဒီအပတ် ကိုယ့်အဖွဲ့ရဲ့ postmortem အလေ့အထကို နည်းနည်းချင်း ပြင်ကြည့်ပါ။ ကိုယ့် postmortem template မှာ ဘာ မှန်ခဲ့လဲ၊ ဘယ်မှာ ကံကောင်းခဲ့လဲ ဆိုတဲ့ ခေါင်းစဉ် နှစ်ခု ထည့်ပါ။ မပြီးသေးတဲ့ action item တိုင်းကို နာမည်ပါတဲ့ owner ပေးပါ။ ပြီးတော့ ကံကောင်းလို့ ထိခိုက်မှု မရှိသလောက်နဲ့ လွတ်ခဲ့တဲ့ near miss တစ်ခုကို ရေးကြည့်ပါ၊ incident လိုပဲ သင်ခန်းစာ ပေးပေမဲ့ ကုန်ကျစရိတ် အများကြီး နည်းပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+      - {
+          title: "Hollnagel, Wears & Braithwaite, From Safety-I to Safety-II: A White Paper (NHS England PDF)",
+          url: "https://www.england.nhs.uk/signuptosafety/wp-content/uploads/sites/16/2015/10/safety-1-safety-2-whte-papr.pdf",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l11-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] ကိုမင်းရဲ့ ညက သင်ခန်းစာတွေကို ပြန်စုကြည့်ရအောင်။ [[mark:sel-postmortem]] postmortem က incident ပြီးရင် မေးခွန်း လေးခုကို ဖြေပြီး အဖွဲ့လိုက် သင်ယူတာပါ။ [[mark:sel-timeline]] timeline ကတော့ ဘာကြောင့်လဲ မမေးခင် အားလုံး သဘောတူထားတဲ့ အချိန်အလိုက် မှတ်တမ်းပါ။
+      [[mark:sel-local]] local rationality က အဲဒီအချိန်က သိထားတာနဲ့ဆိုရင် သူ့ ဆုံးဖြတ်ချက်က အဓိပ္ပာယ် ရှိခဲ့တယ်လို့ ကြည့်တာပါ။ [[mark:sel-hindsight]] hindsight bias က အဖြေ သိပြီးမှ သိသာခဲ့တယ်လို့ ထင်တာဖြစ်ပြီး၊ [[mark:sel-outcome]] outcome bias က ရလဒ် ဆိုးလို့ ဆုံးဖြတ်ချက်ကိုပါ ဆိုးတယ်လို့ အကဲဖြတ်တာပါ။
+      [[mark:sel-restorative]] restorative accountability ကတော့ အပြစ်ပေးမယ့်အစား ပြင်တဲ့ အလုပ်မှာ ပါဝင်ပြီး တာဝန်ယူစေတာပါ။ [[mark:sel-question]] log တွေကို ဘာလို့ မစစ်ခဲ့တာလဲ ဆိုတဲ့ မေးခွန်းကို Eats lead လိုပဲ လူကို မဟုတ်ဘဲ အခြေအနေကို မေးအောင် ဘယ်လို ပြန်ရေးမလဲ?
+      [[mark:pause-question]] အဲဒီအချိန်က log နဲ့ dashboard တွေမှာ ဘာ ပြနေခဲ့လဲ ဆိုတာမျိုး မေးလို့ရပါတယ်။ နောက်လ လစာထုတ်ရက်မှာ ဘယ်သူမှ မမှားဘဲ ကံကြောင့်သာ လွတ်သွားတဲ့ near miss တစ်ခု ဖြစ်ပါတယ်။ ရှုပ်ထွေးတဲ့ system တွေက ဘာကြောင့် အဲဒီလို ပျက်တတ်တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/workbook/postmortem-culture/",
+        }
+      - {
+          title: "How Complex Systems Fail (Richard Cook)",
+          url: "https://how.complexsystems.fail/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      # occurrence 2: the title line "# သင်ခန်းစာ ရတဲ့ postmortem" holds the first match.
+      - {
+          id: sel-postmortem,
+          type: editor.select,
+          at: { mark: sel-postmortem },
+          target: { file: notes.md, text: "postmortem", occurrence: 2 },
+        }
+      - {
+          id: sel-timeline,
+          type: editor.select,
+          at: { mark: sel-timeline },
+          target: { file: notes.md, text: "timeline", occurrence: 1 },
+        }
+      - {
+          id: sel-local,
+          type: editor.select,
+          at: { mark: sel-local },
+          target: { file: notes.md, text: "local rationality", occurrence: 1 },
+        }
+      - {
+          id: sel-hindsight,
+          type: editor.select,
+          at: { mark: sel-hindsight },
+          target: { file: notes.md, text: "hindsight bias", occurrence: 1 },
+        }
+      - {
+          id: sel-outcome,
+          type: editor.select,
+          at: { mark: sel-outcome },
+          target: { file: notes.md, text: "outcome bias", occurrence: 1 },
+        }
+      - {
+          id: sel-restorative,
+          type: editor.select,
+          at: { mark: sel-restorative },
+          target: { file: notes.md, text: "restorative accountability", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. Here the ⟪select မေးခွန်း⟫ mark already starts
+      # the question's own dialog (the question is one sentence), so no extra mark
+      # is needed: the question-line select hangs off sel-question with an offset
+      # that starts it about as the question ends, its drag runs in silence, and
+      # the answer at pause-question waits for it (the scheduler holds only the
+      # dialog after its anchor's). A select with no offset would drag under the
+      # question and leave no pause. The question is a long
+      # dialog (117 characters, no ၊ to split at), so the quiet depends on the
+      # voice's speed: 8200 leaves about 2.8 / 1.1 / 0.35 s before the answer at
+      # 55 / 70 / 95 ms per char (at 95 the drag starts under the question's last
+      # words, as in lesson 7); 8250 trips compile-check's 2.5 s inserted-silence
+      # warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: sel-question, offsetMs: 8200 }
+        target:
+          file: notes.md
+          text: 'မေးခွန်း: "log တွေကို ဘာလို့ မစစ်ခဲ့တာလဲ?" ကို အခြေအနေကို မေးတဲ့ မေးခွန်း ဖြစ်အောင် ပြန်ရေးပါ။'
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
