@@ -1,0 +1,1245 @@
+# SRE from zero, lesson 14: Becoming an SRE (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-14-becoming-an-sre.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-14-becoming-an-sre.md \
+#     src/studio/scripts/sre-14-becoming-an-sre.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: Thiri writes Padauk's first SRE job post (cover), and Module 4 opens
+# on the loop's hub, the people (m4_map). Pages: what makes a good SRE, a week
+# of persuading for three lines of code. Board B1 (P5 bars): a developer and Ko
+# Zaw reach one hiring bar from opposite sides, trivia questions and a
+# nine-week process, the T-shape. Page: Ko Min's lost 10 minutes. Board B2 (P7
+# staircase): the onboarding staircase to on-call, the mentor under it, why
+# Padauk builds a real program. Pages: goals you can check, the starter
+# project, planned work against interruptions, impostor feelings. Board B3 (P6
+# lanes): Ko Aung as a single point of failure, then paired with Ko Zaw, and
+# the split day/night shift. Pages: growing the Padauk way, practice on your
+# own, this week; recap on notes.md.
+#
+# Extra marks, all at existing sentence ends, add no spoken text: b1-s1b and
+# b1-s1c draw the two bars as each candidate is described (B1 step 1 holds two
+# bars and a legend, more than three new elements); b1-s3b lands the
+# nine-week note and b2-s3b the green on-call step as they are said;
+# hook-budget, p02-toil and p03-payoff only split dialogs of 454, 480 and 456
+# characters in two (no action). The recap's question-line select hangs off
+# sel-question, the voice script's own select mark, so the ⟪pause 3s⟫ is real
+# silence (see select-question). No page or board step holds longer than
+# ~35 s at 70 ms/char (l14_p02; the cover ~35 s, l14_p03 ~33 s), so no pacing
+# page was added beyond the voice script's own.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for axes, arrows, bar names
+# and the 24-hour label; blue the thing named (the software segments, the T,
+# the onboarding steps, the settlement job); violet the second data series
+# (the systems segments) and the mentor bar; green healthy or done (on-call
+# reached, the pair, the split shift); red failure (trivia questions, the lost
+# candidate, the single point of failure); orange the limit or caveat (the
+# hiring bar, "small + growing fast"). A label on two lines is two text
+# assets, one per line: the overflow rule counts a whole text's length.
+#
+# Deck pages: deck "Next Editor · SRE 4 · People and teams". The /pub URL
+# below is the deck's published link; until this lesson's pages are built
+# into it, the published copy holds only the kit pages and the Director
+# reports the l14 pages missing. The voice script asks for l14_p05 as two
+# plain K3 columns (no better/worse colouring); the page plan carries that as
+# a note. Page plan:
+# ~/Documents/sre-course/work/pages/sre-14-becoming-an-sre.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-14-becoming-an-sre.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-14-becoming-an-sre.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-14-becoming-an-sre
+  title: "SRE from zero 14: SRE တစ်ယောက် ဖြစ်လာဖို့"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SRE တစ်ယောက် ဖြစ်လာဖို့
+
+        - T-shaped — အလွှာ အများကြီးကို ကျယ်ကျယ် သိ၊ တစ်ခု နှစ်ခုမှာ နက်နက် ကျွမ်း
+        - starter project — အဖွဲ့ လိုချင်ပြီး လူသစ် ကိုယ်တိုင် ပြီးနိုင်တဲ့ ပထမ project အစစ်
+        - shadowing / reverse shadowing — ဘေးက လိုက်ကြည့် → ကိုယ်တိုင် handle လုပ်
+        - စီစဉ်ထားတဲ့ အလုပ်နဲ့ ကြားဖြတ် အလုပ် — ကြားဖြတ်ကို အချိန်ရဲ့ တစ်ဝက်အောက်မှာ ထား
+        - N+1 (လူ) — system တိုင်း၊ shift တိုင်းမှာ လိုတာထက် တစ်ယောက် ပို
+
+        မေးခွန်း: "Kubernetes ကို လေ့လာမယ်" ကို စစ်လို့ရတဲ့ ပန်းတိုင် ဖြစ်အောင် ပြန်ရေးပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SRE တစ်ယောက် ဖြစ်လာဖို့</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 14</p>
+              <h1>SRE တစ်ယောက် ဖြစ်လာဖို့</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l14-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p01
+    - id: m4-map
+      contentType: google
+      name: Module 4 map
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: m4_map
+    - id: l14-p02
+      contentType: google
+      name: A good SRE
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p02
+    - id: l14-p02b
+      contentType: google
+      name: A week for three lines
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p02b
+    - id: l14-p02c
+      contentType: google
+      name: Ko Min's 10 minutes
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p02c
+    - id: l14-p03
+      contentType: google
+      name: Goals you can check
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p03
+    - id: l14-p03b
+      contentType: google
+      name: Starter project choices
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p03b
+    - id: l14-p04
+      contentType: google
+      name: Ko Min's starter project
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p04
+    - id: l14-p04b
+      contentType: google
+      name: A good first project
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p04b
+    - id: l14-p05
+      contentType: google
+      name: Planned work and interruptions
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p05
+    - id: l14-p05b
+      contentType: google
+      name: Feeling out of place
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p05b
+    - id: l14-p06
+      contentType: google
+      name: Growing, the Padauk way
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p06
+    - id: l14-p06b
+      contentType: google
+      name: Practice on your own
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p06b
+    - id: l14-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTfwR5EnbT88FJmQyL5j4ly_je1HWDnxxgj25pcz6oc8hrq5Jx2Wnq2RLc2mkrOwTZBmz38VIek4Scb/pub"
+      pageId: l14_p07
+  whiteboardAssets:
+    # ---- Board B1: two ways to clear the bar, stacked bars (P5) -------------
+    - {
+        id: l14-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 405,
+        y: 475,
+        width: 420,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l14-b1-leg-sys,
+        kind: text,
+        x: 290,
+        y: 212,
+        width: 115,
+        height: 35,
+        text: "systems",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-leg-sw,
+        kind: text,
+        x: 280,
+        y: 362,
+        width: 130,
+        height: 35,
+        text: "software",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-dev-sys,
+        kind: rectangle,
+        x: 420,
+        y: 200,
+        width: 100,
+        height: 60,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l14-b1-dev-sw,
+        kind: rectangle,
+        x: 420,
+        y: 260,
+        width: 100,
+        height: 240,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l14-b1-dev-name,
+        kind: text,
+        x: 410,
+        y: 515,
+        width: 150,
+        height: 35,
+        text: "developer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-zaw-sys,
+        kind: rectangle,
+        x: 570,
+        y: 200,
+        width: 100,
+        height: 240,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l14-b1-zaw-sw,
+        kind: rectangle,
+        x: 570,
+        y: 440,
+        width: 100,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l14-b1-zaw-name,
+        kind: text,
+        x: 580,
+        y: 515,
+        width: 115,
+        height: 35,
+        text: "ကိုဇော်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-bar,
+        kind: rectangle,
+        x: 405,
+        y: 196,
+        width: 420,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l14-b1-bar-t,
+        kind: text,
+        x: 410,
+        y: 155,
+        width: 170,
+        height: 35,
+        text: "ခန့်တဲ့ စံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Outline, not filled: a red strike across a solid red bar of the same
+    # colour would vanish.
+    - {
+        id: l14-b1-trivia,
+        kind: rectangle,
+        x: 720,
+        y: 400,
+        width: 90,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l14-b1-trivia-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 708,
+        y: 415,
+        width: 114,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l14-b1-trivia-t1,
+        kind: text,
+        x: 705,
+        y: 515,
+        width: 150,
+        height: 35,
+        text: "အလွတ်ကျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-trivia-t2,
+        kind: text,
+        x: 705,
+        y: 550,
+        width: 135,
+        height: 35,
+        text: "မေးခွန်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-lost,
+        kind: text,
+        x: 705,
+        y: 595,
+        width: 365,
+        height: 35,
+        text: "9 ပတ်: တစ်ယောက် လက်လွတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-t-top,
+        kind: rectangle,
+        x: 855,
+        y: 300,
+        width: 200,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l14-b1-t-wide,
+        kind: text,
+        x: 870,
+        y: 255,
+        width: 180,
+        height: 35,
+        text: "ကျယ်ကျယ် သိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-t-stem,
+        kind: rectangle,
+        x: 935,
+        y: 340,
+        width: 40,
+        height: 180,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l14-b1-t-deep1,
+        kind: text,
+        x: 985,
+        y: 385,
+        width: 100,
+        height: 35,
+        text: "နက်နက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b1-t-deep2,
+        kind: text,
+        x: 985,
+        y: 420,
+        width: 100,
+        height: 35,
+        text: "ကျွမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B2: the onboarding staircase, rising left to right (P7) ------
+    - {
+        id: l14-b2-s1,
+        kind: rectangle,
+        x: 262,
+        y: 480,
+        width: 152,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b2-s1-t1,
+        kind: text,
+        x: 268,
+        y: 490,
+        width: 85,
+        height: 35,
+        text: "doc +",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s1-t2,
+        kind: text,
+        x: 268,
+        y: 525,
+        width: 140,
+        height: 35,
+        text: "checklist",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s2,
+        kind: rectangle,
+        x: 420,
+        y: 420,
+        width: 122,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b2-s2-t1,
+        kind: text,
+        x: 426,
+        y: 430,
+        width: 110,
+        height: 35,
+        text: "starter",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s2-t2,
+        kind: text,
+        x: 426,
+        y: 465,
+        width: 110,
+        height: 35,
+        text: "project",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s3,
+        kind: rectangle,
+        x: 548,
+        y: 360,
+        width: 168,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b2-s3-t1,
+        kind: text,
+        x: 554,
+        y: 370,
+        width: 156,
+        height: 35,
+        text: "whiteboard",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s3-t2,
+        kind: text,
+        x: 554,
+        y: 405,
+        width: 65,
+        height: 35,
+        text: "talk",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s4,
+        kind: rectangle,
+        x: 722,
+        y: 300,
+        width: 107,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b2-s4-t,
+        kind: text,
+        x: 728,
+        y: 327,
+        width: 95,
+        height: 35,
+        text: "shadow",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s5,
+        kind: rectangle,
+        x: 835,
+        y: 240,
+        width: 122,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b2-s5-t1,
+        kind: text,
+        x: 841,
+        y: 250,
+        width: 110,
+        height: 35,
+        text: "reverse",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s5-t2,
+        kind: text,
+        x: 841,
+        y: 285,
+        width: 95,
+        height: 35,
+        text: "shadow",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-s6,
+        kind: rectangle,
+        x: 963,
+        y: 180,
+        width: 122,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l14-b2-s6-t,
+        kind: text,
+        x: 969,
+        y: 207,
+        width: 110,
+        height: 35,
+        text: "on-call",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-mentor,
+        kind: rectangle,
+        x: 262,
+        y: 590,
+        width: 823,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l14-b2-mentor-t,
+        kind: text,
+        x: 625,
+        y: 597,
+        width: 100,
+        height: 35,
+        text: "mentor",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b2-program,
+        kind: text,
+        x: 270,
+        y: 200,
+        width: 530,
+        height: 35,
+        text: "သေး + မြန်မြန် ကြီး → program အစစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: people redundancy, two lanes (P6) ------------------------
+    - {
+        id: l14-b3-job1,
+        kind: rectangle,
+        x: 280,
+        y: 200,
+        width: 250,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b3-job1-t,
+        kind: text,
+        x: 292,
+        y: 217,
+        width: 225,
+        height: 35,
+        text: "settlement job",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 215,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l14-b3-aung,
+        kind: rectangle,
+        x: 610,
+        y: 200,
+        width: 160,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l14-b3-aung-t,
+        kind: text,
+        x: 622,
+        y: 217,
+        width: 135,
+        height: 35,
+        text: "ကိုအောင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-spof,
+        kind: text,
+        x: 280,
+        y: 285,
+        width: 365,
+        height: 35,
+        text: "single point of failure",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-job2,
+        kind: rectangle,
+        x: 280,
+        y: 380,
+        width: 250,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l14-b3-job2-t,
+        kind: text,
+        x: 292,
+        y: 397,
+        width: 225,
+        height: 35,
+        text: "settlement job",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 395,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l14-b3-pair,
+        kind: rectangle,
+        x: 610,
+        y: 380,
+        width: 320,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l14-b3-pair-t,
+        kind: text,
+        x: 622,
+        y: 397,
+        width: 290,
+        height: 35,
+        text: "ကိုအောင် + ကိုဇော်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-day,
+        kind: rectangle,
+        x: 280,
+        y: 510,
+        width: 320,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l14-b3-day-t,
+        kind: text,
+        x: 415,
+        y: 522,
+        width: 55,
+        height: 35,
+        text: "နေ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-night,
+        kind: rectangle,
+        x: 600,
+        y: 510,
+        width: 320,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l14-b3-night-t,
+        kind: text,
+        x: 750,
+        y: 522,
+        width: 25,
+        height: 35,
+        text: "ည",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l14-b3-24h,
+        kind: text,
+        x: 935,
+        y: 522,
+        width: 120,
+        height: 35,
+        text: "24 နာရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2614
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: ပထမဆုံး SRE အလုပ်ခေါ် ကြော်ငြာ
+    narration: >
+      [[mark:show-p01]] Padauk က refund design ကို STPA နဲ့ ကြိုစစ်ပြီး လစာထုတ်ရက်မှာ ပိတ်ခံရတဲ့ wallet ၂၈၀၀ ကိုလည်း CAST နဲ့ ပြန်ခွဲကြည့်ခဲ့ပါပြီ။ ဒါပေမဲ့ lesson ၆ ကတည်းက incident တွေမှာ reliability ဘက်ကို ထမ်းခဲ့ရတာ Site Reliability Engineer၊ SRE ဖြစ်တဲ့ မသီရိ တစ်ယောက်တည်းပါ။
+      [[mark:hook-budget]] ဒါကြောင့် CTO ကိုနေလင်းက SRE အဖွဲ့ ဖွဲ့ဖို့ ငွေ ခွဲပေးလိုက်တော့ မသီရိက Padauk ရဲ့ ပထမဆုံး SRE အလုပ်ခေါ် ကြော်ငြာကို ရေးနေပါပြီ။ ဘယ်လို လူမျိုးကို ခန့်ရမလဲ၊ လူသစ်တွေကရော ဘေးကင်းကင်း ဘယ်လို သင်ယူကြမလဲ?
+      [[mark:show-map]] lesson ၁ မှာ ပြောခဲ့သလို Module ၄ က reliability loop ကို လည်နေအောင် လုပ်ပေးတဲ့ အလယ်က လူတွေ အကြောင်းပါ။ tool တွေ ဘယ်လောက်ပဲ ကောင်းကောင်း service ကို စိတ်ချရအောင် ထိန်းထားတာက လူတွေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+      - {
+          title: "Why heroism is bad (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/no-heroes/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l14-p01,
+        }
+      # Module 4 opens: the module map advances in place from the cover.
+      - { id: show-map, type: slide.show, at: { mark: show-map }, slideId: m4-map }
+
+  - id: good-sre
+    chapter: SRE ကောင်း တစ်ယောက်
+    narration: >
+      [[mark:show-p02]] မသီရိ ရှာနေတဲ့ SRE က code ရေးရုံ မကဘဲ top-up တစ်ခု operator ဆီ ရောက်ပုံကို အောက်ဆုံး အလွှာထိ နားလည်ပြီး design လုပ်တတ်ရပါမယ်။ debug လုပ်ရင်လည်း ကြုံရာ restart မလုပ်ဘဲ Operator A နှေးလို့လား ဆိုတဲ့ hypothesis ကို data နဲ့ စစ်ပြီး incident တွေကြားက ထပ်နေတဲ့ ပုံစံကိုလည်း မြင်ရပါမယ်။
+      [[mark:p02-toil]] လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရပြီး ရေရှည် တန်ဖိုး မပေးတဲ့ ops အလုပ်၊ toil ကိုလည်း automate လုပ်ချင်လောက်အောင် မုန်းရပါမယ်။ skill လောက် အရေးကြီးတာက ပျက်မှ ပြေးပြင်တာထက် ဘာက ပျက်နိုင်လဲ ကြိုတွေးတဲ့ စိတ်ထားပါ။
+      [[mark:show-p02b]] SRE တွေ code ရေးပေမဲ့ တစ်နေကုန် ရေးနေတာ မဟုတ်ပါဘူး။ ဥပမာ မသီရိက Operator B နဲ့ ချိတ်တဲ့ နေရာကို ပြောင်းဖို့ သူတို့ အဖွဲ့ကို data ပြပြီး တစ်ပတ်လုံး နားချခဲ့ရပေမဲ့ တကယ် ပြောင်းလိုက်တဲ့ code က သုံးကြောင်းပဲ ရှိပါတယ်။ ရှင်းပြတတ်တာကလည်း code လောက် အရေးကြီးတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l14-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l14-p02b }
+
+  - id: hiring-bar
+    chapter: ခန့်တဲ့ စံ
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ကြော်ငြာ ထွက်ပြီးတော့ နောက်ဆုံး ကျန်တဲ့ နှစ်ယောက်က လုံးဝ မတူပါဘူး။ [[mark:b1-s1b]] တစ်ယောက်က code ရေးတာ အရမ်း သန်တဲ့ backend developer ဖြစ်ပေမဲ့ Linux နဲ့ network ကို သိပ်မသိပါဘူး။ [[mark:b1-s1c]] နောက်တစ်ယောက်က ဘဏ်မှာ systems administrator လုပ်ခဲ့တဲ့ ကိုဇော်ပါ၊ server နဲ့ network ကို နက်နက် သိပေမဲ့ code နည်းနည်းပဲ ရေးဖူးပါတယ်။
+      [[mark:b1-s2]] Padauk က SRE ကိုလည်း developer ခန့်တဲ့ စံအတိုင်းပဲ ခန့်ပါတယ်။ ဒါပေမဲ့ software နဲ့ systems ကျွမ်းကျင်မှုကို ပေါင်းပြီး တိုင်းလို့ နှစ်ယောက်လုံး ခန့်တဲ့ စံကို ရောက်ပါတယ်၊ ရောက်ပုံသာ ပြောင်းပြန်ပါ။ SRE ကောင်းတွေက နောက်ခံ အမျိုးမျိုးကနေ လာကြတာပါ။
+      [[mark:b1-s3]] interview မှာလည်း အလွတ်ကျက်ရတဲ့ မေးခွန်းတွေ မမေးဘဲ သင်္ကြန် ညမှာ top-up ဘာကြောင့် နှေးလဲ ဆိုတဲ့ တကယ့် ပြဿနာကို ပေးပြီး စဉ်းစားပုံကို အသံထွက် ပြောခိုင်းပါတယ်။ [[mark:b1-s3b]] ဒါပေမဲ့ SRE ရှာရ ခက်တဲ့ကြားထဲ process က ၉ ပတ် ကြာသွားလို့ candidate ကောင်း နောက်တစ်ယောက်က တခြား ကုမ္ပဏီကို ရွေးသွားခဲ့ပါတယ်။
+      [[mark:b1-s4]] မသီရိ တကယ် ရှာနေတာက T-shaped ကျွမ်းကျင်မှုပါ။ T ရဲ့ အလျားလိုက် မျဉ်းက app ကနေ network အထိ အလွှာ အများကြီးကို ကျယ်ကျယ် သိတာ၊ ဒေါင်လိုက် မျဉ်းက တစ်ခု နှစ်ခုမှာ နက်နက် ကျွမ်းတာပါ။ incident မှာ ပြဿနာ ဘယ် အလွှာမှာ ပုန်းနေလဲ ကြိုမသိနိုင်လို့ အကျယ်ရော အနက်ပါ လိုတာပါ။ မသီရိကိုယ်တိုင် developer ဘက် နက်တော့ Padauk က systems ဘက် နက်တဲ့ ကိုဇော်ကို ရွေးလိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l14-b1-axis, l14-b1-leg-sys, l14-b1-leg-sw],
+        }
+      # Step 1 is split in two: each bar lands as its candidate is described.
+      - {
+          id: b1-s1b,
+          type: whiteboard.apply,
+          at: { mark: b1-s1b },
+          upsertIds: [l14-b1-dev-sw, l14-b1-dev-sys, l14-b1-dev-name],
+          drawMs: 1500,
+        }
+      - {
+          id: b1-s1c,
+          type: whiteboard.apply,
+          at: { mark: b1-s1c },
+          upsertIds: [l14-b1-zaw-sw, l14-b1-zaw-sys, l14-b1-zaw-name],
+          drawMs: 1500,
+        }
+      - {
+          id: b1-s2,
+          type: whiteboard.apply,
+          at: { mark: b1-s2 },
+          upsertIds: [l14-b1-bar, l14-b1-bar-t],
+          drawMs: 1000,
+        }
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l14-b1-trivia, l14-b1-trivia-x, l14-b1-trivia-t1, l14-b1-trivia-t2],
+          drawMs: 1600,
+        }
+      # The nine weeks land as they are said.
+      - {
+          id: b1-s3b,
+          type: whiteboard.apply,
+          at: { mark: b1-s3b },
+          upsertIds: [l14-b1-lost],
+          drawMs: 900,
+        }
+      - {
+          id: b1-s4,
+          type: whiteboard.apply,
+          at: { mark: b1-s4 },
+          upsertIds: [l14-b1-t-top, l14-b1-t-wide, l14-b1-t-stem, l14-b1-t-deep1, l14-b1-t-deep2],
+          drawMs: 2400,
+        }
+
+  - id: onboarding-staircase
+    chapter: Onboarding လှေကား
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02c]] ကိုဇော် အလုပ်ကို လက်ခံပြီးတော့ မသီရိ သတိရတာက ကိုမင်းပါ။ လစာထုတ်ရက် incident မှာ ကိုမင်းကို Operator A ရဲ့ latency ကို ၁၀ မိနစ်အတွင်း စစ်ခိုင်းခဲ့ပေမဲ့ မှန်တဲ့ dashboard ကို ရှာရင်း အချိန် အများစု ကုန်သွားခဲ့ပါတယ်။ လူသစ်ကို ကိုယ့်ဘာသာ ရုန်းကန်ပြီး သင်ခိုင်းရင် ဒီလိုပဲ ဖြစ်တတ်ပါတယ်။
+      [[mark:close-p02c]] [[mark:b2-s1]] ဒါကြောင့် မသီရိက လူသစ်ကို system တွေနဲ့ အဖွဲ့ကို နားလည်အောင် လမ်းပြတဲ့ onboarding ကို on-call ဆီ တက်တဲ့ လှေကားလို ဆွဲပါတယ်။ ပထမ အဆင့်က doc တွေ ဖတ်ရင်း on-call မကျခင် သင်ရမယ့် အရာတွေရဲ့ စာရင်း၊ on-call checklist ကို လိုက်လုပ်တာပါ၊ ခေတ်နောက်ကျနေတဲ့ doc တွေ့ရင် ကိုမင်းကိုယ်တိုင် ပြင်ပါတယ်။
+      [[mark:b2-s2]] နောက် အဆင့်တွေက လူသစ်ရဲ့ ပထမ project အစစ်၊ starter project နဲ့ whiteboard talk ပါ။ whiteboard talk မှာ ကိုမင်းက Wallet ledger ကို ဆွဲပြီး ငွေလွှဲ တစ်ခု ဘယ်လို မှတ်တမ်းဝင်လဲ အဖွဲ့ကို ရှင်းပြရင်း သင်ယူပါတယ်။
+      [[mark:b2-s3]] ပြီးရင် on-call ကို နှစ်ဆင့်နဲ့ တက်ပါတယ်။ shadowing မှာ page တွေကို မသီရိ handle လုပ်တာ ကိုမင်းက ဘေးကနေ လိုက်ကြည့်ပြီး reverse shadowing မှာတော့ ကိုမင်း ကိုယ်တိုင် handle လုပ်တာကို မသီရိက ဘေးကနေ စောင့်ကြည့်ပါတယ်။ [[mark:b2-s3b]] ဒီနောက်မှ အဖွဲ့ဝင်တွေ on-call ကို အလှည့်ကျ ယူတဲ့ on-call rotation ထဲ ဝင်ပါတယ်။
+      [[mark:b2-s4]] လှေကား တစ်လျှောက်လုံး ရေရှည် လမ်းညွှန်တဲ့ mentor က အောက်ကနေ ထောက်ထားပါတယ်။ mentor ရဲ့ အချိန် ပေးရပေမဲ့ လူသစ်တွေ on-call ကို ပိုမြန်မြန် ရောက်ပြီး ပထမ တစ်နှစ်အတွင်း အလုပ်ထွက်တာလည်း နည်းပါတယ်။
+      [[mark:b2-s5]] လူ မတိုးတဲ့ အဖွဲ့ငယ်ဆိုရင် နေ့စဉ် မေးလို့ရတဲ့ buddy တစ်ယောက် တွဲပေးရုံနဲ့ လုံလောက်ပါတယ်။ Padauk ကတော့ သေးပေမဲ့ မြန်မြန် ကြီးလာနေလို့ program အစစ် လုပ်ပါတယ်။ Padauk ရဲ့ ledger ကို ဘယ် course ကမှ မသင်ပေးနိုင်လို့ အဖွဲ့ကပဲ သင်ပေးရပေမဲ့ ဘယ်သူမှ အကုန် အလွတ်ကျက်စရာ မလိုပါဘူး၊ ဘယ်မှာ ရှာရမလဲ သိရင် ရပါပြီ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l14-p02c }
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l14-b2-s1, l14-b2-s1-t1, l14-b2-s1-t2],
+          drawMs: 1200,
+        }
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l14-b2-s2, l14-b2-s2-t1, l14-b2-s2-t2, l14-b2-s3, l14-b2-s3-t1, l14-b2-s3-t2],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l14-b2-s4, l14-b2-s4-t, l14-b2-s5, l14-b2-s5-t1, l14-b2-s5-t2],
+          drawMs: 1600,
+        }
+      # The green top step lands as the rotation is named.
+      - {
+          id: b2-s3b,
+          type: whiteboard.apply,
+          at: { mark: b2-s3b },
+          upsertIds: [l14-b2-s6, l14-b2-s6-t],
+          drawMs: 900,
+        }
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l14-b2-mentor, l14-b2-mentor-t],
+          drawMs: 1200,
+        }
+      - {
+          id: b2-s5,
+          type: whiteboard.apply,
+          at: { mark: b2-s5 },
+          upsertIds: [l14-b2-program],
+          drawMs: 1200,
+        }
+
+  - id: checkable-goals
+    chapter: စစ်လို့ရတဲ့ ပန်းတိုင်
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] checklist ရဲ့ ပထမ မူကြမ်းမှာ operator gateway ကို နားလည်ရမယ်၊ deploy tool ကို သိရမယ် ဆိုတဲ့ စာကြောင်းတွေ ပါပါတယ်။ ဒါပေမဲ့ နားလည်ပြီလား ဘယ်သူ ဘယ်လို စစ်မလဲ? ဒါကြောင့် မသီရိက operator အလိုက် fail တွေကို ရှာပြရမယ်၊ release တစ်ခုကို rollback လုပ်ပြရမယ် ဆိုသလို စာကြောင်းတိုင်းကို ကိုမင်း လုပ်ပြနိုင်တဲ့ action အဖြစ် ပြန်ရေးပါတယ်။
+      [[mark:p03-payoff]] ဒီတော့ ဘယ်အထိ ရောက်ပြီလဲ ကိုမင်းရော mentor ပါ မြင်ရပြီး ဘယ် စာကြောင်းအတွက်မှ မလိုတဲ့ doc တွေ၊ သင်ခန်းစာတွေကိုလည်း ဖြုတ်လို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l14-p03 }
+
+  - id: starter-project
+    chapter: ကိုမင်းရဲ့ starter project
+    narration: >
+      [[mark:show-p03b]] ဒါဆို ကိုမင်းရဲ့ starter project ကို ဘာရွေးမလဲ? settlement job ကို ပြန် design လုပ်တာ၊ လက်နဲ့ အမ်းနေရတဲ့ refund တွေကို ရှင်းတာ၊ ပြီးတော့ incident ညက ရှိခဲ့ရင် အချိန် ကယ်ပေးနိုင်မယ့် operator အလိုက် fail dashboard ဆိုပြီး သုံးခု ရှိပါတယ်။ ကိုယ်ဆိုရင် ဘယ်ဟာ ရွေးမလဲ ခဏ စဉ်းစားကြည့်ပါ။
+      [[mark:show-p04]] settlement ကို ပြန် design လုပ်တာက ဘဏ်ရဲ့ ခွင့်ပြုချက် စောင့်ရတဲ့ အလုပ်ကြီးမို့ လူသစ်နဲ့ မသင့်ပါဘူး။ refund ရှင်းတာကတော့ toil ကို ထပ်လုပ်ရုံမို့ ဘာအသစ်မှ မသင်ရပါဘူး။ ဒါကြောင့် dashboard ကို ရွေးပြီး မသီရိက mentor လုပ်ပေးပါတယ်။ လေးပတ်နေရင် အဖွဲ့ကို demo ပြရမယ်၊ နောက် incident မှာ တစ်ယောက်ယောက် တကယ် ဖွင့်သုံးမှ အောင်မြင်တာပါ။
+      [[mark:show-p04b]] ဘာကြောင့် ဒီ dashboard က ပထမ project ကောင်း ဖြစ်တာလဲ? ဆောက်ရင်း gateway၊ monitoring နဲ့ Top-up data ကို ဖြတ်သွားရလို့ system ကို တကယ် သင်ရပါတယ်။ ပျက်ရင်တောင် ငွေပေးတဲ့ လမ်းကို မထိသလို အလောတကြီးလည်း မလိုပါဘူး။ ဒါပေမဲ့ အဖွဲ့ တကယ် လိုချင်နေတဲ့ tool ဖြစ်ပြီး တခြားသူကို မစောင့်ဘဲ ကိုမင်း ကိုယ်တိုင် ပြီးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+      - {
+          title: "SRE Fundamentals course (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/sre-fundamentals-course/",
+        }
+    actions:
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l14-p03b }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l14-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l14-p04b }
+
+  - id: planned-work
+    chapter: စီစဉ်ထားတဲ့ အလုပ်နဲ့ ကြားဖြတ် အလုပ်
+    narration: >
+      [[mark:show-p05]] ဒါပေမဲ့ ပထမ အပတ်မှာပဲ ticket၊ code review၊ chat က မေးခွန်းတွေ ဝင်လာတိုင်း အစက ပြန်စဉ်းစားရလို့ ကိုမင်း dashboard ကို တစ်နာရီ ဆက်တိုက်တောင် မလုပ်နိုင်ခဲ့ပါဘူး။ SRE အလုပ်မှာ ကြာရှည် တန်ဖိုးရှိမယ့် စီစဉ်ထားတဲ့ အလုပ်နဲ့ page တွေလို ကြားဖြတ် အလုပ် နှစ်မျိုးလုံး အမြဲ ရှိလို့ Padauk က ကြားဖြတ် အလုပ်ကို အချိန်ရဲ့ တစ်ဝက်အောက်မှာ ထားပြီး မနက်ပိုင်း နှစ်နာရီကို အာရုံစိုက်ချိန်အဖြစ် ကာပေးပါတယ်။
+      [[mark:show-p05b]] အစပိုင်း အပတ်တွေမှာ ကိုမင်းက တခြားသူတွေ အကုန် သိနေပြီး ကိုယ်ပဲ ဒီနေရာနဲ့ မတန်ဘူးလို့ ခံစားရပါတယ်။ သင်ရမယ့် system တွေ များလို့ SRE အသစ် အများစု ဒီလို ခံစားရတာ ပုံမှန်ပါပဲ။ ကိုမင်းလည်း checklist မှာ ပြီးသွားတဲ့ စာကြောင်းတွေကို မြင်ရတော့ ယုံကြည်မှု ပြန်ရလာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "DORA capability: Well-being", url: "https://dora.dev/capabilities/well-being/" }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l14-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l14-p05b }
+
+  - id: people-redundancy
+    chapter: လူမှာလည်း အရန်
+    narration: >
+      [[mark:close-p05b]] [[mark:b3-s1]] lesson ၅ က ကိုအောင်ကို သတိရပါလား? settlement job ရပ်တဲ့ ရိုးရိုး case တွေကို runbook နဲ့ တခြားသူတွေ ပြင်တတ်လာပေမဲ့ ခက်တဲ့ ညတွေမှာ ကိုအောင်ကိုပဲ နှိုးရတုန်းပါ။ ဒီလို တစ်ခုတည်း ပျက်ရင် တစ်ခုလုံး ရပ်သွားမယ့် အစိတ်အပိုင်း၊ single point of failure က server တင် မကဘဲ လူလည်း ဖြစ်နိုင်ပါတယ်။
+      [[mark:b3-s2]] server တစ်လုံး ပျက်လည်း ဆက်လည်ပတ်အောင် အပို တစ်လုံး ထားသလို လူမှာလည်း system တိုင်း၊ shift တိုင်းအတွက် လိုတာထက် အနည်းဆုံး တစ်ယောက် ပိုထားတာကို N plus one လို့ ခေါ်ပါတယ်။ ဒါကြောင့် ကိုဇော် ဝင်လာတာနဲ့ ကိုအောင်နဲ့ တွဲပေးပြီး ခက်တဲ့ ညတွေကိုပါ ကိုယ်တိုင် ပြင်နိုင်တဲ့အထိ လက်လွှဲပါမယ်။
+      [[mark:b3-s3]] လူ တစ်ယောက် on-call အသင့် ဖြစ်ဖို့ တစ်နှစ်လောက်အထိ ကြာနိုင်လို့ လူ ထွက်သွားရင် ဆုံးရှုံးမှု ကြီးပါတယ်၊ on-call ကိုယ်တိုင်ကလည်း လူတွေ အလုပ်ထွက်တဲ့ အဓိက အကြောင်းရင်း တစ်ခုပါ။ ဒါကြောင့် Padauk က ၂၄ နာရီ on-call shift ကို နေ့ပိုင်း ညပိုင်း ခွဲလိုက်လို့ ကိုအောင်က နေ့ပိုင်းကိုပဲ ယူလို့ရပြီး လိုရင် အချင်းချင်း shift လဲလို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Why heroism is bad (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/no-heroes/",
+        }
+      - { title: "DORA capability: Well-being", url: "https://dora.dev/capabilities/well-being/" }
+    actions:
+      - { id: close-p05b, type: slide.close, at: { mark: close-p05b, offsetMs: -400 } }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds:
+            [l14-b3-job1, l14-b3-job1-t, l14-b3-a1, l14-b3-aung, l14-b3-aung-t, l14-b3-spof],
+          drawMs: 2400,
+        }
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l14-b3-job2, l14-b3-job2-t, l14-b3-a2, l14-b3-pair, l14-b3-pair-t],
+          drawMs: 2000,
+        }
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l14-b3-day, l14-b3-day-t, l14-b3-night, l14-b3-night-t, l14-b3-24h],
+          drawMs: 2000,
+        }
+
+  - id: growing
+    chapter: ဆက်ပြီး တိုးတက်ဖို့
+    narration: >
+      [[mark:close-b3]] [[mark:show-p06]] onboarding ပြီးရင် ဘယ်လို ဆက်တိုးတက်မလဲလို့ ကိုမင်း မေးတော့ မသီရိက Padauk ရဲ့ အလေ့အထ သုံးခုကို ပြောပြပါတယ်။ သုံးလ တစ်ခါ ကိုယ့် system ဘေးက system တစ်ခုကို လေ့လာပါ၊ fix တစ်ခုကို အစကနေ အဆုံးထိ ကိုယ်တိုင် တာဝန်ယူပါ၊ သင်ခဲ့တာကို ၁၀ မိနစ်နဲ့ အဖွဲ့ကို ပြန်ရှင်းပြပါ။
+      [[mark:show-p06b]] ကိုယ့်ဘာသာဆိုရင် သင်္ကြန် ညသန်းခေါင်မှာ တစ်စက္ကန့်ကို top-up ဘယ်နှခု ဝင်မလဲလို့ တကယ့် ကိန်းဂဏန်းနဲ့ တွက်ပြီး design ဆွဲကြည့်ပါ။ public postmortem တစ်ခုကို အပတ်တိုင်း ဖတ်ပြီး ကိုယ့်စကားနဲ့ အကျဉ်း ပြန်ရေးကြည့်ပါ။ manager ဖြစ်တာကလည်း တက်လမ်း တစ်ခုတည်း မဟုတ်ပါဘူး၊ လူ မစီမံဘဲ engineering ကိုယ်တိုင် လုပ်ရင်း ဦးဆောင်တဲ့ individual contributor လမ်းလည်း ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE Fundamentals course (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/sre-fundamentals-course/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l14-p06 }
+      - { id: show-p06b, type: slide.show, at: { mark: show-p06b }, slideId: l14-p06b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] လူ ဝင်ထွက်လည်း အဖွဲ့ ဆက်ရပ်တည်နိုင်အောင် ဒီအပတ် စလုပ်ကြည့်ပါ။ ကိုယ့် service ရဲ့ on-call checklist ကို လုပ်ပြလို့ရတဲ့ action တွေနဲ့ ရေးပါ။ ကိုယ့် system ကို အဖွဲ့ဖော် တစ်ယောက်အတွက် whiteboard ပေါ်မှာ ဆွဲပြီး ရှင်းပြပါ။ ပြီးတော့ တစ်ယောက်တည်းပဲ ကျွမ်းတဲ့ system ရှိရင် အဲဒီလူနဲ့ တွဲမယ့် နောက်တစ်ယောက်ကို ရှာပေးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+      - {
+          title: "Why heroism is bad (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/no-heroes/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l14-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] SRE ဖြစ်လာဖို့ လိုတာတွေကို ကြည့်ရအောင်။ [[mark:sel-tshaped]] T-shaped က အလွှာ အများကြီးကို ကျယ်ကျယ် သိပြီး တစ်ခု နှစ်ခုမှာ နက်နက် ကျွမ်းတာပါ။ [[mark:sel-starter]] starter project က အဖွဲ့ တကယ် လိုချင်ပြီး လူသစ် ကိုယ်တိုင် ပြီးနိုင်တဲ့ ပထမ project အစစ်ပါ။
+      [[mark:sel-shadowing]] shadowing မှာ လူသစ်က ဘေးကနေ ကြည့်ပြီး reverse shadowing မှာတော့ ကိုယ်တိုင် handle လုပ်ပါတယ်။ [[mark:sel-planned]] စီစဉ်ထားတဲ့ အလုပ်ကို ကာဖို့ ကြားဖြတ် အလုပ်ကို တစ်ဝက်အောက်မှာ ထားပါတယ်။ [[mark:sel-n1]] လူအတွက် N plus one ကတော့ system တိုင်း၊ shift တိုင်းမှာ လိုတာထက် တစ်ယောက် ပိုထားတာပါ။
+      [[mark:sel-question]] ဒါဆို ကိုမင်းရဲ့ checklist လိုပဲ Kubernetes ကို လေ့လာမယ် ဆိုတဲ့ ပန်းတိုင်ကို စစ်လို့ရတဲ့ ပန်းတိုင် ဖြစ်အောင် ဘယ်လို ပြန်ရေးမလဲ?
+      [[mark:pause-question]] ဥပမာ ကိုယ့်အဖွဲ့ရဲ့ cluster ပေါ်မှာ service တစ်ခုကို deploy လုပ်ပြီး rollback လုပ်ပြနိုင်ရမယ်လို့ ရေးနိုင်ပါတယ်။ တနင်္လာနေ့ဆိုရင် ကိုဇော် အလုပ်စပါပြီ၊ ဒါပေမဲ့ SRE နှစ်ယောက်နဲ့ on-call rotation မဖြစ်သေးပါဘူး။ သူတို့ကို ဘယ်မှာ ထားပြီး ဘာတွေကို တာဝန်ယူခိုင်းမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Accelerating SREs to On-Call and Beyond",
+          url: "https://sre.google/sre-book/accelerating-sre-on-call/",
+        }
+      - {
+          title: "Workbook: SRE Team Lifecycles",
+          url: "https://sre.google/workbook/team-lifecycles/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-tshaped,
+          type: editor.select,
+          at: { mark: sel-tshaped },
+          target: { file: notes.md, text: "T-shaped", occurrence: 1 },
+        }
+      - {
+          id: sel-starter,
+          type: editor.select,
+          at: { mark: sel-starter },
+          target: { file: notes.md, text: "starter project", occurrence: 1 },
+        }
+      # occurrence 1: the line's first "shadowing", before "reverse shadowing".
+      - {
+          id: sel-shadowing,
+          type: editor.select,
+          at: { mark: sel-shadowing },
+          target: { file: notes.md, text: "shadowing", occurrence: 1 },
+        }
+      - {
+          id: sel-planned,
+          type: editor.select,
+          at: { mark: sel-planned },
+          target: { file: notes.md, text: "စီစဉ်ထားတဲ့ အလုပ်", occurrence: 1 },
+        }
+      - {
+          id: sel-n1,
+          type: editor.select,
+          at: { mark: sel-n1 },
+          target: { file: notes.md, text: "N+1", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. A select at sel-question itself would drag
+      # under the question and leave no pause, and one at pause-question would
+      # drag under the answer's first words (the scheduler holds only the
+      # dialog after its anchor's). sel-question already starts the question's
+      # own dialog (the sentence before it ends at ။), so the question-line
+      # select hangs off it: it starts about as the question ends, its drag
+      # runs in silence, and the answer at pause-question waits for it. The
+      # question is one 127-character sentence with no ၊ to split at, so the
+      # quiet depends on the voice's speed: 8750 leaves about
+      # 2.85 / 0.94 / 0.35 s before the answer at 55 / 70 / 95 ms per char (at
+      # 95 the drag starts under the question's last words, as in lessons 2 and
+      # 7); 8800 trips compile-check's 2.5 s inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: sel-question, offsetMs: 8750 }
+        target:
+          file: notes.md
+          text: 'မေးခွန်း: "Kubernetes ကို လေ့လာမယ်" ကို စစ်လို့ရတဲ့ ပန်းတိုင် ဖြစ်အောင် ပြန်ရေးပါ။'
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
