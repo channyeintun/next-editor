@@ -1,0 +1,1761 @@
+# SRE from zero, lesson 25: Platform engineering (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-25-platform-engineering.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-25-platform-engineering.md \
+#     src/studio/scripts/sre-25-platform-engineering.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Nine marks add no spoken text and sit at an existing ။:
+# - hook-split and p05-split split the hook's narration and l25_p05's narration
+#   at their paragraph breaks (one 483- or 468-character dialog would pass the
+#   450-character limit; no action uses them).
+# - b1-s1b lands B1's freeze rule, bus and Wallet's check on the sentence that
+#   names the rule, after the three scripts of the sentence before; the two red
+#   ✗ then land with the words "ကျန်တဲ့ နှစ်ဖွဲ့က" (b1-s1c hangs off b1-s1b with
+#   an offset, as lesson 16 does for its select), so the check and the crosses
+#   do not all arrive together.
+# - b1-s3b adds the last two services of the shared platform (Eats, rider) on the
+#   sentence that says new teams inherit the rule on day one, so no step adds
+#   more than three labelled boxes.
+# - b2-s2b lands B2's green "service with canary, auto-rollback, SLO dashboard" on
+#   the sentence that says what comes out of the template (the template and its
+#   arrow land with the sentence before), and b2-s3b lands the escape hatch on
+#   the sentence that names it, after "3 weeks → 1 day" lands with the first.
+# - b3-s1b lands the red "retry · rollout · SLO" label and the SRE queue box on
+#   the sentence that says teams must master everything or wait in line.
+# - b4-s1b lands the red "block" box on the sentence about new services, and
+#   b4-s3b lands the violet "6 databases never restored" label on the sentence
+#   that says the leader report shows it.
+# b3-s2b is not a mark: the three teams standing on the slab are an apply
+# chained after the slab (afterAction), so the slab lands first. Likewise
+# b4-s1-draw is chained after b4-s1, which opens and clears the board with B4's
+# title alone and no drawMs (furniture, as lesson 5 does for its board titles);
+# the first box is then drawn in.
+# ask-question is the voice script's ⟪select မေးခွန်း⟫, which already starts the
+# question's own dialog, so the question-line select hangs off it for the
+# ⟪pause 3s⟫ (see select-question), as in lessons 5 and 16.
+#
+# Pacing (70 ms per character): the longest a page or board stays up is the
+# cover l25_p01 at about 36 s (the hook's 483 characters, which include the
+# 2 s opening handle), then l25_p05 at about 34 s and l25_p03c at about 30 s;
+# every other page or board step changes within 30 s. The voice script already
+# carries the continuation pages (l25_p02b, l25_p02c, l25_p03b, …), so no pacing
+# page or step beyond the marks above was added.
+#
+# A board followed by a deck page closes the panel (open: false) 400 ms before
+# the page, and a deck page followed by a board closes the page 400 ms before,
+# as in Module 1; pages that follow each other advance in place. Every board
+# opens with open + clear. B1's last step is a second wipe (clear) inside the
+# open board: the "shared deploy platform" diagram redraws the same comb, so the
+# four services keep their places and get their checks.
+#
+# Boards (B1 P2 comb, B2 P1 flow, B3 P6 lanes, B4 two P6 lanes merging). Colour
+# jobs: #1e1e1e ink (paints white) for buses, arrows and B4's title; blue the thing
+# named (the freeze rule, the rider service, the shared platform, the template,
+# the teams, old and new services); green healthy or done (Wallet's script and
+# every check, the golden-path service, the platform slab, the scorecard); red
+# failure (Top-up's and Eats's scripts, the ✗, the load each team carries, the
+# block on new services); orange the caveat or limit (the Viber script, the
+# escape hatch, the SRE queue, the exemption); violet the result (3 weeks to 1
+# day, "both", the 6 databases and the restore sprint). A label on two lines is
+# one text asset per line, so each line meets the 0.55 em width rule on its own;
+# every label was also measured in Chrome with Excalidraw's Virgil font
+# (wb-fit.mjs) and stays inside its box and inside x 1100.
+# B1 and B2 run left to right. B3 keeps the voice script's two lanes (teams in
+# a row on top and on the slab below). B4 runs as two top-to-bottom lanes side
+# by side, because the arrow-down of each lane has to reach the scorecard
+# under both without crossing the other lane. B1's "?" for the rider service and
+# the ✗ marks are small text assets (the board has no cross stroke).
+#
+# Deck pages: deck "Next Editor · SRE 5C · Design and platforms", published; the
+# /pub URL below is final. Its l25 pages are built later from the page plan, so
+# until then the Director reports page "l25_p01" missing from the published deck
+# (with the deck URL swapped for an unreachable one it validates). The voice
+# script asks for l25_p05b as an ordinary compare (left gray, right teal). The
+# voice script's cover title is 36 code points, over the kit's 34, so the cover
+# page drops the particle ကို (33; the page plan notes it); the lesson title
+# here is unchanged. Page plan:
+# ~/Documents/sre-course/work/pages/sre-25-platform-engineering.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-25-platform-engineering.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-25-platform-engineering.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-25-platform-engineering
+  title: "SRE from zero 25: မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်
+
+        - golden path — လိုက်သွားရုံနဲ့ reliability ပါလာတဲ့ standard လမ်း
+        - escape hatch — default နဲ့ မကိုက်ရင် ခွင့်ပြုချက်နဲ့ ထွက်တဲ့ လမ်း
+        - break-glass — အရေးပေါ်မှာ ကျော်၊ log ကျန်၊ နောက်မှ review
+        - shift down — ကျွမ်းကျင်သူက platform ထဲမှာ တစ်ခါ ဆောက်၊ အားလုံး ရ
+        - လိုသလောက် တင်းကျပ်မှု — အမှားရဲ့ ထိခိုက်မှုနဲ့ ကိုက်တဲ့ စစ်ဆေးမှု: Playground · Light · Standard · Strict
+        - exemption — owner၊ အကြောင်းပြချက်၊ ကုန်ဆုံးရက် ပါတဲ့ ယာယီ ခွင့်ပြုချက်
+
+        မေးခွန်း: wiki ပေါ်မှာပဲ ရှိတဲ့ စည်းမျဉ်းကို golden path ထဲ ထည့်ဆောက်ဖို့ နည်း တစ်ခု ပြောပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 25</p>
+              <h1>မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l25-p01
+      contentType: google
+      name: "Cover: a deploy during the freeze"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p01
+    - id: l25-p02
+      contentType: google
+      name: "Your platform already exists"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p02
+    - id: l25-p02b
+      contentType: google
+      name: "Designed, or an accident"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p02b
+    - id: l25-p02c
+      contentType: google
+      name: "Bounding a choice"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p02c
+    - id: l25-p03
+      contentType: google
+      name: "When Top-up broke a rule"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p03
+    - id: l25-p03b
+      contentType: google
+      name: "Checks that steer"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p03b
+    - id: l25-p03c
+      contentType: google
+      name: "The shared gateway client"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p03c
+    - id: l25-p04
+      contentType: google
+      name: "Right-sized control"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p04
+    - id: l25-p04b
+      contentType: google
+      name: "Not a ladder"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p04b
+    - id: l25-p05
+      contentType: google
+      name: "Exceptions are normal"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p05
+    - id: l25-p05b
+      contentType: google
+      name: "Forcing the platform or listing exceptions"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p05b
+    - id: l25-p06
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l25_p06
+  whiteboardAssets:
+    # ---- Board B1 (P2 comb): the freeze rule reaches one script ----
+    - {
+        id: l25-b1-w,
+        kind: rectangle,
+        x: 627,
+        y: 175,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1-w-t,
+        kind: text,
+        x: 639,
+        y: 197,
+        width: 276,
+        height: 35,
+        text: "Wallet script",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-t,
+        kind: rectangle,
+        x: 627,
+        y: 275,
+        width: 300,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l25-b1-t-t,
+        kind: text,
+        x: 639,
+        y: 297,
+        width: 276,
+        height: 35,
+        text: "Top-up script",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-e,
+        kind: rectangle,
+        x: 627,
+        y: 375,
+        width: 300,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l25-b1-e-t,
+        kind: text,
+        x: 639,
+        y: 397,
+        width: 276,
+        height: 35,
+        text: "Eats script",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-rule,
+        kind: rectangle,
+        x: 255,
+        y: 335,
+        width: 270,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b1-rule-t1,
+        kind: text,
+        x: 267,
+        y: 350,
+        width: 246,
+        height: 35,
+        text: freeze,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-rule-t2,
+        kind: text,
+        x: 267,
+        y: 385,
+        width: 246,
+        height: 35,
+        text: "စည်းကမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-a0,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 529,
+        y: 365,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-bus,
+        kind: rectangle,
+        x: 569,
+        y: 175,
+        width: 14,
+        height: 420,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-a-w,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 195,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-a-t,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 295,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-a-e,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 395,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 192,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1-no-t,
+        kind: text,
+        x: 945,
+        y: 293,
+        width: 30,
+        height: 45,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: l25-b1-no-e,
+        kind: text,
+        x: 945,
+        y: 393,
+        width: 30,
+        height: 45,
+        text: "✗",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: l25-b1-rider,
+        kind: rectangle,
+        x: 627,
+        y: 485,
+        width: 430,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b1-rider-t1,
+        kind: text,
+        x: 639,
+        y: 505,
+        width: 406,
+        height: 35,
+        text: "rider service",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-rider-t2,
+        kind: text,
+        x: 639,
+        y: 540,
+        width: 406,
+        height: 35,
+        text: "ပိတ်ရက်မှာ ရေးတဲ့ pipeline",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1-a-r,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 520,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1-q,
+        kind: text,
+        x: 1062,
+        y: 507,
+        width: 30,
+        height: 45,
+        text: "?",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: l25-b1p-src,
+        kind: rectangle,
+        x: 255,
+        y: 315,
+        width: 270,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b1p-src-t1,
+        kind: text,
+        x: 267,
+        y: 330,
+        width: 246,
+        height: 35,
+        text: "shared deploy",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-src-t2,
+        kind: text,
+        x: 267,
+        y: 365,
+        width: 246,
+        height: 35,
+        text: platform,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-a0,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 529,
+        y: 345,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-bus,
+        kind: rectangle,
+        x: 569,
+        y: 175,
+        width: 14,
+        height: 380,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-1,
+        kind: rectangle,
+        x: 627,
+        y: 175,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-1-t,
+        kind: text,
+        x: 639,
+        y: 197,
+        width: 276,
+        height: 35,
+        text: Wallet,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 195,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-ok1,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 192,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-2,
+        kind: rectangle,
+        x: 627,
+        y: 275,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-2-t,
+        kind: text,
+        x: 639,
+        y: 297,
+        width: 276,
+        height: 35,
+        text: Top-up,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 295,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-ok2,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 292,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-3,
+        kind: rectangle,
+        x: 627,
+        y: 375,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-3-t,
+        kind: text,
+        x: 639,
+        y: 397,
+        width: 276,
+        height: 35,
+        text: Eats,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 395,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-ok3,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 392,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-4,
+        kind: rectangle,
+        x: 627,
+        y: 475,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b1p-4-t,
+        kind: text,
+        x: 639,
+        y: 497,
+        width: 276,
+        height: 35,
+        text: rider,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b1p-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 587,
+        y: 495,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b1p-ok4,
+        kind: freedraw,
+        stroke: check,
+        x: 940,
+        y: 492,
+        width: 50,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    # ---- Board B2 (P1 flow): desire path to golden path ----
+    - {
+        id: l25-b2-viber,
+        kind: rectangle,
+        x: 255,
+        y: 215,
+        width: 245,
+        height: 170,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l25-b2-viber-t1,
+        kind: text,
+        x: 267,
+        y: 265,
+        width: 221,
+        height: 35,
+        text: "Viber မှာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-viber-t2,
+        kind: text,
+        x: 267,
+        y: 300,
+        width: 221,
+        height: 35,
+        text: "မျှတဲ့ script",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 504,
+        y: 280,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b2-tpl,
+        kind: rectangle,
+        x: 544,
+        y: 215,
+        width: 245,
+        height: 170,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b2-tpl-t1,
+        kind: text,
+        x: 556,
+        y: 265,
+        width: 221,
+        height: 35,
+        text: "template:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-tpl-t2,
+        kind: text,
+        x: 556,
+        y: 300,
+        width: 221,
+        height: 35,
+        text: "မေးခွန်း 4 ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 793,
+        y: 280,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b2-svc,
+        kind: rectangle,
+        x: 833,
+        y: 215,
+        width: 245,
+        height: 170,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b2-svc-t1,
+        kind: text,
+        x: 845,
+        y: 230,
+        width: 221,
+        height: 35,
+        text: "service အသစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-svc-t2,
+        kind: text,
+        x: 845,
+        y: 265,
+        width: 221,
+        height: 35,
+        text: canary,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-svc-t3,
+        kind: text,
+        x: 845,
+        y: 300,
+        width: 221,
+        height: 35,
+        text: auto-rollback,
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-svc-t4,
+        kind: text,
+        x: 845,
+        y: 335,
+        width: 221,
+        height: 35,
+        text: "SLO dashboard",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b2-gain,
+        kind: text,
+        x: 815,
+        y: 462,
+        width: 275,
+        height: 45,
+        text: "3 ပတ် → 1 ရက်",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: l25-b2-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 646,
+        y: 390,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b2-hatch,
+        kind: rectangle,
+        x: 544,
+        y: 445,
+        width: 245,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l25-b2-hatch-t,
+        kind: text,
+        x: 556,
+        y: 463,
+        width: 221,
+        height: 35,
+        text: "escape hatch",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3 (P6 lanes): shift left alone, then shift down ----
+    - {
+        id: l25-b3-u1,
+        kind: rectangle,
+        x: 255,
+        y: 165,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-u1-t,
+        kind: text,
+        x: 267,
+        y: 183,
+        width: 126,
+        height: 35,
+        text: Wallet,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-u2,
+        kind: rectangle,
+        x: 415,
+        y: 165,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-u2-t,
+        kind: text,
+        x: 427,
+        y: 183,
+        width: 126,
+        height: 35,
+        text: Top-up,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-u3,
+        kind: rectangle,
+        x: 575,
+        y: 165,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-u3-t,
+        kind: text,
+        x: 587,
+        y: 183,
+        width: 126,
+        height: 35,
+        text: Eats,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-need,
+        kind: text,
+        x: 255,
+        y: 245,
+        width: 330,
+        height: 35,
+        text: "retry · rollout · SLO",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 735,
+        y: 180,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b3-sre,
+        kind: rectangle,
+        x: 780,
+        y: 165,
+        width: 250,
+        height: 120,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l25-b3-sre-t1,
+        kind: text,
+        x: 792,
+        y: 190,
+        width: 226,
+        height: 35,
+        text: SRE,
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-sre-t2,
+        kind: text,
+        x: 792,
+        y: 225,
+        width: 226,
+        height: 35,
+        text: "တန်းစီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-slab,
+        kind: rectangle,
+        x: 255,
+        y: 455,
+        width: 560,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b3-slab-t,
+        kind: text,
+        x: 267,
+        y: 487,
+        width: 536,
+        height: 35,
+        text: "platform: retry · rollout · SLO",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-d1,
+        kind: rectangle,
+        x: 255,
+        y: 385,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-d1-t,
+        kind: text,
+        x: 267,
+        y: 403,
+        width: 126,
+        height: 35,
+        text: Wallet,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-d2,
+        kind: rectangle,
+        x: 415,
+        y: 385,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-d2-t,
+        kind: text,
+        x: 427,
+        y: 403,
+        width: 126,
+        height: 35,
+        text: Top-up,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-d3,
+        kind: rectangle,
+        x: 575,
+        y: 385,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b3-d3-t,
+        kind: text,
+        x: 587,
+        y: 403,
+        width: 126,
+        height: 35,
+        text: Eats,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b3-both,
+        kind: text,
+        x: 255,
+        y: 320,
+        width: 440,
+        height: 35,
+        text: "နှစ်ခုလုံး: စောစော + မျှသုံး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B4 (P6, two lanes merging): a new rule for old systems ----
+    - {
+        id: l25-b4-title,
+        kind: text,
+        x: 255,
+        y: 155,
+        width: 545,
+        height: 45,
+        text: "restore test: ရက် 90 အတွင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l25-b4-new,
+        kind: rectangle,
+        x: 270,
+        y: 215,
+        width: 300,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b4-new-t,
+        kind: text,
+        x: 282,
+        y: 243,
+        width: 276,
+        height: 35,
+        text: "service အသစ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 308,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b4-block,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 300,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l25-b4-block-t1,
+        kind: text,
+        x: 282,
+        y: 355,
+        width: 276,
+        height: 35,
+        text: "restore test",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-block-t2,
+        kind: text,
+        x: 282,
+        y: 390,
+        width: 276,
+        height: 35,
+        text: "မပါရင် block",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-old,
+        kind: rectangle,
+        x: 700,
+        y: 215,
+        width: 300,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l25-b4-old-t1,
+        kind: text,
+        x: 712,
+        y: 225,
+        width: 276,
+        height: 35,
+        text: "service ဟောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-old-t2,
+        kind: text,
+        x: 712,
+        y: 260,
+        width: 276,
+        height: 35,
+        text: "35 ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 830,
+        y: 308,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b4-exempt,
+        kind: rectangle,
+        x: 700,
+        y: 345,
+        width: 300,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l25-b4-exempt-t1,
+        kind: text,
+        x: 712,
+        y: 355,
+        width: 276,
+        height: 35,
+        text: "ရက်စွဲအထိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-exempt-t2,
+        kind: text,
+        x: 712,
+        y: 390,
+        width: 276,
+        height: 35,
+        text: exemption,
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 438,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b4-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 830,
+        y: 438,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l25-b4-card,
+        kind: rectangle,
+        x: 270,
+        y: 475,
+        width: 730,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l25-b4-card-t,
+        kind: text,
+        x: 282,
+        y: 493,
+        width: 706,
+        height: 35,
+        text: "scorecard + exception စာရင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-risk-1,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 545,
+        height: 35,
+        text: "ငွေ database 6 ခု: restore မစမ်းဖူး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l25-b4-risk-2,
+        kind: text,
+        x: 270,
+        y: 595,
+        width: 250,
+        height: 35,
+        text: "→ restore sprint",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2625
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "Freeze အတွင်း ထွက်သွားတဲ့ deploy"
+    narration: >
+      [[mark:show-p01]] သင်္ကြန် ညနဲ့ login ပိတ်တဲ့ မနက်က သင်ခန်းစာတွေကြောင့် priority label၊ error budget နဲ့ ပြက္ခဒိန်ကို ကြည့်တဲ့ ပြောင်းလဲမှု စည်းကမ်းနဲ့ အရေးပေါ် အိတ်တွေက Padauk ရဲ့ ပုံမှန် ဖြစ်လာပါတယ်။
+      [[mark:hook-split]] ဒါပေမဲ့ နောက်တစ်နှစ်မှာ rollout တွေ ရပ်ထားရမယ့် သင်္ကြန် change freeze အတွင်း Top-up deploy တစ်ခု ထွက်သွားပြီး Wallet က သင်ခန်းစာ ယူပြီးသား outage မျိုး ထပ်ဖြစ်ပါတယ်။ wiki ပေါ်မှာပဲ ရှိတဲ့ freeze စည်းကမ်းက Wallet ရဲ့ script ထဲကိုပဲ ရောက်ခဲ့လို့ပါ။ မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင် ဘယ်လို လုပ်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l25-p01,
+        }
+
+  - id: one-rule
+    chapter: "စည်းကမ်း တစ်ခု၊ script အများကြီး"
+    narration: >
+      [[mark:close-p01]] [[mark:b1-s1]] Wallet၊ Top-up နဲ့ Eats အဖွဲ့တွေမှာ ကိုယ်ပိုင် deploy script တစ်ခုစီ ရှိပါတယ်။ [[mark:b1-s1b]] freeze စည်းကမ်း ထွက်လာတော့ Wallet က ပြက္ခဒိန် စစ်တဲ့ check ကို ကိုယ့် script ထဲ ထည့်ခဲ့ပေမဲ့ ကျန်တဲ့ နှစ်ဖွဲ့က wiki ကို ဖတ်ပြီး မှတ်ထားရုံပဲ ရှိလို့ Top-up က မေ့သွားတာပါ။
+      [[mark:b1-s2]] ပိတ်ရက်မှာ ရေးခဲ့တဲ့ rider service အသစ်ရဲ့ pipeline ကတော့ စည်းမျဉ်း တစ်ခုမှ မသိပါဘူး။ ကုမ္ပဏီ ကြီးလာလေ tool တွေ များလာလေ ဖြစ်ပြီး စာပေါ်က စည်းမျဉ်းက နောက်ကျမှ ရောက်သလို tool အသစ်တွေကလည်း သင်ခန်းစာ ဟောင်းတွေကို မသိပါဘူး။ ဒါကြောင့် outage အများစုက သင်ပြီးသား ပုံစံကိုပဲ ပြန်ထပ်တာပါ။
+      [[mark:b1-s3]] ဒီတော့ Padauk က deploy နဲ့ config ပြောင်းတာလို အန္တရာယ်ရှိတဲ့ ပြောင်းလဲမှု တစ်မျိုးစီအတွက် အဖွဲ့တိုင်း မဖြစ်မနေ သုံးရမယ့် shared platform တစ်ခုစီ ရွေးပါတယ်။ [[mark:b1-s3b]] စည်းမျဉ်းက နေရာ တစ်ခုတည်းမှာ ရှိလို့ အဖွဲ့ အသစ်တွေလည်း ပထမနေ့ကတည်းက အလိုလို ရပါတယ်။ ပြောင်းရွှေ့ရတာ အလုပ်ပိုလို့ ဘယ်သူမှ မကြိုက်ပေမဲ့ ကိုနေလင်းက ကိုယ်တိုင် ထောက်ခံပြီး အကြောင်းရင်းကို ရှင်းပြပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - { id: close-p01, type: slide.close, at: { mark: close-p01, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l25-b1-w, l25-b1-w-t, l25-b1-t, l25-b1-t-t, l25-b1-e, l25-b1-e-t]
+        drawMs: 2000
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [
+            l25-b1-rule,
+            l25-b1-rule-t1,
+            l25-b1-rule-t2,
+            l25-b1-a0,
+            l25-b1-bus,
+            l25-b1-a-w,
+            l25-b1-a-t,
+            l25-b1-a-e,
+            l25-b1-ok,
+          ]
+        drawMs: 2600
+      - id: b1-s1c
+        type: whiteboard.apply
+        at: { mark: b1-s1b, offsetMs: 6440 }
+        upsertIds: [l25-b1-no-t, l25-b1-no-e]
+        drawMs: 900
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l25-b1-rider, l25-b1-rider-t1, l25-b1-rider-t2, l25-b1-a-r, l25-b1-q]
+        drawMs: 1800
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        clear: true
+        upsertIds:
+          [
+            l25-b1p-src,
+            l25-b1p-src-t1,
+            l25-b1p-src-t2,
+            l25-b1p-a0,
+            l25-b1p-bus,
+            l25-b1p-1,
+            l25-b1p-1-t,
+            l25-b1p-a1,
+            l25-b1p-ok1,
+            l25-b1p-2,
+            l25-b1p-2-t,
+            l25-b1p-a2,
+            l25-b1p-ok2,
+          ]
+        drawMs: 2600
+      - id: b1-s3b
+        type: whiteboard.apply
+        at: { mark: b1-s3b }
+        upsertIds:
+          [
+            l25-b1p-3,
+            l25-b1p-3-t,
+            l25-b1p-a3,
+            l25-b1p-ok3,
+            l25-b1p-4,
+            l25-b1p-4-t,
+            l25-b1p-a4,
+            l25-b1p-ok4,
+          ]
+        drawMs: 1800
+
+  - id: platform-exists
+    chapter: "Platform က ရှိပြီးသားပါ"
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] deploy၊ run၊ monitoring နဲ့ data သိမ်းတာအတွက် မျှသုံးတဲ့ ဒီ အလွှာက platform ပါ။ tool တွေတင် မကဘဲ သုံးကြပုံ အလေ့အထတွေပါ ပါလို့ tool ဝယ်ရုံနဲ့ platform မရပါဘူး။ ကုမ္ပဏီတိုင်းမှာ platform ရှိပြီးသားပါ၊ design လုပ်ထားလား၊ မတော်တဆ ဖြစ်လာတာလား ဆိုတာပဲ ကွာပါတယ်။
+      [[mark:show-p02b]] Padauk ရဲ့ script တွေ၊ Viber group နဲ့ wiki ကလည်း အဖွဲ့ချင်း ကိုယ့်အတွက် ဆုံးဖြတ်ချက်တွေ စုလာရင်း မတော်တဆ ဖြစ်လာတဲ့ platform ပါပဲ။ ဒါကြောင့် ကိုနေလင်းက engineer တွေကို user အဖြစ် သဘောထားပြီး platform ကို product တစ်ခုလို ဆောက်ဖို့ မသီရိရဲ့ အဖွဲ့ကို တာဝန်ပေးပါတယ်၊ ဒါကို platform engineering လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l25-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l25-p02b }
+
+  - id: golden-path
+    chapter: "Desire path ကနေ golden path ဆီ"
+    narration: >
+      [[mark:close-p02b]] [[mark:b2-s1]] platform အဖွဲ့က ဘာကိုမှ မပိတ်ပင်ခင် engineer တွေ တကယ် ဘာသုံးနေလဲ အရင် ကြည့်ပါတယ်။ Viber group ထဲမှာ လူတိုင်း ကူးသုံးနေတဲ့ bash script တစ်ခု ရှိပြီး server တစ်လုံးမှာ အရင် deploy လုပ်ပြီး ငါးမိနစ် စောင့်ကြည့်တဲ့ ဉာဏ်ကောင်းတဲ့ နည်းလေး ပါပါတယ်။ လူတွေ တကယ် လျှောက်နေတဲ့ တရားဝင် မဟုတ်တဲ့ ဒီလမ်းကို desire path လို့ ခေါ်ပါတယ်။
+      [[mark:b2-s2]] အဲဒီ နည်းလေးကို template အသစ်ထဲ ထည့်ပြီး template က ဘယ်အဖွဲ့ ပိုင်လဲ ဆိုတာလို မေးခွန်း လေးခုပဲ မေးပါတယ်။ [[mark:b2-s2b]] ထွက်လာတဲ့ service မှာ traffic နည်းနည်းကို version အသစ်ဆီ အရင်ပို့တဲ့ canary၊ အလိုအလျောက် rollback နဲ့ SLO dashboard ပါပြီးသားပါ။ လိုက်သွားရုံနဲ့ reliability ပါလာတဲ့ ဒီ standard လမ်းက golden path ပါ။
+      [[mark:b2-s3]] repository အသစ်ကနေ ပထမ deploy အထိ သုံးပတ် ကြာရာက တစ်ရက်ပဲ ကြာတော့ပါတယ်။ [[mark:b2-s3b]] config က အဖွဲ့ရဲ့ repository ထဲမှာ ရှိလို့ incident ဖြစ်ရင် ဖွင့်ဖတ်လို့ရပြီး ထူးခြားတဲ့ လိုအပ်ချက်အတွက် ခွင့်ပြုချက်နဲ့ ထွက်လို့ရတဲ့ escape hatch လည်း ရှိပါတယ်။ ဒါကြောင့် အဖွဲ့တွေက အပြစ်ပေးမှာ ကြောက်လို့ မဟုတ်ဘဲ အလွယ်ဆုံးမို့ ကိုယ့်ဆန္ဒနဲ့ ပြောင်းလာကြပါတယ်။
+      [[mark:close-b2]] [[mark:show-p02c]] platform က လိုအပ်ချက်တင် မကဘဲ ထိန်းပေးတဲ့ ဖြေရှင်းနည်း အနည်းငယ်ကိုပါ ပေးပြီး ရွေးစရာကို နည်း သုံးမျိုးနဲ့ ကန့်သတ်ပါတယ်။ အကြောင်းပြချက် မရှိရင် Postgres ကိုပဲ သုံးတာက strong default၊ Postgres ဒါမှမဟုတ် Postgres နဲ့ Redis cache ထဲက ရွေးတာက menu သေးသေးလေး ဖြစ်ပြီး SSH နဲ့ deploy လုပ်တာကိုတော့ ဖယ်လိုက်ပါတယ်။ ဒီတော့ အဖွဲ့တွေက dashboard tool ကို မငြင်းခုံတော့ဘဲ ဘယ် SLO က user နဲ့ ကိုက်လဲ ဆွေးနွေးလာကြပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "CNCF Platform Engineering Maturity Model",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l25-b2-viber, l25-b2-viber-t1, l25-b2-viber-t2]
+        drawMs: 1400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l25-b2-a1, l25-b2-tpl, l25-b2-tpl-t1, l25-b2-tpl-t2]
+        drawMs: 1600
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds:
+          [l25-b2-a2, l25-b2-svc, l25-b2-svc-t1, l25-b2-svc-t2, l25-b2-svc-t3, l25-b2-svc-t4]
+        drawMs: 2200
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l25-b2-gain]
+        drawMs: 1400
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l25-b2-a3, l25-b2-hatch, l25-b2-hatch-t]
+        drawMs: 1600
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l25-p02c }
+
+  - id: template-no
+    chapter: "Template က ငြင်းတဲ့နေ့"
+    narration: >
+      [[mark:show-p03]] ဒါပေမဲ့ တစ်နေ့မှာ Top-up developer တစ်ယောက်က မြန်မြန် ထုတ်ချင်လို့ canary အဆင့်ကို ဖြုတ်ပြီး rollback plan လည်း မရေးခဲ့ပါဘူး။ rollback plan မပါလို့ editor ထဲမှာတင် warning ပေါ်လာပြီး canary မပါလို့ merge လုပ်တော့ block ခံရပါတယ်။ incident မှာ အမြန် ပြင်ရရင်တော့ check တွေကို ကျော်ခွင့်ပေးတဲ့ break-glass လမ်း ရှိပေမဲ့ သုံးတိုင်း log ကျန်ပြီး နောက်နေ့ review လုပ်ရပါတယ်။
+      [[mark:show-p03b]] check တိုင်းက linter လိုပဲ ဘယ် စည်းမျဉ်းကို ချိုးမိလဲ ပြောပြီး ပြင်နည်းကိုပါ အကြံပေးပါတယ်။ check အများစုက warning ပဲ ပေးပြီး ခြွင်းချက် မရှိနိုင်တဲ့ စည်းမျဉ်းကျမှ block လုပ်ပါတယ်။ အကောင်းဆုံးကတော့ default အတိုင်း ထားရုံနဲ့ စည်းမျဉ်းနဲ့ ကိုက်ပြီးသား ဖြစ်နေတာပါ။
+      [[mark:show-p03c]] ရေးရခက်တဲ့ reliability code ကိုလည်း platform ထဲမှာ တစ်ခါတည်း ရေးထားပါတယ်။ gateway ခေါ်တဲ့ service တွေက retry code ကို ကိုယ်တိုင် မရေးဘဲ timeout၊ backoff with jitter၊ retry budget နဲ့ circuit breaker ပါတဲ့ shared gateway client ကို သုံးလို့ client ပြင်တိုင်း redeploy လုပ်ရုံနဲ့ အကုန် ရပါတယ်။ ဒါပေမဲ့ bug ပါရင်လည်း နေရာတိုင်း ရောက်မှာမို့ platform အဖွဲ့က ကိုယ့် ပြောင်းလဲမှုကို service တစ်ခု၊ zone တစ်ခုမှာ အရင် canary လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l25-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l25-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l25-p03c }
+
+  - id: shift-down
+    chapter: "Shift left နဲ့ shift down"
+    narration: >
+      [[mark:close-p03c]] [[mark:b3-s1]] အရင်က Padauk က reliability ကို design အဆင့်ကတည်းက စောစော စဉ်းစားဖို့ အဖွဲ့တိုင်းကို တောင်းခဲ့ပါတယ်၊ ဒါကို shift left လို့ ခေါ်ပါတယ်။ [[mark:b3-s1b]] ဒါပေမဲ့ ဒါတစ်ခုတည်းဆိုရင် အဖွဲ့တိုင်းက retry၊ rollout၊ SLO အကုန် ကျွမ်းကျင်ရမယ်၊ မဟုတ်ရင် Site Reliability Engineering၊ SRE အဖွဲ့ဆီမှာ တန်းစီ စောင့်ရပါမယ်။ engineer ၆၀ လောက်ကို SRE လေး ငါး ယောက်နဲ့ လိုက်မမီပါဘူး။
+      [[mark:b3-s2]] shift down ကတော့ အဲဒီ အလုပ်တွေကို shared gateway client လိုပဲ ကျွမ်းကျင်သူတွေက platform ထဲမှာ တစ်ခါ ဆောက်ပေးလို့ အဖွဲ့တိုင်းက အဲဒီပေါ်မှာ ရပ်ရုံပါပဲ။ ကိုယ်ပိုင် SRE မရှိတဲ့ service သေးသေးတွေတောင် reliability အခြေခံကို အလိုလို ရလာပါတယ်။
+      [[mark:b3-s3]] ဒါဆို shift left ကို ရပ်ရမလား ဆိုတော့ မဟုတ်ပါဘူး။ စောစော စဉ်းစားတာကို ဆက်လုပ်ပြီး အဲဒီ အလုပ်ကို platform မှာ မျှသုံးတာမို့ နှစ်ခုလုံး တွဲသုံးရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l25-b3-u1, l25-b3-u1-t, l25-b3-u2, l25-b3-u2-t, l25-b3-u3, l25-b3-u3-t]
+        drawMs: 1800
+      - id: b3-s1b
+        type: whiteboard.apply
+        at: { mark: b3-s1b }
+        upsertIds: [l25-b3-need, l25-b3-a1, l25-b3-sre, l25-b3-sre-t1, l25-b3-sre-t2]
+        drawMs: 2400
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l25-b3-slab, l25-b3-slab-t]
+        drawMs: 1200
+      - id: b3-s2b
+        type: whiteboard.apply
+        at: { afterAction: b3-s2 }
+        upsertIds: [l25-b3-d1, l25-b3-d1-t, l25-b3-d2, l25-b3-d2-t, l25-b3-d3, l25-b3-d3-t]
+        drawMs: 1800
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l25-b3-both]
+        drawMs: 1400
+
+  - id: right-sized
+    chapter: "လိုသလောက် တင်းကျပ်မှု"
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] platform က service တိုင်းကို တစ်ပုံစံတည်း မစစ်ပါဘူး။ hackathon app တွေက Playground မှာ ကြိုက်တဲ့အချိန် deploy လုပ်နိုင်ပေမဲ့ customer data ကို မထိရပါဘူး။ Eats ရဲ့ menu service လိုဟာတွေက Light မှာ warning ပဲ ရပြီး service အများစုက Standard မှာ canary နဲ့ SLO check ကို ဖြတ်ရပါတယ်။ ledger နဲ့ ငွေ ရွှေ့တဲ့ system တွေကတော့ Strict မှာ လူ နှစ်ယောက် review လုပ်မှ ပြောင်းရပါတယ်။
+      [[mark:show-p04b]] စစ်ဆေးမှုကို အမှားရဲ့ ထိခိုက်မှုနဲ့ ကိုက်အောင် ချိန်ညှိတာကို လိုသလောက် တင်းကျပ်မှုလို့ ခေါ်ပါမယ်။ ဒါက တက်ရမယ့် လှေကား မဟုတ်ပါဘူး။ hackathon ကို Strict နဲ့ ထိန်းရင် စမ်းသပ်မှု ရပ်သွားပြီး ledger ကို Playground မှာ ထားရင် အန္တရာယ် ကြီးပါတယ်။ ဒါကြောင့် ကုမ္ပဏီ တစ်ခုထဲမှာ လေးဆင့်လုံး တစ်ပြိုင်နက် ရှိနေတာ ပုံမှန်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "CNCF Platform Engineering Maturity Model",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l25-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l25-p04b }
+
+  - id: exceptions
+    chapter: "Exception တွေက ပုံမှန်ပါ"
+    narration: >
+      [[mark:show-p05]] platform ဘယ်လောက်ပဲ ကောင်းကောင်း မထည့်ထားမိတဲ့ လိုအပ်ချက်တွေ ရှိတတ်ပါတယ်။ ဥပမာ fraud အဖွဲ့က ငွေလွှဲတိုင်းကို စစ်ဖို့ GPU ပေါ်က Python model server လိုပါတယ်။ ဒါကြောင့် platform ကနေ ခွဲထွက်ခွင့်၊ exception တွေကို ထိခိုက်မှုအလိုက် ခွဲပါတယ်။
+      [[mark:p05-split]] memory limit တိုးတာလို သေးတဲ့ ကိစ္စက ticket မတင်ဘဲ ကိုယ်တိုင် လုပ်လို့ရတဲ့ self-service ဖြစ်ပြီး log ကျန်ပါတယ်။ runtime အသစ်လို ကြီးတဲ့ ကိစ္စကိုတော့ ပျက်ရင် ညဘက် ထပြင်ရမယ့် မသီရိနဲ့ ကုန်ကျစရိတ် ပေးရမယ့် ကိုနေလင်းက review လုပ်ပါတယ်။
+      [[mark:show-p05b]] exception မပေးဘဲ အတင်း သုံးခိုင်းရင် လူတွေက မမြင်ရတဲ့ နေရာမှာ workaround တွေ ဆောက်ကုန်ပါတယ်။ ရွေးစရာ များလွန်းတာက tech debt တစ်မျိုး ဖြစ်သလို တင်းကျပ်လွန်းတာကလည်း debt နောက်တစ်မျိုးပါ။ ဒါကြောင့် exception တိုင်းကို owner နဲ့အတူ စာရင်း တစ်ခုတည်းမှာ ထားပါတယ်၊ အဖွဲ့ သုံးဖွဲ့က model server မျိုး တောင်းထားတာ မြင်ရတော့ platform အဖွဲ့က အဲဒါကို နောက် golden path အဖြစ် ဆောက်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l25-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l25-p05b }
+
+  - id: old-systems
+    chapter: "System ဟောင်းတွေအတွက် စည်းမျဉ်း အသစ်"
+    narration: >
+      [[mark:close-p05b]] [[mark:b4-s1]] lesson ၂၂ က restore drill ၇ နာရီ ကြာခဲ့လို့ Padauk က ငွေ database တိုင်းမှာ ရက် ၉၀ အတွင်း အောင်မြင်တဲ့ restore test ရှိရမယ် ဆိုတဲ့ စည်းမျဉ်းကို owner မသီရိ၊ အကြောင်းပြချက်နဲ့ နှစ်စဉ် ပြန်သုံးသပ်မယ့် ရက်နဲ့အတူ ရေးပါတယ်။ [[mark:b4-s1b]] service အသစ်တွေကတော့ restore test မပါရင် merge လုပ်လို့ မရပါဘူး။
+      [[mark:b4-s2]] service ဟောင်း ၃၅ ခုကိုတော့ ချက်ချင်း block မလုပ်ဘဲ owner နဲ့ ကုန်ဆုံးရက် ပါတဲ့ ယာယီ ခွင့်ပြုချက်၊ exemption ကို ပေးပါတယ်။ ကုန်ဆုံးရက်က risk ပေါ် မူတည်ပြီး ledger က သတ်မှတ်ရက်အထိ၊ merchant service တွေက နောက် အပြောင်းအလဲကြီးအထိ ရပါတယ်။ ပိတ်တော့မယ့် SMS gateway ဟောင်းကိုတော့ ခေါင်းဆောင်တွေက risk ကို လက်ခံကြောင်း သုံးလ တစ်ခါ ပြန်လက်မှတ်ထိုးပါတယ်။
+      [[mark:b4-s3]] ညတိုင်း run တဲ့ check က အဖွဲ့ scorecard တွေနဲ့ exception စာရင်းကို update လုပ်ပြီး ပြင်စရာကို ticket၊ အသင့်ရေးထားတဲ့ pull request ဒါမှမဟုတ် ဘေးကင်းရင် အလိုအလျောက် ပြင်တာနဲ့ ဖြေရှင်းပါတယ်။ [[mark:b4-s3b]] ခေါင်းဆောင် report မှာ ငွေ database ခြောက်ခုကို restore တစ်ခါမှ မစမ်းဖူးတာ မြင်ရတော့ ကိုနေလင်းက restore sprint ကို ခွင့်ပြုပါတယ်၊ ခေါင်းဆောင်တွေက ကုန်ကျစရိတ်ထက် မသိရတဲ့ risk ကို ပိုကြောက်လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+      - {
+          title: "CNCF Platform Engineering Maturity Model",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/",
+        }
+    actions:
+      - { id: close-p05b, type: slide.close, at: { mark: close-p05b, offsetMs: -400 } }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l25-b4-title]
+      - id: b4-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b4-s1 }
+        upsertIds: [l25-b4-new, l25-b4-new-t]
+        drawMs: 1400
+      - id: b4-s1b
+        type: whiteboard.apply
+        at: { mark: b4-s1b }
+        upsertIds: [l25-b4-a1, l25-b4-block, l25-b4-block-t1, l25-b4-block-t2]
+        drawMs: 1800
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds:
+          [
+            l25-b4-old,
+            l25-b4-old-t1,
+            l25-b4-old-t2,
+            l25-b4-a2,
+            l25-b4-exempt,
+            l25-b4-exempt-t1,
+            l25-b4-exempt-t2,
+          ]
+        drawMs: 2400
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l25-b4-a3, l25-b4-a4, l25-b4-card, l25-b4-card-t]
+        drawMs: 2200
+      - id: b4-s3b
+        type: whiteboard.apply
+        at: { mark: b4-s3b }
+        upsertIds: [l25-b4-risk-1, l25-b4-risk-2]
+        drawMs: 1600
+
+  - id: this-week
+    narration: >
+      [[mark:close-b4]] [[mark:show-p06]] ကိုယ့်ကုမ္ပဏီရဲ့ မတော်တဆ platform ကို ဒီအပတ် ဒီလို စပြင်ကြည့်ပါ။ လူတိုင်း ကူးသုံးနေတဲ့ script ကို ရှာပြီး ဘာကြောင့် သုံးကြလဲ မေးကြည့်ပါ။ wiki ပေါ်မှာပဲ ရှိတဲ့ စည်းမျဉ်း တစ်ခုကို pipeline ထဲက check တစ်ခု ဖြစ်အောင် ပြောင်းပါ။ ပြီးတော့ ကိုယ့် exception တွေကို စာရင်း တစ်ခုတည်းမှာ စုရေးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l25-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] Module ၅ ရဲ့ နောက်ဆုံး notes ပါ။ [[mark:sel-golden-path]] golden path က လိုက်သွားရုံနဲ့ reliability ပါလာတဲ့ standard လမ်းပါ၊ [[mark:sel-escape-hatch]] escape hatch က default နဲ့ မကိုက်ရင် ခွင့်ပြုချက်နဲ့ ထွက်တဲ့ လမ်းပါ။ [[mark:sel-break-glass]] break-glass က အရေးပေါ်မှာ check ကို ကျော်ပေမဲ့ log ကျန်ပြီး နောက်မှ review လုပ်ရတဲ့ လမ်းပါ။
+      [[mark:sel-shift-down]] shift down က reliability အလုပ်ကို platform ထဲမှာ တစ်ခါတည်း ဆောက်ပေးတာ ဖြစ်ပြီး၊ [[mark:sel-right-sized]] လိုသလောက် တင်းကျပ်မှုက စစ်ဆေးမှုကို အမှားရဲ့ ထိခိုက်မှုနဲ့ ကိုက်အောင် ချိန်ညှိတာပါ။ [[mark:sel-exemption]] exemption ကတော့ owner၊ အကြောင်းပြချက်နဲ့ ကုန်ဆုံးရက် ပါတဲ့ ယာယီ ခွင့်ပြုချက်ပါ။ [[mark:ask-question]] စည်းမျဉ်း တစ်ခုက wiki ပေါ်မှာပဲ ရှိနေတယ် ဆိုရင် အဲဒါကို golden path ထဲ ထည့်ဆောက်ဖို့ နည်း တစ်ခု ပြောကြည့်ပါ။
+      [[mark:pause-question]] စည်းမျဉ်းနဲ့ ကိုက်ပြီးသား default တစ်ခု၊ template ထဲက check တစ်ခု ဒါမှမဟုတ် merge ကို block လုပ်တာ ဘယ်ဟာမဆို ရပါတယ်။ Module ၆ ရောက်တော့ coding agent တွေ ပါလာပြီး merge တွေက တစ်ရက်ကို ၁၅ ကနေ ၁၂၀ အထိ ခုန်တက်သွားပါတယ်။ SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CNCF Platforms White Paper",
+          url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/",
+        }
+      - {
+          title: "DORA capability: Platform engineering",
+          url: "https://dora.dev/capabilities/platform-engineering/",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-golden-path,
+          type: editor.select,
+          at: { mark: sel-golden-path },
+          target: { file: notes.md, text: "golden path", occurrence: 1 },
+        }
+      - {
+          id: sel-escape-hatch,
+          type: editor.select,
+          at: { mark: sel-escape-hatch },
+          target: { file: notes.md, text: "escape hatch", occurrence: 1 },
+        }
+      - {
+          id: sel-break-glass,
+          type: editor.select,
+          at: { mark: sel-break-glass },
+          target: { file: notes.md, text: break-glass, occurrence: 1 },
+        }
+      - {
+          id: sel-shift-down,
+          type: editor.select,
+          at: { mark: sel-shift-down },
+          target: { file: notes.md, text: "shift down", occurrence: 1 },
+        }
+      - {
+          id: sel-right-sized,
+          type: editor.select,
+          at: { mark: sel-right-sized },
+          target: { file: notes.md, text: "လိုသလောက် တင်းကျပ်မှု", occurrence: 1 },
+        }
+      - {
+          id: sel-exemption,
+          type: editor.select,
+          at: { mark: sel-exemption },
+          target: { file: notes.md, text: exemption, occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, as in lessons 5, 16 and 22. ask-question
+      # (the ⟪select မေးခွန်း⟫ marker) starts the question's own dialog, so the question-line
+      # select hangs off it with an offset: it starts as the question nears its end, its drag
+      # runs in silence, and the answer at pause-question waits for it (the scheduler holds only
+      # the dialog after the select's anchor). The question is 108 characters, so 7500 (about
+      # 400 + 108 x 70 - 460) leaves about 2.6 / 1.0 / 0.35 s of quiet before the answer at
+      # 55 / 70 / 95 ms per char; an offset above ~7600 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 7500 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: wiki ပေါ်မှာပဲ ရှိတဲ့ စည်းမျဉ်းကို golden path ထဲ ထည့်ဆောက်ဖို့ နည်း တစ်ခု ပြောပါ။"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
