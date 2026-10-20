@@ -1,0 +1,1632 @@
+# SRE from zero, lesson 20: Capacity planning (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-20-capacity-planning.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-20-capacity-planning.md \
+#     src/studio/scripts/sre-20-capacity-planning.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Ten marks that are not in the voice script add no spoken text and sit at an
+# existing ။: b1-s2b, b1-s4b, b2-s1b, b2-s2b, b2-s3b, b2-s5b, b3-s2b and
+# b3-s4b each start the second half of a board step on the sentence that names
+# it, not seconds early with the step's first part (B1's violet "could be"
+# extensions and their key, B1's buffer note, B2's struck zones with 130% and
+# 78%, B2's green "reserve room" line and the rule line of its last note, B3's
+# shared-pool bar and the spare-zone label), as lesson 16 lands B1's re-rank
+# label; p04-pool splits l20_p04's narration at its paragraph break (one
+# 479-character dialog would pass the 450-character limit; no action uses it);
+# and ask-question makes the recap question its own dialog so the
+# question-line select can hang off it for the ⟪pause 3s⟫, as in lesson 30.
+# sel-question is the voice script's ⟪select မေးခွန်း⟫; it only splits the
+# short lead-in from the question.
+#
+# Pacing: at 70 ms/char no page or board step holds longer than ~35 s (the
+# longest is l20_p04, 35.0 s from its show, then the cover, l20_p01, 33.2 s;
+# the longest board step is B3's shared pool, b3-s2b, 20.4 s), so the voice
+# script's own markers and pacing pages (l20_p01b, l20_p02b, l20_p03b-d,
+# l20_p05b-c, l20_p06b) carry it and nothing was added for pacing.
+#
+# A board followed by a deck page closes the panel (open: false) 400 ms before
+# the page, and a deck page followed by a board closes the page 400 ms before,
+# as in Module 1. ⟪close board⟫ straight into the next board (scene 6) wipes the
+# open board 400 ms early (whiteboard.apply clear) instead of closing the
+# panel, so the editor does not flash between two boards, as in lesson 16; the
+# next board then draws with open: true, clear: true as usual.
+#
+# Boards (B1 P5 bars, B2 two rows of zones, B3 P6 lanes). Colour jobs:
+# #1e1e1e ink (paints white) for the title, the axis, B1's axis labels and B3's
+# day tracks; blue the thing named and the main data series (past and likely
+# demand, Wallet's zones, instances and their row labels, the three teams and
+# their peaks, the separate total, the utilization formula); violet the second
+# series and the result (the "could be" extensions, the shared pool); green
+# healthy (the 78% that holds, the room kept in the surviving zones); red
+# failure (the surprise bar and its note, the struck zones and 130%, "nothing
+# left"); orange the caveat or limit (last year's 2× forecast against 2.6×,
+# doubled database connections, the drain and reservation notes, the spare
+# zone kept idle). A label on two lines is one text asset per line, so each
+# line meets the 0.55 em width rule on its own; every label was also measured
+# in Chrome with Excalidraw's Virgil font and fits its box. B1's two notes are
+# set on two lines where the voice script gives one: the orange note breaks
+# after "ပြီးခဲ့တဲ့နှစ်:" so it sits above the Thingyan bar (one line needs
+# 601 px under the 0.55 rule), and "buffer + demand လျှော့" sits under the
+# surprise bar as "buffer +" / "demand လျှော့" instead of running 340 px left
+# under the forecast bars. B2's last note, which the voice script asks for on
+# two lines, breaks at its " · ", which the line break replaces. On B1 the
+# past-quarters and Thingyan labels sit under the axis like a chart's
+# categories, the surprise bar's name above that bar, and a colour key for
+# blue and violet at the top right; B2 draws each zone's instances as small
+# squares, one row per zone, so a strike runs through them, and puts the
+# doubled database connections beside the two-zone row they belong to. Each
+# B3 lane is a day from 06:00 to 06:00 (unlabelled), so the three peaks
+# (12:00, 19:00, 00:00) fall at different places along their tracks, left to
+# right.
+#
+# Deck pages: deck "Next Editor · SRE 5B · Capacity and data". deckUrl is the
+# deck's published /pub link; until this lesson's pages are built from the
+# page plan, the Director reports the l20 pages missing from the published
+# deck. Page plan:
+# ~/Documents/sre-course/work/pages/sre-20-capacity-planning.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-20-capacity-planning.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-20-capacity-planning.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-20-capacity-planning
+  title: "SRE from zero 20: Capacity ဘယ်လောက် လိုမလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Capacity ဘယ်လောက် လိုမလဲ
+
+        - forecast range — demand ကို ဂဏန်း တစ်ခု မဟုတ်ဘဲ အနိမ့်ကနေ အမြင့်အထိ ခန့်မှန်း
+        - plan of record — wish list မဟုတ်၊ တကယ် ဝယ်မယ့် capacity အစီအစဉ်
+        - ကျန်တဲ့ zone တွေမှာ နေရာ ကြိုထား — zone တစ်ခု ပျက်ရင် ကျန်တာတွေ load ကို ခံနိုင်ရမယ်
+        - peak of sums — ပေါင်းထားတဲ့ traffic ရဲ့ peak၊ peak တွေ ပေါင်းတာထက် နည်း
+        - utilization — ပေးရတဲ့ resource ထဲက တကယ် သုံးနေတဲ့ ရာခိုင်နှုန်း
+        - degradation profile — load ဘယ်လောက်မှာ ဘာ ပိတ်မလဲ၊ ဘာ ဘယ်တော့မှ မပိတ်ဘူးလဲ
+
+        မေးခွန်း: zone 2 ခု၊ instance 12 ခု၊ 60% စီ။ zone တစ်ခု ပျက်ရင် ကျန်တဲ့ instance တွေက ဘယ်လောက် ထမ်းရမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Capacity ဘယ်လောက် လိုမလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 20</p>
+              <h1>Capacity ဘယ်လောက် လိုမလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l20-p01
+      contentType: google
+      name: "Cover: Thingyan is six weeks away"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p01
+    - id: l20-p01b
+      contentType: google
+      name: Demand, supply and risk together
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p01b
+    - id: l20-p02
+      contentType: google
+      name: "First: is planning worth it?"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p02
+    - id: l20-p02b
+      contentType: google
+      name: Three things to balance
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p02b
+    - id: l20-p03
+      contentType: google
+      name: Plan in top-ups, not CPUs
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p03
+    - id: l20-p03b
+      contentType: google
+      name: "Cloud cost per 1,000 top-ups: +30%"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p03b
+    - id: l20-p03c
+      contentType: google
+      name: Wish list or plan of record
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p03c
+    - id: l20-p03d
+      contentType: google
+      name: Three questions about supply
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p03d
+    - id: l20-p04
+      contentType: google
+      name: Keep report jobs away from payments
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p04
+    - id: l20-p05
+      contentType: google
+      name: "Eats' degradation profile"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p05
+    - id: l20-p05b
+      contentType: google
+      name: "Friday dinner: 130%"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p05b
+    - id: l20-p05c
+      contentType: google
+      name: Prepare ahead
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p05c
+    - id: l20-p06
+      contentType: google
+      name: What capacity really costs
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p06
+    - id: l20-p06b
+      contentType: google
+      name: "Padauk's Thingyan plan"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p06b
+    - id: l20-p07
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l20_p07
+  whiteboardAssets:
+    # ---- Board B1: the Top-up forecast, bars on an axis (P5) -----------------
+    - {
+        id: l20-b1-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 310,
+        height: 45,
+        text: "Top-up forecast",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    # The axis runs along y 560, where every bar ends.
+    - {
+        id: l20-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 275,
+        y: 539,
+        width: 790,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l20-b1-past1,
+        kind: rectangle,
+        x: 290,
+        y: 455,
+        width: 60,
+        height: 105,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-past2,
+        kind: rectangle,
+        x: 365,
+        y: 440,
+        width: 60,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-past-t1,
+        kind: text,
+        x: 280,
+        y: 575,
+        width: 160,
+        height: 35,
+        text: "ပြီးခဲ့တဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-past-t2,
+        kind: text,
+        x: 280,
+        y: 610,
+        width: 205,
+        height: 35,
+        text: "သုံးလပတ် 2 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Four forecast bars: the likely (blue) part, steady growth after the
+    # Thingyan bar, which is about twice a normal peak.
+    - {
+        id: l20-b1-f1,
+        kind: rectangle,
+        x: 505,
+        y: 345,
+        width: 64,
+        height: 215,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-f2,
+        kind: rectangle,
+        x: 600,
+        y: 430,
+        width: 64,
+        height: 130,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-f3,
+        kind: rectangle,
+        x: 695,
+        y: 420,
+        width: 64,
+        height: 140,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-f4,
+        kind: rectangle,
+        x: 790,
+        y: 410,
+        width: 64,
+        height: 150,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-thingyan,
+        kind: text,
+        x: 505,
+        y: 575,
+        width: 130,
+        height: 35,
+        text: "သင်္ကြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # The "could be" (violet) extensions grow longer the further out a bar is.
+    - {
+        id: l20-b1-f1-up,
+        kind: rectangle,
+        x: 505,
+        y: 300,
+        width: 64,
+        height: 45,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l20-b1-f2-up,
+        kind: rectangle,
+        x: 600,
+        y: 375,
+        width: 64,
+        height: 55,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l20-b1-f3-up,
+        kind: rectangle,
+        x: 695,
+        y: 350,
+        width: 64,
+        height: 70,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l20-b1-f4-up,
+        kind: rectangle,
+        x: 790,
+        y: 320,
+        width: 64,
+        height: 90,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    # Colour key, top right: violet over blue, as the bars stack.
+    - {
+        id: l20-b1-key-maybe-sw,
+        kind: rectangle,
+        x: 865,
+        y: 172,
+        width: 22,
+        height: 22,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l20-b1-key-maybe,
+        kind: text,
+        x: 895,
+        y: 165,
+        width: 175,
+        height: 35,
+        text: "ဖြစ်လာနိုင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-key-likely-sw,
+        kind: rectangle,
+        x: 865,
+        y: 214,
+        width: 22,
+        height: 22,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b1-key-likely,
+        kind: text,
+        x: 895,
+        y: 207,
+        width: 203,
+        height: 35,
+        text: "ဖြစ်နိုင်ဆုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-note-t1,
+        kind: text,
+        x: 470,
+        y: 215,
+        width: 240,
+        height: 35,
+        text: "ပြီးခဲ့တဲ့နှစ်:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-note-t2,
+        kind: text,
+        x: 470,
+        y: 250,
+        width: 380,
+        height: 35,
+        text: "forecast 2× · တကယ် 2.6×",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-surprise,
+        kind: rectangle,
+        x: 975,
+        y: 335,
+        width: 64,
+        height: 225,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l20-b1-surprise-t,
+        kind: text,
+        x: 895,
+        y: 290,
+        width: 203,
+        height: 35,
+        text: "မမျှော်လင့်တာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-shape-t1,
+        kind: text,
+        x: 895,
+        y: 575,
+        width: 130,
+        height: 35,
+        text: "buffer +",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b1-shape-t2,
+        kind: text,
+        x: 895,
+        y: 610,
+        width: 203,
+        height: 35,
+        text: "demand လျှော့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B2: Wallet's zones, two then three (instances as squares) ------
+    - {
+        id: l20-b2-row1,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 560,
+        height: 35,
+        text: "Wallet: zone 2 ခု × instance 6 · 65%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-z1,
+        kind: rectangle,
+        x: 280,
+        y: 205,
+        width: 190,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i1,
+        kind: rectangle,
+        x: 288,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i2,
+        kind: rectangle,
+        x: 318,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i3,
+        kind: rectangle,
+        x: 348,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i4,
+        kind: rectangle,
+        x: 378,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i5,
+        kind: rectangle,
+        x: 408,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-i6,
+        kind: rectangle,
+        x: 438,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2,
+        kind: rectangle,
+        x: 500,
+        y: 205,
+        width: 190,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i1,
+        kind: rectangle,
+        x: 508,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i2,
+        kind: rectangle,
+        x: 538,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i3,
+        kind: rectangle,
+        x: 568,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i4,
+        kind: rectangle,
+        x: 598,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i5,
+        kind: rectangle,
+        x: 628,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z2-i6,
+        kind: rectangle,
+        x: 658,
+        y: 225,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-z1-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 272,
+        y: 205,
+        width: 206,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l20-b2-lost,
+        kind: text,
+        x: 715,
+        y: 205,
+        width: 285,
+        height: 35,
+        text: "ကျန်တဲ့ zone: 130%",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-db,
+        kind: text,
+        x: 715,
+        y: 245,
+        width: 345,
+        height: 35,
+        text: "database connection ×2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-row2,
+        kind: text,
+        x: 280,
+        y: 300,
+        width: 515,
+        height: 35,
+        text: "zone 3 ခု × instance 5 · 52% (+3)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-y1,
+        kind: rectangle,
+        x: 280,
+        y: 345,
+        width: 170,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-i1,
+        kind: rectangle,
+        x: 293,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-i2,
+        kind: rectangle,
+        x: 323,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-i3,
+        kind: rectangle,
+        x: 353,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-i4,
+        kind: rectangle,
+        x: 383,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-i5,
+        kind: rectangle,
+        x: 413,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2,
+        kind: rectangle,
+        x: 470,
+        y: 345,
+        width: 170,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2-i1,
+        kind: rectangle,
+        x: 483,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2-i2,
+        kind: rectangle,
+        x: 513,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2-i3,
+        kind: rectangle,
+        x: 543,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2-i4,
+        kind: rectangle,
+        x: 573,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y2-i5,
+        kind: rectangle,
+        x: 603,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3,
+        kind: rectangle,
+        x: 660,
+        y: 345,
+        width: 170,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3-i1,
+        kind: rectangle,
+        x: 673,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3-i2,
+        kind: rectangle,
+        x: 703,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3-i3,
+        kind: rectangle,
+        x: 733,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3-i4,
+        kind: rectangle,
+        x: 763,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y3-i5,
+        kind: rectangle,
+        x: 793,
+        y: 365,
+        width: 24,
+        height: 24,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b2-y1-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 272,
+        y: 345,
+        width: 186,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l20-b2-held,
+        kind: text,
+        x: 855,
+        y: 359,
+        width: 70,
+        height: 35,
+        text: "78%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-keep,
+        kind: text,
+        x: 280,
+        y: 430,
+        width: 500,
+        height: 35,
+        text: "ကျန်တဲ့ zone တွေမှာ နေရာ ကြိုထား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-drain-t1,
+        kind: text,
+        x: 280,
+        y: 485,
+        width: 360,
+        height: 35,
+        text: "drain: playbook ထဲ ရေး၊",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-drain-t2,
+        kind: text,
+        x: 280,
+        y: 520,
+        width: 190,
+        height: 35,
+        text: "ကြိုလေ့ကျင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-rent-t1,
+        kind: text,
+        x: 280,
+        y: 570,
+        width: 345,
+        height: 35,
+        text: "သင်္ကြန်အတွက် ကြိုငှား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b2-rent-t2,
+        kind: text,
+        x: 280,
+        y: 605,
+        width: 470,
+        height: 35,
+        text: "test ကလွဲရင် zone တစ်ခုတည်း မရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: three teams, three peaks, three lanes (P6) ----------------
+    # Each track is one day from 06:00 to 06:00, 560 px wide; a peak block
+    # (70 px) is centred on its hour.
+    - {
+        id: l20-b3-l1-t,
+        kind: text,
+        x: 280,
+        y: 170,
+        width: 225,
+        height: 35,
+        text: "Wallet · 12:00",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-l1,
+        kind: rectangle,
+        x: 520,
+        y: 165,
+        width: 560,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l20-b3-l1-peak,
+        kind: rectangle,
+        x: 625,
+        y: 165,
+        width: 70,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b3-l2-t,
+        kind: text,
+        x: 280,
+        y: 230,
+        width: 225,
+        height: 35,
+        text: "Eats · 19:00",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-l2,
+        kind: rectangle,
+        x: 520,
+        y: 225,
+        width: 560,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l20-b3-l2-peak,
+        kind: rectangle,
+        x: 788,
+        y: 225,
+        width: 70,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b3-l3-t,
+        kind: text,
+        x: 280,
+        y: 290,
+        width: 225,
+        height: 35,
+        text: "Top-up · 00:00",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-l3,
+        kind: rectangle,
+        x: 520,
+        y: 285,
+        width: 560,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l20-b3-l3-peak,
+        kind: rectangle,
+        x: 905,
+        y: 285,
+        width: 70,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    # Totals to one scale, 8 px per server: 65 separate, 40 shared + 6 buffer.
+    - {
+        id: l20-b3-sep,
+        kind: rectangle,
+        x: 280,
+        y: 365,
+        width: 520,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l20-b3-sep-t,
+        kind: text,
+        x: 815,
+        y: 367,
+        width: 175,
+        height: 35,
+        text: "သီးသန့်: 65",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-pool,
+        kind: rectangle,
+        x: 280,
+        y: 420,
+        width: 320,
+        height: 40,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l20-b3-buf,
+        kind: rectangle,
+        x: 600,
+        y: 420,
+        width: 48,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l20-b3-pool-t,
+        kind: text,
+        x: 665,
+        y: 422,
+        width: 390,
+        height: 35,
+        text: "မျှသုံး: 40 + buffer ≈ 46",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-claim,
+        kind: text,
+        x: 280,
+        y: 480,
+        width: 640,
+        height: 35,
+        text: "အားလုံး တစ်ပြိုင်နက် တောင်းရင် ဘာမှ မကျန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-util,
+        kind: text,
+        x: 280,
+        y: 545,
+        width: 455,
+        height: 35,
+        text: "utilization = သုံးတာ ÷ ပေးရတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l20-b3-spare,
+        kind: text,
+        x: 280,
+        y: 595,
+        width: 360,
+        height: 35,
+        text: "zone အပို: တမင် ချန်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2620
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: သင်္ကြန် ရောက်ဖို့ ခြောက်ပတ်
+    narration: >
+      [[mark:show-p01]] ခေါ်သုံးတဲ့ service တိုင်းက version အလိုက် ကိန်းဂဏန်းကို မြင်ရပြီး loyalty fault test ကိုလည်း ညတိုင်း run ပါတယ်။ အခု သင်္ကြန် ရောက်ဖို့ ခြောက်ပတ်ပဲ လိုပါတော့တယ်။ ပြီးခဲ့တဲ့ နှစ်က ညသန်းခေါင်မှာ တစ်စက္ကန့်ကို request ၃၀၀၀ အတွက်ပဲ တည်ဆောက်ထားတဲ့ Top-up ဆီ ၂၀၀၀၀ လောက် ဝင်လာခဲ့ပြီး အများစုက retry တွေပါ။
+      တချို့က server ကို ခုနစ်ဆ တိုးချင်ပေမဲ့ finance အဖွဲ့က ပွဲရက် အနည်းငယ်အတွက် ဒီလောက် ငွေ မသုံးချင်ပါဘူး။ ဒီနှစ်အတွက် ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?
+      [[mark:show-p01b]] ဒီ မေးခွန်းကို ဖြေဖို့ user တွေ လိုချင်မယ့် အလုပ်ပမာဏ၊ demand နဲ့ ကိုယ် ပေးနိုင်တဲ့ resource၊ supply ကို ချိန်ပြီး မလောက်ရင် risk ဘယ်လောက် လက်ခံမလဲ ဆုံးဖြတ်ရပါတယ်၊ ဒီလို ကြိုပြင်ဆင်တာက capacity planning ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l20-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l20-p01b }
+
+  - id: worth-it
+    chapter: Plan လုပ်ဖို့ တန်လား
+    narration: >
+      [[mark:show-p02]] ဒါပေမဲ့ လေးယောက်ပဲ ရှိတဲ့ မသီရိရဲ့ အဖွဲ့က service တိုင်းကို plan မလုပ်နိုင်လို့ တန်မတန် အရင် မေးရပါတယ်။ ဥပမာ support အဖွဲ့ရဲ့ admin tool လို သေးပြီး ခဏ နှေးလည်း ရတဲ့ service မှာ autoscaling နဲ့ အပို နည်းနည်း ထားတာက engineer အချိန်ထက် သက်သာပါတယ်။ Wallet နဲ့ Top-up လို ကြီးပြီး ငွေနဲ့ ဆိုင်တဲ့ service တွေကတော့ ကြို plan လုပ်ရပါမယ်။
+      [[mark:show-p02b]] capacity ဆုံးဖြတ်ချက်တိုင်းမှာ မြန်တာ၊ ဈေးသက်သာတာ၊ မပျက်တာ ဆိုတဲ့ သုံးခုကို ချိန်ရပြီး ဘယ်လို ချိန်မလဲ ဆိုတာကို engineer အကြိုက်နဲ့ မဟုတ်ဘဲ business က ဆုံးဖြတ်ပါတယ်။ spike တိုင်းအတွက် စက်တွေကို အမြဲ ပိုထားရင် ငွေ အလဟဿ ဖြစ်မှာမို့ lesson ၆ မှာ SLO ရဲ့ ပျက်ခွင့်၊ error budget ကို သဘောတူခဲ့သလိုပဲ capacity မလောက်မယ့် risk ကိုလည်း တမင် ရွေးရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Kubernetes: Autoscaling Workloads",
+          url: "https://kubernetes.io/docs/concepts/workloads/autoscaling/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l20-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l20-p02b }
+
+  - id: forecast-fan
+    chapter: Forecast ဆိုတာ range
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ဒါဆို Top-up မှာ ဘယ်လောက် လာမလဲ? အရင် data ကနေ ခန့်မှန်းတဲ့ forecast မှာ demand ကို သုံးမျိုး ခွဲကြည့်ပါတယ်။ ပထမက user အသစ်တွေကြောင့် တဖြည်းဖြည်း တက်တာမို့ ပြီးခဲ့တဲ့ သုံးလပတ် နှစ်ခုက တက်နှုန်းအတိုင်း ဆက်ဆွဲရုံပါပဲ။
+      [[mark:b1-s2]] ဒုတိယက လစာထုတ်ရက်၊ သင်္ကြန်၊ operator promotion လို ကြိုသိတဲ့ event တွေမို့ ပြက္ခဒိန်ထဲ ချရေးထားရပါတယ်။ [[mark:b1-s2b]] bar တိုင်းမှာ အပြာက ဖြစ်နိုင်ဆုံး၊ ခရမ်းက ဖြစ်လာနိုင်တဲ့ အမြင့်ဆုံးပါ၊ ဝေးဝေး ကြည့်လေ မသေချာလေမို့ ခရမ်းက ရှည်လာပါတယ်။ ဒီလို ဂဏန်း တစ်ခုတည်း မပေးဘဲ ခန့်မှန်းတာကို forecast range လို့ ခေါ်ပါတယ်။
+      [[mark:b1-s3]] ပြီးခဲ့တဲ့ နှစ်ရဲ့ forecast ကို တကယ် ဖြစ်ခဲ့တာနဲ့ ပြန်တိုက်ကြည့်တော့ သင်္ကြန်ညရဲ့ top-up အရေအတွက်ကို ပုံမှန် peak ရဲ့ ၂ ဆလို့ ခန့်မှန်းခဲ့ပေမဲ့ တကယ်က ၂.၆ ဆ ဖြစ်ခဲ့ပါတယ်။ ဒါကြောင့် ငွေပေးချေတဲ့ လမ်းကြောင်းအတွက် range ရဲ့ အမြင့်ဘက်အထိ ပြင်ဆင်ပါတယ်။
+      [[mark:b1-s4]] တတိယကတော့ တခြား wallet app တစ်ခု ပျက်သွားလို့ သူ့ user တွေ ရုတ်တရက် ပြောင်းလာတာလို ဘယ် forecast ကမှ မဖမ်းနိုင်တဲ့ အရာတွေပါ။ [[mark:b1-s4b]] ဒါတွေကို အပို capacity၊ buffer နဲ့ အရေးမကြီးတာ ပိတ်ပြီး demand လျှော့တာနဲ့ ရင်ဆိုင်ရပေမဲ့ ဘယ်အထိ ပြင်ဆင်မလဲ ကြိုသတ်မှတ်ရပါတယ်။ စက် မှာတာကနေ သုံးလို့ရတဲ့အထိ ကြာချိန်၊ lead time တိုတာကတော့ ပိုတိကျတဲ့ ခန့်မှန်းချက်ထက်တောင် တန်ဖိုးရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l20-b1-title],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds: [l20-b1-axis, l20-b1-past1, l20-b1-past2, l20-b1-past-t1, l20-b1-past-t2]
+        drawMs: 1600
+      # The likely parts and the Thingyan label land with the planned events;
+      # the violet extensions and the colour key land (b1-s2b) on the sentence
+      # that names blue and violet.
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l20-b1-f1, l20-b1-f2, l20-b1-f3, l20-b1-f4, l20-b1-thingyan]
+        drawMs: 1800
+      - id: b1-s2b
+        type: whiteboard.apply
+        at: { mark: b1-s2b }
+        upsertIds:
+          [
+            l20-b1-f1-up,
+            l20-b1-f2-up,
+            l20-b1-f3-up,
+            l20-b1-f4-up,
+            l20-b1-key-likely-sw,
+            l20-b1-key-likely,
+            l20-b1-key-maybe-sw,
+            l20-b1-key-maybe,
+          ]
+        drawMs: 2400
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l20-b1-note-t1, l20-b1-note-t2]
+        drawMs: 1400
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l20-b1-surprise, l20-b1-surprise-t]
+        drawMs: 1200
+      # The buffer note lands as the second sentence says it.
+      - id: b1-s4b
+        type: whiteboard.apply
+        at: { mark: b1-s4b }
+        upsertIds: [l20-b1-shape-t1, l20-b1-shape-t2]
+        drawMs: 1200
+
+  - id: top-ups
+    chapter: CPU မဟုတ်ဘဲ top-up နဲ့ တွက်
+    narration: >
+      [[mark:close-b1]] [[mark:show-p03]] forecast ကို CPU တွေ၊ request တွေနဲ့ မတွက်ဘဲ top-up နဲ့ တွက်ပါတယ်၊ request ထဲမှာ retry တွေ ရောနေတတ်ပြီး product နဲ့ finance အဖွဲ့ကလည်း top-up ဆိုမှ နားလည်လို့ပါ။ top-up ၁၀၀၀ ခုအတွက် cloud ကို ကျပ် ဘယ်လောက် ပေးရလဲ ဆိုတဲ့ အချိုးကိုလည်း ကြည့်ပါတယ်။
+      [[mark:show-p03b]] top-up အရေအတွက် မတက်ဘဲ ဒီ အချိုး ခုန်တက်ရင် regression တစ်ခုက capacity ကို စားနေတာပါ။ ဥပမာ app version အသစ်က status ကို ပိုခဏခဏ မေးလာလို့ အချိုး ၃၀ ရာခိုင်နှုန်း ခုန်တက်တာကို alert က ဖမ်းမိလို့ သင်္ကြန် မတိုင်ခင် ပြင်လိုက်ပါတယ်။
+      [[mark:show-p03c]] ဒါပေမဲ့ forecast က လိုချင်သမျှ ပါတဲ့ wish list ပါ။ supply နဲ့ budget ထဲမှာ တကယ် ဝယ်မယ်လို့ သဘောတူထားတာကတော့ plan of record ပါ၊ provider က လိုတာရဲ့ ၈၀ ရာခိုင်နှုန်းပဲ အချိန်မီ ပေးနိုင်လို့ plan က ပိုနည်းပါတယ်။ ကွာဟချက်ကို ဆုံးရှုံးနိုင်တဲ့ top-up နဲ့ တွက်ပြတော့ business က rewards screen လို အပိုတွေကို ညသန်းခေါင်မှာ ခဏ ပိတ်ဖို့ ကြိုဆုံးဖြတ်ပါတယ်။
+      [[mark:show-p03d]] supply ဘက်မှာလည်း ဘယ်နေရာမှာမဆို run လို့ရလား၊ lesson ၄ က ပြည်တွင်း စည်းမျဉ်းလို တစ်ခုခုက နေရာ ကန့်သတ်ထားလား၊ lead time ဘယ်လောက်လဲ၊ ဘယ်အထိ တိုးပြီး ပြန်လျှော့နိုင်လဲ မေးရပြီး တစ်ရက်အတွင်း ရနိုင်တာနဲ့ အများဆုံး ရနိုင်တာကိုလည်း သိထားရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l20-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l20-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l20-p03c }
+      - { id: show-p03d, type: slide.show, at: { mark: show-p03d }, slideId: l20-p03d }
+
+  - id: zone-arithmetic
+    chapter: Zone တစ်ခု ပျက်ရင်
+    narration: >
+      [[mark:close-p03d]] [[mark:b2-s1]] Wallet က zone သုံးခုထဲက နှစ်ခုမှာပဲ instance ၆ ခုစီ run ပြီး peak မှာ ၆၅ ရာခိုင်နှုန်းစီ သုံးနေပါတယ်။ zone တစ်ခုက ပြဿနာ တစ်ခုတည်းကြောင့် အတူတူ ပျက်နိုင်တဲ့ failure domain ပါ။ [[mark:b2-s1b]] ကိုဇော် တွက်ကြည့်တော့ zone တစ်ခု ပျက်ရင် ကျန်တဲ့ ၆ ခုက ၁၂ ခုစာ ထမ်းရလို့ ၁၃၀ ရာခိုင်နှုန်း ဖြစ်ပြီး ပြိုသွားမှာပါ။
+      [[mark:b2-s2]] ဒါကြောင့် Wallet ကို zone သုံးခုလုံးမှာ instance ၅ ခုစီ ဖြန့်လိုက်ပါတယ်၊ ၃ ခုပဲ ထပ်တိုးရတာပါ။ [[mark:b2-s2b]] ပုံမှန်မှာ ၅၂ ရာခိုင်နှုန်းစီပဲ သုံးပြီး zone တစ်ခု ပျက်ရင်တောင် ကျန်တဲ့ ၁၀ ခုက ၇၈ ရာခိုင်နှုန်းနဲ့ ခံနိုင်ပါတယ်။
+      [[mark:b2-s3]] zone နှစ်ခုတည်းဆိုရင် failover ဖြစ်တဲ့အခါ ကျန်တဲ့ zone က database connection တွေပါ နှစ်ဆ ဖြစ်တတ်ပါတယ်။ [[mark:b2-s3b]] ဒါကြောင့် ကျန်တဲ့ zone တွေမှာရော database မှာပါ load ကို ခံနိုင်လောက်တဲ့ နေရာ ကြိုထားရပါမယ်။
+      [[mark:b2-s4]] failover လုပ်ဖို့ သုံးမယ့် console နဲ့ scaling API ကိုယ်တိုင်ကလည်း ပျက်တဲ့ zone ထဲမှာ ရှိနေနိုင်ပါတယ်။ ဒါကြောင့် traffic လွှဲတဲ့ drain အဆင့်တွေကို playbook ထဲ ရေးပြီး သင်္ကြန် မတိုင်ခင် တကယ် လေ့ကျင့်ထားပါတယ်။
+      [[mark:b2-s5]] cloud ကလည်း အကန့်အသတ်မဲ့ မဟုတ်ပါဘူး၊ သင်္ကြန်ညမှာ တခြား ကုမ္ပဏီတွေလည်း တစ်ပြိုင်နက် စက် တောင်းကြမှာမို့ autoscaling ကို အားမကိုးဘဲ ကြိုငှားထားပါတယ်။ [[mark:b2-s5b]] စည်းမျဉ်းကတော့ test ကလွဲရင် ဘယ် service မှ zone တစ်ခုတည်းမှာ မ run ရပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+    actions:
+      - { id: close-p03d, type: slide.close, at: { mark: close-p03d, offsetMs: -400 } }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l20-b2-row1,
+            l20-b2-z1,
+            l20-b2-z1-i1,
+            l20-b2-z1-i2,
+            l20-b2-z1-i3,
+            l20-b2-z1-i4,
+            l20-b2-z1-i5,
+            l20-b2-z1-i6,
+            l20-b2-z2,
+            l20-b2-z2-i1,
+            l20-b2-z2-i2,
+            l20-b2-z2-i3,
+            l20-b2-z2-i4,
+            l20-b2-z2-i5,
+            l20-b2-z2-i6,
+          ]
+        drawMs: 2400
+      # The strike and the survivors' 130% land on the sentence that does the sum.
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds: [l20-b2-z1-x, l20-b2-lost]
+        drawMs: 1200
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds:
+          [
+            l20-b2-row2,
+            l20-b2-y1,
+            l20-b2-y1-i1,
+            l20-b2-y1-i2,
+            l20-b2-y1-i3,
+            l20-b2-y1-i4,
+            l20-b2-y1-i5,
+            l20-b2-y2,
+            l20-b2-y2-i1,
+            l20-b2-y2-i2,
+            l20-b2-y2-i3,
+            l20-b2-y2-i4,
+            l20-b2-y2-i5,
+            l20-b2-y3,
+            l20-b2-y3-i1,
+            l20-b2-y3-i2,
+            l20-b2-y3-i3,
+            l20-b2-y3-i4,
+            l20-b2-y3-i5,
+          ]
+        drawMs: 2600
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds: [l20-b2-y1-x, l20-b2-held]
+        drawMs: 1000
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l20-b2-db]
+        drawMs: 1000
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l20-b2-keep]
+        drawMs: 1200
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l20-b2-drain-t1, l20-b2-drain-t2]
+        drawMs: 1400
+      # The reservation line first, the one-zone rule (b2-s5b) as it is said.
+      - id: b2-s5
+        type: whiteboard.apply
+        at: { mark: b2-s5 }
+        upsertIds: [l20-b2-rent-t1]
+        drawMs: 1000
+      - id: b2-s5b
+        type: whiteboard.apply
+        at: { mark: b2-s5b }
+        upsertIds: [l20-b2-rent-t2]
+        drawMs: 1200
+
+  - id: peak-of-sums
+    chapter: Pool တစ်ခုတည်း မျှသုံး
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] ပြင်ဆင်ရင်း မသီရိ တွေ့တာက အဖွဲ့တိုင်း ကိုယ့် peak အတွက် server တွေကို သီးသန့် ကြိုငှားထားတာပါ၊ Wallet ၂၀၊ Eats ၃၀၊ Top-up ၁၅ လုံးပါ။ ဒါပေမဲ့ Wallet က နေ့လယ် ၁၂ နာရီ၊ Eats က ည ၇ နာရီ၊ Top-up က ညသန်းခေါင်မှာ peak ရောက်ပါတယ်။
+      [[mark:b3-s2]] peak တွေကို ပေါင်းရင် ၆၅ လုံးဖြစ်ပြီး ဒါကို sum of peaks လို့ ခေါ်ပါတယ်။ [[mark:b3-s2b]] traffic ကို အချိန်အလိုက် ပေါင်းပြီးမှ ကြည့်ရင်တော့ အမြင့်ဆုံး အချိန်မှာတောင် ၄၀ လုံးပဲ လိုပြီး ဒါက peak of sums ပါ။ ဒါကြောင့် pool တစ်ခုကို မျှသုံးပြီး buffer ထည့်ရင် ၄၆ လုံးလောက်နဲ့ လုံလောက်ပါတယ်၊ အဖွဲ့တစ်ခုစီ သုံးခွင့်ရှိတဲ့ အများဆုံး ပမာဏ၊ quota ကိုတော့ pool ထဲကနေ ခွဲပေးပါတယ်။
+      [[mark:b3-s3]] ဒါပေမဲ့ အဖွဲ့အားလုံး တစ်ပြိုင်နက် ပိုတောင်းရင် pool ထဲမှာ ဘာမှ မကျန်တော့ပါဘူး။ ဒါကြောင့် peak တွေ ထပ်နိုင်တဲ့ သင်္ကြန်ညကိုတော့ သီးသန့် event အဖြစ် plan လုပ်ပါတယ်။
+      [[mark:b3-s4]] ပေးရတဲ့ resource ထဲက တကယ် သုံးတဲ့ ရာခိုင်နှုန်း၊ utilization ကို ပေးရတာ လျှော့ပြီးဖြစ်စေ၊ အသုံးဝင်တဲ့ အလုပ် ပိုလုပ်ပြီးဖြစ်စေ မြှင့်နိုင်ပါတယ်။ [[mark:b3-s4b]] ဒါပေမဲ့ zone အပိုနဲ့ database ရဲ့ အရန် replica လို စက်တွေက တမင် အားနေအောင် ထားတာပါ၊ utilization လှအောင် အဲဒါတွေကိုပါ ဖြည့်ပစ်ရင် တကယ် ပျက်တဲ့နေ့ ခံစရာ မကျန်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B2 400 ms early, keep the panel open.
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l20-b3-l1-t,
+            l20-b3-l1,
+            l20-b3-l1-peak,
+            l20-b3-l2-t,
+            l20-b3-l2,
+            l20-b3-l2-peak,
+            l20-b3-l3-t,
+            l20-b3-l3,
+            l20-b3-l3-peak,
+          ]
+        drawMs: 2600
+      # The separate total with "sum of peaks"; the shared pool (b3-s2b) with
+      # "peak of sums".
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l20-b3-sep, l20-b3-sep-t]
+        drawMs: 1200
+      - id: b3-s2b
+        type: whiteboard.apply
+        at: { mark: b3-s2b }
+        upsertIds: [l20-b3-pool, l20-b3-buf, l20-b3-pool-t]
+        drawMs: 1500
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l20-b3-claim]
+        drawMs: 1200
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l20-b3-util]
+        drawMs: 1200
+      - id: b3-s4b
+        type: whiteboard.apply
+        at: { mark: b3-s4b }
+        upsertIds: [l20-b3-spare]
+        drawMs: 1000
+
+  - id: batch-and-payments
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] pool ကို မျှသုံးရင် settlement report ထုတ်တဲ့ job တွေက ငွေပေးချေမှုကို မနှေးစေဖို့လည်း စီစဉ်ရပါတယ်။ report တွေကို ဈေးပေါတဲ့ သီးခြား စက်တွေပေါ် ထားရင် ရိုးရှင်းပြီး အာမခံချက် ခိုင်ပေမဲ့ စက် ထပ်ပေးရလို့ ပိုကုန်ပါတယ်။
+      [[mark:p04-pool]] pool တစ်ခုတည်းမှာ ဦးစားပေး label တပ်ပြီး ငွေပေးချေမှုကို အမြဲ အရင် ဖြေရင်တော့ သက်သာပေမဲ့ label မှားရင် report တွေက ငွေပေးချေမှုကို နှေးစေနိုင်ပါတယ်။ Padauk ကတော့ lesson ၄ ကတည်းက settlement job တွေကို provider က ပြန်ယူနိုင်တဲ့ spot instance ပေါ်မှာ ခွဲ run နေပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Handling Overload",
+          url: "https://sre.google/sre-book/handling-overload/",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l20-p04 }
+
+  - id: degradation-profile
+    chapter: Degradation profile
+    narration: >
+      [[mark:show-p05]] capacity မလောက်တဲ့ ညစာချိန်အတွက် Eats အဖွဲ့က load ဘယ်လောက် ရောက်ရင် ဘာကို အရင် ပိတ်မလဲ၊ ဘာကို ဘယ်တော့မှ မပိတ်ဘူးလဲ ကြိုရေးထားပါတယ်၊ ဒါကို degradation profile လို့ ခေါ်ပါတယ်။ capacity ရဲ့ ၁၀၀ ရာခိုင်နှုန်းမှာ နည်းနည်း နှေးတာကို လက်ခံပါတယ်၊ ၁၂၀ မှာ အကြံပြု menu လို အပိုတွေ ပိတ်ပြီး ၁၅၀ မှာ order အသစ်တွေကို တန်းစီ စောင့်ခိုင်းပါတယ်။ ငွေပေးချေမှုကိုတော့ ဘယ်တော့မှ မပျောက်စေရပါဘူး။
+      [[mark:show-p05b]] ပြီးခဲ့တဲ့ သောကြာ ညစာချိန်မှာ load ၁၃၀ ရာခိုင်နှုန်း ရောက်တော့ အကြံပြု menu ပိတ်သွားပေမဲ့ order နဲ့ ငွေပေးချေမှု အားလုံး ပြီးခဲ့ပါတယ်။ request တိုင်းမှာ ဘယ်လောက် အရေးကြီးလဲ ဆိုတဲ့ label ပါလို့ ဝန်ပိုရင် အရင် ငြင်းလို့ရတဲ့ sheddable request တွေကိုပဲ ရွေးပိတ်နိုင်တာပါ။
+      [[mark:show-p05c]] စက် ထပ်တိုးတာထက် demand လျှော့တာက ပိုသက်သာပေမဲ့ ငြင်းလိုက်တဲ့ request တိုင်းကို ရေတွက်ထားမှ မနှင်းက ဆုံးရှုံးတဲ့ အရောင်းကို တွက်ပြီး server ထပ်ငှားမလား ဆုံးဖြတ်နိုင်ပါတယ်။ capacity မလောက်တဲ့ incident အတွက် playbook ကိုလည်း ကြိုရေးထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Using load shedding to avoid overload (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/",
+        }
+      - {
+          title: "SRE book, 1st ed: Handling Overload",
+          url: "https://sre.google/sre-book/handling-overload/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l20-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l20-p05b }
+      - { id: show-p05c, type: slide.show, at: { mark: show-p05c }, slideId: l20-p05c }
+
+  - id: real-cost
+    chapter: တကယ့် ကုန်ကျစရိတ်
+    narration: >
+      [[mark:show-p06]] capacity ရဲ့ ကုန်ကျစရိတ်ကလည်း cloud bill တစ်ခုတည်း မဟုတ်ပါဘူး။ ကြိုငှားပြီး အားနေတဲ့ server တွေ၊ engineer တွေရဲ့ နာရီတွေ၊ မလောက်လို့ ဆုံးရှုံးတဲ့ order တွေကိုပါ ပေါင်းတွက်ရပါတယ်။
+      [[mark:show-p06b]] ဒီတော့ Padauk က သင်္ကြန်အတွက် server ကို ခုနစ်ဆ မတိုးခဲ့ပါဘူး။ plan of record အတိုင်း ကြိုငှားတယ်၊ Wallet ကို zone သုံးခုလုံးမှာ ဖြန့်တယ်၊ အဖွဲ့တွေ pool တစ်ခုကို မျှသုံးတယ်၊ ကျော်လာရင် ဘာကို ပိတ်မလဲ degradation profile မှာ ရေးထားပါတယ်။ capacity planning ဆိုတာ risk ဘယ်လောက် ထမ်းမလဲ ရွေးတာမို့ failure ကိုလည်း ခဏခဏ စမ်းရပြီး product နဲ့ finance အဖွဲ့နဲ့ အတူ ဆုံးဖြတ်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l20-p06 }
+      - { id: show-p06b, type: slide.show, at: { mark: show-p06b }, slideId: l20-p06b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p07]] လစာထုတ်ရက်၊ ပွဲတော်၊ promotion လို ကိုယ့် peak ရက်တွေကို ဒီအပတ် ပြက္ခဒိန် တစ်ခုထဲ ချရေးပါ။ အမြင့်ဆုံး peak မှာ zone တစ်ခု ပျက်ရင် ကျန်တာတွေ ခံနိုင်လား တွက်ကြည့်ပါ။ ပြီးတော့ request ၁၀၀၀ ခုအတွက် cloud ကို ကျပ် ဘယ်လောက် ပေးရလဲ စပြီး မှတ်ထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+      - { title: "Workbook: Managing Load", url: "https://sre.google/workbook/managing-load/" }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: show-p07 }, slideId: l20-p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:open-notes]] သင်္ကြန် ပြင်ဆင်ရင်း သိခဲ့တာတွေပါ။ [[mark:sel-forecast-range]] forecast range က demand ကို ဂဏန်း တစ်ခုတည်းအစား အနိမ့်ကနေ အမြင့်အထိ ခန့်မှန်းတာ ဖြစ်ပြီး၊ [[mark:sel-plan-of-record]] plan of record က wish list မဟုတ်ဘဲ တကယ် ဝယ်မယ်လို့ သဘောတူထားတဲ့ အစီအစဉ်ပါ။ [[mark:sel-survivors]] zone တစ်ခု ပျက်ရင် ကျန်တဲ့ zone တွေ load ကို ခံနိုင်အောင် နေရာ ကြိုထားရပါမယ်။
+      [[mark:sel-peak-of-sums]] peak of sums က ပေါင်းထားတဲ့ traffic ရဲ့ peak ဖြစ်လို့ peak တွေကို ပေါင်းတာထက် နည်းပါတယ်။ [[mark:sel-utilization]] utilization က ပေးရတဲ့ resource ထဲက တကယ် သုံးနေတဲ့ ရာခိုင်နှုန်းဖြစ်ပြီး၊ [[mark:sel-degradation]] degradation profile ကတော့ load ဘယ်လောက်မှာ ဘာကို ပိတ်မလဲ၊ ဘာကို ဘယ်တော့မှ မပိတ်ဘူးလဲ ကြိုရေးထားတာပါ။
+      [[mark:sel-question]] ကိုဇော် တွက်ခဲ့တဲ့ ပုစ္ဆာကို ဂဏန်း ပြောင်းပြီး မေးပါမယ်။ [[mark:ask-question]] zone နှစ်ခုမှာ instance ၁၂ ခုက ၆၀ ရာခိုင်နှုန်းစီ သုံးနေတုန်း zone တစ်ခု ပျက်သွားရင် ကျန်တဲ့ instance တွေက load ဘယ်လောက် ထမ်းရမလဲ?
+      [[mark:pause-question]] ကျန်တဲ့ ၆ ခုက ၁၂ ခုစာ ထမ်းရလို့ ၁၂၀ ရာခိုင်နှုန်းပါ။ သင်္ကြန် ပြင်ဆင်နေတုန်းမှာပဲ မစုရဲ့ support အဖွဲ့ဆီ user တစ်ယောက်က သူ့ account ကို ဖျက်ပေးပါလို့ တောင်းဆိုလာပါတယ်။ သူ့ data တွေက တကယ်တော့ ဘယ်မှာ ရှိနေလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Capacity Planning (USENIX ;login:, Feb 2015)",
+          url: "https://www.usenix.org/publications/login/feb15/capacity-planning",
+        }
+      - {
+          title: "Using load shedding to avoid overload (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-forecast-range,
+          type: editor.select,
+          at: { mark: sel-forecast-range },
+          target: { file: notes.md, text: "forecast range", occurrence: 1 },
+        }
+      - {
+          id: sel-plan-of-record,
+          type: editor.select,
+          at: { mark: sel-plan-of-record },
+          target: { file: notes.md, text: "plan of record", occurrence: 1 },
+        }
+      - {
+          id: sel-survivors,
+          type: editor.select,
+          at: { mark: sel-survivors },
+          target: { file: notes.md, text: "ကျန်တဲ့ zone တွေမှာ နေရာ ကြိုထား", occurrence: 1 },
+        }
+      - {
+          id: sel-peak-of-sums,
+          type: editor.select,
+          at: { mark: sel-peak-of-sums },
+          target: { file: notes.md, text: "peak of sums", occurrence: 1 },
+        }
+      - {
+          id: sel-utilization,
+          type: editor.select,
+          at: { mark: sel-utilization },
+          target: { file: notes.md, text: "utilization", occurrence: 1 },
+        }
+      - {
+          id: sel-degradation,
+          type: editor.select,
+          at: { mark: sel-degradation },
+          target: { file: notes.md, text: "degradation profile", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the lead-in and the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more
+      # mark at an existing sentence end that makes the question its own dialog:
+      # it starts about as the question ends, its drag runs in silence, and the
+      # answer at pause-question waits for it. The question is 130 characters,
+      # so 9500 (400 + 130 x 70) would start the drag as the question ends at
+      # 70 ms per char, but anything above ~8920 trips compile-check's 2.5 s
+      # inserted-silence warning at 55; 8890 leaves about 2.8 / 0.9 / 0.35 s of
+      # quiet before the answer at 55 / 70 / 95 (at 70 the drag starts under the
+      # question's last ~0.6 s, at 95 earlier, as in lessons 7, 10 and 30).
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 8890 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: zone 2 ခု၊ instance 12 ခု၊ 60% စီ။ zone တစ်ခု ပျက်ရင် ကျန်တဲ့ instance တွေက ဘယ်လောက် ထမ်းရမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
