@@ -1,0 +1,1392 @@
+# SRE from zero, lesson 29: Where AI helps operations (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-29-where-ai-helps-operations.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-29-where-ai-helps-operations.md \
+#     src/studio/scripts/sre-29-where-ai-helps-operations.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Two marks add no spoken text and sit at an existing ။: p01b-anomaly splits
+# l29_p01b's narration at its paragraph break (one 476-character dialog would
+# pass the 450-character limit; no action uses it), and ask-question makes the
+# recap question its own dialog so the question-line select can hang off it
+# for the ⟪pause 3s⟫, as in Module 1. sel-question is the voice script's
+# ⟪select မေးခွန်း⟫; it only splits the short lead-in from the question.
+#
+# Pacing: at 70 ms/char no page or board step holds longer than ~35 s (the
+# longest is l29_p01b, 34.7 s; the cover 33.2 s), so the voice script's own
+# markers carry it and no pacing page or board step was added.
+#
+# ⟪close board⟫ straight into the next board (scenes 5 and 6) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, so
+# the editor does not flash between two boards, as in lessons 8 and 16; the
+# next board then draws with open: true, clear: true as usual. A board followed
+# by a deck page closes the panel (open: false) 400 ms before the page, and a
+# deck page followed by a board closes the page 400 ms before, as in Module 1.
+#
+# Boards (B1 P5 bars on an underline axis, B2 and B3 P6 lanes, B4 P3 ring).
+# Colour jobs: #1e1e1e ink (paints white) for titles, axis, ring and arrows;
+# blue the thing named and the data series (the quiet complaint bars, Ops
+# Buddy's summary and handoff, the hypothesis, the postmortem draft, the past
+# incidents note, the first two toil-loop steps); green healthy or done (the
+# person who approves, people check and write, ask-first); red failure (the
+# 5.3 / B spike, the retry without a key, "reopened?"); orange the caveat or
+# limit (the confidence line, the fleet scan's 7 more calls, the guardrails);
+# violet the result (Ops Buddy's grouping, the rollback suggestion, the
+# playbook). A label on two lines is one text asset per line, so each line
+# meets the 0.55 em width rule on its own. B1 writes "5.3 / B: 38" as the
+# "5.3 / B" axis label plus "38" above the tall bar, since the five bar slots
+# are 156 px wide. B3 steps down after its second box (an arrow-down into
+# "postmortem", then right into "lessons"), not one row left to right as the
+# voice script sketches it: four two-line boxes plus three arrows need about
+# 990 px under the 0.55 rule, and the visible area is 850 px wide. B4's ring
+# nodes are filled #ffffff, which inverts to the canvas colour and hides the
+# track behind their labels (as lesson 2's loop does); the side box sits above
+# the first node and feeds it with an arrow-down, since there are no left or
+# up arrows. Every label was also measured in Chrome with Excalidraw's Virgil
+# font and fits inside its box (short Burmese runs past the 0.55 em rule there:
+# "အချက်အလက် အရင် မေး" is 322 px, so the side box is 345 px wide).
+#
+# Deck pages: deck "Next Editor · SRE 6A · AI", published; the /pub URL below
+# is final. The deck holds only the kit pages until this lesson's pages are
+# built from the page plan, so until then the Director reports page "l29_p01"
+# missing from the published deck (with the deck URL swapped for an
+# unreachable one it validates: 35 dialogs, no critic notes). The cover's Ops
+# Buddy icon at သတိထားမိ · တုံ့ပြန် · သင်ယူ · တည်ဆောက် is not a K1 kit field (the
+# page plan lights the whole loop, S = all, and notes the icon). Page plan:
+# ~/Documents/sre-course/work/pages/sre-29-where-ai-helps-operations.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-29-where-ai-helps-operations.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-29-where-ai-helps-operations.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-29-where-ai-helps-operations
+  title: "SRE from zero 29: AI က operations မှာ ဘယ်နေရာ ကူညီလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # AI က operations မှာ ဘယ်နေရာ ကူညီလဲ
+
+        - complaint အုပ်စုဖွဲ့တာ — version၊ operator အလိုက် စုပြီး ပျမ်းမျှထဲက အုပ်စုကို ရှာ
+        - ယုံကြည်မှု မျဉ်း — အဲဒီအောက်ဆို AI အကြံကို မပြ
+        - playbook — လူ အောင်မြင်ခဲ့တဲ့ fix တွေကနေ ရေးတဲ့ အဆင့်တွေ
+        - reopen rate — agent ဖြေရှင်းပြီးသား ticket ပြန်ပွင့်တဲ့ နှုန်း
+        - toil ဖယ်တာရဲ့ အကန့်အသတ် — အချိန်ပဲ ပြန်ရ၊ 100% ထက် မကျော်
+        - fleet scan — incident တစ်ခုက အားနည်းချက်ကို codebase တိုင်းမှာ ရှာ
+
+        မေးခွန်း: call 500၊ တစ်ခုချင်း error 0.1%။ run တစ်ခါမှာ error အနည်းဆုံး တစ်ခု ကြုံဖို့ ဘယ်လောက်လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>AI က operations မှာ ဘယ်နေရာ ကူညီလဲ</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 29</p>
+              <h1>AI က operations မှာ ဘယ်နေရာ ကူညီလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l29-p01
+      contentType: google
+      name: "Cover: green dashboard, angry comments"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p01
+    - id: l29-p01b
+      contentType: google
+      name: The supermarket's nightly job
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p01b
+    - id: l29-p02
+      contentType: google
+      name: Complaints as a signal
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p02
+    - id: l29-p02b
+      contentType: google
+      name: Affected users
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p02b
+    - id: l29-p03
+      contentType: google
+      name: The limit of removing toil
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p03
+    - id: l29-p03b
+      contentType: google
+      name: Work AI makes affordable
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p03b
+    - id: l29-p03c
+      contentType: google
+      name: How the work changes
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p03c
+    - id: l29-p04
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l29_p04
+  whiteboardAssets:
+    # ---- Board B1: that evening's complaints by version / operator (P5) ------
+    - {
+        id: l29-b1-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 690,
+        height: 45,
+        text: "ညနေက complaint: version / operator",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l29-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 520,
+        width: 790,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b1-bar1,
+        kind: rectangle,
+        x: 323,
+        y: 515,
+        width: 70,
+        height: 45,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l29-b1-lab1,
+        kind: text,
+        x: 308,
+        y: 572,
+        width: 120,
+        height: 35,
+        text: "5.1 / A",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-bar2,
+        kind: rectangle,
+        x: 479,
+        y: 505,
+        width: 70,
+        height: 55,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l29-b1-lab2,
+        kind: text,
+        x: 464,
+        y: 572,
+        width: 120,
+        height: 35,
+        text: "5.2 / A",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-bar3,
+        kind: rectangle,
+        x: 635,
+        y: 520,
+        width: 70,
+        height: 40,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l29-b1-lab3,
+        kind: text,
+        x: 620,
+        y: 572,
+        width: 120,
+        height: 35,
+        text: "5.3 / A",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-bar4,
+        kind: rectangle,
+        x: 791,
+        y: 270,
+        width: 70,
+        height: 290,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l29-b1-lab4,
+        kind: text,
+        x: 776,
+        y: 572,
+        width: 120,
+        height: 35,
+        text: "5.3 / B",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-n38,
+        kind: text,
+        x: 805,
+        y: 222,
+        width: 60,
+        height: 45,
+        text: "38",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: l29-b1-bar5,
+        kind: rectangle,
+        x: 947,
+        y: 512,
+        width: 70,
+        height: 48,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l29-b1-lab5,
+        kind: text,
+        x: 932,
+        y: 572,
+        width: 120,
+        height: 35,
+        text: "5.3 / C",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-ai1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 380,
+        height: 35,
+        text: "Ops Buddy က message 420",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b1-ai2,
+        kind: text,
+        x: 300,
+        y: 338,
+        width: 240,
+        height: 35,
+        text: "ကို အုပ်စုဖွဲ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B2: during the incident, one lane (P6) ------------------------
+    - {
+        id: l29-b2-lane,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 310,
+        height: 45,
+        text: "incident အတွင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l29-b2-r1,
+        kind: rectangle,
+        x: 262,
+        y: 235,
+        width: 230,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l29-b2-t1a,
+        kind: text,
+        x: 272,
+        y: 245,
+        width: 210,
+        height: 35,
+        text: "နောက်မှ ဝင်သူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-t1b,
+        kind: text,
+        x: 272,
+        y: 282,
+        width: 120,
+        height: 35,
+        text: "summary",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 497,
+        y: 260,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b2-r2,
+        kind: rectangle,
+        x: 548,
+        y: 235,
+        width: 140,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l29-b2-t2a,
+        kind: text,
+        x: 558,
+        y: 245,
+        width: 120,
+        height: 35,
+        text: "handoff",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-t2b,
+        kind: text,
+        x: 558,
+        y: 282,
+        width: 120,
+        height: 35,
+        text: "မူကြမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 693,
+        y: 260,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b2-r3,
+        kind: rectangle,
+        x: 744,
+        y: 235,
+        width: 280,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l29-b2-t3a,
+        kind: text,
+        x: 754,
+        y: 245,
+        width: 215,
+        height: 35,
+        text: "rollback အကြံ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-t3b,
+        kind: text,
+        x: 754,
+        y: 282,
+        width: 260,
+        height: 35,
+        text: "ယုံကြည်မှု မြင့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 864,
+        y: 330,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b2-r4,
+        kind: rectangle,
+        x: 784,
+        y: 390,
+        width: 200,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l29-b2-t4,
+        kind: text,
+        x: 796,
+        y: 404,
+        width: 180,
+        height: 35,
+        text: "လူက approve",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b2-line,
+        kind: rectangle,
+        x: 262,
+        y: 510,
+        width: 820,
+        height: 6,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l29-b2-line-t,
+        kind: text,
+        x: 272,
+        y: 530,
+        width: 590,
+        height: 35,
+        text: "ယုံကြည်မှု မျဉ်း: ဒီအောက်ဆို ဘာမှ မပြ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: the next day, one lane stepping down once (P6) ------------
+    - {
+        id: l29-b3-lane,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 230,
+        height: 45,
+        text: "နောက်တစ်နေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l29-b3-r1,
+        kind: rectangle,
+        x: 262,
+        y: 235,
+        width: 262,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l29-b3-t1a,
+        kind: text,
+        x: 272,
+        y: 245,
+        width: 170,
+        height: 35,
+        text: "hypothesis",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-t1b,
+        kind: text,
+        x: 272,
+        y: 282,
+        width: 242,
+        height: 35,
+        text: "trace · log ကနေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-check,
+        kind: text,
+        x: 272,
+        y: 335,
+        width: 125,
+        height: 35,
+        text: "လူက စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 529,
+        y: 260,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b3-r2,
+        kind: rectangle,
+        x: 580,
+        y: 235,
+        width: 280,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l29-b3-t2a,
+        kind: text,
+        x: 590,
+        y: 245,
+        width: 200,
+        height: 35,
+        text: "အကြောင်းရင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-t2b,
+        kind: text,
+        x: 590,
+        y: 282,
+        width: 260,
+        height: 35,
+        text: "key မပါတဲ့ retry",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 330,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b3-r3,
+        kind: rectangle,
+        x: 580,
+        y: 385,
+        width: 180,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l29-b3-t3a,
+        kind: text,
+        x: 590,
+        y: 395,
+        width: 160,
+        height: 35,
+        text: "postmortem",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-t3b,
+        kind: text,
+        x: 590,
+        y: 432,
+        width: 120,
+        height: 35,
+        text: "မူကြမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 765,
+        y: 410,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b3-r4,
+        kind: rectangle,
+        x: 816,
+        y: 385,
+        width: 170,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l29-b3-t4a,
+        kind: text,
+        x: 826,
+        y: 395,
+        width: 150,
+        height: 35,
+        text: "သင်ခန်းစာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-t4b,
+        kind: text,
+        x: 826,
+        y: 432,
+        width: 120,
+        height: 35,
+        text: "လူက ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-note,
+        kind: text,
+        x: 272,
+        y: 495,
+        width: 620,
+        height: 35,
+        text: "incident အဟောင်း · dashboard · playbook",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b3-fleet,
+        kind: rectangle,
+        x: 262,
+        y: 555,
+        width: 610,
+        height: 65,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l29-b3-fleet-t,
+        kind: text,
+        x: 280,
+        y: 570,
+        width: 585,
+        height: 35,
+        text: "fleet scan: payment call 7 ခု ထပ်တွေ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B4: the settlement-file toil loop, clockwise (P3 ring) --------
+    - {
+        id: l29-b4-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 480,
+        height: 45,
+        text: "settlement file ပြန်ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l29-b4-ring,
+        kind: ellipse,
+        x: 320,
+        y: 330,
+        width: 700,
+        height: 300,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b4-n1,
+        kind: rectangle,
+        x: 262,
+        y: 302,
+        width: 313,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l29-b4-n1a,
+        kind: text,
+        x: 272,
+        y: 312,
+        width: 298,
+        height: 35,
+        text: "ticket နဲ့ chat ထဲက",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-n1b,
+        kind: text,
+        x: 272,
+        y: 349,
+        width: 135,
+        height: 35,
+        text: "toil ရှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 582,
+        y: 312,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b4-n2,
+        kind: rectangle,
+        x: 640,
+        y: 312,
+        width: 210,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l29-b4-n2t,
+        kind: text,
+        x: 652,
+        y: 330,
+        width: 190,
+        height: 35,
+        text: "ထပ်တာ ပေါင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-n3,
+        kind: rectangle,
+        x: 880,
+        y: 395,
+        width: 200,
+        height: 90,
+        strokeColor: "#6741d9",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l29-b4-n3a,
+        kind: text,
+        x: 890,
+        y: 405,
+        width: 180,
+        height: 35,
+        text: "လူ့ fix ကနေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-n3b,
+        kind: text,
+        x: 890,
+        y: 442,
+        width: 135,
+        height: 35,
+        text: "playbook",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 990,
+        y: 492,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l29-b4-n4,
+        kind: rectangle,
+        x: 740,
+        y: 555,
+        width: 300,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l29-b4-n4a,
+        kind: text,
+        x: 750,
+        y: 565,
+        width: 225,
+        height: 35,
+        text: "ကန့်သတ်ချက်နဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-n4b,
+        kind: text,
+        x: 750,
+        y: 602,
+        width: 285,
+        height: 35,
+        text: "agent ဒါမှမဟုတ် လူ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-n5,
+        kind: rectangle,
+        x: 262,
+        y: 490,
+        width: 225,
+        height: 70,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l29-b4-n5t,
+        kind: text,
+        x: 274,
+        y: 507,
+        width: 205,
+        height: 35,
+        text: "ပြန်ပွင့်လား?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-side,
+        kind: rectangle,
+        x: 262,
+        y: 213,
+        width: 345,
+        height: 55,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l29-b4-side-t,
+        kind: text,
+        x: 274,
+        y: 223,
+        width: 325,
+        height: 35,
+        text: "အချက်အလက် အရင် မေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l29-b4-a0,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 395,
+        y: 270,
+        width: 36,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2629
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Dashboard အစိမ်း၊ comment တွေ ဒေါသထွက်
+    narration: >
+      [[mark:show-p01]] lesson ၂၈ မှာ Padauk ရဲ့ AI operations agent၊ Ops Buddy က action card၊ budget နှစ်ခုနဲ့ stop button ဆိုတဲ့ ဘရိတ်တွေ ရလာခဲ့ပါတယ်။
+      သောကြာနေ့ ညနေ top-up promo စတော့ dashboard က Top-up success rate ၉၉.၇ ရာခိုင်နှုန်းနဲ့ အစိမ်းရောင် ပြနေပါတယ်။ ဒါပေမဲ့ Operator B နဲ့ app ၅.၃ ကို သုံးသူတွေဆီက top-up မရဘူး၊ သုံးခါတောင် စမ်းပြီးပြီ ဆိုတဲ့ ဒေါသထွက်နေတဲ့ comment တွေ Facebook နဲ့ Viber ကနေ မစုရဲ့ support အဖွဲ့ဆီ ဆက်တိုက် ဝင်လာပါတယ်။ alert ဘာလို့ မတက်ခဲ့တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l29-p01,
+        }
+
+  - id: complaints-chart
+    chapter: ပျမ်းမျှထဲမှာ ပျောက်နေတဲ့ user တွေ
+    narration: >
+      [[mark:close-p01]] [[mark:b1-s1]] ဒီ chart က အဲဒီညနေ မစုရဲ့ အဖွဲ့ဆီ ရောက်လာတဲ့ complaint တွေကို app version နဲ့ operator အလိုက် ခွဲထားတာပါ။ Operator A ဘက်က အုပ်စုတွေမှာ complaint နည်းနည်းစီပဲ ရှိပြီး promo ညတိုင်း မြင်နေကျပါ။
+      [[mark:b1-s2]] ဒါပေမဲ့ app ၅.၃ နဲ့ Operator B အုပ်စုမှာတော့ complaint ၃၈ ခု တက်လာပါတယ်၊ app ၅.၃ နဲ့ Operator C ကတော့ ပုံမှန်ပါပဲ။ top-up အားလုံးထဲမှာ ဒီ အုပ်စုက သေးသေးလေးပဲ ဖြစ်တော့ ပေါင်းထားတဲ့ success rate က SLO ၉၉.၅ ရာခိုင်နှုန်းထက် မြင့်နေဆဲမို့ alert မတက်ခဲ့တာပါ။ ပျမ်းမျှက သူတို့ ဒုက္ခကို ဖုံးထားလိုက်တာပါ။
+      [[mark:b1-s3]] ဒီ chart ကို ဆွဲပေးတာက Ops Buddy ပါ။ မြန်မာလို အင်္ဂလိပ်လို ရောရေးထားတဲ့ message ၄၂၀ ကို ဖတ်ပြီး ဘယ် version၊ ဘယ် operator၊ ဘာလုပ်ရင်း ဖြစ်လဲ ဆိုတာနဲ့ အုပ်စုဖွဲ့ပေးတာပါ။ တစ်ခုချင်း ဖတ်ရင် မရေမရာ ဖြစ်နေတဲ့ စာတွေကို စုလိုက်တော့မှ ဒီ အနီရောင် bar ပေါ်လာတာပါ။
+      [[mark:close-b1]] [[mark:show-p01b]] ပျမ်းမျှက နောက်တစ်မျိုးလည်း ဖုံးထားတတ်ပါတယ်။ supermarket chain ရဲ့ ညတိုင်း settlement စစ်တဲ့ job က Padauk API ကို ၅၀၀ ခါ ခေါ်ပြီး တစ်ခါ fail တာနဲ့ job တစ်ခုလုံး fail ပါတယ်။ တစ်ခါချင်းမှာ error ၀.၂ ရာခိုင်နှုန်းပဲ ဆိုရင် dashboard က ၉၉.၈ ရာခိုင်နှုန်း ပြနေပေမဲ့ သူတို့ job ကတော့ ည ၁၀၀ မှာ ၆၃ ညလောက် fail ပါတယ်။
+      [[mark:p01b-anomaly]] ပုံမှန်နဲ့ မတူတာကို ရှာတဲ့ anomaly detection ကလည်း promo စတာ၊ traffic လွှဲတာလို ပုံမှန် အပြောင်းအလဲတွေကို ပျက်နေတယ်လို့ ထင်တတ်ပြီး user က top-up တကယ် ရလား မမြင်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: close-p01, type: slide.close, at: { mark: close-p01, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l29-b1-title, l29-b1-axis],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds: [l29-b1-bar1, l29-b1-lab1, l29-b1-bar2, l29-b1-lab2, l29-b1-bar3, l29-b1-lab3]
+        drawMs: 1800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l29-b1-bar4, l29-b1-lab4, l29-b1-n38, l29-b1-bar5, l29-b1-lab5]
+        drawMs: 1800
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l29-b1-ai1, l29-b1-ai2],
+          drawMs: 1200,
+        }
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l29-p01b }
+
+  - id: complaints-signal
+    chapter: Complaint ကို signal အဖြစ်
+    narration: >
+      [[mark:show-p02]] ဒါကြောင့် user ရေးတဲ့ complaint ကို signal တစ်ခုအဖြစ် သုံးလို့ရပါတယ်။ metric က ဘယ်နှစ်ခု fail လဲ ဆိုတာပဲ ပြောပေမဲ့ complaint ကတော့ user က ဘာလုပ်ချင်ခဲ့လဲ၊ ဘယ်မှာ၊ ဘယ်အချိန်က ဘာဖြစ်သွားလဲ ဆိုတာကို ကိုယ့်စကားနဲ့ ပြောပြပါတယ်။ စာရေးရတာ အချိန်ပေးရလို့ တကယ် ဒုက္ခရောက်တဲ့သူတွေပဲ ရေးလေ့ ရှိပြီး၊ အုပ်စု ကြီးလေ ပြဿနာ ကြီးလေ ဖြစ်ပါတယ်။
+      တစ်စိတ်တစ်ပိုင်းပဲ ပျက်တာကို user တွေက metric ထက် အရင် သိတတ်ပေမဲ့ complaint က metric ကို ကူပေးတာပါ၊ အစားထိုးတာ မဟုတ်ပါဘူး။
+      [[mark:show-p02b]] အုပ်စုက သတ်မှတ်ထားတဲ့ အရွယ်ကို ကျော်တော့ Ops Buddy က report တိုတို ရေးပြီး Top-up on-call ကျနေတဲ့ ကိုမင်းဆီ page ပို့ပါတယ်။ version နဲ့ operator ကို သိနေတော့ ထိခိုက်နေတဲ့ user ၂၁၀၀ လောက်ဆီကိုပဲ message ပို့လို့ user ၁၂ သိန်းလုံးကို မလန့်စေရပါဘူး။
+      ဒီလို အလုပ်ဖြစ်တာ model တော်လို့ချည်း မဟုတ်ပါဘူး။ spam စစ်ထုတ်တာ၊ ဖုန်းနံပါတ်နဲ့ နာမည် ဖယ်တာ၊ Unicode နဲ့ ဇော်ဂျီ ညှိတာလို model ပတ်ပတ်လည်က pipeline အလုပ်တွေက အများစုပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l29-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l29-p02b }
+
+  - id: during
+    chapter: Incident အတွင်း
+    narration: >
+      [[mark:close-p02b]] [[mark:b2-s1]] ကိုမင်းက incident ကြေညာလိုက်တော့ Ops Buddy က ဘာမှ မပြောင်းဘဲ ဖတ်ပြီး ရေးပေးတာကနေ စပါတယ်။ နောက်မှ ဝင်လာသူတွေအတွက် ဘာသိပြီ၊ ဘာလုပ်ပြီးပြီ ဆိုတဲ့ summary ရေးပေးပြီး shift လွှဲဖို့ handoff မူကြမ်းလည်း ပြင်ထားပေးလို့ ဘာဖြစ်နေတာလဲ ဆိုတဲ့ မေးခွန်းတွေ channel ထဲမှာ အများကြီး နည်းသွားပါတယ်။
+      [[mark:b2-s2]] အကြောင်းရင်း မသိခင် user ထိခိုက်မှုကို အရင် ရပ်တဲ့ mitigation အတွက်တော့ Ops Buddy က lesson ၁၀ မှာ ရေးခဲ့တဲ့ fix စာရင်းထဲကနေ rollback၊ traffic လွှဲတာ၊ capacity တိုးတာလို တစ်ခုကို ရွေးပါတယ်။ fail တွေ စတဲ့ အချိန်က app ၅.၃ user တွေကို top-up လမ်းကြောင်းအသစ်ဆီ ပို့တဲ့ promo config ပြောင်းလဲမှုနဲ့ ကိုက်နေလို့ အဲဒါကို rollback လုပ်ဖို့ အကြံပေးပြီး ယုံကြည်မှု မြင့်တယ်လို့လည်း ပြပါတယ်။
+      [[mark:b2-s3]] ဆုံးဖြတ်တာကတော့ ကိုမင်းပါ၊ အထောက်အထားကို စစ်ပြီး approve လုပ်တော့ မကြာခင် top-up တွေ ပြန်ဝင်လာပါတယ်။ [[mark:b2-s4]] Padauk က ယုံကြည်မှု မျဉ်း တစ်ခုလည်း သတ်မှတ်ထားပြီး အဲဒီ မျဉ်းအောက်က အကြံဆိုရင် Ops Buddy က လုံးဝ မပြပါဘူး။ မသေချာတဲ့ ခန့်မှန်းချက်ကို တစ်ခါ မြင်လိုက်ရရင် ပင်ပန်းနေတဲ့ on-call က အဲဒီဘက်ကိုပဲ လိုက်စဉ်းစားမိပြီး လမ်းလွဲသွားတတ်လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l29-b2-lane],
+        }
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l29-b2-r1, l29-b2-t1a, l29-b2-t1b, l29-b2-a1, l29-b2-r2, l29-b2-t2a, l29-b2-t2b]
+        drawMs: 2200
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l29-b2-a2, l29-b2-r3, l29-b2-t3a, l29-b2-t3b],
+          drawMs: 1400,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l29-b2-a3, l29-b2-r4, l29-b2-t4],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l29-b2-line, l29-b2-line-t],
+          drawMs: 1400,
+        }
+
+  - id: after
+    chapter: နောက်တစ်နေ့
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] user ထိခိုက်မှုကို ရပ်တာနဲ့ ဘာကြောင့်လဲ နားလည်တာက သီးခြား အလုပ်ပါ။ နောက်တစ်နေ့မှာ Ops Buddy က trace နဲ့ log တွေကနေ ဖြစ်နိုင်တဲ့ အကြောင်းရင်း၊ hypothesis တွေ ထုတ်ပေးပြီး မှန်မမှန်ကိုတော့ engineer တွေက data နဲ့ စစ်ပါတယ်။
+      [[mark:b3-s2]] စစ်ကြည့်တော့ app ၅.၃ ရဲ့ လမ်းကြောင်းအသစ်က top-up အဖြေ နောက်ကျရင် idempotency key မပါဘဲ ပြန်ပို့တာ တွေ့ရပါတယ်။ ဒီ key က request တစ်ခုကို ဘယ်နှခါ ပို့ပို့ တစ်ခါပဲ လုပ်အောင် တွဲပေးတဲ့ သီးသန့် နံပါတ်ပါ၊ key မပါတော့ Operator B က ဒုတိယ request ကို ထပ်နေတယ်ဆိုပြီး ငြင်းလိုက်တာပါ။
+      [[mark:b3-s3]] postmortem မူကြမ်းကိုလည်း Ops Buddy က chat နဲ့ alert မှတ်တမ်းတွေကနေ ရေးပေးပေမဲ့ ဘယ်မှာ ကံကောင်းခဲ့လဲ၊ ဘာ ပြင်မလဲ ဆိုတဲ့ သင်ခန်းစာကိုတော့ အဖွဲ့က ကိုယ်တိုင် ရေးပါတယ်။ [[mark:b3-s4]] ဆင်တူ incident အဟောင်းတွေကို ရှာပြီး dashboard ဆောက်ပေးတာ၊ alert တက်ရင် ဘာလုပ်ရမလဲ အဆင့်လိုက် ရေးထားတဲ့ playbook ကို ကိုမင်း တကယ် လုပ်ခဲ့တာနဲ့ တိုက်ပြီး ပြင်ဖို့ အကြံပေးတာတွေလည်း လုပ်ပါတယ်။
+      [[mark:b3-s5]] ပြီးတော့ incident တစ်ခုက အားနည်းချက်ကို codebase တိုင်းမှာ လိုက်ရှာတဲ့ fleet scan နဲ့ idempotency key မပါတဲ့ payment call ၇ ခု ထပ်တွေ့ပါတယ်။ lesson ၁ မှာ ယူခဲ့ပြီး lesson ၁၁ မှာ ငွေ နှစ်ခါ ဖြတ်မိစေခဲ့တဲ့ အကြွေးမျိုးကို ဒီတစ်ခါတော့ user မထိခင် ဆပ်လိုက်တာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l29-b3-lane],
+        }
+      - id: b3-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds: [l29-b3-r1, l29-b3-t1a, l29-b3-t1b, l29-b3-check]
+        drawMs: 1600
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l29-b3-a1, l29-b3-r2, l29-b3-t2a, l29-b3-t2b],
+          drawMs: 1400,
+        }
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds:
+          [
+            l29-b3-a2,
+            l29-b3-r3,
+            l29-b3-t3a,
+            l29-b3-t3b,
+            l29-b3-a3,
+            l29-b3-r4,
+            l29-b3-t4a,
+            l29-b3-t4b,
+          ]
+        drawMs: 2400
+      - {
+          id: b3-s4,
+          type: whiteboard.apply,
+          at: { mark: b3-s4 },
+          upsertIds: [l29-b3-note],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s5,
+          type: whiteboard.apply,
+          at: { mark: b3-s5 },
+          upsertIds: [l29-b3-fleet, l29-b3-fleet-t],
+          drawMs: 1400,
+        }
+
+  - id: toil-loop
+    chapter: Toil ကနေ playbook ဆီ
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] incident မရှိတဲ့ ရက်တွေမှာတော့ AI က toil ကို လျှော့ပေးပါတယ်။ လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ toil ရဲ့ အဓိပ္ပာယ်က lesson ၁၇ ကတည်းက မပြောင်းပါဘူး၊ အသစ်က automation ဆောက်တာကိုယ်တိုင် မြန်လာတာပါ။ merchant တွေရဲ့ ticket နဲ့ chat တွေကို Ops Buddy က အုပ်စုဖွဲ့ကြည့်တော့ အများဆုံးက မနေ့က settlement file ကို ပြန်ပို့ပေးပါ ဆိုတာပါ၊ တစ်ဆိုင်တည်းက နှစ်ခါ တောင်းတာတွေကိုလည်း ပေါင်းပေးပါတယ်။
+      [[mark:b4-s2]] engineer တွေ အရင်က file ပြန်ပို့ခဲ့ပုံတွေကနေ Ops Buddy က playbook မူကြမ်း ရေးပြီး လူက review လုပ်ပါတယ်။ file ကို ဖတ်ပြီး ပြန်ပို့ရုံမို့ action card မှာ ကိုယ်တိုင် လုပ်ပြီးမှ ပြောခွင့် ရပါတယ်၊ ငွေ ရွှေ့ရမယ့် ကိစ္စတွေနဲ့ မမြင်ဖူးသေးတဲ့ ကိစ္စတွေကတော့ လူဆီ ရောက်ပါတယ်။
+      [[mark:b4-s3]] merchant တစ်ဆိုင်က file ထဲမှာ ဘာမှ မပါဘူးလို့ ပြန်ပြောတော့ ticket ပြန်ပွင့်ပြီး playbook မှာ မပို့ခင် file ထဲ data ရှိလား စစ်တဲ့ အဆင့် ထပ်တိုးလာပါတယ်။ ဒီလို agent ဖြေရှင်းပြီးသား ticket ပြန်ပွင့်တဲ့ နှုန်း၊ reopen rate က agent ကို တိုင်းတဲ့ အဓိက number ပါ။
+      [[mark:b4-s4]] ငွေ မရောက်ဘူး ဆိုတဲ့ ticket တွေမှာတော့ engineer မကြည့်ခင် merchant ID နဲ့ transaction ID ကို Ops Buddy က အရင် မေးထားပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          clear: true,
+        }
+      - {
+          id: b4-s1,
+          type: whiteboard.apply,
+          at: { mark: b4-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l29-b4-title, l29-b4-ring],
+        }
+      - id: b4-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b4-s1 }
+        upsertIds: [l29-b4-n1, l29-b4-n1a, l29-b4-n1b, l29-b4-a1, l29-b4-n2, l29-b4-n2t]
+        drawMs: 2000
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l29-b4-n3, l29-b4-n3a, l29-b4-n3b, l29-b4-a2, l29-b4-n4, l29-b4-n4a, l29-b4-n4b]
+        drawMs: 2200
+      - {
+          id: b4-s3,
+          type: whiteboard.apply,
+          at: { mark: b4-s3 },
+          upsertIds: [l29-b4-n5, l29-b4-n5t],
+          drawMs: 900,
+        }
+      - {
+          id: b4-s4,
+          type: whiteboard.apply,
+          at: { mark: b4-s4 },
+          upsertIds: [l29-b4-side, l29-b4-side-t, l29-b4-a0],
+          drawMs: 1100,
+        }
+
+  - id: beyond-toil
+    chapter: Toil ထက် ပိုကြီးတဲ့ အကျိုး
+    narration: >
+      [[mark:close-b4]] [[mark:show-p03]] ဒါဆို AI ရဲ့ တန်ဖိုးကို သက်သာသွားတဲ့ နာရီနဲ့ပဲ တိုင်းမလား? toil က အပတ်ရဲ့ ၃၀ ရာခိုင်နှုန်း ဆိုပါစို့၊ AI နဲ့ ၁၀ ဆ မြန်အောင် လုပ်နိုင်ရင် toil က ၃ ရာခိုင်နှုန်းပဲ ကျန်ပြီး engineering အချိန်က ၇၀ ကနေ ၉၇ ရာခိုင်နှုန်း ဖြစ်လာပါတယ်။ toil ကို လုံးဝ ဖျောက်နိုင်ရင်တောင် ၁၀၀ ရာခိုင်နှုန်းကို မကျော်နိုင်ပါဘူး၊ toil ဖယ်တာက အချိန်ကိုပဲ ပြန်ပေးနိုင်လို့ အကန့်အသတ် ရှိတာပါ။
+      [[mark:show-p03b]] ပိုကြီးတဲ့ အကျိုးက ဈေးကြီးလို့ အရင်က မလုပ်နိုင်ခဲ့တဲ့ အလုပ်အသစ်တွေပါ။ ဥပမာ design review နဲ့ launch review ကို AI က အရင် စစ်ပေးတာ၊ fault တစ်ခုကို တမင် inject လုပ်တဲ့ fault experiment မှာ fault တကယ် ဖြစ်ခဲ့လား၊ system ခံနိုင်ခဲ့လား စစ်တာ၊ run နေတဲ့ config ကို စည်းမျဉ်းတွေနဲ့ တိုက်စစ်တာတွေပါ။ ပြင်ရမယ်ဆိုရင်တော့ lesson ၂၈ ရဲ့ action card အောက်မှာပဲ ပြင်ပါတယ်။
+      [[mark:show-p03c]] AI tool တွေကိုလည်း အဖွဲ့တွေက အရင် စမ်းပြီး အလုပ်ဖြစ်တာကိုမှ platform အဖွဲ့က အားလုံးအတွက် ယူပါတယ်။ on-call ကလည်း သိပြီးသား fix တွေကနေ ပြဿနာ အမျိုးအစား အသစ်တွေဆီ ရွေ့သွားပါတယ်။
+      ops အလုပ်ကို လုပ်ရင်း နားလည်ပြီးမှ engineering နဲ့ မလိုတော့အောင် လုပ်တာက Site Reliability Engineering၊ SRE စကတည်းက ရှိခဲ့တဲ့ အယူအဆပါ။ AI ကြောင့် ကွာသွားတာက merchant chat တွေလို လူ ဖတ်မှ နားလည်ခဲ့တဲ့ အလုပ်တွေပါ အဲဒီလို ဖယ်လို့ ရလာတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l29-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l29-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l29-p03c }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p04]] agent မရှိသေးလည်း ဒီအပတ် စလို့ရတာ သုံးခုပါ။ complaint တွေကို app version နဲ့ ဒေသ အလိုက် ခွဲကြည့်ပါ။ နောက်ဆုံး incident ရဲ့ chat ကနေ AI ကို timeline မူကြမ်း ရေးခိုင်းပြီး ကိုယ်တိုင် ပြန်စစ်ပါ။ ပြီးတော့ ခဏခဏ လုပ်နေရတဲ့ fix တစ်ခုကို playbook အဖြစ် ချရေးပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l29-p04 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p04]] [[mark:open-notes]] AI ကူခဲ့တဲ့ နေရာတွေပါ။ [[mark:sel-grouping]] complaint အုပ်စုဖွဲ့တာက ပျမ်းမျှထဲမှာ ပျောက်နေတဲ့ အုပ်စုကို ရှာပေးပါတယ်။ [[mark:sel-confidence]] ယုံကြည်မှု မျဉ်းအောက်က AI အကြံကိုတော့ on-call ကို လုံးဝ မပြပါဘူး။ [[mark:sel-playbook]] playbook ကို လူတွေ အောင်မြင်ခဲ့တဲ့ fix တွေကနေ ရေးပါတယ်။
+      [[mark:sel-reopen]] reopen rate က agent ဖြေရှင်းပြီးသား ticket ပြန်ပွင့်တဲ့ နှုန်းပါ။ [[mark:sel-toil-limit]] toil ဖယ်တာရဲ့ အကန့်အသတ်က ဘယ်လောက် မြန်မြန် ဖယ်ဖယ် အချိန်ကိုပဲ ပြန်ရတာပါ။ [[mark:sel-fleet]] fleet scan ကတော့ အားနည်းချက် တစ်ခုကို codebase တိုင်းမှာ လိုက်ရှာတာပါ။
+      [[mark:sel-question]] supermarket ရဲ့ job လိုပဲ တွက်ကြည့်ပါ။ [[mark:ask-question]] ညတိုင်း run တဲ့ job က API ကို ၅၀၀ ခါ ခေါ်ပြီး တစ်ခါချင်းမှာ error ၀.၁ ရာခိုင်နှုန်း ဆိုရင် run တစ်ခါမှာ error အနည်းဆုံး တစ်ခု ကြုံဖို့ ဘယ်လောက် ဖြစ်နိုင်လဲ?
+      [[mark:pause-question]] ၃၉ ရာခိုင်နှုန်းလောက်ပါ၊ error ထက်ဝက် လျော့ပေမဲ့ ည ၅ ညမှာ ၂ ညလောက် ကြုံရဆဲပါ။ ဒီနေ့ ပြောခဲ့တာတွေက Padauk ရဲ့ ကိုယ်ပိုင် platform နဲ့ အဖွဲ့ကို အားကိုးထားပါတယ်။ အခု Padauk က မန္တလေးက delivery startup လေး တစ်ခုကို ဝယ်ပြီး ကိုမင်းက အဲဒီမှာ ပထမဆုံး SRE အဖြစ် သွားပါတယ်။ ကိုမင်း ဘယ်ကနေ စမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-grouping,
+          type: editor.select,
+          at: { mark: sel-grouping },
+          target: { file: notes.md, text: "complaint အုပ်စုဖွဲ့တာ", occurrence: 1 },
+        }
+      - {
+          id: sel-confidence,
+          type: editor.select,
+          at: { mark: sel-confidence },
+          target: { file: notes.md, text: "ယုံကြည်မှု မျဉ်း", occurrence: 1 },
+        }
+      - {
+          id: sel-playbook,
+          type: editor.select,
+          at: { mark: sel-playbook },
+          target: { file: notes.md, text: "playbook", occurrence: 1 },
+        }
+      - {
+          id: sel-reopen,
+          type: editor.select,
+          at: { mark: sel-reopen },
+          target: { file: notes.md, text: "reopen rate", occurrence: 1 },
+        }
+      - {
+          id: sel-toil-limit,
+          type: editor.select,
+          at: { mark: sel-toil-limit },
+          target: { file: notes.md, text: "toil ဖယ်တာရဲ့ အကန့်အသတ်", occurrence: 1 },
+        }
+      - {
+          id: sel-fleet,
+          type: editor.select,
+          at: { mark: sel-fleet },
+          target: { file: notes.md, text: "fleet scan", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the question and leave no
+      # pause, and one at pause-question would drag under the answer's first words
+      # (the scheduler holds only the dialog after its anchor's). So the
+      # question-line select hangs off ask-question, one more mark at an existing
+      # sentence end that makes the question its own dialog: it starts about as
+      # the question ends, its drag runs in silence, and the answer at
+      # pause-question waits for it. The question is 156 characters with no ၊
+      # to split at, so the quiet depends on the voice's speed: 10350 leaves
+      # about 2.8 / 0.5 / 0.35 s before the answer at 55 / 70 / 95 ms per char
+      # (at 70 and 95 the drag starts under the question's last words, as in
+      # lessons 7 and 10); an offset above ~10380 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 10350 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: call 500၊ တစ်ခုချင်း error 0.1%။ run တစ်ခါမှာ error အနည်းဆုံး တစ်ခု ကြုံဖို့ ဘယ်လောက်လဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
