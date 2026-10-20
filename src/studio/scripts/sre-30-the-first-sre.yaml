@@ -1,0 +1,991 @@
+# SRE from zero, lesson 30: The first SRE (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-30-the-first-sre.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-30-the-first-sre.md \
+#     src/studio/scripts/sre-30-the-first-sre.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Eight marks that are not in the voice script add no spoken text and sit at
+# an existing ။: hook-parcel, p02-questions, p03-journey, p03b-tools and
+# p04-offline split the narration of l30_p01, l30_p02, l30_p03, l30_p03b and
+# l30_p04 at their paragraph breaks (one 468-, 452-, 455-, 458- or
+# 477-character dialog would pass the 450-character limit; no action uses
+# them); b2-s1b and b2-s3b let board B2's day-10 and day-21 ticks land on the
+# sentences that name them, not seconds early with the step's first tick, so
+# each apply adds one labelled tick, as lesson 16 lands its lanes; and
+# ask-question makes the recap question its own dialog so the question-line
+# select can hang off it for the ⟪pause 3s⟫, as in lesson 7. sel-question is
+# the voice script's ⟪select မေးခွန်း⟫; it only splits the short lead-in from
+# the question.
+#
+# Pacing: at 70 ms/char no page or board step holds longer than ~36 s (the
+# longest is the cover, l30_p01, 35.6 s from its show, then l30_p04, 34.8 s),
+# so the voice script's own markers carry it and no pacing page or board step
+# was added.
+#
+# A board followed by a deck page closes the panel (open: false) 400 ms before
+# the page, and a deck page followed by a board closes the page 400 ms before,
+# as in Module 1. The lesson never goes straight from one board to the next.
+#
+# Boards (B1 P6 lanes, B2 P8 timeline). Colour jobs: #1e1e1e ink (paints
+# white) for arrows and the time axis; blue the thing named (the big SRE
+# team's lane, B2's day-3 and day-14 events); green healthy or done (the
+# team-of-one lane, the day-10, day-21 and day-30 milestones); red failure
+# (panicked roll forward into outages in a row, struck out); orange the caveat
+# or limit (Ko Min carrying three roles at once, the narration's "ဒါပေမဲ့", and
+# the list's one-in-one-out rule). A label on two or three lines is one text
+# asset per line, so each line meets the 0.55 em width rule on its own; every
+# label was also measured in Chrome with Excalidraw's Virgil font and fits its
+# box. B1's step 3 puts Ko Min's box under the team-of-one box, his three roles
+# beside it. B2 sets each day's label on three lines, not the voice script's
+# two ("ရက် 3:" / "deploy အဆင့်တွေ" / "ထွက်မယ့်သူနဲ့ ချရေး"): as two lines the
+# three labels above the axis need 339 + 308 + 277 px under the 0.55 rule,
+# more than the 850 px visible area, and as three lines 293 + 185 + 154 px. The
+# roll-forward note gets one strike per line, sized to the measured text, since
+# one strike through a two-line label would fall between its lines.
+#
+# Deck pages: deck "Next Editor · SRE 6B · Where you work, and what's next".
+# deckUrl is the deck's published /pub link; until this lesson's pages are
+# built from the page plan, the Director reports the l30 pages missing from
+# the published deck. Page plan:
+# ~/Documents/sre-course/work/pages/sre-30-the-first-sre.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-30-the-first-sre.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-30-the-first-sre.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-30-the-first-sre
+  title: "SRE from zero 30: ပထမဆုံး SRE"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # ပထမဆုံး SRE
+
+        - ဦးစားပေး စာရင်း — အစဉ်လိုက် စီ၊ လူတိုင်း မြင်၊ 1 ခု ဝင်ရင် 1 ခု ထွက်
+        - ပြန်ပြန်လောင်တဲ့ မီး — ထပ်ခါထပ်ခါ ပြန်ဖြစ်တဲ့ outage
+        - rollback — အရင် ကောင်းခဲ့တဲ့ version ကို ပြန်သွား၊ roll forward မလို
+        - playbook — ဘယ်သူမဆို လိုက်လုပ်နိုင်တဲ့ အဆင့်တွေ၊ offline copy ပါ
+        - on-call ခွဲယူ — SRE နဲ့ developer တွေ အလှည့်ကျ အတူ ယူ
+
+        မေးခွန်း: deploy လုပ်တတ်တဲ့ တစ်ယောက်တည်းက နောက်လ ထွက်မယ်။ စာရင်းရဲ့ ထိပ်ဆုံးမှာ ဘာ ထားမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ပထမဆုံး SRE</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 30</p>
+              <h1>ပထမဆုံး SRE</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l30-p01
+      contentType: google
+      name: "Cover: Ko Min becomes a first SRE"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p01
+    - id: l30-p01b
+      contentType: google
+      name: When companies hire a first SRE
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p01b
+    - id: l30-p02
+      contentType: google
+      name: "Ko Min's day-1 questions"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p02
+    - id: l30-p02b
+      contentType: google
+      name: "Parcel's answers"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p02b
+    - id: l30-p02c
+      contentType: google
+      name: "Ko Min's real job"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p02c
+    - id: l30-p02d
+      contentType: google
+      name: "Ko Min's priority list"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p02d
+    - id: l30-p03
+      contentType: google
+      name: "Parcel's three user checks"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p03
+    - id: l30-p03b
+      contentType: google
+      name: Plain, shared visibility
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p03b
+    - id: l30-p04
+      contentType: google
+      name: Playbooks Ko Min keeps
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p04
+    - id: l30-p04b
+      contentType: google
+      name: The night the wiki was down
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p04b
+    - id: l30-p05
+      contentType: google
+      name: Grow beyond yourself
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p05
+    - id: l30-p05b
+      contentType: google
+      name: The first SLOs
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p05b
+    - id: l30-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l30_p06
+  whiteboardAssets:
+    # ---- Board B1: a big SRE team and a team of one, two lanes (P6) -----------
+    - {
+        id: l30-b1-r1,
+        kind: rectangle,
+        x: 270,
+        y: 210,
+        width: 260,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l30-b1-r1-t,
+        kind: text,
+        x: 282,
+        y: 237,
+        width: 236,
+        height: 35,
+        text: "SRE အဖွဲ့ကြီး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 235,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l30-b1-r2,
+        kind: rectangle,
+        x: 610,
+        y: 210,
+        width: 330,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l30-b1-r2-t1,
+        kind: text,
+        x: 622,
+        y: 220,
+        width: 306,
+        height: 35,
+        text: "SLO၊ budget၊",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-r2-t2,
+        kind: text,
+        x: 622,
+        y: 255,
+        width: 306,
+        height: 35,
+        text: "automation အရင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-r3,
+        kind: rectangle,
+        x: 270,
+        y: 350,
+        width: 260,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l30-b1-r3-t,
+        kind: text,
+        x: 282,
+        y: 377,
+        width: 236,
+        height: 35,
+        text: "တစ်ယောက်တည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 375,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l30-b1-r4,
+        kind: rectangle,
+        x: 610,
+        y: 350,
+        width: 330,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l30-b1-r4-t1,
+        kind: text,
+        x: 622,
+        y: 360,
+        width: 306,
+        height: 35,
+        text: "ရပ်တည်၊ မြင်၊",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-r4-t2,
+        kind: text,
+        x: 622,
+        y: 395,
+        width: 306,
+        height: 35,
+        text: "ဘေးကင်းကင်း ထုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-r5,
+        kind: rectangle,
+        x: 270,
+        y: 500,
+        width: 170,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l30-b1-r5-t,
+        kind: text,
+        x: 282,
+        y: 517,
+        width: 146,
+        height: 35,
+        text: "ကိုမင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b1-roles,
+        kind: text,
+        x: 460,
+        y: 517,
+        width: 560,
+        height: 35,
+        text: "တုံ့ပြန်သူ · တည်ဆောက်သူ · သင်ပေးသူ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: Ko Min's first 30 days, a timeline (P8) --------------------
+    - {
+        id: l30-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 260,
+        y: 318,
+        width: 830,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l30-b2-t3,
+        kind: rectangle,
+        x: 280,
+        y: 321,
+        width: 6,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l30-b2-d3-l1,
+        kind: text,
+        x: 292,
+        y: 205,
+        width: 110,
+        height: 35,
+        text: "ရက် 3:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d3-l2,
+        kind: text,
+        x: 292,
+        y: 240,
+        width: 250,
+        height: 35,
+        text: "deploy အဆင့်တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d3-l3,
+        kind: text,
+        x: 292,
+        y: 275,
+        width: 310,
+        height: 35,
+        text: "ထွက်မယ့်သူနဲ့ ချရေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-t10,
+        kind: rectangle,
+        x: 450,
+        y: 321,
+        width: 6,
+        height: 36,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l30-b2-d10-l1,
+        kind: text,
+        x: 462,
+        y: 370,
+        width: 125,
+        height: 35,
+        text: "ရက် 10:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d10-l2,
+        kind: text,
+        x: 462,
+        y: 405,
+        width: 215,
+        height: 35,
+        text: "ခလုတ် တစ်ချက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d10-l3,
+        kind: text,
+        x: 462,
+        y: 440,
+        width: 280,
+        height: 35,
+        text: "deploy + rollback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-rf-l1,
+        kind: text,
+        x: 462,
+        y: 490,
+        width: 385,
+        height: 35,
+        text: "ပျာပျာသလဲ roll forward →",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-rf-l2,
+        kind: text,
+        x: 462,
+        y: 525,
+        width: 250,
+        height: 35,
+        text: "outage ဆက်တိုက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-rf-x1,
+        kind: freedraw,
+        stroke: strike,
+        x: 458,
+        y: 490,
+        width: 366,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l30-b2-rf-x2,
+        kind: freedraw,
+        stroke: strike,
+        x: 458,
+        y: 525,
+        width: 243,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l30-b2-t14,
+        kind: rectangle,
+        x: 625,
+        y: 321,
+        width: 6,
+        height: 36,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l30-b2-d14-l1,
+        kind: text,
+        x: 637,
+        y: 205,
+        width: 125,
+        height: 35,
+        text: "ရက် 14:",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d14-l2,
+        kind: text,
+        x: 637,
+        y: 240,
+        width: 200,
+        height: 35,
+        text: "သူ ထွက်သွား၊",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d14-l3,
+        kind: text,
+        x: 637,
+        y: 275,
+        width: 190,
+        height: 35,
+        text: "deploy ဆက်ရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-t21,
+        kind: rectangle,
+        x: 795,
+        y: 321,
+        width: 6,
+        height: 36,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l30-b2-d21-l1,
+        kind: text,
+        x: 807,
+        y: 370,
+        width: 125,
+        height: 35,
+        text: "ရက် 21:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d21-l2,
+        kind: text,
+        x: 807,
+        y: 405,
+        width: 250,
+        height: 35,
+        text: "dispatch worker",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d21-l3,
+        kind: text,
+        x: 807,
+        y: 440,
+        width: 140,
+        height: 35,
+        text: "ပြင်ပြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-t30,
+        kind: rectangle,
+        x: 910,
+        y: 321,
+        width: 6,
+        height: 36,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l30-b2-d30-l1,
+        kind: text,
+        x: 922,
+        y: 205,
+        width: 125,
+        height: 35,
+        text: "ရက် 30:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d30-l2,
+        kind: text,
+        x: 922,
+        y: 240,
+        width: 165,
+        height: 35,
+        text: "user check",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-d30-l3,
+        kind: text,
+        x: 922,
+        y: 275,
+        width: 160,
+        height: 35,
+        text: "3 ခု live",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l30-b2-note,
+        kind: text,
+        x: 292,
+        y: 590,
+        width: 700,
+        height: 35,
+        text: "စာရင်း: 1 ခု ဝင်ရင် 1 ခု ထွက် · ပြီးတာကို ပြ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2630
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Parcel ရဲ့ ပထမဆုံး SRE
+    narration: >
+      [[mark:show-p01]] Padauk မှာ အခုဆို platform အဖွဲ့၊ complaint chart တွေနဲ့ incident မှာ ကူညီတဲ့ Ops Buddy အထိ ရှိနေပါပြီ။ ဒီနေ့တော့ အဲဒါတွေ တစ်ခုမှ မရှိတဲ့ နေရာကို သွားပါမယ်။
+      [[mark:hook-parcel]] Padauk က မန္တလေးက ပါဆယ် ပို့တဲ့ startup လေး Padauk Parcel ကို ဝယ်လိုက်ပါတယ်။ engineer ၈ ယောက် ရှိပေမဲ့ outage က အပတ်တိုင်း ဖြစ်ပြီး deploy ကို တစ်ယောက်တည်းပဲ လုပ်တတ်ပါတယ်၊ သူကလည်း နှစ်ပတ်နေရင် ထွက်တော့မှာပါ။ ဒါကြောင့် developer ကိုမင်းကို Parcel ရဲ့ ပထမဆုံး Site Reliability Engineer၊ SRE အဖြစ် လွှတ်လိုက်ပါတယ်။
+      [[mark:show-p01b]] ကုမ္ပဏီတွေက ပထမဆုံး SRE ကို ခန့်တာ အများအားဖြင့် ပြဿနာက မခံနိုင်လောက်အောင် ဖြစ်လာမှပါ၊ outage တွေ ခဏခဏ ဖြစ်တာ၊ deploy က လူ တစ်ယောက်အပေါ် မှီနေတာ၊ မီးငြိမ်းရင်းနဲ့ feature အတွက် အချိန် မကျန်တော့တာ မျိုးပါ။ မသီရိက mentor အဖြစ်၊ သူ့ အဖွဲ့က အဖော်တွေအဖြစ် ကူညီပေမဲ့ Parcel ထဲမှာတော့ ကိုမင်း တစ်ယောက်တည်းပါ။ ဒါဆို သူ ဘယ်ကနေ စမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l30-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l30-p01b }
+
+  - id: day-one
+    chapter: ပထမနေ့ရဲ့ မေးခွန်းတွေ
+    narration: >
+      [[mark:show-p02]] ကိုမင်း ပထမဆုံး စိတ်ကူးမိတာက Padauk ရဲ့ SLO တွေနဲ့ dashboard တွေကို ကူးလာဖို့ပါ၊ SLO ဆိုတာ service ဘယ်လောက် စိတ်ချရရင် လုံလောက်ပြီလို့ သဘောတူထားတဲ့ ပစ်မှတ်ပါ။ မသီရိကတော့ အဖွဲ့ကြီးအတွက် လုပ်ထားတာတွေကို ဒီအတိုင်း မကူးဘဲ Parcel နဲ့ ကိုက်အောင် ပြင်သုံးဖို့ ပြောပါတယ်။
+      [[mark:p02-questions]] ဒါကြောင့် ကိုမင်းက tool မထည့်ခင် မေးခွန်း သုံးခု အရင် မေးပါတယ်။ customer ကို ဘာက အများဆုံး ဒုက္ခပေးလဲ၊ deploy ကို ဘယ်သူ လုပ်တတ်ပြီး ဘယ်နေ့အထိ ရှိမလဲ၊ တစ်နာရီ ရပ်ရင် ဘာ ဆုံးရှုံးလဲ ဆိုတာပါ။
+      [[mark:show-p02b]] အဖြေတွေက ရှင်းပါတယ်။ rider တွေဆီ job ခွဲပေးတဲ့ dispatch worker က အပတ်တိုင်း hang ဖြစ်ပြီး rider တွေ အလုပ်မရဘဲ စောင့်ရပါတယ်။ deploy ကို ထွက်ခါနီး engineer ပဲ လုပ်တတ်ပါတယ်။ နေ့လယ်မှာ တစ်နာရီ ရပ်ရင် ပါဆယ် ရာနဲ့ချီ နောက်ကျပါတယ်။
+      [[mark:show-p02c]] lesson ၁၅ မှာ မြင်ခဲ့သလို SRE တစ်ယောက်တည်းနဲ့ အဖွဲ့ မဖြစ်ပါဘူး။ ဒါကြောင့် ကိုမင်းရဲ့ တကယ့် အလုပ်က အကုန် ကိုယ်တိုင် ပြင်တာ မဟုတ်ဘဲ reliability အလုပ်ကို engineer ၈ ယောက်ကြား ဖြန့်ပေးတာပါ။
+      ပထမ အပတ်တွေမှာ worker ကို restart လုပ်တာလို လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ toil များနေတာ ပုံမှန်ပါ။ ဒါပေမဲ့ ops အလုပ်ကို အချိန်ရဲ့ တစ်ဝက်အောက်မှာ ထားရမယ် ဆိုတဲ့ ကန့်သတ်ချက်ကိုတော့ system ငြိမ်လာတာနဲ့ ပြန်လိုက်နာရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l30-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l30-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l30-p02c }
+
+  - id: team-of-one
+    chapter: တစ်ယောက်တည်း အဖွဲ့
+    narration: >
+      [[mark:close-p02c]] [[mark:b1-s1]] SRE လို့ ကြားလိုက်ရင် အဖွဲ့ကြီး တစ်ခုကို မြင်ယောင်ကြတာ များပါတယ်။ အဲဒီလို အဖွဲ့မှာ on-call ကို လူ အများကြီး အလှည့်ကျ ယူနိုင်ပြီး အလုပ်ကို SLO၊ error budget နဲ့ automation ကနေ စနိုင်ပါတယ်။
+      [[mark:b1-s2]] တစ်ယောက်တည်း အဖွဲ့ကတော့ ဦးစားပေးပုံ ကွာပါတယ်။ အရင်ဆုံး system ကို ရပ်တည်နေအောင် ထိန်းရပါတယ်၊ ပြီးရင် user တွေ ဘာကြုံနေလဲ မြင်ရအောင်၊ နောက်တော့ ပြောင်းလဲမှုတွေကို ဘေးကင်းကင်း ထုတ်နိုင်အောင် လုပ်ရပါတယ်။ SLO တွေက ဒီ အခြေခံတွေ ရပြီးမှ လာမှာပါ။ ဒီလို ဦးစားပေးတာ ပြတ်သားရင် SRE လုပ်ဖို့ အဖွဲ့ကြီး မလိုပါဘူး။
+      [[mark:b1-s3]] ဒါပေမဲ့ ကိုမင်းက တာဝန် သုံးမျိုးကို တစ်ပြိုင်နက် ယူရပါတယ်။ outage မှာ ငြိမ်ငြိမ် ဦးဆောင်တဲ့ တုံ့ပြန်သူ၊ နောက်တစ်ခါ မဖြစ်အောင် tool ဆောက်တဲ့ တည်ဆောက်သူ၊ လုပ်ပုံ အသစ်ကို အဖွဲ့က လက်ခံအောင် နားချတဲ့ သင်ပေးသူပါ။ ကိုမင်း မရှိတဲ့ ညတွေမှာ system ကို ကာကွယ်မှာက သူ သင်ပေးထားတဲ့ developer တွေမို့ နားချတာနဲ့ သင်ပေးတာက အလုပ်ရဲ့ တစ်ဝက်လောက် ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l30-b1-r1, l30-b1-r1-t, l30-b1-a1, l30-b1-r2, l30-b1-r2-t1, l30-b1-r2-t2]
+        drawMs: 2000
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l30-b1-r3, l30-b1-r3-t, l30-b1-a2, l30-b1-r4, l30-b1-r4-t1, l30-b1-r4-t2]
+        drawMs: 2000
+      # Ko Min's own box under the team-of-one lane, and his three roles beside it.
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l30-b1-r5, l30-b1-r5-t, l30-b1-roles]
+        drawMs: 1600
+
+  - id: diary
+    chapter: ကိုမင်းရဲ့ ပထမ ရက် 30
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02d]] ပုံမှန်ဆိုရင် ပထမဆုံး SRE က ထပ်ခါထပ်ခါ ပြန်ဖြစ်နေတဲ့ outage၊ ပြန်ပြန်လောင်တဲ့ မီးကို အရင် ငြိမ်းပါတယ်၊ ငြိမ်းသွားရင် လူတိုင်း သက်သာပြီး SRE ကို ယုံလာလို့ပါ။ Parcel မှာ အဲဒီ မီးက dispatch worker ပါ။
+      ဒါပေမဲ့ worker က restart လုပ်ရင် ပြန်ကောင်းသေးတယ်၊ deploy တတ်သူ ထွက်သွားရင်တော့ worker ရဲ့ fix ကိုတောင် ထုတ်လို့ မရတော့ပါဘူး။ ဒါကြောင့် ကိုမင်းက deploy ကို ပထမ၊ worker ကို ဒုတိယ၊ user check တွေကို တတိယ ထားပါတယ်။
+      [[mark:close-p02d]] [[mark:b2-s1]] ကိုမင်းရဲ့ ပထမ ရက် ၃၀ ကို ကြည့်ရအောင်။ ရက် ၃ မှာ ထွက်ခါနီး engineer နဲ့ ထိုင်ပြီး deploy အဆင့်တိုင်းကို ချရေးပါတယ်။ [[mark:b2-s1b]] ရက် ၁၀ မှာ ခလုတ် တစ်ချက်နဲ့ deploy ရော rollback ရော လုပ်လို့ရလာပါပြီ၊ rollback ဆိုတာ ပြဿနာ ရှိတဲ့ ပြောင်းလဲမှုကို ဖယ်ပြီး အရင် ကောင်းခဲ့တဲ့ version ကို ပြန်ပြောင်းတာပါ။
+      [[mark:b2-s2]] ကောင်းတဲ့ deploy က အဆင့် တစ်ဆင့်တည်းနဲ့ ပြီးရမယ်၊ service လည်း မရပ်ရဘူး၊ ဒါပေမဲ့ အရေးအကြီးဆုံးက rollback လုပ်လို့ရတာပါ။ rollback မရှိရင် deploy ပျက်တိုင်း ပြင်ဆင်ချက် အသစ်ကို ပျာပျာသလဲ ထပ်တင်ရပါတယ်၊ ဒါကို roll forward လို့ ခေါ်ပါတယ်။ စိတ်လောပြီး ရေးတဲ့ fix က ပြဿနာ အသစ်ကို ဖြစ်စေတတ်လို့ outage တွေ ဆက်တိုက် ဖြစ်လာတတ်ပါတယ်။
+      [[mark:b2-s3]] ရက် ၁၄ မှာ အဲဒီ engineer ထွက်သွားပေမဲ့ deploy တွေ ဆက်လုပ်နိုင်ပါတယ်။ [[mark:b2-s3b]] dispatch worker ကတော့ လိပ်စာ ရှာပေးတဲ့ service ကို timeout မထားဘဲ ခေါ်ထားလို့ အဲဒီ service နှေးတိုင်း အဆုံးမရှိ စောင့်နေတာပါ။ timeout ထည့်ပြီး အလိုအလျောက် restart လုပ်အောင် ပြင်လိုက်တော့ ရက် ၂၁ မှာ အပတ်တိုင်း ဖြစ်နေတဲ့ outage ရပ်သွားပါတယ်။
+      [[mark:b2-s4]] ရက် ၃၀ မှာတော့ user check သုံးခု live ဖြစ်လာပါတယ်။ ဒီ အလုပ်တွေကို founder တွေနဲ့ မျှထားတဲ့ ဦးစားပေး စာရင်း တစ်ခုမှာ အစဉ်လိုက် စီထားပြီး အသစ် တစ်ခု ထည့်ရင် တစ်ခုကို ထုတ်ရပါတယ်။ ပြီးသွားတာတွေကိုလည်း ပြထားလို့ founder တွေက တိုးတက်မှုကို အပတ်တိုင်း မြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02d, type: slide.show, at: { mark: show-p02d }, slideId: l30-p02d }
+      - { id: close-p02d, type: slide.close, at: { mark: close-p02d, offsetMs: -400 } }
+      # The time axis is furniture (no drawMs); then the day-3 tick and label.
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l30-b2-axis],
+        }
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l30-b2-t3, l30-b2-d3-l1, l30-b2-d3-l2, l30-b2-d3-l3]
+        drawMs: 1400
+      # The day-10 tick lands on the sentence that names it, not ~6 s early.
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds: [l30-b2-t10, l30-b2-d10-l1, l30-b2-d10-l2, l30-b2-d10-l3]
+        drawMs: 1400
+      # The roll-forward note under the day-10 label, then one strike per line.
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l30-b2-rf-l1, l30-b2-rf-l2, l30-b2-rf-x1, l30-b2-rf-x2]
+        drawMs: 2000
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l30-b2-t14, l30-b2-d14-l1, l30-b2-d14-l2, l30-b2-d14-l3]
+        drawMs: 1400
+      # The day-21 tick lands as the narration turns to the dispatch worker.
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l30-b2-t21, l30-b2-d21-l1, l30-b2-d21-l2, l30-b2-d21-l3]
+        drawMs: 1400
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l30-b2-t30, l30-b2-d30-l1, l30-b2-d30-l2, l30-b2-d30-l3, l30-b2-note]
+        drawMs: 2200
+
+  - id: user-checks
+    chapter: User check သုံးခု
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] အရင်က Parcel မှာ outage ဖြစ်ရင် ဆိုင်ရှင်တွေ Viber နဲ့ ပြောမှ သိရပါတယ်။ ကိုမင်းရဲ့ check သုံးခုကတော့ server ကို မစစ်ဘဲ user လုပ်ချင်တာ ပြီးလား စစ်ပါတယ်၊ rider က job လက်ခံနိုင်လား၊ label print ထွက်လား၊ customer က tracking မြင်ရလား ဆိုတာပါ။
+      [[mark:p03-journey]] ဒါက lesson ၇ က critical user journey ကို တိုင်းတာပါ၊ journey ဆိုတာ user တစ်ယောက် ရည်ရွယ်ချက် တစ်ခု ပြီးဖို့ ဖြတ်သွားရတဲ့ အဆင့်တွေပါ။ dashboard အများကြီးထက် ဒီ check သုံးခုက မိနစ်တိုင်း အဖြေ ပေးနေတာက ပိုအရေးကြီးပါတယ်။
+      [[mark:show-p03b]] alert ကိုလည်း CPU မြင့်တာလို အကြောင်းရင်းပေါ် မထားဘဲ user ခံစားရတဲ့ လက္ခဏာပေါ်မှာပဲ ထားပြီး တက်တိုင်း လုပ်စရာ ရှိအောင်၊ မလိုဘဲ မတက်အောင် ထိန်းပါတယ်။ log တွေကိုလည်း လူရော စက်ရော ဖတ်လို့ရတဲ့ JSON ပုံစံ တစ်မျိုးတည်းနဲ့ နေရာ တစ်ခုကို ပို့ပါတယ်။
+      [[mark:p03b-tools]] metric၊ log၊ trace အတွက်လည်း tool တစ်စုတည်းပဲ သုံးပါတယ်၊ tool တွေကို အချင်းချင်း ဆက်ပေးနေရတာကိုယ်တိုင် toil ဖြစ်လို့ပါ။ alert အသစ်ကိုလည်း ညနေ မဟုတ်ဘဲ မနက်မှာ ဖွင့်ပါတယ်၊ မှားတက်ရင် ရုံးမှာ ရှိနေတုန်း ပြင်နိုင်အောင်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l30-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l30-p03b }
+
+  - id: playbooks
+    chapter: Playbook
+    narration: >
+      [[mark:show-p04]] playbook ဆိုတာ alert တက်ရင် ဘာလုပ်ရမလဲ အဆင့်လိုက် ရေးထားတဲ့ လမ်းညွှန်ပါ။ ကိုမင်းက incident ဖြစ်နေတုန်းမှာပဲ လုပ်တဲ့ အဆင့်တွေကို developer တိုင်း လိုက်လုပ်နိုင်အောင် ချရေးပါတယ်၊ အဲဒါတွေက နောက်ပိုင်း automation ရဲ့ မူကြမ်း ဖြစ်လာပါတယ်။
+      [[mark:p04-offline]] playbook တွေကို wiki မှာပဲ မထားဘဲ Git ထဲနဲ့ laptop ထဲမှာပါ offline copy ထားပါတယ်၊ လိုအပ်ဆုံး ညမှာ wiki ပါ ပျက်နေနိုင်လို့ပါ။ rollback ကိုလည်း ဘယ်သူမဆို run နိုင်အောင် ရေးပါတယ်၊ ကိုမင်း တစ်ယောက်တည်း run တတ်ရင် သူ အိပ်နေတဲ့ ညမှာ အသုံးမဝင်လို့ပါ။
+      [[mark:show-p04b]] ဒါ တကယ် အလုပ်ဖြစ်လား ဆိုတာ ဒုတိယ လမှာ သိလိုက်ရပါတယ်။ တစ်ည ကိုမင်း ညကားပေါ်မှာ ဖုန်းလိုင်း မမိနေတုန်း deploy အသစ်ကြောင့် label တွေ print မထွက်တော့ဘဲ wiki ကလည်း ဖွင့်လို့ မရပါဘူး။ ဒါပေမဲ့ on-call ကျနေတဲ့ developer က Git ထဲက playbook ကို ဖွင့်ပြီး rollback လုပ်လိုက်တော့ ၁၀ မိနစ်အတွင်း ပြန်ကောင်းသွားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l30-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l30-p04b }
+
+  - id: grow
+    chapter: အဖွဲ့လိုက် ပိုင်အောင်
+    narration: >
+      [[mark:show-p05]] အဲဒီည developer တစ်ယောက်တည်း ဖြေရှင်းနိုင်ခဲ့တာက ကိုမင်းက developer တွေနဲ့ on-call ကို အလှည့်ကျ ခွဲယူထားလို့ပါ။ developer တွေက ပြဿနာ တစ်ခုဟာ မနေ့က ကိုယ့် code ကြောင့်လား ချက်ချင်း သိတတ်တာလည်း အားသာချက်ပါ။
+      change တိုင်းကိုလည်း တခြား လူ တစ်ယောက်က review လုပ်ရပါမယ်။ အစမှာ developer တွေ ညည်းကြပေမဲ့ reviewer တစ်ယောက်က မန္တလေးထဲ ပို့တဲ့ ပါဆယ်ကို ရန်ကုန် ပို့ခ ကောက်မိမယ့် bug ကို ဖမ်းမိတော့ review ကို သူတို့ကိုယ်တိုင် အားပေးလာကြပါတယ်။
+      [[mark:show-p05b]] rider job နဲ့ label print journey နှစ်ခုမှာ ပထမဆုံး SLO တွေ ထားလိုက်တော့ bug တစ်ခုကို ချက်ချင်း ပြင်ရမလား data နဲ့ ဆုံးဖြတ်နိုင်လာပါတယ်။ test တွေနဲ့ AI reviewer တွေ ကူနိုင်ပေမဲ့ SLO တွေကို alert နဲ့ ချိတ်ပြီး ပုံမှန် မီလာမှပဲ လူ review ကို လျှော့မယ်လို့ ကိုမင်း ဆုံးဖြတ်ပါတယ်။ သူ ဖြစ်ချင်တာက မရဘူးလို့ တားတဲ့သူ မဟုတ်ဘဲ ဘေးကင်းတဲ့ လမ်းကို အလွယ်ဆုံး လမ်း ဖြစ်အောင် လုပ်ပေးတဲ့သူပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l30-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l30-p05b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] ကုမ္ပဏီရဲ့ ပထမဆုံး SRE ဖြစ်ဖြစ်၊ developer ဖြစ်ဖြစ် ဒီအပတ် ဒီ သုံးခုနဲ့ စလို့ရပါတယ်။ ကိုယ့် အဖွဲ့ရဲ့ ပြန်ပြန်လောင်တဲ့ မီးကို နာမည်တပ်ပြီး ချရေးပါ။ ဘယ်သူမဆို လိုက်လုပ်နိုင်မယ့် rollback အဆင့်တွေကို ရေးပြီး တခြားသူ တစ်ယောက်ကို စမ်းခိုင်းပါ။ ပြီးတော့ ဦးစားပေး စာရင်းကို အစဉ်လိုက် စီပြီး အဖွဲ့နဲ့ မျှပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l30-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] ကိုမင်း Parcel မှာ သင်ခဲ့တာတွေပါ။ [[mark:sel-priority-list]] ဦးစားပေး စာရင်းက လူတိုင်း မြင်ရတဲ့ အစဉ်လိုက် စာရင်းပါ၊ အသစ် တစ်ခု ဝင်ရင် တစ်ခု ထွက်ရပါတယ်။ [[mark:sel-repeat-fire]] ပြန်ပြန်လောင်တဲ့ မီးကတော့ ထပ်ခါထပ်ခါ ပြန်ဖြစ်နေတဲ့ outage ပါ။
+      [[mark:sel-rollback]] rollback က အရင် ကောင်းခဲ့တဲ့ version ကို ပြန်သွားတာမို့ ပျာပျာသလဲ roll forward လုပ်စရာ မလိုတော့ပါဘူး။ [[mark:sel-playbook]] playbook က ဘယ်သူမဆို လိုက်လုပ်နိုင်တဲ့ အဆင့်တွေပါ၊ offline copy လည်း ထားရပါမယ်။ [[mark:sel-shared-oncall]] on-call ခွဲယူတာကတော့ SRE နဲ့ developer တွေ အလှည့်ကျ အတူ ယူတာပါ။
+      [[mark:sel-question]] ကိုယ်က ကိုမင်းနေရာမှာ ဆိုပါစို့။ [[mark:ask-question]] deploy လုပ်တတ်တဲ့သူ တစ်ယောက်တည်းက နောက်လ ထွက်တော့မယ် ဆိုရင် ကိုယ့် စာရင်းရဲ့ ထိပ်ဆုံးမှာ ဘာကို ထားမလဲ?
+      [[mark:pause-question]] deploy နဲ့ rollback ကို ဘယ်သူမဆို run နိုင်အောင် အရင်ဆုံး လုပ်ရပါမယ်။ startup လေးကနေ ပြင်လို့မရတဲ့ system တွေနဲ့ စည်းမျဉ်း တင်းကျပ်တဲ့ ကုမ္ပဏီကြီး အဟောင်းတွေဆီ ကူးကြည့်ရအောင်။ ညသန်းခေါင်မှာ wallet တွေ ပိတ်မိသွားပြီး ပြင်တာက ၅ မိနစ်ပဲ ကြာပေမဲ့ မိနစ် ၇၀ ပိတ်မိနေခဲ့ပါတယ်။ ကျန်တဲ့ မိနစ် ၆၅ က ဘယ်ရောက်သွားလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-priority-list,
+          type: editor.select,
+          at: { mark: sel-priority-list },
+          target: { file: notes.md, text: "ဦးစားပေး စာရင်း", occurrence: 1 },
+        }
+      - {
+          id: sel-repeat-fire,
+          type: editor.select,
+          at: { mark: sel-repeat-fire },
+          target: { file: notes.md, text: "ပြန်ပြန်လောင်တဲ့ မီး", occurrence: 1 },
+        }
+      - {
+          id: sel-rollback,
+          type: editor.select,
+          at: { mark: sel-rollback },
+          target: { file: notes.md, text: "rollback", occurrence: 1 },
+        }
+      - {
+          id: sel-playbook,
+          type: editor.select,
+          at: { mark: sel-playbook },
+          target: { file: notes.md, text: "playbook", occurrence: 1 },
+        }
+      - {
+          id: sel-shared-oncall,
+          type: editor.select,
+          at: { mark: sel-shared-oncall },
+          target: { file: notes.md, text: "on-call ခွဲယူ", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the lead-in and the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more
+      # mark at an existing sentence end that makes the question its own dialog:
+      # it starts about as the question ends, its drag runs in silence, and the
+      # answer at pause-question waits for it. The question is 102 characters,
+      # so 7540 (400 + 102 x 70) would start the drag as the question ends at
+      # 70 ms per char, but anything above ~7380 trips compile-check's 2.5 s
+      # inserted-silence warning at 55; 7350 leaves about 2.8 / 1.3 / 0.35 s of
+      # quiet before the answer at 55 / 70 / 95 (at 95, and by 0.16 s at 70, the
+      # drag starts under the question's last words, as in lessons 7 and 10).
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 7350 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: deploy လုပ်တတ်တဲ့ တစ်ယောက်တည်းက နောက်လ ထွက်မယ်။ စာရင်းရဲ့ ထိပ်ဆုံးမှာ ဘာ ထားမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
