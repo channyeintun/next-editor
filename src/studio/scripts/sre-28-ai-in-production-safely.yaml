@@ -1,0 +1,1529 @@
+# SRE from zero, lesson 28: AI in production, safely (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-28-ai-in-production-safely.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-28-ai-in-production-safely.md \
+#     src/studio/scripts/sre-28-ai-in-production-safely.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: Ops Buddy asks for an admin token (cover), why AI and why its
+# mistakes repeat (1000 ÷ 200 = 5), and production has no sandbox. Board B1
+# (P3, the Padauk loop as furniture): where a mistake costs little. Board B2
+# (P8 timeline): Ko Zaw's dry-run month, the Friday session, the first solo
+# action, a model swap as a production change. Board B3: the action card
+# (acts then tells, asks first, never) and what it takes to move a row up.
+# Page: before Ops Buddy touches production. Board B4 (P5 bars): the service's
+# error budget and Ops Buddy's own safety budget, then the STOP brake. Board
+# B5 (P1 flow + branch): act, warm up, watch, check, keep or auto-undo, as one
+# audited unit; Ops Buddy's own SLO. Pages: what people do now, Jevons
+# paradox and trust; this week; recap on notes.md.
+#
+# Two marks add no spoken text and sit at an existing ။: b5-s1b splits board
+# B5's first step so it adds at most three labelled boxes (act first, then
+# warm-up, watch and healthy? as the next sentence names them), and
+# ask-question makes the recap question its own dialog so the question-line
+# select can hang off it for the ⟪pause 3s⟫, as in Module 1. The voice script
+# already carries its pacing pages (p01b, p01c, p01d, p03b); every dialog stays
+# under 450 characters, and no page or board step holds longer than about
+# 33 s at 70 ms/char (the cover, l28_p01: 443 characters after the opening
+# handle), so no pacing page was added.
+#
+# ⟪close board⟫ straight into the next board (scenes 3, 4 and 7) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, as
+# in lesson 8, so the editor does not flash between two boards; the next board
+# then draws with open: true, clear: true as usual. A board followed by a deck
+# page closes the panel (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for axes, arrows, the card
+# frame and the audited-unit frame; blue the thing named (loop stations, the
+# dry-run and Friday ticks, the card's actions, the service's budget, Ops
+# Buddy's SLO); green healthy or done (cheap places to help, the first solo
+# action, acts-then-tells, keep); red failure or budget spent (never, spent
+# budgets, STOP, auto-undo); orange the caveat or limit (suggest only at
+# first, asks first, a model swap, moving a row up); violet the result or flow
+# (the loop's ring, the review result, the safety budget as a second series,
+# the act-watch flow). B1 reuses lesson 2's compact loop so the notes fit beside its
+# stations (its တည်ဆောက် box 18 px wider, since the label runs 156 px in
+# Chrome); its furniture lands without drawMs, so the board stays at nine
+# labels. A label on two lines is two text assets, one per line: the overflow
+# rule counts a whole text's length. Mostly-Latin labels get extra width,
+# since Virgil's Latin and digits run wider than the 0.55 em rule, and short
+# Burmese words such as ဆက်ထား run past it too (0.7 em in Chrome's Noto Sans
+# Myanmar): every label was also measured in Chrome with Excalidraw's Virgil
+# font and fits inside its box. B5's audited-unit frame holds both outcomes,
+# keep and auto-undo.
+#
+# Deck pages: deck "Next Editor · SRE 6A · AI", published; the /pub URL below
+# is final. The deck holds only the kit pages until this lesson's pages are
+# built from the page plan, so until then the Director reports page "l28_p01"
+# missing from the published deck. Page plan:
+# ~/Documents/sre-course/work/pages/sre-28-ai-in-production-safely.json (the
+# cover's title is shortened there to "AI ကို production ထဲ ဘေးကင်းကင်း", 32
+# code points, because the full title's 42 pass the K1 title's safe 34).
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-28-ai-in-production-safely.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-28-ai-in-production-safely.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-28-ai-in-production-safely
+  title: "SRE from zero 28: AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း
+
+        - action card — action တစ်ခုချင်း: လုပ်ခွင့် · undo နည်း · ရပ်ရမယ့် အခြေအနေ
+        - budget နှစ်ခု — service budget ကုန်: အကြံပဲ · safety budget ကုန်: ရပ်
+        - stop button — on-call ဘယ်သူမဆို ချက်ချင်း နှိပ်လို့ရတဲ့ ဘရိတ်
+        - undo လုပ်လို့ရတဲ့ action — သေးပြီး မကောင်းရင် အလိုအလျောက် ပြန် undo
+        - dry run — တကယ် မပြောင်းဘဲ လုပ်မယ့်ဟာကို မှတ်တမ်းတင်
+
+        မေးခွန်း: undo နည်း ဘယ်သူမှ မသိတဲ့ action။ Ops Buddy ရဲ့ action card မှာ ဘာ ရေးမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 28</p>
+              <h1>AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l28-p01
+      contentType: google
+      name: "Cover: Ops Buddy asks for production access"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p01
+    - id: l28-p01b
+      contentType: google
+      name: Why AI is needed now
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p01b
+    - id: l28-p01c
+      contentType: google
+      name: An agent wrong 1 in 200
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p01c
+    - id: l28-p01d
+      contentType: google
+      name: Production has no sandbox
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p01d
+    - id: l28-p02
+      contentType: google
+      name: Before Ops Buddy touches production
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p02
+    - id: l28-p03
+      contentType: google
+      name: What people do now
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p03
+    - id: l28-p03b
+      contentType: google
+      name: SRE work does not shrink
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p03b
+    - id: l28-p04
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l28_p04
+  whiteboardAssets:
+    # ---- Board B1: the Padauk loop (P3) as furniture, lesson 2's compact layout, then where Ops Buddy may help
+    - {
+        id: l28-b1-ring,
+        kind: ellipse,
+        x: 322,
+        y: 250,
+        width: 330,
+        height: 360,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b1-arrow-top,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 575,
+        y: 280,
+        width: 65,
+        height: 35,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b1-arrow-side,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 627,
+        y: 440,
+        width: 35,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b1-agree-box,
+        kind: rectangle,
+        x: 407,
+        y: 222,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l28-b1-agree-label,
+        kind: text,
+        x: 421,
+        y: 232,
+        width: 110,
+        height: 35,
+        text: "သဘောတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-notice-box,
+        kind: rectangle,
+        x: 564,
+        y: 346,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l28-b1-notice-label,
+        kind: text,
+        x: 578,
+        y: 356,
+        width: 132,
+        height: 35,
+        text: "သတိထားမိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-respond-box,
+        kind: rectangle,
+        x: 504,
+        y: 548,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l28-b1-respond-label,
+        kind: text,
+        x: 518,
+        y: 558,
+        width: 132,
+        height: 35,
+        text: "တုံ့ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-learn-box,
+        kind: rectangle,
+        x: 310,
+        y: 548,
+        width: 160,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l28-b1-learn-label,
+        kind: text,
+        x: 324,
+        y: 558,
+        width: 100,
+        height: 35,
+        text: "သင်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-build-box,
+        kind: rectangle,
+        x: 250,
+        y: 346,
+        width: 178,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l28-b1-build-label,
+        kind: text,
+        x: 264,
+        y: 356,
+        width: 160,
+        height: 35,
+        text: "တည်ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-doll-head,
+        kind: ellipse,
+        x: 465,
+        y: 395,
+        width: 44,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l28-b1-doll-body,
+        kind: ellipse,
+        x: 450,
+        y: 432,
+        width: 74,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l28-b1-doll-label,
+        kind: text,
+        x: 450,
+        y: 505,
+        width: 90,
+        height: 35,
+        text: "လူတွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-note-notice,
+        kind: text,
+        x: 740,
+        y: 356,
+        width: 340,
+        height: 35,
+        text: "complaint အုပ်စုဖွဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-note-learn,
+        kind: text,
+        x: 258,
+        y: 612,
+        width: 280,
+        height: 35,
+        text: "timeline မူကြမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b1-note-respond,
+        kind: text,
+        x: 680,
+        y: 558,
+        width: 280,
+        height: 35,
+        text: "အစမှာ အကြံပဲ ပေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: Ko Zaw's dry-run month, a P8 timeline (labels alternate above and below)
+    - {
+        id: l28-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 400,
+        width: 800,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b2-t1,
+        kind: rectangle,
+        x: 290,
+        y: 413,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b2-l1,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 370,
+        height: 35,
+        text: "4 ပတ် dry run: အကြံ 40",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-t2,
+        kind: rectangle,
+        x: 400,
+        y: 413,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b2-l2a,
+        kind: text,
+        x: 400,
+        y: 455,
+        width: 260,
+        height: 35,
+        text: "review: မှန် 31",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-l2b,
+        kind: text,
+        x: 400,
+        y: 492,
+        width: 380,
+        height: 35,
+        text: "အန္တရာယ်မရှိ 6 · မှား 3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-t3,
+        kind: rectangle,
+        x: 700,
+        y: 413,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b2-l3,
+        kind: text,
+        x: 700,
+        y: 370,
+        width: 300,
+        height: 35,
+        text: "သောကြာနေ့ session",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-t4,
+        kind: rectangle,
+        x: 795,
+        y: 413,
+        width: 6,
+        height: 34,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l28-b2-l4a,
+        kind: text,
+        x: 795,
+        y: 455,
+        width: 302,
+        height: 35,
+        text: "ပထမဆုံး ကိုယ်တိုင်:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-l4b,
+        kind: text,
+        x: 795,
+        y: 492,
+        width: 240,
+        height: 35,
+        text: "promo SMS ရပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b2-t5,
+        kind: rectangle,
+        x: 1060,
+        y: 330,
+        width: 6,
+        height: 117,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l28-b2-l5,
+        kind: text,
+        x: 685,
+        y: 318,
+        width: 410,
+        height: 35,
+        text: "model လဲရင် dry run ပြန်စ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: Ops Buddy's action card (actions left, one mode box per group right)
+    - {
+        id: l28-b3-card,
+        kind: rectangle,
+        x: 262,
+        y: 172,
+        width: 826,
+        height: 340,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b3-a1,
+        kind: text,
+        x: 280,
+        y: 192,
+        width: 340,
+        height: 35,
+        text: "promo SMS batch ရပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-a2,
+        kind: text,
+        x: 280,
+        y: 240,
+        width: 430,
+        height: 35,
+        text: "Top-up instance 1 ခု တိုး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-m1,
+        kind: rectangle,
+        x: 750,
+        y: 186,
+        width: 310,
+        height: 94,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l28-b3-m1-label,
+        kind: text,
+        x: 770,
+        y: 215,
+        width: 260,
+        height: 35,
+        text: "လုပ်ပြီးမှ ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-a3,
+        kind: text,
+        x: 280,
+        y: 305,
+        width: 440,
+        height: 35,
+        text: "operator traffic 10% လွှဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-a4a,
+        kind: text,
+        x: 280,
+        y: 350,
+        width: 430,
+        height: 35,
+        text: "တစ်နေတဲ့ dispatch worker",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-a4b,
+        kind: text,
+        x: 280,
+        y: 387,
+        width: 150,
+        height: 35,
+        text: restart,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-m2,
+        kind: rectangle,
+        x: 750,
+        y: 298,
+        width: 310,
+        height: 130,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l28-b3-m2-label,
+        kind: text,
+        x: 770,
+        y: 346,
+        width: 160,
+        height: 35,
+        text: "အရင် မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-a5,
+        kind: text,
+        x: 280,
+        y: 456,
+        width: 250,
+        height: 35,
+        text: "ledger ကို ထိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-m3,
+        kind: rectangle,
+        x: 750,
+        y: 446,
+        width: 310,
+        height: 56,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b3-m3-label,
+        kind: text,
+        x: 770,
+        y: 456,
+        width: 260,
+        height: 35,
+        text: "ဘယ်တော့မှ မလုပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b3-promote,
+        kind: text,
+        x: 280,
+        y: 540,
+        width: 790,
+        height: 35,
+        text: "အဆင့်တင်ရင်: မှတ်တမ်း · rollback · test · budget",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B4: two budgets and a brake (P5 bars side by side)
+    - {
+        id: l28-b4-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 385,
+        width: 600,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b4-bar1,
+        kind: rectangle,
+        x: 330,
+        y: 280,
+        width: 120,
+        height: 130,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l28-b4-bar1-l1,
+        kind: text,
+        x: 300,
+        y: 195,
+        width: 200,
+        height: 35,
+        text: "service ရဲ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-bar1-l2,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 215,
+        height: 35,
+        text: "error budget",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-bar2,
+        kind: rectangle,
+        x: 640,
+        y: 280,
+        width: 120,
+        height: 130,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l28-b4-bar2-l1,
+        kind: text,
+        x: 610,
+        y: 195,
+        width: 230,
+        height: 35,
+        text: "Ops Buddy ရဲ့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-bar2-l2,
+        kind: text,
+        x: 610,
+        y: 232,
+        width: 240,
+        height: 35,
+        text: "safety budget",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-down1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 425,
+        width: 40,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b4-spent1a,
+        kind: text,
+        x: 290,
+        y: 495,
+        width: 300,
+        height: 35,
+        text: "service budget ကုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-spent1b,
+        kind: text,
+        x: 290,
+        y: 532,
+        width: 200,
+        height: 35,
+        text: "→ အကြံပဲ ပေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-down2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 680,
+        y: 425,
+        width: 40,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b4-spent2a,
+        kind: text,
+        x: 600,
+        y: 495,
+        width: 290,
+        height: 35,
+        text: "safety budget ကုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-spent2b,
+        kind: text,
+        x: 600,
+        y: 532,
+        width: 100,
+        height: 35,
+        text: "→ ရပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b4-stop,
+        kind: ellipse,
+        x: 920,
+        y: 270,
+        width: 160,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b4-stop-label,
+        kind: text,
+        x: 950,
+        y: 302,
+        width: 90,
+        height: 45,
+        text: "STOP",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    # ---- Board B5: one undoable unit (P1 flow with a branch, then the audited unit around it)
+    - {
+        id: l28-b5-b1,
+        kind: rectangle,
+        x: 260,
+        y: 240,
+        width: 76,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b5-b1-l,
+        kind: text,
+        x: 267,
+        y: 254,
+        width: 62,
+        height: 35,
+        text: "လုပ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 339,
+        y: 252,
+        width: 26,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b5-b2,
+        kind: rectangle,
+        x: 368,
+        y: 240,
+        width: 124,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b5-b2-l,
+        kind: text,
+        x: 375,
+        y: 254,
+        width: 114,
+        height: 35,
+        text: warm-up,
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 495,
+        y: 252,
+        width: 26,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b5-b3,
+        kind: rectangle,
+        x: 524,
+        y: 240,
+        width: 184,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b5-b3-l,
+        kind: text,
+        x: 531,
+        y: 254,
+        width: 172,
+        height: 35,
+        text: "စောင့်ကြည့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 711,
+        y: 252,
+        width: 26,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b5-b4,
+        kind: rectangle,
+        x: 740,
+        y: 240,
+        width: 172,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l28-b5-b4-l,
+        kind: text,
+        x: 747,
+        y: 254,
+        width: 158,
+        height: 35,
+        text: "ကောင်းလား?",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 915,
+        y: 252,
+        width: 26,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b5-keep,
+        kind: rectangle,
+        x: 944,
+        y: 240,
+        width: 140,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l28-b5-keep-l,
+        kind: text,
+        x: 952,
+        y: 254,
+        width: 124,
+        height: 35,
+        text: "ဆက်ထား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 811,
+        y: 308,
+        width: 30,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b5-undo,
+        kind: rectangle,
+        x: 679,
+        y: 362,
+        width: 294,
+        height: 56,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l28-b5-undo-l,
+        kind: text,
+        x: 689,
+        y: 372,
+        width: 274,
+        height: 35,
+        text: "အလိုအလျောက် undo",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-unit,
+        kind: rectangle,
+        x: 252,
+        y: 205,
+        width: 842,
+        height: 225,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l28-b5-unit-l,
+        kind: text,
+        x: 262,
+        y: 162,
+        width: 440,
+        height: 35,
+        text: "audit လုပ်ထားတဲ့ unit တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-example,
+        kind: text,
+        x: 262,
+        y: 445,
+        width: 720,
+        height: 35,
+        text: "ဥပမာ: promo SMS ရပ်၊ SMS code မြန်မှ ပြန်ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l28-b5-slo,
+        kind: rectangle,
+        x: 262,
+        y: 520,
+        width: 736,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l28-b5-slo-l,
+        kind: text,
+        x: 277,
+        y: 534,
+        width: 700,
+        height: 35,
+        text: "Ops Buddy ရဲ့ SLO: မြန် · အသုံးဝင် · ဘေးကင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2628
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Production access တောင်းတဲ့ Ops Buddy
+    narration: >
+      [[mark:show-p01]] Ask Padauk မှာ အခု AI SLI တွေ ရှိပြီး နေ့တိုင်း အဖြေ နမူနာ စစ်နေသလို fraud model ကလည်း data မကောင်းရင် training ကို ရပ်ပါတယ်။ ဒီနေ့တော့ production ကို run ဖို့ ကူညီမယ့် AI ဘက်ကို လှည့်ကြည့်ပါမယ်။
+      platform အဖွဲ့က alert နဲ့ log တွေကို ဖတ်ပြီး on-call ကို ကူညီမယ့် internal AI agent၊ Ops Buddy ကို ဆောက်ပါတယ်။ ဒါပေမဲ့ သူ့ ပထမ version က admin token နဲ့ production တစ်ခုလုံး ဝင်ခွင့် တောင်းထားပါတယ်။ Ops Buddy ကို ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?
+      [[mark:show-p01b]] AI ကို ဘာလို့ လိုလာတာလဲ? service တွေ များလာတော့ alert တိုင်းကို လူက လိုက်ကြည့်လို့ မမီသလို script တွေကလည်း ကြိုသိထားတဲ့ ပြဿနာကိုပဲ ဖြေရှင်းနိုင်ပါတယ်။ AI ကတော့ ပုံစံမကျတဲ့ chat နဲ့ log တွေကို ဖတ်ပြီး ဘယ်သူမှ rule မရေးထားတဲ့ အခြေအနေမှာလည်း အကြံပေးနိုင်ပါတယ်၊ ဒါပေမဲ့ ရိုးရိုး rule နဲ့ ရပြီးသား နေရာမှာတော့ AI မလိုပါဘူး။
+      [[mark:show-p01c]] ပြဿနာက လူနဲ့ agent မှားပုံ မတူတာပါ။ လူ တစ်ယောက် မှားရင် တစ်ခါပဲ မှားပြီး ဘေးက တစ်ယောက်ယောက် သတိထားမိတတ်ပါတယ်။ ၂၀၀ ခါမှာ တစ်ခါပဲ မှားတဲ့ agent က တစ်ရက်ကို action ၁၀၀၀ လုပ်ရင်တော့ အမှား ငါးခုကို ပုံစံတူ မြန်မြန် ထပ်လုပ်ပါလိမ့်မယ်။ input တူရင်တောင် အဖြေ ကွဲနိုင်တဲ့ AI ကို ဘယ်တော့မှ မမှားအောင် လုပ်လို့ မရလို့ ဘယ်လောက် မှားလဲ တိုင်းပြီး ထိန်းရပါတယ်။
+      [[mark:show-p01d]] ပြီးတော့ production မှာ အမှားကို ဘေးကင်းကင်း ပိတ်ထားပေးမယ့် sandbox မရှိပါဘူး။ Ask Padauk မှားရင် သူဖွင့်တဲ့ ticket ကို လူက ပြန်စစ်ပေးနိုင်ပေမဲ့ Ops Buddy က နေ့လယ်စာချိန်မှာ rider dispatch worker တွေကို မှားပြီး restart လုပ်ရင် Eats order တွေ ချက်ချင်း ရပ်သွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l28-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l28-p01b }
+      - { id: show-p01c, type: slide.show, at: { mark: show-p01c }, slideId: l28-p01c }
+      - { id: show-p01d, type: slide.show, at: { mark: show-p01d }, slideId: l28-p01d }
+
+  - id: where-it-helps
+    chapter: မှားလည်း နည်းနည်းပဲ ထိတဲ့ နေရာ
+    narration: >
+      [[mark:close-p01d]] [[mark:b1-s1]] ဘဏ်မှာ system administrator လုပ်ခဲ့ဖူးတဲ့ ကိုဇော်က admin token ကို ငြင်းလိုက်ပါတယ်။ AI က တစ်ခါခါ မှားမှာ သေချာနေတော့ Padauk ရဲ့ reliability loop ပေါ်မှာ မှားရင် နည်းနည်းပဲ ထိမယ့် နေရာကို ရှာပါတယ်။
+      [[mark:b1-s2]] သတိထားမိတဲ့ အဆင့်မှာ Ops Buddy က Facebook နဲ့ Viber ကနေ မစုဆီ ဝင်လာတဲ့ complaint တွေကို အုပ်စုဖွဲ့ပေးပြီး သင်ယူတဲ့ အဆင့်မှာ postmortem အတွက် timeline မူကြမ်း ရေးပေးပါတယ်။ မှားရင် ကုန်ကျစရိတ် နည်းပြီး လူက ရလဒ်ကို အမြဲ ပြန်ဖတ်တဲ့ နေရာတွေပါ။
+      [[mark:b1-s3]] incident ကို တုံ့ပြန်တဲ့ အဆင့်မှာတော့ အစပိုင်း အကြံပဲ ပေးပြီး ဆုံးဖြတ်တာက on-call ပါ။ tool ထက် အရင် လိုတာက အပြစ်ပေးခံရမှာ မကြောက်ဘဲ ပြောရဲတဲ့ psychological safety ပါ၊ ဒါကြောင့် Ops Buddy ရဲ့ မှတ်တမ်းကို လူတွေကို အမှတ်ပေးဖို့ ဘယ်တော့မှ မသုံးပါဘူး။ ဘေးကင်းကြောင်း မသေချာခင် အားလုံးကို အတင်း သုံးခိုင်းရင်လည်း ယုံကြည်မှု ပျက်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      - { id: close-p01d, type: slide.close, at: { mark: close-p01d, offsetMs: -400 } }
+      # The loop is furniture: it lands at once, with no drawMs.
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l28-b1-ring,
+            l28-b1-arrow-top,
+            l28-b1-arrow-side,
+            l28-b1-agree-box,
+            l28-b1-agree-label,
+            l28-b1-notice-box,
+            l28-b1-notice-label,
+            l28-b1-respond-box,
+            l28-b1-respond-label,
+            l28-b1-learn-box,
+            l28-b1-learn-label,
+            l28-b1-build-box,
+            l28-b1-build-label,
+            l28-b1-doll-head,
+            l28-b1-doll-body,
+            l28-b1-doll-label,
+          ]
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l28-b1-note-notice, l28-b1-note-learn]
+        drawMs: 1400
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l28-b1-note-respond]
+        drawMs: 900
+
+  - id: dry-run-month
+    chapter: ကိုဇော်ရဲ့ dry run တစ်လ
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ကိုဇော်က Ops Buddy ကို တစ်လလုံး dry run နဲ့ပဲ run ထားပါတယ်၊ တကယ် ဘာမှ မပြောင်းဘဲ လုပ်မယ့်ဟာကိုပဲ မှတ်တမ်းတင်တာပါ။ အကြံ ၄၀ ကို on-call တွေ တကယ် လုပ်ခဲ့တာနဲ့ တိုက်ကြည့်တော့ ၃၁ ခုက မှန်ပြီး ၆ ခုက မမှန်ပေမဲ့ အန္တရာယ် မရှိပါဘူး၊ ကျန်တဲ့ ၃ ခုကတော့ မှားပါတယ်။
+      မှားတဲ့ တစ်ခုက Operator B နှေးနေတုန်း Top-up traffic အားလုံးကို Operator A ဆီ လွှဲခိုင်းတာပါ၊ တကယ်သာ လုပ်ခဲ့ရင် Operator A ပါ ဝန်ပိုပြီး ကျသွားမှာပါ။
+      [[mark:b2-s2]] ဒီ ရလဒ်တွေကို ကိုဇော်က သောကြာနေ့ session တစ်ခုမှာ senior တွေနဲ့ အလုပ်ဝင်ခါစ engineer တွေကို အတူ ပြပါတယ်။ Ops Buddy က ဘာမှာ တော်ပြီး ဘယ်မှာ မှားတတ်လဲ မြင်တော့ senior တွေက အလွန်အကျွံ မကြောက်တော့သလို လူသစ်တွေလည်း မျက်စိမှိတ် မယုံတော့ပါဘူး။ အဲဒီနောက်မှ SMS code တွေ နှေးလာရင် အဲဒီ provider ကို မျှသုံးနေတဲ့ promo SMS batch ကို ခဏ ရပ်တာကို ပထမဆုံး ကိုယ်တိုင် လုပ်ခွင့်အဖြစ် ပေးပါတယ်။
+      [[mark:b2-s3]] ဒါပေမဲ့ ဒီ ရလဒ်က ဒီ model အတွက်ပဲ မှန်လို့ model ကို ပိုကောင်းတဲ့ တစ်ခုနဲ့ လဲတာတောင် production change တစ်ခုလို dry run နဲ့ ပြန်စစ်ပါတယ်။ AI tool တွေက မြန်မြန် ဟောင်းသွားပေမဲ့ ဒီလို အရင် စစ်တဲ့ စည်းမျဉ်းတွေကတော့ ကျန်နေပါတယ်။ Ops Buddy မလုပ်နိုင်သေးတဲ့ အလုပ်တွေကိုလည်း လက်မလျှော့ဘဲ လအနည်းငယ်နေရင် ပြန်စမ်းပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l28-b2-axis, l28-b2-t1, l28-b2-l1, l28-b2-t2, l28-b2-l2a, l28-b2-l2b]
+        drawMs: 2400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l28-b2-t3, l28-b2-l3, l28-b2-t4, l28-b2-l4a, l28-b2-l4b]
+        drawMs: 2000
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l28-b2-t5, l28-b2-l5]
+        drawMs: 1000
+
+  - id: action-card
+    chapter: Action card
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] Ops Buddy ရဲ့ လုပ်ခွင့်တွေကို lesson ၁၇ က failover bot လိုပဲ action card ပေါ်မှာ ရေးပါတယ်။ action card ဆိုတာ action တစ်ခုချင်းအတွက် အကြံပဲ ပေးမလား၊ အရင် မေးမလား၊ လုပ်ပြီးမှ ပြောမလား၊ ဘယ်တော့မှ မလုပ်ရဘူးလား ဆိုတာနဲ့ undo လုပ်နည်း၊ ရပ်ရမယ့် အခြေအနေကို ရေးထားတဲ့ ကတ်ပါ။ promo SMS ရပ်တာနဲ့ Top-up instance တစ်ခု တိုးတာက မိနစ်ပိုင်းအတွင်း undo လုပ်လို့ရလို့ လုပ်ပြီးမှ ပြောပါတယ်။
+      [[mark:b3-s2]] operator traffic ၁၀ ရာခိုင်နှုန်း လွှဲတာနဲ့ တစ်နေတဲ့ dispatch worker ကို restart လုပ်တာကတော့ မှားရင် ပိုထိလို့ on-call ကို အရင် မေးရပါတယ်။ ဒါပေမဲ့ အဆင့်တိုင်းကို approve လုပ်ခိုင်းရင် ကြာတော့ လူက မဖတ်တော့ဘဲ approve ကိုပဲ နှိပ်ပေးတတ်ပါတယ်။ ဒါကြောင့် review တိုင်းကို နောက်တစ်ဆင့် တက်ဖို့ feedback အဖြစ် သုံးပါတယ်။
+      [[mark:b3-s3]] Wallet ရဲ့ ledger ကိုတော့ ဘယ်တော့မှ မထိရပါဘူး။ ဒီလို လုပ်ခွင့်ကို agent တစ်ခုလုံးအတွက် မဟုတ်ဘဲ action တစ်ခုချင်း ဘယ်လောက် အရေးကြီးလဲ၊ မှားရင် ဘယ်လောက် ဆုံးရှုံးမလဲ ချိန်ပြီး ဆုံးဖြတ်တာပါ။
+      [[mark:b3-s4]] ဥပမာ operator traffic လွှဲတာကို လုပ်ပြီးမှ ပြော အဆင့် တင်ချင်ရင် approve ခံခဲ့တဲ့ မှတ်တမ်း ကောင်းကောင်း၊ အရင် အခြေအနေကို ပြန်ယူတဲ့ rollback ကို စမ်းပြီးသား ဖြစ်တာ၊ test တွေနဲ့ budget တွေ ရှိမှ တင်ပါတယ်။ လုပ်ခွင့် နည်းနည်းပဲ ပေးထားတာက ပိုကောင်းတဲ့ action တွေလည်း အများကြီး ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B2 400 ms early, keep the panel open.
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l28-b3-card, l28-b3-a1, l28-b3-a2, l28-b3-m1, l28-b3-m1-label]
+        drawMs: 2200
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l28-b3-a3, l28-b3-a4a, l28-b3-a4b, l28-b3-m2, l28-b3-m2-label]
+        drawMs: 2200
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l28-b3-a5, l28-b3-m3, l28-b3-m3-label]
+        drawMs: 1200
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l28-b3-promote]
+        drawMs: 1400
+
+  - id: before-production
+    chapter: Production မထိခင်
+    narration: >
+      [[mark:close-b3]] [[mark:show-p02]] ကိုဇော် admin token ကို ငြင်းတာ lesson ၂၂ ရဲ့ cleanup script ကြောင့်ပါ။ AI နဲ့ ရေးထားတဲ့ အဲဒီ script ကို admin credential နဲ့ run လိုက်တော့ merchant ၁၀၀၀၀ ကို ဖျက်မိခဲ့ပါတယ်။ agent ဆိုရင် ဒီလို အမှားကို ပိုမြန်မြန် လုပ်နိုင်ပါတယ်။
+      ဒါကြောင့် Ops Buddy ကို read-only နဲ့ စပြီး least privilege နဲ့ပဲ ထားပါတယ်။ action တိုင်း မလုပ်ခင် dry run နဲ့ ဘာပြောင်းမလဲ ပြရပြီး တကယ် အလုပ်လုပ်တဲ့ stop button လည်း ရှိရပါမယ်။ စမ်းရုံနဲ့တောင် admin token မပေးပါနဲ့။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "Gemini Cloud Assist investigations (Google Cloud)",
+          url: "https://docs.cloud.google.com/cloud-assist/investigations",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l28-p02 }
+
+  - id: two-budgets
+    chapter: Budget နှစ်ခုနဲ့ stop button
+    narration: >
+      [[mark:close-p02]] [[mark:b4-s1]] Ops Buddy ကို သီးသန့် budget နှစ်ခုနဲ့ ထိန်းပါတယ်။ ပထမက SLO က ခွင့်ပြုထားတဲ့ ပျက်ခွင့်၊ service ရဲ့ error budget ပါ၊ Top-up ဆိုရင် တစ်လကို fail ဖြစ်တဲ့ top-up ၁၀၀၀၀ ပါ။ ဒုတိယက Ops Buddy ကိုယ်ပိုင် safety budget ပါ၊ on-call က သူ့ action ကို ပြန် undo လုပ်ပေးရတိုင်း၊ သူ့ အကြံကို ဘေးမကင်းလို့ ငြင်းရတိုင်း လျော့သွားပါတယ်။
+      [[mark:b4-s2]] Top-up ရဲ့ error budget ကုန်ရင် Ops Buddy က Top-up မှာ ကိုယ်တိုင် ဘာမှ မလုပ်တော့ဘဲ အကြံပဲ ပေးပါတယ်။ safety budget ကုန်ရင်တော့ service ကောင်းနေရင်တောင် အဖွဲ့က review မလုပ်မချင်း ကိုယ်တိုင် လုပ်ခွင့် အားလုံး ရပ်ပါတယ်။ ဒါ့အပြင် action မလုပ်ခင် ဖွင့်ထားတဲ့ incident ရှိလား စစ်ပါတယ်၊ သင်္ကြန် change freeze အတွင်းမှာလည်း ကိုယ့်ဘာသာ ရပ်နေပါတယ်။
+      [[mark:b4-s3]] နောက်ဆုံး ဘရိတ်က stop button ပါ။ on-call ကျနေတဲ့ ဘယ်သူမဆို ခွင့်မတောင်းဘဲ နှိပ်လိုက်တာနဲ့ Ops Buddy ရဲ့ access အားလုံး ချက်ချင်း ပြတ်ပါတယ်။ ရပ်လို့ရမှန်း သိထားမှ on-call တွေက Ops Buddy နဲ့ စိတ်ချလက်ချ တွဲလုပ်ရဲကြတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: close-p02, type: slide.close, at: { mark: close-p02, offsetMs: -400 } }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l28-b4-axis,
+            l28-b4-bar1,
+            l28-b4-bar1-l1,
+            l28-b4-bar1-l2,
+            l28-b4-bar2,
+            l28-b4-bar2-l1,
+            l28-b4-bar2-l2,
+          ]
+        drawMs: 2200
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds:
+          [
+            l28-b4-down1,
+            l28-b4-spent1a,
+            l28-b4-spent1b,
+            l28-b4-down2,
+            l28-b4-spent2a,
+            l28-b4-spent2b,
+          ]
+        drawMs: 2000
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l28-b4-stop, l28-b4-stop-label]
+        drawMs: 900
+
+  - id: undoable-unit
+    chapter: Undo လုပ်လို့ရမှ လုပ်
+    narration: >
+      [[mark:close-b4]] [[mark:b5-s1]] အခြေခံ စည်းကမ်းက undo လုပ်နည်း မသိရင် action မလုပ်ရဘူး ဆိုတာပါ။ [[mark:b5-s1b]] action ကို လုပ်ပြီးရင် ငြိမ်လာအောင် warm-up အချိန် စောင့်ပြီးမှ ကောင်းလား ကြည့်ပါတယ်။ ဥပမာ promo SMS batch ကို ရပ်ရင် provider ဆီ ရောက်ပြီးသား message တွေ ကုန်အောင် မိနစ်အနည်းငယ် စောင့်ပြီးမှ SMS code latency ကို ကြည့်ပါတယ်။
+      [[mark:b5-s2]] SMS code ပြန်မြန်လာရင် batch ကို ဆက်ရပ်ထားပြီး ငြိမ်မှ promo ကို ဖြည်းဖြည်း ပြန်ပို့ပါတယ်။ မမြန်လာရင်တော့ promo က အကြောင်းရင်း မဟုတ်လို့ batch ကို အလိုအလျောက် ပြန်ဖွင့်ပြီး on-call ဆီ page ပို့ပါတယ်။
+      [[mark:b5-s3]] ဒီ အဆင့်တွေကို တစ်ဝက်တစ်ပျက် မကျန်အောင် unit တစ်ခုတည်းအဖြစ် run ပြီး audit log ထဲမှာလည်း တစ်ခုတည်းအဖြစ် မှတ်ပါတယ်။ lesson ၂၆ မှာ release တစ်ခုလုံးကို rollback မလုပ်နိုင်ခဲ့ပေမဲ့ agent ရဲ့ action တစ်ခုချင်းကတော့ သေးပြီး undo လုပ်လို့ ရရပါမယ်။ data ဖျက်တာ၊ schema ပြောင်းတာလို ပြန်ယူလို့ မရတဲ့ အလုပ်တွေကတော့ လူတွေ လက်ထဲမှာပဲ ကျန်ပါတယ်။
+      [[mark:b5-s4]] Ops Buddy ကိုယ်တိုင်လည်း SLO ရှိတဲ့ service တစ်ခုပါ။ ဘယ်လောက် မြန်လဲ၊ အကြံ လက်ခံတဲ့ နှုန်းနဲ့ ဘယ်လောက် အသုံးဝင်လဲ၊ ဘယ်လောက် ဘေးကင်းလဲ တိုင်းပြီး အရင် incident တွေမှာ လူတွေ လုပ်ခဲ့တာနဲ့ အမြဲ တိုက်စစ်ပါတယ်၊ incident ပြီးတိုင်း စစ်စရာ case တစ်ခု တိုးပါတယ်။ သူ ဖတ်တဲ့ service map နဲ့ deploy မှတ်တမ်း နောက်ကျနေရင် သူ့ အကြံလည်း မှားမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "SRE book second edition (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B4 400 ms early, keep the panel open.
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b5-s1
+        type: whiteboard.apply
+        at: { mark: b5-s1 }
+        open: true
+        clear: true
+        upsertIds: [l28-b5-b1, l28-b5-b1-l]
+        drawMs: 800
+      # Step 1 is split in two (at most three labelled boxes per step): warm-up,
+      # watch and healthy? land as the next sentence names them.
+      - id: b5-s1b
+        type: whiteboard.apply
+        at: { mark: b5-s1b }
+        upsertIds:
+          [
+            l28-b5-a1,
+            l28-b5-b2,
+            l28-b5-b2-l,
+            l28-b5-a2,
+            l28-b5-b3,
+            l28-b5-b3-l,
+            l28-b5-a3,
+            l28-b5-b4,
+            l28-b5-b4-l,
+          ]
+        drawMs: 2400
+      - id: b5-s2
+        type: whiteboard.apply
+        at: { mark: b5-s2 }
+        upsertIds: [l28-b5-a4, l28-b5-keep, l28-b5-keep-l, l28-b5-down, l28-b5-undo, l28-b5-undo-l]
+        drawMs: 1800
+      - id: b5-s3
+        type: whiteboard.apply
+        at: { mark: b5-s3 }
+        upsertIds: [l28-b5-unit, l28-b5-unit-l, l28-b5-example]
+        drawMs: 2000
+      - id: b5-s4
+        type: whiteboard.apply
+        at: { mark: b5-s4 }
+        upsertIds: [l28-b5-slo, l28-b5-slo-l]
+        drawMs: 1600
+
+  - id: people-now
+    chapter: လူတွေရဲ့ နေရာသစ်
+    narration: >
+      [[mark:close-b5]] [[mark:show-p03]] ဒါဆို AI က Site Reliability Engineering၊ SRE လုပ်တဲ့ လူတွေကို အစားထိုးမလား? မထိုးပါဘူး၊ သူတို့ နေရာ ပြောင်းသွားတာပါ။ အဆင့်တိုင်းကို ကိုယ်တိုင် လုပ်နေမယ့်အစား အပေါ်ကနေ ပန်းတိုင်နဲ့ ကန့်သတ်ချက် သတ်မှတ်တယ်၊ အထောက်အထား စစ်ပြီး approve လုပ်တယ်၊ လိုရင် ရပ်တယ်၊ ခက်တဲ့ ပြဿနာ အသစ်တွေကို ယူပါတယ်။ ဒါကို human over the loop လို့ ခေါ်ပါတယ်။
+      [[mark:show-p03b]] reliability အလုပ် ဈေးသက်သာလာရင် SRE အလုပ် နည်းမယ် ထင်ရပေမဲ့ တကယ်တော့ ပိုများလာတတ်ပါတယ်၊ ဒါက Jevons paradox ပါ။ Padauk လည်း ချွေတာတဲ့ အချိန်နဲ့ SLO မရှိသေးတဲ့ service တွေကို SLO ထည့်ပါတယ်။ senior တွေ သတိကြီးတာ အကြောင်း ရှိလို့ အတင်း မခိုင်းဘဲ dry run မှတ်တမ်းလို အထောက်အထားနဲ့ ယုံလာအောင် လုပ်ပါတယ်။
+      tool တွေ ပြောင်းသွားလည်း အမြဲ စစ်တာ၊ AI ကိုယ်တိုင် reliable ဖြစ်တာ၊ လုပ်ခွင့်ကို တစ်ဆင့်ချင်း ပေးတာနဲ့ AI က လူကို ကူညီတာကတော့ ကျန်နေမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      - {
+          id: close-b5,
+          type: whiteboard.apply,
+          at: { mark: close-b5, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l28-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l28-p03b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p04]] AI helper တစ်ခုကို ကိုယ့် production နဲ့ ချိတ်ဖို့ စဉ်းစားနေရင် ဒီအပတ် ဒီ သုံးခုကနေ စပါ။ AI helper ကို read-only access ပဲ ပေးပါ။ သူ ဘယ်တော့မှ မလုပ်ရမယ့် action တွေကို စာရင်း ချရေးပါ။ ပြီးတော့ ဘာ လုပ်ခွင့်မှ မပေးခင် stop button ကို အရင် ဆောက်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "Gemini Cloud Assist investigations (Google Cloud)",
+          url: "https://docs.cloud.google.com/cloud-assist/investigations",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l28-p04 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p04]] [[mark:open-notes]] Ops Buddy ကို ဘေးကင်းအောင် ထားတဲ့ နည်းတွေပါ။ [[mark:sel-action-card]] action card က action တစ်ခုချင်းရဲ့ လုပ်ခွင့်၊ undo လုပ်နည်းနဲ့ ရပ်ရမယ့် အခြေအနေကို ရေးထားတဲ့ ကတ်ပါ။ [[mark:sel-budgets]] budget နှစ်ခုမှာ service ရဲ့ error budget ကုန်ရင် Ops Buddy က အကြံပဲ ပေးပြီး safety budget ကုန်ရင် ရပ်ပါတယ်။
+      [[mark:sel-stop]] stop button က on-call ဘယ်သူမဆို ချက်ချင်း နှိပ်လို့ရတဲ့ ဘရိတ်ပါ။ [[mark:sel-undo]] undo လုပ်လို့ရတဲ့ action က မကောင်းရင် အလိုအလျောက် ပြန် undo လုပ်တဲ့ action အသေးလေးပါ။ [[mark:sel-dry-run]] dry run ကတော့ တကယ် မပြောင်းဘဲ လုပ်မယ့်ဟာကိုပဲ မှတ်တမ်းတင်တာပါ။
+      [[mark:sel-question]] card ကို ကိုယ်တိုင် ဖြည့်ကြည့်ပါ။ [[mark:ask-question]] Ops Buddy လုပ်ချင်တဲ့ action တစ်ခုကို ဘယ်လို undo လုပ်ရမလဲ ဘယ်သူမှ မသိဘူး ဆိုရင် သူ့ action card မှာ ဘာ ရေးမလဲ?
+      [[mark:pause-question]] ဘယ်တော့မှ မလုပ်ရဘူးလို့ ရေးပါတယ်၊ အဲဒီ action က လူတွေ လက်ထဲမှာပဲ ကျန်ပါတယ်။ ဘရိတ်တွေ ရှိလာပြီ ဆိုတော့ AI က တကယ် ဘယ်မှာ ကူညီလဲ? သောကြာနေ့ promo တစ်ခုမှာ dashboard က ၉၉.၇ ရာခိုင်နှုန်း အောင်မြင်တယ်လို့ ပြနေပေမဲ့ Facebook မှာ ဒေါသထွက်နေတဲ့ comment တွေ ပြည့်နေပါတယ်။ alert ဘာလို့ မတက်ခဲ့တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-action-card,
+          type: editor.select,
+          at: { mark: sel-action-card },
+          target: { file: notes.md, text: "action card", occurrence: 1 },
+        }
+      - {
+          id: sel-budgets,
+          type: editor.select,
+          at: { mark: sel-budgets },
+          target: { file: notes.md, text: "budget နှစ်ခု", occurrence: 1 },
+        }
+      - {
+          id: sel-stop,
+          type: editor.select,
+          at: { mark: sel-stop },
+          target: { file: notes.md, text: "stop button", occurrence: 1 },
+        }
+      - {
+          id: sel-undo,
+          type: editor.select,
+          at: { mark: sel-undo },
+          target: { file: notes.md, text: "undo လုပ်လို့ရတဲ့ action", occurrence: 1 },
+        }
+      - {
+          id: sel-dry-run,
+          type: editor.select,
+          at: { mark: sel-dry-run },
+          target: { file: notes.md, text: "dry run", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the question and leave
+      # no pause, and one at pause-question would drag under the answer's first
+      # words (the scheduler holds only the dialog after its anchor's). So the
+      # question-line select hangs off ask-question, one more mark at an existing
+      # sentence end that makes the question its own dialog: it starts about as
+      # the question ends, its drag runs in silence, and the answer at
+      # pause-question waits for it. The question is 111 characters (no ၊ to
+      # split at), so the quiet depends on the voice's speed: 7750 leaves about
+      # 2.7 / 1.05 / 0.35 s before the answer at 55 / 70 / 95 ms per char (at 70
+      # and 95 the drag starts under the question's last words, as in lessons 7,
+      # 8 and 15); above ~7875 trips compile-check's 2.5 s inserted-silence
+      # warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 7750 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: undo နည်း ဘယ်သူမှ မသိတဲ့ action။ Ops Buddy ရဲ့ action card မှာ ဘာ ရေးမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
