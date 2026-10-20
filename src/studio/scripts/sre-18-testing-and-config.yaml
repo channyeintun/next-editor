@@ -1,0 +1,1242 @@
+# SRE from zero, lesson 18: Testing and config (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-18-testing-and-config.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-18-testing-and-config.md \
+#     src/studio/scripts/sre-18-testing-and-config.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Six marks that are not in the voice script add no spoken text and sit at an
+# existing ။: p01b-tests splits l18_p01b's narration at its paragraph break
+# (one 471-character dialog would pass the 450-character limit; no action uses
+# it); b2-s1b lets board B2's four-box top lane land two boxes and two, as
+# lesson 16 lands its four-box lane, so no step adds more than three labelled
+# boxes; and b1-s4b, b3-s3b, b3-s4b and b3-s5b land B1's "real world: final
+# check" label, B3's "CI မှာ ရှာ" and "Git ကနေ auto-sync" boxes and B3's
+# "Padauk: ညတိုင်း diff" label on the sentences that name them, not 9-14 s
+# early with the rest of their step, as lesson 16's b1-s4b does. ask-question
+# is the voice script's ⟪select မေးခွန်း⟫, which already starts the question's
+# own dialog, so the question-line select hangs off it for the ⟪pause 3s⟫, as
+# in lesson 16.
+#
+# Pacing: at 70 ms/char no page or board step holds longer than ~35 s (the
+# longest is l18_p01b, 34.4 s from its show, then l18_p04, 31.6 s), so the
+# voice script's own markers carry it and no pacing page or board step was
+# added.
+#
+# ⟪close board⟫ straight into the next board (scene 7) wipes the open board
+# 400 ms early (whiteboard.apply clear) instead of closing the panel, so the
+# editor does not flash between two boards, as in lesson 16; the next board
+# then draws with open: true, clear: true as usual. B3's own "cleared" step 3
+# wipes steps 1-2 in the same apply that draws the new strip (clear without
+# open, as lesson 2 does). A board followed by a deck page closes the panel
+# (open: false) 400 ms before the page, and a deck page followed by a board
+# closes the page 400 ms before, as in Module 1.
+#
+# Boards (B1 P1 flow, B2 P6 lanes, B3 two boxes and then a P1 flow). Colour
+# jobs: #1e1e1e ink (paints white) for arrows; blue the thing named (the test
+# types and "repeatable", the config checks and Padauk's three meaning checks,
+# the Git copy, the four ways to handle drift); green healthy or done
+# (rollout, Padauk's nightly diff); red failure (the emergency push, the next
+# deploy undoing the fix); orange the caveat or limit (the real-world end of
+# the map, where to start on an old system, what the emergency push skips and
+# keeps and the tests it runs straight after, the hand-made live value,
+# auto-sync's condition). A label on two or three lines is one text asset per
+# line, so each line meets the 0.55 em width rule on its own; every label was
+# also measured in Chrome with Excalidraw's Virgil font and fits its box. B1's
+# "real world: final check" is set on two lines ("real world:" over "final
+# check") so it sits over canary and fault alone: on one line it needs 355 px
+# under the 0.55 rule and would start over smoke. B3's live box sets "live:
+# weight 70" and "(လက်နဲ့ ပြင်)" on two lines for the same reason (29 code
+# points need 447 px on one line).
+#
+# Deck pages: deck "Next Editor · SRE 5A · Toil and tests". deckUrl is the
+# deck's published /pub link; until this lesson's pages are built from the
+# page plan, the Director reports the l18 pages missing from the published
+# deck. Scenes 3, 5 and 7 cite the curriculum's own public sources for the
+# test pyramid and for GitOps and drift (Fowler, OpenGitOps; URLs checked
+# 2026-10-21). Page plan:
+# ~/Documents/sre-course/work/pages/sre-18-testing-and-config.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-18-testing-and-config.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-18-testing-and-config.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-18-testing-and-config
+  title: "SRE from zero 18: Test နဲ့ config"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Test နဲ့ config
+
+        - repeatable test — ပြင်ပ system မမှီ၊ ဘယ်နှခါ run run ရလဒ် တူ
+        - smoke test — deploy ပြီးတာနဲ့ အဓိက journey တွေကို မြန်မြန် စစ်
+        - config check — syntax · အဓိပ္ပာယ် · dry run၊ rollout မတိုင်ခင်
+        - configuration drift — live နဲ့ Git ထဲက config မတူတော့တာ
+
+        မေးခွန်း: 0 လို့ ပြောင်းရုံနဲ့ service တစ်ခုလုံး ရပ်သွားနိုင်တဲ့ config တန်ဖိုး တစ်ခုကို ပြောပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Test နဲ့ config</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 18</p>
+              <h1>Test နဲ့ config</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l18-p01
+      contentType: google
+      name: "Cover: tests green, Operator A at zero"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p01
+    - id: l18-p01b
+      contentType: google
+      name: "Operator A's weight, 50 to 0"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p01b
+    - id: l18-p02
+      contentType: google
+      name: What a test proves
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p02
+    - id: l18-p02b
+      contentType: google
+      name: "The system's assumptions"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p02b
+    - id: l18-p03
+      contentType: google
+      name: Two habits
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p03
+    - id: l18-p03b
+      contentType: google
+      name: From an alert to a test
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p03b
+    - id: l18-p04
+      contentType: google
+      name: Three questions for any config change
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p04
+    - id: l18-p04b
+      contentType: google
+      name: Four GitOps principles
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p04b
+    - id: l18-p04c
+      contentType: google
+      name: "Padauk's routing config"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p04c
+    - id: l18-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l18_p05
+  whiteboardAssets:
+    # ---- Board B1: the test map, a left-to-right flow (P1) ---------------------
+    - {
+        id: l18-b1-unit,
+        kind: rectangle,
+        x: 256,
+        y: 330,
+        width: 100,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b1-unit-t,
+        kind: text,
+        x: 268,
+        y: 352,
+        width: 76,
+        height: 35,
+        text: "unit",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 360,
+        y: 350,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b1-int,
+        kind: rectangle,
+        x: 404,
+        y: 330,
+        width: 200,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b1-int-t,
+        kind: text,
+        x: 416,
+        y: 352,
+        width: 180,
+        height: 35,
+        text: "integration",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 608,
+        y: 350,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b1-smoke,
+        kind: rectangle,
+        x: 652,
+        y: 330,
+        width: 110,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b1-smoke-t,
+        kind: text,
+        x: 664,
+        y: 352,
+        width: 90,
+        height: 35,
+        text: "smoke",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 766,
+        y: 350,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b1-canary,
+        kind: rectangle,
+        x: 810,
+        y: 330,
+        width: 124,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b1-canary-t,
+        kind: text,
+        x: 822,
+        y: 352,
+        width: 104,
+        height: 35,
+        text: "canary",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 938,
+        y: 350,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b1-fault,
+        kind: rectangle,
+        x: 982,
+        y: 330,
+        width: 110,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b1-fault-t,
+        kind: text,
+        x: 994,
+        y: 352,
+        width: 90,
+        height: 35,
+        text: "fault",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-rep,
+        kind: text,
+        x: 306,
+        y: 280,
+        width: 175,
+        height: 35,
+        text: "repeatable",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-real-t1,
+        kind: text,
+        x: 880,
+        y: 245,
+        width: 175,
+        height: 35,
+        text: "real world:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-real-t2,
+        kind: text,
+        x: 880,
+        y: 280,
+        width: 175,
+        height: 35,
+        text: "final check",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-start-t1,
+        kind: text,
+        x: 268,
+        y: 440,
+        width: 315,
+        height: 35,
+        text: "စမယ့်နေရာ: payment →",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b1-start-t2,
+        kind: text,
+        x: 268,
+        y: 477,
+        width: 605,
+        height: 35,
+        text: "တခြားသူ ခေါ်တဲ့ API → ကိုယ် ခေါ်တဲ့ API",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: config checks, two lanes (P6) ------------------------------
+    - {
+        id: l18-b2-syntax,
+        kind: rectangle,
+        x: 256,
+        y: 185,
+        width: 130,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b2-syntax-t,
+        kind: text,
+        x: 268,
+        y: 207,
+        width: 105,
+        height: 35,
+        text: "syntax",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 390,
+        y: 205,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b2-meaning,
+        kind: rectangle,
+        x: 434,
+        y: 185,
+        width: 175,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b2-meaning-t,
+        kind: text,
+        x: 446,
+        y: 207,
+        width: 150,
+        height: 35,
+        text: "အဓိပ္ပာယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 613,
+        y: 205,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b2-dry,
+        kind: rectangle,
+        x: 657,
+        y: 185,
+        width: 140,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b2-dry-t,
+        kind: text,
+        x: 669,
+        y: 207,
+        width: 115,
+        height: 35,
+        text: "dry run",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 801,
+        y: 205,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b2-rollout,
+        kind: rectangle,
+        x: 845,
+        y: 185,
+        width: 140,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l18-b2-rollout-t,
+        kind: text,
+        x: 857,
+        y: 207,
+        width: 115,
+        height: 35,
+        text: "rollout",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-m1,
+        kind: text,
+        x: 446,
+        y: 280,
+        width: 300,
+        height: 35,
+        text: "weight ပေါင်း = 100",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-m2,
+        kind: text,
+        x: 446,
+        y: 315,
+        width: 315,
+        height: 35,
+        text: "06:00–24:00 မှာ 0 မရ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-m3,
+        kind: text,
+        x: 446,
+        y: 350,
+        width: 470,
+        height: 35,
+        text: "ဝန်ဆောင်ခ +20% → ဒုတိယ approve",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-push,
+        kind: rectangle,
+        x: 256,
+        y: 440,
+        width: 245,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l18-b2-push-t,
+        kind: text,
+        x: 268,
+        y: 467,
+        width: 222,
+        height: 35,
+        text: "emergency push",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 465,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b2-skip,
+        kind: rectangle,
+        x: 549,
+        y: 440,
+        width: 385,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l18-b2-skip-t1,
+        kind: text,
+        x: 561,
+        y: 450,
+        width: 190,
+        height: 35,
+        text: "review ကျော်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-skip-t2,
+        kind: text,
+        x: 561,
+        y: 485,
+        width: 360,
+        height: 35,
+        text: "syntax check + log ကျန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b2-rerun,
+        kind: text,
+        x: 268,
+        y: 555,
+        width: 530,
+        height: 35,
+        text: "ကျော်ခဲ့တဲ့ test တွေ ချက်ချင်း run",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: drift, then four ways to handle it (P1) --------------------
+    - {
+        id: l18-b3-git,
+        kind: rectangle,
+        x: 280,
+        y: 280,
+        width: 290,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b3-git-t,
+        kind: text,
+        x: 300,
+        y: 312,
+        width: 240,
+        height: 35,
+        text: "Git: weight 50",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-live,
+        kind: rectangle,
+        x: 640,
+        y: 280,
+        width: 330,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l18-b3-live-t1,
+        kind: text,
+        x: 660,
+        y: 295,
+        width: 250,
+        height: 35,
+        text: "live: weight 70",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-live-t2,
+        kind: text,
+        x: 660,
+        y: 330,
+        width: 210,
+        height: 35,
+        text: "(လက်နဲ့ ပြင်)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-undo,
+        kind: text,
+        x: 420,
+        y: 415,
+        width: 485,
+        height: 35,
+        text: "နောက် deploy က fix ကို ပြန်ဖျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-r1,
+        kind: rectangle,
+        x: 256,
+        y: 300,
+        width: 205,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b3-r1-t1,
+        kind: text,
+        x: 266,
+        y: 310,
+        width: 187,
+        height: 35,
+        text: "code နဲ့ တွဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-r1-t2,
+        kind: text,
+        x: 266,
+        y: 345,
+        width: 175,
+        height: 35,
+        text: "(အဖွဲ့ သေး)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 465,
+        y: 325,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b3-r2,
+        kind: rectangle,
+        x: 505,
+        y: 300,
+        width: 120,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b3-r2-t1,
+        kind: text,
+        x: 515,
+        y: 310,
+        width: 100,
+        height: 35,
+        text: "CI မှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-r2-t2,
+        kind: text,
+        x: 515,
+        y: 345,
+        width: 50,
+        height: 35,
+        text: "ရှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 629,
+        y: 325,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b3-r3,
+        kind: rectangle,
+        x: 669,
+        y: 300,
+        width: 192,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b3-r3-t1,
+        kind: text,
+        x: 679,
+        y: 310,
+        width: 85,
+        height: 35,
+        text: "alert",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-r3-t2,
+        kind: text,
+        x: 679,
+        y: 345,
+        width: 172,
+        height: 35,
+        text: "(ယုံရအောင်)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 865,
+        y: 325,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l18-b3-r4,
+        kind: rectangle,
+        x: 905,
+        y: 300,
+        width: 170,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l18-b3-r4-t1,
+        kind: text,
+        x: 915,
+        y: 310,
+        width: 115,
+        height: 35,
+        text: "Git ကနေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-r4-t2,
+        kind: text,
+        x: 915,
+        y: 345,
+        width: 145,
+        height: 35,
+        text: "auto-sync",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-note-t1,
+        kind: text,
+        x: 875,
+        y: 410,
+        width: 220,
+        height: 35,
+        text: "merge မလုပ်ခင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-note-t2,
+        kind: text,
+        x: 875,
+        y: 445,
+        width: 220,
+        height: 35,
+        text: "check ခိုင်မှ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l18-b3-diff,
+        kind: text,
+        x: 505,
+        y: 410,
+        width: 310,
+        height: 35,
+        text: "Padauk: ညတိုင်း diff",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2618
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Test အစိမ်းနဲ့ traffic သုည
+    narration: >
+      [[mark:show-p01]] toil ပစ်မှတ်ကို ၃၅ ရာခိုင်နှုန်း ထားလိုက်ပြီး promo tool က input အလွတ်ကို ငြင်းတတ်လာသလို failover bot ကလည်း action card အတိုင်း လုပ်နေပါပြီ။ ဒီတစ်ခါတော့ လစာထုတ်ရက် ညနေမှာ test တွေ အားလုံး အစိမ်းရောင် ဖြစ်နေပေမဲ့ Operator A ဆီ top-up တစ်ခုမှ မရောက်တော့ပါဘူး။ တစ်ယောက်က console ထဲမှာ routing ကို လက်နဲ့ ပြင်လိုက်လို့ပါ။
+      [[mark:show-p01b]] Top-up router က operator တစ်ခုစီဆီ traffic ဘယ်လောက်စီ ပို့မလဲကို config ထဲက weight တွေနဲ့ ဆုံးဖြတ်ပါတယ်။ အဲဒီညနေက Operator B နှေးနေလို့ engineer တစ်ယောက်က B ဆီ ပို့တာကို လျှော့ရင်း Operator A ရဲ့ weight ကိုပါ ၅၀ ကနေ သုည ဖြစ်အောင် မှားပြင်မိခဲ့တာပါ။ deploy လည်း မရှိ၊ code လည်း မပြောင်းခဲ့တော့ အကြောင်းရင်း ရှာတွေ့ဖို့ မိနစ် ၄၀ ကြာခဲ့ပါတယ်။
+      [[mark:p01b-tests]] test တွေက router ရဲ့ code ကို စစ်ခဲ့ပေမဲ့ config ကိုတော့ ဘယ်တော့မှ မကြည့်ခဲ့ပါဘူး။ ဒီတော့ test အစိမ်းရောင်က ဘာကို တကယ် သက်သေပြတာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l18-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l18-p01b }
+
+  - id: what-a-test-proves
+    chapter: Test က ဘာကို သက်သေပြလဲ
+    narration: >
+      [[mark:show-p02]] postmortem မှာ မသီရိက ဒီ မေးခွန်းကို ပြန်မေးပါတယ်။ router ရဲ့ test တွေက weight ကို ၅၀၊ ၃၀၊ ၂၀ လို့ ပုံသေ ထည့်စမ်းထားလို့ pass ဖြစ်ခဲ့တာပါ။ ဆိုတော့ test pass ဖြစ်တာက ကိုယ် ကြိုတွေးထားတဲ့ case တွေ အလုပ်လုပ်နေသေးတယ် ဆိုတာလောက်ပဲ ပြောနိုင်ပြီး system ကောင်းနေတယ်လို့ သက်သေ မပြပါဘူး။ test fail ဖြစ်တာကတော့ တကယ့် ပြဿနာ ရှိနေတယ်ဆိုတာကို သေချာ ပြပါတယ်။
+      [[mark:show-p02b]] system တိုင်းက input ဒီပုံစံ လာမယ်၊ operator တွေ ဒီလောက် မြန်မယ်၊ weight တွေ သုည မဖြစ်ဘူး ဆိုတဲ့ ယူဆချက်တွေ ပေါ်မှာ ဆောက်ထားတာပါ။ outage အတော်များများကလည်း code ရေးတာ မှားလို့ချည်း မဟုတ်ဘဲ ဒီလို ယူဆချက် တစ်ခု မှားနေလို့ ဖြစ်တာပါ။ ဒါကြောင့် test ရဲ့ တကယ့် အလုပ်က ကိုယ့် ယူဆချက်တွေထဲက ဘယ်ဟာ မှားနေလဲ ဆိုတာကို user မတွေ့ခင် ရှာပေးတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l18-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l18-p02b }
+
+  - id: test-map
+    chapter: Test မြေပုံ
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ဒါဆို test အမျိုးအစားတွေကို မြေပုံလို စီကြည့်ရအောင်။ unit test က function တစ်ခုချင်းကို စမ်းပြီး integration test ကတော့ router ကို operator gateway အစစ်အစား fake server နဲ့ ချိတ်စမ်းသလို အစိတ်အပိုင်းတွေ တွဲအလုပ်လုပ်တာကို စမ်းပါတယ်။
+      [[mark:b1-s2]] smoke test ကတော့ deploy ပြီးတာနဲ့ user တစ်ယောက် ရည်ရွယ်ချက် တစ်ခု ပြီးဖို့ ဖြတ်သွားရတဲ့ critical user journey တွေ ရသေးလား မြန်မြန် လျှောက်စစ်တာပါ၊ ဥပမာ ၁၀၀၀ ကျပ် top-up တစ်ခုကို အစအဆုံး ဖြည့်ကြည့်တာမျိုးပါ။
+      [[mark:b1-s3]] ညာဘက်မှာတော့ version အသစ်ကို traffic နည်းနည်းဆီ အရင် ပို့ပြီး အဟောင်းနဲ့ နှိုင်းယှဉ်တဲ့ canary နဲ့ ပျက်စီးမှုကို တမင် inject လုပ်တဲ့ fault test ရှိပါတယ်၊ ဒီနှစ်ခုက production ထဲမှာ စမ်းတာမို့ lesson ၁၉ အတွက် ချန်ထားပါမယ်။ ဆိုတော့ testing က release နဲ့ မပြီးပါဘူး။ release တိုင်း နည်းနည်းစီ နှေးလာတာမျိုးကိုလည်း test တစ်ခုခုက ပုံမှန် မတိုင်ရင် ဘယ်သူမှ သတိမထားမိပါဘူး။
+      [[mark:b1-s4]] ဘယ်ဘက်က test တွေကို repeatable test လို့ ခေါ်ပါတယ်။ ပြင်ပ system တွေကို မမှီလို့ ဘယ်နှခါ run run ရလဒ် တူပြီး fail ရင်လည်း အကြောင်းရင်း ရှာရ လွယ်တာမို့ test အများစုက ဒီလို ဖြစ်သင့်ပါတယ်။ [[mark:b1-s4b]] ညာဘက်ကတော့ staging က မတုပနိုင်တဲ့ တကယ့် user၊ တကယ့် config နဲ့ တွေ့ရတဲ့ နောက်ဆုံး စစ်ဆေးချက်ပါ။
+      [[mark:b1-s5]] လူသိများတဲ့ test pyramid ကတော့ အလွှာ တစ်ခုစီမှာ test ဘယ်နှခု ရှိလဲ ပြပေမဲ့ ဘယ် test က user ကို တကယ် ကာကွယ်ပေးလဲ မပြပါဘူး။ ဒါကြောင့် test နည်းတဲ့ system ဟောင်းမှာ စမယ်ဆိုရင် payment လို ငွေနဲ့ ဆိုင်တဲ့ အပိုင်းကနေ စပြီး တခြားသူတွေ ခေါ်သုံးတဲ့ API၊ ကိုယ် ခေါ်သုံးတဲ့ API တွေကို ဆက်စစ်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+      - {
+          title: "Martin Fowler: The Practical Test Pyramid",
+          url: "https://martinfowler.com/articles/practical-test-pyramid.html",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l18-b1-unit, l18-b1-unit-t, l18-b1-a1, l18-b1-int, l18-b1-int-t]
+        drawMs: 1800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l18-b1-a2, l18-b1-smoke, l18-b1-smoke-t]
+        drawMs: 1000
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds:
+          [l18-b1-a3, l18-b1-canary, l18-b1-canary-t, l18-b1-a4, l18-b1-fault, l18-b1-fault-t]
+        drawMs: 2000
+      - {
+          id: b1-s4,
+          type: whiteboard.apply,
+          at: { mark: b1-s4 },
+          upsertIds: [l18-b1-rep],
+          drawMs: 800,
+        }
+      # "real world: final check" lands on the sentence about the right end, not ~13 s early.
+      - id: b1-s4b
+        type: whiteboard.apply
+        at: { mark: b1-s4b }
+        upsertIds: [l18-b1-real-t1, l18-b1-real-t2]
+        drawMs: 1000
+      - id: b1-s5
+        type: whiteboard.apply
+        at: { mark: b1-s5 }
+        upsertIds: [l18-b1-start-t1, l18-b1-start-t2]
+        drawMs: 1600
+
+  - id: two-habits
+    chapter: အလေ့အထ နှစ်ခု
+    narration: >
+      [[mark:close-b1]] [[mark:show-p03]] test တွေ ကောင်းလာဖို့ အလေ့အထ နှစ်ခုနဲ့ စလို့ရပါတယ်။ ပထမက bug တစ်ခု တွေ့တိုင်း မပြင်ခင် အဲဒီ bug ကြောင့် fail ဖြစ်တဲ့ test ကို အရင် ရေးတာပါ။ ဥပမာ request တစ်ခုကို နှစ်ခါ ပို့ရင်တောင် ငွေ တစ်ခါပဲ ဖြတ်ရမယ် ဆိုတဲ့ test မျိုးပါ။ build နီနေရင်လည်း ချက်ချင်း ပြင်ပါ၊ ကြာကြာ နီနေရင် test တွေကို ဘယ်သူမှ မယုံတော့ပါဘူး။
+      [[mark:show-p03b]] ဒုတိယက alert တစ်ခုစီ စောင့်ကြည့်နေတဲ့ အခြေအနေကို test ထဲမှာ ပြန်ဖန်တီးတာပါ။ ဥပမာ Operator B နှေးရင် တက်တဲ့ alert အတွက် နှေးနေတဲ့ fake server နဲ့ စမ်းကြည့်တော့ router က ချက်ချင်း သုံးခါ retry လုပ်လို့ နှေးနေတဲ့ gateway ဆီ ဝန် သုံးဆ ရောက်နေတာ တွေ့ပါတယ်။ ဒီ အားနည်းချက်ကို user မတွေ့ခင် တွေ့သွားသလို alert တကယ် တက်တဲ့ညမှာလည်း on-call ကျသူက ဘာကို အရင် စစ်ရမလဲ သိနေပါပြီ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l18-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l18-p03b }
+
+  - id: config-questions
+    chapter: Config ကိုလည်း code လို
+    narration: >
+      [[mark:show-p04]] ဒါပေမဲ့ ဒီ test တွေ အားလုံးက code ကိုပဲ စစ်ပါတယ်။ code အသစ်ကို feature flag နဲ့ တဖြည်းဖြည်း ဖွင့်လို့ရပေမဲ့ config ပြောင်းတာကတော့ server အားလုံးဆီ တစ်ပြိုင်နက် ရောက်သွားနိုင်လို့ code ပြောင်းသလောက်ပဲ အန္တရာယ် ရှိပါတယ်။ ဒါကြောင့် မသီရိက config ပြောင်းတိုင်း ဘယ်သူမဆို မြင်နိုင်လား၊ တစ်ဆင့်တည်းနဲ့ ပြန်ပြောင်းနိုင်လား၊ check တစ်ခုခု run ခဲ့လား ဆိုတဲ့ မေးခွန်း သုံးခု မေးပါတယ်။ console ကနေ ပြင်ခဲ့တဲ့ ညနေကတော့ ဒီ သုံးခုထဲက တစ်ခုမှ မရှိခဲ့ပါဘူး။
+      [[mark:show-p04b]] ပြင်ဖို့အတွက်တော့ config ကို code လို Git ထဲမှာ ထိန်းတဲ့ GitOps principle လေးခုကို လမ်းညွှန်အဖြစ် ယူပါတယ်။ လိုချင်တဲ့ အခြေအနေကို file ထဲမှာ ရေးထားမယ်၊ version တွေနဲ့ သိမ်းမယ်၊ system က အလိုအလျောက် ဆွဲယူမယ်၊ live ကို Git နဲ့ အမြဲ ကိုက်အောင် ညှိနေမယ် ဆိုတာတွေပါ။
+      [[mark:show-p04c]] ဝန်ဆောင်ခ config က lesson ၂ ကတည်းက Git ထဲ ရောက်နေပေမဲ့ routing config ကတော့ console ထဲမှာ ကျန်ခဲ့တာပါ။ အခု သူ့ကိုလည်း Git ထဲ ရွှေ့လိုက်တော့ ပြောင်းလဲမှုတိုင်းကို review လုပ်ရပြီး CI က build နဲ့ test ကို run ပေးပါတယ်၊ မှားရင်လည်း Git မှာ တစ်ဆင့်တည်းနဲ့ ပြန်ပြောင်းလို့ရပါတယ်။ config ကို ဖတ်လို့ မရရင်တောင် router က operator သုံးခုလုံးဆီ တန်းတူ ခွဲပို့တဲ့ safe default ကို သုံးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+      - { title: "OpenGitOps principles", url: "https://opengitops.dev/" }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l18-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l18-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l18-p04c }
+
+  - id: config-checks
+    chapter: Config check သုံးဆင့်
+    narration: >
+      [[mark:close-p04c]] [[mark:b2-s1]] တတိယ မေးခွန်းအတွက်တော့ routing config ပြောင်းတိုင်း rollout မတိုင်ခင် config check လို့ ခေါ်တဲ့ စစ်ဆေးမှု သုံးဆင့်ကို ဖြတ်ရပါတယ်။ syntax check က file ပုံစံ မှန်လား စစ်ပြီး ဒုတိယ အဆင့်က တန်ဖိုးတွေရဲ့ အဓိပ္ပာယ် မှန်လား စစ်ပါတယ်။ [[mark:b2-s1b]] dry run ကတော့ config အသစ်ကို router copy တစ်ခုမှာ စမ်းတင်ပြီး operator တစ်ခုစီဆီ test top-up တစ်ခုစီ ပို့ကြည့်တာပါ။
+      [[mark:b2-s2]] Operator A ကို သုည ထားတဲ့ file ကလည်း syntax အရတော့ မှန်နေတာပါပဲ။ ဒါကြောင့် Padauk ရဲ့ အဓိပ္ပာယ် check တွေက weight တွေ ပေါင်းရင် ၁၀၀ ဖြစ်ရမယ်၊ မနက် ၆ နာရီကနေ ညသန်းခေါင်အထိ ဘယ် operator မှ သုည မဖြစ်ရဘူး၊ ဝန်ဆောင်ခ ၂၀ ရာခိုင်နှုန်းထက် ပိုတက်ရင် ဒုတိယ လူတစ်ယောက် approve လုပ်ရမယ် ဆိုတာတွေပါ။
+      [[mark:b2-s3]] incident အတွင်း review ကို စောင့်ချိန် မရှိရင်တော့ ပုံမှန် ကန့်သတ်ချက်တွေကို ကျော်တဲ့ break-glass လမ်း၊ emergency push ကို သုံးပါတယ်။ review ကို ကျော်ပေမဲ့ syntax check နဲ့ ဘယ်သူ ဘာ ပြောင်းခဲ့လဲ ဆိုတဲ့ log ကိုတော့ မကျော်ပါဘူး။
+      [[mark:b2-s4]] code ကို အရေးပေါ် push လုပ်ရင်လည်း ကျော်ခဲ့တဲ့ test တွေကို ချက်ချင်း ဆက် run ပါတယ်။ fail ရင် အဲဒီ push ကို ပျက်နေတယ်လို့ မှတ်ထားတော့ နောက် fix လုပ်မယ့်သူက အမှန်ကို သိပြီးမှ စနိုင်ပါတယ်။ break-glass ကို အပတ်တိုင်း သုံးနေရရင်တော့ အဲဒီ လမ်းမှာ မြန်တဲ့ test အစုလေး တစ်ခုကို အလိုအလျောက် run အောင် လုပ်ထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - { id: close-p04c, type: slide.close, at: { mark: close-p04c, offsetMs: -400 } }
+      # Top lane, two boxes and two: syntax and meaning first, then (b2-s1b) dry
+      # run and rollout as the sentence about the dry run starts.
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l18-b2-syntax, l18-b2-syntax-t, l18-b2-a1, l18-b2-meaning, l18-b2-meaning-t]
+        drawMs: 1800
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds:
+          [l18-b2-a2, l18-b2-dry, l18-b2-dry-t, l18-b2-a3, l18-b2-rollout, l18-b2-rollout-t]
+        drawMs: 2000
+      # Padauk's three meaning checks, one text block of three lines under "meaning".
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l18-b2-m1, l18-b2-m2, l18-b2-m3]
+        drawMs: 2000
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds:
+          [l18-b2-push, l18-b2-push-t, l18-b2-a4, l18-b2-skip, l18-b2-skip-t1, l18-b2-skip-t2]
+        drawMs: 2200
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l18-b2-rerun],
+          drawMs: 1200,
+        }
+
+  - id: drift
+    chapter: Git နဲ့ live မတူတော့ရင်
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] တစ်လအကြာ လစာထုတ်ရက် ညမှာ Operator B နှေးလာပြန်ပါတယ်။ on-call ကျနေသူက emergency push နဲ့ live မှာ Operator A ရဲ့ weight ကို ၅၀ ကနေ ၇၀ ကို တင်လိုက်တော့ top-up တွေ ပြန်ကောင်းလာပေမဲ့ Git ထဲကိုတော့ ဘယ်သူမှ ပြန်မထည့်ခဲ့ပါဘူး။ ဒီလို live မှာ run နေတာနဲ့ Git ထဲမှာ ရေးထားတာ မတူတော့တာကို configuration drift လို့ ခေါ်ပါတယ်။
+      [[mark:b3-s2]] နောက်တစ်ပတ် Git ကနေ ပုံမှန် deploy လုပ်တော့ weight က ၅၀ ကို တိတ်တိတ်လေး ပြန်ရောက်ပြီး ညက fix ပျောက်သွားပါတယ်။ ဒါဆို ၅၀ နဲ့ ၇၀ ဘယ်ဟာ မှန်လဲ? drift ဖြစ်ပြီးရင် ဘယ်သူမှ သေချာ မသိတော့ပါဘူး။
+      [[mark:b3-s3]] drift ကို ဖြေရှင်းနည်း လေးဆင့် ရှိပါတယ်။ အဖွဲ့ သေးရင် config ကို code နဲ့ တွဲပြီး deploy လုပ်လို့ရပေမဲ့ config ကို သီးသန့် မြန်မြန် ပြောင်းနိုင်တာ ဆုံးသွားပါတယ်။ [[mark:b3-s3b]] နောက်တစ်ဆင့်က CI ထဲမှာ live နဲ့ Git ကွာနေလား ရှာတာပါ။
+      [[mark:b3-s4]] တတိယက ကွာတာ တွေ့တိုင်း alert ပို့တာပါ။ ဒါပေမဲ့ drift alert တွေ ခဏခဏ တက်နေရင် လူတွေ ဂရုမစိုက်တော့တတ်လို့ ယုံလို့ရအောင် ထိန်းထားရပါမယ်။ [[mark:b3-s4b]] နောက်ဆုံးကတော့ tool တစ်ခုက live ကို Git အတိုင်း အမြဲ အလိုအလျောက် ပြန်ညှိပေးတာပါ။
+      [[mark:b3-s5]] ဒါပေမဲ့ အဲဒီ tool က မှားတဲ့ commit တစ်ခုကိုလည်း နေရာတိုင်း ချက်ချင်း ပို့မှာမို့ merge မလုပ်ခင် check တွေ ခိုင်မာမှ သုံးပါ။ [[mark:b3-s5b]] Padauk ရဲ့ ပထမ အဖြေကတော့ ညတိုင်း live config ကို Git နဲ့ ယှဉ်ပြီး ကွာတာကို မနက် team chat ထဲ တင်ပေးတဲ့ diff လေး တစ်ခုပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+      - { title: "OpenGitOps principles", url: "https://opengitops.dev/" }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B2 400 ms early, keep the panel open.
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l18-b3-git, l18-b3-git-t, l18-b3-live, l18-b3-live-t1, l18-b3-live-t2]
+        drawMs: 2000
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l18-b3-undo],
+          drawMs: 1200,
+        }
+      # The voice script's "cleared" step 3: the same apply wipes steps 1-2 and
+      # starts the four-box strip; each box then lands on the sentence that names it.
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        clear: true
+        upsertIds: [l18-b3-r1, l18-b3-r1-t1, l18-b3-r1-t2]
+        drawMs: 1200
+      - id: b3-s3b
+        type: whiteboard.apply
+        at: { mark: b3-s3b }
+        upsertIds: [l18-b3-a1, l18-b3-r2, l18-b3-r2-t1, l18-b3-r2-t2]
+        drawMs: 1200
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l18-b3-a2, l18-b3-r3, l18-b3-r3-t1, l18-b3-r3-t2]
+        drawMs: 1200
+      - id: b3-s4b
+        type: whiteboard.apply
+        at: { mark: b3-s4b }
+        upsertIds: [l18-b3-a3, l18-b3-r4, l18-b3-r4-t1, l18-b3-r4-t2]
+        drawMs: 1200
+      - id: b3-s5
+        type: whiteboard.apply
+        at: { mark: b3-s5 }
+        upsertIds: [l18-b3-note-t1, l18-b3-note-t2]
+        drawMs: 1200
+      - {
+          id: b3-s5b,
+          type: whiteboard.apply,
+          at: { mark: b3-s5b },
+          upsertIds: [l18-b3-diff],
+          drawMs: 1000,
+        }
+
+  - id: this-week
+    narration: >
+      [[mark:close-b3]] [[mark:show-p05]] review မပါဘဲ ပြောင်းလို့ရနေတဲ့ config တစ်ခုကို ဒီအပတ် console တွေထဲမှာ ရှာပါ။ နောက်ဆုံး ပြင်ခဲ့တဲ့ bug ကို test တစ်ခု ဖြစ်အောင် ရေးပါ။ ပြီးတော့ live config တစ်ခုကို Git ထဲက version နဲ့ တစ်ခါ ယှဉ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l18-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] weight သုည ဖြစ်ခဲ့တဲ့ ညနေကနေ ဒီ လေးခုကို ယူသွားပါ။ [[mark:sel-repeatable]] repeatable test က ပြင်ပ system တွေကို မမှီလို့ ဘယ်နှခါ run run ရလဒ် တူတဲ့ test ပါ။ [[mark:sel-smoke]] smoke test က deploy ပြီးတာနဲ့ အဓိက journey တွေ ရသေးလား မြန်မြန် စစ်တာပါ။
+      [[mark:sel-config-check]] config check က rollout မတိုင်ခင် syntax၊ အဓိပ္ပာယ်၊ dry run ဆိုပြီး သုံးဆင့် စစ်တာ ဖြစ်ပြီး၊ [[mark:sel-drift]] configuration drift ကတော့ live မှာ run နေတာနဲ့ Git ထဲမှာ ရှိတာ မတူတော့တာပါ။
+      [[mark:ask-question]] ကိုယ့် system ထဲမှာ သုည လို့ ပြောင်းလိုက်ရုံနဲ့ service တစ်ခုလုံး ရပ်သွားနိုင်တဲ့ config တန်ဖိုး တစ်ခုကို စဉ်းစားကြည့်ပါ။
+      [[mark:pause-question]] ဥပမာ worker အရေအတွက်၊ rate limit ဒါမှမဟုတ် Padauk လို traffic weight ဖြစ်နိုင်ပါတယ်။ တွေ့ရင် သုည မဖြစ်ရဘူး ဆိုတဲ့ အဓိပ္ပာယ် check တစ်ခု ထည့်လိုက်ပါ။ ညတိုင်း diff စတဲ့ အပတ်မှာပဲ ဝန်ဆောင်ခ တွက်ပေးတဲ့ pricing service ရဲ့ canary က pass ဖြစ်ပေမဲ့ Bill Pay မှာ timeout တွေ စဖြစ်လာပါတယ်။ ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-repeatable,
+          type: editor.select,
+          at: { mark: sel-repeatable },
+          target: { file: notes.md, text: "repeatable test", occurrence: 1 },
+        }
+      - {
+          id: sel-smoke,
+          type: editor.select,
+          at: { mark: sel-smoke },
+          target: { file: notes.md, text: "smoke test", occurrence: 1 },
+        }
+      - {
+          id: sel-config-check,
+          type: editor.select,
+          at: { mark: sel-config-check },
+          target: { file: notes.md, text: "config check", occurrence: 1 },
+        }
+      - {
+          id: sel-drift,
+          type: editor.select,
+          at: { mark: sel-drift },
+          target: { file: notes.md, text: "configuration drift", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ (ask-question) already starts
+      # the question's own dialog, but a select right there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question with an
+      # offset: it starts about as the question ends, its drag runs in silence,
+      # and the answer at pause-question waits for it. The question is 121
+      # characters, so 8870 (400 + 121 x 70) would start the drag as the question
+      # ends at 70 ms per char, but anything above ~8425 trips compile-check's
+      # 2.5 s inserted-silence warning at 55; 8400 leaves about 2.8 / 1.0 / 0.35 s
+      # of quiet before the answer at 55 / 70 / 95 (at 95, and by 0.44 s at 70,
+      # the drag starts under the question's last words, as in lessons 7, 10 and
+      # 30).
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 8400 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: 0 လို့ ပြောင်းရုံနဲ့ service တစ်ခုလုံး ရပ်သွားနိုင်တဲ့ config တန်ဖိုး တစ်ခုကို ပြောပါ။"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
