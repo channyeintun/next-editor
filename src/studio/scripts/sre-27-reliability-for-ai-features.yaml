@@ -1,0 +1,1276 @@
+# SRE from zero, lesson 27: Reliability for AI features (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-27-reliability-for-ai-features.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-27-reliability-for-ai-features.md \
+#     src/studio/scripts/sre-27-reliability-for-ai-features.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Five marks add no spoken text and sit at an existing ။: p01-http splits the
+# hook at its paragraph break (one 496-character dialog would pass the
+# 450-character limit; no action uses it); b2-step1b, b3-step1b and b3-step2b
+# land a board's caveat, wrong-ID tag or guards on the sentence that names
+# them, so no step adds more than three labelled elements; and ask-question is
+# the voice script's ⟪select မေးခွန်း⟫, which already starts the question's
+# own dialog, so the question-line select hangs off it for the ⟪pause 3s⟫, as
+# in Module 1. Pacing: every page and board step changes within ~37 s at
+# 70 ms/char (the cover is the longest hold), so no pacing pages were added.
+#
+# Boards (B1 P5 segmented bar, B2 P1 flow, B3 P6 lanes). Colour jobs: #1e1e1e
+# ink (paints white) for the axis, step boxes and box labels; blue the thing
+# named (data, the degraded flag, the freshness SLO, logging); green healthy or
+# done (good answers, serving, the guards); red failure (errors, the halt, the
+# wrong ID); orange the caveat or limit (weak answers, the data check); violet
+# the flow and the result (arrows, what users feel). A label on two lines is
+# one text asset per line, so each line meets the 0.55 em width rule on its
+# own. Every new board opens with open: true, clear: true and is never
+# maximized; a board followed by a deck page closes the panel (open: false)
+# 400 ms before the page, and a page followed by a board closes the page
+# 400 ms before the board, as in Module 1.
+#
+# Deck pages: deck "Next Editor · SRE 6A · AI", published; the /pub URL below
+# is final. The deck holds only the kit pages until this lesson's pages are
+# built from the page plan, so until then the Director reports page "l27_p01"
+# missing from the published deck (with the deck URL swapped for an
+# unreachable one, everything else validates). Page plan:
+# ~/Documents/sre-course/work/pages/sre-27-reliability-for-ai-features.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-27-reliability-for-ai-features.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-27-reliability-for-ai-features.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-27-reliability-for-ai-features
+  title: "SRE from zero 27: AI feature တွေရဲ့ reliability"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # AI feature တွေရဲ့ reliability
+
+        - inference — train ပြီးသား model နဲ့ request တစ်ခုချင်းကို ဖြေတာ
+        - token — model ဖတ်တဲ့ စာသား အပိုင်းလေး၊ ကုန်ကျငွေလည်း ဒီကလာ
+        - eval — AI အဖြေကို စနစ်တကျ စစ်တာ၊ ရမှတ်က SLI
+        - golden set — အဖြေ မှန်ကို ကြိုသိထားတဲ့ မေးခွန်းတွေ
+        - degraded answer — error မဟုတ်ပေမဲ့ အားနည်းတဲ့ အဖြေ၊ SLO ထဲမှာ ရေတွက်
+        - prompt injection — model ဖတ်မယ့် စာထဲ ဝှက်ထည့်တဲ့ ညွှန်ကြားချက်
+
+        မေးခွန်း: AI feature က request တိုင်း 200 ပြန်ပေးတယ်။ အဖြေ မှားတာကို ဖမ်းမယ့် SLI တစ်ခု ပြောပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>AI feature တွေရဲ့ reliability</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 27</p>
+              <h1>AI feature တွေရဲ့ reliability</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l27_p01
+      contentType: google
+      name: "Cover: 99.9% success, wrong refunds"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p01
+    - id: l27_p02
+      contentType: google
+      name: "AI is still a service"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p02
+    - id: l27_p02b
+      contentType: google
+      name: "Four terms"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p02b
+    - id: l27_p02c
+      contentType: google
+      name: "Four habits for a hosted model"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p02c
+    - id: l27_p03
+      contentType: google
+      name: "Ask Padauk's SLIs"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p03
+    - id: l27_p03b
+      contentType: google
+      name: "Ask Padauk's eval"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p03b
+    - id: l27_p03c
+      contentType: google
+      name: "Agent SLIs and the first SLO"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p03c
+    - id: l27_p04
+      contentType: google
+      name: "Plan AI capacity in kyat"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p04
+    - id: l27_p04b
+      contentType: google
+      name: "AI capacity checks"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p04b
+    - id: l27_p05
+      contentType: google
+      name: "What counts as a change?"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p05
+    - id: l27_p05b
+      contentType: google
+      name: "What stops a rollout"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p05b
+    - id: l27_p05c
+      contentType: google
+      name: "Fence the agent in"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p05c
+    - id: l27_p05d
+      contentType: google
+      name: "Prompt injection"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p05d
+    - id: l27_p06
+      contentType: google
+      name: "Launching an AI feature"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p06
+    - id: l27_p07
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l27_p07
+  whiteboardAssets:
+    # Board B1 (P5, one segmented bar on an underline axis): the answer spectrum.
+    # red = server errors (and what HTTP sees), orange = the weak fallback answers (still
+    # 200), green = good answers, violet = what users feel and the result of grading,
+    # blue = the thing named (the degraded flag and the 2% sample); ink = the axis.
+    # The bar is a spectrum, not a proportion chart: the orange segment is as wide as
+    # its first label line needs (23 code points x 15.4 px)
+    - {
+        id: l27-b1-axis,
+        kind: freedraw,
+        stroke: "underline",
+        x: 270,
+        y: 308,
+        width: 810,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b1-red,
+        kind: rectangle,
+        x: 280,
+        y: 270,
+        width: 80,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l27-b1-error,
+        kind: text,
+        x: 280,
+        y: 222,
+        width: 180,
+        height: 35,
+        text: "error (500)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-orange,
+        kind: rectangle,
+        x: 360,
+        y: 270,
+        width: 370,
+        height: 60,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l27-b1-weak-1,
+        kind: text,
+        x: 360,
+        y: 352,
+        width: 365,
+        height: 35,
+        text: "အားနည်း / fallback အဖြေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-weak-2,
+        kind: text,
+        x: 360,
+        y: 389,
+        width: 150,
+        height: 35,
+        text: "(200 ပဲ!)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-green,
+        kind: rectangle,
+        x: 730,
+        y: 270,
+        width: 340,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l27-b1-good,
+        kind: text,
+        x: 750,
+        y: 352,
+        width: 180,
+        height: 35,
+        text: "အဖြေ ကောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-http,
+        kind: text,
+        x: 280,
+        y: 172,
+        width: 335,
+        height: 35,
+        text: "HTTP မြင်တာ ဒီလောက်ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-whole,
+        kind: freedraw,
+        stroke: "underline",
+        x: 280,
+        y: 428,
+        width: 790,
+        height: 26,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b1-users,
+        kind: text,
+        x: 280,
+        y: 462,
+        width: 470,
+        height: 35,
+        text: "user က bar တစ်ခုလုံးကို ခံစားရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-flag,
+        kind: text,
+        x: 280,
+        y: 535,
+        width: 580,
+        height: 35,
+        text: "degraded လို့ မှတ် · နေ့တိုင်း 2% စစ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b1-truth,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 490,
+        height: 35,
+        text: "available၊ ဒါပေမဲ့ 30% degraded",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board B2 (P1 flow, short English box labels, left to right): the fraud model's
+    # nightly pipeline. blue = the data (the table) and the named freshness SLO, orange =
+    # the check and what it checks, green = serving users, red = the halt, violet = the
+    # flow arrows, ink = the other boxes and the box labels. Five boxes fit across the
+    # visible area only with English labels of at most 9 characters (9 x 15.4 = 139 px)
+    - {
+        id: l27-b2-table,
+        kind: rectangle,
+        x: 258,
+        y: 240,
+        width: 110,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l27-b2-table-t,
+        kind: text,
+        x: 270,
+        y: 257,
+        width: 86,
+        height: 35,
+        text: "table",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-a1,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 372,
+        y: 255,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b2-check,
+        kind: rectangle,
+        x: 408,
+        y: 240,
+        width: 110,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l27-b2-check-t,
+        kind: text,
+        x: 420,
+        y: 257,
+        width: 86,
+        height: 35,
+        text: "check",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-a2,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 522,
+        y: 255,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b2-training,
+        kind: rectangle,
+        x: 558,
+        y: 240,
+        width: 150,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b2-training-t,
+        kind: text,
+        x: 570,
+        y: 257,
+        width: 128,
+        height: 35,
+        text: "training",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-checks,
+        kind: text,
+        x: 408,
+        y: 325,
+        width: 380,
+        height: 35,
+        text: "fresh? rows? ဗလာ column?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-a3,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 712,
+        y: 255,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b2-eval,
+        kind: rectangle,
+        x: 748,
+        y: 240,
+        width: 165,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b2-eval-t,
+        kind: text,
+        x: 760,
+        y: 257,
+        width: 145,
+        height: 35,
+        text: "eval gate",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-a4,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 917,
+        y: 255,
+        width: 32,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b2-serving,
+        kind: rectangle,
+        x: 953,
+        y: 240,
+        width: 135,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l27-b2-serving-t,
+        kind: text,
+        x: 965,
+        y: 257,
+        width: 115,
+        height: 35,
+        text: "serving",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-halt-arrow,
+        kind: freedraw,
+        stroke: "arrow-down",
+        x: 440,
+        y: 368,
+        width: 40,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l27-b2-halt,
+        kind: text,
+        x: 408,
+        y: 438,
+        width: 500,
+        height: 35,
+        text: "ရပ်၊ model ဟောင်း ဆက်သုံး၊ alert",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b2-fresh,
+        kind: text,
+        x: 258,
+        y: 540,
+        width: 610,
+        height: 35,
+        text: "freshness SLO: သင်္ကြန် မနက် model အသစ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board B3 (P6 lanes, English boxes): Ask Padauk's three steps, before (top lane)
+    # and after (bottom lane). ink = the step boxes, violet = the flow arrows, red = the
+    # wrong ID, green = the two guards, blue = the named practice (logging). The long
+    # step names sit on two lines, one text asset per line, so the guard fits between
+    # the second and third boxes. The wrong-ID tag runs under the find and ticket boxes,
+    # where the narration says the mix-up began and travelled; the ID guard sits on the
+    # path into the ticket step (filled white, which paints as the dark canvas, so the
+    # arrow does not run through it), because the mix-up happened in the find step
+    - {
+        id: l27-b3-t-read,
+        kind: rectangle,
+        x: 260,
+        y: 180,
+        width: 170,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-t-read-t,
+        kind: text,
+        x: 273,
+        y: 207,
+        width: 145,
+        height: 35,
+        text: "read chat",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-t-a1,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 436,
+        y: 205,
+        width: 40,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b3-t-find,
+        kind: rectangle,
+        x: 482,
+        y: 180,
+        width: 200,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-t-find-t1,
+        kind: text,
+        x: 497,
+        y: 189,
+        width: 75,
+        height: 35,
+        text: "find",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-t-find-t2,
+        kind: text,
+        x: 497,
+        y: 226,
+        width: 175,
+        height: 35,
+        text: "transaction",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-t-a2,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 692,
+        y: 205,
+        width: 120,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b3-t-ticket,
+        kind: rectangle,
+        x: 822,
+        y: 180,
+        width: 200,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-t-ticket-t1,
+        kind: text,
+        x: 837,
+        y: 189,
+        width: 175,
+        height: 35,
+        text: "open refund",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-t-ticket-t2,
+        kind: text,
+        x: 837,
+        y: 226,
+        width: 100,
+        height: 35,
+        text: "ticket",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-wrong-line,
+        kind: freedraw,
+        stroke: "underline",
+        x: 482,
+        y: 272,
+        width: 540,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l27-b3-wrong,
+        kind: text,
+        x: 497,
+        y: 302,
+        width: 115,
+        height: 35,
+        text: "ID မှား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-b-read,
+        kind: rectangle,
+        x: 260,
+        y: 410,
+        width: 170,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-b-read-t,
+        kind: text,
+        x: 273,
+        y: 437,
+        width: 145,
+        height: 35,
+        text: "read chat",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-b-a1,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 436,
+        y: 435,
+        width: 40,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b3-b-find,
+        kind: rectangle,
+        x: 482,
+        y: 410,
+        width: 200,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-b-find-t1,
+        kind: text,
+        x: 497,
+        y: 419,
+        width: 75,
+        height: 35,
+        text: "find",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-b-find-t2,
+        kind: text,
+        x: 497,
+        y: 456,
+        width: 175,
+        height: 35,
+        text: "transaction",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-b-a2,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 692,
+        y: 435,
+        width: 120,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l27-b3-b-ticket,
+        kind: rectangle,
+        x: 822,
+        y: 410,
+        width: 200,
+        height: 90,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l27-b3-b-ticket-t1,
+        kind: text,
+        x: 837,
+        y: 419,
+        width: 175,
+        height: 35,
+        text: "open refund",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-b-ticket-t2,
+        kind: text,
+        x: 837,
+        y: 456,
+        width: 100,
+        height: 35,
+        text: "ticket",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-guard,
+        kind: rectangle,
+        x: 724,
+        y: 420,
+        width: 56,
+        height: 70,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l27-b3-guard-check,
+        kind: freedraw,
+        stroke: "check",
+        x: 732,
+        y: 435,
+        width: 40,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l27-b3-validate,
+        kind: text,
+        x: 640,
+        y: 362,
+        width: 240,
+        height: 35,
+        text: "ID ကို validate",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-fence,
+        kind: rectangle,
+        x: 812,
+        y: 400,
+        width: 220,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l27-b3-ticket-only,
+        kind: text,
+        x: 765,
+        y: 518,
+        width: 330,
+        height: 35,
+        text: "ticket ပဲ၊ ငွေ မရွှေ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l27-b3-log,
+        kind: text,
+        x: 260,
+        y: 578,
+        width: 315,
+        height: 35,
+        text: "tool call တိုင်း log",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2627
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "မှားတဲ့ refund ticket တွေ"
+    narration: >
+      [[mark:p01]] Padauk ရဲ့ coding agent တွေက အခု instruction file နဲ့ fee spec ကို ဖတ်ပြီး ပြောင်းလဲမှုတိုင်းမှာ change record ချန်ပါတယ်။ ဒီတစ်ခါတော့ chat ကို မြန်မာလို ဖြေပြီး refund ticket ဖွင့်ပေးနိုင်တဲ့ AI support assistant၊ Ask Padauk ကို launch လုပ်ပါတယ်။
+      [[mark:p01-http]] HTTP မှာ chat တွေရဲ့ ၉၉.၉ ရာခိုင်နှုန်းက အောင်မြင်တယ်လို့ ပြန်လာပါတယ်။ ဒါပေမဲ့ customer မေးတဲ့ transaction အစား တခြား transaction အတွက် refund ticket ဖွင့်ထားတာကို မစုရဲ့ support အဖွဲ့က တွေ့လာပါတယ်။ success code ပြန်လာရုံနဲ့ ဘယ်တော့ မလုံလောက်တော့လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      # p01-http (no action) splits the 496-character hook at its paragraph break, under
+      # the 450-character dialog limit; the cover holds both paragraphs (~37 s at 70 ms/char).
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l27_p01 }
+
+  - id: ai-is-a-service
+    chapter: "AI လည်း service တစ်ခုပါပဲ"
+    narration: >
+      [[mark:p02]] AI feature မို့ reliability ကို အစကနေ ပြန်သင်ရမလား ဆိုတော့ မလိုပါဘူး။ Ask Padauk လည်း service ပဲမို့ SLO၊ capacity၊ ဘေးကင်းတဲ့ change တွေ အရင်အတိုင်း လိုပါတယ်။ အသစ်က နှစ်ခုပဲ ရှိပါတယ်၊ အဖြေက error မပြဘဲ မှားနိုင်တာနဲ့ request တိုင်းမှာ token ကုန်တာပါ။
+      [[mark:p02b]] model ကို data နဲ့ သင်ပေးတာက training ဖြစ်ပြီး train ပြီးသား model နဲ့ request တစ်ခုချင်းကို ဖြေတာက inference ပါ။ token က model ခွဲဖတ်တဲ့ စာသား အပိုင်းလေးတွေ ဖြစ်ပြီး တစ်ခါတည်း ဖတ်နိုင်တဲ့ အများဆုံး ပမာဏကို context window လို့ ခေါ်ပါတယ်။ transaction ရှာတာ၊ ticket ဖွင့်တာလို tool တွေကို အဆင့်လိုက် ခေါ်သုံးတဲ့ model က agent ဖြစ်ပြီး tool တစ်ခါ ခေါ်တာက tool call ပါ။
+      [[mark:p02c]] model ကို provider ဆီက ငှားသုံးရင် အလေ့အထ လေးခု ရှိပါတယ်။ prompt နဲ့ limit သတ်မှတ်တဲ့ အပိုင်းကို user ကို ဖြေတဲ့ အပိုင်းနဲ့ ခွဲထားပြီး quota ကို ရှားပါးတဲ့ resource လို သုံးပါ။ AI အပိုင်းကိုပါ observe လုပ်ပြီး prompt နဲ့ model ကို rollback လုပ်လို့ရအောင် version တပ်ပါ။ ဈေးပေါတဲ့ model ဆီ traffic လွှဲတဲ့ model router ကလည်း reliability ခလုတ် တစ်ခုပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Hidden Technical Debt in Machine Learning Systems (NeurIPS 2015)",
+          url: "https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
+        }
+      - {
+          title: "MLOps: Continuous delivery and automation pipelines in ML (Google Cloud)",
+          url: "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l27_p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: p02b }, slideId: l27_p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: p02c }, slideId: l27_p02c }
+
+  - id: answer-spectrum
+    chapter: "အလယ်က အဖြေတွေ"
+    narration: >
+      [[mark:close-p02c]] [[mark:b1-step1]] လစာထုတ်ရက် ညနေမှာ provider ရဲ့ rate limit ကို ထိတော့ model router က အခမဲ့ user တွေရဲ့ chat ကို fallback အဖြစ် ဈေးပေါတဲ့ model ဆီ လွှဲပါတယ်။ အဖြေတွေကို bar တစ်ခုပေါ် စီကြည့်ရင် ဘယ်ဘက်အစွန်မှာ server error တွေ ရှိပါတယ်၊ အဲဒီညက error မတက်လာလို့ dashboard က အစိမ်းရောင်ပါပဲ။
+      [[mark:b1-step2]] အလယ်မှာတော့ HTTP က အောင်မြင်တယ်လို့ ပြပေမဲ့ အားနည်းတဲ့ fallback အဖြေတွေ ရှိပြီး ညာဘက်အစွန်မှာ ကောင်းတဲ့ အဖြေတွေ ရှိပါတယ်။ ဈေးပေါတဲ့ model ရဲ့ အဖြေ ဝေဝါးလို့ user တွေ စကားလုံး ပြောင်းပြီး ထပ်မေးနေတာကို မစု သတိထားမိပါတယ်။
+      [[mark:b1-step3]] lesson ၇ မှာ ကြိုပြောခဲ့သလို AI မှာ အောင်မြင်တာနဲ့ ပျက်တာ နှစ်မျိုးတည်း မရှိတော့ပါဘူး။ HTTP က ဘယ်ဘက်အစွန်ကိုပဲ မြင်ပေမဲ့ user ကတော့ bar တစ်ခုလုံးကို ခံစားရပါတယ်။ error မဟုတ်ပေမဲ့ အားနည်းတဲ့ အဖြေကို degraded answer လို့ ခေါ်ပြီး SLO ထဲမှာ ရေတွက်ရပါတယ်။
+      [[mark:b1-step4]] မသီရိက fallback အဖြေတိုင်းကို degraded လို့ မှတ်ပြီး အဖြေ ၂ ရာခိုင်နှုန်းကို နေ့တိုင်း အမှတ်ပေး စစ်ခိုင်းပါတယ်။ ဒီတော့မှ လစာထုတ်ရက် ညနေမှာ Ask Padauk က available ဖြစ်နေပေမဲ့ အဖြေ ၃၀ ရာခိုင်နှုန်းက degraded ဖြစ်နေတာ ပေါ်လာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - id: b1-step1
+        type: whiteboard.apply
+        at: { mark: b1-step1 }
+        open: true
+        clear: true
+        upsertIds: [l27-b1-axis, l27-b1-red, l27-b1-error]
+        drawMs: 1400
+      - id: b1-step2
+        type: whiteboard.apply
+        at: { mark: b1-step2 }
+        upsertIds: [l27-b1-orange, l27-b1-weak-1, l27-b1-weak-2, l27-b1-green, l27-b1-good]
+        drawMs: 2200
+      - id: b1-step3
+        type: whiteboard.apply
+        at: { mark: b1-step3 }
+        upsertIds: [l27-b1-http, l27-b1-whole, l27-b1-users]
+        drawMs: 1800
+      - id: b1-step4
+        type: whiteboard.apply
+        at: { mark: b1-step4 }
+        upsertIds: [l27-b1-flag, l27-b1-truth]
+        drawMs: 1600
+
+  - id: ask-padauk-slis
+    chapter: "Ask Padauk ရဲ့ SLI တွေ"
+    narration: >
+      [[mark:close-b1]] [[mark:p03]] ဒါဆို refund အမှားကို ဘယ် ကိန်းဂဏန်းက ဖမ်းမလဲ? မသီရိက user ကြုံရတာကို တိုင်းတဲ့ SLI တွေကို ဒုက္ခ တစ်ခုချင်းကနေ ဆွဲထုတ်ပါတယ်။ refund မှားတာအတွက် transaction မှန်မှန် ရွေးတဲ့ ရာခိုင်နှုန်း၊ အဖြေ အသုံးမဝင်တာအတွက် ၅ မိနစ်အတွင်း ထပ်မမေးရတဲ့ chat ရာခိုင်နှုန်း၊ စောင့်ရတာအတွက် ပထမ စာလုံး ပေါ်တဲ့အထိ ကြာချိန်၊ time to first token ၂ စက္ကန့်အတွင်း ဆိုတာတွေပါ။ fallback အဖြေကိုတော့ degraded လို့ ရေတွက်ပါတယ်။
+      [[mark:p03b]] prompt အသစ်ကို user မမြင်ခင်ရော ဘယ်လို စစ်မလဲ? အဖြေ မှန်ကို ကြိုသိထားတဲ့ မေးခွန်း စုစည်းမှု၊ golden set နဲ့ AI အဖြေကို စနစ်တကျ စစ်တာကို eval လို့ ခေါ်ပါတယ်။ Padauk က တကယ့် complaint ၅၀ နဲ့ golden set လုပ်ပြီး eval ရမှတ်ကို SLI၊ အောင်မျဉ်းကို SLO အဖြစ် ထားပါတယ်။ အဖြေတွေက စကားလုံး ကွဲတတ်လို့ စာလုံးချင်း တိုက်မစစ်ဘဲ ID၊ ငွေပမာဏနဲ့ format ကိုပဲ စစ်ပါတယ်။
+      [[mark:p03c]] agent ရဲ့ SLI အနေနဲ့ tool call အောင်မြင်တာ၊ ID validation ဖြတ်တာ၊ ticket format မှန်တာကိုလည်း တိုင်းပါတယ်။ မနှင်းနဲ့ မသီရိက refund မှန်မှန် ရဖို့ ဆိုတဲ့ product ပန်းတိုင်ကို အရင် သဘောတူပါတယ်။ ပထမ SLO ကို မီနိုင်တဲ့ ဂဏန်းမှာ ထားပြီး နောက်မှ မြှင့်မှာပါ၊ degraded အဖြေတွေကလည်း အဲဒီ SLO ရဲ့ error budget ကို သုံးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l27_p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: p03b }, slideId: l27_p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: p03c }, slideId: l27_p03c }
+
+  - id: capacity-is-cost
+    chapter: "Capacity ကို ကျပ်နဲ့ တွက်"
+    narration: >
+      [[mark:p04]] capacity စီစဉ်ပုံလည်း ပြောင်းပါတယ်။ Ask Padauk ရဲ့ request တွေက top-up ထက် အများကြီး နည်းပေမဲ့ တစ်ခုချင်းက ဈေးကြီးပြီး chat ရှည်လေ token ကုန်လေမို့ ကုန်ကျငွေလည်း မညီပါဘူး။ ဒါကြောင့် request တစ်ခုရဲ့ ကုန်ကျငွေကို request အရေအတွက်နဲ့ မြှောက်ပြီး capacity ကို ကျပ်နဲ့ စီစဉ်ပါတယ်။ request နည်းရင် ဂရုမစိုက်တဲ့ alert၊ ကုန်ကျငွေ တူတယ်လို့ ယူဆတဲ့ alert တွေကလည်း ပြဿနာကို ဖုံးထားတတ်ပါတယ်။
+      [[mark:p04b]] Padauk က request တိုင်းရဲ့ token၊ latency နဲ့ ကုန်ကျငွေကို မှတ်ထားပါတယ်။ အရန် quota ကလည်း မသုံးရင်တောင် ပိုက်ဆံ ကုန်ပါတယ်။ load test မှာလည်း အဖြေ အရည်အသွေးကိုပါ စစ်ပါတယ်။ feature အသစ်ကို chat ၅ ရာခိုင်နှုန်းမှာ အရင် တိုင်းပြီး launch မလုပ်ခင် bill ကို ချဲ့တွက်ပါတယ်၊ provider ပြောင်းဖို့ ခလုတ် တစ်ခုလည်း ထားပါတယ်။ ကိုယ်ပိုင် model train ဖို့ GPU စီမံတာကိုတော့ ဒီသင်တန်းမှာ ချန်ထားပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Best practices for autoscaling LLM inference on GKE (Google Cloud)",
+          url: "https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l27_p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: p04b }, slideId: l27_p04b }
+
+  - id: bad-data-stops
+    chapter: "Data မကောင်းရင် ရပ်"
+    narration: >
+      [[mark:close-p04b]] [[mark:b2-step1]] model ရဲ့ ဆုံးဖြတ်ချက်ကို code ထက် train ခဲ့တဲ့ data က ပိုသတ်မှတ်ပါတယ်။ လိမ်လည်တဲ့ ငွေချေမှုကို ရှာပေးတဲ့ Padauk ရဲ့ fraud model က transactions table ကနေ ညတိုင်း train ပါတယ်။ [[mark:b2-step1b]] သင်္ကြန် မတိုင်ခင် log ပြောင်းတဲ့ change တစ်ခုကြောင့် column တစ်ခု ဗလာ ဖြစ်သွားပေမဲ့ training မစခင် data အသစ်လား၊ row လုံလောက်လား၊ ဗလာ column ရှိလား စစ်တဲ့ check ရှိပါတယ်။
+      [[mark:b2-step2]] ပုံမှန်ဆိုရင် check အောင်မှ train ပြီး model အသစ်က eval gate ကို ဖြတ်မှ user တွေအတွက် model ကို run ထားတဲ့ serving ဆီ ရောက်ပါတယ်။ ဗလာ column နဲ့ train မိရင်တော့ model က ယုံယုံကြည်ကြည်နဲ့ မှားမှာပါ။
+      [[mark:b2-step3]] ဒီတစ်ခါ check က training ကို ရပ်လို့ model ဟောင်းက ဆက်အလုပ်လုပ်ပြီး on-call ဆီ alert ရောက်ပါတယ်။ check တွေကို ဈေးပေါတာကနေ ဈေးကြီးတာအထိ အလွှာလိုက် ထားပါတယ်။ data အသစ်လား အမြဲ စစ်ပြီး fraud score တွေ တကယ့် လိမ်လည်မှုနဲ့ ကွာလာလား စောင့်ကြည့်ပါတယ်၊ လူ ဒါမှမဟုတ် ဒုတိယ model က နမူနာ ပြန်စစ်တာကိုတော့ ရံဖန်ရံခါပဲ လုပ်ပါတယ်။
+      [[mark:b2-step4]] ရပ်တာ မှန်ပေမဲ့ ဟောင်းနေတဲ့ model လည်း outage တစ်မျိုးမို့ သင်္ကြန် မနက်မှာ eval အောင်ထားတဲ့ model အသစ် ရှိရမယ် ဆိုတဲ့ freshness SLO ထားပါတယ်။ training က ညတိုင်း သူ့ဘာသာ run နေပြီ ဆိုရင် production မို့ မသီရိရဲ့ အဖွဲ့က တာဝန်ယူပြီး စမ်းသပ်နေတုန်းမှာတော့ အကြံပဲ ပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "MLOps: Continuous delivery and automation pipelines in ML (Google Cloud)",
+          url: "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+        }
+      - {
+          title: "Hidden Technical Debt in Machine Learning Systems (NeurIPS 2015)",
+          url: "https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
+        }
+    actions:
+      # b2-step1b, one more mark at an existing sentence end, lands the check's three
+      # questions as the narration names them, so step 1 adds three labelled boxes and
+      # step 1b the caveat (at most three labelled elements per step).
+      - { id: close-p04b, type: slide.close, at: { mark: close-p04b, offsetMs: -400 } }
+      - id: b2-step1
+        type: whiteboard.apply
+        at: { mark: b2-step1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l27-b2-table,
+            l27-b2-table-t,
+            l27-b2-a1,
+            l27-b2-check,
+            l27-b2-check-t,
+            l27-b2-a2,
+            l27-b2-training,
+            l27-b2-training-t,
+          ]
+        drawMs: 2400
+      - id: b2-step1b
+        type: whiteboard.apply
+        at: { mark: b2-step1b }
+        upsertIds: [l27-b2-checks]
+        drawMs: 1000
+      - id: b2-step2
+        type: whiteboard.apply
+        at: { mark: b2-step2 }
+        upsertIds:
+          [l27-b2-a3, l27-b2-eval, l27-b2-eval-t, l27-b2-a4, l27-b2-serving, l27-b2-serving-t]
+        drawMs: 2000
+      - id: b2-step3
+        type: whiteboard.apply
+        at: { mark: b2-step3 }
+        upsertIds: [l27-b2-halt-arrow, l27-b2-halt]
+        drawMs: 1200
+      - id: b2-step4
+        type: whiteboard.apply
+        at: { mark: b2-step4 }
+        upsertIds: [l27-b2-fresh]
+        drawMs: 1200
+
+  - id: what-is-a-change
+    chapter: "ဘာတွေက change လဲ"
+    narration: >
+      [[mark:close-b2]] [[mark:p05]] log ပြောင်းတာလေးတောင် model ကို ထိခဲ့ပါတယ်။ AI feature မှာ model အသစ်၊ provider က တိတ်တိတ် update လုပ်တာ၊ prompt စာကြောင်း တစ်ကြောင်း၊ template နဲ့ setting ပြင်တာတွေက code မပြောင်းဘဲ အပြုအမူကို ပြောင်းလို့ change တွေပါပဲ။ ဒါကြောင့် အားလုံးကို eval နဲ့ အရင် စစ်ပြီးမှ chat အနည်းငယ်ဆီ ပို့ကြည့်တဲ့ canary နဲ့ ထုတ်ပါတယ်။
+      [[mark:p05b]] canary မှာ အဖြေ နှေးလာတာရော ညံ့လာတာရော rollout ကို ရပ်စေပါတယ်။ lesson ၇ က Hyrum's law လိုပဲ ကတိ မပေးခဲ့တဲ့ ticket ပုံစံကိုတောင် support tool က အားကိုးနေနိုင်လို့ ပျမ်းမျှ ရမှတ် တက်ရုံနဲ့ မလုံလောက်ဘဲ workflow တစ်ခုလုံးကို စမ်းရပါတယ်။ ဒီ guardrail တွေက ပြဿနာကို စောစော မိစေလို့ Padauk က ပိုမြန်မြန် ထုတ်နိုင်လာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "MLOps: Continuous delivery and automation pipelines in ML (Google Cloud)",
+          url: "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l27_p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: p05b }, slideId: l27_p05b }
+
+  - id: agent-blast-radius
+    chapter: "Agent ရဲ့ blast radius"
+    narration: >
+      [[mark:close-p05b]] [[mark:b3-step1]] Ask Padauk က chat ဖတ်၊ transaction ရှာပြီး ticket ဖွင့်ပါတယ်။ [[mark:b3-step1b]] ရှာတဲ့ အဆင့်မှာ transaction နှစ်ခုရဲ့ ID ကို ရောမိတော့ နောက်အဆင့်တွေက မစစ်ဘဲ ယုံလိုက်လို့ အမှားက အဆုံးထိ ပါသွားတာပါ။
+      [[mark:b3-step2]] ဒါကြောင့် agent မှားရင် ထိခိုက်မယ့် နယ်ပယ်၊ blast radius ကို ကျဉ်းအောင် လုပ်ပါတယ်။ [[mark:b3-step2b]] ID က ဒီ customer ရဲ့ transaction ဟုတ်လား၊ ငွေပမာဏ ကိုက်လား ဆိုတာကို ရိုးရိုး code နဲ့ validate လုပ်ပြီး agent ကို ticket ဖွင့်ခွင့်ပဲ ပေးထားလို့ ငွေကို လူက အတည်ပြုမှ ပြန်အမ်းပါတယ်။
+      [[mark:b3-step3]] tool call တိုင်းကို input၊ output နဲ့ log မှာ မှတ်ပြီး prompt နဲ့ အဖြေတွေကို personal data ဖယ်ပြီးမှ သိမ်းလို့ ဘယ်အဆင့်က စမှားလဲ ပြန်ရှာလို့ ရပါတယ်။
+      [[mark:close-b3]] [[mark:p05c]] agent လုပ်ခွင့်ရှိတဲ့ အဆင့် အရေအတွက်ကို step budget အဖြစ် ကန့်သတ်ပြီး ကျော်ရင် လူဆီ လွှဲရပါမယ်။ ယုံလို့မရတဲ့ chat ဖတ်ခွင့်၊ wallet data မြင်ခွင့်နဲ့ message လွတ်လွတ် ပို့ခွင့် သုံးခုကိုလည်း agent တစ်ခုတည်းမှာ အတူ မပေးပါနဲ့။ ဒါကြောင့် SMS tool က verify လုပ်ထားတဲ့ customer နံပါတ်ကိုပဲ ပို့နိုင်အောင် prompt နဲ့ မဟုတ်ဘဲ ရိုးရိုး code နဲ့ ကန့်သတ်ထားပါတယ်။
+      [[mark:p05d]] ဘာလို့ prompt နဲ့ မထိန်းတာလဲ? model ရဲ့ စည်းမျဉ်းနဲ့ user စာက လမ်းကြောင်း တစ်ခုတည်းကနေ ဝင်လာလို့ စာထဲမှာ ညွှန်ကြားချက် ဝှက်ထည့်ပြီး model ကို မလုပ်သင့်တာ လုပ်ခိုင်းနိုင်ပါတယ်၊ ဒါက prompt injection ပါ။ ဒါကြောင့် အဝင်ရော အထွက်ရော စစ်ရပြီး download လုပ်တဲ့ model နဲ့ dataset တွေကလည်း dependency တွေမို့ library တွေလိုပဲ သတိထားရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+      - {
+          title: "Hidden Technical Debt in Machine Learning Systems (NeurIPS 2015)",
+          url: "https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
+        }
+    actions:
+      # b3-step1b and b3-step2b, marks at existing sentence ends, split each lane from its
+      # tag or guards, so no step adds more than three labelled elements.
+      - { id: close-p05b, type: slide.close, at: { mark: close-p05b, offsetMs: -400 } }
+      - id: b3-step1
+        type: whiteboard.apply
+        at: { mark: b3-step1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l27-b3-t-read,
+            l27-b3-t-read-t,
+            l27-b3-t-a1,
+            l27-b3-t-find,
+            l27-b3-t-find-t1,
+            l27-b3-t-find-t2,
+            l27-b3-t-a2,
+            l27-b3-t-ticket,
+            l27-b3-t-ticket-t1,
+            l27-b3-t-ticket-t2,
+          ]
+        drawMs: 2400
+      - id: b3-step1b
+        type: whiteboard.apply
+        at: { mark: b3-step1b }
+        upsertIds: [l27-b3-wrong-line, l27-b3-wrong]
+        drawMs: 1000
+      - id: b3-step2
+        type: whiteboard.apply
+        at: { mark: b3-step2 }
+        upsertIds:
+          [
+            l27-b3-b-read,
+            l27-b3-b-read-t,
+            l27-b3-b-a1,
+            l27-b3-b-find,
+            l27-b3-b-find-t1,
+            l27-b3-b-find-t2,
+            l27-b3-b-a2,
+            l27-b3-b-ticket,
+            l27-b3-b-ticket-t1,
+            l27-b3-b-ticket-t2,
+          ]
+        drawMs: 2400
+      - id: b3-step2b
+        type: whiteboard.apply
+        at: { mark: b3-step2b }
+        upsertIds:
+          [l27-b3-guard, l27-b3-guard-check, l27-b3-validate, l27-b3-fence, l27-b3-ticket-only]
+        drawMs: 2200
+      - id: b3-step3
+        type: whiteboard.apply
+        at: { mark: b3-step3 }
+        upsertIds: [l27-b3-log]
+        drawMs: 1000
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05c, type: slide.show, at: { mark: p05c }, slideId: l27_p05c }
+      - { id: show-p05d, type: slide.show, at: { mark: p05d }, slideId: l27_p05d }
+
+  - id: launching
+    chapter: "AI feature ကို launch လုပ်ပုံ"
+    narration: >
+      [[mark:p06]] ပြင်ပြီးတော့ Ask Padauk ကို အဆင့်လိုက် ပြန် launch လုပ်ပါတယ်။ အရင်ဆုံး complaint အစစ် ၅၀ နဲ့ eval လုပ်တယ်၊ အရည်အသွေးပါ စစ်တဲ့ load test လုပ်တယ်၊ model ဟောင်းဆီ ပြန်သွားတဲ့ rollback နဲ့ ချက်ချင်း ပိတ်တဲ့ ခလုတ်ကို စမ်းထားပြီးမှ chat ၅ ရာခိုင်နှုန်းနဲ့ စပါတယ်။
+      complaint တွေနဲ့ နေ့တိုင်း အဖြေ ၂ ရာခိုင်နှုန်း စစ်တဲ့ ရလဒ်တွေကို နောက်တစ်ခေါက် ပြင်ဖို့ ပြန်သုံးပါတယ်။ prototype က ရက်ပိုင်းပဲ ကြာပေမဲ့ production ကတော့ အများကြီး ပိုကြာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: p06 }, slideId: l27_p06 }
+
+  - id: this-week
+    narration: >
+      [[mark:p07]] AI feature ရှိရင် ဒီအပတ် စမ်းကြည့်ဖို့ သုံးခုပါ။ fallback အဖြေတိုင်းကို degraded လို့ မှတ်ပြီး ရေတွက်ပါ။ user မေးခွန်း အစစ်ကနေ case ၅၀ ပါတဲ့ golden set တစ်ခု စုပါ။ ကိုယ့် agent ကိုလည်း တကယ် လိုတဲ့ permission လောက်ပဲ ပေးတဲ့ least privilege ဖြစ်အောင် ပြင်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+      - {
+          title: "The ML Test Score (research.google)",
+          url: "https://research.google/pubs/the-ml-test-score-a-rubric-for-ml-production-readiness-and-technical-debt-reduction/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: p07 }, slideId: l27_p07 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p07]] [[mark:notes]] Ask Padauk ကနေ ရလာတဲ့ ဝေါဟာရတွေပါ။ [[mark:sel-inference]] inference က train ပြီးသား model နဲ့ request တစ်ခုချင်းကို ဖြေတာ ဖြစ်ပြီး၊ [[mark:sel-token]] token က model ဖတ်တဲ့ စာသား အပိုင်းလေးပါ၊ ကုန်ကျငွေလည်း ဒီကလာပါတယ်။ [[mark:sel-eval]] eval က AI အဖြေကို စနစ်တကျ စစ်တာ ဖြစ်ပြီး ရမှတ်က SLI ပါ။ [[mark:sel-golden-set]] golden set က အဖြေ မှန်ကို ကြိုသိထားတဲ့ မေးခွန်းတွေပါ။
+      [[mark:sel-degraded]] degraded answer က error မဟုတ်ပေမဲ့ SLO ထဲမှာ ရေတွက်ရတဲ့ အားနည်းတဲ့ အဖြေ ဖြစ်ပြီး၊ [[mark:sel-injection]] prompt injection က model ဖတ်မယ့် စာထဲ ညွှန်ကြားချက် ဝှက်ထည့်တာပါ။ [[mark:ask-question]] AI feature က request တိုင်းကို အောင်မြင်တယ်လို့ ပြန်ပေးနေရင် အဖြေ မှားတာကို ဘယ် SLI က ဖမ်းမလဲ?
+      [[mark:pause-question]] ဥပမာ transaction မှန်မှန် ရွေးတဲ့ ရာခိုင်နှုန်း၊ ဒါမှမဟုတ် ၅ မိနစ်အတွင်း ထပ်မမေးရတဲ့ chat ရာခိုင်နှုန်းပါ။ အခု ဘက်ပြောင်းကြည့်ရအောင်၊ Padauk ရဲ့ internal AI operations agent၊ Ops Buddy က production ဝင်ခွင့် တောင်းလာပါတယ်။ AI agent တစ်ခုကို ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Rules of Machine Learning (Google for Developers)",
+          url: "https://developers.google.com/machine-learning/guides/rules-of-ml",
+        }
+      - {
+          title: "Hidden Technical Debt in Machine Learning Systems (NeurIPS 2015)",
+          url: "https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07 } }
+      - id: open-notes
+        type: workspace.openFile
+        at: { mark: notes, offsetMs: 300 }
+        path: notes.md
+      - id: sel-inference
+        type: editor.select
+        at: { mark: sel-inference }
+        target: { file: notes.md, text: "inference", occurrence: 1 }
+      - id: sel-token
+        type: editor.select
+        at: { mark: sel-token }
+        target: { file: notes.md, text: "token", occurrence: 1 }
+      - id: sel-eval
+        type: editor.select
+        at: { mark: sel-eval }
+        target: { file: notes.md, text: "eval", occurrence: 1 }
+      - id: sel-golden-set
+        type: editor.select
+        at: { mark: sel-golden-set }
+        target: { file: notes.md, text: "golden set", occurrence: 1 }
+      - id: sel-degraded
+        type: editor.select
+        at: { mark: sel-degraded }
+        target: { file: notes.md, text: "degraded answer", occurrence: 1 }
+      - id: sel-injection
+        type: editor.select
+        at: { mark: sel-injection }
+        target: { file: notes.md, text: "prompt injection", occurrence: 1 }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ (ask-question) already starts
+      # the question's own dialog, but a select right there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question with an
+      # offset: it starts about as the question ends, its drag runs in silence,
+      # and the answer at pause-question waits for it. The question is
+      # 94 characters, so 6850 starts the drag about as the question ends at 70 ms
+      # per char and leaves about 2.8 / 1.4 / 0.4 s of quiet before the answer at
+      # 55 / 70 / 95; an offset above ~6930 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 6850 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: AI feature က request တိုင်း 200 ပြန်ပေးတယ်။ အဖြေ မှားတာကို ဖမ်းမယ့် SLI တစ်ခု ပြောပါ။"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
