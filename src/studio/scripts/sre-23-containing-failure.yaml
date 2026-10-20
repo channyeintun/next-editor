@@ -1,0 +1,1782 @@
+# SRE from zero, lesson 23: Failure ကို ဘောင်ခတ်ထားတဲ့ design (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-23-containing-failure.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-23-containing-failure.md \
+#     src/studio/scripts/sre-23-containing-failure.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: the half-written price list (cover, then the 40% page); board B1 (P5
+# bars): the designed range with normal nights, the tall night beyond it, red
+# collapse vs green dip-and-recover, then the wider range each lesson buys;
+# board B2 (P5 two-axis placement): how often against how bad, the three risks,
+# the struck-through "likelihood × impact" and Padauk's three decisions; board
+# B3 (P2 comb): three zones, the shared session cache, a cache per zone, more
+# and smaller domains, and the protected known-good copy; board B4 (P1 flow +
+# P2 fan-in): Eats checkout, Wallet 99.9% and notification 99% multiplying to
+# 98.9%, the struck promise and the queue, then two SMS providers into one
+# operator gateway; pages: Eats checkout's dependency card, three cards, the
+# same cards with the third highlighted, then before and after; board B5 (P1
+# flow): the checks in front of the price list, reject and keep the last good
+# version, the zone-by-zone rollout, fail open and fail closed; the "this week"
+# page; recap on notes.md.
+#
+# Twelve marks add no spoken text and each sits at an existing ။ or ၊. Eleven
+# let a board's later boxes land as the narration names them, so no step adds
+# more than three labelled boxes: b1-s2b lands B1's green dip-and-recover after
+# the red collapse; b2-s2b lands "SMS gateway မျှသုံး" after the other two risks;
+# b2-s3b strikes through "ဖြစ်နိုင်ခြေ × ထိခိုက်မှု" once the sentence about it ends;
+# b2-s4b lands the SMS decision; b3-s2b lands the red "zone A ပျက် = 100% ပျက်"
+# after the shared cache is on the board; b3-s4b lands the second line of the
+# orange domain note ("traffic ကို အဆင့်လိုက် လွှဲ"); b4-s1b lands Wallet and
+# notification after Eats checkout; b4-s2b lands the 98.9% result and its note
+# once the multiplication is spoken (b4-s2 itself only draws the arrow towards
+# it); b4-s4b lands the operator gateway after the two providers; b5-s1b lands
+# the two checks as the narration names them and b5-s4b the fail-closed line.
+# The twelfth, ask-question-b, splits the recap question at its ၊: ask-question
+# is the voice script's ⟪select မေးခွန်း⟫, pause-question its ⟪pause 3s⟫, and
+# select-question hangs off ask-question-b (see the note there).
+# The title "Wallet" is furniture: it is drawn on its own with no drawMs and the
+# three zone boxes follow through afterAction, so no apply counts more than
+# three labelled boxes. No page or board step holds longer than ~30 s at
+# 70 ms/char (the longest is l23_p02c at ~29.6 s), so no pacing page was added
+# beyond the voice script's own.
+#
+# ⟪close board⟫ straight into the next board (scenes 3 to 5) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, so
+# the editor does not flash between two boards, as in lesson 8; the next board
+# then draws with open: true, clear: true as usual. A board followed by a deck
+# page closes the panel (open: false) 400 ms before the page, as in Module 1,
+# and a page followed by a board closes the page 400 ms before.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for titles, axes, arrows and
+# buses; blue the thing named (the designed range, the normal nights, the risks,
+# the zones, the flow's boxes, the SMS providers); green healthy or the fix (the
+# dip-and-recover bars, "a cache per zone", the queue, the last good version,
+# the known-good copy); red failure or limit (the collapse bar, losing zone A,
+# the operator gateway, the reject box, the struck promise); orange the caveat
+# (the shared cache, "likelihood × impact", the accepted gateway risk, the
+# domain note, the "promise 99.9%?", the two checks, fail open and fail closed);
+# violet result or flow (plan now and fix step by step, the 98.9% result, the
+# rollout to the servers). A label on two lines is one text asset per line, so
+# each line meets the 0.55 em width rule on its own; every label was also
+# measured in Chrome with the fallback font (WORK/opencode/wb-fit.mjs) and
+# fits the box it sits in.
+#
+# Deck pages: deck "Next Editor · SRE 5C · Design and platforms", published; the
+# /pub URL below is final. The deck holds only the kit pages until this
+# lesson's pages are built from the page plan, so until then the Director
+# reports page "l23_p01" missing from the published deck. l23_p02b repeats
+# l23_p02 with its third card highlighted yellow. Page plan:
+# ~/Documents/sre-course/work/pages/sre-23-containing-failure.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-23-containing-failure.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-23-containing-failure.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-23-containing-failure
+  title: "SRE from zero 23: Failure ကို ဘောင်ခတ်ထားတဲ့ design"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Failure ကို ဘောင်ခတ်ထားတဲ့ design
+
+        - resilience — design ဘောင် အပြင်က failure ကိုပါ ဘောင်ခတ်ပြီး ပြန်ကောင်းလာ
+        - failure domain — ပြဿနာ တစ်ခုတည်းကြောင့် အတူ ပျက်နိုင်တဲ့ အုပ်စု
+        - blast radius — မှားရင် ထိခိုက်မယ့် နယ်ပယ်
+        - serial dependency — အစဉ်လိုက် ခေါ်ရလို့ availability တွေ မြှောက်ရ
+        - shared fate — တစ်ခုတည်းကို မျှသုံးလို့ အတူ ပျက်
+        - fail open / fail closed — data မှားရင် ဆက်ခွင့်ပြုမလား၊ ပိတ်မလား
+
+        မေးခွန်း: journey က သီးခြား service 2 ခုကို အစဉ်လိုက် ခေါ်တယ်၊ 99.9% နဲ့ 99.5%။ အကောင်းဆုံး ဘယ်လောက် ရနိုင်လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Failure ကို ဘောင်ခတ်ထားတဲ့ design</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 23</p>
+              <h1>Failure ကို ဘောင်ခတ်ထားတဲ့ design</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l23-p01
+      contentType: google
+      name: "Cover: top-ups stopped everywhere"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p01
+    - id: l23-p01b
+      contentType: google
+      name: "The half-written price list"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p01b
+    - id: l23-p02
+      contentType: google
+      name: "Eats checkout's dependency card"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p02
+    - id: l23-p02b
+      contentType: google
+      name: "The card, the promise highlighted"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p02b
+    - id: l23-p02c
+      contentType: google
+      name: "Before and after the card"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p02c
+    - id: l23-p03
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l23_p03
+  whiteboardAssets:
+    # ---- Board B1: the designed range and what lies beyond it (P5 bars) ----
+    - {
+        id: "l23-b1-axis",
+        kind: "freedraw",
+        stroke: "underline",
+        x: 270,
+        y: 530,
+        width: 820,
+        height: 25,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b1-range",
+        kind: "rectangle",
+        x: 285,
+        y: 262,
+        width: 370,
+        height: 293,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-range-t",
+        kind: "text",
+        x: 297,
+        y: 270,
+        width: 355,
+        height: 35,
+        text: "design လုပ်ထားတဲ့ ဘောင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b1-n1",
+        kind: "rectangle",
+        x: 305,
+        y: 465,
+        width: 45,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-n2",
+        kind: "rectangle",
+        x: 370,
+        y: 435,
+        width: 45,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-n3",
+        kind: "rectangle",
+        x: 435,
+        y: 455,
+        width: 45,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-n4",
+        kind: "rectangle",
+        x: 500,
+        y: 425,
+        width: 45,
+        height: 130,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-n-t",
+        kind: "text",
+        x: 295,
+        y: 572,
+        width: 185,
+        height: 35,
+        text: "ပုံမှန် ညတွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b1-tall",
+        kind: "rectangle",
+        x: 720,
+        y: 215,
+        width: 55,
+        height: 340,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-tall-t",
+        kind: "text",
+        x: 680,
+        y: 168,
+        width: 201,
+        height: 35,
+        text: "စာရင်း တစ်ဝက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b1-red",
+        kind: "rectangle",
+        x: 835,
+        y: 523,
+        width: 55,
+        height: 32,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: "l23-b1-red-t",
+        kind: "text",
+        x: 827,
+        y: 480,
+        width: 93,
+        height: 35,
+        text: "ပြိုကျ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b1-g1",
+        kind: "rectangle",
+        x: 925,
+        y: 365,
+        width: 40,
+        height: 190,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l23-b1-g2",
+        kind: "rectangle",
+        x: 975,
+        y: 495,
+        width: 40,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l23-b1-g3",
+        kind: "rectangle",
+        x: 1025,
+        y: 365,
+        width: 40,
+        height: 190,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: "l23-b1-g-t",
+        kind: "text",
+        x: 884,
+        y: 318,
+        width: 216,
+        height: 35,
+        text: "ကျပြီး ပြန်တက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b1-wide",
+        kind: "rectangle",
+        x: 256,
+        y: 205,
+        width: 545,
+        height: 357,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b1-wide-t",
+        kind: "text",
+        x: 268,
+        y: 213,
+        width: 432,
+        height: 35,
+        text: "သင်ခန်းစာတိုင်း ဘောင် ကျယ်လာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board B2: how often, how bad (P5 two-axis placement) ----
+    - {
+        id: "l23-b2-vaxis",
+        kind: "rectangle",
+        x: 300,
+        y: 200,
+        width: 8,
+        height: 375,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b2-y-t",
+        kind: "text",
+        x: 285,
+        y: 160,
+        width: 215,
+        height: 35,
+        text: "ဘယ်လောက် ဆိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-haxis",
+        kind: "freedraw",
+        stroke: "underline",
+        x: 300,
+        y: 550,
+        width: 790,
+        height: 25,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b2-x-t",
+        kind: "text",
+        x: 815,
+        y: 590,
+        width: 280,
+        height: 35,
+        text: "ဘယ်လောက် ခဏခဏ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-list",
+        kind: "ellipse",
+        x: 820,
+        y: 295,
+        width: 250,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b2-list-t",
+        kind: "text",
+        x: 870,
+        y: 313,
+        width: 170,
+        height: 35,
+        text: "စာရင်း ပြတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-zone",
+        kind: "ellipse",
+        x: 335,
+        y: 205,
+        width: 290,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b2-zone-t",
+        kind: "text",
+        x: 407,
+        y: 223,
+        width: 216,
+        height: 35,
+        text: "zone ဆုံးရှုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-sms",
+        kind: "ellipse",
+        x: 510,
+        y: 435,
+        width: 370,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b2-sms-t",
+        kind: "text",
+        x: 563,
+        y: 453,
+        width: 293,
+        height: 35,
+        text: "SMS gateway မျှသုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-mult",
+        kind: "text",
+        x: 650,
+        y: 222,
+        width: 386,
+        height: 35,
+        text: "ဖြစ်နိုင်ခြေ × ထိခိုက်မှု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-mult-x",
+        kind: "freedraw",
+        stroke: "strike",
+        x: 650,
+        y: 226,
+        width: 270,
+        height: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: "l23-b2-list-d",
+        kind: "text",
+        x: 730,
+        y: 378,
+        width: 370,
+        height: 35,
+        text: "ဈေးပေါ check၊ အမြဲ ဖွင့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-zone-d",
+        kind: "text",
+        x: 320,
+        y: 290,
+        width: 416,
+        height: 35,
+        text: "plan အခု၊ တစ်ဆင့်ချင်း ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b2-sms-d",
+        kind: "text",
+        x: 530,
+        y: 512,
+        width: 262,
+        height: 35,
+        text: "လက်ခံ၊ ရေးမှတ်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: three zones sharing one cache (P2 comb), then the fixes ----
+    - {
+        id: "l23-b3-title",
+        kind: "text",
+        x: 280,
+        y: 160,
+        width: 119,
+        height: 45,
+        text: "Wallet",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: "l23-b3-za",
+        kind: "rectangle",
+        x: 800,
+        y: 205,
+        width: 270,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b3-za-t",
+        kind: "text",
+        x: 815,
+        y: 213,
+        width: 180,
+        height: 35,
+        text: "zone A: 33%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-zb",
+        kind: "rectangle",
+        x: 800,
+        y: 265,
+        width: 270,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b3-zb-t",
+        kind: "text",
+        x: 815,
+        y: 273,
+        width: 180,
+        height: 35,
+        text: "zone B: 33%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-zc",
+        kind: "rectangle",
+        x: 800,
+        y: 325,
+        width: 270,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b3-zc-t",
+        kind: "text",
+        x: 815,
+        y: 333,
+        width: 180,
+        height: 35,
+        text: "zone C: 33%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-cache",
+        kind: "rectangle",
+        x: 280,
+        y: 245,
+        width: 240,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: "l23-b3-cache-t1",
+        kind: "text",
+        x: 292,
+        y: 252,
+        width: 201,
+        height: 35,
+        text: "session cache",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-cache-t2",
+        kind: "text",
+        x: 292,
+        y: 287,
+        width: 124,
+        height: 35,
+        text: "(zone A)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-a0",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 525,
+        y: 270,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b3-bus",
+        kind: "rectangle",
+        x: 585,
+        y: 210,
+        width: 16,
+        height: 160,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b3-a1",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 606,
+        y: 210,
+        width: 190,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b3-a2",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 606,
+        y: 270,
+        width: 190,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b3-a3",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 606,
+        y: 330,
+        width: 190,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b3-red-t",
+        kind: "text",
+        x: 280,
+        y: 388,
+        width: 355,
+        height: 35,
+        text: "zone A ပျက် = 100% ပျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-green-t",
+        kind: "text",
+        x: 280,
+        y: 426,
+        width: 478,
+        height: 35,
+        text: "zone တိုင်းမှာ ကိုယ်ပိုင် cache",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-dom1",
+        kind: "text",
+        x: 280,
+        y: 475,
+        width: 416,
+        height: 35,
+        text: "domain မချဲ့၊ အရေအတွက် တိုး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-dom2",
+        kind: "text",
+        x: 280,
+        y: 510,
+        width: 416,
+        height: 35,
+        text: "traffic ကို အဆင့်လိုက် လွှဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-fix",
+        kind: "rectangle",
+        x: 280,
+        y: 558,
+        width: 560,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: "l23-b3-fix1",
+        kind: "text",
+        x: 292,
+        y: 568,
+        width: 355,
+        height: 35,
+        text: "ကောင်းမှန်းသိတဲ့ မိတ္တူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b3-fix2",
+        kind: "text",
+        x: 292,
+        y: 603,
+        width: 555,
+        height: 35,
+        text: "zone တစ်ခုချင်း ခွဲ၊ ပြင်၊ ပြန်ချိတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B4: a serial flow, then two providers fanning into one gateway (P1 + P2) ----
+    - {
+        id: "l23-b4-b1",
+        kind: "rectangle",
+        x: 255,
+        y: 170,
+        width: 150,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b4-b1-t1",
+        kind: "text",
+        x: 267,
+        y: 180,
+        width: 70,
+        height: 35,
+        text: "Eats",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-b1-t2",
+        kind: "text",
+        x: 267,
+        y: 215,
+        width: 124,
+        height: 35,
+        text: "checkout",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-a1",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 410,
+        y: 195,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-b2",
+        kind: "rectangle",
+        x: 465,
+        y: 170,
+        width: 120,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b4-b2-t1",
+        kind: "text",
+        x: 477,
+        y: 180,
+        width: 93,
+        height: 35,
+        text: "Wallet",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-b2-t2",
+        kind: "text",
+        x: 477,
+        y: 215,
+        width: 90,
+        height: 35,
+        text: "99.9%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-a2",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 590,
+        y: 195,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-b3",
+        kind: "rectangle",
+        x: 645,
+        y: 170,
+        width: 205,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b4-b3-t1",
+        kind: "text",
+        x: 657,
+        y: 180,
+        width: 185,
+        height: 35,
+        text: "notification",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-b3-t2",
+        kind: "text",
+        x: 657,
+        y: 215,
+        width: 65,
+        height: 35,
+        text: "99%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-a3",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 855,
+        y: 195,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-b4",
+        kind: "rectangle",
+        x: 910,
+        y: 170,
+        width: 150,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: "l23-b4-b4-t",
+        kind: "text",
+        x: 922,
+        y: 198,
+        width: 120,
+        height: 35,
+        text: "≈ 98.9%",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-v1",
+        kind: "text",
+        x: 745,
+        y: 266,
+        width: 262,
+        height: 35,
+        text: "သီးခြားစီ ပျက်ရင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-v2",
+        kind: "text",
+        x: 745,
+        y: 300,
+        width: 355,
+        height: 35,
+        text: "ဘယ်လိုပဲ 99% ကို မကျော်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-promise",
+        kind: "text",
+        x: 255,
+        y: 275,
+        width: 180,
+        height: 35,
+        text: "ကတိ 99.9%?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-promise-x",
+        kind: "freedraw",
+        stroke: "strike",
+        x: 255,
+        y: 279,
+        width: 175,
+        height: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: "l23-b4-queue",
+        kind: "text",
+        x: 560,
+        y: 350,
+        width: 339,
+        height: 35,
+        text: "notification ကို queue",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-p1",
+        kind: "rectangle",
+        x: 255,
+        y: 410,
+        width: 240,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b4-p1-t",
+        kind: "text",
+        x: 267,
+        y: 427,
+        width: 216,
+        height: 35,
+        text: "SMS provider 1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-p2",
+        kind: "rectangle",
+        x: 255,
+        y: 510,
+        width: 240,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b4-p2-t",
+        kind: "text",
+        x: 267,
+        y: 527,
+        width: 216,
+        height: 35,
+        text: "SMS provider 2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-a4",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 500,
+        y: 425,
+        width: 55,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-a5",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 500,
+        y: 525,
+        width: 55,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-bus",
+        kind: "rectangle",
+        x: 565,
+        y: 415,
+        width: 16,
+        height: 170,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-a6",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 586,
+        y: 480,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b4-gw",
+        kind: "rectangle",
+        x: 660,
+        y: 450,
+        width: 290,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: "l23-b4-gw-t1",
+        kind: "text",
+        x: 672,
+        y: 458,
+        width: 250,
+        height: 35,
+        text: "operator gateway",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-gw-t2",
+        kind: "text",
+        x: 672,
+        y: 493,
+        width: 220,
+        height: 35,
+        text: "သူ့ထက် မကောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b4-gw-o",
+        kind: "freedraw",
+        stroke: "circle",
+        x: 640,
+        y: 432,
+        width: 330,
+        height: 136,
+        strokeColor: "#e03131",
+      }
+    # ---- Board B5: the checks in front of a shared price list (P1 flow) ----
+    - {
+        id: "l23-b5-job",
+        kind: "rectangle",
+        x: 255,
+        y: 175,
+        width: 205,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: "l23-b5-job-t1",
+        kind: "text",
+        x: 267,
+        y: 185,
+        width: 232,
+        height: 35,
+        text: "ဈေးနှုန်းစာရင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-job-t2",
+        kind: "text",
+        x: 267,
+        y: 220,
+        width: 47,
+        height: 35,
+        text: "job",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-a1",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 463,
+        y: 195,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b5-chk",
+        kind: "rectangle",
+        x: 503,
+        y: 175,
+        width: 305,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: "l23-b5-chk-t1",
+        kind: "text",
+        x: 515,
+        y: 185,
+        width: 235,
+        height: 35,
+        text: "မနေ့ကထက် သေး?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-chk-t2",
+        kind: "text",
+        x: 515,
+        y: 220,
+        width: 280,
+        height: 35,
+        text: "တစ်နာရီထက် ဟောင်း?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-a2",
+        kind: "freedraw",
+        stroke: "arrow-right",
+        x: 812,
+        y: 195,
+        width: 32,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b5-srv",
+        kind: "rectangle",
+        x: 848,
+        y: 175,
+        width: 232,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: "l23-b5-srv-t1",
+        kind: "text",
+        x: 860,
+        y: 185,
+        width: 154,
+        height: 35,
+        text: "server တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-srv-t2",
+        kind: "text",
+        x: 860,
+        y: 220,
+        width: 232,
+        height: 35,
+        text: "zone တစ်ခုချင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-a3",
+        kind: "freedraw",
+        stroke: "arrow-down",
+        x: 635,
+        y: 270,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b5-red",
+        kind: "rectangle",
+        x: 503,
+        y: 320,
+        width: 305,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: "l23-b5-red-t",
+        kind: "text",
+        x: 515,
+        y: 337,
+        width: 185,
+        height: 35,
+        text: "ငြင်း၊ alert",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-a4",
+        kind: "freedraw",
+        stroke: "arrow-down",
+        x: 635,
+        y: 395,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: "l23-b5-grn",
+        kind: "rectangle",
+        x: 485,
+        y: 440,
+        width: 340,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: "l23-b5-grn-t1",
+        kind: "text",
+        x: 497,
+        y: 448,
+        width: 339,
+        height: 35,
+        text: "နောက်ဆုံး ကောင်းခဲ့တဲ့",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-grn-t2",
+        kind: "text",
+        x: 497,
+        y: 483,
+        width: 108,
+        height: 35,
+        text: "version",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-open",
+        kind: "text",
+        x: 255,
+        y: 565,
+        width: 493,
+        height: 35,
+        text: "fraud blocklist အလွတ်: fail open",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: "l23-b5-closed",
+        kind: "text",
+        x: 255,
+        y: 600,
+        width: 524,
+        height: 35,
+        text: "merchant စာရင်း အလွတ်: fail closed",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2623
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "တစ်ဝက်ပဲ ပါတဲ့ ဈေးနှုန်းစာရင်း"
+    narration: >
+      [[mark:show-p01]] Padauk က backup တွေကို အပတ်တိုင်း restore လုပ်ပြီး စစ်သလို data အများကြီး ဖျက်တာကိုလည်း လူ နှစ်ယောက် အတည်ပြုမှ လုပ်ပါတယ်။ ဒါပေမဲ့ တစ်ရက် ည ၁ နာရီမှာ top-up တွေ နေရာတိုင်း ရပ်သွားပါတယ်။ operator တွေရဲ့ plan ဈေးနှုန်းစာရင်းကို ညတိုင်း ထုတ်ပေးတဲ့ job က တစ်ဝက်ပဲ ပါတဲ့ စာရင်းကို ပို့လိုက်ပြီး server တိုင်းက ယုံလိုက်လို့ပါ။
+      [[mark:show-p01b]] job က ကြားမှာ ရပ်သွားလို့ စာရင်းထဲမှာ row တွေရဲ့ ၄၀ ရာခိုင်နှုန်းပဲ ပါခဲ့တာပါ။ ဆိုတော့ စာရင်းထဲ မပါတဲ့ plan တွေရဲ့ top-up မှန်သမျှ zone သုံးခုလုံးမှာ fail ကုန်ပါတယ်။ server တစ်လုံးမှ မကျဘဲ health check တွေလည်း အစိမ်းရောင်ပါ၊ မှားနေတာက data ပါ။
+      ပြဿနာ မှန်သမျှကို ကြိုမမြင်နိုင်ပေမဲ့ ဘယ်အထိ ပျံ့မလဲ ဆိုတာကိုတော့ design နဲ့ ကန့်သတ်နိုင်ပါတယ်။ ကြိုမစီစဉ်ထားတဲ့ failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      # -1750 / -1450, as in the other lessons: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - id: collapse-dock
+        type: runtime.collapseDock
+        at: { scene: start, offsetMs: -1750 }
+      - id: show-p01
+        type: slide.show
+        at: { mark: show-p01, offsetMs: -1450 }
+        slideId: l23-p01
+      - id: show-p01b
+        type: slide.show
+        at: { mark: show-p01b }
+        slideId: l23-p01b
+
+  - id: reliable-resilient
+    chapter: "Reliable နဲ့ resilient"
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] အပြာရောင် ဘောင်က Top-up ကို design လုပ်ပြီး စမ်းထားတဲ့ load အတိုင်းအတာပါ၊ ဘောင်ထဲက bar တွေကတော့ ပုံမှန် ညတွေပါ။ ဒီဘောင်ထဲမှာ lesson ၆ က Top-up SLO ကို ထိန်းနိုင်နေရင် reliable ဖြစ်တယ်လို့ ပြောပါတယ်။
+      [[mark:b1-s2]] ဈေးနှုန်းစာရင်း တစ်ဝက်ပဲ ရောက်တဲ့ ညကတော့ ဘောင်အပြင်ဘက်ပါ။ တချို့ system တွေက အနီရောင်လို ပြိုကျပြီး လူ လာပြင်တဲ့အထိ ရပ်နေပါတယ်။ [[mark:b1-s2b]] တချို့ကတော့ အစိမ်းရောင်လို ခဏ ကျပေမဲ့ ပြဿနာ မပျံ့အောင် ဘောင်ခတ်ပြီး ပြန်တက်လာပါတယ်၊ ဥပမာ ကျန်တဲ့ plan တွေကို ဆက်ရောင်းနေနိုင်ပါတယ်။ ဒီလို design ဘောင် အပြင်က failure ကိုပါ ဘောင်ခတ်ပြီး ပြန်ကောင်းလာနိုင်တာကို resilience လို့ ခေါ်ပါတယ်။
+      [[mark:b1-s3]] incident တိုင်းကနေ ရတဲ့ သင်ခန်းစာတွေက ဒီဘောင်ကို တဖြည်းဖြည်း ချဲ့ပေးပါတယ်။ ဒါပေမဲ့ ပြင်ဆင်မှုတိုင်းက ဒီနေ့ ကုန်ကျပြီး failure တကယ် ဖြစ်မှ အကျိုးပြန်ပေးတာမို့ အားလုံးကို မကာကွယ်နိုင်ဘဲ ချိန်ဆပြီး ရွေးရပါတယ်။ ဘယ်လောက် resilient ဖြစ်ရင် လုံလောက်လဲ ဆိုတာကိုလည်း engineer တွေ မဟုတ်ဘဲ user တွေနဲ့ Padauk ကို ခေါ်သုံးတဲ့ system တွေက ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - id: close-p01b
+        type: slide.close
+        at: { mark: close-p01b, offsetMs: -400 }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l23-b1-axis,
+            l23-b1-range,
+            l23-b1-range-t,
+            l23-b1-n1,
+            l23-b1-n2,
+            l23-b1-n3,
+            l23-b1-n4,
+            l23-b1-n-t,
+          ]
+        drawMs: 2800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l23-b1-tall, l23-b1-tall-t, l23-b1-red, l23-b1-red-t]
+        drawMs: 4000
+      - id: b1-s2b
+        type: whiteboard.apply
+        at: { mark: b1-s2b }
+        upsertIds: [l23-b1-g1, l23-b1-g2, l23-b1-g3, l23-b1-g-t]
+        drawMs: 3200
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l23-b1-wide, l23-b1-wide-t]
+        drawMs: 2400
+
+  - id: risk-picture
+    chapter: "Padauk ရဲ့ risk ပုံ"
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို ဘယ် failure အတွက် အရင် ပြင်ဆင်မလဲ? မသီရိနဲ့ ကိုဇော်က Padauk ရဲ့ risk တွေကို ဘယ်လောက် ခဏခဏ ဖြစ်လဲ၊ ဖြစ်ရင် ဘယ်လောက် ဆိုးလဲ ဆိုတဲ့ ဝင်ရိုး နှစ်ခုပေါ်မှာ နေရာချကြည့်ပါတယ်။ ညာဘက် ရောက်လေ ခဏခဏ ဖြစ်လေ၊ အပေါ် ရောက်လေ ဆိုးလေပါ။
+      [[mark:b2-s2]] ဈေးနှုန်းစာရင်း ပြတ်တာက ညတိုင်း ပို့နေလို့ ခဏခဏ ဖြစ်နိုင်ပြီး ဆိုးလည်း ဆိုးပါတယ်။ zone တစ်ခုလုံး ဆုံးရှုံးတာက ရှားပေမဲ့ ဖြစ်ရင် အရမ်း ဆိုးပါတယ်။ [[mark:b2-s2b]] SMS provider နှစ်ခုက operator gateway တစ်ခုတည်းကို မျှသုံးနေတာကတော့ တစ်ခါတလေ ပြဿနာ ပေးပြီး အလယ်အလတ်လောက် ဆိုးပါတယ်။
+      [[mark:b2-s3]] ဖြစ်နိုင်ခြေကို ထိခိုက်မှုနဲ့ မြှောက်ပြီး အဆင့်စီရင် zone ဆုံးရှုံးတာလို ရှားတဲ့ ဘေးကြီးက ကိန်းဂဏန်း သေးသေးလေးပဲ ထွက်လို့ အလှည့် ဘယ်တော့မှ မရောက်ပါဘူး။ [[mark:b2-s3b]] တစ်ခါ ဖြစ်ရုံနဲ့ ကုမ္ပဏီကိုပါ ထိနိုင်တဲ့ risk မှာ ဒီနည်း အလုပ်မဖြစ်လို့ ရှားပေမဲ့ ဆိုးတဲ့ risk ကိုလည်း plan တစ်ခု ပေးရပါတယ်။
+      [[mark:b2-s4]] ဒါကြောင့် စာရင်း ပြဿနာအတွက် ဈေးပေါပြီး အမြဲ ဖွင့်ထားတဲ့ check တွေ ထည့်ပါတယ်။ zone ဆုံးရှုံးတာအတွက်တော့ ဒီနေ့ ဖြစ်ရင် ဘာလုပ်မလဲ ဆိုတဲ့ plan ကို အခုပဲ ရေးပြီး အမြစ်ကနေ တစ်ဆင့်ချင်း ပြင်ပါတယ်။ [[mark:b2-s4b]] SMS gateway ကိုတော့ အခုအတွက် လက်ခံပြီး ဘာကြောင့်လဲ၊ ဘယ်တော့ ပြန်ကြည့်မလဲ ရေးမှတ်ထားပါတယ်။ ပြင်ပုံကလည်း လက်နဲ့ ပြင်တာ၊ automation နဲ့ ပြင်တာ၊ architecture ပြောင်းပြီး အားနည်းချက်ကို ဖယ်ပစ်တာ ဆိုပြီး သုံးမျိုး ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - id: close-b1
+        type: whiteboard.apply
+        at: { mark: close-b1, offsetMs: -400 }
+        clear: true
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l23-b2-vaxis, l23-b2-y-t, l23-b2-haxis, l23-b2-x-t]
+        drawMs: 2400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l23-b2-list, l23-b2-list-t, l23-b2-zone, l23-b2-zone-t]
+        drawMs: 3600
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds: [l23-b2-sms, l23-b2-sms-t]
+        drawMs: 1600
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l23-b2-mult]
+        drawMs: 1600
+      - id: b2-s3b
+        type: whiteboard.apply
+        at: { mark: b2-s3b }
+        upsertIds: [l23-b2-mult-x]
+        drawMs: 900
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4 }
+        upsertIds: [l23-b2-list-d, l23-b2-zone-d]
+        drawMs: 3200
+      - id: b2-s4b
+        type: whiteboard.apply
+        at: { mark: b2-s4b }
+        upsertIds: [l23-b2-sms-d]
+        drawMs: 1200
+
+  - id: independent
+    chapter: "တကယ် သီးခြား ဖြစ်ရဲ့လား"
+    narration: >
+      [[mark:close-b2]] [[mark:b3-s1]] zone ဆုံးရှုံးရင် သုံးမယ့် plan ကို ရေးရင်း ကိုဇော်က lesson ၂၀ မှာ zone သုံးခုဆီ ဖြန့်ခဲ့တဲ့ Wallet ကို ပြန်စစ်ပါတယ်။ zone တစ်ခုစီက ပြဿနာ တစ်ခုတည်းကြောင့် အတူ ပျက်နိုင်တဲ့ အုပ်စု၊ failure domain ဖြစ်လို့ zone တစ်ခု ပျက်ရင် Wallet ရဲ့ သုံးပုံတစ်ပုံပဲ ထိမှာပါ၊ blast radius ကို ကျဉ်းအောင် ခွဲထားတာပါ။
+      [[mark:b3-s2]] ဒါပေမဲ့ request လမ်းကြောင်းကို လိုက်ကြည့်တော့ zone သုံးခုလုံးက login session တွေကို zone A ထဲက cache တစ်ခုတည်းကနေ ဖတ်နေတာ တွေ့ပါတယ်။ [[mark:b3-s2b]] zone A ပျက်ရင် သုံးပုံတစ်ပုံ မဟုတ်ဘဲ Wallet တစ်ခုလုံး ရပ်မှာပါ။ ဒီလို တစ်ခုကို မျှသုံးလို့ အတူ ပျက်ကြတာကို lesson ၈ ကလိုပဲ shared fate လို့ ခေါ်ပါတယ်။
+      [[mark:b3-s3]] ဒီတော့ zone တစ်ခုစီမှာ ကိုယ်ပိုင် session cache ထားလိုက်ပါတယ်။ zone တွေ သီးခြားလို့ ထင်ရုံနဲ့ မလုံလောက်ပါဘူး၊ deployment တွေကို failure domain နဲ့ ကိုက်အောင် ထားပြီး zone တစ်ခု ဆုံးရှုံးရင် ဘာတွေ ပါသွားမလဲ ဂဏန်းနဲ့ တွက်ကြည့်ရပါမယ်။
+      [[mark:b3-s4]] domain တွေကိုလည်း ပိုကြီးအောင် မချဲ့ဘဲ domain အသစ် ထပ်တိုးရပါမယ်။ domain ကြီး တစ်ခု ပျက်ရင် သူ့ traffic အကုန် ကျန်တဲ့ domain တွေဆီ တစ်ပြိုင်နက် ပြေးလာပြီး သူတို့ကိုပါ လဲစေနိုင်လို့ပါ။ [[mark:b3-s4b]] ပြန်ကောင်းလာတဲ့ domain ကိုလည်း traffic တစ်ခါတည်း ပြန်ဝင်ရင် ထပ်လဲနိုင်လို့ အဆင့်လိုက်ပဲ ပြန်လွှဲပါတယ်။
+      [[mark:b3-s5]] ဈေးနှုန်းစာရင်းလို အမှားက zone သုံးခုလုံးကို ထိသွားရင်ကော? zone တစ်ခုကို traffic ကနေ ခွဲထုတ်ပြီး ကောင်းမှန်းသိတဲ့ မိတ္တူကနေ ပြန်ပြင်ပါတယ်။ config၊ data နဲ့ binary တွေကို သီးသန့် ကာကွယ်ထားတဲ့ ဒီ မိတ္တူက ပြောင်းလဲမှု အသစ်တွေကို နောက်ဆုံးမှ လက်ခံပါတယ်။ ပြီးရင် အဲဒီ zone ကို ပြန်ချိတ်ပြီး ကျန်တဲ့ zone တွေမှာ တစ်ခုချင်း ထပ်လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+    actions:
+      - id: close-b2
+        type: whiteboard.apply
+        at: { mark: close-b2, offsetMs: -400 }
+        clear: true
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l23-b3-title]
+      - id: b3-s1d
+        type: whiteboard.apply
+        at: { afterAction: b3-s1 }
+        upsertIds: [l23-b3-za, l23-b3-za-t, l23-b3-zb, l23-b3-zb-t, l23-b3-zc, l23-b3-zc-t]
+        drawMs: 2400
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds:
+          [
+            l23-b3-cache,
+            l23-b3-cache-t1,
+            l23-b3-cache-t2,
+            l23-b3-a0,
+            l23-b3-bus,
+            l23-b3-a1,
+            l23-b3-a2,
+            l23-b3-a3,
+          ]
+        drawMs: 3200
+      - id: b3-s2b
+        type: whiteboard.apply
+        at: { mark: b3-s2b }
+        upsertIds: [l23-b3-red-t]
+        drawMs: 1500
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l23-b3-green-t]
+        drawMs: 1800
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l23-b3-dom1]
+        drawMs: 1500
+      - id: b3-s4b
+        type: whiteboard.apply
+        at: { mark: b3-s4b }
+        upsertIds: [l23-b3-dom2]
+        drawMs: 1400
+      - id: b3-s5
+        type: whiteboard.apply
+        at: { mark: b3-s5 }
+        upsertIds: [l23-b3-fix, l23-b3-fix1, l23-b3-fix2]
+        drawMs: 2400
+
+  - id: dependency-arithmetic
+    chapter: "Dependency တွေကို မြှောက်ကြည့်"
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] Eats ရဲ့ product manager မနှင်းက checkout အတွက် rider တွေနဲ့ ဆိုင်တွေကို ၉၉.၉ ရာခိုင်နှုန်း ကတိပေးချင်ပါတယ်။ [[mark:b4-s1b]] checkout က Wallet ကနေ ငွေဖြတ်ပြီးမှ SMS ပို့ဖို့ notification service ကို ခေါ်ပါတယ်။ ဒီလို request တစ်ခုက အစဉ်လိုက် ခေါ်ရတဲ့ dependency တွေကို serial dependency လို့ ခေါ်ပါတယ်။
+      [[mark:b4-s2]] Wallet က ၉၉.၉ ရာခိုင်နှုန်း၊ notification က ၉၉ ရာခိုင်နှုန်း ဆိုရင် နှစ်ခုလုံး အောင်မြင်မှ checkout အောင်မြင်တာမို့ availability တွေကို မြှောက်ရပြီး ၉၈.၉ ရာခိုင်နှုန်းလောက်ပဲ ရပါတယ်။ [[mark:b4-s2b]] ဒါက နှစ်ခု သီးခြားစီ ပျက်တယ်လို့ ယူဆတာပါ၊ ဘယ်လိုပဲ ဖြစ်ဖြစ် notification ရဲ့ ၉၉ ကိုတော့ မကျော်နိုင်ပါဘူး။
+      [[mark:b4-s3]] ဒီ design နဲ့ ၉၉.၉ ကတိ မပေးနိုင်လို့ notification ကို queue ထဲ ထည့်လိုက်ပါတယ်။ checkout က SMS ပို့တဲ့အထိ မစောင့်တော့ဘဲ queue ထဲ ရောက်တာနဲ့ ပြီးသွားလို့ notification service ခဏ ပျက်နေလည်း checkout က ဆက်အလုပ်လုပ်ပါတယ်။
+      [[mark:b4-s4]] SMS ဘက်မှာတော့ ဒီ တွက်နည်းက အကောင်းဘက်ကနေ လှည့်စားနိုင်ပါတယ်။ provider နှစ်ခုက ၁ ရာခိုင်နှုန်းစီ ပျက်တယ် ဆိုပါစို့၊ သီးခြားစီ ပျက်ရင် နှစ်ခုလုံး တစ်ပြိုင်နက် ပျက်တာ ၁၀၀၀၀ ခါမှာ တစ်ခါပဲ ရှိလို့ ၉၉.၉၉ ရာခိုင်နှုန်း ရမှာပါ။ [[mark:b4-s4b]] ဒါပေမဲ့ နှစ်ခုလုံးက operator gateway တစ်ခုတည်းကို ဖြတ်ရလို့ gateway ထက် ပိုမကောင်းနိုင်ပါဘူး၊ ဒါလည်း shared fate ပါပဲ။
+      [[mark:b4-s5]] ဒါကြောင့် error budget တွေကို ရိုးရိုး ပေါင်းမယ့်အစား request က dependency တွေကို တကယ် ဘယ်လို ခေါ်လဲ၊ ဘာကို မျှသုံးလဲ အရင် ဆွဲကြည့်ပြီးမှ တွက်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The Calculus of Service Availability (research.google)",
+          url: "https://research.google/pubs/the-calculus-of-service-availability/",
+        }
+    actions:
+      - id: close-b3
+        type: whiteboard.apply
+        at: { mark: close-b3, offsetMs: -400 }
+        clear: true
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l23-b4-b1, l23-b4-b1-t1, l23-b4-b1-t2]
+        drawMs: 1200
+      - id: b4-s1b
+        type: whiteboard.apply
+        at: { mark: b4-s1b }
+        upsertIds:
+          [
+            l23-b4-a1,
+            l23-b4-b2,
+            l23-b4-b2-t1,
+            l23-b4-b2-t2,
+            l23-b4-a2,
+            l23-b4-b3,
+            l23-b4-b3-t1,
+            l23-b4-b3-t2,
+          ]
+        drawMs: 2600
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l23-b4-a3]
+        drawMs: 600
+      - id: b4-s2b
+        type: whiteboard.apply
+        at: { mark: b4-s2b }
+        upsertIds: [l23-b4-b4, l23-b4-b4-t, l23-b4-v1, l23-b4-v2]
+        drawMs: 3400
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l23-b4-promise, l23-b4-promise-x, l23-b4-queue]
+        drawMs: 3000
+      - id: b4-s4
+        type: whiteboard.apply
+        at: { mark: b4-s4 }
+        upsertIds:
+          [l23-b4-p1, l23-b4-p1-t, l23-b4-p2, l23-b4-p2-t, l23-b4-a4, l23-b4-a5, l23-b4-bus]
+        drawMs: 3000
+      - id: b4-s4b
+        type: whiteboard.apply
+        at: { mark: b4-s4b }
+        upsertIds: [l23-b4-a6, l23-b4-gw, l23-b4-gw-t1, l23-b4-gw-t2]
+        drawMs: 2200
+      - id: b4-s5
+        type: whiteboard.apply
+        at: { mark: b4-s5 }
+        upsertIds: [l23-b4-gw-o]
+        drawMs: 900
+
+  - id: dependency-card
+    chapter: "Dependency card"
+    narration: >
+      [[mark:close-b4]] [[mark:show-p02]] Eats အဖွဲ့က ဒါတွေကို dependency card တစ်ခုထဲ ချရေးပါတယ်။ မရှိမဖြစ် လိုတာက Wallet ဖြစ်ပြီး notification ကိုတော့ queue ကနေ ပို့ပါတယ်။ loyalty နဲ့ ဟင်းပွဲ ဓာတ်ပုံ service တွေမှာတော့ test ထဲ failure ကို inject လုပ်ကြည့်ပြီး checkout ဆက် အောင်မြင်မှ optional လို့ ရေးပါတယ်၊ မအောင်မြင်ရင် မရှိမဖြစ်ထဲ ထည့်ပါတယ်။
+      [[mark:show-p02b]] ကိုယ့်ကို မှီခိုနေတဲ့သူတွေကို ပေးရမယ့် ကတိလည်း card ပေါ်မှာ ပါပါတယ်။ checkout က Wallet ရဲ့ ၉၉.၉ ကို မကျော်နိုင်လို့ မနှင်းက rider တွေနဲ့ ဆိုင်တွေကို ၉၉.၅ ရာခိုင်နှုန်းပဲ ကတိပေးပါတယ်။ ပြဿနာကြီး ဖြစ်တဲ့နေ့ ဘယ်သူ့အတွက် အရင် ပြန်ဖွင့်ပေးမလဲ ဆိုတာလည်း ဒီ ကတိတွေနဲ့ ဆုံးဖြတ်ပါတယ်။
+      [[mark:show-p02c]] အရင်က SMS gateway ပျက်တုန်းက notification အဖွဲ့ရော Top-up အဖွဲ့ရော တစ်ဖက်အဖွဲ့က ပိုင်တယ်လို့ ထင်နေခဲ့ပါတယ်။ ဒါကြောင့် အခု မျှသုံးတဲ့ dependency တိုင်းမှာ owner တစ်ယောက်ကို နာမည်နဲ့ ရေးပြီး owner မရှိတဲ့ ကွက်လပ်တွေကို ခေါင်းဆောင်တွေက လိုက်ရှာပါတယ်။ SMS gateway ကို ပြန်ကြည့်တဲ့နေ့ ရောက်တော့ gateway ကို မဖြတ်တဲ့ ကိုယ်ပိုင် လမ်းကြောင်းနဲ့ provider တစ်ခုကို fallback ထည့်ပါတယ်၊ ဈေးပိုကြီးပေမဲ့ gateway နဲ့ အတူ မပျက်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The Calculus of Service Availability (research.google)",
+          url: "https://research.google/pubs/the-calculus-of-service-availability/",
+        }
+    actions:
+      - id: close-b4
+        type: whiteboard.apply
+        at: { mark: close-b4, offsetMs: -400 }
+        open: false
+      - id: show-p02
+        type: slide.show
+        at: { mark: show-p02 }
+        slideId: l23-p02
+      - id: show-p02b
+        type: slide.show
+        at: { mark: show-p02b }
+        slideId: l23-p02b
+      - id: show-p02c
+        type: slide.show
+        at: { mark: show-p02c }
+        slideId: l23-p02c
+
+  - id: bad-input
+    chapter: "Bad input"
+    narration: >
+      [[mark:close-p02c]] [[mark:b5-s1]] ည ၁ နာရီက ဈေးနှုန်းစာရင်းဆီ ပြန်သွားရအောင်။ ပုံမှန်နဲ့ မတူတဲ့ ဒါမှမဟုတ် မှားနေတဲ့ input၊ bad input က attacker ဆီကပဲ မဟုတ်ဘဲ ကိုယ့် job ဒါမှမဟုတ် dependency ကနေလည်း လာနိုင်ပါတယ်။ စာရင်းက တစ်ဝက်မှာ ပြတ်နေတာ၊ အလွတ် ဖြစ်နေတာ၊ ဟောင်းနေတာ ဖြစ်နိုင်ပါတယ်။ [[mark:b5-s1b]] ဒီတော့ server တွေ မယုံခင် မနေ့ကထက် အများကြီး သေးနေလား၊ တစ်နာရီထက် ဟောင်းနေလား စစ်ပါတယ်။
+      [[mark:b5-s2]] check မအောင်ရင် စာရင်းအသစ်ကို ငြင်းပြီး alert တက်ပါတယ်၊ server တွေကတော့ နောက်ဆုံး ကောင်းခဲ့တဲ့ version ကို ဆက်သုံးပါတယ်။ သံသယ ဖြစ်ရင် မနေ့က စာရင်းနဲ့ ဆက် run နေတာက အန္တရာယ် အနည်းဆုံးပါ။
+      [[mark:b5-s3]] check ကို အောင်သွားရင်တောင် server တိုင်းဆီ တစ်ခါတည်း မပို့ပါဘူး။ server တိုင်း မျှသုံးတဲ့ data က နေရာတိုင်းကို တစ်ပြိုင်နက် ရောက်သွားလို့ အန္တရာယ် အများဆုံး ပြောင်းလဲမှုပါ၊ ဒါကြောင့် code လိုပဲ zone တစ်ခုချင်း rollout လုပ်ရပါတယ်။
+      [[mark:b5-s4]] data ဖတ်တဲ့ service တိုင်းကလည်း data မှားနေရင်၊ အလွတ် ဖြစ်နေရင် ဘာလုပ်မလဲ ကြိုဆုံးဖြတ်ထားရပါမယ်။ fraud blocklist အလွတ်ကို ယုံရင် ဘာမှ မတားတော့လို့ အကုန် ဖြတ်သွားပါတယ်၊ ဒါက fail open ပါ။ [[mark:b5-s4b]] merchant စာရင်း အလွတ်ကို ယုံရင်တော့ ဆိုင်တိုင်းရဲ့ ငွေချေမှု ပိတ်ကုန်မှာမို့ fail closed ပါ၊ ဘယ်ဟာ ဘေးကင်းလဲ ဆိုတာ data အလိုက် ကွာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - id: close-p02c
+        type: slide.close
+        at: { mark: close-p02c, offsetMs: -400 }
+      - id: b5-s1
+        type: whiteboard.apply
+        at: { mark: b5-s1 }
+        open: true
+        clear: true
+        upsertIds: [l23-b5-job, l23-b5-job-t1, l23-b5-job-t2]
+        drawMs: 1400
+      - id: b5-s1b
+        type: whiteboard.apply
+        at: { mark: b5-s1b }
+        upsertIds: [l23-b5-a1, l23-b5-chk, l23-b5-chk-t1, l23-b5-chk-t2]
+        drawMs: 2000
+      - id: b5-s2
+        type: whiteboard.apply
+        at: { mark: b5-s2 }
+        upsertIds:
+          [l23-b5-a3, l23-b5-red, l23-b5-red-t, l23-b5-a4, l23-b5-grn, l23-b5-grn-t1, l23-b5-grn-t2]
+        drawMs: 3800
+      - id: b5-s3
+        type: whiteboard.apply
+        at: { mark: b5-s3 }
+        upsertIds: [l23-b5-a2, l23-b5-srv, l23-b5-srv-t1, l23-b5-srv-t2]
+        drawMs: 2400
+      - id: b5-s4
+        type: whiteboard.apply
+        at: { mark: b5-s4 }
+        upsertIds: [l23-b5-open]
+        drawMs: 1800
+      - id: b5-s4b
+        type: whiteboard.apply
+        at: { mark: b5-s4b }
+        upsertIds: [l23-b5-closed]
+        drawMs: 1800
+
+  - id: this-week
+    narration: >
+      [[mark:close-b5]] [[mark:show-p03]] failure တစ်ခု ဘယ်အထိ ပျံ့နိုင်လဲ သိအောင် ဒီအပတ် စလုပ်စရာ သုံးခုပါ။ ကိုယ့် zone တွေ တကယ်တော့ database၊ cache၊ gateway လို ဘာတွေကို မျှသုံးနေလဲ စာရင်း လုပ်ကြည့်ပါ။ အရေးအကြီးဆုံး journey ရဲ့ dependency တွေကို ဆွဲပြီး availability တွေကို မြှောက်ကြည့်ပါ။ ပြီးတော့ ညတိုင်း ဝင်လာတဲ့ data တစ်ခုမှာ မနေ့ကထက် သေးလွန်းနေလား စစ်တဲ့ check တစ်ခု ထည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+      - {
+          title: "The Calculus of Service Availability (research.google)",
+          url: "https://research.google/pubs/the-calculus-of-service-availability/",
+        }
+    actions:
+      - id: close-b5
+        type: whiteboard.apply
+        at: { mark: close-b5, offsetMs: -400 }
+        open: false
+      - id: show-p03
+        type: slide.show
+        at: { mark: show-p03 }
+        slideId: l23-p03
+
+  - id: recap
+    narration: >
+      [[mark:close-p03]] [[mark:open-notes]] ဘောင်ခတ်နည်းတွေကို ပြန်ခေါ်ကြည့်ပါမယ်။ [[mark:sel-resilience]] resilience က design ဘောင် အပြင်က failure ကိုပါ ဘောင်ခတ်ပြီး ပြန်ကောင်းလာနိုင်တာပါ။ [[mark:sel-failure-domain]] failure domain က အတူ ပျက်နိုင်တဲ့ အုပ်စု ဖြစ်ပြီး၊ [[mark:sel-blast-radius]] blast radius က မှားရင် ထိခိုက်မယ့် နယ်ပယ်ပါ။
+      [[mark:sel-serial-dependency]] serial dependency တွေမှာ availability တွေကို မြှောက်ရလို့ စုစုပေါင်းက အားအနည်းဆုံး တစ်ခုထက်တောင် နိမ့်ပါတယ်။ [[mark:sel-shared-fate]] shared fate က တစ်ခုတည်းကို မျှသုံးလို့ အတူ ပျက်တာ ဖြစ်ပြီး၊ [[mark:sel-fail-open-closed]] fail open နဲ့ fail closed က data မှားရင် ဆက်ခွင့်ပြုမလား ပိတ်မလား ကြိုရွေးထားတာပါ။
+      [[mark:ask-question]] journey တစ်ခုက သီးခြားစီ ပျက်တဲ့ service နှစ်ခုကို အစဉ်လိုက် ခေါ်ပြီး တစ်ခုက ၉၉.၉၊ [[mark:ask-question-b]] နောက်တစ်ခုက ၉၉.၅ ရာခိုင်နှုန်း ဆိုရင် journey က အကောင်းဆုံး ဘယ်လောက် ရနိုင်လဲ?
+      [[mark:pause-question]] ၉၉.၄ ရာခိုင်နှုန်းလောက်ပါ၊ မြှောက်ရလို့ ၉၉.၅ ထက်တောင် နိမ့်ပါတယ်။ ခြောက်ပတ် ပြင်ဆင်ခဲ့တဲ့ သင်္ကြန် ညသန်းခေါင် ရောက်တော့ တစ်စက္ကန့်ကို request ၃၀၀၀ အတွက် ဆောက်ထားတဲ့ top-up service ဆီ ၂၀၀၀၀ ရောက်လာပြီး server တွေ restart ဖြစ်လာပါတယ်။ ပြိုမကျဘဲ ဘယ်လို တည်ငြိမ်အောင် ထိန်းမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+      - {
+          title: "The Calculus of Service Availability (research.google)",
+          url: "https://research.google/pubs/the-calculus-of-service-availability/",
+        }
+    actions:
+      - id: close-p03
+        type: slide.close
+        at: { mark: close-p03 }
+      - id: open-notes
+        type: workspace.openFile
+        at: { mark: open-notes, offsetMs: 300 }
+        path: notes.md
+      - id: sel-resilience
+        type: editor.select
+        at: { mark: sel-resilience }
+        target: { file: notes.md, text: "resilience", occurrence: 1 }
+      - id: sel-failure-domain
+        type: editor.select
+        at: { mark: sel-failure-domain }
+        target: { file: notes.md, text: "failure domain", occurrence: 1 }
+      - id: sel-blast-radius
+        type: editor.select
+        at: { mark: sel-blast-radius }
+        target: { file: notes.md, text: "blast radius", occurrence: 1 }
+      - id: sel-serial-dependency
+        type: editor.select
+        at: { mark: sel-serial-dependency }
+        target: { file: notes.md, text: "serial dependency", occurrence: 1 }
+      - id: sel-shared-fate
+        type: editor.select
+        at: { mark: sel-shared-fate }
+        target: { file: notes.md, text: "shared fate", occurrence: 1 }
+      - id: sel-fail-open-closed
+        type: editor.select
+        at: { mark: sel-fail-open-closed }
+        target: { file: notes.md, text: "fail open / fail closed", occurrence: 1 }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause: a select at ask-question would drag under the
+      # question and one at pause-question under the answer, so the question-line
+      # select hangs off the question with an offset: it starts about as the
+      # question ends, drags in silence, and the answer waits for it. The question
+      # is 161 characters, so one offset cannot fit 55 and 70 ms/char at once
+      # (it would leave ~0 s of quiet at 70 or over 2.5 s at 55); ask-question-b
+      # splits it at its ၊ and the select hangs off the 78-character second half,
+      # which is the lesson-16 case (400 + 78 x 70 = 5860 ms; an offset above
+      # ~6000 trips compile-check's 2.5 s inserted-silence warning at 55 ms/char).
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question-b, offsetMs: 5900 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: journey က သီးခြား service 2 ခုကို အစဉ်လိုက် ခေါ်တယ်၊ 99.9% နဲ့ 99.5%။ အကောင်းဆုံး ဘယ်လောက် ရနိုင်လဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
