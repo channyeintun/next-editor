@@ -1,0 +1,1537 @@
+# SRE from zero, lesson 24: Overload နဲ့ emergency mode (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-24-overload-change-emergency.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-24-overload-change-emergency.md \
+#     src/studio/scripts/sre-24-overload-change-emergency.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Fourteen marks add no spoken text and sit at an existing ။ or ?:
+# - hook-surge splits the hook at its paragraph break (one 482-character
+#   dialog would pass the 450-character limit; no action uses it).
+# - b1-s1b and b1-s1c land B1's nodes on the sentences that name them: the
+#   ring first, then "ဝန် ပိုလာ" and "queue ရှည်လာ", then "timeout". b1-s2b
+#   lands the restart node on the "health check" sentence, after the retry node
+#   at b1-s2. b1-s3b lands the three strikes and their fixes on "ကွင်းကို
+#   ဖြတ်ဖို့", where the narration lists them. B1's step 3 mark (b1-s3) draws
+#   the arrow back to "ဝန် ပိုလာ" instead of any new label: the narration has
+#   just said "ကွင်းက အစကို ပြန်ရောက်ပါတယ်", and the sentence that follows only
+#   gives the cascade its name, so nothing else belongs there.
+# - b2-s1b lands B2's title on the sentence that says "goodput"; b2-s1c lands
+#   its axis labels and (b2-s1d, afterAction) the capacity line on the
+#   "chart" sentence, so no apply adds more than three labelled texts; b2-s2b
+#   and b2-s3b land the red "ပြိုကျ" label and the green fix label on the
+#   second sentence of steps 2 and 3, after their bars.
+# - b3-s1b lands B3's two ticks on the sentence that names the two dangerous
+#   periods; step 1's mark only draws the month axis.
+# - b4-s1b lands the sign-on box on the sentence that says "single sign-on",
+#   after b4-s1's console box and b4-s1c (afterAction) the other two red
+#   boxes. b4-s2 only draws the three empty green slots of the kit (the first
+#   sentence says Padauk packs a kit); b4-s2b types in each label as the
+#   second sentence names the key, the bridge and the runbook. b4-s4b lands
+#   the second key holder on the sentence that names Mandalay.
+# - ask-question makes the recap question its own dialog (the 121-character
+#   question after the lead-in "… ပြန်တွေးကြည့်ပါ။"), so the question-line
+#   select can hang off it for the ⟪pause 3s⟫ (see select-question).
+#   sel-question is the voice script's ⟪select မေးခွန်း⟫; it only splits the
+#   recap's last term from the lead-in.
+# Pacing: at 70 ms/char the longest a page or board step holds is the cover,
+# l24_p01 (36.6 s: its two paragraphs have no page change between them), then
+# l24_p04 (29.5 s) and l24_p02c (28.8 s); the longest dialog is 411
+# characters (l24_p04's), so no pacing page or step was added.
+#
+# A board followed by a deck page closes the panel (open: false) 400 ms
+# before the page, and a deck page followed by a board closes the page 400 ms
+# before, as in Module 1. ⟪close board⟫ straight into the next board (scene 3)
+# wipes the open board 400 ms early (whiteboard.apply clear) instead of closing
+# the panel, so the editor does not flash between two boards, as in lesson 16;
+# the next board then draws with open: true, clear: true as usual. Every board
+# opens with open + clear.
+#
+# Boards (B1 P3 ring, B2 P5 bars, B3 P8 timeline, B4 P2 comb turned top to
+# bottom). Colour jobs: #1e1e1e ink (paints white) for arrows, the axes, the
+# bus and the 1×–6× marks; blue the thing named (the five cascade steps, the
+# goodput title, the two calendar ticks); green healthy or done (the three
+# fixes, the green goodput bars, the emergency kit, the second key holder); red
+# failure or limit (the strikes, the failing goodput bars, the sign-on outage
+# and what it locks, the freeze); orange the caveat or limit (the capacity
+# line, the change rule, the game day); violet flow (the cascade ring). The
+# five ring nodes carry a white fill (it inverts to dark on the canvas) so the
+# ring runs behind them, as in lesson 2's board B3; its arrows read clockwise
+# (top, right, then back into the top node). A label on two lines is one text
+# asset per line, so each line meets the 0.55 em width rule on its own; every
+# label was also measured in Chrome with Excalidraw's Virgil font
+# (wb-fit.mjs) and stays inside its box. B2 pairs a red and a green bar at
+# each load (the voice script puts the green bars "beside" the red ones), and
+# the "ပြိုကျ" label sits in the gap above the 6× red bar. B4 runs top to
+# bottom (an arrow-down bus) because the voice script puts each fallback under
+# its red box: the right-hand comb would need six rows.
+#
+# Deck pages: deck "Next Editor · SRE 5C · Design and platforms", published;
+# the /pub URL below is final. Its l24 pages are built later from the page
+# plan, so until then the Director reports page "l24_p01" missing from the
+# published deck. Page plan:
+# ~/Documents/sre-course/work/pages/sre-24-overload-change-emergency.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-24-overload-change-emergency.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-24-overload-change-emergency.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-24-overload-change-emergency
+  title: "SRE from zero 24: Overload နဲ့ emergency mode"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Overload နဲ့ emergency mode
+
+        - cascading failure — တစ်ခု ပျက်တာက နောက်တစ်ခုပေါ် ဝန်ပိုကျပြီး ကွင်းလို ဆင့်ကဲ ပျက်
+        - goodput — retry နဲ့ fail ဖယ်ပြီး user အတွက် တကယ် အောင်မြင်တဲ့ အလုပ်
+        - load shedding — ဝန်ပိရင် အရေးမကြီးတဲ့ request ကို တံခါးဝမှာ ငြင်း
+        - backoff with jitter — retry တိုင်း စောင့်ချိန် တိုး၊ ကျပန်း အချိန် ထည့်
+        - ပြောင်းလဲမှု စည်းကမ်း — budget နည်း၊ peak နီး၊ incident ကြီးရင် ပြောင်းလဲမှုကို ပိုတင်းတင်း စစ်
+        - အရေးပေါ် အိတ် — break-glass key · phone bridge · offline runbook
+
+        မေးခွန်း: layer 3 ခု၊ တစ်ခုစီ 3 ခါအထိ ကြိုးစား။ user တစ်ချက် နှိပ်ရင် အောက်ဆုံးမှာ call ဘယ်နှခုအထိ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Overload နဲ့ emergency mode</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 24</p>
+              <h1>Overload နဲ့ emergency mode</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l24-p01
+      contentType: google
+      name: "Cover: Thingyan midnight"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p01
+    - id: l24-p01b
+      contentType: google
+      name: "Top-up error budget gone"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p01b
+    - id: l24-p02
+      contentType: google
+      name: "Break the loop"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p02
+    - id: l24-p02b
+      contentType: google
+      name: "Priority labels"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p02b
+    - id: l24-p02c
+      contentType: google
+      name: "Client side help"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p02c
+    - id: l24-p02d
+      contentType: google
+      name: "Per-partner quotas"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p02d
+    - id: l24-p02e
+      contentType: google
+      name: "The retry config change"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p02e
+    - id: l24-p03
+      contentType: google
+      name: "Change safely"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p03
+    - id: l24-p03b
+      contentType: google
+      name: "Changes that can stop"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p03b
+    - id: l24-p04
+      contentType: google
+      name: "Undo toolbox"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p04
+    - id: l24-p04b
+      contentType: google
+      name: "Fixes are changes too"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p04b
+    - id: l24-p04c
+      contentType: google
+      name: "When tools are down"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p04c
+    - id: l24-p05
+      contentType: google
+      name: "This week"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQ1uOHEh8RzrKKOs0KFK_cEn1q0d5B8St3MRUgJGkE43-RBG2MysJIG6Y_WRqs4Z-fBgSHPbdM-ynCB/pub"
+      pageId: l24_p05
+  whiteboardAssets:
+    - {
+        id: l24-b1-ring,
+        kind: ellipse,
+        x: 350,
+        y: 195,
+        width: 650,
+        height: 430,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l24-b1-n1,
+        kind: rectangle,
+        x: 575,
+        y: 162,
+        width: 200,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b1-n1-t,
+        kind: text,
+        x: 590,
+        y: 177,
+        width: 170,
+        height: 35,
+        text: "ဝန် ပိုလာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-a12,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 800,
+        y: 201,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b1-n2,
+        kind: rectangle,
+        x: 874,
+        y: 311,
+        width: 220,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b1-n2-t,
+        kind: text,
+        x: 886,
+        y: 326,
+        width: 195,
+        height: 35,
+        text: "queue ရှည်လာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-a23,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 967,
+        y: 400,
+        width: 40,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b1-n3,
+        kind: rectangle,
+        x: 781,
+        y: 551,
+        width: 170,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b1-n3-t,
+        kind: text,
+        x: 796,
+        y: 566,
+        width: 115,
+        height: 35,
+        text: timeout,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-n4,
+        kind: rectangle,
+        x: 339,
+        y: 551,
+        width: 290,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b1-n4-t,
+        kind: text,
+        x: 354,
+        y: 566,
+        width: 255,
+        height: 35,
+        text: "client တွေ retry",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-n5,
+        kind: rectangle,
+        x: 266,
+        y: 294,
+        width: 200,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b1-n5-t1,
+        kind: text,
+        x: 281,
+        y: 304,
+        width: 130,
+        height: 35,
+        text: "restart၊",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-n5-t2,
+        kind: text,
+        x: 281,
+        y: 346,
+        width: 150,
+        height: 35,
+        text: "cache ဗလာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-aback,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 201,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b1-x1,
+        kind: freedraw,
+        stroke: strike,
+        x: 906,
+        y: 480,
+        width: 120,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l24-b1-x1-t,
+        kind: text,
+        x: 668,
+        y: 490,
+        width: 225,
+        height: 35,
+        text: "shed + degrade",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-x2,
+        kind: freedraw,
+        stroke: strike,
+        x: 308,
+        y: 455,
+        width: 120,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l24-b1-x2-t,
+        kind: text,
+        x: 440,
+        y: 455,
+        width: 260,
+        height: 35,
+        text: "backoff + jitter",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b1-x3,
+        kind: freedraw,
+        stroke: strike,
+        x: 360,
+        y: 244,
+        width: 110,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l24-b1-x3-t,
+        kind: text,
+        x: 488,
+        y: 262,
+        width: 215,
+        height: 35,
+        text: "restart ခဏရပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 170,
+        height: 45,
+        text: goodput,
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: l24-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 528,
+        width: 770,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b2-cap,
+        kind: text,
+        x: 300,
+        y: 610,
+        width: 200,
+        height: 35,
+        text: "ဝင်လာတဲ့ ဝန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-tick1,
+        kind: text,
+        x: 380,
+        y: 568,
+        width: 50,
+        height: 35,
+        text: "1×",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-tick2,
+        kind: text,
+        x: 570,
+        y: 568,
+        width: 50,
+        height: 35,
+        text: "2×",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-tick4,
+        kind: text,
+        x: 760,
+        y: 568,
+        width: 50,
+        height: 35,
+        text: "4×",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-tick6,
+        kind: text,
+        x: 950,
+        y: 568,
+        width: 50,
+        height: 35,
+        text: "6×",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-thr,
+        kind: rectangle,
+        x: 290,
+        y: 270,
+        width: 770,
+        height: 6,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l24-b2-thr-t,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 125,
+        height: 35,
+        text: capacity,
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-red1,
+        kind: rectangle,
+        x: 320,
+        y: 275,
+        width: 70,
+        height: 279,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l24-b2-grn1,
+        kind: rectangle,
+        x: 400,
+        y: 275,
+        width: 70,
+        height: 279,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l24-b2-red2,
+        kind: rectangle,
+        x: 510,
+        y: 404,
+        width: 70,
+        height: 150,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l24-b2-grn2,
+        kind: rectangle,
+        x: 590,
+        y: 275,
+        width: 70,
+        height: 279,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l24-b2-red3,
+        kind: rectangle,
+        x: 700,
+        y: 499,
+        width: 70,
+        height: 55,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l24-b2-grn3,
+        kind: rectangle,
+        x: 780,
+        y: 275,
+        width: 70,
+        height: 279,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l24-b2-red4,
+        kind: rectangle,
+        x: 890,
+        y: 546,
+        width: 70,
+        height: 8,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l24-b2-grn4,
+        kind: rectangle,
+        x: 970,
+        y: 275,
+        width: 70,
+        height: 279,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l24-b2-red-t,
+        kind: text,
+        x: 868,
+        y: 482,
+        width: 100,
+        height: 35,
+        text: "ပြိုကျ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b2-grn-t,
+        kind: text,
+        x: 600,
+        y: 215,
+        width: 370,
+        height: 35,
+        text: "capacity နားမှာ ဆက်ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 372,
+        width: 760,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b3-tick-t,
+        kind: rectangle,
+        x: 533,
+        y: 381,
+        width: 6,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l24-b3-tick-t-t,
+        kind: text,
+        x: 440,
+        y: 430,
+        width: 320,
+        height: 35,
+        text: "သင်္ကြန် 3 ရက်အလို",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-tick-p,
+        kind: rectangle,
+        x: 926,
+        y: 381,
+        width: 6,
+        height: 34,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l24-b3-tick-p-t,
+        kind: text,
+        x: 780,
+        y: 332,
+        width: 310,
+        height: 35,
+        text: "လစာထုတ် အပတ် (25–1)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-o1,
+        kind: text,
+        x: 270,
+        y: 190,
+        width: 660,
+        height: 35,
+        text: "budget 25% အောက်၊ လစာထုတ် အပတ်၊ 3 ရက်အလို:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-o2,
+        kind: text,
+        x: 270,
+        y: 230,
+        width: 690,
+        height: 35,
+        text: "rollback လုပ်မယ့်သူ + reviewer နောက်တစ်ယောက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-r1,
+        kind: text,
+        x: 560,
+        y: 495,
+        width: 434,
+        height: 35,
+        text: "သင်္ကြန် အကြိုည: rollout ရပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b3-r2,
+        kind: text,
+        x: 560,
+        y: 535,
+        width: 495,
+        height: 35,
+        text: "အရေးပေါ် fix နဲ့ security fix ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-src,
+        kind: rectangle,
+        x: 515,
+        y: 160,
+        width: 330,
+        height: 62,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-src-t,
+        kind: text,
+        x: 530,
+        y: 174,
+        width: 300,
+        height: 35,
+        text: "single sign-on ပျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-a0,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 226,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-bus,
+        kind: rectangle,
+        x: 340,
+        y: 272,
+        width: 700,
+        height: 10,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-d1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 375,
+        y: 286,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-d2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 286,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-d3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 925,
+        y: 286,
+        width: 40,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-red1,
+        kind: rectangle,
+        x: 270,
+        y: 332,
+        width: 250,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-red1-t,
+        kind: text,
+        x: 282,
+        y: 345,
+        width: 220,
+        height: 35,
+        text: console,
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-red2,
+        kind: rectangle,
+        x: 545,
+        y: 332,
+        width: 250,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-red2-t,
+        kind: text,
+        x: 557,
+        y: 345,
+        width: 220,
+        height: 35,
+        text: "team chat",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-red3,
+        kind: rectangle,
+        x: 820,
+        y: 332,
+        width: 250,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-red3-t,
+        kind: text,
+        x: 832,
+        y: 345,
+        width: 220,
+        height: 35,
+        text: "runbook wiki",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-grn1,
+        kind: rectangle,
+        x: 270,
+        y: 412,
+        width: 250,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-grn1-t,
+        kind: text,
+        x: 282,
+        y: 425,
+        width: 232,
+        height: 35,
+        text: "break-glass key",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-grn2,
+        kind: rectangle,
+        x: 545,
+        y: 412,
+        width: 250,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-grn2-t,
+        kind: text,
+        x: 557,
+        y: 425,
+        width: 232,
+        height: 35,
+        text: "phone bridge",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-grn3,
+        kind: rectangle,
+        x: 820,
+        y: 412,
+        width: 250,
+        height: 60,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-grn3-t,
+        kind: text,
+        x: 832,
+        y: 425,
+        width: 232,
+        height: 35,
+        text: "offline runbook",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 255,
+        y: 398,
+        width: 280,
+        height: 88,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l24-b4-game,
+        kind: rectangle,
+        x: 270,
+        y: 520,
+        width: 330,
+        height: 100,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-game-t1,
+        kind: text,
+        x: 285,
+        y: 530,
+        width: 300,
+        height: 35,
+        text: "game day: key ရှိသူ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-game-t2,
+        kind: text,
+        x: 285,
+        y: 572,
+        width: 300,
+        height: 35,
+        text: "1 ယောက်၊ ဆက်သွယ်မရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-a-game,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 550,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l24-b4-mdy,
+        kind: rectangle,
+        x: 700,
+        y: 520,
+        width: 330,
+        height: 100,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l24-b4-mdy-t1,
+        kind: text,
+        x: 715,
+        y: 530,
+        width: 300,
+        height: 35,
+        text: "မန္တလေးမှာ ဒုတိယ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l24-b4-mdy-t2,
+        kind: text,
+        x: 715,
+        y: 572,
+        width: 200,
+        height: 35,
+        text: "key ရှိသူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2624
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: "သင်္ကြန် ညသန်းခေါင်"
+    narration: >
+      [[mark:show-p01]] ဈေးနှုန်းစာရင်း သေးသွားလား စစ်တဲ့ check၊ zone တစ်ခုစီက cache နဲ့ notification queue တွေ ထည့်ပြီးတော့ ခြောက်ပတ် ပြင်ဆင်ခဲ့တဲ့ သင်္ကြန် ညသန်းခေါင် ရောက်လာပါပြီ။
+      [[mark:hook-surge]] Operator B ရဲ့ နှစ်သစ် promo စတာနဲ့ တစ်စက္ကန့်ကို request ၃၀၀၀ အတွက် ဆောက်ထားတဲ့ top-up service ဆီ ၂၀၀၀၀ ဝင်လာပါတယ်။ lesson ၂၀ မှာ ကြိုငှားခဲ့တာက top-up အစစ်တွေအတွက်ပါ၊ ဒီ request အများစုကတော့ ထပ်ပို့နေတဲ့ retry တွေပါ။ မကြာခင် server တွေလည်း တစ်လုံးပြီး တစ်လုံး restart ဖြစ်လာပါတယ်။ ပြိုမကျဘဲ ဘယ်လို တည်ငြိမ်အောင် ထိန်းမလဲ?
+      [[mark:show-p01b]] အဲဒီ တစ်ညတည်းနဲ့ SLO က ခွင့်ပြုထားတဲ့ တစ်လစာ ပျက်ခွင့်၊ error budget ရဲ့ လေးပုံသုံးပုံကျော် ကုန်သွားပါတယ်။ ဒီလို ခံနိုင်တာထက် ပိုတဲ့ အလုပ် ရောက်လာတာကို overload လို့ ခေါ်ပါတယ်။ ဒီ lesson မှာ overload ကို ခံပုံ၊ ပြောင်းလဲမှုကို ဘေးကင်းအောင် လုပ်ပုံနဲ့ ကိုယ့် tool တွေပါ ပျက်တဲ့နေ့ကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - { title: "Workbook: Managing Overload", url: "https://sre.google/workbook/overload/" }
+    actions:
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l24-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l24-p01b }
+
+  - id: cascade
+    chapter: "Cascading failure"
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] postmortem မှာ မသီရိက အဲဒီညကို ကွင်း တစ်ခုအဖြစ် ဆွဲပြပါတယ်။ [[mark:b1-s1b]] ဝန် ပိုလာတော့ queue ရှည်လာပြီး request တွေ ကြာကြာ စောင့်ရပါတယ်။ [[mark:b1-s1c]] app က စောင့်ပေးတဲ့ ကန့်သတ်ချိန်၊ timeout ကျော်သွားတော့ စောင့်တာ ရပ်လိုက်ပေမဲ့ server ကတော့ ဘယ်သူမှ မစောင့်တော့တဲ့ request တွေကို ဆက်လုပ်နေလို့ အလုပ်တွေ အလကား ဖြစ်ကုန်ပါတယ်။
+      [[mark:b1-s2]] timeout ဖြစ်တော့ app၊ Padauk API နဲ့ top-up router ဆိုတဲ့ layer သုံးခုလုံးက retry လုပ်ကြလို့ user တစ်ချက် နှိပ်တာက call အများကြီး ဖြစ်သွားပါတယ်။ [[mark:b1-s2b]] health check ကို မဖြေနိုင်တဲ့ server တွေကို cloud platform က restart လုပ်ပစ်တော့ ကျန်တဲ့ server တွေပေါ် ဝန် ပိုကျပြီး ပြန်တက်လာတဲ့ server ကလည်း cache ဗလာနဲ့ နှေးလို့ ကွင်းက အစကို ပြန်ရောက်ပါတယ်။
+      [[mark:b1-s3]] ဒီလို တစ်ခု ပျက်တာက နောက်တစ်ခုပေါ် ဝန်ပိုကျပြီး ဆင့်ကဲ ပျက်သွားတာကို cascading failure လို့ ခေါ်ပါတယ်။ [[mark:b1-s3b]] ကွင်းကို ဖြတ်ဖို့ ဝန်ကို လျှော့ရမယ်၊ retry တွေကို စောင့်ခိုင်းရမယ်၊ restart တွေကိုလည်း ခဏ ရပ်ရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - {
+          title: "Timeouts, retries, and backoff with jitter (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l24-b1-ring],
+          drawMs: 1600,
+        }
+      - {
+          id: b1-s1b,
+          type: whiteboard.apply,
+          at: { mark: b1-s1b },
+          upsertIds: [l24-b1-n1, l24-b1-n1-t, l24-b1-a12, l24-b1-n2, l24-b1-n2-t],
+          drawMs: 2000,
+        }
+      - {
+          id: b1-s1c,
+          type: whiteboard.apply,
+          at: { mark: b1-s1c },
+          upsertIds: [l24-b1-a23, l24-b1-n3, l24-b1-n3-t],
+          drawMs: 1200,
+        }
+      - {
+          id: b1-s2,
+          type: whiteboard.apply,
+          at: { mark: b1-s2 },
+          upsertIds: [l24-b1-n4, l24-b1-n4-t],
+          drawMs: 1000,
+        }
+      - {
+          id: b1-s2b,
+          type: whiteboard.apply,
+          at: { mark: b1-s2b },
+          upsertIds: [l24-b1-n5, l24-b1-n5-t1, l24-b1-n5-t2],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l24-b1-aback],
+          drawMs: 700,
+        }
+      - {
+          id: b1-s3b,
+          type: whiteboard.apply,
+          at: { mark: b1-s3b },
+          upsertIds: [l24-b1-x1, l24-b1-x1-t, l24-b1-x2, l24-b1-x2-t, l24-b1-x3, l24-b1-x3-t],
+          drawMs: 3000,
+        }
+
+  - id: goodput
+    chapter: "Goodput"
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို ဘာကို တိုင်းမလဲ? server handle လုပ်သမျှ request အားလုံးကို ရေတွက်တဲ့ throughput ကတော့ retry နဲ့ fail တွေပါ ပါနေလို့ လှည့်စားတတ်ပါတယ်။ [[mark:b2-s1b]] ဒါကြောင့် ဖုန်းဘေလ် တကယ် ဝင်သွားတဲ့ top-up လို အသုံးဝင်တဲ့ အလုပ်ကိုပဲ ရေတွက်တဲ့ goodput ကို ကြည့်ပါတယ်။ [[mark:b2-s1c]] ဒီ chart မှာ ဝင်လာတဲ့ ဝန်ကို capacity ရဲ့ ၁ ဆကနေ ၆ ဆအထိ တိုးကြည့်ပါမယ်။
+      [[mark:b2-s2]] အနီရောင် bar တွေက အဲဒီညက top-up service ပါ။ [[mark:b2-s2b]] capacity ကျော်တာနဲ့ goodput ပြိုကျပြီး ၆ ဆမှာ သုညနီးပါး ဖြစ်သွားပါတယ်၊ server တွေက အလုပ် အပြည့် လုပ်နေပေမဲ့ အများစုက timeout ဖြစ်ပြီးသား request တွေနဲ့ retry တွေမို့ပါ။
+      [[mark:b2-s3]] Padauk လိုချင်တာက အစိမ်းရောင် bar တွေပါ။ [[mark:b2-s3b]] ဝန် ဘယ်လောက်ပဲ တက်တက် goodput က capacity နားမှာ ညီညီ ရှိနေပြီး ပိုလာတဲ့ အပိုင်းကိုပဲ ငြင်းတာပါ။ အောင်မြင်တယ် ဆိုတာ တစ်ညလုံး ငွေပေးချေမှုတွေ ဆက်စီးနေပြီး ဝန် ကျသွားတာနဲ့ ဘယ်သူမှ ဘာမှ မနှိပ်ဘဲ system က သူ့ဘာသာ ပြန်ကောင်းလာတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - { title: "Workbook: Managing Overload", url: "https://sre.google/workbook/overload/" }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l24-b2-axis],
+          drawMs: 900,
+        }
+      - {
+          id: b2-s1b,
+          type: whiteboard.apply,
+          at: { mark: b2-s1b },
+          upsertIds: [l24-b2-title],
+          drawMs: 700,
+        }
+      - {
+          id: b2-s1c,
+          type: whiteboard.apply,
+          at: { mark: b2-s1c },
+          upsertIds: [l24-b2-cap, l24-b2-tick1, l24-b2-tick2],
+          drawMs: 1500,
+        }
+      - {
+          id: b2-s1d,
+          type: whiteboard.apply,
+          at: { afterAction: b2-s1c },
+          upsertIds: [l24-b2-tick4, l24-b2-tick6, l24-b2-thr, l24-b2-thr-t],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l24-b2-red1, l24-b2-red2, l24-b2-red3, l24-b2-red4],
+          drawMs: 2400,
+        }
+      - {
+          id: b2-s2b,
+          type: whiteboard.apply,
+          at: { mark: b2-s2b },
+          upsertIds: [l24-b2-red-t],
+          drawMs: 600,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l24-b2-grn1, l24-b2-grn2, l24-b2-grn3, l24-b2-grn4],
+          drawMs: 2400,
+        }
+      - {
+          id: b2-s3b,
+          type: whiteboard.apply,
+          at: { mark: b2-s3b },
+          upsertIds: [l24-b2-grn-t],
+          drawMs: 1000,
+        }
+
+  - id: break-the-loop
+    chapter: "ကွင်းကို ဖြတ်မယ်"
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] Padauk က ကွင်းကို server ဘက်၊ client ဘက်နဲ့ partner တစ်ခုချင်းအလိုက် ဖြတ်ပါတယ်။ server ဘက်မှာ ဝန်ပိရင် request တချို့ကို တမင် ငြင်းပါတယ်၊ တစ်ဝက် လုပ်ပြီးမှ fail တာထက် တံခါးဝမှာတင် ငြင်းလိုက်ရင် resource ကို ကျန်တဲ့ request တွေအတွက် ချန်ထားနိုင်လို့ပါ။ ဒါကို load shedding လို့ ခေါ်ပါတယ်။
+      [[mark:show-p02b]] ဘာကို အရင် ငြင်းမလဲ ဆိုတာကို request တိုင်းမှာ တပ်ထားတဲ့ priority label က ဆုံးဖြတ်ပါတယ်။ top-up ငွေပေးချေမှုကို အမြဲ ဖြေပြီး status မေးတာ၊ promo banner တွေကိုတော့ ခဏနေမှ ပြန်ကြိုးစားပါလို့ ပြောပြီး ငြင်းပါတယ်။ lesson ၂၀ မှာ ကြိုရေးထားတဲ့ အစီအစဉ်အတိုင်း feature တချို့ ပိတ်ပြီး အဓိက အလုပ်ကို ဆက်ပေးတာကတော့ graceful degradation ပါ။
+      [[mark:show-p02c]] client တွေက ချက်ချင်း ပြန်ပြန်ပို့နေရင် shedding က အလကား ဖြစ်မှာမို့ client ဘက်ကလည်း ကူရပါတယ်။ retry ကို app တစ်နေရာတည်းမှာပဲ လုပ်ပြီး ပြန်ကြိုးစားတိုင်း စောင့်ချိန်ကို နှစ်ဆစီ တိုးပြီး ကျပန်း အချိန်နည်းနည်း ထည့်တဲ့ backoff with jitter ကို သုံးပါတယ်။ retry အရေအတွက်ကိုလည်း retry budget နဲ့ ကန့်သတ်ထားပြီး ခေါ်တာ အများစု fail နေရင် app က ကိုယ်တိုင် လျှော့ပို့ပြီး အရေးကြီးတဲ့ request ကိုပဲ ဆက်ပို့ပါတယ်။
+      [[mark:show-p02d]] တတိယက partner တစ်ခုချင်း သုံးခွင့်ရှိတဲ့ အများဆုံး ပမာဏ၊ quota ပါ။ အဲဒီည Operator B ရဲ့ promo က service တစ်ခုလုံးကို ပိတ်ဆို့လို့ Operator A နဲ့ C သုံးတဲ့ user တွေပါ ဒုက္ခရောက်ခဲ့ပါတယ်။ အခုတော့ operator တစ်ခုစီမှာ quota ရှိလို့ ကျော်တဲ့ request တွေက Operator B ဘက်မှာပဲ error ရပြီး A နဲ့ C က ဆက်သွားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - {
+          title: "Timeouts, retries, and backoff with jitter (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l24-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l24-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l24-p02c }
+      - { id: show-p02d, type: slide.show, at: { mark: show-p02d }, slideId: l24-p02d }
+
+  - id: change-safely
+    chapter: "ဘေးကင်းကင်း ပြောင်း"
+    narration: >
+      [[mark:show-p02e]] postmortem မှာ တွေ့တာ နောက်တစ်ခုက သင်္ကြန် မတိုင်ခင် နှစ်ရက်မှာ Padauk API ရဲ့ retry ကို တစ်ခါကနေ သုံးခါ တိုးလိုက်တဲ့ config ပြောင်းလဲမှုပါ။ code ပြောင်းလဲမှု နှစ်ခုနဲ့ ရောပြီး server အားလုံးဆီ တစ်ခါတည်း ပို့ခဲ့လို့ ညသန်းခေါင်မှာ ဘယ်ဟာကြောင့်လဲ မသေချာသလို ပြန်ဖြုတ်ဖို့လည်း deploy အသစ် လိုခဲ့ပါတယ်။
+      [[mark:show-p03]] production ပြဿနာ အများစုက ပြောင်းလဲမှုကနေ စတာပါ။ ဒါကြောင့် Padauk က code၊ config၊ data ဘာပဲ ပြောင်းပြောင်း lesson ၁၉ က canary လိုပဲ traffic နည်းနည်းဆီ အရင် ပို့ကြည့်ပြီး zone တစ်ခုချင်း တဖြည်းဖြည်း ဖြန့်ပါတယ်။ တစ်ကြိမ်မှာ ပြောင်းလဲမှု တစ်ခုပဲ ဖြန့်လို့ ပြဿနာ တက်ရင် ဘယ်ဟာကြောင့်လဲ ချက်ချင်း သိပါတယ်။
+      [[mark:show-p03b]] ပြောင်းလဲမှုတိုင်းကို ရပ်လို့လည်း ရရပါမယ်။ retry setting ကို feature flag ခလုတ် နောက်မှာ ထားခဲ့ရင် deploy မလုပ်ဘဲ စက္ကန့်ပိုင်းအတွင်း ပြန်ပိတ်နိုင်ခဲ့မှာပါ။ rollout ရပ်တဲ့ ခလုတ်ကလည်း နှိပ်လို့ ဘေးကင်းပြီး ပြန်ဆက်လို့ရမှ လူတွေ နှိပ်ရဲမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - { id: show-p02e, type: slide.show, at: { mark: show-p02e }, slideId: l24-p02e }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l24-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l24-p03b }
+
+  - id: change-rule
+    chapter: "ပြောင်းလဲမှု စည်းကမ်း"
+    narration: >
+      [[mark:close-p03b]] [[mark:b3-s1]] ဒီ incident နောက်မှာ Padauk က ပြောင်းလဲမှုကို ဘယ်လောက် ဂရုစိုက်ရမလဲ ဆိုတာကို ပြက္ခဒိန်နဲ့ error budget နဲ့ ချိတ်လိုက်ပါတယ်။ [[mark:b3-s1b]] အန္တရာယ် အများဆုံး ရက်တွေက လတိုင်း ၂၅ ရက်ကနေ ၁ ရက်အထိ လစာထုတ်တဲ့ အပတ်နဲ့ သင်္ကြန် မတိုင်ခင် သုံးရက်ပါ။
+      [[mark:b3-s2]] error budget ၂၅ ရာခိုင်နှုန်းအောက် ကျန်ရင် ဒါမှမဟုတ် အဲဒီ ရက်တွေထဲ ရောက်ရင် ပြောင်းလဲမှုတိုင်းမှာ rollback လုပ်မယ့်သူ နာမည်ကို ကြိုရေးပြီး reviewer နောက်တစ်ယောက် လိုပါတယ်။ ဒါက Padauk ရဲ့ ပြောင်းလဲမှု စည်းကမ်းပါ။ သင်္ကြန် ညက budget အများစု ကုန်သွားလို့ Top-up က လကုန်အထိ ဒီ စည်းကမ်းအောက်မှာ ရှိနေပါတယ်။
+      [[mark:b3-s3]] သင်္ကြန် အကြိုညမှာတော့ rollout အားလုံး ရပ်ပြီး အရေးပေါ် fix နဲ့ security fix ပဲ ခွင့်ပြုတဲ့ change freeze ပါ။ incident ကြီး ဖြစ်နေချိန်မှာလည်း မပျက်သေးတဲ့ service တွေနဲ့ ပြန်ကောင်းအောင် သုံးမယ့် tool တွေကို incident ပြီးတဲ့အထိ freeze အောက်မှာ ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l24-b3-axis],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s1b,
+          type: whiteboard.apply,
+          at: { mark: b3-s1b },
+          upsertIds: [l24-b3-tick-t, l24-b3-tick-t-t, l24-b3-tick-p, l24-b3-tick-p-t],
+          drawMs: 2400,
+        }
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l24-b3-o1, l24-b3-o2],
+          drawMs: 2400,
+        }
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l24-b3-r1, l24-b3-r2],
+          drawMs: 2400,
+        }
+
+  - id: undo-toolbox
+    chapter: "Undo လုပ်နည်း"
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] အဲဒီညက Padauk ကို ပြန်ထိန်းခဲ့တာက promo banner ပိတ်ပြီး degrade လုပ်တာနဲ့ capacity တိုးတာပါ။ ဒါတွေက အကြောင်းရင်း မသိခင် သုံးလို့ရတဲ့ lesson ၁၀ က generic mitigation တွေပါ။ traffic လွှဲတဲ့ drain၊ rollback နဲ့ ဒုက္ခပေးနေတဲ့ caller ကို block လုပ်တာလည်း ပါပါတယ်။ version အသစ်က data ပုံစံကို ပြောင်းပြီးသွားရင်တော့ rollback လုပ်လို့ မရတော့လို့ ပြင်ပြီးသား version ကို ရှေ့ဆက်တင်တဲ့ roll forward ကို ကြိုပြင်ထားရပါမယ်။
+      [[mark:show-p04b]] fix တွေကလည်း ပြောင်းလဲမှုတွေမို့ ကြိုစမ်းထားပြီး တဖြည်းဖြည်း သုံးရပါတယ်။ restart ကိုတော့ ဝန်ပိချိန်မှာ သတိထားရပါမယ်၊ capacity နဲ့ data ပြည့်နေတဲ့ cache ကို လွှင့်ပစ်လို့ပါ။ ဒါကြောင့် ဝန်ပိရင် အလိုအလျောက် restart ကို ခဏ ရပ်ပြီး အသုံးဝင်တဲ့ အလုပ် လုံးဝ မလုပ်နိုင်တော့တဲ့ server ကိုပဲ restart လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l24-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l24-p04b }
+
+  - id: tools-down
+    chapter: "ကိုယ့် tool တွေပါ ပျက်တဲ့အခါ"
+    narration: >
+      [[mark:close-p04b]] [[mark:b4-s1]] သင်္ကြန် ပြီးလို့ ဆယ်ရက်လောက်အကြာ လစာထုတ်ရက် မနက်မှာ on-call ကျနေတဲ့ ကိုမင်းက Wallet နှေးနေတာကို ကြည့်ဖို့ console ကို ဝင်ပေမဲ့ login မရပါဘူး။ [[mark:b4-s1b]] login တစ်ခါနဲ့ tool အားလုံး ဝင်ရအောင် လုပ်ပေးတဲ့ single sign-on ပျက်နေလို့ console၊ team chat နဲ့ runbook wiki အားလုံး ပိတ်သွားပါတယ်။
+      [[mark:b4-s2]] on-call ကျသူတွေ မီးပျက်ရင် power bank၊ လိုင်းကျရင် ဆင်းကတ် အပို ဆောင်ထားသလိုပဲ အဲဒီနေ့ နောက်မှာ Padauk က အရေးပေါ် အိတ် တစ်ခု ပြင်ပါတယ်။ [[mark:b4-s2b]] အိတ်ထဲမှာ ပုံမှန် ကန့်သတ်ချက်ကို ကျော်ပြီး ဝင်လို့ရတဲ့ break-glass key၊ နံပါတ် တစ်ခု ခေါ်ရုံနဲ့ အားလုံး ဆုံလို့ရတဲ့ phone bridge နဲ့ ဖုန်းထဲ သိမ်းထားတဲ့ offline runbook တွေ ပါပါတယ်။
+      [[mark:b4-s3]] break-glass key သုံးရင်တောင် လူ နှစ်ယောက် အတည်ပြုရပါတယ်၊ အရေးပေါ်လမ်းက ပိုလွယ်နေရင် တစ်ယောက်ယောက်က ပုံမှန်လမ်းကို တမင် ဖျက်ပြီး ကျော်သွားနိုင်လို့ပါ။ fallback တွေကိုလည်း ပုံမှန်လမ်းနဲ့ သုံးရတာ တူအောင် လုပ်ထားရပါမယ်၊ offline runbook က wiki နဲ့ အဆင့်တွေ အတူတူ ဖြစ်သလိုပါ။
+      [[mark:b4-s4]] နောက်လမှာ single sign-on ကို တမင် ပိတ်တဲ့ game day လုပ်တော့ break-glass key ရှိတာ ကိုဇော် တစ်ယောက်တည်း ဖြစ်ပြီး လေယာဉ်ပေါ်မှာမို့ ဆက်သွယ်မရပါဘူး။ [[mark:b4-s4b]] အတူ ပျက်နိုင်တဲ့ failure domain ဆိုတာ လူတွေမှာလည်း ရှိလို့ မန္တလေးမှာ key ရှိတဲ့ ဒုတိယ လူ တစ်ယောက် ထားလိုက်ပါတယ်။
+      [[mark:close-b4]] [[mark:show-p04c]] tool တွေ ပျက်တဲ့နေ့မှာတော့ မေးခွန်း သုံးခုကို အစဉ်လိုက် မေးပါ။ ပုံမှန်လမ်း ရသေးလား၊ မရရင် fallback ရှိလား၊ အဲဒါလည်း မရှိရင်တော့ အတွေ့အကြုံ အများဆုံး နှစ်ယောက်ကို ခေါ်ပါ။ fallback တွေ အမြဲ သုံးလို့ရနေအောင် ခေါင်းဆောင်တွေက ထိန်းထားရပြီး ခဏခဏ သေးသေးလေး လေ့ကျင့်တာကလည်း ကျွမ်းကျင်မှုကို ကြာကြာ ခံစေပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+      - {
+          title: "The Calculus of Service Availability (research.google)",
+          url: "https://research.google/pubs/the-calculus-of-service-availability/",
+        }
+    actions:
+      - { id: close-p04b, type: slide.close, at: { mark: close-p04b, offsetMs: -400 } }
+      - {
+          id: b4-s1,
+          type: whiteboard.apply,
+          at: { mark: b4-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l24-b4-red1, l24-b4-red1-t],
+          drawMs: 900,
+        }
+      - {
+          id: b4-s1b,
+          type: whiteboard.apply,
+          at: { mark: b4-s1b },
+          upsertIds: [l24-b4-src, l24-b4-src-t, l24-b4-a0, l24-b4-bus, l24-b4-d1],
+          drawMs: 1500,
+        }
+      - {
+          id: b4-s1c,
+          type: whiteboard.apply,
+          at: { afterAction: b4-s1b },
+          upsertIds: [l24-b4-d2, l24-b4-red2, l24-b4-red2-t, l24-b4-d3, l24-b4-red3, l24-b4-red3-t],
+          drawMs: 1500,
+        }
+      - {
+          id: b4-s2,
+          type: whiteboard.apply,
+          at: { mark: b4-s2 },
+          upsertIds: [l24-b4-grn1, l24-b4-grn2, l24-b4-grn3],
+          drawMs: 1200,
+        }
+      - {
+          id: b4-s2b,
+          type: whiteboard.apply,
+          at: { mark: b4-s2b },
+          upsertIds: [l24-b4-grn1-t, l24-b4-grn2-t, l24-b4-grn3-t],
+          drawMs: 3600,
+        }
+      - {
+          id: b4-s3,
+          type: whiteboard.apply,
+          at: { mark: b4-s3 },
+          upsertIds: [l24-b4-circle],
+          drawMs: 900,
+        }
+      - {
+          id: b4-s4,
+          type: whiteboard.apply,
+          at: { mark: b4-s4 },
+          upsertIds: [l24-b4-game, l24-b4-game-t1, l24-b4-game-t2],
+          drawMs: 1800,
+        }
+      - {
+          id: b4-s4b,
+          type: whiteboard.apply,
+          at: { mark: b4-s4b },
+          upsertIds: [l24-b4-a-game, l24-b4-mdy, l24-b4-mdy-t1, l24-b4-mdy-t2],
+          drawMs: 2000,
+        }
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l24-p04c }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p05]] ကိုယ့် system ထဲမှာ layer နှစ်ခုက retry ထပ်လုပ်နေတဲ့ client တွေကို ဒီအပတ် ရှာကြည့်ပါ။ နောက်လာမယ့် peak ရက်တွေကို ပြက္ခဒိန်ပေါ် မှတ်ပြီး အဲဒီ ရက်တွေမှာ ပြောင်းလဲမှုကို ဘယ်လောက် တင်းကျပ်မလဲ ချရေးပါ။ ပြီးတော့ chat မရှိရင် ဘယ်လို စကားပြောမလဲလို့ အဖွဲ့ကို မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - {
+          title: "Timeouts, retries, and backoff with jitter (AWS Builders' Library)",
+          url: "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l24-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] cascading failure ကနေ စပါမယ်။ [[mark:sel-cascading]] cascading failure က တစ်ခု ပျက်တော့ နောက်တစ်ခုပေါ် ဝန်ပိုကျပြီး ဆင့်ကဲ ပျက်သွားတာ ဖြစ်ပြီး၊ [[mark:sel-goodput]] goodput က retry နဲ့ fail တွေကို ဖယ်ပြီး user အတွက် တကယ် အောင်မြင်တဲ့ အလုပ်ပါ။ [[mark:sel-shedding]] load shedding က ဝန်ပိရင် အရေးမကြီးတဲ့ request ကို တံခါးဝမှာတင် ငြင်းတာပါ။
+      [[mark:sel-backoff]] backoff with jitter က retry တိုင်း စောင့်ချိန် တိုးပြီး ကျပန်း အချိန် ထည့်တာ ဖြစ်ပြီး၊ [[mark:sel-rule]] ပြောင်းလဲမှု စည်းကမ်းက budget နည်းချိန်၊ peak နီးချိန်နဲ့ incident ကြီးချိန်မှာ ပြောင်းလဲမှုကို ပိုတင်းတင်း စစ်တာပါ။ [[mark:sel-kit]] အရေးပေါ် အိတ်ကတော့ ကိုယ့် tool တွေ ပျက်တဲ့နေ့အတွက် ကြိုပြင်ထားတဲ့ fallback တွေပါ။
+      [[mark:sel-question]] သင်္ကြန် ညက retry တွေကို ပြန်တွေးကြည့်ပါ။ [[mark:ask-question]] layer သုံးခုက call တစ်ခုကို တစ်ခုစီ သုံးခါအထိ ကြိုးစားရင် user တစ်ချက် နှိပ်တာက အောက်ဆုံးမှာ call ဘယ်နှခုအထိ ဖြစ်နိုင်လဲ?
+      [[mark:pause-question]] သုံး သုံးလီ ကိုး၊ ကိုး သုံးလီ ၂၇ ခုပါ၊ ဒါကြောင့် retry ကို layer တစ်ခုတည်းမှာပဲ ထားရတာပါ။ နောက်တစ်နှစ် သင်္ကြန် change freeze အလယ်မှာ Top-up deploy တစ်ခု ထွက်သွားပါတယ်၊ freeze စည်းကမ်းက wiki စာမျက်နှာ တစ်ခုပေါ်မှာပဲ ရှိနေခဲ့လို့ပါ။ မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင် ဘယ်လို လုပ်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Addressing Cascading Failures",
+          url: "https://sre.google/sre-book/addressing-cascading-failures/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 8: Design for Resilience",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch08.html",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-cascading,
+          type: editor.select,
+          at: { mark: sel-cascading },
+          target: { file: notes.md, text: "cascading failure", occurrence: 1 },
+        }
+      - {
+          id: sel-goodput,
+          type: editor.select,
+          at: { mark: sel-goodput },
+          target: { file: notes.md, text: goodput, occurrence: 1 },
+        }
+      - {
+          id: sel-shedding,
+          type: editor.select,
+          at: { mark: sel-shedding },
+          target: { file: notes.md, text: "load shedding", occurrence: 1 },
+        }
+      - {
+          id: sel-backoff,
+          type: editor.select,
+          at: { mark: sel-backoff },
+          target: { file: notes.md, text: "backoff with jitter", occurrence: 1 },
+        }
+      - {
+          id: sel-rule,
+          type: editor.select,
+          at: { mark: sel-rule },
+          target: { file: notes.md, text: "ပြောင်းလဲမှု စည်းကမ်း", occurrence: 1 },
+        }
+      - {
+          id: sel-kit,
+          type: editor.select,
+          at: { mark: sel-kit },
+          target: { file: notes.md, text: "အရေးပေါ် အိတ်", occurrence: 1 },
+        }
+      - {
+          id: select-question,
+          type: editor.select,
+          at: { mark: ask-question, offsetMs: 8380 },
+          target:
+            {
+              file: notes.md,
+              text: "မေးခွန်း: layer 3 ခု၊ တစ်ခုစီ 3 ခါအထိ ကြိုးစား။ user တစ်ချက် နှိပ်ရင် အောက်ဆုံးမှာ call ဘယ်နှခုအထိ?",
+              occurrence: 1,
+            },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
