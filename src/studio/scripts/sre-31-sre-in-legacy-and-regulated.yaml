@@ -1,0 +1,1307 @@
+# SRE from zero, lesson 31: SRE in old, regulated companies (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-31-sre-in-legacy-and-regulated.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-31-sre-in-legacy-and-regulated.md \
+#     src/studio/scripts/sre-31-sre-in-legacy-and-regulated.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Three marks add no spoken text and sit at an existing ။: hook-midnight
+# splits the hook's narration at its paragraph break (one 485-character
+# dialog would pass the 450-character limit; no action uses it); b1-s4b lands
+# B1's "70 မိနစ် → 5 မိနစ်" box on the sentence that says it (the drill), not
+# ~24 s early; and b2-s1b lands B2's "restart script" label on its own
+# sentence, not ~15 s early. ask-question is the voice script's
+# ⟪select မေးခွန်း⟫, which already starts the question's own dialog, so the
+# question-line select hangs off it for the ⟪pause 3s⟫ (pause-question), as
+# in Module 1.
+#
+# Pacing: at 70 ms/char no page or board step holds longer than ~37 s (the
+# longest is the cover, l31_p01, counting the 1.45 s it shows before the
+# first word; next is l31_p04c at ~31 s), so the voice script's own markers
+# carry it and no pacing page or board step was added.
+#
+# Every board here is followed by a deck page and every run of pages by a
+# board, so a board closes the panel (open: false) 400 ms before the next
+# page, and a page closes 400 ms before the next board draws with open: true,
+# clear: true, as in Module 1.
+#
+# Boards (B1 a P1 flow with its guards and outcomes below it, B2 a P1 flow
+# into the wrapped vendor system, B3 a P2 fan-in comb, B4 a P2 fan-out comb).
+# Colour jobs: #1e1e1e ink (paints white) for arrows and the buses; blue the
+# thing named (the incident commander's mandate, users and Padauk's gateway,
+# the three data sources, the three lenses); green healthy or done
+# (70 → 5 minutes, the user-success alert, the gateway fix); red failure (the
+# read-only desk, the closed vendor system, NRC numbers in the vendor's logs);
+# orange the caveat or limit (break-glass and its three guards, the
+# setup-as-code boundary and its restart script, "blameless ≠ no owner", the
+# vulnerability rule); violet the result (the postmortem sent as the
+# regulator's report, the one SLO report). The voice script's "gray" (old or
+# risky, as on the slides, where the brand has no red) is drawn red: the
+# board palette has no gray, and red is the course's colour for what failed.
+# A label on two or three lines is one text asset per line, so each line
+# meets the 0.55 em width rule on its own; every label was also measured in
+# Chrome with Excalidraw's Virgil font and fits its box. B2's gateway line
+# "timeout · queue · metric · config check" and its alert line need ~600 px
+# each under that rule, so the gateway runs on three lines and the alert on
+# two, and the boundary's label sits on two lines inside the orange outline;
+# B4's source box runs on two lines too, so the fan-out fits. B2's arrow into
+# the vendor box crosses the orange boundary on purpose: every request passes
+# through the layer Padauk owns.
+#
+# Deck pages: deck "Next Editor · SRE 6B · Where you work, and what's next"
+# (published). Until the lead builds this lesson's pages from the page plan,
+# the Director reports the l31 pages missing from the published deck. On
+# l31_p03 only the middle card has a term (ဘယ်မှာမဆို), per the voice script's
+# "term: line" item. Page plan:
+# ~/Documents/sre-course/work/pages/sre-31-sre-in-legacy-and-regulated.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-31-sre-in-legacy-and-regulated.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-31-sre-in-legacy-and-regulated.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-31-sre-in-legacy-and-regulated
+  title: "SRE from zero 31: ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE
+
+        - break-glass — အရေးပေါ်မှာ ကန့်သတ်ချက်ကို ကျော်ဖို့ ကြိုသဘောတူထားတဲ့ လမ်း
+        - toil audit — complaint ကို နာရီနဲ့ incident ပါတဲ့ business case ဖြစ်အောင်
+        - anticorruption layer — ပြင်လို့ မရတဲ့ system ရှေ့က ကိုယ်ပိုင် gateway
+        - executive sponsor — အချိန်နဲ့ ရင်းမြစ် ပေးပြီး ထောက်ခံတဲ့ ခေါင်းဆောင်
+        - SLO report တစ်ခုတည်း — ရှိပြီးသား tool တွေကို ဖတ်ပြီး ကိန်းဂဏန်း တစ်စုတည်း
+
+        မေးခွန်း: ပြင်ပ desk က incident မှာ ကြည့်ရုံပဲ ရတယ်။ အရေးပေါ် access ကို ဘေးကင်းအောင် လုပ်တဲ့ အကာအကွယ် နှစ်ခုက ဘာလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 31</p>
+              <h1>ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l31-p01
+      contentType: google
+      name: "Cover: wallets locked for 70 minutes"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p01
+    - id: l31-p01b
+      contentType: google
+      name: The 70 minutes, step by step
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p01b
+    - id: l31-p02
+      contentType: google
+      name: Complaint versus business case
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p02
+    - id: l31-p02b
+      contentType: google
+      name: "Toil audit: 45 hours a month"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p02b
+    - id: l31-p02c
+      contentType: google
+      name: After the approval
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p02c
+    - id: l31-p03
+      contentType: google
+      name: When you can't change it
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p03
+    - id: l31-p03b
+      contentType: google
+      name: Machine or person?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p03b
+    - id: l31-p04
+      contentType: google
+      name: Monsoon night
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p04
+    - id: l31-p04b
+      contentType: google
+      name: Who leads the response, by size
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p04b
+    - id: l31-p04c
+      contentType: google
+      name: What SRE means here
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p04c
+    - id: l31-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l31_p05
+  whiteboardAssets:
+    # ---- Board B1: authority and access, a P1 flow with what sits below it ----
+    - {
+        id: l31-b1-ic,
+        kind: rectangle,
+        x: 260,
+        y: 190,
+        width: 350,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b1-ic-t1,
+        kind: text,
+        x: 275,
+        y: 203,
+        width: 320,
+        height: 35,
+        text: "incident commander",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-ic-t2,
+        kind: text,
+        x: 275,
+        y: 243,
+        width: 320,
+        height: 35,
+        text: "စာနဲ့ လုပ်ပိုင်ခွင့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 620,
+        y: 220,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b1-bg,
+        kind: rectangle,
+        x: 690,
+        y: 205,
+        width: 280,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l31-b1-bg-t,
+        kind: text,
+        x: 705,
+        y: 222,
+        width: 250,
+        height: 35,
+        text: "break-glass",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-g1,
+        kind: text,
+        x: 705,
+        y: 295,
+        width: 250,
+        height: 35,
+        text: "2 နာရီနဲ့ ပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-g2,
+        kind: text,
+        x: 705,
+        y: 335,
+        width: 290,
+        height: 35,
+        text: "ဒုတိယ လူ အတည်ပြု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-g3,
+        kind: text,
+        x: 705,
+        y: 375,
+        width: 250,
+        height: 35,
+        text: "audit log",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-desk,
+        kind: rectangle,
+        x: 260,
+        y: 455,
+        width: 350,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l31-b1-desk-t,
+        kind: text,
+        x: 275,
+        y: 472,
+        width: 320,
+        height: 35,
+        text: "ကြည့်ရုံပဲ ရတဲ့ desk",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-fast,
+        kind: rectangle,
+        x: 690,
+        y: 455,
+        width: 320,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l31-b1-fast-t,
+        kind: text,
+        x: 705,
+        y: 472,
+        width: 290,
+        height: 35,
+        text: "70 မိနစ် → 5 မိနစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b1-report,
+        kind: rectangle,
+        x: 260,
+        y: 555,
+        width: 610,
+        height: 65,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l31-b1-report-t,
+        kind: text,
+        x: 275,
+        y: 570,
+        width: 580,
+        height: 35,
+        text: "postmortem = regulator အတွက် report",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B2: a layer of our own around the vendor system (P1 flow) -------
+    - {
+        id: l31-b2-v,
+        kind: rectangle,
+        x: 795,
+        y: 290,
+        width: 280,
+        height: 95,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l31-b2-v-t1,
+        kind: text,
+        x: 810,
+        y: 302,
+        width: 250,
+        height: 35,
+        text: "vendor billing",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-v-t2,
+        kind: text,
+        x: 810,
+        y: 342,
+        width: 250,
+        height: 35,
+        text: "ပြင်လို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-env,
+        kind: rectangle,
+        x: 775,
+        y: 190,
+        width: 320,
+        height: 270,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l31-b2-env-t1,
+        kind: text,
+        x: 790,
+        y: 200,
+        width: 300,
+        height: 35,
+        text: "ပတ်ဝန်းကျင် အားလုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-env-t2,
+        kind: text,
+        x: 790,
+        y: 237,
+        width: 150,
+        height: 35,
+        text: "code နဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-restart,
+        kind: text,
+        x: 810,
+        y: 405,
+        width: 240,
+        height: 35,
+        text: "restart script",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-u,
+        kind: rectangle,
+        x: 255,
+        y: 290,
+        width: 100,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b2-u-t,
+        kind: text,
+        x: 268,
+        y: 307,
+        width: 85,
+        height: 35,
+        text: users,
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 358,
+        y: 305,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b2-g,
+        kind: rectangle,
+        x: 397,
+        y: 255,
+        width: 350,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b2-g-t1,
+        kind: text,
+        x: 412,
+        y: 265,
+        width: 330,
+        height: 35,
+        text: "Padauk gateway",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-g-t2,
+        kind: text,
+        x: 412,
+        y: 305,
+        width: 330,
+        height: 35,
+        text: "timeout · queue",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-g-t3,
+        kind: text,
+        x: 412,
+        y: 345,
+        width: 330,
+        height: 35,
+        text: "metric · config check",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 751,
+        y: 305,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b2-alert,
+        kind: rectangle,
+        x: 380,
+        y: 475,
+        width: 410,
+        height: 95,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l31-b2-alert-t1,
+        kind: text,
+        x: 395,
+        y: 487,
+        width: 390,
+        height: 35,
+        text: "alert: user ဘေလ် ဆောင်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b2-alert-t2,
+        kind: text,
+        x: 395,
+        y: 527,
+        width: 390,
+        height: 35,
+        text: "အောင်မြင်မှု %",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3: one SLO report, a P2 fan-in comb ----------------------------
+    - {
+        id: l31-b3-s1,
+        kind: rectangle,
+        x: 260,
+        y: 190,
+        width: 350,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b3-s1-t,
+        kind: text,
+        x: 275,
+        y: 207,
+        width: 320,
+        height: 35,
+        text: "vendor monitoring",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 205,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b3-s2,
+        kind: rectangle,
+        x: 260,
+        y: 300,
+        width: 350,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b3-s2-t,
+        kind: text,
+        x: 275,
+        y: 317,
+        width: 320,
+        height: 35,
+        text: "Padauk metric",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 315,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b3-s3,
+        kind: rectangle,
+        x: 260,
+        y: 410,
+        width: 350,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b3-s3-t,
+        kind: text,
+        x: 275,
+        y: 427,
+        width: 330,
+        height: 35,
+        text: "ဘဏ် ချိတ်ဆက်မှု check",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 425,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b3-bus,
+        kind: rectangle,
+        x: 670,
+        y: 190,
+        width: 10,
+        height: 290,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b3-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 688,
+        y: 315,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b3-report,
+        kind: rectangle,
+        x: 745,
+        y: 290,
+        width: 345,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l31-b3-report-t,
+        kind: text,
+        x: 760,
+        y: 317,
+        width: 320,
+        height: 35,
+        text: "SLO report တစ်ခုတည်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b3-blameless,
+        kind: text,
+        x: 260,
+        y: 560,
+        width: 370,
+        height: 35,
+        text: "blameless ≠ owner မရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B4: one problem, three lenses, a P2 fan-out comb ----------------
+    - {
+        id: l31-b4-src,
+        kind: rectangle,
+        x: 260,
+        y: 275,
+        width: 250,
+        height: 95,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l31-b4-src-t1,
+        kind: text,
+        x: 275,
+        y: 287,
+        width: 225,
+        height: 35,
+        text: "vendor log ထဲက",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-src-t2,
+        kind: text,
+        x: 275,
+        y: 327,
+        width: 225,
+        height: 35,
+        text: "NRC နံပါတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-a0,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 515,
+        y: 302,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b4-bus,
+        kind: rectangle,
+        x: 562,
+        y: 195,
+        width: 10,
+        height: 255,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b4-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 578,
+        y: 197,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b4-rel,
+        kind: rectangle,
+        x: 630,
+        y: 170,
+        width: 400,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b4-rel-t1,
+        kind: text,
+        x: 645,
+        y: 182,
+        width: 370,
+        height: 35,
+        text: "reliability: log ဘေလ်၊",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-rel-t2,
+        kind: text,
+        x: 645,
+        y: 222,
+        width: 370,
+        height: 35,
+        text: "disk ပြည့်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 578,
+        y: 302,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b4-sec,
+        kind: rectangle,
+        x: 630,
+        y: 290,
+        width: 400,
+        height: 65,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b4-sec-t,
+        kind: text,
+        x: 645,
+        y: 305,
+        width: 380,
+        height: 35,
+        text: "security: ပေါက်ကြားနိုင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 578,
+        y: 407,
+        width: 45,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l31-b4-priv,
+        kind: rectangle,
+        x: 630,
+        y: 380,
+        width: 400,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l31-b4-priv-t1,
+        kind: text,
+        x: 645,
+        y: 392,
+        width: 370,
+        height: 35,
+        text: "privacy: ရည်ရွယ်ချက်ထက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-priv-t2,
+        kind: text,
+        x: 645,
+        y: 432,
+        width: 370,
+        height: 35,
+        text: "ကျော်သုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-fix,
+        kind: text,
+        x: 645,
+        y: 495,
+        width: 320,
+        height: 35,
+        text: "gateway က NRC ဖြုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l31-b4-vuln,
+        kind: text,
+        x: 260,
+        y: 580,
+        width: 620,
+        height: 35,
+        text: "vulnerability: ပြီးတဲ့ စံ တစ်ခု + သက်သေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2631
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: ညသန်းခေါင်မှာ ပိတ်မိတဲ့ wallet
+    narration: >
+      [[mark:show-p01]] ကိုမင်းက Parcel ရဲ့ ပထမဆုံး Site Reliability Engineer၊ SRE ဖြစ်ချိန်မှာ Padauk ကလည်း Bank X နဲ့ partner ဖြစ်လာလို့ ဘဏ်ရဲ့ စည်းမျဉ်းတွေ၊ ပြင်လို့မရတဲ့ vendor system တွေကြားမှာ အလုပ်လုပ်ရပါပြီ။ ဒီ အလုပ်ကို ဘဏ်မှာ system administrator လုပ်ခဲ့ဖူးတဲ့ ကိုဇော်က ဦးဆောင်ပါတယ်။
+      [[mark:hook-midnight]] တစ်ည ၁၂ နာရီမှာ job တစ်ခု မှားသွားလို့ wallet တွေ ပိတ်မိသွားပြီး user တွေ ငွေလွှဲလို့ မရတော့ပါဘူး။ ညဘက်အတွက် ငှားထားတဲ့ ပြင်ပ support desk က ချက်ချင်း မြင်ပေမဲ့ read-only access ပဲ ရှိလို့ ကြည့်ရုံပဲ ကြည့်နိုင်ပါတယ်။
+      [[mark:show-p01b]] desk က engineer တွေကို လိုက်ဖုန်းဆက်ရပါတယ်။ ပြင်နည်း သိတဲ့သူ ရောက်လာတော့လည်း compliance ခွင့်ပြုချက် မရမချင်း production data ကို မပြင်ရဘူးလို့ စည်းမျဉ်းက ဆိုတယ် ဆိုပါစို့။ ပြင်တာက ၅ မိနစ်ပဲ ကြာပေမဲ့ wallet တွေ မိနစ် ၇၀ ပိတ်မိနေခဲ့ပါတယ်။ ကျန်တဲ့ မိနစ် ၆၅ က ဘယ်ရောက်သွားလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l31-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l31-p01b }
+
+  - id: authority-access
+    chapter: မြင်ခွင့်နဲ့ လုပ်ခွင့်
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] ၆၅ မိနစ်လုံး လုပ်ခွင့် ရှိတဲ့သူကို ရှာရင်း ကုန်သွားတာပါ။ incident ကို တုံ့ပြန်တဲ့သူမှာ မြင်ခွင့် ရှိရုံနဲ့ မလုံလောက်ပါဘူး၊ ပြင်ခွင့်ပါ ရှိရပါမယ်။ ဒါကြောင့် incident ကို ညှိပြီး ဆုံးဖြတ်တဲ့ incident commander က ဘယ် engineer ကိုမဆို နှိုးခွင့်နဲ့ အရေးပေါ် access ကို အတည်ပြုခွင့် ရှိတယ်လို့ CTO ကိုနေလင်းက စာနဲ့ ကြေညာပေးပါတယ်။
+      [[mark:b1-s2]] ဒါပေမဲ့ နှိုးလိုက်တဲ့ engineer မှာ access မရှိရင် ထပ်စောင့်ရမှာပါပဲ။ ဒါကြောင့် အရေးပေါ်မှာ ပုံမှန် ကန့်သတ်ချက်တွေကို ကျော်လို့ရတဲ့ break-glass လမ်းကို compliance အဖွဲ့နဲ့ ကြိုသဘောတူထားပါတယ်။
+      [[mark:b1-s3]] ဒီ လမ်းမှာ အကာအကွယ် သုံးခု ပါပါတယ်။ access က ၂ နာရီနဲ့ အလိုအလျောက် ပြန်ပိတ်တယ်၊ ဒုတိယ လူတစ်ယောက် အတည်ပြုမှ ပွင့်တယ်၊ ဘယ်သူ ဘာလုပ်ခဲ့လဲကို ပြင်လို့မရတဲ့ audit log ထဲ မှတ်ပါတယ်။ ပုံမှန်နေ့တွေမှာတော့ တကယ် လိုတဲ့ permission လောက်ပဲ ပေးတဲ့ least privilege နဲ့ သွားပြီး ဒီ စည်းတွေကို incident မှာသာ မဟုတ်ဘဲ production access အားလုံးမှာ သုံးပါတယ်။
+      [[mark:b1-s4]] desk ကတော့ read-only အတိုင်းပါပဲ။ ဒါပေမဲ့ postmortem မှာ desk က ကြည့်ပဲ ကြည့်နိုင်ခဲ့တယ်လို့ ပြောတော့ အဲဒီ စကားက incident commander ကို တိုက်ရိုက် page ပို့ခွင့် ပေးမယ့် action item ဖြစ်လာပြီး owner လည်း ရပါတယ်။ အဲဒါ လုပ်ဖို့ အချိန် ပေးတဲ့ ကိုနေလင်းလို ထောက်ခံပြီး ရင်းမြစ် ပေးတဲ့ ခေါင်းဆောင်ကို executive sponsor လို့ ခေါ်ပါတယ်။ [[mark:b1-s4b]] နောက်လ drill မှာတော့ အစကနေ အဆုံး ၅ မိနစ်နဲ့ ပြီးသွားပါတယ်။
+      [[mark:b1-s5]] ငွေကြေး လုပ်ငန်းတွေကို စစ်တဲ့ regulator က ကြာကြာ ပျက်တဲ့ incident တိုင်းအတွက် report တောင်းတယ် ဆိုပါစို့။ Padauk က report သီးသန့် မရေးဘဲ ဒီ postmortem ကိုပဲ ပို့ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l31-b1-ic, l31-b1-ic-t1, l31-b1-ic-t2]
+        drawMs: 1400
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l31-b1-a1, l31-b1-bg, l31-b1-bg-t]
+        drawMs: 1200
+      # The three guards under break-glass.
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l31-b1-g1, l31-b1-g2, l31-b1-g3]
+        drawMs: 1800
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l31-b1-desk, l31-b1-desk-t]
+        drawMs: 1000
+      # "70 → 5 minutes" lands as the drill sentence says it.
+      - id: b1-s4b
+        type: whiteboard.apply
+        at: { mark: b1-s4b }
+        upsertIds: [l31-b1-fast, l31-b1-fast-t]
+        drawMs: 1000
+      - id: b1-s5
+        type: whiteboard.apply
+        at: { mark: b1-s5 }
+        upsertIds: [l31-b1-report, l31-b1-report-t]
+        drawMs: 1400
+
+  - id: business-case
+    chapter: Complaint ကနေ business case ဆီ
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] ကိုဇော်ရဲ့ နောက်ပြဿနာက Bill Pay နောက်ကွယ်က vendor billing system ပါ၊ ဝယ်ထားပေမဲ့ code ကို ပြင်လို့ မရပါဘူး။ မီတာခ ပေးရက် နီးတိုင်း ပျက်တတ်လို့ restart လုပ်တာ၊ settlement ဖိုင် ပြင်တာတွေကို လက်နဲ့ လုပ်ရပါတယ်။ ဒီလို ထပ်ခါထပ်ခါ လုပ်ရတဲ့ လက်အလုပ်၊ toil များလွန်းတယ်လို့ အဖွဲ့က ပြောခဲ့ပေမဲ့ ဘယ်သူမှ နားမထောင်ခဲ့ပါဘူး။
+      [[mark:show-p02b]] ကိုဇော်က အဲဒီ အလုပ် လုပ်တဲ့သူတွေနဲ့အတူ toil ကို နာရီနဲ့ incident အရေအတွက်နဲ့ တိုင်းတဲ့ toil audit လုပ်ပါတယ်။ တစ်လ ၄၅ နာရီ ကုန်ပြီး လက်နဲ့ ပြင်တဲ့ ဖိုင်တွေကြောင့် incident နှစ်ခု ဖြစ်ခဲ့တာ ထွက်လာပါတယ်။ automate လုပ်ရင် ဒီ နာရီတွေ product အလုပ်ဆီ ပြန်ရမယ် ဆိုတော့ complaint က business case ဖြစ်သွားပြီး ကိုနေလင်းက ချက်ချင်း ခွင့်ပြုပါတယ်။
+      [[mark:show-p02c]] ဒါပေမဲ့ ထပ်မဖြစ်အောင် ကြိုကာတဲ့ အလုပ်မှာ ခေါင်းဆောင်က အချိန် ပေးရုံ မကဘဲ အဖွဲ့ကလည်း action item တွေ လုပ်မယ်လို့ ကတိ ပေးရပါတယ်။ automation ကလည်း ဆောက်ပြီး မေ့ထားလို့ရတာ မဟုတ်လို့ script တိုင်းမှာ owner ထားပြီး script မှားတဲ့နေ့မှာလည်း ရေးတဲ့သူကို အပြစ်မရှာဘဲ blameless review လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l31-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l31-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l31-p02c }
+
+  - id: wrap-vendor
+    chapter: Vendor system ရှေ့က ကိုယ်ပိုင် အလွှာ
+    narration: >
+      [[mark:close-p02c]] [[mark:b2-s1]] vendor system ရဲ့ အထဲကို မပြင်နိုင်ပေမဲ့ ပတ်ဝန်းကျင်ကိုတော့ Padauk ပိုင်ပါတယ်။ ဒါကြောင့် server၊ network နဲ့ setting တွေကို click နှိပ်ပြီး မပြင်ဘဲ code နဲ့ ရေးတဲ့ infrastructure as code နဲ့ စီမံပါတယ်။ [[mark:b2-s1b]] ခဏခဏ ရပ်တတ်တဲ့ ချိတ်ဆက်မှုအတွက်လည်း restart script ရိုးရိုးလေး ရေးပါတယ်။
+      [[mark:b2-s2]] ပြီးတော့ vendor ရှေ့မှာ Padauk ကိုယ်ပိုင် gateway ထားလို့ request တိုင်း အဲဒီကို ဖြတ်ရပါတယ်။ gateway က vendor နှေးရင် timeout နဲ့ ဖြတ်တယ်၊ ပေးရက်မှာ များလာတဲ့ request တွေကို queue ထဲ စီတယ်၊ metric ထုတ်ပြီး config ပြောင်းတိုင်း check နဲ့ စစ်ပါတယ်။ ပြင်လို့မရတဲ့ system ရှေ့က ဒီလို ကိုယ်ပိုင် ကာကွယ်ရေး အလွှာကို anticorruption layer လို့ ခေါ်ပါတယ်။
+      [[mark:b2-s3]] alert ကိုလည်း vendor ရဲ့ အတွင်း ကိန်းဂဏန်းပေါ်မှာ မထားဘဲ user ဘေလ် ဆောင်တာ ဘယ်လောက် အောင်မြင်လဲ ဆိုတာပေါ်မှာ ထားပါတယ်၊ ဒီလို user ဘက်က alert က system ဟောင်း အသစ် မရွေး အလုပ်ဖြစ်ပါတယ်။ အောက်က system တွေ မတူပေမဲ့ သူတို့ကို စီမံတဲ့ code နဲ့ monitoring ကိုတော့ ပုံစံ တစ်ခုတည်း ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Strangler Fig Application (Martin Fowler)",
+          url: "https://martinfowler.com/bliki/StranglerFigApplication.html",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      # The vendor box, then the orange setup-as-code boundary around it.
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l31-b2-v, l31-b2-v-t1, l31-b2-v-t2, l31-b2-env, l31-b2-env-t1, l31-b2-env-t2]
+        drawMs: 2200
+      # "restart script" lands on its own sentence.
+      - id: b2-s1b
+        type: whiteboard.apply
+        at: { mark: b2-s1b }
+        upsertIds: [l31-b2-restart]
+        drawMs: 800
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds:
+          [
+            l31-b2-u,
+            l31-b2-u-t,
+            l31-b2-a1,
+            l31-b2-g,
+            l31-b2-g-t1,
+            l31-b2-g-t2,
+            l31-b2-g-t3,
+            l31-b2-a2,
+          ]
+        drawMs: 2600
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l31-b2-alert, l31-b2-alert-t1, l31-b2-alert-t2]
+        drawMs: 1400
+
+  - id: cant-change
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] system ဟောင်း အသစ် ရောနေတဲ့ နေရာမှာ အားလုံးကို တစ်ပြိုင်နက် မပြင်ပါနဲ့၊ Padauk ကလည်း Bill Pay တစ်ခုကနေ စခဲ့တာပါ။ incident မှာလည်း အတွင်းကို နားမလည်ဘဲ ဘယ်မှာမဆို လုပ်လို့ရတဲ့ rollback၊ traffic လွှဲတဲ့ drain၊ အရန်ဆီ ပြောင်းတဲ့ failover ကို အရင် သုံးပါတယ်။ ပြင်လို့ မရတဲ့ system ဖြစ်ပေမဲ့ ပြန်ထူတာကိုတော့ drill နဲ့ လေ့ကျင့်ထားပါတယ်။
+      [[mark:show-p03b]] automate လုပ်မလား လူ လုပ်မလား ဆိုရင် Padauk က လူကို စောင့်ရတာက ပိုအန္တရာယ် များမှပဲ automate လုပ်ပါတယ်၊ ဥပမာ ချိတ်ဆက်မှု ရပ်ရင် restart script က ချက်ချင်း run ပါတယ်။ ဝန်ဆောင်ခ ဇယားကတော့ lesson ၂ က typo လို တစ်လုံး မှားရင် user တိုင်း ထိမှာမို့ script ကို မပေးဘဲ လူကပဲ ပြောင်းပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Strangler Fig Application (Martin Fowler)",
+          url: "https://martinfowler.com/bliki/StranglerFigApplication.html",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l31-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l31-p03b }
+
+  - id: one-report
+    chapter: SLO report တစ်ခုတည်း
+    narration: >
+      [[mark:close-p03b]] [[mark:b3-s1]] ကိုဇော်က SRE အလေ့အထတွေကို Bank X ဘက်အထိ ယူသွားချင်ပါတယ်။ ဒါပေမဲ့ incident တိုင်းမှာ vendor၊ Padauk နဲ့ ဘဏ်က ကိုယ့် monitoring ကိုယ် ပြပြီး ဘယ်သူ့ ကိန်းဂဏန်း မှန်လဲ ငြင်းနေကြပါတယ်။
+      [[mark:b3-s2]] ဘဏ်ကို tool အသစ် ပြောင်းဖို့ အမိန့် ပေးလို့ မရတော့ ကိုဇော်က ရှိပြီးသား သုံးခုလုံးကို ဖတ်တဲ့ SLO report တစ်ခုတည်းကို ဆောက်ပါတယ်၊ အားလုံး ကိန်းဂဏန်း တစ်စုတည်းကို ကြည့်လာတော့ ငြင်းတာ ရပ်သွားပါတယ်။ ဘဏ်လို ယုံကြည်မှု နည်းပြီး ကျွမ်းကျင်သူ ရှားတဲ့ နေရာမှာ lesson ၁၅ မှာလို SRE ကို အဖွဲ့တိုင်းထဲ ခွဲထည့်တာထက် ဗဟိုက အဖွဲ့ငယ်လေးက ပိုအလုပ်ဖြစ်တတ်ပါတယ်။
+      [[mark:b3-s3]] ဘဏ်နဲ့ vendor ပါတဲ့ postmortem တွေမှာတော့ blameless ဆိုတဲ့ စကားကို ဒိုင်းအဖြစ် သုံးပြီး action item ရှောင်လာကြပါတယ်။ ဒါကြောင့် ကိုဇော်က blameless ဆိုတာ လူကို အပြစ်မရှာတာပါ၊ action item တိုင်းမှာတော့ owner ရှိရမယ်လို့ ပြန်ရှင်းပြပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+      # Listed for this lesson in the curriculum: spreading a practice.
+      - {
+          title: "Workbook: Organizational Change Management in SRE",
+          url: "https://sre.google/workbook/organizational-change/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l31-b3-s1,
+            l31-b3-s1-t,
+            l31-b3-a1,
+            l31-b3-s2,
+            l31-b3-s2-t,
+            l31-b3-a2,
+            l31-b3-s3,
+            l31-b3-s3-t,
+            l31-b3-a3,
+            l31-b3-bus,
+          ]
+        drawMs: 2600
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l31-b3-a4, l31-b3-report, l31-b3-report-t]
+        drawMs: 1200
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l31-b3-blameless]
+        drawMs: 1000
+
+  - id: monsoon
+    chapter: မိုးရာသီ ရေကြီးတဲ့ည
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] incident မှာ လေ့ကျင့်ထားတဲ့ စွမ်းရည်က software နဲ့ မဆိုင်တဲ့ အကျပ်အတည်းမှာလည်း အသုံးဝင်ပါတယ်။ မိုးရာသီ ညတစ်ညမှာ ရန်ကုန် မြို့နယ် တချို့ ရေကြီးလို့ rider တွေ ပိတ်မိပြီး ဆိုင်တချို့ internet ပြတ်သွားတော့ Padauk က incident ကြေညာပါတယ်။ rider တိုင်းကို လုံခြုံလား ဖုန်းဆက်မေးတယ်၊ ဆိုင်တွေကို cash on delivery ပြောင်းပေးတယ်၊ status page တစ်ခုတည်းမှာ လူတိုင်းအတွက် update တင်ပါတယ်။
+      [[mark:show-p04b]] အဲဒီညက ပုံစံက မီးသတ်နဲ့ ကယ်ဆယ်ရေး အဖွဲ့တွေ သုံးတဲ့ Incident Command System ကနေ ယူထားတာပါ၊ incident commander က ညှိပေးရုံပဲ လုပ်ပြီး rider အဖွဲ့၊ ဆိုင်ဘက် အဖွဲ့နဲ့ support က ကိုယ့်နယ်ပယ်မှာ ကိုယ်တိုင် လုပ်ကြတာပါ။ Padauk က လူတိုင်း call တစ်ခုထဲ ဝင်ဖို့ ကြီးလွန်းပြီး အချိန်ပြည့် အရေးပေါ် အဖွဲ့ ထားဖို့ သေးလွန်းလို့ ဒီပုံစံနဲ့ ကိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l31-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l31-p04b }
+
+  - id: three-lenses
+    chapter: ပြဿနာ တစ်ခု၊ ရှုထောင့် သုံးခု
+    narration: >
+      [[mark:close-p04b]] [[mark:b4-s1]] အပတ် အနည်းငယ် ကြာတော့ vendor system နှေးလို့ alert တက်ပါတယ်။ ကိုဇော် ဝင်ကြည့်တော့ disk ပြည့်နေပြီး vendor က customer တွေရဲ့ NRC နံပါတ်တွေကို log ထဲ ရေးထည့်နေတာ တွေ့ပါတယ်။ ဒါကို ရှုထောင့် သုံးခုကနေ ကြည့်ရအောင်။
+      [[mark:b4-s2]] reliability ဘက်က log တွေ ကြီးလာလို့ storage ဘေလ် တက်ပြီး disk ပြည့်ရင် system ရပ်နိုင်တဲ့ ပြဿနာပါ။ security ဘက်ကတော့ log ရသွားတဲ့ ဘယ်သူမဆို NRC နံပါတ်တွေကို ယူသွားနိုင်တဲ့ ပြဿနာပါ။
+      [[mark:b4-s3]] privacy ဘက်ကတော့ အထောက်အထား စစ်ဖို့ပဲ ပေးခဲ့တဲ့ data ကို log ထဲ သိမ်းထားတဲ့ ပြဿနာပါ။ ဘာက ပျက်နိုင်လဲ ကြိုရှာတဲ့ အလေ့အထက သုံးခုလုံး တူပေမဲ့ ရန်က မတူပါဘူး။ reliability ရဲ့ ရန်က ပမာဏပါ၊ ငွေလွှဲ သန်းချီ ရှိရင် ရှားတဲ့ အမှားတောင် နေ့တိုင်း ကြုံရလို့ပါ။ security ရဲ့ ရန်က NRC ကို ခိုးချင်တဲ့သူ၊ privacy ရဲ့ ရန်ကတော့ ပေးခဲ့တဲ့ ရည်ရွယ်ချက်ထက် ကျော်သုံးတာပါ။
+      [[mark:b4-s4]] ပြင်နည်းကတော့ တစ်ခုတည်းပါ၊ gateway က vendor မလိုတဲ့ NRC နံပါတ်ကို ဖြုတ်ပစ်ပြီး log ဟောင်းတွေကို ရှင်းလိုက်တော့ ရှုထောင့် သုံးခုလုံး တစ်ပြိုင်နက် ကောင်းသွားပါတယ်။
+      [[mark:b4-s5]] library တစ်ခုမှာ လုံခြုံရေး အားနည်းချက်၊ vulnerability ပေါ်တော့လည်း Padauk က incident တစ်ခုတည်းအဖြစ် run ပါတယ်။ အဖွဲ့တိုင်းအတွက် ပြီးတယ် ဆိုတာ upgrade လုပ်ပြီးတာ ဒါမှမဟုတ် စာနဲ့ ရေးထားတဲ့ exception ရှိတာ ဖြစ်ပြီး အခြေအနေကို တစ်နေရာတည်းမှာ မှတ်ပါတယ်၊ ပြီးပြီလို့ ပြောရုံနဲ့ မရဘဲ သက်သေ ပြရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+    actions:
+      - { id: close-p04b, type: slide.close, at: { mark: close-p04b, offsetMs: -400 } }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l31-b4-src, l31-b4-src-t1, l31-b4-src-t2, l31-b4-a0, l31-b4-bus]
+        drawMs: 1800
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds:
+          [l31-b4-a1, l31-b4-rel, l31-b4-rel-t1, l31-b4-rel-t2, l31-b4-a2, l31-b4-sec, l31-b4-sec-t]
+        drawMs: 2400
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l31-b4-a3, l31-b4-priv, l31-b4-priv-t1, l31-b4-priv-t2]
+        drawMs: 1400
+      - id: b4-s4
+        type: whiteboard.apply
+        at: { mark: b4-s4 }
+        upsertIds: [l31-b4-fix]
+        drawMs: 900
+      - id: b4-s5
+        type: whiteboard.apply
+        at: { mark: b4-s5 }
+        upsertIds: [l31-b4-vuln]
+        drawMs: 1400
+
+  - id: sre-here
+    chapter: ဒီမှာ SRE ဆိုတာ
+    narration: >
+      [[mark:close-b4]] [[mark:show-p04c]] Padauk က SRE ကို tool တစ်ခုလို ဝယ်ခဲ့တာ မဟုတ်ပါဘူး။ ကိုယ့် အရွယ်အစား၊ budget နဲ့ regulator ကို ကိုက်တဲ့ အလေ့အထတွေကို ရွေးပြီး ပြင်သုံးခဲ့တာမို့ SRE က စည်းမျဉ်း စာရင်း မဟုတ်ဘဲ တွေးပုံ တစ်ခုပါ။
+      Parcel မှာ SRE က ကိုမင်း တစ်ယောက်တည်း၊ Padauk မှာ platform အဖွဲ့ ဖြစ်သလို ကိုယ့်ဆီမှာ on-call rotation ဒါမှမဟုတ် ပိုအားကောင်းတဲ့ DevOps အဖွဲ့ ဖြစ်နိုင်ပါတယ်။ ဒါပေမဲ့ အချိန်နဲ့ manager ရဲ့ ထောက်ခံမှု မရှိရင် ဘယ်ပုံစံမှ အလုပ်မဖြစ်ပါဘူး။
+      [[mark:show-p05]] ကုမ္ပဏီ အဟောင်းမှာလည်း ဒီအပတ် စလို့ရတာ သုံးခုပါ။ ညဘက် incident မှာ အရေးပေါ် access ကို ဘယ်သူ အတည်ပြုမလဲ စာနဲ့ ရေးထားပါ။ အဖွဲ့နဲ့ တစ်နာရီ ထိုင်ပြီး toil audit သေးသေးလေး လုပ်ကြည့်ပါ။ ပြီးတော့ ကိုယ့်ဆီမှာ SRE ဆိုတာ ဘာလဲ စာပိုဒ် တစ်ပိုဒ် ရေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "From Nothing to SRE: Implementing SRE in Smaller Organisations (SREcon19 EMEA)",
+          url: "https://www.usenix.org/conference/srecon19emea/presentation/huxtable",
+        }
+      - {
+          title: "Succeeding as the Lone SRE in a Small Team (SREcon23 EMEA)",
+          url: "https://www.usenix.org/conference/srecon23emea/presentation/kirchmeier",
+        }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l31-p04c }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l31-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] ဘဏ်ဘက်ကို ကိုဇော် ယူသွားခဲ့တဲ့ အလေ့အထတွေပါ။ [[mark:sel-break-glass]] break-glass က အရေးပေါ်မှာ ပုံမှန် ကန့်သတ်ချက်ကို ကျော်လို့ရအောင် ကြိုသဘောတူထားတဲ့ လမ်းပါ။ [[mark:sel-toil-audit]] toil audit က complaint ကို နာရီနဲ့ incident ပါတဲ့ business case ဖြစ်အောင် ပြောင်းပေးပါတယ်။ [[mark:sel-acl]] anticorruption layer က ပြင်လို့မရတဲ့ system ရှေ့က ကိုယ်ပိုင် gateway ပါ။
+      [[mark:sel-sponsor]] executive sponsor က အချိန်နဲ့ ရင်းမြစ် ပေးပြီး ထောက်ခံတဲ့ ခေါင်းဆောင် ဖြစ်ပြီး၊ [[mark:sel-one-report]] SLO report တစ်ခုတည်းက ရှိပြီးသား tool တွေကို ဖတ်ပြီး ကိန်းဂဏန်း တစ်စုတည်း ပြပေးပါတယ်။
+      [[mark:ask-question]] ကိုယ့် ပြင်ပ support desk က incident အတွင်း ကြည့်ရုံပဲ ကြည့်နိုင်တယ် ဆိုရင် အရေးပေါ် access ကို ဘေးကင်းအောင် ဘယ် အကာအကွယ် နှစ်ခု ထည့်မလဲ?
+      [[mark:pause-question]] အချိန် ကန့်သတ်ချက်၊ ဒုတိယ လူရဲ့ အတည်ပြုချက်နဲ့ audit log ထဲက နှစ်ခု ဆိုရင် မှန်ပါတယ်။ နောက်ဆုံး lesson ကတော့ Padauk ရဲ့ နှစ်ကုန် review ပါ၊ သုံးလစာ uptime ကိန်းဂဏန်းတွေက ရှေ့မှာ ဘာလာမလဲ ဘာမှ မပြောခဲ့ပါဘူး။ ဒါဆို ဘာက ကြိုပြောနိုင်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: SRE: Reaching Beyond Your Walls",
+          url: "https://sre.google/workbook/reaching-beyond/",
+        }
+      - {
+          title: "Strangler Fig Application (Martin Fowler)",
+          url: "https://martinfowler.com/bliki/StranglerFigApplication.html",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-break-glass,
+          type: editor.select,
+          at: { mark: sel-break-glass },
+          target: { file: notes.md, text: "break-glass", occurrence: 1 },
+        }
+      - {
+          id: sel-toil-audit,
+          type: editor.select,
+          at: { mark: sel-toil-audit },
+          target: { file: notes.md, text: "toil audit", occurrence: 1 },
+        }
+      - {
+          id: sel-acl,
+          type: editor.select,
+          at: { mark: sel-acl },
+          target: { file: notes.md, text: "anticorruption layer", occurrence: 1 },
+        }
+      - {
+          id: sel-sponsor,
+          type: editor.select,
+          at: { mark: sel-sponsor },
+          target: { file: notes.md, text: "executive sponsor", occurrence: 1 },
+        }
+      - {
+          id: sel-one-report,
+          type: editor.select,
+          at: { mark: sel-one-report },
+          target: { file: notes.md, text: "SLO report တစ်ခုတည်း", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ (ask-question) already starts
+      # the question's own dialog, but a select right there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question with an
+      # offset of about the question's length: it starts about as the question
+      # ends, its drag runs in silence, and the answer at pause-question waits
+      # for it. The question is 137 characters with no ၊ to split at, so the
+      # quiet depends on the voice's speed: 9250 leaves about 2.8 / 0.74 / 0.35 s
+      # before the answer at 55 / 70 / 95 ms per char (at 95 the drag starts
+      # under the question's last words, as in lessons 10 and 14); an offset
+      # above ~9305 trips compile-check's 2.5 s inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 9250 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: ပြင်ပ desk က incident မှာ ကြည့်ရုံပဲ ရတယ်။ အရေးပေါ် access ကို ဘေးကင်းအောင် လုပ်တဲ့ အကာအကွယ် နှစ်ခုက ဘာလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
