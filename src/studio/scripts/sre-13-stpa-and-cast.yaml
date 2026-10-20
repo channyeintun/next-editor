@@ -1,0 +1,1493 @@
+# SRE from zero, lesson 13: Beyond root cause, STPA and CAST (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-13-stpa-and-cast.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-13-stpa-and-cast.md \
+#     src/studio/scripts/sre-13-stpa-and-cast.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Three marks add no spoken text and sit at an existing ။: b1-s1b splits
+# board B1's first step so each part's box lands as it is named (payroll, then
+# the fraud engine with the shared "as designed" label), b1-s3b keeps B1's
+# third step to three new elements (the timeline strip and its two days, then
+# "before is not because" as it is said), and ask-question makes the recap
+# question its own dialog so the question-line select can hang off it for the
+# ⟪pause 3s⟫, as in Module 1. No page or board step holds longer than about
+# 31 s at 70 ms/char (l13_p02b, the scene 4 rider), so no pacing page was added.
+#
+# ⟪close board⟫ straight into the next board (scenes 3 and 7) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, as
+# in lesson 8, so the editor does not flash between two boards; the next board
+# then draws with open: true, clear: true as usual. A board followed by a deck
+# page closes the panel (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards (B1 two parts over one result plus a P8 strip, B2 P3 ring, B3 the
+# refund control structure, B4 P1 flow). Colour jobs: #1e1e1e ink (paints
+# white) for arrows, ticks, the axis and the plain nodes; blue the thing named
+# (the parts and the controllers); green healthy or done (as designed, the
+# fixes); red failure (frozen wallets, unsafe actions, missing controls);
+# orange the caveat (before is not because, the belief, late feedback, the
+# ownership gap, the dashboard); violet the result or flow (STAMP's verdict,
+# the loop's track). A label on two lines is two text assets, one per line, so
+# each line meets the 0.55 em width rule on its own.
+#
+# Deck pages: deck "Next Editor · SRE 3 · Respond and learn". The /pub URL
+# below is the deck's published link; until this lesson's pages are built
+# into it, the published copy holds only the kit pages and the Director
+# reports the l13 pages missing. Page plan:
+# ~/Documents/sre-course/work/pages/sre-13-stpa-and-cast.json (the cover's
+# title is shortened there to "Root cause ထက် ပို: STPA နဲ့ CAST", 33 code
+# points, because the full title's 40 pass the K1 title's safe 34).
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-13-stpa-and-cast.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-13-stpa-and-cast.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-13-stpa-and-cast
+  title: "SRE from zero 13: Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST
+
+        - control loop — controller → action → process → feedback → ယုံကြည်ချက် ပြင်
+        - hazard — loss မဖြစ်သေးပေမဲ့ အဲဒီဆီ ဦးတည်တဲ့ အခြေအနေ၊ alert ထားစရာ
+        - unsafe control action — hazard ဖြစ်စေတဲ့ action: မလုပ် · မှားလုပ် · အချိန်မှား · ကြာချိန်မှား
+        - STPA — incident မဖြစ်ခင် design ပေါ်မှာ ကြိုရှာ
+        - CAST — incident ပြီးမှ တကယ့် structure နဲ့ ပြန်ခွဲ
+
+        မေးခွန်း: fraud dashboard က "ပိတ်တာ 2,800" ကို သတင်းကောင်းလို့ ပြခဲ့တယ်။ control loop ရဲ့ ဘယ်အပိုင်း မှားခဲ့လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 13</p>
+              <h1>Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l13-p01
+      contentType: google
+      name: "Cover: nothing broke"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p01
+    - id: l13-p01b
+      contentType: google
+      name: "2,800 of 3,000 wallets frozen"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p01b
+    - id: l13-p02
+      contentType: google
+      name: Every controller has
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p02
+    - id: l13-p02b
+      contentType: google
+      name: Late feedback
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p02b
+    - id: l13-p03
+      contentType: google
+      name: STPA in four steps
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p03
+    - id: l13-p03b
+      contentType: google
+      name: Steps 1 and 2
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p03b
+    - id: l13-p03c
+      contentType: google
+      name: Four kinds of unsafe action
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p03c
+    - id: l13-p03d
+      contentType: google
+      name: "Step 4: why it could happen"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p03d
+    - id: l13-p04
+      contentType: google
+      name: "CAST, step by step"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p04
+    - id: l13-p04b
+      contentType: google
+      name: It made sense at the time
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p04b
+    - id: l13-p04c
+      contentType: google
+      name: Factors that touch every controller
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p04c
+    - id: l13-p04d
+      contentType: google
+      name: Local fix or system question
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p04d
+    - id: l13-p05
+      contentType: google
+      name: Before and after
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p05
+    - id: l13-p05b
+      contentType: google
+      name: How to start
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p05b
+    - id: l13-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vQnixg1JXyyQxBuQRN8jr_FHKYu5mcxq_tTD394AVnczrYmLIUTsL7LdiELwDrbZscOQJ3KGhQ7rh4y/pub"
+      pageId: l13_p06
+  whiteboardAssets:
+    # ---- Board B1: two parts work as designed, together they freeze wallets; a short timeline (P8)
+    - {
+        id: l13-b1-pay,
+        kind: rectangle,
+        x: 290,
+        y: 165,
+        width: 260,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b1-pay-t,
+        kind: text,
+        x: 305,
+        y: 182,
+        width: 215,
+        height: 35,
+        text: "payroll batch",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-pay-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 300,
+        y: 243,
+        width: 40,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l13-b1-fraud,
+        kind: rectangle,
+        x: 800,
+        y: 165,
+        width: 260,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b1-fraud-t,
+        kind: text,
+        x: 815,
+        y: 182,
+        width: 205,
+        height: 35,
+        text: "fraud engine",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-fraud-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1010,
+        y: 243,
+        width: 40,
+        height: 34,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l13-b1-design,
+        kind: text,
+        x: 563,
+        y: 245,
+        width: 230,
+        height: 35,
+        text: "design အတိုင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 500,
+        y: 245,
+        width: 36,
+        height: 92,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b1-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 814,
+        y: 245,
+        width: 36,
+        height: 92,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b1-frozen,
+        kind: rectangle,
+        x: 470,
+        y: 345,
+        width: 410,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l13-b1-frozen-t,
+        kind: text,
+        x: 492,
+        y: 357,
+        width: 380,
+        height: 35,
+        text: "ပိတ်ခံရတဲ့ wallet 2,800",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 400,
+        y: 455,
+        width: 560,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b1-tick1,
+        kind: rectangle,
+        x: 520,
+        y: 468,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b1-tick2,
+        kind: rectangle,
+        x: 820,
+        y: 468,
+        width: 6,
+        height: 34,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b1-thu,
+        kind: text,
+        x: 420,
+        y: 428,
+        width: 330,
+        height: 35,
+        text: "fraud rule: ကြာသပတေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-fri,
+        kind: text,
+        x: 740,
+        y: 510,
+        width: 250,
+        height: 35,
+        text: "payroll: သောကြာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-because,
+        kind: text,
+        x: 330,
+        y: 555,
+        width: 400,
+        height: 35,
+        text: "အရင်ဖြစ်တာ ≠ အကြောင်းရင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b1-stamp,
+        kind: text,
+        x: 290,
+        y: 605,
+        width: 700,
+        height: 35,
+        text: "STAMP: ပျက်လို့ မဟုတ်၊ control မလုံလောက်လို့",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B2: the control loop, a ring with four nodes travelled clockwise (P3)
+    - {
+        id: l13-b2-ring,
+        kind: ellipse,
+        x: 375,
+        y: 200,
+        width: 600,
+        height: 400,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l13-b2-ctrl,
+        kind: rectangle,
+        x: 262,
+        y: 355,
+        width: 230,
+        height: 90,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l13-b2-ctrl-t1,
+        kind: text,
+        x: 276,
+        y: 363,
+        width: 165,
+        height: 35,
+        text: "controller",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-ctrl-t2,
+        kind: text,
+        x: 276,
+        y: 400,
+        width: 200,
+        height: 35,
+        text: "fraud engine",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 440,
+        y: 239,
+        width: 60,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l13-b2-act,
+        kind: rectangle,
+        x: 570,
+        y: 155,
+        width: 210,
+        height: 90,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l13-b2-act-t1,
+        kind: text,
+        x: 585,
+        y: 163,
+        width: 110,
+        height: 35,
+        text: "action",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-act-t2,
+        kind: text,
+        x: 585,
+        y: 200,
+        width: 180,
+        height: 35,
+        text: "wallet ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 890,
+        y: 252,
+        width: 30,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l13-b2-proc,
+        kind: rectangle,
+        x: 870,
+        y: 355,
+        width: 210,
+        height: 90,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l13-b2-proc-t1,
+        kind: text,
+        x: 884,
+        y: 363,
+        width: 125,
+        height: 35,
+        text: "process",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-proc-t2,
+        kind: text,
+        x: 884,
+        y: 400,
+        width: 165,
+        height: 35,
+        text: "wallet တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-fb,
+        kind: rectangle,
+        x: 575,
+        y: 555,
+        width: 200,
+        height: 90,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l13-b2-fb-t1,
+        kind: text,
+        x: 589,
+        y: 563,
+        width: 135,
+        height: 35,
+        text: "feedback",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-fb-t2,
+        kind: text,
+        x: 589,
+        y: 600,
+        width: 150,
+        height: 35,
+        text: "dashboard",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b2-belief-ring,
+        kind: ellipse,
+        x: 252,
+        y: 333,
+        width: 250,
+        height: 134,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l13-b2-belief,
+        kind: text,
+        x: 505,
+        y: 382,
+        width: 360,
+        height: 35,
+        text: "ယုံကြည်ချက် (မှားနိုင်)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: STPA on the refund design, two controllers over one ledger, then the fixes
+    - {
+        id: l13-b3-sup,
+        kind: rectangle,
+        x: 262,
+        y: 285,
+        width: 220,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b3-sup-t,
+        kind: text,
+        x: 272,
+        y: 302,
+        width: 205,
+        height: 35,
+        text: "support agent",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-sup-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 355,
+        y: 362,
+        width: 36,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b3-job,
+        kind: rectangle,
+        x: 700,
+        y: 285,
+        width: 250,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b3-job-t,
+        kind: text,
+        x: 710,
+        y: 302,
+        width: 235,
+        height: 35,
+        text: "auto-refund job",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-job-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 715,
+        y: 362,
+        width: 36,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b3-ledger,
+        kind: rectangle,
+        x: 330,
+        y: 450,
+        width: 440,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b3-ledger-t,
+        kind: text,
+        x: 445,
+        y: 462,
+        width: 215,
+        height: 35,
+        text: "wallet ledger",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-cb,
+        kind: rectangle,
+        x: 800,
+        y: 160,
+        width: 290,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b3-cb-t,
+        kind: text,
+        x: 810,
+        y: 172,
+        width: 270,
+        height: 35,
+        text: "operator callback",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-cb-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 905,
+        y: 225,
+        width: 36,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b3-late,
+        kind: text,
+        x: 635,
+        y: 235,
+        width: 260,
+        height: 35,
+        text: "feedback နောက်ကျ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-tag1,
+        kind: rectangle,
+        x: 770,
+        y: 365,
+        width: 300,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l13-b3-tag1-t1,
+        kind: text,
+        x: 780,
+        y: 370,
+        width: 255,
+        height: 35,
+        text: "refund ပေးပြီးမှ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-tag1-t2,
+        kind: text,
+        x: 780,
+        y: 405,
+        width: 215,
+        height: 35,
+        text: "success ရောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-tag2,
+        kind: rectangle,
+        x: 497,
+        y: 282,
+        width: 188,
+        height: 78,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l13-b3-tag2-t1,
+        kind: text,
+        x: 507,
+        y: 287,
+        width: 165,
+        height: 35,
+        text: "နှစ်ခုလုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-tag2-t2,
+        kind: text,
+        x: 507,
+        y: 322,
+        width: 100,
+        height: 35,
+        text: "refund",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-fix1,
+        kind: text,
+        x: 780,
+        y: 385,
+        width: 310,
+        height: 35,
+        text: "status ကို အရင် စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-fix2,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 350,
+        height: 35,
+        text: "refund ပေးသူ တစ်ခုတည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-fix3,
+        kind: text,
+        x: 300,
+        y: 592,
+        width: 245,
+        height: 35,
+        text: "idempotency key",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-alert,
+        kind: rectangle,
+        x: 800,
+        y: 450,
+        width: 270,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l13-b3-alert-t1,
+        kind: text,
+        x: 812,
+        y: 458,
+        width: 100,
+        height: 35,
+        text: "alert:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b3-alert-t2,
+        kind: text,
+        x: 812,
+        y: 495,
+        width: 230,
+        height: 35,
+        text: "balance မကိုက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B4: CAST, the structure as it really worked that day (P1 flow)
+    - {
+        id: l13-b4-pay,
+        kind: rectangle,
+        x: 255,
+        y: 255,
+        width: 225,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b4-pay-t,
+        kind: text,
+        x: 267,
+        y: 282,
+        width: 208,
+        height: 35,
+        text: "payroll batch",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 485,
+        y: 280,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b4-fraud,
+        kind: rectangle,
+        x: 540,
+        y: 255,
+        width: 230,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l13-b4-fraud-t,
+        kind: text,
+        x: 552,
+        y: 282,
+        width: 205,
+        height: 35,
+        text: "fraud engine",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 775,
+        y: 280,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l13-b4-frozen,
+        kind: rectangle,
+        x: 830,
+        y: 255,
+        width: 200,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l13-b4-frozen-t1,
+        kind: text,
+        x: 842,
+        y: 263,
+        width: 165,
+        height: 35,
+        text: "ပိတ်ခံရတဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-frozen-t2,
+        kind: text,
+        x: 842,
+        y: 300,
+        width: 110,
+        height: 35,
+        text: "wallet",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-sup1,
+        kind: text,
+        x: 270,
+        y: 470,
+        width: 640,
+        height: 35,
+        text: "support: အစုလိုက် ပြန်ဖွင့်တဲ့ tool မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-sup2,
+        kind: text,
+        x: 400,
+        y: 507,
+        width: 280,
+        height: 35,
+        text: "on-call လမ်း မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-oncall,
+        kind: text,
+        x: 270,
+        y: 565,
+        width: 530,
+        height: 35,
+        text: "on-call: wallet ပိတ်တာ alert မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-owner1,
+        kind: text,
+        x: 345,
+        y: 360,
+        width: 340,
+        height: 35,
+        text: "payroll × fraud rule:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-owner2,
+        kind: text,
+        x: 345,
+        y: 397,
+        width: 355,
+        height: 35,
+        text: "ဘယ်သူ ပိုင်လဲ? ဘယ်သူမှ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-dash1,
+        kind: text,
+        x: 540,
+        y: 165,
+        width: 255,
+        height: 35,
+        text: "fraud dashboard:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l13-b4-dash2,
+        kind: text,
+        x: 540,
+        y: 202,
+        width: 430,
+        height: 35,
+        text: '"ပိတ်တာ 2,800" = အောင်မြင်?',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2613
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: ဘာမှ မပျက်ဘဲ ပိတ်ခံရတဲ့ wallet တွေ
+    narration: >
+      [[mark:show-p01]] Padauk က အခု ပုံမှန်လို့ ခေါ်နေတဲ့ ဖြတ်လမ်းတွေကို သုံးလ တစ်ခါ ပြန်စစ်နေပြီး Bank X throttle ကိုလည်း tool ဖြစ်အောင် ဆောက်ထားပါပြီ။ ဒီလ လစာထုတ်ရက် မနက်၊ အထည်ချုပ် စက်ရုံ တစ်ခုက payroll feature အသစ်နဲ့ အလုပ်သမား ၃၀၀၀ ရဲ့ wallet တွေထဲ လစာ ထည့်ပါတယ်။
+      [[mark:show-p01b]] မိနစ်ပိုင်းအတွင်း wallet ၂၈၀၀ ပိတ်ခံလိုက်ရလို့ အလုပ်သမားတွေ နေ့လယ်စာ ဝယ်လို့ မရ၊ ရွာကို ငွေ ပို့လို့ မရ ဖြစ်ကုန်ပါတယ်။ ဒါပေမဲ့ ပျက်နေတာ ဘာမှ မရှိပါဘူး၊ payroll batch ရော လိမ်လည်တဲ့ ငွေလွှဲတွေကို ပိတ်ပေးတဲ့ fraud engine ရော design အတိုင်း အလုပ်လုပ်ခဲ့တာပါ။ ဒီတစ်ခါ root cause က ဘယ်မှာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+      - {
+          title: "The Evolution of SRE at Google (USENIX ;login:)",
+          url: "https://usenix.org/publications/loginonline/evolution-sre-google",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l13-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l13-p01b }
+
+  - id: worked-as-designed
+    chapter: အရင်ဖြစ်တာ အကြောင်းရင်း မဟုတ်
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] မသီရိက အပိုင်း တစ်ခုချင်းကို အရင် ကြည့်တော့ payroll batch က test အားလုံး အောင်ထားပါတယ်။ [[mark:b1-s1b]] fraud engine မှာလည်း အကောင့်အသစ်က wallet အများကြီးဆီ ငွေ ရုတ်တရက် လွှဲရင် လက်ခံတဲ့ wallet တွေကို ခဏ ပိတ်ထားတဲ့ rule အသစ် ရှိပါတယ်၊ နှစ်ခုလုံးမှာ bug မရှိပါဘူး။
+      [[mark:b1-s2]] ဒါပေမဲ့ နှစ်ခု ဆုံတော့ fraud engine အမြင်မှာ စက်ရုံက wallet ထောင်ချီဆီ တစ်ပြိုင်နက် ငွေလွှဲတဲ့ အကောင့်အသစ် ဖြစ်နေလို့ လစာက လိမ်တဲ့ ပုံစံနဲ့ တူနေတာပါ။ လစာ သုံးမရတာလို user တွေ လက်မခံနိုင်တဲ့ ဆုံးရှုံးမှုကို loss လို့ ခေါ်ပါတယ်၊ အပိုင်းတိုင်း မှန်နေရက်နဲ့ loss ဖြစ်တာမို့ safety ဆိုတာ အပိုင်းတွေ ဆက်ဆံရာကနေ ပေါ်လာတာပါ။
+      [[mark:b1-s3]] postmortem မှာ တစ်ယောက်က fraud rule ကို ရှေ့နေ့ ကြာသပတေးမှာ ထည့်ခဲ့လို့ အဲဒါ root cause ပဲလို့ ပြောပါတယ်။ ဒါပေမဲ့ rule က ကြာသပတေး တစ်နေ့လုံး ပြဿနာ မပေးခဲ့ပါဘူး။ [[mark:b1-s3b]] timeline က ဘာ အရင် ဖြစ်လဲ ပြပေမဲ့ အရင် ဖြစ်တာတိုင်း အကြောင်းရင်း မဟုတ်ပါဘူး။
+      [[mark:b1-s4]] ဒါကြောင့် root cause ဆိုတာ မေးတာ ရပ်လိုက်တဲ့ နေရာ သက်သက်ပါ။ safety ပညာရှင် Nancy Leveson ရဲ့ STAMP model ကလည်း loss တွေကို အပိုင်း ပျက်လို့ထက် ဆက်ဆံပုံကို control မလုံလောက်လို့ ဖြစ်တယ်လို့ ကြည့်ပြီး လူ ဒါမှမဟုတ် software ရဲ့ အမှားကို လက္ခဏာ အဖြစ်ပဲ မြင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CAST Handbook (Leveson, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file4.php?name=CAST_Handbook.pdf",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      # Step 1 is split at the sentence end after the payroll clause, so each part's
+      # box lands as it is named: payroll first, then the fraud engine and the
+      # shared "as designed" label.
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l13-b1-pay, l13-b1-pay-t, l13-b1-pay-ok]
+        drawMs: 1400
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds: [l13-b1-fraud, l13-b1-fraud-t, l13-b1-fraud-ok, l13-b1-design]
+        drawMs: 1800
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l13-b1-a1, l13-b1-a2, l13-b1-frozen, l13-b1-frozen-t]
+        drawMs: 1800
+      # Step 3 is split in two (at most three new elements per step): the timeline
+      # strip with its two days, then "before is not because" as it is said.
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l13-b1-axis, l13-b1-tick1, l13-b1-tick2, l13-b1-thu, l13-b1-fri]
+        drawMs: 2200
+      - id: b1-s3b
+        type: whiteboard.apply
+        at: { mark: b1-s3b }
+        upsertIds: [l13-b1-because]
+        drawMs: 1200
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l13-b1-stamp]
+        drawMs: 1600
+
+  - id: control-loop
+    chapter: Control loop
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို control ဆိုတာ ဘာလဲ? တစ်ခုခုကို ထိန်းတဲ့ လူ ဒါမှမဟုတ် program ကို controller လို့ ခေါ်ပြီး သူ ပို့တဲ့ command ကို control action လို့ ခေါ်ပါတယ်။ ဒီမှာတော့ fraud engine က controller ဖြစ်ပြီး wallet ပိတ်တာက သူ့ action ပါ။
+      [[mark:b2-s2]] action က ထိန်းခံရတဲ့ process ကို ပြောင်းပါတယ်၊ ဒီမှာတော့ wallet တွေပါ။ ရလဒ်ကို ပြန်ပြောပြတဲ့ dashboard လို signal က feedback ဖြစ်ပြီး controller က အဲဒါကို ကြည့်ပြီး နောက် action ကို ဆုံးဖြတ်ပါတယ်။ ဒီ စက်ဝိုင်းက control loop ပါ၊ bug ရှိနေရင်တောင် process ကို ဘေးကင်းတဲ့ ဘောင်ထဲမှာ ထိန်းထားပေးပါတယ်။
+      [[mark:b2-s3]] controller တိုင်းမှာ process အကြောင်း ယုံကြည်ချက် တစ်ခု ရှိပါတယ်။ fraud engine က အကောင့်အသစ်က ငွေ အများကြီး လွှဲရင် လိမ်တာပဲလို့ ယုံထားပြီး လစာ ဆိုတာ သူ့ ယုံကြည်ချက်ထဲမှာ မရှိခဲ့ပါဘူး။ ယုံကြည်ချက် မှားရင် logic မှန်နေရင်တောင် action မှားတာပါပဲ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STPA Handbook (Leveson & Thomas, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file.php?name=STPA_Handbook.pdf",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      # ⟪close board⟫ straight into the next board: wipe B1 400 ms early and keep the
+      # panel open (as in lesson 8), so the editor does not flash between two boards.
+      - id: close-b1
+        type: whiteboard.apply
+        at: { mark: close-b1, offsetMs: -400 }
+        clear: true
+      # The ring is the track (furniture, no drawMs); the nodes are drawn on top of it,
+      # filled white (it paints as the dark canvas) so the ring does not cross a label.
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l13-b2-ring]
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds:
+          [
+            l13-b2-ctrl,
+            l13-b2-ctrl-t1,
+            l13-b2-ctrl-t2,
+            l13-b2-a1,
+            l13-b2-act,
+            l13-b2-act-t1,
+            l13-b2-act-t2,
+          ]
+        drawMs: 2400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds:
+          [
+            l13-b2-a2,
+            l13-b2-proc,
+            l13-b2-proc-t1,
+            l13-b2-proc-t2,
+            l13-b2-fb,
+            l13-b2-fb-t1,
+            l13-b2-fb-t2,
+          ]
+        drawMs: 2400
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l13-b2-belief-ring, l13-b2-belief]
+        drawMs: 1400
+
+  - id: every-controller
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] ဘယ် controller ကိုမဆို နားလည်ချင်ရင် သူ့ တာဝန်နဲ့ ဆုံးဖြတ်တဲ့ စည်းမျဉ်း၊ မှားနိုင်တဲ့ ယုံကြည်ချက်နဲ့ အဲဒါကို ပြင်ပေးတဲ့ feedback ဆိုတဲ့ သုံးခုကို ကြည့်ပါ၊ ယုံကြည်ချက်က feedback ကောင်းသလောက်ပဲ မှန်ပါတယ်။
+      [[mark:show-p02b]] ဥပမာ Operator A နှေးလို့ on-call က traffic တစ်ဝက်ကို Operator B ဆီ လွှဲတယ် ဆိုပါစို့။ dashboard က ၂ မိနစ် နောက်ကျနေလို့ လွှဲတာ မရသေးဘူး ထင်ပြီး ကျန်တာပါ ထပ်လွှဲလိုက်တော့ Operator B ပါ နှေးသွားပါတယ်၊ logic မှန်ပေမဲ့ feedback နောက်ကျခဲ့တာပါ။
+      automation များလာလေ အခက်ဆုံး case တွေက လူဆီ ရောက်လာလေပါပဲ၊ မှားပြီး ပိတ်ခံရတဲ့ wallet တွေကို support က ပြန်ဖွင့်ရသလိုပါ။ ဒါကြောင့် control loop ဆွဲရင် လူတွေကိုလည်း controller အဖြစ် ထည့်ဆွဲရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STPA Handbook (Leveson & Thomas, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file.php?name=STPA_Handbook.pdf",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      - id: close-b2
+        type: whiteboard.apply
+        at: { mark: close-b2, offsetMs: -400 }
+        open: false
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l13-p02 }
+      # p02b stays up for the scene's last two sentences (~31 s at 70 ms/char).
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l13-p02b }
+
+  - id: stpa-four-steps
+    chapter: STPA အဆင့် လေးဆင့်
+    narration: >
+      [[mark:show-p03]] payroll ရဲ့ design doc ကို ရေးတုန်းက လစာ ဝင်လာရင် wallet ပေါ်မှာ တခြား ဘယ် controller တွေ action လုပ်မလဲ၊ သူတို့ ဘာကို ယုံထားလဲလို့ မေးခဲ့ရင် ဒီ ပြဿနာကို စာရွက်ပေါ်မှာတင် တွေ့နိုင်ခဲ့မှာပါ။ ဒီလို incident မဖြစ်ခင် ကြိုရှာတဲ့ နည်းက System-Theoretic Process Analysis၊ အတိုကောက် STPA ပါ၊ အဆင့် လေးဆင့် ရှိပါတယ်။
+      [[mark:show-p03b]] ပထမ အဆင့်မှာ loss တွေနဲ့ အဲဒီဆီ ဦးတည်နိုင်တဲ့ အန္တရာယ်ရှိတဲ့ အခြေအနေ၊ hazard တွေကို ရေးပါတယ်။ ဒုတိယ အဆင့်မှာ ဘယ်သူက ဘာကို ထိန်းပြီး ဘယ် feedback ပြန်ရလဲ ဆိုတဲ့ ပုံ၊ control structure ကို ဆွဲပါတယ်။
+      [[mark:show-p03c]] တတိယ အဆင့်မှာ hazard ဖြစ်စေနိုင်တဲ့ action တွေ၊ unsafe control action တွေကို ရှာပါတယ်။ လုပ်သင့်ရဲ့နဲ့ မလုပ်တာ၊ မလုပ်သင့်ဘဲ လုပ်တာ၊ စောလွန်းတာ ဒါမှမဟုတ် နောက်ကျလွန်းတာ၊ ကြာလွန်းတာ ဒါမှမဟုတ် စောစော ရပ်သွားတာ ဆိုပြီး လေးမျိုး ရှိပါတယ်။
+      [[mark:show-p03d]] စတုတ္ထ အဆင့်မှာတော့ အဲဒီ action တွေ ဘာကြောင့် ဖြစ်နိုင်လဲ ရေးပါတယ်၊ ဥပမာ feedback နောက်ကျတာ၊ ပျောက်တာ၊ ယုံကြည်ချက် မှားတာတွေပါ။ run နေတဲ့ system ပေါ်မှာလည်း STPA လုပ်လို့ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STPA Handbook (Leveson & Thomas, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file.php?name=STPA_Handbook.pdf",
+        }
+      - {
+          title: "Teaching a new way to prevent outages at Google (sre.google)",
+          url: "https://sre.google/stpa/teaching/",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l13-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l13-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l13-p03c }
+      - { id: show-p03d, type: slide.show, at: { mark: show-p03d }, slideId: l13-p03d }
+
+  - id: refund-design
+    chapter: Refund design ကို ကြိုစစ်
+    narration: >
+      [[mark:close-p03d]] [[mark:b3-s1]] Top-up အဖွဲ့ကလည်း operator ၁၀ မိနစ်အတွင်း အတည်မပြုရင် auto-refund job က ငွေ ပြန်အမ်းမယ့် design doc ယူလာပါတယ်။ မသီရိ၊ Top-up developer တစ်ယောက်နဲ့ support lead မစုတို့ တစ်မနက်လောက် STPA လုပ်ကြည့်တော့ ငွေဝင်ငွေထွက် စာရင်း၊ ledger ပေါ်မှာ refund ပေးနိုင်တဲ့ controller နှစ်ခု တွေ့ပါတယ်၊ support agent နဲ့ job ပါ။
+      [[mark:b3-s2]] ဒီ design မှာတော့ loss က ငွေ ဆုံးတာ ဖြစ်ပြီး hazard က wallet balance နဲ့ operator ဘက်မှာ တကယ် ဖြစ်ခဲ့တာ မကိုက်တာပါ။ job ရဲ့ feedback ဖြစ်တဲ့ success callback ကလည်း traffic များတဲ့ ညနေတွေမှာ နောက်ကျတတ်ပါတယ်။
+      [[mark:b3-s3]] ဒီတော့ unsafe control action နှစ်ခု ထွက်လာပါတယ်။ job က callback မလာရင် fail တာပဲလို့ ယုံထားလို့ callback နောက်ကျရင် အောင်မြင်ပြီးသား top-up ကို refund ပေးမိတာနဲ့ support ရော job ရော refund လုပ်လို့ နှစ်ခါ ပြန်အမ်းမိတာပါ။
+      [[mark:b3-s4]] design doc မှာ ပြင်တာကတော့ refund မပေးခင် status ကို အရင် စစ်မယ်၊ refund ကို job ကပဲ ပေးပြီး support က တောင်းဆိုရုံပဲ လုပ်မယ်၊ refund တစ်ခုကို တစ်ခါပဲ ဖြစ်အောင် idempotency key ထည့်မယ် ဆိုတာတွေပါ။
+      [[mark:b3-s5]] balance မကိုက်တဲ့ hazard ပေါ်တာနဲ့ alert တက်အောင်လည်း ထားလို့ loss တကယ် မဖြစ်ခင် သိရပါမယ်။ design doc မှာ စာပိုဒ် အနည်းငယ်ပဲ ကုန်ပေမဲ့ production ရောက်မှ ပြင်ရရင်တော့ အဖွဲ့ တစ်ဖွဲ့လုံး လိုပြီး ledger data တွေကိုပါ လိုက်ပြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STPA Handbook (Leveson & Thomas, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file.php?name=STPA_Handbook.pdf",
+        }
+      - {
+          title: "STPA for Software Systems (SREcon25 EMEA)",
+          url: "https://www.usenix.org/conference/srecon25emea/presentation/klein",
+        }
+    actions:
+      - { id: close-p03d, type: slide.close, at: { mark: close-p03d, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l13-b3-sup,
+            l13-b3-sup-t,
+            l13-b3-sup-a,
+            l13-b3-job,
+            l13-b3-job-t,
+            l13-b3-job-a,
+            l13-b3-ledger,
+            l13-b3-ledger-t,
+          ]
+        drawMs: 2600
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l13-b3-cb, l13-b3-cb-t, l13-b3-cb-a, l13-b3-late]
+        drawMs: 1600
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds:
+          [l13-b3-tag1, l13-b3-tag1-t1, l13-b3-tag1-t2, l13-b3-tag2, l13-b3-tag2-t1, l13-b3-tag2-t2]
+        drawMs: 2200
+      # Step 4 clears the red tags and keeps the step 1-2 structure as furniture
+      # (clear never removes an id the same action upserts), then draws the fixes.
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        clear: true
+        upsertIds:
+          [
+            l13-b3-sup,
+            l13-b3-sup-t,
+            l13-b3-sup-a,
+            l13-b3-job,
+            l13-b3-job-t,
+            l13-b3-job-a,
+            l13-b3-ledger,
+            l13-b3-ledger-t,
+            l13-b3-cb,
+            l13-b3-cb-t,
+            l13-b3-cb-a,
+            l13-b3-late,
+          ]
+      - id: b3-s4-draw
+        type: whiteboard.apply
+        at: { afterAction: b3-s4 }
+        upsertIds: [l13-b3-fix1, l13-b3-fix2, l13-b3-fix3]
+        drawMs: 2000
+      - id: b3-s5
+        type: whiteboard.apply
+        at: { mark: b3-s5 }
+        upsertIds: [l13-b3-alert, l13-b3-alert-t1, l13-b3-alert-t2]
+        drawMs: 1400
+
+  - id: cast-frozen-wallets
+    chapter: ပိတ်ခံရတဲ့ wallet တွေအပေါ် CAST
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] ပိတ်ခံရတဲ့ wallet တွေလို ဖြစ်ပြီးသွားတဲ့ incident ကိုတော့ Causal Analysis based on Systems Theory၊ အတိုကောက် CAST နဲ့ ပြန်ခွဲပါတယ်၊ ဘယ်သူ မှားလဲ မမေးဘဲ control တွေ ဘာလို့ မတားနိုင်ခဲ့လဲ မေးတာပါ။ မသီရိက org chart အတိုင်း မဟုတ်ဘဲ အဲဒီနေ့က တကယ် အလုပ်လုပ်ခဲ့တဲ့ structure ကို ဆွဲပါတယ်။
+      [[mark:b4-s2]] support မှာ wallet အများကြီးကို တစ်ခါတည်း ပြန်ဖွင့်တဲ့ tool မရှိသလို on-call ကို ခေါ်တဲ့ လမ်းလည်း မရှိခဲ့ပါဘူး။ on-call မှာလည်း wallet ပိတ်တာ များလာရင် တက်မယ့် alert မရှိလို့ Facebook post တွေ ပြန့်လာမှ သိခဲ့ပါတယ်။
+      [[mark:b4-s3]] ပုံ ဆွဲလိုက်တော့ payroll နဲ့ fraud rule တွေ ဆက်ဆံပုံကို ဘယ်သူ ပိုင်လဲ ဆိုတဲ့ မေးခွန်း ပေါ်လာပါတယ်၊ ဘယ်သူမှ မပိုင်ပါဘူး။ ပိုင်ရှင် မရှိတဲ့ နေရာ၊ ပိုင်ရှင် ထပ်နေတဲ့ နေရာတွေမှာ အကြောင်းရင်းတွေ ပုန်းနေတတ်ပါတယ်။
+      [[mark:b4-s4]] fraud dashboard ကလည်း ပိတ်လိုက်တဲ့ ၂၈၀၀ ကို အောင်မြင်မှုလို့ ရေတွက်ခဲ့ပါတယ်။ feedback က မှားတဲ့ အရာကို တိုင်းနေလို့ fraud အဖွဲ့က rule ကောင်းနေတယ်လို့ပဲ ယုံခဲ့ကြတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CAST Handbook (Leveson, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file4.php?name=CAST_Handbook.pdf",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board again: wipe B3, keep the panel open.
+      - id: close-b3
+        type: whiteboard.apply
+        at: { mark: close-b3, offsetMs: -400 }
+        clear: true
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l13-b4-pay,
+            l13-b4-pay-t,
+            l13-b4-a1,
+            l13-b4-fraud,
+            l13-b4-fraud-t,
+            l13-b4-a2,
+            l13-b4-frozen,
+            l13-b4-frozen-t1,
+            l13-b4-frozen-t2,
+          ]
+        drawMs: 2600
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l13-b4-sup1, l13-b4-sup2, l13-b4-oncall]
+        drawMs: 2200
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l13-b4-owner1, l13-b4-owner2]
+        drawMs: 1600
+      - id: b4-s4
+        type: whiteboard.apply
+        at: { mark: b4-s4 }
+        upsertIds: [l13-b4-dash1, l13-b4-dash2]
+        drawMs: 1600
+
+  - id: cast-step-by-step
+    narration: >
+      [[mark:close-b4]] [[mark:show-p04]] CAST မှာ အဆင့် ငါးဆင့် ရှိပါတယ်။ ပထမ အဆင့်မှာ loss နဲ့ hazard ကို ရေးပြီး timeline ကိုတော့ မေးခွန်း ထုတ်ဖို့ပဲ သုံးပါတယ်၊ ဥပမာ fraud အဖွဲ့က payroll launch ကို ဘာလို့ မသိခဲ့လဲ ဆိုတာမျိုးပါ။ အပြစ်လည်း မရှာ၊ အဖြေလည်း မချသေးပါဘူး။ ဒုတိယ အဆင့်က ခုနက ဆွဲခဲ့တဲ့ structure ပါ။
+      [[mark:show-p04b]] တတိယ အဆင့်မှာ controller တစ်ခုချင်း လုပ်ခဲ့တာ အဲဒီအချိန်က ဘာကြောင့် အဓိပ္ပာယ် ရှိခဲ့လဲ ရှာပါတယ်။ fraud အဖွဲ့က လိမ်တာ များလာတာ မြင်ခဲ့ပြီး payroll အဖွဲ့ကလည်း သေချာ test လုပ်ခဲ့ပါတယ်။ ဆုံးဖြတ်ချက်ကို ပုံသွင်းခဲ့တဲ့ ယုံကြည်ချက်၊ feedback၊ အချိန် ဖိအားတွေကို မပြင်ဘဲ လူကိုပဲ လဲရင် နောက်လူလည်း ဒီလိုပဲ ဆုံးဖြတ်မှာပါ။
+      [[mark:show-p04c]] စတုတ္ထ အဆင့်မှာ controller အားလုံးကို ထိတဲ့ အချက်တွေ ရှာပါတယ်၊ ဥပမာ launch တိုင်းမှာ ဒီ wallet ပေါ် တခြား ဘယ်သူ action လုပ်လဲလို့ မေးတဲ့ review မရှိတာပါ။ engineer ၄၀ လောက် ရှိလာတော့ launch တိုင်းကို လူတိုင်း မသိတော့ဘဲ control တွေ တဖြည်းဖြည်း အားနည်းသွားတာပါ။
+      [[mark:show-p04d]] ပဉ္စမ အဆင့်မှာ အကြံပြုချက် တိုင်းကို တွေ့ခဲ့တဲ့ အချက်ဆီ ပြန်ချိတ်ပြီး ဒီ incident ကိုပဲ တားမှာလား၊ ဆင်တူ incident တွေကိုပါ တားမှာလားလို့ မေးပါတယ်။ rule ကနေ စက်ရုံကို ချန်တာ၊ ပြန်ဖွင့်တဲ့ ခလုတ် ထည့်တာလို local fix တွေက လက္ခဏာကိုပဲ ကုလို့ rule တွေ ဆက်ဆံပုံ ဘယ်သူ ပိုင်မလဲ၊ support က on-call ကို ဘာလို့ မခေါ်နိုင်ခဲ့လဲလို့ ဆက်မေးရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "CAST Handbook (Leveson, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file4.php?name=CAST_Handbook.pdf",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      - id: close-b4
+        type: whiteboard.apply
+        at: { mark: close-b4, offsetMs: -400 }
+        open: false
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l13-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l13-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l13-p04c }
+      - { id: show-p04d, type: slide.show, at: { mark: show-p04d }, slideId: l13-p04d }
+
+  - id: the-shift
+    chapter: ကြိုကြည့်တဲ့ အမြင်
+    narration: >
+      [[mark:show-p05]] ဒီ incident နောက် Padauk ရဲ့ အမြင် ပြောင်းသွားပါတယ်။ root cause တစ်ခုကို ရှာမယ့်အစား အချက်တွေနဲ့ structure ကို ပြင်ပြီး၊ လူကို အပြစ်မရှာတဲ့ blameless ဖြစ်ရုံ မကဘဲ ဆုံးဖြတ်ချက်ကို ဘာက ပုံသွင်းခဲ့လဲ စနစ်တကျ ခွဲပါတယ်။ ပျက်ပြီးမှ မြန်မြန် တုံ့ပြန်ရုံနဲ့လည်း မရပ်ဘဲ loss တွေကို ကြိုစာရင်းလုပ်ပြီး အဆိုးဆုံးကို အရင် ပြင်ပါတယ်။
+      [[mark:show-p05b]] fault injection test တွေက တစ်ခုခုကို တမင် ပျက်အောင် လုပ်ပြီးမှ စပေမဲ့ STPA က ဘာမှ မပျက်ဘဲ ဖြစ်တဲ့ loss တွေကို ရှာပြီး နောက် ဘယ် test လုပ်ရမလဲ ဆိုတာကိုပါ ပြပေးပါတယ်၊ lesson ၁၉ မှာ ပြန်တွေ့ရပါမယ်။ incident ပြီးရင် CAST က ပိုသက်သာပြီး STPA က ပိုကျယ်ပါတယ်။ စချင်ရင် လူ နှစ်ယောက် သုံးယောက်၊ design doc တစ်ခုနဲ့ အရင်က မထင်မှတ်ဘဲ ပြဿနာ ပေးခဲ့ဖူးတဲ့ system ကနေ စပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The Evolution of SRE at Google (USENIX ;login:)",
+          url: "https://usenix.org/publications/loginonline/evolution-sre-google",
+        }
+      - {
+          title: "Teaching a new way to prevent outages at Google (sre.google)",
+          url: "https://sre.google/stpa/teaching/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l13-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l13-p05b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] ဒီအပတ် postmortem နဲ့ design doc တွေကို မျက်လုံးအသစ်နဲ့ ကြည့်ပါ။ postmortem တစ်ခုကို ဖတ်ပြီး ဘယ်နေရာမှာ မေးတာ ရပ်သွားလဲ ရှာကြည့်ပါ။ ကိုယ့် system ထဲက control loop တစ်ခုကို ယုံကြည်ချက် ပါအောင် ဆွဲကြည့်ပါ။ ပြီးတော့ review လုပ်နေတဲ့ design doc တစ်ခုပေါ်မှာ STPA ကို စမ်းကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Teaching a new way to prevent outages at Google (sre.google)",
+          url: "https://sre.google/stpa/teaching/",
+        }
+      - {
+          title: "STAMP at Google (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/stpa/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l13-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] ဒီ စကားလုံးတွေက control loop ကနေ လာတာပါ။ [[mark:sel-control-loop]] control loop က action လုပ်၊ feedback ပြန်ရပြီး ယုံကြည်ချက်ကို ပြင်တဲ့ စက်ဝိုင်းပါ။ [[mark:sel-hazard]] hazard က loss ဆီ ဦးတည်နေတဲ့ အခြေအနေမို့ alert ထားဖို့ ကောင်းတဲ့ နေရာပါ။ [[mark:sel-uca]] unsafe control action ကတော့ hazard ဖြစ်စေတဲ့ action ပါ။
+      [[mark:sel-stpa]] STPA က incident မဖြစ်ခင် design ပေါ်မှာ ကြိုရှာတာ ဖြစ်ပြီး၊ [[mark:sel-cast]] CAST ကတော့ ဖြစ်ပြီးမှ တကယ့် structure နဲ့ ပြန်ခွဲတာပါ။ [[mark:sel-question]] fraud dashboard က ပိတ်လိုက်တဲ့ ၂၈၀၀ ကို သတင်းကောင်းလို့ ပြခဲ့ပါတယ်။ [[mark:ask-question]] control loop ရဲ့ ဘယ်အပိုင်း မှားခဲ့တာလဲ?
+      [[mark:pause-question]] feedback ပါ၊ ပိတ်တဲ့ အရေအတွက်ကိုပဲ ရေတွက်ပြီး ပိတ်ခံရတဲ့သူတွေ တကယ် လိမ်တာလား မတိုင်ခဲ့လို့ပါ။ ဒီ incident တွေမှာ reliability ဘက်ကို ထမ်းခဲ့ရတာ မသီရိ တစ်ယောက်တည်းပါ။ Padauk က ဘယ်လို လူမျိုးကို ခန့်ရမလဲ၊ လူသစ်တွေကရော ဘေးကင်းကင်း ဘယ်လို သင်ယူကြမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "STPA Handbook (Leveson & Thomas, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file.php?name=STPA_Handbook.pdf",
+        }
+      - {
+          title: "CAST Handbook (Leveson, MIT PSASS, PDF)",
+          url: "https://psas.scripts.mit.edu/home/get_file4.php?name=CAST_Handbook.pdf",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - id: sel-control-loop
+        type: editor.select
+        at: { mark: sel-control-loop }
+        target: { file: notes.md, text: "control loop", occurrence: 1 }
+      - id: sel-hazard
+        type: editor.select
+        at: { mark: sel-hazard }
+        target: { file: notes.md, text: "hazard", occurrence: 1 }
+      - id: sel-uca
+        type: editor.select
+        at: { mark: sel-uca }
+        target: { file: notes.md, text: "unsafe control action", occurrence: 1 }
+      # occurrence 2: the title line holds the first STPA and the first CAST.
+      - id: sel-stpa
+        type: editor.select
+        at: { mark: sel-stpa }
+        target: { file: notes.md, text: "STPA", occurrence: 2 }
+      - id: sel-cast
+        type: editor.select
+        at: { mark: sel-cast }
+        target: { file: notes.md, text: "CAST", occurrence: 2 }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause (as in lesson 7). sel-question marks where the
+      # voice script puts the select, but a select there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more
+      # mark at an existing sentence end that makes the question its own dialog:
+      # it starts about as the question ends, its drag runs in silence, and the
+      # answer at pause-question waits for it. The question is a short dialog (40
+      # characters), so 3850 leaves about 2.8 / 2.2 / 1.2 s of quiet between the
+      # question's estimated end and the answer at 55 / 70 / 95 ms per char (at 95
+      # the drag starts under the question's last words, as in lesson 7); an
+      # offset above ~3970 trips compile-check's 2.5 s inserted-silence warning
+      # at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 3850 }
+        target:
+          file: notes.md
+          text: 'မေးခွန်း: fraud dashboard က "ပိတ်တာ 2,800" ကို သတင်းကောင်းလို့ ပြခဲ့တယ်။ control loop ရဲ့ ဘယ်အပိုင်း မှားခဲ့လဲ?'
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
