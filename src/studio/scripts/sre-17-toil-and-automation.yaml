@@ -1,0 +1,1692 @@
+# SRE from zero, lesson 17: Toil and automation (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-17-toil-and-automation.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-17-toil-and-automation.md \
+#     src/studio/scripts/sre-17-toil-and-automation.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: the toil audit (cover: 55% hand-work, 11 of 70 pages needed action),
+# and Module 5 opens on the loop's build station (m5_map). Board B1 sorts the
+# audit into toil and engineering; board B2, toil feeding on itself; pages,
+# treating toil like an SLO and why to automate; board B3, the morning
+# reconciliation's break-even; pages, Padauk's path to removing the task and
+# the three ways automation hurts; board B4, the promo SMS tool's empty input
+# and its guards; board B5, the failover bot's record and its action card;
+# this week; recap on notes.md.
+#
+# Seven marks add no spoken text and sit at an existing ။:
+# - b1-s3b, b3-s1b, b4-s1b, b5-s1b and b5-s2b land a board piece on the
+#   sentence that names it instead of 11-15 s early: B1's warning line; B3's
+#   three years, then (afterAction) its hours-saved and build-and-upkeep bars;
+#   B4's red lane; B5's two record bars; the first action-card row.
+# - b4-s3b lands B4's second guard line ("all" picked on purpose, stop and ask
+#   a human) where the sentence naming its first item ends, about 18 s after
+#   the first line, so each apply adds one labelled line.
+# - ask-question makes the recap question its own dialog so the question-line
+#   select can hang off it for the ⟪pause 3s⟫, as in lesson 30 (see
+#   select-question). sel-question is the voice script's ⟪select မေးခွန်း⟫;
+#   it only splits the short lead-in from the question.
+# Pacing: at 70 ms/char no page or board step holds longer than ~30 s (the
+# cover, l17_p01, from its show to the module map), so the voice script's own
+# markers carry it and no pacing page or board step was added.
+#
+# ⟪close board⟫ straight into the next board (scenes 3 and 9) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, as
+# in lesson 16, so the editor does not flash between two boards; the next
+# board then draws with open: true, clear: true as usual. A board followed by
+# a deck page closes the panel (open: false) 400 ms before the page, and a
+# deck page followed by a board closes the page 400 ms before, as in Module 1.
+#
+# Boards (B1 two columns, B2 P3 ring, B3 P5 bars, B4 P6 lanes, B5 P5 bars over
+# two card rows). Colour jobs: #1e1e1e ink (paints white) for titles, axes,
+# year labels and the arrows between boxes; blue the thing named (the
+# engineering column, build + upkeep, the promo SMS tool, the action-card
+# rows); green healthy or done (hours saved, refusing empty input with a clear
+# error, 38 right, acts then tells); red failure or toil (the toil column, B2's
+# toil, burnout and people leaving and the more-toil-each return, the
+# 3-million-SMS lane, 2 wrong, the day the system is retired); orange the
+# caveat or limit (temporary planned toil and the warning signs, no time to
+# fix, the format changes, B4's guards, asks first always); violet the flow
+# (B2's ring and its clockwise arrows). B2's nodes are filled white, which
+# paints dark, so the ring does not run through their labels. Titles, axes,
+# column headings, B2's ring and B5's "action card" heading are furniture and
+# land without drawMs. A label on two or three lines is one text asset per
+# line, so each line meets the 0.55 em width rule on its own; every label was
+# also measured with the real fallback font against the box it sits in
+# (wb-fit.mjs: 0 spills).
+# Where the boards differ from the voice script's sketches:
+# - B3 carries its numbers on three legend lines (hours saved 152 · 304 · 456,
+#   build + upkeep 116 · 152 · 188), not on nine bars, so the board holds
+#   eight labels; the orange line starts with "+" because its numbers (176 ·
+#   272 · 368) are the new totals, the tops of the stacked blue and orange bars.
+# - B4's tool box and first red box set their labels on three lines, not two:
+#   as two lines ("user အုပ်စု = (အလွတ်)", "registered user အားလုံး", 21 and
+#   23 code points) the tool box, the red box and the 3-million box need
+#   343 + 374 + 236 px under the 0.55 rule, more than the 850 px visible area
+#   with two arrows; as three lines 236 + 251 + 236 px.
+# - B2's return to toil is drawn as a red arrow on the upper-left arc beside
+#   the "more toil each" label, so "back to toil" reads clockwise.
+#
+# Deck pages: deck "Next Editor · SRE 5A · Toil and tests", published; deckUrl
+# is its /pub link. Its l17 pages and m5_map are built later from the page
+# plan, so until then the Director reports page "l17_p01" missing from the
+# published deck. The voice script lights l17_p03d's last chip; the K6 kit has
+# no lit state, so the page plan carries that as a note. Scene 7 also cites
+# Bainbridge's paper, the curriculum's public source for the 1983 finding it
+# names (URL checked 2026-10-21). Page plan:
+# ~/Documents/sre-course/work/pages/sre-17-toil-and-automation.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-17-toil-and-automation.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-17-toil-and-automation.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-17-toil-and-automation
+  title: "SRE from zero 17: Toil နဲ့ automation"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Toil နဲ့ automation
+
+        - toil — လက်နဲ့ ထပ်ခါထပ်ခါ၊ service နဲ့အတူ ကြီး၊ ရေရှည် တန်ဖိုး မကျန်
+        - toil target — toil ရှိခွင့် အများဆုံးကို SLO လို ထားတဲ့ ပစ်မှတ် (Padauk: 35%)
+        - safe default — input မပါရင် ဘာမှ မလုပ်ဘဲ ငြင်း
+        - ironies of automation — automation ကောင်းလေ ခက်တဲ့ case အတွက် လူ့ ကျွမ်းကျင်မှု ဆုံးလေ
+        - action card — action တစ်ခုချင်း: အကြံပေး · အရင်မေး · လုပ်ပြီးမှပြော · ဘယ်တော့မှမလုပ်၊ undo၊ ရပ်ရမယ့် အခြေအနေ
+
+        မေးခွန်း: နေ့တိုင်း မိနစ် 20၊ automate လုပ်ဖို့ နာရီ 80။ ဘယ်တော့ အရင်း ပြန်ကျေမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Toil နဲ့ automation</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 17</p>
+              <h1>Toil နဲ့ automation</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l17-p01
+      contentType: google
+      name: "Cover: half the week is gone"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p01
+    - id: m5-map
+      contentType: google
+      name: Module 5 map
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: m5_map
+    - id: l17-p02
+      contentType: google
+      name: Treat toil like an SLO
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p02
+    - id: l17-p02b
+      contentType: google
+      name: "Padauk's toil target"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p02b
+    - id: l17-p02c
+      contentType: google
+      name: Every page needs an action
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p02c
+    - id: l17-p02d
+      contentType: google
+      name: "Fixing toil: don't and do"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p02d
+    - id: l17-p03
+      contentType: google
+      name: Why automate?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p03
+    - id: l17-p03b
+      contentType: google
+      name: Four minutes a month
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p03b
+    - id: l17-p03c
+      contentType: google
+      name: "Padauk's path"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p03c
+    - id: l17-p03d
+      contentType: google
+      name: The settlement API removes the task
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p03d
+    - id: l17-p04
+      contentType: google
+      name: Automation can hurt
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p04
+    - id: l17-p04b
+      contentType: google
+      name: A restart every 40 minutes
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p04b
+    - id: l17-p04c
+      contentType: google
+      name: "Bainbridge, 1983"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p04c
+    - id: l17-p05
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l17_p05
+  whiteboardAssets:
+    # ---- Board B1: toil or engineering, two columns ---------------------------
+    - {
+        id: l17-b1-h1,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 100,
+        height: 45,
+        text: "toil",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: l17-b1-r1,
+        kind: rectangle,
+        x: 270,
+        y: 215,
+        width: 380,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b1-r1-t,
+        kind: text,
+        x: 282,
+        y: 242,
+        width: 300,
+        height: 35,
+        text: "settlement ပြန် run",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-r2,
+        kind: rectangle,
+        x: 270,
+        y: 320,
+        width: 380,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b1-r2-t1,
+        kind: text,
+        x: 282,
+        y: 330,
+        width: 200,
+        height: 35,
+        text: "merchant ကို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-r2-t2,
+        kind: text,
+        x: 282,
+        y: 365,
+        width: 230,
+        height: 35,
+        text: "လက်နဲ့ approve",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-r3,
+        kind: rectangle,
+        x: 270,
+        y: 425,
+        width: 380,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b1-r3-t1,
+        kind: text,
+        x: 282,
+        y: 435,
+        width: 245,
+        height: 35,
+        text: "ရပ်နေတဲ့ worker",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-r3-t2,
+        kind: text,
+        x: 282,
+        y: 470,
+        width: 185,
+        height: 35,
+        text: "ကို restart",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-h2,
+        kind: text,
+        x: 700,
+        y: 160,
+        width: 240,
+        height: 45,
+        text: "engineering",
+        strokeColor: "#1971c2",
+        fontSize: 36,
+      }
+    - {
+        id: l17-b1-e1,
+        kind: rectangle,
+        x: 690,
+        y: 215,
+        width: 380,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b1-e1-t,
+        kind: text,
+        x: 702,
+        y: 242,
+        width: 350,
+        height: 35,
+        text: "outage ပြီး fix + test",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-e2,
+        kind: rectangle,
+        x: 690,
+        y: 320,
+        width: 380,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b1-e2-t,
+        kind: text,
+        x: 702,
+        y: 347,
+        width: 245,
+        height: 35,
+        text: "security policy",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-e3,
+        kind: rectangle,
+        x: 690,
+        y: 425,
+        width: 380,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b1-e3-t1,
+        kind: text,
+        x: 702,
+        y: 435,
+        width: 245,
+        height: 35,
+        text: "တစ်ခါပဲ လုပ်တဲ့",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-e3-t2,
+        kind: text,
+        x: 702,
+        y: 470,
+        width: 150,
+        height: 35,
+        text: "migration",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-ok,
+        kind: text,
+        x: 280,
+        y: 535,
+        width: 320,
+        height: 35,
+        text: "ယာယီ + ကြိုစီစဉ် = ရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b1-warn,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 700,
+        height: 35,
+        text: "သတိ: product ကွက်လပ် · အဖွဲ့ထက် မြန်မြန် ကြီး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: toil feeds on itself, a ring travelled clockwise (P3) -------
+    - {
+        id: l17-b2-ring,
+        kind: ellipse,
+        x: 420,
+        y: 215,
+        width: 560,
+        height: 360,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b2-arrow-top,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 830,
+        y: 232,
+        width: 60,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b2-arrow-right,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 923,
+        y: 470,
+        width: 30,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b2-toil,
+        kind: rectangle,
+        x: 635,
+        y: 185,
+        width: 130,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l17-b2-toil-t,
+        kind: text,
+        x: 678,
+        y: 197,
+        width: 75,
+        height: 35,
+        text: "toil",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-notime,
+        kind: rectangle,
+        x: 880,
+        y: 348,
+        width: 200,
+        height: 95,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l17-b2-notime-t1,
+        kind: text,
+        x: 895,
+        y: 356,
+        width: 140,
+        height: 35,
+        text: "ပြင်ဖို့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-notime-t2,
+        kind: text,
+        x: 895,
+        y: 391,
+        width: 175,
+        height: 35,
+        text: "အချိန် မရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-burnout,
+        kind: rectangle,
+        x: 615,
+        y: 545,
+        width: 170,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l17-b2-burnout-t,
+        kind: text,
+        x: 649,
+        y: 557,
+        width: 125,
+        height: 35,
+        text: "burnout",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-leave,
+        kind: rectangle,
+        x: 325,
+        y: 365,
+        width: 190,
+        height: 60,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l17-b2-leave-t,
+        kind: text,
+        x: 338,
+        y: 377,
+        width: 165,
+        height: 35,
+        text: "လူတွေ ထွက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-back,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 530,
+        y: 222,
+        width: 60,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b2-more-t1,
+        kind: text,
+        x: 268,
+        y: 216,
+        width: 210,
+        height: 35,
+        text: "တစ်ယောက်ချင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b2-more-t2,
+        kind: text,
+        x: 268,
+        y: 251,
+        width: 210,
+        height: 35,
+        text: "toil ပိုများ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B3: the morning reconciliation's break-even (P5 bars, 0.5 px an hour)
+    - {
+        id: l17-b3-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 430,
+        height: 45,
+        text: "မနက်တိုင်း တိုက်စစ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l17-b3-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 536,
+        width: 680,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b3-y1,
+        kind: text,
+        x: 350,
+        y: 572,
+        width: 105,
+        height: 35,
+        text: "နှစ် 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-y2,
+        kind: text,
+        x: 565,
+        y: 572,
+        width: 105,
+        height: 35,
+        text: "နှစ် 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-y3,
+        kind: text,
+        x: 785,
+        y: 572,
+        width: 105,
+        height: 35,
+        text: "နှစ် 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-lg-save,
+        kind: text,
+        x: 280,
+        y: 210,
+        width: 475,
+        height: 35,
+        text: "သက်သာတဲ့ နာရီ: 152 · 304 · 456",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-s1,
+        kind: rectangle,
+        x: 325,
+        y: 484,
+        width: 50,
+        height: 76,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l17-b3-s2,
+        kind: rectangle,
+        x: 545,
+        y: 408,
+        width: 50,
+        height: 152,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l17-b3-s3,
+        kind: rectangle,
+        x: 765,
+        y: 332,
+        width: 50,
+        height: 228,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l17-b3-lg-cost,
+        kind: text,
+        x: 280,
+        y: 245,
+        width: 475,
+        height: 35,
+        text: "ဆောက် + ထိန်း: 116 · 152 · 188",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-c1,
+        kind: rectangle,
+        x: 385,
+        y: 502,
+        width: 50,
+        height: 58,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l17-b3-c2,
+        kind: rectangle,
+        x: 605,
+        y: 484,
+        width: 50,
+        height: 76,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l17-b3-c3,
+        kind: rectangle,
+        x: 825,
+        y: 466,
+        width: 50,
+        height: 94,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l17-b3-lg-fmt,
+        kind: text,
+        x: 280,
+        y: 280,
+        width: 550,
+        height: 35,
+        text: "+ format ပြောင်းတာ: 176 · 272 · 368",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b3-f1,
+        kind: rectangle,
+        x: 385,
+        y: 472,
+        width: 50,
+        height: 30,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l17-b3-f2,
+        kind: rectangle,
+        x: 605,
+        y: 424,
+        width: 50,
+        height: 60,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l17-b3-f3,
+        kind: rectangle,
+        x: 825,
+        y: 376,
+        width: 50,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l17-b3-retire,
+        kind: rectangle,
+        x: 930,
+        y: 330,
+        width: 6,
+        height: 230,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l17-b3-retire-t,
+        kind: text,
+        x: 870,
+        y: 290,
+        width: 225,
+        height: 35,
+        text: "system ပိတ်ရက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B4: empty input, two lanes from one tool (P6) --------------------
+    - {
+        id: l17-b4-src,
+        kind: rectangle,
+        x: 255,
+        y: 205,
+        width: 236,
+        height: 285,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b4-src-t1,
+        kind: text,
+        x: 265,
+        y: 295,
+        width: 220,
+        height: 35,
+        text: "promo SMS tool",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-src-t2,
+        kind: text,
+        x: 265,
+        y: 330,
+        width: 210,
+        height: 35,
+        text: "user အုပ်စု =",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-src-t3,
+        kind: text,
+        x: 265,
+        y: 365,
+        width: 125,
+        height: 35,
+        text: "(အလွတ်)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 495,
+        y: 247,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b4-r1,
+        kind: rectangle,
+        x: 540,
+        y: 205,
+        width: 251,
+        height: 125,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b4-r1-t1,
+        kind: text,
+        x: 550,
+        y: 215,
+        width: 130,
+        height: 35,
+        text: "အလွတ် =",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-r1-t2,
+        kind: text,
+        x: 550,
+        y: 250,
+        width: 236,
+        height: 35,
+        text: "registered user",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-r1-t3,
+        kind: text,
+        x: 550,
+        y: 285,
+        width: 115,
+        height: 35,
+        text: "အားလုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 795,
+        y: 247,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b4-r2,
+        kind: rectangle,
+        x: 840,
+        y: 205,
+        width: 236,
+        height: 125,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l17-b4-r2-t1,
+        kind: text,
+        x: 852,
+        y: 232,
+        width: 180,
+        height: 35,
+        text: "မနက် 2 နာရီ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-r2-t2,
+        kind: text,
+        x: 852,
+        y: 267,
+        width: 165,
+        height: 35,
+        text: "SMS 3 သန်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 495,
+        y: 425,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b4-g1,
+        kind: rectangle,
+        x: 540,
+        y: 400,
+        width: 251,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l17-b4-g1-t,
+        kind: text,
+        x: 552,
+        y: 427,
+        width: 210,
+        height: 35,
+        text: "အလွတ် = ငြင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 795,
+        y: 425,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b4-g2,
+        kind: rectangle,
+        x: 840,
+        y: 400,
+        width: 236,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l17-b4-g2-t,
+        kind: text,
+        x: 852,
+        y: 427,
+        width: 220,
+        height: 35,
+        text: "ရှင်းတဲ့ error",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-guard1,
+        kind: text,
+        x: 260,
+        y: 520,
+        width: 610,
+        height: 35,
+        text: "အရေအတွက် ကန့်သတ် · rate limit · dry run",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b4-guard2,
+        kind: text,
+        x: 260,
+        y: 565,
+        width: 720,
+        height: 35,
+        text: '"အားလုံး" ကို သီးသန့် ရွေး · ရပ်ပြီး လူကို မေး',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B5: the failover bot's record, then its action card --------------
+    - {
+        id: l17-b5-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 365,
+        height: 45,
+        text: "ည 40 အကြံပေးခဲ့တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l17-b5-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 362,
+        width: 380,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b5-ok,
+        kind: rectangle,
+        x: 310,
+        y: 234,
+        width: 70,
+        height: 152,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l17-b5-ok-t,
+        kind: text,
+        x: 282,
+        y: 396,
+        width: 165,
+        height: 35,
+        text: "38 ခါ မှန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b5-bad,
+        kind: rectangle,
+        x: 500,
+        y: 378,
+        width: 70,
+        height: 8,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l17-b5-bad-t,
+        kind: text,
+        x: 478,
+        y: 396,
+        width: 150,
+        height: 35,
+        text: "2 ခါ မှား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b5-card,
+        kind: text,
+        x: 280,
+        y: 445,
+        width: 230,
+        height: 45,
+        text: "action card",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l17-b5-r1,
+        kind: rectangle,
+        x: 270,
+        y: 500,
+        width: 460,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b5-r1-t,
+        kind: text,
+        x: 282,
+        y: 513,
+        width: 440,
+        height: 35,
+        text: "Operator A → backup endpoint",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b5-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 735,
+        y: 511,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b5-m1,
+        kind: rectangle,
+        x: 780,
+        y: 500,
+        width: 260,
+        height: 62,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l17-b5-m1-t,
+        kind: text,
+        x: 792,
+        y: 513,
+        width: 240,
+        height: 35,
+        text: "လုပ်ပြီးမှ ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b5-r2,
+        kind: rectangle,
+        x: 270,
+        y: 578,
+        width: 460,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-b5-r2-t,
+        kind: text,
+        x: 282,
+        y: 591,
+        width: 440,
+        height: 35,
+        text: "ပင်မ endpoint ဆီ ပြန်ပြောင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b5-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 735,
+        y: 589,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b5-m2,
+        kind: rectangle,
+        x: 780,
+        y: 578,
+        width: 230,
+        height: 62,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l17-b5-m2-t,
+        kind: text,
+        x: 792,
+        y: 591,
+        width: 210,
+        height: 35,
+        text: "အမြဲ အရင် မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2617
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: တစ်ပတ်ရဲ့ တစ်ဝက် ပျောက်နေတယ်
+    narration: >
+      [[mark:show-p01]] Bill Pay နဲ့ on-call ခွဲယူတဲ့ engagement ရေးပြီးနောက် မသီရိရဲ့ Site Reliability Engineering၊ SRE အဖွဲ့မှာ လေးယောက် ရှိလာပါပြီ။ ဒါပေမဲ့ project အသစ် စဖို့ အချိန် မရဘူးလို့ အဖွဲ့ဝင်တွေ ညည်းနေကြတော့ မသီရိက တစ်ပတ်လုံး အချိန် ဘယ်မှာ ကုန်လဲ မှတ်ခိုင်းပါတယ်။ အချိန်ရဲ့ ၅၅ ရာခိုင်နှုန်းက လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ toil မှာ ကုန်နေပြီး page ၇၀ ထဲမှာ တကယ် လုပ်စရာ ရှိခဲ့တာ ၁၁ ခုပဲပါ။ ဒါဆို ဘယ်ကနေ စမလဲ?
+      [[mark:show-map]] Module ၅ က reliability loop ရဲ့ နောက်ဆုံး အဆင့်၊ တည်ဆောက်တဲ့ အဆင့်ပါ။ incident တွေက ရတဲ့ သင်ခန်းစာကို test၊ capacity၊ data၊ design နဲ့ platform တွေထဲ ထည့်ဆောက်ရမှာမို့ ဆောက်ဖို့ အချိန် ရအောင် toil ကနေ စပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l17-p01,
+        }
+      # Module 5 opens: the module map advances in place from the cover.
+      - { id: show-map, type: slide.show, at: { mark: show-map }, slideId: m5-map }
+
+  - id: sorting
+    chapter: Toil လား၊ engineering လား
+    narration: >
+      [[mark:close-map]] [[mark:b1-s1]] မသီရိက မှတ်တမ်းထဲက အလုပ်တွေကို နှစ်စု ခွဲကြည့်ပါတယ်။ settlement ပြန် run တာ၊ merchant ကို လက်နဲ့ approve လုပ်တာ၊ ရပ်နေတဲ့ worker ကို restart လုပ်တာတွေက ဒီအပတ် လုပ်ပြီးလည်း နောက်အပတ် ပြန်လုပ်ရမှာပါ။ ဒါတွေက toil ပါ၊ လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရပြီး automate လုပ်လို့ ရပေမဲ့ ရေရှည် တန်ဖိုး မကျန်ဘဲ service ကြီးလာတာနဲ့ အမျှ လိုက်များလာတတ်ပါတယ်။
+      [[mark:b1-s2]] outage တစ်ခုအပြီး fix နဲ့ test ရေးတာ၊ security policy ရေးတာ၊ တစ်ခါပဲ လုပ်ရတဲ့ migration တွေကတော့ ခက်ပြီး ပျင်းစရာ ကောင်းနိုင်ပေမဲ့ စဉ်းစား ဆုံးဖြတ်ရပြီး system ကို အမြဲတမ်း ပိုကောင်းစေလို့ toil မဟုတ်ဘဲ engineering ပါ။
+      [[mark:b1-s3]] toil တိုင်းလည်း မဆိုးပါဘူး။ incident အတွင်း ရပ်နေတဲ့ order တွေကို လက်နဲ့ ပြန်တန်းစီတာလို ယာယီ ဖြစ်ပြီး ကြိုစီစဉ်ထားတဲ့ toil ကို နာရီပိုင်း ရက်ပိုင်းဆို လက်ခံနိုင်ပေမဲ့ အပတ်နဲ့ချီ ကြာလို့ မဖြစ်ပါဘူး။ [[mark:b1-s3b]] သတိထားရမှာက product ထဲ မရှိတဲ့ feature ကို လက်နဲ့ ဖြည့်ပေးနေရတဲ့ toil နဲ့ အဖွဲ့ထက် မြန်မြန် ကြီးလာတဲ့ toil ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+    actions:
+      - { id: close-map, type: slide.close, at: { mark: close-map, offsetMs: -400 } }
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l17-b1-h1],
+        }
+      - id: b1-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s1 }
+        upsertIds:
+          [
+            l17-b1-r1,
+            l17-b1-r1-t,
+            l17-b1-r2,
+            l17-b1-r2-t1,
+            l17-b1-r2-t2,
+            l17-b1-r3,
+            l17-b1-r3-t1,
+            l17-b1-r3-t2,
+          ]
+        drawMs: 2400
+      - { id: b1-s2, type: whiteboard.apply, at: { mark: b1-s2 }, upsertIds: [l17-b1-h2] }
+      - id: b1-s2-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s2 }
+        upsertIds:
+          [l17-b1-e1, l17-b1-e1-t, l17-b1-e2, l17-b1-e2-t, l17-b1-e3, l17-b1-e3-t1, l17-b1-e3-t2]
+        drawMs: 2400
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l17-b1-ok],
+          drawMs: 1200,
+        }
+      # The warning signs land on the sentence that names them, not ~15 s early.
+      - {
+          id: b1-s3b,
+          type: whiteboard.apply,
+          at: { mark: b1-s3b },
+          upsertIds: [l17-b1-warn],
+          drawMs: 1600,
+        }
+
+  - id: toil-loop
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ၅၅ ရာခိုင်နှုန်းက ဘာလို့ အန္တရာယ် ရှိလဲ ဆိုတာ စက်ဝိုင်း တစ်ခုနဲ့ ကြည့်ရအောင်။ toil များလာရင် settlement ကို အမြစ်ကနေ ပြင်တာ၊ alert တွေ ရှင်းတာလို တကယ့် ဖြေရှင်းချက်တွေအတွက် အချိန် မကျန်တော့လို့ မပြင်ရသေးတဲ့ ပြဿနာတွေက toil အသစ်တွေ ထပ်မွေးပါတယ်။
+      [[mark:b2-s2]] ဒီလို ဆက်ဖြစ်နေတော့ လူတွေ burnout ဖြစ်ပြီး အတွေ့အကြုံ အများဆုံး လူတွေကစပြီး ထွက်သွားတတ်ပါတယ်။ [[mark:b2-s3]] သူတို့ရဲ့ toil က ကျန်တဲ့သူတွေဆီ ရောက်လာတော့ တစ်ယောက်ချင်း toil ပိုများပြီး စက်ဝိုင်းက ပိုမြန်မြန် လည်ပါတယ်။ ဒါကြောင့် ၅၅ ရာခိုင်နှုန်းက စိတ်ဓာတ် ကိစ္စ မဟုတ်ဘဲ feature အသစ်တွေကို နှေးစေတဲ့ business ပြဿနာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l17-b2-ring, l17-b2-arrow-top, l17-b2-arrow-right]
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l17-b2-toil, l17-b2-toil-t, l17-b2-notime, l17-b2-notime-t1, l17-b2-notime-t2]
+        drawMs: 1600
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l17-b2-burnout, l17-b2-burnout-t, l17-b2-leave, l17-b2-leave-t]
+        drawMs: 1600
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l17-b2-back, l17-b2-more-t1, l17-b2-more-t2]
+        drawMs: 1400
+
+  - id: toil-like-slo
+    chapter: Toil ကို SLO လို ဆက်ဆံပါ
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] စက်ဝိုင်းကို ဖြတ်ဖို့ Padauk က toil ကို SLO လိုပဲ ဆက်ဆံပါတယ်။ ပထမ အဆင့်က မသီရိရဲ့ တစ်ပတ်စာ မှတ်တမ်းလို အချိန် ဘယ်မှာ ကုန်နေလဲ တိုင်းတဲ့ toil audit ပါ၊ ဒီ အစ ကိန်းဂဏန်း မရှိရင် ပိုကောင်းလာလား သက်သေပြလို့ မရပါဘူး။
+      [[mark:show-p02b]] ပြီးတော့ toil target ထားပါတယ်၊ toil ကို သုည ဖြစ်အောင် မဟုတ်ဘဲ ဘယ်လောက်အထိ ရှိခွင့်ရှိလဲ ဆိုတဲ့ ပစ်မှတ်ပါ။ Padauk က ၃၅ ရာခိုင်နှုန်း ထားပြီး သုံးလတစ်ခါ ပြန်တိုင်းတဲ့အခါ ကျလာနေရပါမယ်။ အခု ၅၅ ရာခိုင်နှုန်းက ops အလုပ်ကို တစ်ဝက်မှာ ကန့်ထားတဲ့ lesson ၃ က စည်းကိုတောင် ကျော်နေပါပြီ။
+      [[mark:show-p02c]] page တွေကိုလည်း လက်ခံရတဲ့သူ ကိုယ်တိုင် တစ်ခုခု လုပ်နိုင်မှ ပို့ရပါတယ်။ ဥပမာ လုပ်ရမှာက payment အဖွဲ့ကို လှမ်းပြောရုံပဲ ဆိုရင် သူတို့ကိုပဲ တိုက်ရိုက် page ပို့ပြီး လုပ်စရာ မရှိတဲ့ page တွေကိုတော့ ပြင်မလား ဖျက်မလား တစ်ခုချင်း ဆုံးဖြတ်ပါတယ်။
+      [[mark:show-p02d]] toil ကို အရေးပေါ် ကိစ္စလို့ ကြေညာတာက ဖိအားပဲ တိုးပြီး လူ မတိုးလို့ အလုပ်မဖြစ်ပါဘူး။ လူ တစ်ယောက်ဆီ ပုံပေးထားရင် သူ burnout ဖြစ်ပြီး ကျန်တဲ့သူတွေ ဒုက္ခကို မမြင်ရတော့သလို လူသစ်ဆီ ပုံပေးတာလည်း onboarding မဟုတ်ပါဘူး။ အဲဒီအစား toil ကြီးတွေကို လူနဲ့ အချိန် ပေးထားတဲ့ project အဖြစ် လုပ်ပြီး ticket တစ်မျိုးလုံး ပျောက်အောင် ပြင်တာကို feature ထုတ်တာလိုပဲ ချီးကျူးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l17-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l17-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l17-p02c }
+      - { id: show-p02d, type: slide.show, at: { mark: show-p02d }, slideId: l17-p02d }
+
+  - id: why-automate
+    chapter: ဘာကြောင့် automate လုပ်မလဲ
+    narration: >
+      [[mark:show-p03]] toil ကို လျှော့တဲ့ နည်း တစ်ခုက automation ပါ၊ လူက လက်နဲ့ လုပ်နေရတဲ့ အလုပ်ကို software က အစား လုပ်ပေးတာပါ။ ပုံမှန်နေ့တွေမှာ နာရီတွေ သက်သာစေရုံ မကဘဲ outage မှာ မိနစ်တွေကို ချွေပေးပြီး ဖိအားကြားမှာလည်း အဆင့်တွေကို အမြဲ တစ်ပုံစံတည်း လုပ်ပေးပါတယ်။
+      [[mark:show-p03b]] ဥပမာ ၉၉.၉၉ ရာခိုင်နှုန်း၊ nine လေးလုံး ပစ်မှတ်က တစ်လကို outage လေးမိနစ်လောက်ပဲ ခွင့်ပြုလို့ on-call ကျနေသူ နိုးပြီး login ဝင်ဖို့တောင် မလောက်ပါဘူး။ အလွယ်ဆုံး အစကတော့ incident ကြေညာတာနဲ့ channel နဲ့ incident doc ဖွင့်ပေး၊ role တွေ ခွဲပေး၊ timeline မှတ်ပေးတဲ့ bot သေးသေးလေးပါ၊ ဒါဆို postmortem က တစ်ဝက်လောက် ရေးပြီးသား ဖြစ်နေပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l17-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l17-p03b }
+
+  - id: break-even
+    chapter: တွက်ခြေ ကိုက်လား
+    narration: >
+      [[mark:close-p03b]] [[mark:b3-s1]] automate လုပ်တိုင်းလည်း မတန်ပါဘူး။ မနက်တိုင်း operator တွေ ပို့တဲ့ settlement file ကို top-up စာရင်းနဲ့ spreadsheet ထဲမှာ တိုက်စစ်ရတာ မိနစ် ၂၅ ကြာပါတယ်။ [[mark:b3-s1b]] သုံးနှစ်ဆို နာရီ ၄၅၆ လောက် သက်သာပြီး tool ဆောက်တာ ထိန်းတာ ပေါင်း နာရီ ၁၈၈ လောက်ပဲ ကုန်မှာမို့ လုပ်သင့်တာ သေချာနေသလိုပါ။
+      [[mark:b3-s2]] တကယ်တော့ operator တွေက file format ကို တစ်နှစ် နှစ်ခါလောက် ပြောင်းလို့ ကုန်ကျစရိတ်က နာရီ ၃၆၈ လောက်ထိ တက်ပြီး အရင်း ပြန်ကျေတာ နောက်ကျသွားပါတယ်။ ဒီ တွက်ချက်မှုထဲမှာ ကန့်သတ်ချက်၊ check နဲ့ ရပ်တဲ့ ခလုတ်လို အကာအကွယ်တွေ ဆောက်ရတာနဲ့ ဝေဝါးတဲ့ signal ကို ယုံပြီး tool က မှားလုပ်မိတာတွေကို ပြန်ရှင်းရတာလည်း မပါသေးပါဘူး။
+      [[mark:b3-s3]] system ကို ပိတ်တဲ့နေ့မှာ သက်သာတာလည်း ရပ်သွားပါတယ်။ တကယ် ဆုံးဖြတ်ပေးခဲ့တာကတော့ ကိန်းဂဏန်းထက် top-up ပျောက်ရင် ဆုံးရှုံးမယ့် ငွေနဲ့ မနက်စောစော ထလုပ်ရတဲ့ ဒုက္ခပါ။
+      [[mark:close-b3]] [[mark:show-p03c]] Padauk က လက်နဲ့ အရင် လုပ်ရင်း ထူးခြားတဲ့ case တွေကို လေ့လာတယ်၊ ပြီးတော့ script ရေးပြီး ရလဒ်ကို လူက စစ်တယ်၊ နောက်မှ အဖွဲ့အတွက် အလိုအလျောက် run အောင် လုပ်ပါတယ်။ script နဲ့ လူ အဆင့်မှာ အမြဲ ရပ်နေရင် တစ်ပုံစံတည်းလည်း မဖြစ်၊ scale လည်း မရလို့ အရှုပ်ဆုံး နောက်ဆုံးပိုင်းကိုပါ အပြီးထိ လုပ်ရပါတယ်။
+      [[mark:show-p03d]] ဒါပေမဲ့ အကောင်းဆုံး အဖြေကတော့ operator တွေနဲ့ settlement API ချိတ်ပြီး မနက် တိုက်စစ်ရတဲ့ အလုပ်ကိုယ်တိုင် ပျောက်သွားအောင် system ကို ပြောင်းလိုက်တာပါ၊ ဒါက SRE အဖွဲ့ရဲ့ တကယ့် အလုပ်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      # The chart frame first (title, axis); then, from "in three years" on, the
+      # three years, the hours-saved bars and the build-and-upkeep bars, one
+      # after the other as the sentence names them, so no apply adds more than
+      # three labels.
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l17-b3-title, l17-b3-axis]
+      - id: b3-s1b
+        type: whiteboard.apply
+        at: { mark: b3-s1b }
+        upsertIds: [l17-b3-y1, l17-b3-y2, l17-b3-y3]
+        drawMs: 900
+      - id: b3-s1c
+        type: whiteboard.apply
+        at: { afterAction: b3-s1b }
+        upsertIds: [l17-b3-lg-save, l17-b3-s1, l17-b3-s2, l17-b3-s3]
+        drawMs: 1500
+      - id: b3-s1d
+        type: whiteboard.apply
+        at: { afterAction: b3-s1c }
+        upsertIds: [l17-b3-lg-cost, l17-b3-c1, l17-b3-c2, l17-b3-c3]
+        drawMs: 1500
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l17-b3-lg-fmt, l17-b3-f1, l17-b3-f2, l17-b3-f3]
+        drawMs: 1500
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l17-b3-retire, l17-b3-retire-t],
+          drawMs: 900,
+        }
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l17-p03c }
+      - { id: show-p03d, type: slide.show, at: { mark: show-p03d }, slideId: l17-p03d }
+
+  - id: automation-hurts
+    chapter: Automation ရဲ့ အန္တရာယ်
+    narration: >
+      [[mark:show-p04]] automation ကလည်း ဒီ နည်း သုံးမျိုးနဲ့ ထိခိုက်စေနိုင်ပါတယ်။ Eats မှာ rider တွေကို order ခွဲပေးတဲ့ dispatch service က memory leak ဖြစ်နေလို့ memory ၈၅ ရာခိုင်နှုန်း ရောက်တိုင်း restart လုပ်ပေးတဲ့ watchdog ထည့်ထားပါတယ်၊ တကယ့် fix က အပတ်တွေ ကြာမှာမို့ တစ်ရက် တစ်ခါဆို တန်ပါတယ်။
+      [[mark:show-p04b]] ဒါပေမဲ့ သင်္ကြန် promotion မှာ မိနစ် ၄၀ တိုင်း restart ဖြစ်ပြီး ခွဲပေးလက်စ order တွေ ပျောက်ကုန်ပေမဲ့ dashboard က အစိမ်းပဲ ပြနေပါတယ်။ automation က မမျှော်လင့်တာ လုပ်လို့ ဘာဖြစ်နေလဲ ဘယ်သူမှ ချက်ချင်း နားမလည်တာကို automation surprise လို့ ခေါ်ပါတယ်။ watchdog က ပျက်နေတဲ့ design ကိုလည်း ဖုံးထားလို့ deploy တွေထက် restart ပိုခဏခဏ ဖြစ်ရင် leak ပြင်တာကို စာရင်းထိပ်ဆုံး တင်ရပါမယ်။
+      [[mark:show-p04c]] ၁၉၈၃ မှာ Lisanne Bainbridge က ပျက်သွားတဲ့ automation ဆီက အလုပ်ကို ဝင်ယူရတာ လက်နဲ့ အစကနေ လုပ်တာထက် ပိုခက်တယ်၊ ရှားတဲ့ အရာကို ကြာကြာ စောင့်ကြည့်ဖို့လည်း လူတွေ မတော်ဘူးလို့ သတိထားမိခဲ့ပါတယ်။ automation ကောင်းလေ ခက်တဲ့ case တွေအတွက် လူ့ ကျွမ်းကျင်မှု ဆုံးလေ ဖြစ်တာကို ironies of automation လို့ ခေါ်ပါတယ်၊ watchdog ရှိလာကတည်းက dispatch ကို လက်နဲ့ ငြိမ်အောင် လုပ်တတ်တဲ့သူ နည်းလာသလိုပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+      - {
+          title: 'Bainbridge, "Ironies of Automation" (Automatica 19(6), 1983)',
+          url: "https://doi.org/10.1016/0005-1098(83)90046-8",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l17-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l17-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l17-p04c }
+
+  - id: safe-default
+    chapter: Input မပါရင် ဘာမှ မလုပ်နဲ့
+    narration: >
+      [[mark:close-p04c]] [[mark:b4-s1]] automation မှာ အန္တရာယ် အရှိဆုံး မေးခွန်း တစ်ခုက input မပါရင် ဘာလုပ်မလဲ ဆိုတာပါ။ promo SMS tool က user အုပ်စုနဲ့ မြို့ကို ရွေးပြီး voucher ပို့ပါတယ်။ [[mark:b4-s1b]] config ပြောင်းရင်း နှစ်ခုလုံး အလွတ် ဖြစ်သွားတော့ tool က အလွတ်ကို registered user အားလုံးလို့ ယူပြီး မနက် ၂ နာရီမှာ SMS သုံးသန်းလောက် ပို့လိုက်ပါတယ်။
+      [[mark:b4-s2]] ပြင်ပြီးတဲ့ tool ကတော့ input အလွတ်ဆိုရင် ဘာမှ မလုပ်ဘဲ ဘာ လိုနေလဲ ပြောတဲ့ error နဲ့ ငြင်းပါတယ်။ ဘာမှ မသတ်မှတ်ထားရင် ဘေးကင်းတဲ့ဘက်ကို ရွေးပေးတဲ့ ဒီ ပုံသေ အပြုအမူကို safe default လို့ ခေါ်ပါတယ်၊ input အလွတ်နဲ့ test လည်း လုပ်ထားရပါမယ်။
+      [[mark:b4-s3]] ဒီ tool က user သုံးသန်းဆီ ပို့နိုင်လို့ အကာအကွယ်တွေ လိုပါတယ်။ လက်ခံသူ အရေအတွက် ကန့်သတ်ချက်၊ တစ်မိနစ် ပို့နှုန်းကို ကန့်တဲ့ rate limit၊ မပို့ခင် ဘယ်နှယောက်ဆီ ရောက်မလဲ ပြတဲ့ dry run တွေ ထည့်ပြီး user အားလုံးကို ပို့ချင်ရင် အားလုံးလို့ သီးသန့် ရွေးရပါတယ်။ [[mark:b4-s3b]] tool က မလုပ်ခင် ပိုဆိုးစေမလား အရင် စစ်ပြီး ထူးဆန်းရင် ရပ်ပြီး လူကို မေးပါတယ်။ နားလည်ရ ခက်တဲ့ tool ကလည်း တစ်နေ့ မဟုတ် တစ်နေ့ outage ဖြစ်စေမှာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+    actions:
+      - { id: close-p04c, type: slide.close, at: { mark: close-p04c, offsetMs: -400 } }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l17-b4-src, l17-b4-src-t1, l17-b4-src-t2, l17-b4-src-t3]
+        drawMs: 1200
+      # The red lane lands as the narration says what the empty input did.
+      - id: b4-s1b
+        type: whiteboard.apply
+        at: { mark: b4-s1b }
+        upsertIds:
+          [
+            l17-b4-a1,
+            l17-b4-r1,
+            l17-b4-r1-t1,
+            l17-b4-r1-t2,
+            l17-b4-r1-t3,
+            l17-b4-a2,
+            l17-b4-r2,
+            l17-b4-r2-t1,
+            l17-b4-r2-t2,
+          ]
+        drawMs: 2400
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l17-b4-a3, l17-b4-g1, l17-b4-g1-t, l17-b4-a4, l17-b4-g2, l17-b4-g2-t]
+        drawMs: 1800
+      - {
+          id: b4-s3,
+          type: whiteboard.apply,
+          at: { mark: b4-s3 },
+          upsertIds: [l17-b4-guard1],
+          drawMs: 1400,
+        }
+      - {
+          id: b4-s3b,
+          type: whiteboard.apply,
+          at: { mark: b4-s3b },
+          upsertIds: [l17-b4-guard2],
+          drawMs: 1400,
+        }
+
+  - id: action-card
+    chapter: Action card
+    narration: >
+      [[mark:close-b4]] [[mark:b5-s1]] ဒါဆို automation ကို ဘယ်တော့ ကိုယ့်ဘာသာ လုပ်ခွင့် ပေးမလဲ? lesson ၁၀ မှာ Operator A နှေးလို့ backup endpoint ဆီ traffic ကို လက်နဲ့ လွှဲခဲ့ရပါတယ်။ [[mark:b5-s1b]] အခု failover bot ကို လွှဲသင့်ပြီလို့ အကြံပဲ ပေးခိုင်းထားတော့ ည ၄၀ မှာ ၃၈ ခါ မှန်ပြီး ၂ ခါပဲ မှားပါတယ်။
+      [[mark:b5-s2]] Padauk ရဲ့ action card က action တစ်ခုချင်းအတွက် အကြံပဲ ပေးမလား၊ အရင် မေးမလား၊ လုပ်ပြီးမှ ပြောမလား၊ လုံးဝ မလုပ်ရဘူးလား ဆိုတဲ့ mode၊ undo လုပ်နည်းနဲ့ ရပ်ရမယ့် အခြေအနေကို ရေးထားတဲ့ ကတ်ပါ။ [[mark:b5-s2b]] backup ဆီ လွှဲတဲ့ action အတွက် လုပ်ပြီးမှ ပြောခွင့်ကို ရက်စွဲကြောင့် မဟုတ်ဘဲ မှန်ခဲ့တဲ့ မှတ်တမ်းကြောင့် ရတာပါ၊ ဒါတောင် Operator A တစ်ခုအတွက်ပဲပါ။
+      [[mark:b5-s3]] ပင်မ endpoint ဆီ ပြန်ပြောင်းတာလို တချို့ အဆင့်တွေကိုတော့ တမင် လူ့လက်ထဲ ချန်ထားလို့ အမြဲ အရင် မေးရပါတယ်။ restore လုပ်တာကိုလည်း alert တစ်ခုတည်းနဲ့ ဘယ်တော့မှ မစပါဘူး၊ monitoring မှားတာ တစ်ခုနဲ့ alert အားလုံး တစ်ပြိုင်နက် တက်လာနိုင်လို့ပါ။ bot မှာလည်း ကိုယ်ပိုင် log နဲ့ dashboard ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B4 400 ms early, keep the panel open.
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b5-s1
+        type: whiteboard.apply
+        at: { mark: b5-s1 }
+        open: true
+        clear: true
+        upsertIds: [l17-b5-title, l17-b5-axis]
+      # The two bars land as the record is told, not ~10 s early.
+      - id: b5-s1b
+        type: whiteboard.apply
+        at: { mark: b5-s1b }
+        upsertIds: [l17-b5-ok, l17-b5-ok-t, l17-b5-bad, l17-b5-bad-t]
+        drawMs: 1400
+      - { id: b5-s2, type: whiteboard.apply, at: { mark: b5-s2 }, upsertIds: [l17-b5-card] }
+      # The first card row lands on the sentence that names the backup switch.
+      - id: b5-s2b
+        type: whiteboard.apply
+        at: { mark: b5-s2b }
+        upsertIds: [l17-b5-r1, l17-b5-r1-t, l17-b5-a1, l17-b5-m1, l17-b5-m1-t]
+        drawMs: 1800
+      - id: b5-s3
+        type: whiteboard.apply
+        at: { mark: b5-s3 }
+        upsertIds: [l17-b5-r2, l17-b5-r2-t, l17-b5-a2, l17-b5-m2, l17-b5-m2-t]
+        drawMs: 1800
+
+  - id: this-week
+    narration: >
+      [[mark:close-b5]] [[mark:show-p05]] ဒီအပတ်ကစပြီး ကိုယ့်အဖွဲ့ရဲ့ toil ကို တစ်ပတ် မှတ်ကြည့်ပါ။ script တစ်ခုကို input အလွတ် ရရင် ငြင်းအောင် ပြင်ပါ။ ပြီးတော့ အကြီးဆုံး project ထက် အမြန်ဆုံး ပြီးမယ့် အလုပ်ကနေ စပါ၊ ပြန်ရတဲ့ အချိန်ကို နောက် အလုပ်မှာ ထည့်သုံးတော့ အတိုးပေါ် အတိုး တက်သလို များလာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Eliminating Toil",
+          url: "https://sre.google/workbook/eliminating-toil/",
+        }
+    actions:
+      - {
+          id: close-b5,
+          type: whiteboard.apply,
+          at: { mark: close-b5, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l17-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] toil audit က ချန်ခဲ့တဲ့ သော့ချက်တွေပါ။ [[mark:sel-toil]] toil က လက်နဲ့ ထပ်ခါထပ်ခါ လုပ်ရပြီး service နဲ့အတူ ကြီးလာတဲ့၊ ရေရှည် တန်ဖိုး မကျန်တဲ့ အလုပ်ပါ။ [[mark:sel-toil-target]] toil target က toil ရှိခွင့် အများဆုံးကို SLO လို ထားတဲ့ ပစ်မှတ်ပါ။ [[mark:sel-safe-default]] safe default က input မပါရင် ဘာမှ မလုပ်ဘဲ ငြင်းတာပါ။
+      [[mark:sel-ironies]] ironies of automation က automation ကောင်းလေ ခက်တဲ့ case တွေအတွက် လူ့ ကျွမ်းကျင်မှု ဆုံးလေ ဖြစ်တာပါ။ [[mark:sel-action-card]] action card ကတော့ action တစ်ခုချင်းကို automation ဘယ်လောက်အထိ လုပ်ခွင့် ရှိလဲ ရေးထားတာပါ။
+      [[mark:sel-question]] တွက်ခြေ ကိုက်လား ကိုယ်တိုင် တွက်ကြည့်ပါ။ [[mark:ask-question]] နေ့တိုင်း မိနစ် ၂၀ ကြာတဲ့ အလုပ်ကို automate လုပ်ဖို့ နာရီ ၈၀ ကုန်မယ်ဆိုရင် ဘယ်တော့ အရင်း ပြန်ကျေမလဲ?
+      [[mark:pause-question]] တစ်လကို နာရီ ၁၀ လောက် သက်သာလို့ ထိန်းရတဲ့ အချိန် မထည့်ရင် ၈ လလောက်ပါ။ လစာထုတ်ရက် ညနေ တစ်ခုမှာ test တွေ အားလုံး အစိမ်းရောင်ပေမဲ့ တစ်ယောက်က console ထဲမှာ config ပြင်လိုက်တော့ Operator A ဆီ traffic လုံးဝ မရောက်တော့ပါဘူး။ test တွေက ဘာကို တစ်ခါမှ မကြည့်ခဲ့လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Eliminating Toil",
+          url: "https://sre.google/sre-book/eliminating-toil/",
+        }
+      - {
+          title: "SRE book, 1st ed: The Evolution of Automation at Google",
+          url: "https://sre.google/sre-book/automation-at-google/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-toil,
+          type: editor.select,
+          at: { mark: sel-toil },
+          target: { file: notes.md, text: "toil", occurrence: 1 },
+        }
+      - {
+          id: sel-toil-target,
+          type: editor.select,
+          at: { mark: sel-toil-target },
+          target: { file: notes.md, text: "toil target", occurrence: 1 },
+        }
+      - {
+          id: sel-safe-default,
+          type: editor.select,
+          at: { mark: sel-safe-default },
+          target: { file: notes.md, text: "safe default", occurrence: 1 },
+        }
+      - {
+          id: sel-ironies,
+          type: editor.select,
+          at: { mark: sel-ironies },
+          target: { file: notes.md, text: "ironies of automation", occurrence: 1 },
+        }
+      - {
+          id: sel-action-card,
+          type: editor.select,
+          at: { mark: sel-action-card },
+          target: { file: notes.md, text: "action card", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. sel-question marks where the voice script puts
+      # the select, but a select there would drag under the lead-in and the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more
+      # mark at an existing sentence end that makes the question its own dialog:
+      # it starts about as the question ends, its drag runs in silence, and the
+      # answer at pause-question waits for it. The question is 100 characters,
+      # so 7400 (400 + 100 x 70) would start the drag as the question ends at
+      # 70 ms per char, but anything above ~7270 trips compile-check's 2.5 s
+      # inserted-silence warning at 55; 7250 leaves about 2.8 / 1.3 / 0.35 s of
+      # quiet before the answer at 55 / 70 / 95 (at 95, and by 0.12 s at 70, the
+      # drag starts under the question's last words, as in lessons 7, 10 and 30).
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 7250 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: နေ့တိုင်း မိနစ် 20၊ automate လုပ်ဖို့ နာရီ 80။ ဘယ်တော့ အရင်း ပြန်ကျေမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
