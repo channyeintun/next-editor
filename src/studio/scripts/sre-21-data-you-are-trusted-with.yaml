@@ -1,0 +1,1209 @@
+# SRE from zero, lesson 21: Data you are trusted with (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-21-data-you-are-trusted-with.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-21-data-you-are-trusted-with.md \
+#     src/studio/scripts/sre-21-data-you-are-trusted-with.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The derived-data example is the wallet balance table (B1's "balance table"
+# store and its "derived" tag, l21_p02c, the recap question and notes.md), as
+# the voice script now has it.
+#
+# Six marks add no spoken text and sit at an existing ။ or ၊:
+# - b1-s1b splits B1 step 1 so no apply adds more than three labelled boxes:
+#   the request, the bus and the database first, then the cache and the
+#   balance table on the sentence that names them.
+# - b1-s3b and b1-s3c give B1's three tags a sentence each (original, derived,
+#   personal data), instead of "derived" and "personal data" landing 11-16 s
+#   before they are named.
+# - b3-s2b and b3-s3b land B3's bug-repair lane and its constraint box on the
+#   sentence that names each, instead of ~16 s and ~8 s early.
+# - ask-question sits after the recap question's ၊ pause so the question-line
+#   select can make the ⟪pause 3s⟫, as in lessons 3 and 5 (see
+#   select-question). sel-question is the voice script's ⟪select မေးခွန်း⟫; it
+#   only splits the recap's reconciliation line from the question.
+# Pacing: at 70 ms/char no page or board step holds longer than ~32 s (l21_p04
+# with its break-glass paragraph; l21_p03c 31 s, the cover 30 s), and the
+# longest dialog is 446 characters (l21_p04's), so no pacing page or step was
+# added.
+#
+# No board follows another board: a board followed by a deck page closes the
+# panel (open: false) 400 ms before the page, and a deck page followed by a
+# board closes the page 400 ms before, as in Module 1. Every board opens with
+# open + clear.
+#
+# Boards (B1 P2 comb, B2 P1 flow with a note under it, B3 P6 lanes). Colour
+# jobs: #1e1e1e ink (paints white) for the request box, the buses, the arrows
+# and the store names; blue the thing named (the six stores, soft delete, the
+# nightly check, the "derived" tag); green healthy or done (the "original"
+# tag, the designed reconciliation lane, the constraint); red failure or a hard
+# limit (hard delete and its deadline, silent fix-ups that hide bugs); orange
+# the caveat (the "personal data" tag, the TTL note, the bug-repair lane). B1
+# puts its six stores in two columns of three on one bus, as the voice script
+# asks: the bus carries on under the first column and up into the second (a
+# U-shaped bus), because there are no left or up arrows and an arrow from the
+# first bus could not reach the second column without crossing the first.
+# Each store box leaves room under its name for step 3's tag, a small outlined
+# label inside the box. B3's two lanes leave the nightly check through a short
+# bus, so both read as the two kinds of mismatch it finds. A label on two lines
+# is one text asset per line, so each line meets the 0.55 em width rule on its
+# own; every label was also measured in Chrome with Excalidraw's Virgil font
+# (wb-fit.mjs) and stays inside its box (Latin can run past the rule:
+# "database" is 133 px against the rule's 124, so its text box is 145 px wide).
+#
+# Deck pages: deck "Next Editor · SRE 5B · Capacity and data", published; the
+# /pub URL below is final. Its l21 pages are built later from the page plan, so
+# until then the Director reports page "l21_p01" missing from the published
+# deck (with the deck URL swapped for an unreachable one it validates: 36
+# dialogs, no critic notes). The voice script asks for l21_p02 as a plain
+# contrast with no teal "better" colouring (its right column is the harder
+# case); the page plan notes it. Page plan:
+# ~/Documents/sre-course/work/pages/sre-21-data-you-are-trusted-with.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-21-data-you-are-trusted-with.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-21-data-you-are-trusted-with.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-21-data-you-are-trusted-with
+  title: "SRE from zero 21: ယုံကြည်ပြီး အပ်ထားတဲ့ data"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # ယုံကြည်ပြီး အပ်ထားတဲ့ data
+
+        - ယုံကြည်ပြီး အပ်ထားတဲ့ data — ပြန်စလို့ မရ၊ tool မရွေးခင် business၊ ဥပဒေ၊ ကျင့်ဝတ်
+        - soft delete / hard delete — undo window အတွင်း ပြန်ယူလို့ရ / deadline မတိုင်ခင် လုံးဝ ဖျက်
+        - original / derived — ပြန်ထုတ်လို့ မရ / ပြန်ဆောက်လို့ရ၊ ကြာရင် original လို ကာကွယ်
+        - least privilege — လူရော service ရော လိုတဲ့ permission လောက်ပဲ
+        - reconciliation — design ထဲက ပုံမှန် တိုက်စစ်၊ bug repair ကို log ထားပြီး alert
+
+        မေးခွန်း: derived balance table ကို ပြန်ဆောက်ရင် 6 နာရီ ကြာတယ်။ backup ယူမလား?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ယုံကြည်ပြီး အပ်ထားတဲ့ data</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 21</p>
+              <h1>ယုံကြည်ပြီး အပ်ထားတဲ့ data</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l21-p01
+      contentType: google
+      name: "Cover: please delete my account"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p01
+    - id: l21-p02
+      contentType: google
+      name: Outage or data failure
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p02
+    - id: l21-p02b
+      contentType: google
+      name: Data people trust us with
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p02b
+    - id: l21-p02c
+      contentType: google
+      name: The balance table takes 6 hours
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p02c
+    - id: l21-p03
+      contentType: google
+      name: Know your data
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p03
+    - id: l21-p03b
+      contentType: google
+      name: What the class decides
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p03b
+    - id: l21-p03c
+      contentType: google
+      name: The copy on no list
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p03c
+    - id: l21-p04
+      contentType: google
+      name: Who can see it
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p04
+    - id: l21-p04b
+      contentType: google
+      name: "Test data, then and now"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p04b
+    - id: l21-p04c
+      contentType: google
+      name: Availability includes speed
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p04c
+    - id: l21-p05
+      contentType: google
+      name: Suppose the rule says
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p05
+    - id: l21-p05b
+      contentType: google
+      name: Eats wants to send ads
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p05b
+    - id: l21-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l21_p06
+  whiteboardAssets:
+    # ---- Board B1: where her data lives, one bus to six stores (P2 comb) -------
+    - {
+        id: l21-b1-src,
+        kind: rectangle,
+        x: 255,
+        y: 330,
+        width: 165,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-src-t1,
+        kind: text,
+        x: 268,
+        y: 343,
+        width: 145,
+        height: 35,
+        text: "ဖျက်ပေးပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-src-t2,
+        kind: text,
+        x: 268,
+        y: 382,
+        width: 120,
+        height: 35,
+        text: "request",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-a-src,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 424,
+        y: 360,
+        width: 34,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-bus,
+        kind: rectangle,
+        x: 462,
+        y: 210,
+        width: 10,
+        height: 375,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-a-db,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 476,
+        y: 240,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-db,
+        kind: rectangle,
+        x: 510,
+        y: 210,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-db-t,
+        kind: text,
+        x: 524,
+        y: 222,
+        width: 145,
+        height: 35,
+        text: "database",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-a-cache,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 476,
+        y: 360,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-cache,
+        kind: rectangle,
+        x: 510,
+        y: 330,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-cache-t,
+        kind: text,
+        x: 524,
+        y: 342,
+        width: 90,
+        height: 35,
+        text: "cache",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-a-bal,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 476,
+        y: 480,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-bal,
+        kind: rectangle,
+        x: 510,
+        y: 450,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-bal-t,
+        kind: text,
+        x: 524,
+        y: 462,
+        width: 205,
+        height: 35,
+        text: "balance table",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-bus-join,
+        kind: rectangle,
+        x: 462,
+        y: 575,
+        width: 335,
+        height: 10,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-bus2,
+        kind: rectangle,
+        x: 787,
+        y: 210,
+        width: 10,
+        height: 375,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-a-an,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 801,
+        y: 240,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-an,
+        kind: rectangle,
+        x: 835,
+        y: 210,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-an-t,
+        kind: text,
+        x: 849,
+        y: 222,
+        width: 145,
+        height: 35,
+        text: "analytics",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-a-log,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 801,
+        y: 360,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-log,
+        kind: rectangle,
+        x: 835,
+        y: 330,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-log-t,
+        kind: text,
+        x: 849,
+        y: 342,
+        width: 60,
+        height: 35,
+        text: "log",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-a-bk,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 801,
+        y: 480,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b1-bk,
+        kind: rectangle,
+        x: 835,
+        y: 450,
+        width: 245,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-bk-t,
+        kind: text,
+        x: 849,
+        y: 462,
+        width: 105,
+        height: 35,
+        text: "backup",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-tag-orig,
+        kind: rectangle,
+        x: 520,
+        y: 262,
+        width: 140,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l21-b1-tag-orig-t,
+        kind: text,
+        x: 530,
+        y: 265,
+        width: 125,
+        height: 35,
+        text: "original",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-tag-der,
+        kind: rectangle,
+        x: 520,
+        y: 502,
+        width: 125,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b1-tag-der-t,
+        kind: text,
+        x: 530,
+        y: 505,
+        width: 110,
+        height: 35,
+        text: "derived",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b1-tag-pers,
+        kind: rectangle,
+        x: 845,
+        y: 382,
+        width: 225,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l21-b1-tag-pers-t,
+        kind: text,
+        x: 855,
+        y: 385,
+        width: 205,
+        height: 35,
+        text: "personal data",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: soft, then hard (P1 flow) and the TTL note under it ---------
+    - {
+        id: l21-b2-soft,
+        kind: rectangle,
+        x: 260,
+        y: 265,
+        width: 330,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b2-soft-t1,
+        kind: text,
+        x: 276,
+        y: 278,
+        width: 175,
+        height: 35,
+        text: "soft delete",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b2-soft-t2,
+        kind: text,
+        x: 276,
+        y: 317,
+        width: 300,
+        height: 35,
+        text: "undo window: 14 ရက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b2-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 295,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b2-hard,
+        kind: rectangle,
+        x: 670,
+        y: 265,
+        width: 240,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l21-b2-hard-t1,
+        kind: text,
+        x: 686,
+        y: 278,
+        width: 175,
+        height: 35,
+        text: "hard delete",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b2-hard-t2,
+        kind: text,
+        x: 686,
+        y: 317,
+        width: 130,
+        height: 35,
+        text: "deadline",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b2-ttl,
+        kind: rectangle,
+        x: 260,
+        y: 435,
+        width: 650,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l21-b2-ttl-t1,
+        kind: text,
+        x: 276,
+        y: 448,
+        width: 500,
+        height: 35,
+        text: "TTL: soft delete အရင်၊ ပြင်လို့ရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b2-ttl-t2,
+        kind: text,
+        x: 276,
+        y: 487,
+        width: 455,
+        height: 35,
+        text: "အားလုံး တစ်ပြိုင်နက် ရပ်ခလုတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: the nightly check, two lanes off one bus (P6) ---------------
+    - {
+        id: l21-b3-check,
+        kind: rectangle,
+        x: 260,
+        y: 205,
+        width: 620,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l21-b3-check-t,
+        kind: text,
+        x: 276,
+        y: 218,
+        width: 545,
+        height: 35,
+        text: "ညတိုင်း: balance = cashback ledger?",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-bus,
+        kind: rectangle,
+        x: 285,
+        y: 267,
+        width: 10,
+        height: 158,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 299,
+        y: 300,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b3-recon,
+        kind: rectangle,
+        x: 347,
+        y: 290,
+        width: 640,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l21-b3-recon-t,
+        kind: text,
+        x: 363,
+        y: 302,
+        width: 605,
+        height: 35,
+        text: "reconciliation: design ထဲက နေ့စဉ် အလုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 299,
+        y: 395,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l21-b3-repair,
+        kind: rectangle,
+        x: 347,
+        y: 368,
+        width: 520,
+        height: 95,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l21-b3-repair-t1,
+        kind: text,
+        x: 363,
+        y: 378,
+        width: 485,
+        height: 35,
+        text: "bug repair: အသေးစိတ် သိမ်း၊ log",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-repair-t2,
+        kind: text,
+        x: 363,
+        y: 418,
+        width: 285,
+        height: 35,
+        text: "ပထမ တစ်ခုမှာ alert",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-silent,
+        kind: rectangle,
+        x: 260,
+        y: 500,
+        width: 300,
+        height: 95,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l21-b3-silent-t1,
+        kind: text,
+        x: 276,
+        y: 510,
+        width: 255,
+        height: 35,
+        text: "တိတ်တိတ် ပြင်ရင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-silent-t2,
+        kind: text,
+        x: 276,
+        y: 550,
+        width: 220,
+        height: 35,
+        text: "bug ကို ဖုံးမိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-constraint,
+        kind: rectangle,
+        x: 590,
+        y: 500,
+        width: 400,
+        height: 95,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l21-b3-constraint-t1,
+        kind: text,
+        x: 606,
+        y: 510,
+        width: 175,
+        height: 35,
+        text: "constraint:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l21-b3-constraint-t2,
+        kind: text,
+        x: 606,
+        y: 550,
+        width: 360,
+        height: 35,
+        text: "မှားတဲ့ write ကို ငြင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2621
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: ကျွန်မ account ကို ဖျက်ပေးပါ
+    narration: >
+      [[mark:show-p01]] Wallet က zone သုံးခုလုံးမှာ run နေပြီး အဖွဲ့တွေက server pool တစ်ခုကို မျှသုံးပါတယ်၊ load များရင် ဘာကို အရင် ပိတ်မလဲ ဆိုတဲ့ degradation profile လည်း ရေးထားပါတယ်။
+      သင်္ကြန် ပြင်ဆင်နေတုန်း မန္တလေးက ဆရာမ တစ်ယောက်က ကျွန်မ account ကို ပိတ်ပြီး data တွေ အားလုံး ဖျက်ပေးပါလို့ မစုရဲ့ support အဖွဲ့ဆီ စာ ရေးလာပါတယ်။ ဆရာမရဲ့ data တွေက တကယ်တော့ ဘယ်နေရာတွေမှာ ရှိနေလဲ၊ တခြား ဘယ်သူ့ဆီမှာ မိတ္တူ ရှိနေသေးလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l21-p01,
+        }
+
+  - id: cant-retry
+    chapter: ပြန်စလို့ မရတဲ့ ပြဿနာ
+    narration: >
+      [[mark:show-p02]] ဒီ မေးခွန်းက ဘာလို့ အရေးကြီးလဲ? outage မှာ user က ခဏ စောင့်ပြီး ပြန်ကြိုးစားလို့ ရပါတယ်၊ ပြင်လိုက်တာနဲ့ ပြဿနာလည်း ပြီးသွားပါတယ်။ data ပြဿနာကတော့ မတူပါဘူး။ ဥပမာ ဆရာမရဲ့ NRC ဓာတ်ပုံ ပေါက်သွားရင် ပြန်သိမ်းလို့ မရသလို မှားဖျက်မိတဲ့ data ကိုလည်း ကောင်းတဲ့ မိတ္တူ မရှိရင် ဘယ်တော့မှ ပြန်မရပါဘူး၊ မှားနေတဲ့ balance ကလည်း လိုက်ပြင်တဲ့အထိ မှားနေဆဲပါ။
+      [[mark:show-p02b]] outage မှာ စောင့်ပေးတဲ့ user တွေတောင် data ပြဿနာ ဖြစ်ရင်တော့ Padauk ကို ဆက်မယုံကြတော့ပါဘူး။ ဒါကြောင့် user တွေ ယုံကြည်ပြီး အပ်ထားတဲ့ data အတွက် tool မရွေးခင် business က ဘာလိုလဲ၊ ဥပဒေက ဘာတောင်းလဲ၊ ကျင့်ဝတ်အရ သင့်တော်လားလို့ အရင် မေးရပါတယ်။ ပြီးတော့ data မှန်ကန်မှု၊ integrity ကို speed နဲ့ cost အတွက် ဘယ်တော့မှ မလဲပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l21-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l21-p02b }
+
+  - id: where-she-lives
+    chapter: သူ့ data တွေ ဘယ်မှာ ရှိလဲ
+    narration: >
+      [[mark:close-p02b]] [[mark:b1-s1]] ဆရာမရဲ့ data တွေကို လိုက်ရှာကြည့်ရအောင်။ ပထမဆုံးက account နဲ့ ငွေလွှဲ မှတ်တမ်းတွေ ရှိတဲ့ database ပါ။ [[mark:b1-s1b]] cache ထဲမှာ သူ့ profile ရှိပြီး wallet လက်ကျန်ငွေတွေ သိမ်းတဲ့ balance table ထဲမှာလည်း သူ့ လက်ကျန်ငွေ ပါနေပါတယ်။
+      [[mark:b1-s2]] analytics ထဲမှာ သူ့ ငွေလွှဲမှုတွေ၊ log ထဲမှာ သူ့ ဖုန်းနံပါတ် ပါပြီး backup တွေထဲမှာတော့ အားလုံး ရှိနေပါသေးတယ်။ ရက် ၃၀ အတွင်း နေရာတိုင်းက ဖျက်ရမယ်လို့ စည်းမျဉ်းက ဆိုတယ် ဆိုပါစို့။ ဆိုတော့ ဖျက်တာက command တစ်ကြောင်း မဟုတ်ဘဲ နေရာ တစ်ခုချင်းမှာ deadline ကိုယ်စီ ရှိတဲ့ pipeline ဖြစ်သွားပါတယ်၊ backup တွေကိုလည်း အဲဒီ deadline ထက် ကြာကြာ သိမ်းလို့ မရတော့ပါဘူး။
+      [[mark:b1-s3]] ဒါပေမဲ့ နေရာတိုင်းကို တစ်ပုံစံတည်း ကာကွယ်ဖို့ မလိုပါဘူး။ database ထဲက data က user ဆီက တိုက်ရိုက် ရလာတဲ့ original data မို့ ပျောက်ရင် ပြန်မရပါဘူး။ [[mark:b1-s3b]] balance table ကတော့ database ကနေ ပြန်ဆောက်လို့ရတဲ့ derived data ပါ။ [[mark:b1-s3c]] log ကိုတော့ lesson ၈ မှာ တွေ့ခဲ့သလို personal data ပါတယ်လို့ အမှတ်အသား တပ်ထားပါတယ်။
+      [[mark:close-b1]] [[mark:show-p02c]] ပြန်ဆောက်တာ ကြာလွန်းရင်တော့ ကိစ္စ မတူတော့ပါဘူး။ balance table ကို အစကနေ ပြန်ဆောက်ရင် ၆ နာရီ ကြာပြီး အဲဒီ အတောအတွင်း လက်ကျန်ငွေ ပြလို့ မရတော့တဲ့အတွက် Padauk က အဲဒီ table ကို original data လိုပဲ ကာကွယ်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      # Step 1 in two: the request, the bus and the database first, then (b1-s1b)
+      # the cache and the balance table as the narration names them, so no apply
+      # adds more than three labelled boxes.
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l21-b1-src,
+            l21-b1-src-t1,
+            l21-b1-src-t2,
+            l21-b1-a-src,
+            l21-b1-bus,
+            l21-b1-a-db,
+            l21-b1-db,
+            l21-b1-db-t,
+          ]
+        drawMs: 2200
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [l21-b1-a-cache, l21-b1-cache, l21-b1-cache-t, l21-b1-a-bal, l21-b1-bal, l21-b1-bal-t]
+        drawMs: 1800
+      # Step 2: the bus carries on under the first column into the second.
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds:
+          [
+            l21-b1-bus-join,
+            l21-b1-bus2,
+            l21-b1-a-an,
+            l21-b1-an,
+            l21-b1-an-t,
+            l21-b1-a-log,
+            l21-b1-log,
+            l21-b1-log-t,
+            l21-b1-a-bk,
+            l21-b1-bk,
+            l21-b1-bk-t,
+          ]
+        drawMs: 2600
+      # Step 3: one tag per sentence (original, derived, personal data).
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l21-b1-tag-orig, l21-b1-tag-orig-t]
+        drawMs: 900
+      - id: b1-s3b
+        type: whiteboard.apply
+        at: { mark: b1-s3b }
+        upsertIds: [l21-b1-tag-der, l21-b1-tag-der-t]
+        drawMs: 900
+      - id: b1-s3c
+        type: whiteboard.apply
+        at: { mark: b1-s3c }
+        upsertIds: [l21-b1-tag-pers, l21-b1-tag-pers-t]
+        drawMs: 900
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l21-p02c }
+
+  - id: soft-then-hard
+    chapter: Soft delete နဲ့ hard delete
+    narration: >
+      [[mark:close-p02c]] [[mark:b2-s1]] ဖျက်တာကိုလည်း Padauk က နှစ်ဆင့် ခွဲလုပ်ပါတယ်။ ပထမဆင့် soft delete မှာတော့ data ကို app မှာ မပြတော့ပေမဲ့ ၁၄ ရက် ဆက်ထားပါတယ်။ ဆရာမ စိတ်ပြောင်းရင်ဖြစ်ဖြစ်၊ Padauk ဘက်က မှားဖျက်မိရင်ဖြစ်ဖြစ် ပြန်ယူလို့ရတဲ့ ဒီ ကာလကို undo window လို့ ခေါ်ပါတယ်။
+      [[mark:b2-s2]] ဒုတိယဆင့် hard delete ကတော့ deadline မတိုင်ခင် နေရာတိုင်းကနေ လုံးဝ ဖျက်ပစ်တာပါ။ pipeline က နေရာတိုင်းမှာ ဖျက်ပြီးပြီလား စစ်ပေးပြီး တစ်နေရာမှာ ကြာနေရင် alert တက်ပါတယ်။
+      [[mark:b2-s3]] တချို့ data ကိုတော့ သက်တမ်း ကုန်တာနဲ့ အလိုအလျောက် ဖျက်ပါတယ်၊ ဒီ သက်တမ်းကို time to live၊ TTL လို့ ခေါ်ပါတယ်။ TTL မှားရင် data တွေ သတိမထားမိခင် ပျောက်သွားနိုင်ပါတယ်။ ဒါကြောင့် Padauk ရဲ့ TTL က data ကို soft delete ထဲ အရင် ပို့လို့ မှားနေရင် ပြင်ချိန် ရပါတယ်၊ bug တစ်ခုက မှားဖျက်လာရင် TTL ဖျက်တာ အားလုံးကို တစ်ပြိုင်နက် ရပ်လို့ရတဲ့ ခလုတ်လည်း ရှိပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds: [l21-b2-soft, l21-b2-soft-t1, l21-b2-soft-t2]
+        drawMs: 1400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds: [l21-b2-a1, l21-b2-hard, l21-b2-hard-t1, l21-b2-hard-t2]
+        drawMs: 1400
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l21-b2-ttl, l21-b2-ttl-t1, l21-b2-ttl-t2]
+        drawMs: 1800
+
+  - id: know-your-data
+    chapter: ကိုယ့် data ကို သိပါ
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] ဒါဆို data တစ်မျိုးချင်းကို ဘယ်လောက် ဂရုစိုက်မလဲ? original လား derived လား၊ ဘယ်လောက် တန်ဖိုးရှိလဲ၊ ပေါက်ကြားရင် ဘယ်လောက် ထိခိုက်မလဲလို့ မေးရပါတယ်။ NRC နံပါတ်၊ လိပ်စာ၊ မွေးနေ့လို data ကိုတော့ ခိုင်လုံတဲ့ အကြောင်းပြချက်နဲ့ review ရှိမှပဲ စုပါတယ်။ ဖုန်းနံပါတ်ကို hash လုပ်ထားရင်တောင် နံပါတ် တစ်ခုက hash တစ်ခုတည်းပဲ ထွက်လို့ record တွေကို ချိတ်ပြီး ဘယ်သူလဲ သိနိုင်နေသေးပါတယ်။
+      [[mark:show-p03b]] ဒီလို ခွဲလိုက်တဲ့ အမျိုးအစားကပဲ ဘယ်လောက် ကြာကြာ သိမ်းမလဲ၊ ဘယ်သူ ကြည့်ခွင့် ရှိလဲ၊ backup နဲ့ restore ကို ဘယ်လို လုပ်မလဲ ဆိုတာကို ဆုံးဖြတ်ပေးပါတယ်။ ဥပမာ ledger ကို backup ယူပေမဲ့ အဲဒီကနေ ပြန်ထုတ်လို့ရတဲ့ ပြေစာ PDF တွေကိုတော့ မယူပါဘူး။ Padauk က data တိုင်းရဲ့ အမျိုးအစားနဲ့ owner ကို data catalog တစ်ခုမှာ စာရင်းလုပ်ပါတယ်၊ နောက်တစ်ခါ ဖျက်ခိုင်းရင် လိုက်ရှာစရာ မလိုအောင်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l21-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l21-p03b }
+
+  - id: test-server-copy
+    chapter: Test server ပေါ်က မိတ္တူ
+    narration: >
+      [[mark:show-p03c]] catalog ရေးနေရင်း မသီရိက စာရင်းထဲ မပါတဲ့ မိတ္တူ တစ်ခုကို တွေ့သွားပါတယ်။ developer တစ်ယောက်က bug တစ်ခု ရှာဖို့ တကယ့် wallet data တွေကို အဖွဲ့တိုင်း သုံးတဲ့ test server ပေါ် ကူးထားပြီး ဖျက်ဖို့ မေ့သွားခဲ့တာပါ၊ ဆရာမရဲ့ data လည်း ပါပါတယ်။ ဖျက်တဲ့ pipeline က ဒီ မိတ္တူကို မသိသလို test server ကို ဝင်လို့ရတဲ့ သူတိုင်း user တွေရဲ့ balance ကို မြင်နေရပါတယ်။ developer ကို အပြစ်တင်စရာ မဟုတ်ပါဘူး၊ test data မရှိလို့ အလွယ်ဆုံး လမ်းကို ရွေးခဲ့တာပါ။
+      [[mark:show-p04]] ဒါပေမဲ့ user တွေက ကိုယ့် data ကို ဘယ်သူ မြင်လဲ ဆိုတာကို အရမ်း ဂရုစိုက်ကြလို့ Padauk က လူရော service ရော တကယ် လိုတဲ့ permission လောက်ပဲ ပေးတဲ့ least privilege ကို စည်းမျဉ်းအဖြစ် ထားပါတယ်။ ဥပမာ support က ငွေလွှဲ အခြေအနေကို မြင်ရပေမဲ့ NRC ဓာတ်ပုံကို မမြင်ရပါဘူး။
+      user data ကို တကယ် ကြည့်ဖို့ လိုလာရင်တော့ break-glass ဆိုတဲ့ အရေးပေါ် လမ်းနဲ့ account တစ်ခုတည်းကို တစ်နာရီလောက်ပဲ ဖွင့်ရပြီး ကြည့်တဲ့သူ ကိုယ်တိုင်တောင် ဖျက်လို့ မရတဲ့ မှတ်တမ်း ကျန်ပါတယ်။
+      [[mark:show-p04b]] test မှာ production data သုံးရင် engineer တွေမှာ permission အများကြီး ဆက်ရှိနေရပြီး script တစ်ခု မှားတာနဲ့ တကယ့် data ပျက်နိုင်ပါတယ်။ ဒါကြောင့် Padauk က တကယ့် user data မဟုတ်တဲ့ synthetic test data ကို သုံးပြီး test instance တွေကို ပုံမှန် ရှင်းပစ်ပါတယ်၊ sandbox အသစ်တွေကိုလည်း production နဲ့ မရောနိုင်တဲ့ နာမည် ပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l21-p03c }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l21-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l21-p04b }
+
+  - id: nightly-check
+    chapter: ညတိုင်း တိုက်စစ်တာ
+    narration: >
+      [[mark:close-p04b]] [[mark:b3-s1]] account မပိတ်ခင် ဆရာမရဲ့ wallet ထဲက ငွေကို သူ့ bank ဆီ ပြန်လွှဲရပါမယ်၊ ဒါဆို အဲဒီ balance က မှန်ရဲ့လား? integrity ဆိုတာ ဒီ balance လို data က တကယ် ဖြစ်ခဲ့တဲ့ ငွေအဝင်အထွက်နဲ့ အမြဲ အတိအကျ ကိုက်နေတာပါ။ Padauk က wallet balance တွေကို cashback ledger နဲ့ ညတိုင်း တိုက်စစ်ပါတယ်၊ ဒီလို တိုက်စစ်ပြီး မကိုက်တာကို ပြင်တာကို reconciliation လို့ ခေါ်ပါတယ်။
+      [[mark:b3-s2]] မကိုက်တာ နှစ်မျိုး ရှိပါတယ်။ cashback ကို ledger ထဲ ချက်ချင်း ရေးပေမဲ့ balance ထဲကိုတော့ နာရီတိုင်း batch နဲ့ ထည့်တာမို့ batch တစ်ခု fail ရင် ညဘက် job က ဖြည့်ပေးပါတယ်၊ ဒါက design ထဲမှာ ကြိုသိထားတဲ့ ပုံမှန် reconciliation ပါ။ [[mark:b3-s2b]] bug ကြောင့် မကိုက်တာကို ပြင်တာကတော့ repair ပါ၊ အဲဒါကို အသေးစိတ် မှတ်ပြီး log ထားရသလို ငွေ data မှာဆို ပထမဆုံး repair ကတည်းက alert တက်ရပါမယ်။
+      [[mark:b3-s3]] job တစ်ခုက မကိုက်တာကို တိတ်တိတ်လေး ပြင်ပေးနေရင်တော့ dashboard က အစိမ်းရောင် ပြနေပေမဲ့ bug ကိုတော့ ဖုံးထားမိပါတယ်။ [[mark:b3-s3b]] မှားတဲ့ write ကို ဝင်ကတည်းက တားတာကလည်း အလွယ်ဆုံး ကာကွယ်နည်းပါ၊ balance သုညအောက် မရောက်ရဘူး ဆိုတဲ့ စည်းမျဉ်းကို database မှာ constraint အဖြစ် ထားရင် database ကိုယ်တိုင် ငြင်းပေးပါတယ်။
+      [[mark:close-b3]] [[mark:show-p04c]] data အတွက် availability ဆိုတာမှာ မြန်တာလည်း ပါပါတယ်။ ledger က နည်းနည်း နှေးပါစေ၊ ဘယ်က ဖတ်ဖတ် မှန်နေတဲ့ consistency ကို အရင်လိုပြီး Eats menu ကတော့ speed ကို အရင်လိုပါတယ်။ user အတွက် timeout ဖြစ်နေတဲ့ menu က မရှိတဲ့ menu နဲ့ အတူတူမို့ data ရဲ့ SLO မှာ latency ကိုလည်း ထည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Critical State",
+          url: "https://sre.google/sre-book/managing-critical-state/",
+        }
+    actions:
+      - { id: close-p04b, type: slide.close, at: { mark: close-p04b, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l21-b3-check, l21-b3-check-t]
+        drawMs: 1200
+      # Each lane lands as the narration reaches it: reconciliation, then (b3-s2b) repair.
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l21-b3-bus, l21-b3-a1, l21-b3-recon, l21-b3-recon-t]
+        drawMs: 1600
+      - id: b3-s2b
+        type: whiteboard.apply
+        at: { mark: b3-s2b }
+        upsertIds: [l21-b3-a2, l21-b3-repair, l21-b3-repair-t1, l21-b3-repair-t2]
+        drawMs: 1600
+      # The silent fix-up first, then (b3-s3b) the constraint beside it.
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l21-b3-silent, l21-b3-silent-t1, l21-b3-silent-t2]
+        drawMs: 1400
+      - id: b3-s3b
+        type: whiteboard.apply
+        at: { mark: b3-s3b }
+        upsertIds: [l21-b3-constraint, l21-b3-constraint-t1, l21-b3-constraint-t2]
+        drawMs: 1400
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l21-p04c }
+
+  - id: suppose-rule
+    chapter: စည်းမျဉ်းက ဒီလို ဆိုတယ် ဆိုပါစို့
+    narration: >
+      [[mark:show-p05]] data နဲ့ ဘာလုပ်ခွင့် ရှိလဲ ဆိုတာကိုလည်း စည်းမျဉ်းတွေက ကန့်သတ်ပါတယ်။ lesson ၄ ကလိုပဲ NRC နံပါတ် ပါတဲ့ data ကို ပြည်တွင်းမှာပဲ ထားရမယ် ဆိုပါစို့။ ဒီ data residency စည်းမျဉ်းက disaster မှာလည်း မပြောင်းလို့ region တစ်ခုလုံး ပျက်ရင်တောင် ဒီ data ကို ပြည်ပ ရွှေ့ပြီး ကယ်လို့ မရတာကို playbook ထဲမှာ ကြိုရေးထားရပါတယ်။
+      [[mark:show-p05b]] data ကို စုခဲ့တဲ့ အကြောင်းအတွက်ပဲ သုံးရမယ် ဆိုတဲ့ စည်းမျဉ်းလည်း ရှိနိုင်ပါတယ်။ ဥပမာ Eats က wallet ငွေသုံးပုံကို ကြည့်ပြီး ကြော်ငြာ ပို့ချင်ရင် ငွေလွှဲဖို့ စုခဲ့တဲ့ data မို့ user ကို အရင် မေးရပါမယ်။ တကယ့် စည်းမျဉ်းကိုတော့ ကိုယ့်ဘာသာ မှန်းမယူဘဲ ရှေ့နေနဲ့ အတူ ရှာပါ။ ဥပဒေက အနည်းဆုံး အဆင့်ပဲ ဖြစ်ပြီး ကျင့်ဝတ်က အဲဒီထက် မြင့်လို့ user တွေ သိရင် သဘောကျပါ့မလားလို့လည်း မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l21-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l21-p05b }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] ကိုယ့် user တွေ အပ်ထားတဲ့ data အတွက် ဒီအပတ် လုပ်နိုင်တာ သုံးခုပါ။ test server၊ laptop၊ spreadsheet လို production အပြင် ရောက်နေတဲ့ production data ကို ရှာကြည့်ပါ။ user တစ်ယောက်ရဲ့ data ဘယ်နေရာတွေမှာ ရှိလဲ ချရေးကြည့်ပါ။ ပြီးတော့ အမြဲ ဖွင့်ထားတဲ့ admin access တစ်ခုကို ပိတ်ပြီး လိုမှ break-glass နဲ့ ယူခိုင်းပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l21-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] ဆရာမရဲ့ စာ တစ်စောင်က data အကြောင်း အများကြီး သင်ပေးခဲ့ပါတယ်။ [[mark:sel-entrusted]] ယုံကြည်ပြီး အပ်ထားတဲ့ data က ပျက်ရင် outage လို ပြန်စလို့ မရလို့ tool မရွေးခင် business၊ ဥပဒေ၊ ကျင့်ဝတ် မေးခွန်းတွေကို အရင် မေးရပါတယ်။ [[mark:sel-soft-delete]] soft delete က ပြန်ယူလို့ရအောင် ခဏ ထားတာ၊ hard delete က deadline မတိုင်ခင် လုံးဝ ဖျက်ပစ်တာပါ။
+      [[mark:sel-original-derived]] original data ကို ပြန်ထုတ်လို့ မရပေမဲ့ derived data ကို ပြန်ဆောက်လို့ ရပါတယ်။ [[mark:sel-least-privilege]] least privilege က တကယ် လိုတဲ့ permission လောက်ပဲ ပေးတာပါ။ [[mark:sel-reconciliation]] reconciliation က ပုံမှန် တိုက်စစ်တာ ဖြစ်ပြီး bug ကြောင့် ပြင်ရတဲ့ repair မှာတော့ log ထားပြီး alert တက်ရပါမယ်။ [[mark:sel-question]] derived data ဖြစ်တဲ့ balance table တစ်ခုကို ပြန်ဆောက်ရင် ၆ နာရီ ကြာတယ် ဆိုပါစို့၊ [[mark:ask-question]] backup ယူထားမလား၊ မယူဘဲ ထားမလား?
+      [[mark:pause-question]] ယူထားသင့်ပါတယ်၊ ပြန်ဆောက်နေတဲ့ ၆ နာရီလုံး product ကို သုံးလို့ မရလို့ပါ။ လကုန် စာရင်းပိတ်တော့ cashback bug တစ်ခုက Padauk ရဲ့ အဟောင်းဆုံး backup ထက်တောင် စောပြီး စခဲ့တာ တွေ့ရပါတယ်။ နောက်ပြန် ဘယ်အထိ သွားလို့ ရမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-entrusted,
+          type: editor.select,
+          at: { mark: sel-entrusted },
+          target: { file: notes.md, text: "ယုံကြည်ပြီး အပ်ထားတဲ့ data", occurrence: 2 },
+        }
+      - {
+          id: sel-soft-delete,
+          type: editor.select,
+          at: { mark: sel-soft-delete },
+          target: { file: notes.md, text: "soft delete", occurrence: 1 },
+        }
+      - {
+          id: sel-original-derived,
+          type: editor.select,
+          at: { mark: sel-original-derived },
+          target: { file: notes.md, text: "original / derived", occurrence: 1 },
+        }
+      - {
+          id: sel-least-privilege,
+          type: editor.select,
+          at: { mark: sel-least-privilege },
+          target: { file: notes.md, text: "least privilege", occurrence: 1 },
+        }
+      - {
+          id: sel-reconciliation,
+          type: editor.select,
+          at: { mark: sel-reconciliation },
+          target: { file: notes.md, text: "reconciliation", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause (as in lessons 3 and 5). sel-question marks where
+      # the voice script puts the select, but a select there would drag under the
+      # question and leave no pause, and one at pause-question would drag under the
+      # answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more mark
+      # after the question's ၊ pause, so the dialog it follows is only the
+      # question's last part (32 characters): the select starts about as the
+      # question ends, its drag runs in silence, and the answer at pause-question
+      # waits for it. 3500 leaves about 2.8 / 2.3 / 1.5 s before the answer at
+      # 55 / 70 / 95 ms per char; an offset above ~3530 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 3500 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: derived balance table ကို ပြန်ဆောက်ရင် 6 နာရီ ကြာတယ်။ backup ယူမလား?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
