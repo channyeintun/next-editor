@@ -1,0 +1,1590 @@
+# SRE from zero, lesson 32: The road ahead (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-32-the-road-ahead.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-32-the-road-ahead.md \
+#     src/studio/scripts/sre-32-the-road-ahead.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: Padauk's year-end review, where three months of uptime said nothing
+# ahead of the outage (cover); board B1, unfixed risks rising while uptime
+# stays level (leading vs trailing); board B2, Thiri's risk sheet and one fix
+# in the shared config service; pages, what Padauk kept and changed; board B3,
+# the release train replaced by one pipeline and one canary per change; pages,
+# the catalog entry before any deploy, supervising agents, what Padauk learned
+# to value, Thiri the generalist; board B4, the whole course on the Padauk
+# loop; your next step; recap on notes.md.
+#
+# Nine marks add no spoken text and sit at an existing ။, ၊ or ?:
+# - b1-lesson1 only splits B1 step 3's narration at its paragraph break (one
+#   454-character dialog would pass the 450-character limit; no action uses it).
+# - b1-s1b, b2-s5b and b3-s1b land a board piece on the sentence that names it
+#   (the three risk bars, the design-review label, "which one broke it?")
+#   instead of 12-15 s early.
+# - b3-s2b splits B3 step 2 so no apply adds more than three labelled boxes:
+#   change, tests and 1% with the pipeline sentences, then all and the green
+#   "caught alone" label with the sentence that says so.
+# - b4-s2b, b4-s3b and b4-s3c give each station of B4 its own check as the
+#   narration reaches it, as lesson 2's loop does; b4-s3b and b4-s3c sit after
+#   the ၊ pauses of the one sentence that walks respond, learn and build.
+# - ask-question sits after the recap question's ၊ pause so the question-line
+#   select can make the ⟪pause 3s⟫, as in lesson 3 (see select-question).
+# Pacing: at 70 ms/char no page or board step holds longer than ~33 s (B1
+# step 3 with the lesson-1 paragraph), so no pacing page or step was added.
+#
+# ⟪board B2 step 1⟫ follows board B1 with no ⟪close board⟫, so it opens with
+# open + clear like every new board (the panel is still open), as lesson 6's
+# B3 does, and B2 step 4 wipes the bars (clear) because the voice script marks
+# it "cleared". A board followed by a deck page closes the panel (open: false)
+# 400 ms before the page, and a deck page followed by a board closes the page
+# 400 ms before, as in Module 1.
+#
+# Boards (B1 and B2 P5 bars, B2 step 4 a row of teams on one platform slab, B3
+# P6 lanes, B4 P3 ring). Colour jobs: #1e1e1e ink (paints white) for titles,
+# axes, arrows, the source box, the bar categories, "trailing" and the loop's
+# station names; blue the thing named and the data series (the risk bars and
+# "leading", the incident bars, the teams, the per-change pipeline, the loop's
+# stations); green healthy or done (the level uptime months, the shared config
+# service, the bad change caught alone, the people and the checks); red
+# failure (the 99.71% month, the circled biggest pattern, the release train
+# and "which one broke it?"); orange the caveat (keep looking: the two
+# risk-finding labels); violet the result or flow (× 600 each alone, the
+# loop's ring and arrows). Titles, axes and B4's loop are furniture and land
+# without drawMs. B4 re-draws lesson 1's loop as furniture (its seven labels
+# land at once; the steps add only checks and the hub circle) at lesson 1's
+# coordinates, its သတိထားမိ and တည်ဆောက် stations as lesson 1 widened them
+# around their centres; only the သဘောတူ, သတိထားမိ and တည်ဆောက် label boxes
+# are wider than lesson 1's (by 20, 15 and 30 px), and every check sits 10-15 px
+# clear of its station. Every label meets the 0.55 em rule and was measured in
+# Chrome with Excalidraw's Virgil font: it stays inside the box it sits in, and
+# no label box is narrower than its measured text. A label on two lines is two
+# text assets, one per line: the overflow rule counts a whole text's length.
+#
+# Deck pages: deck "Next Editor · SRE 6B · Where you work, and what's next",
+# published. Its l32 pages are built later from the page plan, so until then
+# the Director reports page "l32_p01" missing from the published deck. Page
+# plan: ~/Documents/sre-course/work/pages/sre-32-the-road-ahead.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-32-the-road-ahead.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-32-the-road-ahead.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-32-the-road-ahead
+  title: "SRE from zero 32: SRE ရဲ့ ရှေ့ခရီး"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # SRE ရဲ့ ရှေ့ခရီး
+
+        - leading indicator — outage မဖြစ်ခင် ကြိုပြတဲ့ အချက်၊ risk လို
+        - risk sheet — risk တွေကို နေရာ တစ်ခု၊ အမျိုးအစားနဲ့ စု၊ အကြီးဆုံး ပုံစံကို တစ်ခါ ပြင်
+        - service catalog — service တိုင်းရဲ့ owner နဲ့ dependency၊ deploy မလုပ်ခင်
+        - generalist — principle တွေနဲ့ agent တွေကို လမ်းညွှန်တဲ့ SRE
+        - reliability loop — သဘောတူ → သတိထားမိ → တုံ့ပြန် → သင်ယူ → တည်ဆောက်၊ အလယ်မှာ လူတွေ
+
+        မေးခွန်း: ကိုယ့်အဖွဲ့က loop ရဲ့ ဘယ်အဆင့်မှာ အားအနည်းဆုံးလဲ? ဒီအပတ် လုပ်နိုင်တဲ့ ခြေလှမ်း တစ်ခုက ဘာလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>SRE ရဲ့ ရှေ့ခရီး</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 32</p>
+              <h1>SRE ရဲ့ ရှေ့ခရီး</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l32-p01
+      contentType: google
+      name: "Cover: uptime said nothing ahead"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p01
+    - id: l32-p01b
+      contentType: google
+      name: "Wallet uptime, the last three months"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p01b
+    - id: l32-p02
+      contentType: google
+      name: "What we kept, what we changed"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p02
+    - id: l32-p02b
+      contentType: google
+      name: "Why this work matters more"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p02b
+    - id: l32-p02c
+      contentType: google
+      name: "Services 35 to 90"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p02c
+    - id: l32-p03
+      contentType: google
+      name: "Before any deploy"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p03
+    - id: l32-p03b
+      contentType: google
+      name: "Supervising is work"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p03b
+    - id: l32-p04
+      contentType: google
+      name: "What Padauk learned to value"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p04
+    - id: l32-p04b
+      contentType: google
+      name: "Thiri's principle check"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p04b
+    - id: l32-p04c
+      contentType: google
+      name: "Generalist"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p04c
+    - id: l32-p04d
+      contentType: google
+      name: "Toil 45% to 15%"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p04d
+    - id: l32-p05
+      contentType: google
+      name: "Your next step"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTPha97WhPPq9fJLxvmTgai7c5Iejkw-naj2xC1prRy0FX29TJi0dsSB60zkBWfTx8wRrbEjbN1aY0L/pub"
+      pageId: l32_p05
+  whiteboardAssets:
+    # ---- Board B1: unfixed risks rise while uptime stays level, two bar groups (P5) ----
+    - {
+        id: l32-b1-title,
+        kind: text,
+        x: 275,
+        y: 160,
+        width: 360,
+        height: 45,
+        text: "မပြင်ရသေးတဲ့ risk",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l32-b1-axis1,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 505,
+        width: 330,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b1-r1,
+        kind: rectangle,
+        x: 300,
+        y: 444,
+        width: 70,
+        height: 96,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b1-r1-n,
+        kind: text,
+        x: 318,
+        y: 404,
+        width: 50,
+        height: 35,
+        text: "12",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-r2,
+        kind: rectangle,
+        x: 405,
+        y: 388,
+        width: 70,
+        height: 152,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b1-r2-n,
+        kind: text,
+        x: 423,
+        y: 348,
+        width: 50,
+        height: 35,
+        text: "19",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-r3,
+        kind: rectangle,
+        x: 510,
+        y: 324,
+        width: 70,
+        height: 216,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b1-r3-n,
+        kind: text,
+        x: 528,
+        y: 284,
+        width: 50,
+        height: 35,
+        text: "27",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-up-title,
+        kind: text,
+        x: 690,
+        y: 160,
+        width: 320,
+        height: 45,
+        text: "Wallet uptime",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l32-b1-axis2,
+        kind: freedraw,
+        stroke: underline,
+        x: 690,
+        y: 505,
+        width: 390,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b1-u1,
+        kind: rectangle,
+        x: 720,
+        y: 340,
+        width: 70,
+        height: 200,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l32-b1-u1-n,
+        kind: text,
+        x: 700,
+        y: 300,
+        width: 115,
+        height: 35,
+        text: "99.94%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-u2,
+        kind: rectangle,
+        x: 850,
+        y: 340,
+        width: 70,
+        height: 200,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: l32-b1-u2-n,
+        kind: text,
+        x: 830,
+        y: 300,
+        width: 115,
+        height: 35,
+        text: "99.95%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-u3,
+        kind: rectangle,
+        x: 980,
+        y: 440,
+        width: 70,
+        height: 100,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l32-b1-u3-n,
+        kind: text,
+        x: 960,
+        y: 400,
+        width: 115,
+        height: 35,
+        text: "99.71%",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-leading,
+        kind: text,
+        x: 380,
+        y: 228,
+        width: 135,
+        height: 35,
+        text: "leading",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b1-trailing,
+        kind: text,
+        x: 815,
+        y: 228,
+        width: 145,
+        height: 35,
+        text: "trailing",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # ---- Board B2: Thiri's risk sheet, incidents by kind (P5 bars), then one fix under every team ----
+    - {
+        id: l32-b2-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 230,
+        height: 45,
+        text: "risk sheet",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l32-b2-src,
+        kind: rectangle,
+        x: 275,
+        y: 218,
+        width: 520,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b2-src-t,
+        kind: text,
+        x: 290,
+        y: 228,
+        width: 495,
+        height: 35,
+        text: "postmortem 31 · near miss 12",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 505,
+        width: 800,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b2-k1,
+        kind: rectangle,
+        x: 305,
+        y: 400,
+        width: 70,
+        height: 140,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-k1-t,
+        kind: text,
+        x: 288,
+        y: 562,
+        width: 140,
+        height: 35,
+        text: "retry: 7",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-k2,
+        kind: rectangle,
+        x: 495,
+        y: 440,
+        width: 70,
+        height: 100,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-k2-t,
+        kind: text,
+        x: 454,
+        y: 562,
+        width: 185,
+        height: 35,
+        text: "capacity: 5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-k3,
+        kind: rectangle,
+        x: 685,
+        y: 380,
+        width: 70,
+        height: 160,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-k3-t,
+        kind: text,
+        x: 660,
+        y: 562,
+        width: 145,
+        height: 35,
+        text: "တခြား: 8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-k4,
+        kind: rectangle,
+        x: 885,
+        y: 320,
+        width: 70,
+        height: 220,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-k4-t,
+        kind: text,
+        x: 828,
+        y: 562,
+        width: 245,
+        height: 35,
+        text: "config push: 11",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-k4-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 845,
+        y: 300,
+        width: 150,
+        height: 255,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l32-b2-team1,
+        kind: rectangle,
+        x: 335,
+        y: 215,
+        width: 200,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-team1-t,
+        kind: text,
+        x: 393,
+        y: 232,
+        width: 110,
+        height: 35,
+        text: "Wallet",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-team2,
+        kind: rectangle,
+        x: 575,
+        y: 215,
+        width: 200,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-team2-t,
+        kind: text,
+        x: 628,
+        y: 232,
+        width: 110,
+        height: 35,
+        text: "Top-up",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-team3,
+        kind: rectangle,
+        x: 815,
+        y: 215,
+        width: 200,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b2-team3-t,
+        kind: text,
+        x: 880,
+        y: 232,
+        width: 80,
+        height: 35,
+        text: "Eats",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-slab,
+        kind: rectangle,
+        x: 335,
+        y: 305,
+        width: 680,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b2-slab-t1,
+        kind: text,
+        x: 355,
+        y: 320,
+        width: 380,
+        height: 35,
+        text: "shared config service",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-slab-t2,
+        kind: text,
+        x: 355,
+        y: 362,
+        width: 470,
+        height: 35,
+        text: "check + zone အလိုက် rollout",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-pm,
+        kind: text,
+        x: 335,
+        y: 450,
+        width: 490,
+        height: 35,
+        text: 'postmortem: "တွေ့ခဲ့တဲ့ risk"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b2-review,
+        kind: text,
+        x: 335,
+        y: 505,
+        width: 430,
+        height: 35,
+        text: "design review: လူ + agent",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: the weekly release train, then one pipeline per change (P6 lanes) ----
+    - {
+        id: l32-b3-train,
+        kind: rectangle,
+        x: 270,
+        y: 180,
+        width: 560,
+        height: 115,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l32-b3-train-t1,
+        kind: text,
+        x: 290,
+        y: 197,
+        width: 400,
+        height: 35,
+        text: "အပတ်စဉ် release train:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-train-t2,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 300,
+        height: 35,
+        text: "ပြောင်းလဲမှု ~600",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-which,
+        kind: text,
+        x: 290,
+        y: 312,
+        width: 355,
+        height: 35,
+        text: "ဘယ်ဟာက ပျက်စေတာလဲ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-c1,
+        kind: rectangle,
+        x: 262,
+        y: 410,
+        width: 130,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b3-c1-t,
+        kind: text,
+        x: 282,
+        y: 427,
+        width: 100,
+        height: 35,
+        text: "change",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 396,
+        y: 425,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b3-c2,
+        kind: rectangle,
+        x: 440,
+        y: 410,
+        width: 115,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b3-c2-t,
+        kind: text,
+        x: 459,
+        y: 427,
+        width: 85,
+        height: 35,
+        text: "tests",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 559,
+        y: 425,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b3-c3,
+        kind: rectangle,
+        x: 603,
+        y: 410,
+        width: 85,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b3-c3-t,
+        kind: text,
+        x: 628,
+        y: 427,
+        width: 50,
+        height: 35,
+        text: "1%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 692,
+        y: 425,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l32-b3-c4,
+        kind: rectangle,
+        x: 736,
+        y: 410,
+        width: 85,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l32-b3-c4-t,
+        kind: text,
+        x: 762,
+        y: 427,
+        width: 50,
+        height: 35,
+        text: "all",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-caught,
+        kind: text,
+        x: 476,
+        y: 495,
+        width: 380,
+        height: 35,
+        text: "ပျက်တာ တစ်ခုတည်း ဖမ်းမိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-each-t1,
+        kind: text,
+        x: 845,
+        y: 408,
+        width: 120,
+        height: 35,
+        text: "× 600၊",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b3-each-t2,
+        kind: text,
+        x: 845,
+        y: 445,
+        width: 250,
+        height: 35,
+        text: "တစ်ခုစီ သီးသန့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board B4: the Padauk reliability loop (P3) in lesson 1's layout, then one check per station ----
+    - {
+        id: l32-b4-title,
+        kind: text,
+        x: 280,
+        y: 160,
+        width: 470,
+        height: 45,
+        text: "Padauk reliability loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l32-b4-ring,
+        kind: ellipse,
+        x: 430,
+        y: 250,
+        width: 500,
+        height: 330,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l32-b4-agree,
+        kind: rectangle,
+        x: 605,
+        y: 222,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l32-b4-agree-label,
+        kind: text,
+        x: 618,
+        y: 232,
+        width: 130,
+        height: 35,
+        text: "သဘောတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-notice,
+        kind: rectangle,
+        x: 835,
+        y: 336,
+        width: 166,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l32-b4-notice-label,
+        kind: text,
+        x: 848,
+        y: 346,
+        width: 145,
+        height: 35,
+        text: "သတိထားမိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-respond,
+        kind: rectangle,
+        x: 752,
+        y: 520,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l32-b4-respond-label,
+        kind: text,
+        x: 765,
+        y: 530,
+        width: 130,
+        height: 35,
+        text: "တုံ့ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-learn,
+        kind: rectangle,
+        x: 458,
+        y: 520,
+        width: 150,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l32-b4-learn-label,
+        kind: text,
+        x: 471,
+        y: 530,
+        width: 110,
+        height: 35,
+        text: "သင်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-build,
+        kind: rectangle,
+        x: 353,
+        y: 336,
+        width: 178,
+        height: 56,
+        strokeColor: "#1971c2",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l32-b4-build-label,
+        kind: text,
+        x: 366,
+        y: 346,
+        width: 160,
+        height: 35,
+        text: "တည်ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-arrow-top,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 768,
+        y: 252,
+        width: 60,
+        height: 30,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l32-b4-arrow-right,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 910,
+        y: 420,
+        width: 30,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l32-b4-doll-head,
+        kind: ellipse,
+        x: 658,
+        y: 335,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-doll-body,
+        kind: ellipse,
+        x: 643,
+        y: 381,
+        width: 74,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-people,
+        kind: text,
+        x: 643,
+        y: 458,
+        width: 95,
+        height: 35,
+        text: "လူတွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l32-b4-check-agree,
+        kind: freedraw,
+        stroke: check,
+        x: 770,
+        y: 196,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-check-notice,
+        kind: freedraw,
+        stroke: check,
+        x: 1011,
+        y: 342,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-check-respond,
+        kind: freedraw,
+        stroke: check,
+        x: 912,
+        y: 526,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-check-learn,
+        kind: freedraw,
+        stroke: check,
+        x: 404,
+        y: 526,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-check-build,
+        kind: freedraw,
+        stroke: check,
+        x: 299,
+        y: 342,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l32-b4-hub-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 610,
+        y: 312,
+        width: 160,
+        height: 205,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2632
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: နှစ်ကုန် review
+    narration: >
+      [[mark:show-p01]] ညသန်းခေါင် incident နောက်မှာ Padauk က incident commander ရဲ့ လုပ်ပိုင်ခွင့်၊ အကာအကွယ် ပါတဲ့ break-glass access နဲ့ vendor ရှေ့က gateway ကို ရလာခဲ့ပါတယ်။ ဒီ နောက်ဆုံး lesson မှာတော့ နှစ်ကုန် review ကနေ Site Reliability Engineering၊ SRE ရဲ့ ရှေ့ခရီးကို ကြည့်ပါမယ်။
+      [[mark:show-p01b]] review က Wallet ရဲ့ နောက်ဆုံး သုံးလ uptime နဲ့ စပါတယ်။ ပထမ နှစ်လက ၉၉.၉၄ နဲ့ ၉၉.၉၅ ရာခိုင်နှုန်း ဆိုတော့ အားလုံး စိတ်အေးနေခဲ့ကြပါတယ်။ ဒါပေမဲ့ တတိယလမှာ config ပြောင်းလဲမှု တစ်ခုကို zone အားလုံးဆီ တစ်ပြိုင်နက် push လုပ်လိုက်တော့ ငွေလွှဲတာ ၂ နာရီလောက် ရပ်သွားပြီး ၉၉.၇၁ ရာခိုင်နှုန်းကို ကျသွားပါတယ်။ ဘာလို့ ကြိုမမြင်ခဲ့ကြတာလဲလို့ ကိုနေလင်းက မေးပါတယ်။ uptime က ရှေ့ကို ဘာမှ မပြောခဲ့ရင် ဘာက ကြိုပြောနိုင်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+      - {
+          title: "The Evolution of SRE at Google (USENIX ;login:)",
+          url: "https://usenix.org/publications/loginonline/evolution-sre-google",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l32-p01,
+        }
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l32-p01b }
+
+  - id: leading-trailing
+    chapter: Leading နဲ့ trailing
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] ဒီ မေးခွန်းကို ဖြေဖို့ မသီရိက incident ပြီးတိုင်း ဘာဖြစ်ခဲ့လဲ ပြန်ရေးတဲ့ postmortem တွေနဲ့ ကံကောင်းလို့သာ incident မဖြစ်ခဲ့တဲ့ near miss တွေကို ပြန်ကြည့်ပါတယ်။ [[mark:b1-s1b]] တွေ့ထားပြီး မပြင်ရသေးတဲ့ risk တွေက outage မတိုင်ခင်ကတည်းက ၁၂ ခု၊ ၁၉ ခု၊ ၂၇ ခု ဆိုပြီး လတိုင်း တက်လာနေခဲ့တာပါ။
+      [[mark:b1-s2]] uptime ကတော့ ပထမ နှစ်လ ငြိမ်နေပြီး outage ဖြစ်တော့မှပဲ ကျသွားပါတယ်။ risk တွေ စုလာနေတုန်း uptime လို availability ကိန်းဂဏန်းတွေက မလှုပ်ဘဲ user တွေ တကယ် ထိခိုက်ပြီးမှပဲ ပြောင်းတာပါ။
+      [[mark:b1-s3]] ဒီလို ဖြစ်ပြီးမှ တိုင်းလို့ရတဲ့ ကိန်းဂဏန်းကို trailing indicator၊ risk လို ပြဿနာ မဖြစ်ခင် ကြိုပြတဲ့ အချက်ကို leading indicator လို့ ခေါ်ပါတယ်။ availability ကို တိုင်းတဲ့ SLO အများစုလည်း trailing indicator တွေပါ၊ အသုံးမဝင်လို့ မဟုတ်ဘဲ ဖြစ်ပြီးသားကိုပဲ ပြနိုင်လို့ပါ။
+      [[mark:b1-lesson1]] lesson ၁ မှာ သင်္ကြန် အကြိုည ပြီးတော့ Padauk ရေးခဲ့တဲ့ ဖြတ်လမ်း အကြွေး စာရင်းကို မှတ်မိသေးလား? အဲဒါက Padauk ရဲ့ ပထမဆုံး risk စာရင်းပါ၊ အကြွေးနဲ့ risk က outage မတိုင်ခင် အရင် ပေါ်တတ်လို့ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The Evolution of SRE at Google (USENIX ;login:)",
+          url: "https://usenix.org/publications/loginonline/evolution-sre-google",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      # The title and axis are furniture; the three risk bars land on the sentence
+      # that gives their numbers (b1-s1b), not ~12 s early.
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l32-b1-title, l32-b1-axis1],
+        }
+      - {
+          id: b1-s1b,
+          type: whiteboard.apply,
+          at: { mark: b1-s1b },
+          upsertIds: [l32-b1-r1, l32-b1-r1-n, l32-b1-r2, l32-b1-r2-n, l32-b1-r3, l32-b1-r3-n],
+          drawMs: 1800,
+        }
+      - {
+          id: b1-s2,
+          type: whiteboard.apply,
+          at: { mark: b1-s2 },
+          upsertIds: [l32-b1-up-title, l32-b1-axis2],
+        }
+      - {
+          id: b1-s2-draw,
+          type: whiteboard.apply,
+          at: { afterAction: b1-s2 },
+          upsertIds: [l32-b1-u1, l32-b1-u1-n, l32-b1-u2, l32-b1-u2-n, l32-b1-u3, l32-b1-u3-n],
+          drawMs: 2000,
+        }
+      # trailing first, as the narration names it first.
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l32-b1-trailing, l32-b1-leading],
+          drawMs: 1400,
+        }
+
+  - id: risk-sheet
+    chapter: မသီရိရဲ့ risk sheet
+    narration: >
+      [[mark:b2-s1]] မသီရိက တစ်နှစ်စာ postmortem ၃၁ ခုနဲ့ near miss ၁၂ ခုထဲက တွေ့သမျှ risk ကို spreadsheet တစ်ခုထဲ စုပါတယ်။ risk တစ်ခုချင်း ဘယ်လောက် ဖြစ်နိုင်လဲ၊ ဖြစ်ရင် ဘယ်လောက် ထိခိုက်မလဲ ရေးထားတဲ့ ဒီ စာရင်းက risk sheet ပါ။
+      [[mark:b2-s2]] ပြီးတော့ incident နဲ့ risk တစ်ခုစီကို retry၊ capacity လို ကြိုသတ်မှတ်ထားတဲ့ အမျိုးအစား တစ်ခုစီ ပေးပါတယ်။ incident ၃၁ ခုကို ရေတွက်ကြည့်တော့ retry ကြောင့် ၇ ခု၊ capacity မလောက်လို့ ၅ ခု၊ တခြား ၈ ခု ထွက်လာပါတယ်။
+      [[mark:b2-s3]] ကျန်တဲ့ ၁၁ ခုကတော့ config ကို check မလုပ်ဘဲ နေရာတိုင်းဆီ တစ်ပြိုင်နက် push လုပ်တာကနေ လာပါတယ်။ အဖွဲ့တိုင်းမှာ push ပုံ ကိုယ်စီ ရှိလို့ မတူသလို ထင်ရပေမဲ့ incident သုံးခုမှာ တစ်ခုလောက်က ပုံစံ တစ်ခုတည်းကနေ လာနေတာပါ။
+      [[mark:b2-s4]] ဒါကြောင့် အဖွဲ့တိုင်းကို သီးသန့် ပြင်ခိုင်းမယ့်အစား Wallet၊ Top-up၊ Eats အားလုံး သုံးတဲ့ shared config service ထဲမှာ check နဲ့ zone တစ်ခုပြီးမှ တစ်ခု ဖြန့်တဲ့ rollout ကို တစ်ခါတည်း ထည့်လိုက်ပါတယ်။ ဒါက lesson ၂၅ က shift down၊ reliability အလုပ်ကို developer တစ်ယောက်ချင်းဆီ မပုံဘဲ platform ထဲ ထည့်ပေးတာပါ၊ developer တိုင်းကို အကုန် သယ်ခိုင်းရင် ဘယ်သူမှ မနိုင်လို့ပါ။
+      [[mark:b2-s5]] risk ရှာတာကိုလည်း ဆက်လုပ်ရပါတယ်။ အခု postmortem တိုင်းရဲ့ အဆုံးမှာ တွေ့ခဲ့တဲ့ risk တွေ ဆိုတဲ့ ခေါင်းစဉ် ပါလာပြီး ဒီ incident နဲ့ မဆိုင်တဲ့ risk ကိုတောင် ချရေးပါတယ်။ [[mark:b2-s5b]] design review မှာလည်း လူတွေရော agent တွေပါ risk အသစ်တွေ ထပ်ရှာပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "The Evolution of SRE at Google (USENIX ;login:)",
+          url: "https://usenix.org/publications/loginonline/evolution-sre-google",
+        }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+    actions:
+      # B2 is a new board, so it opens with open + clear like every new board (the
+      # panel is still open from B1, as in lesson 6); its title, source box and axis
+      # are furniture.
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l32-b2-title, l32-b2-src, l32-b2-src-t, l32-b2-axis],
+        }
+      - {
+          id: b2-s2,
+          type: whiteboard.apply,
+          at: { mark: b2-s2 },
+          upsertIds: [l32-b2-k1, l32-b2-k1-t, l32-b2-k2, l32-b2-k2-t, l32-b2-k3, l32-b2-k3-t],
+          drawMs: 2200,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l32-b2-k4, l32-b2-k4-t, l32-b2-k4-circle],
+          drawMs: 1800,
+        }
+      # Step 4 is "cleared": the bars go, and the three teams land first, then
+      # (afterAction) the shared config service under them, so no apply adds more
+      # than three labelled boxes.
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          clear: true,
+          upsertIds:
+            [
+              l32-b2-team1,
+              l32-b2-team1-t,
+              l32-b2-team2,
+              l32-b2-team2-t,
+              l32-b2-team3,
+              l32-b2-team3-t,
+            ],
+          drawMs: 1500,
+        }
+      - {
+          id: b2-s4b,
+          type: whiteboard.apply,
+          at: { afterAction: b2-s4 },
+          upsertIds: [l32-b2-slab, l32-b2-slab-t1, l32-b2-slab-t2],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-s5,
+          type: whiteboard.apply,
+          at: { mark: b2-s5 },
+          upsertIds: [l32-b2-pm],
+          drawMs: 1000,
+        }
+      # The design-review label lands on the sentence that says it.
+      - {
+          id: b2-s5b,
+          type: whiteboard.apply,
+          at: { mark: b2-s5b },
+          upsertIds: [l32-b2-review],
+          drawMs: 1000,
+        }
+
+  - id: kept-changed
+    chapter: ထိန်းထားတာနဲ့ ပြောင်းလိုက်တာ
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] နောက်နှစ်အတွက် ဘာ ပြင်ဆင်ရမလဲလို့ ကိုနေလင်း မေးတော့ မသီရိက အဖြေကို နှစ်ပိုင်း ခွဲပြပါတယ်။ လူကို အပြစ်မရှာတဲ့ blameless review၊ user journey ပေါ်က SLO နဲ့ ပြဿနာ ရှိရင် rollback ကို အရင်လုပ်တဲ့ အလေ့အထကို ဆက်ထိန်းထားပါတယ်။ ပြောင်းသွားတာကတော့ code ကို ဘယ်သူ ရေးလဲ၊ service ဘယ်နှခု run လဲ ဆိုတာနဲ့ အပတ်စဉ် release train ပါ။
+      [[mark:show-p02b]] လူတွေက မိဘဆီ ငွေပို့တာလို နေ့စဉ် ကိစ္စတွေကို Padauk နဲ့ လုပ်လာလေ ပျက်တဲ့ တစ်မိနစ်ရဲ့ တန်ဖိုး ကြီးလာလေမို့ ဒီ အလုပ်က နှစ်တိုင်း ပိုအရေးကြီးလာမှာပါ။ ရှေ့ကို ဘယ်သူမှ တိတိကျကျ မသိနိုင်လို့ သတိနဲ့ပဲ ခန့်မှန်းရပေမဲ့ ဒီနေ့ အလေ့အထတွေ သက်သက်နဲ့တော့ agent တွေ ပါလာတဲ့ နောက်တစ်ဆင့်မှာ မလုံလောက်ပါဘူး။ user တွေ ယုံလို့ရတဲ့ service ဆိုတဲ့ ပန်းတိုင်က မပြောင်းပေမဲ့ အဲဒီကို ရောက်တဲ့ နည်းတွေကိုတော့ ပြန်စဉ်းစားနေရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l32-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l32-p02b }
+
+  - id: release-train
+    chapter: Release train
+    narration: >
+      [[mark:close-p02b]] [[mark:b3-s1]] ဥပမာ Padauk ရဲ့ အပတ်စဉ် release train က တစ်ပတ်လုံးက ပြောင်းလဲမှုတွေကို တစ်တွဲတည်း စုပြီး တစ်ရက်တည်းမှာ ထုတ်ပါတယ်။ coding agent တွေ ရောက်လာတော့ တစ်တွဲမှာ ပြောင်းလဲမှုက ၉၀ လောက်ကနေ ၆၀၀ လောက် ဖြစ်လာပါတယ်။ [[mark:b3-s1b]] ငွေလွှဲ တချို့ fail လာတဲ့ ပတ်မှာ ဘယ်ဟာကြောင့်လဲ ရှာရတာ နာရီနဲ့ချီ ကြာပြီး တစ်တွဲလုံး rollback လုပ်ရင်လည်း Bank X စောင့်နေတဲ့ fix ကိုပါ ပြန်ဖြုတ်ရမှာပါ။
+      [[mark:b3-s2]] ဒါကြောင့် Padauk က train ကို ဖျက်ပြီး ပြောင်းလဲမှု တစ်ခုချင်းကို ကိုယ်ပိုင် pipeline နဲ့ ပို့ပါတယ်။ test တွေ အောင်ရင် canary အဆင့် ရောက်ပါတယ်၊ version အသစ်ကို traffic ၁ ရာခိုင်နှုန်းဆီ အရင် ပို့ပြီး version ဟောင်းနဲ့ နှိုင်းယှဉ်တဲ့ အဆင့်ပါ။ [[mark:b3-s2b]] ကောင်းမှ အားလုံးဆီ ဖြန့်ပြီး ပျက်နေရင် အဲဒီ တစ်ခုတည်းကို ဖမ်းမိလို့ သူ့ကိုပဲ rollback လုပ်ပါတယ်။
+      [[mark:b3-s3]] ဒီ လမ်းကြောင်းကို ပြောင်းလဲမှု ၆၀၀ လုံးက တစ်ခုစီ သီးသန့် ဖြတ်ပါတယ်။ code များလာလေ release ကို သေးသေးလေးတွေ ခွဲထုတ်ရလေ ဖြစ်ပြီး လူ့ အမြန်နှုန်းအတွက် ဆောက်ထားတဲ့ tool တွေကိုလည်း agent တွေနဲ့ ကိုက်အောင် ပြန်ဒီဇိုင်း ဆွဲရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - { id: close-p02b, type: slide.close, at: { mark: close-p02b, offsetMs: -400 } }
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l32-b3-train, l32-b3-train-t1, l32-b3-train-t2],
+          drawMs: 1600,
+        }
+      # "Which one broke it?" lands as the narration asks it.
+      - {
+          id: b3-s1b,
+          type: whiteboard.apply,
+          at: { mark: b3-s1b },
+          upsertIds: [l32-b3-which],
+          drawMs: 1000,
+        }
+      # Step 2 in two: change, tests and 1% with the pipeline sentences, then
+      # all and the green caught-alone label with the sentence that says so.
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds:
+            [
+              l32-b3-c1,
+              l32-b3-c1-t,
+              l32-b3-a1,
+              l32-b3-c2,
+              l32-b3-c2-t,
+              l32-b3-a2,
+              l32-b3-c3,
+              l32-b3-c3-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: b3-s2b,
+          type: whiteboard.apply,
+          at: { mark: b3-s2b },
+          upsertIds: [l32-b3-a3, l32-b3-c4, l32-b3-c4-t, l32-b3-caught],
+          drawMs: 1800,
+        }
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l32-b3-each-t1, l32-b3-each-t2],
+          drawMs: 1200,
+        }
+
+  - id: before-deploy
+    chapter: Deploy မလုပ်ခင်
+    narration: >
+      [[mark:close-b3]] [[mark:show-p02c]] agent တွေကြောင့် service တွေလည်း ၃၅ ခုကနေ ၉၀ အထိ များလာပါတယ်။ တစ်ညမှာ top-up တွေ နှေးလို့ on-call က လိုက်ရှာတော့ top-up လမ်းကြောင်းထဲမှာ agent ဆောက်ခဲ့တဲ့ operator balance checker ဆိုတဲ့ service ကို တွေ့ပါတယ်။ owner မရှိလို့ ဘယ်သူ့ကို နှိုးရမလဲ၊ ဘာက သူ့ကို မှီနေလဲ ဘယ်သူမှ မသိပါဘူး။
+      [[mark:show-p03]] ဒါကြောင့် အခု ဘယ် service မဆို deploy မလုပ်ခင် owner၊ အရေးပါမှုနဲ့ dependency တွေကို စာရင်းလုပ်ထားတဲ့ service catalog ထဲမှာ entry ရှိရပါမယ်။ နာမည်ပါတဲ့ owner နဲ့ rollback လုပ်နည်း မပါရင် pipeline က deploy ကို လက်မခံပါဘူး။
+      [[mark:show-p03b]] agent တွေ production ထဲမှာ ကိုယ်တိုင် အလုပ်လုပ်လာတာက ရှေ့လာမယ့် အကြီးဆုံး ပြောင်းလဲမှု ဖြစ်နိုင်ပြီး လူတွေက ကိုယ်တိုင် လုပ်တာကနေ ကြီးကြပ်တာဆီ ရွှေ့လာပါတယ်။ ကြီးကြပ်တယ် ဆိုတာ ထိုင်ကြည့်နေရုံ မဟုတ်ဘဲ ပန်းတိုင် ပေးတာ၊ အထောက်အထား စစ်တာ၊ approve လုပ်တာ၊ လိုရင် ရပ်လိုက်တာပါ။ မကြုံဖူးတဲ့ ပြဿနာ အသစ်တွေကိုတော့ လူတွေကပဲ ဝင်ယူရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l32-p02c }
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l32-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l32-p03b }
+
+  - id: learned-to-value
+    chapter: Padauk တန်ဖိုးထားလာတာ
+    narration: >
+      [[mark:show-p04]] review အဆုံးမှာ မသီရိက Padauk တန်ဖိုးထားလာတဲ့ အရာ သုံးခုကို ရေးပါတယ်။ မသိတာကို မသိဘူးလို့ ဖွင့်ပြောတာ၊ တခြားသူ ဆက်လုပ်နိုင်အောင် စာနဲ့ ချရေးတာနဲ့ ဘေးကင်းတဲ့ လမ်းကို အလွယ်ဆုံး လမ်း ဖြစ်အောင် လုပ်တာပါ။ ဒါဆိုရင် reliability က မှတ်ထားရမယ့် စည်းကမ်း မဟုတ်တော့ဘဲ အလိုလို ရနေတဲ့ default ဖြစ်လာပါတယ်။
+      [[mark:show-p04b]] မသီရိရဲ့ အလုပ်လည်း ပြောင်းသွားပါတယ်။ သင်္ကြန် မတိုင်ခင် သူ မထိဖူးတဲ့ rider dispatch system ကို စစ်ရတော့ code ကို ထိုင်ဖတ်မယ့်အစား agent တွေကို ဒီသင်တန်းက principle တွေနဲ့ စစ်ခိုင်းပါတယ်။ call တိုင်းမှာ timeout ရှိလား၊ load များရင် request တချို့ကို ငြင်းတဲ့ load shedding ရှိလား၊ deploy တိုင်း canary ကို ဖြတ်လား၊ အရန်လမ်း fallback ရှိလား ဆိုတာပါ။
+      [[mark:show-p04c]] agent တွေ ယူလာတဲ့ အထောက်အထားကို ကြည့်ပြီး မသီရိက သင်္ကြန် မတိုင်ခင် ပြင်မယ့် နှစ်ခုကို ရွေးပါတယ်။ ဒီလို နယ်ပယ် တစ်ခုတည်းမှာ နက်တာထက် system အများကြီးကို principle တွေနဲ့ ကြည့်ပြီး agent တွေကို လမ်းညွှန်တဲ့ SRE ကို generalist လို့ ခေါ်ပါတယ်။ ဘာကြောင့်လဲ မေးတတ်တာ၊ အလွှာ အများကြီးကို နည်းနည်းစီ သိတာနဲ့ အဖြေ မရှင်းချိန်မှာ ကောင်းကောင်း ဆုံးဖြတ်တတ်တာကတော့ ဘယ်ခေတ်မှာမဆို အသုံးဝင်ပါတယ်။
+      [[mark:show-p04d]] service တွေ များလာတုန်း toil က ၄၅ ရာခိုင်နှုန်းအထိ ပြန်တက်ခဲ့ပေမဲ့ အခု ၁၅ ရာခိုင်နှုန်းပဲ ကျန်ပြီး တစ်ပတ်ကို page ဝင်တာလည်း ၂၀ ကနေ ၆ ခုအထိ လျော့သွားပါတယ်၊ အဖွဲ့က လူ အတူတူပါပဲ။ AI ကြောင့် အလုပ်အကိုင်တွေ ဘယ်လို ပြောင်းမလဲ စိုးရိမ်တာ သဘာဝကျပြီး ဘယ်သူမှလည်း ကတိ မပေးနိုင်ပါဘူး။ Padauk မှာတော့ အလုပ် မပျောက်သွားဘဲ ပုံစံ ပြောင်းသွားပြီး ပိုခက်တဲ့ ပြဿနာတွေအတွက် အချိန် ရလာပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l32-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l32-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l32-p04c }
+      - { id: show-p04d, type: slide.show, at: { mark: show-p04d }, slideId: l32-p04d }
+
+  - id: one-loop
+    chapter: Loop ပေါ်က ခရီး
+    narration: >
+      [[mark:close-p04d]] [[mark:b4-s1]] ဒါဆို ဒီသင်တန်း တစ်ခုလုံးကို Padauk ရဲ့ reliability loop၊ ပြဿနာ ဖြစ်တိုင်း ပတ်ရတဲ့ စက်ဝိုင်းပေါ်မှာ နောက်ဆုံး တစ်ပတ် ပတ်ကြည့်ရအောင်။ ခရီးက lesson ၁ ရဲ့ သင်္ကြန် အကြိုညကနေ စခဲ့တာပါ၊ အဲဒီတုန်းက top-up တွေ ငွေ နှစ်ခါ ဖြတ်နေပြီး SRE တစ်ယောက်မှ မရှိသေးပါဘူး။
+      [[mark:b4-s2]] သဘောတူတဲ့ အဆင့်မှာ finance က ၁၀၀ ရာခိုင်နှုန်း လိုချင်ခဲ့ပေမဲ့ Top-up အတွက် ၉၉.၅ ရာခိုင်နှုန်း SLO ကို သဘောတူခဲ့ပါတယ်။ [[mark:b4-s2b]] သတိထားမိတဲ့ အဆင့်မှာ SLO တွေ အစိမ်းရောင် ဖြစ်နေရက်နဲ့ Eats order တွေ ရပ်နေခဲ့လို့ journey တစ်ခုလုံးကို တိုင်းတတ်လာပါတယ်။
+      [[mark:b4-s3]] တုံ့ပြန်တဲ့ အဆင့်မှာ လစာထုတ်ရက် top-up incident ကို role တွေ ခွဲပြီး handle လုပ်ခဲ့တယ်၊ [[mark:b4-s3b]] သင်ယူတဲ့ အဆင့်မှာ ကိုနေလင်း ဝင်ထိုင်ခဲ့တဲ့ blameless review ရှိခဲ့တယ်၊ [[mark:b4-s3c]] တည်ဆောက်တဲ့ အဆင့်မှာတော့ သင်ခန်းစာတွေကို platform ထဲ ထည့်ခဲ့ပါတယ်။
+      [[mark:b4-s4]] ဒီ loop ကို လည်စေခဲ့တာ tool တွေ မဟုတ်ဘဲ အလယ်က လူတွေပါ။ သတင်းဆိုး ပြောဖို့ ချီတုံချတုံ ဖြစ်ခဲ့တဲ့ ကိုမင်းက အခု Padauk Parcel ရဲ့ SRE ဖြစ်နေပြီး reliability ကို အပိုတာဝန်အဖြစ် စခဲ့တဲ့ မသီရိကလည်း generalist ဖြစ်လာပါပြီ။ reliability က ဘယ်တော့မှ ပြီးမသွားလို့ ဒီ loop လည်း မရပ်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+    actions:
+      - { id: close-p04d, type: slide.close, at: { mark: close-p04d, offsetMs: -400 } }
+      # Lesson 1's loop, re-drawn as furniture: no drawMs.
+      - {
+          id: b4-s1,
+          type: whiteboard.apply,
+          at: { mark: b4-s1 },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              l32-b4-title,
+              l32-b4-ring,
+              l32-b4-arrow-top,
+              l32-b4-arrow-right,
+              l32-b4-agree,
+              l32-b4-agree-label,
+              l32-b4-notice,
+              l32-b4-notice-label,
+              l32-b4-respond,
+              l32-b4-respond-label,
+              l32-b4-learn,
+              l32-b4-learn-label,
+              l32-b4-build,
+              l32-b4-build-label,
+              l32-b4-doll-head,
+              l32-b4-doll-body,
+              l32-b4-people,
+            ],
+        }
+      # Each station's check lands as the narration reaches that station.
+      - {
+          id: b4-s2,
+          type: whiteboard.apply,
+          at: { mark: b4-s2 },
+          upsertIds: [l32-b4-check-agree],
+          drawMs: 800,
+        }
+      - {
+          id: b4-s2b,
+          type: whiteboard.apply,
+          at: { mark: b4-s2b },
+          upsertIds: [l32-b4-check-notice],
+          drawMs: 800,
+        }
+      - {
+          id: b4-s3,
+          type: whiteboard.apply,
+          at: { mark: b4-s3 },
+          upsertIds: [l32-b4-check-respond],
+          drawMs: 800,
+        }
+      - {
+          id: b4-s3b,
+          type: whiteboard.apply,
+          at: { mark: b4-s3b },
+          upsertIds: [l32-b4-check-learn],
+          drawMs: 800,
+        }
+      - {
+          id: b4-s3c,
+          type: whiteboard.apply,
+          at: { mark: b4-s3c },
+          upsertIds: [l32-b4-check-build],
+          drawMs: 800,
+        }
+      - {
+          id: b4-s4,
+          type: whiteboard.apply,
+          at: { mark: b4-s4 },
+          upsertIds: [l32-b4-hub-circle],
+          drawMs: 1200,
+        }
+
+  - id: next-step
+    chapter: နောက်တစ်လှမ်း
+    narration: >
+      [[mark:close-b4]] [[mark:show-p05]] သင်တန်း ပြီးသွားပေမဲ့ ကိုယ့်အဖွဲ့မှာ ဒီလ စလုပ်လို့ရတာ သုံးခု ရှိပါတယ်။ နောက် postmortem ရဲ့ အဆုံးမှာ တွေ့ခဲ့တဲ့ risk တွေ ဆိုတဲ့ ခေါင်းစဉ် ထည့်ပါ။ spreadsheet တစ်ခုနဲ့ ကိုယ့် risk sheet ကို စပြီး risk တိုင်းကို အမျိုးအစား ပေးကြည့်ပါ။ ပြီးတော့ lesson တစ်ခုကို ရွေးပြီး ဒီလအတွင်း ကိုယ့်အဖွဲ့နဲ့ စမ်းကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Workbook: Conclusion", url: "https://sre.google/workbook/conclusion/" }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+    actions:
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l32-p05 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p05]] [[mark:open-notes]] နှစ်ကုန် review ကနေ မှတ်စရာတွေပါ။ [[mark:sel-leading]] leading indicator က outage မဖြစ်ခင် ကြိုပြတဲ့ risk လို အချက်ပါ။ [[mark:sel-risk-sheet]] risk sheet က risk တွေကို အမျိုးအစားနဲ့ တစ်နေရာတည်း စုထားလို့ အကြီးဆုံး ပုံစံကို မြင်ပြီး တစ်ခါတည်း ပြင်နိုင်စေပါတယ်။
+      [[mark:sel-catalog]] service catalog က service တိုင်းရဲ့ owner နဲ့ dependency ကို deploy မလုပ်ခင် စာရင်းသွင်းထားတာပါ။ [[mark:sel-generalist]] generalist က principle တွေနဲ့ agent တွေကို လမ်းညွှန်တဲ့ SRE ဖြစ်ပြီး၊ [[mark:sel-loop]] reliability loop ကတော့ အလယ်က လူတွေ လည်စေတဲ့ အဆင့် ငါးဆင့် စက်ဝိုင်းပါ။
+      [[mark:sel-question]] သင်တန်းရဲ့ နောက်ဆုံး မေးခွန်းပါ။ ဒီနေ့ ကိုယ့်အဖွဲ့က reliability loop ရဲ့ ဘယ်အဆင့်မှာ အားအနည်းဆုံးလဲ၊ [[mark:ask-question]] ဒီအပတ်မှာ လုပ်နိုင်တဲ့ ခြေလှမ်း တစ်ခုက ဘာလဲ?
+      [[mark:pause-question]] အဖြေ မှန် တစ်ခုတည်း မရှိပါဘူး၊ အရေးကြီးတာက အဆင့် တစ်ခုကို ရွေးပြီး ခြေလှမ်း သေးသေးလေး တစ်ခုနဲ့ စလိုက်တာပါ။ Padauk ရဲ့ ဇာတ်လမ်းက ဒီမှာ မပြီးသေးပါဘူး၊ reliability လိုပဲ ဆက်သွားနေမှာပါ။ ဒီသင်တန်းကို အဆုံးထိ လိုက်ကြည့်ပေးလို့ ကျေးဇူးတင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "20 Years of SRE at Google", url: "https://sre.google/20/" }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: close-p05, type: slide.close, at: { mark: close-p05 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-leading,
+          type: editor.select,
+          at: { mark: sel-leading },
+          target: { file: notes.md, text: "leading indicator", occurrence: 1 },
+        }
+      - {
+          id: sel-risk-sheet,
+          type: editor.select,
+          at: { mark: sel-risk-sheet },
+          target: { file: notes.md, text: "risk sheet", occurrence: 1 },
+        }
+      - {
+          id: sel-catalog,
+          type: editor.select,
+          at: { mark: sel-catalog },
+          target: { file: notes.md, text: "service catalog", occurrence: 1 },
+        }
+      - {
+          id: sel-generalist,
+          type: editor.select,
+          at: { mark: sel-generalist },
+          target: { file: notes.md, text: "generalist", occurrence: 1 },
+        }
+      - {
+          id: sel-loop,
+          type: editor.select,
+          at: { mark: sel-loop },
+          target: { file: notes.md, text: "reliability loop", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause (as in lesson 3). sel-question marks where the
+      # voice script puts the select, but a select there would drag under the
+      # question and leave no pause, and one at pause-question would drag under the
+      # answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more mark
+      # after the question's ၊ pause, so the dialog it follows is only the
+      # question's last clause (44 characters): the select starts about as the
+      # question ends, its drag runs in silence, and the answer at pause-question
+      # waits for it. 4050 leaves about 2.7 / 2.05 / 0.95 s before the answer at
+      # 55 / 70 / 95 ms per char (at 95 the drag starts under the question's last
+      # words, as in lesson 7); an offset above ~4190 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - {
+          id: select-question,
+          type: editor.select,
+          at: { mark: ask-question, offsetMs: 4050 },
+          target:
+            {
+              file: notes.md,
+              text: "မေးခွန်း: ကိုယ့်အဖွဲ့က loop ရဲ့ ဘယ်အဆင့်မှာ အားအနည်းဆုံးလဲ? ဒီအပတ် လုပ်နိုင်တဲ့ ခြေလှမ်း တစ်ခုက ဘာလဲ?",
+              occurrence: 1,
+            },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
