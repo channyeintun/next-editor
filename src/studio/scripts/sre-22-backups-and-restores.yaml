@@ -1,0 +1,1451 @@
+# SRE from zero, lesson 22: Backups and restores (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-22-backups-and-restores.md. Every spoken
+# character is that script's "> " lines, unchanged; each ⟪…⟫ marker became a
+# [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-22-backups-and-restores.md \
+#     src/studio/scripts/sre-22-backups-and-restores.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# Five marks add no spoken text and sit at an existing ။:
+# - b1-s1b and b1-s1c split B1 step 1 so the timeline lands as the narration
+#   names it: the axis opens the board, the blue nightly ticks come with "အပြာရောင်
+#   အမှတ်တွေက ညတိုင်း ယူတဲ့ backup" and the red bug tick with "အနီရောင်က bug ဝင်လာတဲ့
+#   နေ့ပါ", instead of all three landing together, and no apply adds more than
+#   three labelled elements.
+# - b1-s2b lets the orange "kept 7 days" bar land on the sentence that says it
+#   (~12 s after the "noticed on day 11" tick), not with the tick.
+# - b2-s4b lets the green "separate account · read-only backup" boxes land on the
+#   sentence that names them ("အခုတော့ backup တွေကို သီးခြား account …"), ~13 s
+#   after the paragraph starts; b2-s4 itself keeps the script's marker position
+#   and drives nothing.
+# - b4-s3b lets the green "split the data · weekly restore test" line land on
+#   the sentence that says it, ~13 s after the orange validator line.
+# ask-question is the voice script's ⟪select မေးခွန်း⟫, which already starts the
+# question's own dialog, so the question-line select hangs off it (offset 5600)
+# for the ⟪pause 3s⟫ (see select-question), as in lesson 16.
+# Pacing: at 70 ms/char no page or board step holds longer than ~31 s (l22_p05
+# with its two paragraphs, 428 characters) and the longest dialog is that same
+# 428 characters, so no pacing page or step was added; the voice script already
+# carries the continuation pages (l22_p01b, l22_p02b, l22_p02c, …).
+#
+# ⟪close board⟫ straight into the next board (scene 7, B3 into B4) wipes the
+# open board 400 ms early (whiteboard.apply clear) instead of closing the panel,
+# so the editor does not flash between two boards, as in lesson 16; B4 then
+# draws with open: true, clear: true as usual. A board followed by a deck page
+# closes the panel (open: false) 400 ms before the page, and a deck page
+# followed by a board closes the page 400 ms before, as in Module 1. Every board
+# opens with open + clear.
+#
+# Boards (B1 P8 timeline, B2 P2 comb, B3 P1 flow, B4 P8 + P5 bar). Colour jobs:
+# #1e1e1e ink (paints white) for axes, ticks of the drill, buses, arrows and the
+# primary; blue the thing named (the nightly backups, the cleanup script, the
+# measured parts of the drill); green healthy or done (the ledger's correcting
+# entry, the independent backup account, the guards, the drill's fix); red
+# failure (the rounding bug, "can't go back", the cleanup script's delete, the
+# replicas holding it, production, the 7-hour restore); orange the caveat or
+# limit (the day-11 tick, the 7-day retention bar, "one fix-up = alert", the
+# async-failover note, the 1-hour target, the validator). A label on two lines is
+# one text asset per line, so each line meets the 0.55 em width rule on its own;
+# every label was also measured in Chrome with Excalidraw's Virgil font
+# (wb-fit.mjs) and stays inside its box.
+# B1 puts ten nightly ticks on a 64 px-per-day axis (the first three fall
+# outside the orange bar: those backups have already expired). B3 runs top to
+# bottom: a long arrow-down from the script to production, with the four guards
+# in a column beside it ("along the path"), because the six boxes of a row would
+# be about 1,300 px wide and the visible area is 850.
+#
+# Deck pages: deck "Next Editor · SRE 5B · Capacity and data", published; the
+# /pub URL below is final. Its l22 pages are built later from the page plan, so
+# until then the Director reports page "l22_p01" missing from the published deck
+# (with the deck URL swapped for an unreachable one it validates). The voice
+# script asks for l22_p02c as an ordinary compare (left gray, right teal); the
+# page plan notes the K1 pages' empty fields and their cover title, two code
+# points shorter than the voice script's to meet the kit's safe length. Page plan:
+# ~/Documents/sre-course/work/pages/sre-22-backups-and-restores.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-22-backups-and-restores.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-22-backups-and-restores.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-22-backups-and-restores
+  title: "SRE from zero 22: Backup ထက် restore က ပိုအရေးကြီးတယ်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Backup ထက် restore က ပိုအရေးကြီးတယ်
+
+        - RPO — ဆုံးရှုံးခံနိုင်တဲ့ data ကို အချိန်နဲ့ ပြော
+        - RTO — ပျက်ပြီး ပြန်ကောင်းဖို့ ကြာခွင့်
+        - replication ≠ backup — replica တိုင်းဆီ အမှားကိုပါ ချက်ချင်း ကူး
+        - snapshot — မြန်၊ ဈေးပေါ၊ storage ပျက်ရင် အတူ ပျက်
+        - 3-2-1 — မိတ္တူ 3 ခု · storage 2 မျိုး · တခြားနေရာမှာ 1 ခု
+        - restore drill — တကယ် restore လုပ်ပြီး ကြာချိန်နဲ့ data စစ်
+
+        မေးခွန်း: backup ကို 6 နာရီ တစ်ခါ ယူတယ်။ အဆိုးဆုံး RPO က ဘယ်လောက်လဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Backup ထက် restore က ပိုအရေးကြီးတယ်</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 22</p>
+              <h1>Backup ထက် restore က ပိုအရေးကြီးတယ်</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l22-p01
+      contentType: google
+      name: "Cover: a bug older than our backups"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p01
+    - id: l22-p01b
+      contentType: google
+      name: How far back can we go?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p01b
+    - id: l22-p02
+      contentType: google
+      name: Two numbers for money data
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p02
+    - id: l22-p02b
+      contentType: google
+      name: "The ledger's targets"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p02b
+    - id: l22-p02c
+      contentType: google
+      name: Disaster numbers and daily numbers
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p02c
+    - id: l22-p03
+      contentType: google
+      name: Snapshot or backup
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p03
+    - id: l22-p03b
+      contentType: google
+      name: 3-2-1 and point-in-time recovery
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p03b
+    - id: l22-p03c
+      contentType: google
+      name: A backup you can open
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p03c
+    - id: l22-p04
+      contentType: google
+      name: Proof is a restore
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p04
+    - id: l22-p04b
+      contentType: google
+      name: Every kind of restore
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p04b
+    - id: l22-p05
+      contentType: google
+      name: "Padauk's data list"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p05
+    - id: l22-p05b
+      contentType: google
+      name: Decide recovery in advance
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p05b
+    - id: l22-p05c
+      contentType: google
+      name: Recovery rules
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p05c
+    - id: l22-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTUSnn3cAtUKx4c4yRdConjd0Twxkz4fmfa9H8rpPK5l7iy9fmB_m8CNRJoOVaeZuIHBi-0LLnVHjQz/pub"
+      pageId: l22_p06
+  whiteboardAssets:
+    # ---- Board B1 (P8 timeline): the cashback bug against seven days of backups ----
+    - {
+        id: l22-b1-axis,
+        kind: freedraw,
+        x: 262,
+        y: 342,
+        width: 830,
+        height: 30,
+        stroke: underline,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b1-tick-1,
+        kind: rectangle,
+        x: 354,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-2,
+        kind: rectangle,
+        x: 418,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-3,
+        kind: rectangle,
+        x: 482,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-4,
+        kind: rectangle,
+        x: 546,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-5,
+        kind: rectangle,
+        x: 610,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-6,
+        kind: rectangle,
+        x: 674,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-7,
+        kind: rectangle,
+        x: 738,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-8,
+        kind: rectangle,
+        x: 802,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-9,
+        kind: rectangle,
+        x: 866,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-tick-10,
+        kind: rectangle,
+        x: 930,
+        y: 326,
+        width: 6,
+        height: 46,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l22-b1-nightly,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 220,
+        height: 35,
+        text: "ညတိုင်း backup",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-tick-bug,
+        kind: rectangle,
+        x: 290,
+        y: 340,
+        width: 6,
+        height: 64,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l22-b1-bug,
+        kind: text,
+        x: 270,
+        y: 415,
+        width: 185,
+        height: 35,
+        text: "rounding bug",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-tick-seen,
+        kind: rectangle,
+        x: 994,
+        y: 340,
+        width: 6,
+        height: 64,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l22-b1-seen,
+        kind: text,
+        x: 930,
+        y: 415,
+        width: 155,
+        height: 35,
+        text: "သိ: ရက် 11",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-kept,
+        kind: rectangle,
+        x: 535,
+        y: 235,
+        width: 420,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l22-b1-kept-t,
+        kind: text,
+        x: 547,
+        y: 245,
+        width: 340,
+        height: 35,
+        text: "backup သိမ်းထား: 7 ရက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-cant,
+        kind: text,
+        x: 270,
+        y: 460,
+        width: 325,
+        height: 35,
+        text: "နောက်ပြန် မရောက်နိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-ledger,
+        kind: rectangle,
+        x: 700,
+        y: 500,
+        width: 390,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b1-ledger-t1,
+        kind: text,
+        x: 712,
+        y: 507,
+        width: 110,
+        height: 35,
+        text: "ledger:",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-ledger-t2,
+        kind: text,
+        x: 712,
+        y: 545,
+        width: 325,
+        height: 35,
+        text: "ပြန်ညှိတဲ့ entry အသစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b1-alert,
+        kind: text,
+        x: 395,
+        y: 535,
+        width: 280,
+        height: 35,
+        text: "ညှိတာ 1 ခု = alert",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2 (P2 comb): the delete reaches every replica ----
+    - {
+        id: l22-b2-script,
+        kind: rectangle,
+        x: 255,
+        y: 225,
+        width: 250,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l22-b2-script-t1,
+        kind: text,
+        x: 267,
+        y: 232,
+        width: 220,
+        height: 35,
+        text: "cleanup script",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-script-t2,
+        kind: text,
+        x: 267,
+        y: 272,
+        width: 205,
+        height: 35,
+        text: "delete 10,000",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-a1,
+        kind: freedraw,
+        x: 509,
+        y: 255,
+        width: 40,
+        height: 40,
+        stroke: arrow-right,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-primary,
+        kind: rectangle,
+        x: 553,
+        y: 245,
+        width: 150,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-primary-t,
+        kind: text,
+        x: 563,
+        y: 257,
+        width: 110,
+        height: 35,
+        text: "primary",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-a2,
+        kind: freedraw,
+        x: 707,
+        y: 255,
+        width: 40,
+        height: 40,
+        stroke: arrow-right,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-bus,
+        kind: rectangle,
+        x: 751,
+        y: 170,
+        width: 14,
+        height: 210,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-a3,
+        kind: freedraw,
+        x: 769,
+        y: 180,
+        width: 40,
+        height: 40,
+        stroke: arrow-right,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-r1,
+        kind: rectangle,
+        x: 813,
+        y: 170,
+        width: 160,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l22-b2-r1-t,
+        kind: text,
+        x: 823,
+        y: 183,
+        width: 110,
+        height: 35,
+        text: "replica",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-a4,
+        kind: freedraw,
+        x: 769,
+        y: 255,
+        width: 40,
+        height: 40,
+        stroke: arrow-right,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-r2,
+        kind: rectangle,
+        x: 813,
+        y: 245,
+        width: 160,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l22-b2-r2-t,
+        kind: text,
+        x: 823,
+        y: 258,
+        width: 110,
+        height: 35,
+        text: "replica",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-a5,
+        kind: freedraw,
+        x: 769,
+        y: 330,
+        width: 40,
+        height: 40,
+        stroke: arrow-right,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b2-r3,
+        kind: rectangle,
+        x: 813,
+        y: 320,
+        width: 160,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l22-b2-r3-t,
+        kind: text,
+        x: 823,
+        y: 333,
+        width: 110,
+        height: 35,
+        text: "replica",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-async-t1,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 220,
+        height: 35,
+        text: "async failover",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-async-t2,
+        kind: text,
+        x: 270,
+        y: 455,
+        width: 370,
+        height: 35,
+        text: "မကူးရသေးတဲ့ write ပျောက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-acct,
+        kind: rectangle,
+        x: 665,
+        y: 410,
+        width: 425,
+        height: 200,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b2-acct-t,
+        kind: text,
+        x: 677,
+        y: 420,
+        width: 405,
+        height: 35,
+        text: "account သီးခြား၊ read-only",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b2-backup,
+        kind: rectangle,
+        x: 685,
+        y: 480,
+        width: 385,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b2-backup-t,
+        kind: text,
+        x: 697,
+        y: 517,
+        width: 220,
+        height: 35,
+        text: "သီးခြား backup",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B3 (P1 flow, top to bottom): guards between the script and production ----
+    - {
+        id: l22-b3-script,
+        kind: rectangle,
+        x: 255,
+        y: 170,
+        width: 250,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l22-b3-script-t,
+        kind: text,
+        x: 267,
+        y: 182,
+        width: 220,
+        height: 35,
+        text: "cleanup script",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-a1,
+        kind: freedraw,
+        x: 355,
+        y: 238,
+        width: 50,
+        height: 300,
+        stroke: arrow-down,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b3-prod,
+        kind: rectangle,
+        x: 255,
+        y: 548,
+        width: 330,
+        height: 84,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l22-b3-prod-t1,
+        kind: text,
+        x: 267,
+        y: 555,
+        width: 155,
+        height: 35,
+        text: "production",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-prod-t2,
+        kind: text,
+        x: 267,
+        y: 590,
+        width: 295,
+        height: 35,
+        text: "(စာလုံး 1 လုံး ကွာ)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-g1,
+        kind: rectangle,
+        x: 460,
+        y: 235,
+        width: 340,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b3-g1-t,
+        kind: text,
+        x: 472,
+        y: 247,
+        width: 280,
+        height: 35,
+        text: "trash: ရက်အနည်းငယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-g2,
+        kind: rectangle,
+        x: 460,
+        y: 305,
+        width: 340,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b3-g2-t,
+        kind: text,
+        x: 472,
+        y: 317,
+        width: 235,
+        height: 35,
+        text: "ဒုတိယ အတည်ပြုသူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-g3,
+        kind: rectangle,
+        x: 460,
+        y: 375,
+        width: 340,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b3-g3-t,
+        kind: text,
+        x: 472,
+        y: 387,
+        width: 295,
+        height: 35,
+        text: "ဖျက်နိုင်တာ ကန့်သတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b3-g4,
+        kind: rectangle,
+        x: 460,
+        y: 445,
+        width: 340,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l22-b3-g4-t,
+        kind: text,
+        x: 472,
+        y: 457,
+        width: 295,
+        height: 35,
+        text: "backup: မရောက်နိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B4 (P8 + P5): the first restore drill, 100 px per hour from x 300 ----
+    - {
+        id: l22-b4-bar,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 700,
+        height: 46,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l22-b4-bar-t,
+        kind: text,
+        x: 700,
+        y: 178,
+        width: 340,
+        height: 35,
+        text: "900 GB restore: 7 နာရီ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-axis,
+        kind: freedraw,
+        x: 290,
+        y: 288,
+        width: 720,
+        height: 30,
+        stroke: underline,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b4-target,
+        kind: rectangle,
+        x: 397,
+        y: 222,
+        width: 6,
+        height: 100,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l22-b4-target-t,
+        kind: text,
+        x: 300,
+        y: 178,
+        width: 235,
+        height: 35,
+        text: "ပစ်မှတ်: 1 နာရီ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-tick-0,
+        kind: rectangle,
+        x: 297,
+        y: 296,
+        width: 6,
+        height: 50,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b4-tick-2,
+        kind: rectangle,
+        x: 497,
+        y: 296,
+        width: 6,
+        height: 50,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b4-tick-6,
+        kind: rectangle,
+        x: 897,
+        y: 296,
+        width: 6,
+        height: 50,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b4-tick-7,
+        kind: rectangle,
+        x: 997,
+        y: 296,
+        width: 6,
+        height: 50,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l22-b4-find,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 295,
+        height: 35,
+        text: "machine ရှာ: 2 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-copy,
+        kind: text,
+        x: 612,
+        y: 397,
+        width: 170,
+        height: 35,
+        text: "ကူး: 4 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-check,
+        kind: text,
+        x: 880,
+        y: 352,
+        width: 170,
+        height: 35,
+        text: "စစ်: 1 နာရီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-validator,
+        kind: text,
+        x: 270,
+        y: 470,
+        width: 495,
+        height: 35,
+        text: "validator: order မရှိတဲ့ payment",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l22-b4-fix,
+        kind: text,
+        x: 270,
+        y: 540,
+        width: 525,
+        height: 35,
+        text: "data ခွဲ · အပတ်တိုင်း restore test",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2622
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Backup ထက် အသက်ကြီးတဲ့ bug
+    narration: >
+      [[mark:show-p01]] ဆရာမရဲ့ စာကြောင့် Padauk က data catalog၊ ဖျက်တဲ့ pipeline နဲ့ synthetic test data ကို စသုံးလိုက်ပါတယ်။ ဒီလကုန် စာရင်းပိတ်တော့ finance အဖွဲ့က Wallet ရဲ့ cashback စုစုပေါင်း မကိုက်တာကို တွေ့ပါတယ်။
+      [[mark:show-p01b]] ခြေရာခံကြည့်တော့ ၁၁ ရက်အရင်က deploy လုပ်ခဲ့တဲ့ cashback code က round လုပ်ပုံ မှားပြီး wallet တွေထဲ ကျပ် အနည်းငယ်စီ လွဲထည့်နေတာပါ။ မသီရိက bug မဝင်ခင်က backup ကို restore လုပ်ချင်ပေမဲ့ backup တွေကို ၇ ရက်စာပဲ သိမ်းထားပါတယ်။ ဒါဆို နောက်ပြန် ဘယ်အထိ သွားလို့ ရမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - id: show-p01
+        type: slide.show
+        at: { mark: show-p01, offsetMs: -1450 }
+        slideId: l22-p01
+      - { id: show-p01b, type: slide.show, at: { mark: show-p01b }, slideId: l22-p01b }
+
+  - id: how-far-back
+    chapter: နောက်ပြန် ဘယ်အထိ
+    narration: >
+      [[mark:close-p01b]] [[mark:b1-s1]] ဒီ lesson မှာ data incident သုံးခုကို ဖြစ်ခဲ့တဲ့ အစဉ်အတိုင်း ကြည့်ပါမယ်။ [[mark:b1-s1b]] အပြာရောင် အမှတ်တွေက ညတိုင်း ယူတဲ့ backup၊ data ရဲ့ သီးခြား မိတ္တူတွေပါ၊ အဲဒီကနေ ပြန်ယူတာက restore ပါ။ [[mark:b1-s1c]] အနီရောင်က bug ဝင်လာတဲ့ နေ့ပါ၊ bug ကြောင့် မှားတဲ့ data တွေက error မပြဘဲ database copy တိုင်းကို ချက်ချင်း ရောက်သွားပါတယ်။
+      [[mark:b1-s2]] bug ကို ၁၁ ရက်မြောက်မှ သတိထားမိပါတယ်၊ ညတိုင်း balance စစ်တဲ့ check က ကျပ် အနည်းငယ် ကွာတာကို lesson ၂၁ က ပုံမှန် reconciliation လို့ ယူဆပြီး ညှိပေးနေခဲ့လို့ပါ။ [[mark:b1-s2b]] ၇ ရက်စာပဲ သိမ်းလို့ အဟောင်းဆုံး backup တောင် bug ဝင်ပြီး ၄ ရက်ကြာမှ ယူထားတာပါ။
+      [[mark:b1-s3]] ဒါကြောင့် ဘယ် backup မှ bug မဝင်ခင် အချိန်ကို မမီပါဘူး။ backup ကို bug သတိထားမိဖို့ ကြာတဲ့ အချိန်ထက် ပိုကြာကြာ သိမ်းရပေမဲ့ ထာဝရတော့ မသိမ်းနိုင်ပါဘူး၊ lesson ၂၁ က ဖျက်ရမယ့် deadline တွေနဲ့ storage ကုန်ကျစရိတ်က ကန့်သတ်ပါတယ်။ ပြီးတော့ backup ရှိနေရင်တောင် နောက်ဆုံး backup ယူပြီးမှ ဝင်လာတဲ့ write တွေကို ဆုံးရှုံးနိုင်ပါသေးတယ်။
+      [[mark:b1-s4]] ဒီတစ်ခါ ကယ်လိုက်တာက ledger ပါ။ ရေးပြီးသား entry ကို မပြင်ဘဲ အသစ်ပဲ ထပ်ရေးတဲ့ append-only စာရင်းမို့ ပြန်ညှိတဲ့ entry အသစ်တွေနဲ့ ပြင်နိုင်ခဲ့ပါတယ်။ [[mark:b1-s5]] balance check ကိုလည်း batch နဲ့ မရှင်းနိုင်တဲ့ ကွာဟချက် တစ်ခုပဲ ရှိရှိ alert တက်အောင် ပြင်လိုက်ပါတယ်၊ စောစော သိလေ ပြင်ရ သက်သာလေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      - { id: close-p01b, type: slide.close, at: { mark: close-p01b, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds: [l22-b1-axis]
+        drawMs: 900
+      - id: b1-s1b
+        type: whiteboard.apply
+        at: { mark: b1-s1b }
+        upsertIds:
+          [
+            l22-b1-tick-1,
+            l22-b1-tick-2,
+            l22-b1-tick-3,
+            l22-b1-tick-4,
+            l22-b1-tick-5,
+            l22-b1-tick-6,
+            l22-b1-tick-7,
+            l22-b1-tick-8,
+            l22-b1-tick-9,
+            l22-b1-tick-10,
+            l22-b1-nightly,
+          ]
+        drawMs: 2600
+      - id: b1-s1c
+        type: whiteboard.apply
+        at: { mark: b1-s1c }
+        upsertIds: [l22-b1-tick-bug, l22-b1-bug]
+        drawMs: 1200
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l22-b1-tick-seen, l22-b1-seen]
+        drawMs: 1200
+      - id: b1-s2b
+        type: whiteboard.apply
+        at: { mark: b1-s2b }
+        upsertIds: [l22-b1-kept, l22-b1-kept-t]
+        drawMs: 1600
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        upsertIds: [l22-b1-cant]
+        drawMs: 1200
+      - id: b1-s4
+        type: whiteboard.apply
+        at: { mark: b1-s4 }
+        upsertIds: [l22-b1-ledger, l22-b1-ledger-t1, l22-b1-ledger-t2]
+        drawMs: 1800
+      - id: b1-s5
+        type: whiteboard.apply
+        at: { mark: b1-s5 }
+        upsertIds: [l22-b1-alert]
+        drawMs: 1000
+
+  - id: two-numbers
+    chapter: RPO နဲ့ RTO
+    narration: >
+      [[mark:close-b1]] [[mark:show-p02]] ပြီးတော့ မသီရိက tool တွေ ဘာလုပ်နိုင်လဲ ဆိုတာကနေ မစဘဲ မနှင်းနဲ့ finance အဖွဲ့ကို ငွေ data အတွက် မေးခွန်း နှစ်ခု မေးပါတယ်။ ပထမက ဘယ်လောက် ကြာချိန်စာ data ကို ဆုံးရှုံးခံနိုင်လဲ ဆိုတာပါ၊ ဒါကို recovery point objective၊ RPO လို့ ခေါ်ပါတယ်။ ဒုတိယက service ပြန်ကောင်းဖို့ ဘယ်လောက်အထိ ကြာခွင့်ရှိလဲ ဆိုတဲ့ recovery time objective၊ RTO ပါ။
+      [[mark:show-p02b]] သူတို့က ledger အတွက် RPO ကို မိနစ်ပိုင်း၊ RTO ကို တစ်နာရီလို့ ဆုံးဖြတ်ပါတယ်။ RPO က backup ကို ဘယ်လောက် ခဏခဏ ယူရမလဲ ဆုံးဖြတ်ပေးပြီး အဲဒါက tool ရွေးတာ၊ data ကို ခွဲထားပုံအထိ သက်ရောက်လို့ စောစော ဆုံးဖြတ်ထားရပါမယ်။
+      [[mark:show-p02c]] ဒါပေမဲ့ ဒီ နံပါတ် နှစ်ခုက disaster အတွက်ပါ၊ တစ်ခုခု ပျက်ပြီးမှ စရေတွက်ပါတယ်။ နေ့စဉ် ကျန်းမာရေးကိုတော့ သဘောတူထားတဲ့ reliability ပစ်မှတ်၊ SLO နဲ့ သူ့ error budget က အချိန်ရှိတုန်း ကြိုသတိပေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+    actions:
+      - id: close-b1
+        type: whiteboard.apply
+        at: { mark: close-b1, offsetMs: -400 }
+        open: false
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l22-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l22-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l22-p02c }
+
+  - id: replication
+    chapter: Replication က အမှားကိုပါ ကူးတယ်
+    narration: >
+      [[mark:close-p02c]] [[mark:b2-s1]] ဒုတိယ incident မှာတော့ developer တစ်ယောက်က test merchant တွေ ရှင်းဖို့ cleanup script ကို AI coding assistant နဲ့ ရေးပြီး admin credential နဲ့ run လိုက်ပါတယ်။ နာမည် မပြောင်းရသေးတဲ့ staging database နဲ့ production database က စာလုံး တစ်လုံးပဲ ကွာလို့ production ထဲက တကယ့် merchant ၁၀၀၀၀ ကို ဖျက်မိသွားပြီး ဆိုင်တွေ ငွေလက်ခံလို့ မရတော့ပါဘူး။
+      [[mark:b2-s2]] database မှာ write လက်ခံတဲ့ primary နဲ့ သူ့ကို လိုက်ကူးတဲ့ copy သုံးခု ရှိပါတယ်၊ ဒီလို ကူးထားတာက replication၊ copy တစ်ခုချင်းက replica ပါ။ zone တစ်ခု ပျက်ရင် replica က ကယ်ပေးပေမဲ့ delete တွေကိုလည်း ချက်ချင်း ကူးလို့ merchant တွေ နေရာတိုင်းမှာ ပျောက်ကုန်ပါတယ်၊ ဒါကြောင့် replication က backup မဟုတ်ပါဘူး။
+      [[mark:b2-s3]] primary ပျက်လို့ replica ကို ပြောင်းသုံးတဲ့ failover မှာလည်း ခဏ နောက်ကျပြီး လိုက်ကူးတဲ့ asynchronous replica ဆိုရင် မကူးရသေးတဲ့ write တွေ ပျောက်ပါတယ်။ write တိုင်း replica ဆီ ရောက်မှ ပြီးတဲ့ synchronous ကတော့ ပိုနှေးပေမဲ့ ပြန်ယူရ ပိုရိုးရှင်းပါတယ်။
+      [[mark:b2-s4]] merchant တွေကိုတော့ data ကို ဓာတ်ပုံရိုက်သလို နာရီတိုင်း မှတ်ထားတဲ့ snapshot ကနေ restore လုပ်ပြီး write တိုင်းကို မှတ်ထားတဲ့ write log ကနေ script မ run ခင်အထိ ပြန်ထည့်လို့ ပြန်ရခဲ့ပါတယ်။ [[mark:b2-s4b]] အခုတော့ backup တွေကို သီးခြား account ထဲမှာ read-only ထားလို့ production ကို ရေးနိုင်တဲ့ လူ၊ script၊ AI ဘယ်သူမှ မှားလို့ဖြစ်စေ၊ တမင်ဖြစ်စေ backup ကို မဖျက်နိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Managing Critical State",
+          url: "https://sre.google/sre-book/managing-critical-state/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      - { id: close-p02c, type: slide.close, at: { mark: close-p02c, offsetMs: -400 } }
+      - id: b2-s1
+        type: whiteboard.apply
+        at: { mark: b2-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l22-b2-script,
+            l22-b2-script-t1,
+            l22-b2-script-t2,
+            l22-b2-a1,
+            l22-b2-primary,
+            l22-b2-primary-t,
+            l22-b2-a2,
+            l22-b2-bus,
+          ]
+        drawMs: 2400
+      - id: b2-s2
+        type: whiteboard.apply
+        at: { mark: b2-s2 }
+        upsertIds:
+          [
+            l22-b2-a3,
+            l22-b2-r1,
+            l22-b2-r1-t,
+            l22-b2-a4,
+            l22-b2-r2,
+            l22-b2-r2-t,
+            l22-b2-a5,
+            l22-b2-r3,
+            l22-b2-r3-t,
+          ]
+        drawMs: 2600
+      - id: b2-s3
+        type: whiteboard.apply
+        at: { mark: b2-s3 }
+        upsertIds: [l22-b2-async-t1, l22-b2-async-t2]
+        drawMs: 1600
+      - id: b2-s4
+        type: whiteboard.apply
+        at: { mark: b2-s4b }
+        upsertIds: [l22-b2-acct, l22-b2-acct-t, l22-b2-backup, l22-b2-backup-t]
+        drawMs: 2400
+
+  - id: snapshot-backup
+    chapter: Snapshot နဲ့ backup
+    narration: >
+      [[mark:close-b2]] [[mark:show-p03]] snapshot က data ရှိတဲ့ storage ထဲမှာပဲ ယူတာမို့ မြန်ပြီး ဈေးပေါပါတယ်၊ ဒီတစ်ခါလို မှားဖျက်တာကနေ ကယ်နိုင်ပေမဲ့ storage ကိုယ်တိုင် ပျက်ရင်တော့ အတူ ပျက်ပါတယ်။ backup ကတော့ တခြားနေရာမှာ သီးခြား ကူးထားလို့ ပိုနှေးပေမဲ့ storage ပျက်လည်း ကျန်ပါတယ်၊ ဒါကြောင့် နှစ်မျိုးလုံး ထားရပါမယ်။
+      [[mark:show-p03b]] Padauk က သုံး နှစ် တစ် rule ကို လိုက်ပါတယ်၊ မိတ္တူ သုံးခု ထားမယ်၊ storage နှစ်မျိုးမှာ သိမ်းမယ်၊ တစ်ခုကို တခြားနေရာမှာ ထားမယ် ဆိုတာပါ။ merchant တွေတုန်းကလိုပဲ backup ပေါ်မှာ write log ကို လိုတဲ့ မိနစ်အထိ ပြန်ထည့်တာကို point-in-time recovery လို့ ခေါ်ပါတယ်၊ RPO ကို အရမ်း သေးစေလို့ ledger မှာ ဖွင့်ထားပါတယ်။
+      [[mark:show-p03c]] backup ကို ပြန်ဖွင့်ဖို့ encryption key နဲ့ ဘယ်ထဲမှာ ဘာရှိလဲ ပြတဲ့ metadata လည်း လိုလို့ ledger ရဲ့ key နဲ့ metadata ကို login ပါ သီးခြားဖြစ်တဲ့ တခြား cloud account မှာ backup ယူထားပါတယ်။ backup နည်းကိုလည်း ဆန်းပြားတာထက် ပြဿနာ တက်ချိန်မှာ restore လုပ်ရ လွယ်တဲ့ ရိုးရှင်းတဲ့ နည်းကို ရွေးပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - id: close-b2
+        type: whiteboard.apply
+        at: { mark: close-b2, offsetMs: -400 }
+        open: false
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l22-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l22-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l22-p03c }
+
+  - id: one-mistake
+    chapter: အမှား တစ်ခု နေရာတိုင်း မရောက်အောင်
+    narration: >
+      [[mark:close-p03c]] [[mark:b3-s1]] merchant incident ရဲ့ postmortem မှာ developer ကို အပြစ်မရှာဘဲ script တစ်ခုက production တစ်ခုလုံးကို ဘာကြောင့် ထိနိုင်ခဲ့လဲလို့ မေးပါတယ်။ စာလုံး တစ်လုံး မှားတာက ဘယ်သူ့မှာမဆို ဖြစ်နိုင်ပါတယ်၊ ပြဿနာက ဘယ်သူမှ ထပ်မစစ်ဘဲ ဖျက်လို့ရပြီး ဖျက်လိုက်တာနဲ့ အပြီး ပျောက်သွားတာပါ။
+      [[mark:b3-s2]] ဒါကြောင့် အခု ဖျက်တာကို အဆင့်လိုက် လုပ်ပါတယ်၊ lesson ၂၁ က soft delete လိုပဲ ဖျက်လိုက်တဲ့ data ကို trash ထဲမှာ ရက်အနည်းငယ် ထားတော့ ပြန်ယူလို့ရပါတယ်။ data အများကြီး ဖျက်တဲ့ script ကိုလည်း ဒုတိယ လူတစ်ယောက် အတည်ပြုမှ run လို့ရပါတယ်။
+      [[mark:b3-s3]] script တစ်ခါ run ရင် ဖျက်နိုင်တဲ့ အရေအတွက်ကို ကန့်သတ်ထားပြီး backup တွေကလည်း script မရောက်နိုင်တဲ့ နေရာမှာ ရှိပါတယ်။ အန္တရာယ်ရှိတဲ့ data ပြောင်းလဲမှုတွေကိုလည်း နေရာတိုင်းမှာ တစ်ပြိုင်နက် မလုပ်ဘဲ zone တစ်ခုပြီးမှ တစ်ခု လုပ်ပါတယ်။ ဒီ incident က lesson ၂၈ မှာ AI agent တွေကို read-only နဲ့ပဲ စပေးရတဲ့ အကြောင်းရင်း ဖြစ်လာပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [l22-b3-script, l22-b3-script-t, l22-b3-a1, l22-b3-prod, l22-b3-prod-t1, l22-b3-prod-t2]
+        drawMs: 2400
+      - id: b3-s2
+        type: whiteboard.apply
+        at: { mark: b3-s2 }
+        upsertIds: [l22-b3-g1, l22-b3-g1-t, l22-b3-g2, l22-b3-g2-t]
+        drawMs: 1800
+      - id: b3-s3
+        type: whiteboard.apply
+        at: { mark: b3-s3 }
+        upsertIds: [l22-b3-g3, l22-b3-g3-t, l22-b3-g4, l22-b3-g4-t]
+        drawMs: 1800
+
+  - id: the-drill
+    chapter: ပထမဆုံး restore drill
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] တတိယ ပြဿနာကိုတော့ Padauk ကိုယ်တိုင် ရှာတွေ့တာပါ။ Eats ရဲ့ backup တွေကို တစ်ခါမှ မစမ်းဖူးလို့ မသီရိရဲ့ အဖွဲ့က ပထမဆုံး restore drill၊ backup ကို တကယ် restore လုပ်ပြီး ကြာချိန်နဲ့ data မှန်လား စစ်တာကို လုပ်ပါတယ်။ payment နဲ့ order database ၉၀၀ gigabyte ကို restore လုပ်တာ ၇ နာရီ ကြာခဲ့ပါတယ်၊ ပစ်မှတ် RTO က တစ်နာရီပဲ ရှိတာပါ။
+      [[mark:b4-s2]] ခွဲကြည့်တော့ machine ရှာရတာ ၂ နာရီ၊ data ကူးတာ ၄ နာရီ၊ စစ်တာ ၁ နာရီ ကြာခဲ့ပါတယ်။ drill က တကယ့် restore နဲ့ machine တူတူ သုံးရလို့ ဒီ ၂ နာရီက တကယ့် outage မှာလည်း ကုန်မှာပါ။ ပြီးတော့ RTO ထဲမှာ ပြဿနာ သတိထားမိဖို့နဲ့ ဘာလုပ်မလဲ ဆုံးဖြတ်ဖို့ အချိန်တွေလည်း ပါလို့ restore ကိုယ်တိုင်က တစ်နာရီထက် အများကြီး တိုရပါမယ်။
+      [[mark:b4-s3]] ပြန်ယူထားတဲ့ data ကို စစ်တဲ့ program၊ validator ကလည်း order မရှိတဲ့ payment တွေကို တွေ့ပါတယ်၊ payment database ကို order database ထက် နှစ်နာရီ နောက်ကျမှ backup ယူထားလို့ပါ။ [[mark:b4-s3b]] ဒါကြောင့် အခု database နှစ်ခုကို အချိန် တစ်ခုတည်းအထိ ပြန်ယူပါတယ်၊ data ကို အပိုင်းလေးတွေ ခွဲပြီး တစ်ပြိုင်နက် restore လုပ်ပါတယ်၊ restore test ကိုလည်း အပတ်တိုင်း အလိုအလျောက် run ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B3 400 ms early, keep the panel open.
+      - id: close-b3
+        type: whiteboard.apply
+        at: { mark: close-b3, offsetMs: -400 }
+        clear: true
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l22-b4-bar, l22-b4-bar-t, l22-b4-axis, l22-b4-target, l22-b4-target-t]
+        drawMs: 2400
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds:
+          [
+            l22-b4-tick-0,
+            l22-b4-tick-2,
+            l22-b4-tick-6,
+            l22-b4-tick-7,
+            l22-b4-find,
+            l22-b4-copy,
+            l22-b4-check,
+          ]
+        drawMs: 2800
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l22-b4-validator]
+        drawMs: 1600
+      - id: b4-s3b
+        type: whiteboard.apply
+        at: { mark: b4-s3b }
+        upsertIds: [l22-b4-fix]
+        drawMs: 1600
+
+  - id: proof-restore
+    narration: >
+      [[mark:close-b4]] [[mark:show-p04]] backup job အစိမ်းရောင် ပြနေတာက copy တစ်ခု ရေးပြီးသွားတယ် ဆိုတာပဲ ပြောပါတယ်၊ data ပြန်ရမယ်လို့ သက်သေပြတာက အောင်မြင်တဲ့ restore ပါ။ ဒါကြောင့် restore ကို အချိန်ဇယားနဲ့ စမ်းပါ၊ fail ရင်ဖြစ်စေ၊ RTO ထက် ကြာရင်ဖြစ်စေ alert တက်အောင် ထားပြီး ပြန်ရတဲ့ data အဓိပ္ပာယ် ရှိလားလည်း စစ်ပါ။
+      [[mark:show-p04b]] site တစ်ခုလုံး ပြန်ယူတာတင် မဟုတ်ဘဲ cashback လို မှားရေးခဲ့တဲ့ write တွေ၊ user တစ်ယောက်ရဲ့ data စတဲ့ restore အမျိုးအစား တိုင်းကို စမ်းရပါမယ်။ ဒီ စမ်းသပ်မှုအတွက် machine နဲ့ အချိန်ကိုလည်း feature တစ်ခုလိုပဲ budget တောင်းရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      - id: close-b4
+        type: whiteboard.apply
+        at: { mark: close-b4, offsetMs: -400 }
+        open: false
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l22-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l22-p04b }
+
+  - id: data-list
+    chapter: Padauk ရဲ့ data စာရင်း
+    narration: >
+      [[mark:show-p05]] ပြဿနာ သုံးခု ပြီးတော့ Padauk က သတိရမှ backup ထည့်တာကို ရပ်ပြီး database အသစ်တိုင်းမှာ အလိုအလျောက် ထည့်ပါတယ်။ data catalog ထဲက data တွေကို အုပ်စု အနည်းငယ် ခွဲပြီး အုပ်စုတိုင်းကို RPO နဲ့ RTO ပေးပါတယ်။
+      ငွေ data ကို point-in-time recovery နဲ့ ကာကွယ်ပြီး အပတ်တိုင်း restore စမ်းပါတယ်။ settlement file လို ပြန်ထုတ်လို့ရတဲ့ data ကိုတော့ ပြန်ထုတ်ရတာ နှေးမှ ကာကွယ်ပြီး test data လို backup မလိုတဲ့ data ကိုလည်း မလိုဘူးလို့ ရေးထားပါတယ်။
+      [[mark:show-p05b]] restore က စမ်းထားပြီးသား လမ်းပါ၊ အဲဒါ မရတော့မှ ကျန်တာကို ဆယ်ယူရတာက recovery ပါ။ recovery မှာ ဘာလုပ်မလဲ ဆိုတာကို မနက် ၃ နာရီမှ မဆုံးဖြတ်ဘဲ အခုကတည်းက ဆုံးဖြတ်ထားပါတယ်။ ဥပမာ ledger ပျောက်ရင် Wallet ကို လုံးဝ မပိတ်ဘဲ balance တွေ ပြန်ယူနေဆဲလို့ ပြတဲ့ read-only အနေနဲ့ အရင် ဖွင့်ပါမယ်။
+      [[mark:show-p05c]] recovery လုပ်နေတုန်း balance တွေကို လက်နဲ့ မပြင်ဘဲ review လုပ်ပြီးသား code ကနေပဲ ပြင်ပါတယ်၊ တကယ် လက်နဲ့ ပြင်ရမယ်ဆိုရင်တော့ CTO ကိုနေလင်းရဲ့ စာနဲ့ ခွင့်ပြုချက် လိုပါတယ်။ ဒီ plan ကိုလည်း ခေါင်းဆောင်တွေက လက်မှတ်ထိုး အတည်ပြုထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+      - {
+          title: "Building Secure and Reliable Systems, Ch 9: Design for Recovery",
+          url: "https://google.github.io/building-secure-and-reliable-systems/raw/ch09.html",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l22-p05 }
+      - { id: show-p05b, type: slide.show, at: { mark: show-p05b }, slideId: l22-p05b }
+      - { id: show-p05c, type: slide.show, at: { mark: show-p05c }, slideId: l22-p05c }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] မသီရိရဲ့ drill လိုပဲ backup တစ်ခုကို ဒီအပတ် တကယ် restore လုပ်ကြည့်ပြီး ဘယ်လောက် ကြာလဲ အချိန် မှတ်ပါ။ ငွေ data အတွက် RPO နဲ့ RTO ကို business ဘက်က လူနဲ့ အတူ ချရေးပါ။ ပြီးတော့ data ဖျက်တဲ့ လုပ်ဆောင်ချက် တစ်ခုကို လူ နှစ်ယောက် အတည်ပြုမှ လုပ်လို့ရအောင် ပြောင်းပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l22-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] incident သုံးခုကို အတိုချုပ်ရရင် ဒီလိုပါ။ [[mark:sel-rpo]] RPO က ဘယ်လောက် ကြာချိန်စာ data ကို ဆုံးရှုံးခံနိုင်လဲ၊ [[mark:sel-rto]] RTO က ပြန်ကောင်းဖို့ ဘယ်လောက် ကြာခွင့်ရှိလဲ ဆိုတာ ဖြစ်ပြီး နှစ်ခုလုံး disaster အတွက်ပါ။ [[mark:sel-replication]] replication က replica တိုင်းဆီ အမှားကိုပါ ချက်ချင်း ကူးပေးလို့ backup မဟုတ်ပါဘူး။
+      [[mark:sel-snapshot]] snapshot က မြန်ပြီး ဈေးပေါပေမဲ့ storage ပျက်ရင် အတူ ပျက်ပါတယ်။ [[mark:sel-3-2-1]] သုံး နှစ် တစ် rule က မိတ္တူ သုံးခု၊ storage နှစ်မျိုး၊ တခြားနေရာမှာ တစ်ခု ထားတာ ဖြစ်ပြီး၊ [[mark:sel-restore-drill]] restore drill က backup ကို တကယ် restore လုပ်ပြီး ကြာချိန်နဲ့ data မှန်လား စစ်တာပါ။ [[mark:ask-question]] ဒါဆို backup ကို ၆ နာရီ တစ်ခါ ယူတယ် ဆိုရင် အဆိုးဆုံး RPO က ဘယ်လောက်လဲ?
+      [[mark:pause-question]] ၆ နာရီစာ write တွေပါ၊ နောက် backup မယူခင် ခဏလေးမှာ ပျက်ရင် အဲဒီကြားက write တွေ အကုန် ဆုံးရှုံးနိုင်လို့ပါ။ တစ်ညမှာတော့ ဈေးနှုန်းစာရင်း ထုတ်တဲ့ job တစ်ခုက တစ်ဝက်ကိုပဲ ပို့လိုက်လို့ ည ၁ နာရီမှာ top-up တွေ နေရာတိုင်း ရပ်သွားပါတယ်။ ကြိုမစီစဉ်ထားတဲ့ failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Google Cloud: Disaster recovery planning guide",
+          url: "https://docs.cloud.google.com/architecture/dr-scenarios-planning-guide",
+        }
+      - {
+          title: "SRE book, 1st ed: Data Integrity: What You Read Is What You Wrote",
+          url: "https://sre.google/sre-book/data-integrity/",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-rpo,
+          type: editor.select,
+          at: { mark: sel-rpo },
+          target: { file: notes.md, text: "RPO", occurrence: 1 },
+        }
+      - {
+          id: sel-rto,
+          type: editor.select,
+          at: { mark: sel-rto },
+          target: { file: notes.md, text: "RTO", occurrence: 1 },
+        }
+      - {
+          id: sel-replication,
+          type: editor.select,
+          at: { mark: sel-replication },
+          target: { file: notes.md, text: "replication ≠ backup", occurrence: 1 },
+        }
+      - {
+          id: sel-snapshot,
+          type: editor.select,
+          at: { mark: sel-snapshot },
+          target: { file: notes.md, text: "snapshot", occurrence: 1 },
+        }
+      - {
+          id: sel-3-2-1,
+          type: editor.select,
+          at: { mark: sel-3-2-1 },
+          target: { file: notes.md, text: "3-2-1", occurrence: 1 },
+        }
+      - {
+          id: sel-restore-drill,
+          type: editor.select,
+          at: { mark: sel-restore-drill },
+          target: { file: notes.md, text: "restore drill", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, as in lessons 3, 5 and 16. ask-question
+      # (the ⟪select မေးခွန်း⟫ marker) starts the question's own dialog, so the question-line
+      # select hangs off it with an offset: it starts about as the question ends, its drag runs
+      # in silence, and the answer at pause-question waits for it (the scheduler holds only the
+      # dialog after the select's anchor). The question is 82 characters: 6140 (400 + 82 x 70)
+      # would start the drag as the question ends at 70 ms per char, but an offset above ~5600
+      # trips compile-check's 2.5 s inserted-silence warning at 55, so 5600 leaves about
+      # 2.8 / 1.8 / 0.35 s of quiet before the answer at 55 / 70 / 95 ms per char.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 5600 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: backup ကို 6 နာရီ တစ်ခါ ယူတယ်။ အဆိုးဆုံး RPO က ဘယ်လောက်လဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
