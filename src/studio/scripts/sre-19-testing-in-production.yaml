@@ -1,0 +1,1422 @@
+# SRE from zero, lesson 19: Testing in production (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-19-testing-in-production.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-19-testing-in-production.md \
+#     src/studio/scripts/sre-19-testing-in-production.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: pricing v8's canary passed while Bill Pay broke (cover); board B1,
+# a canary as a comparison against a baseline, then the rollout steps with a
+# rollback branch; board B2, each caller's latency split by serving version,
+# Bill Pay's 1-second timeout crossed, the header that makes the split and the
+# rollout that stops itself; pages, why test in production and learning before
+# users are hurt, the fault experiment's steps and checkout's steady state;
+# board B3, the loyalty fault test and its fix; board B4, experiments scaled up
+# step by step; pages, the Thingyan game day, what follows it and the model
+# checker; this week; recap on notes.md.
+#
+# Three marks add no spoken text and sit at an existing ။ or ၊:
+# - hook-split splits the hook at its paragraph break (one 467-character
+#   dialog would pass the 450-character limit; no action uses it).
+# - b2-s2b, after the ၊ of "… နှေးရုံပါပဲ၊", lands B2's Bill Pay timeout line
+#   and its label as the narration names Bill Pay's 1-second wait, not ~10 s
+#   early.
+# - ask-question sits after the recap question's lead-in "… ပိတ်ရအောင်။", so
+#   the question-line select follows only the 95-character question and can
+#   make the ⟪pause 3s⟫ (see select-question). sel-question is the voice
+#   script's ⟪select မေးခွန်း⟫ and pause-question its ⟪pause 3s⟫.
+# B1 step 3's strip lands in two applies (b1-s3, then b1-s3-draw right after
+# it), so no apply adds more than three labelled boxes. Pacing: at 70 ms/char
+# no page or board step holds longer than ~35 s (the cover), so no pacing page
+# or step was added beyond the voice script's own.
+#
+# ⟪close board⟫ straight into the next board (scenes 3 and 7) wipes the open
+# board 400 ms early (whiteboard.apply clear) instead of closing the panel, as
+# in lesson 8, so the editor does not flash between two boards; the next board
+# then draws with open: true, clear: true as usual. B1 step 3 wipes the comb
+# (clear; the board stays open) because the voice script marks it "cleared",
+# as lesson 6's B1 step 5 does. A board followed by a deck page closes the
+# panel (open: false) 400 ms before the page, and a deck page followed by a
+# board closes the page 400 ms before, as in Module 1.
+#
+# Boards (B1 P2 comb, then a P1 strip; B2 P5 bars; B3 P1 flow; B4 P7
+# staircase). Colour jobs: #1e1e1e ink (paints white) for arrows, the bus, the
+# axis, the users box and the bar names; blue the thing named and the first
+# data series (baseline and canary, the v7 bars and legend, the header,
+# checkout, the experiment steps); violet the result and the second series
+# (compare, the v8 bars and legend); green healthy or done (the rollout steps,
+# the fix and "every night"); red failure (rollback, the stopped rollout, the
+# injected delay, the 30-second default); orange the caveat or limit (Bill
+# Pay's timeout line, the 2% note, the soft dependency, the region step done
+# on paper only). B2's v8 bars are each the same 600 ms taller than their v7
+# bars and only Bill Pay's crosses its timeout line, as the voice script and
+# the Module 5 review decided. B4's steps rise left to right as overlapping
+# cards (each about 125 px right and 80 px up): the widest step ("dependency
+# တစ်ခု fail", 21 code points) needs a box of about 340 px under the 0.55 rule,
+# and five steps side by side do not fit the 850 px visible area; the rising
+# steps carry the order, so there are no arrows. A label on two lines is two
+# text assets, one per line, so each line meets the 0.55 em width rule on its
+# own; every label was also measured in Chrome with Excalidraw's Virgil font
+# and fits the box it sits in.
+#
+# Deck pages: deck "Next Editor · SRE 5A · Toil and tests", published; the
+# /pub URL below is final. Its l19 pages are built later from the page plan, so
+# until then the Director reports page "l19_p01" missing from the published
+# deck. Page plan: ~/Documents/sre-course/work/pages/sre-19-testing-in-production.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-19-testing-in-production.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-19-testing-in-production.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-19-testing-in-production
+  title: "SRE from zero 19: Production ထဲမှာ စမ်းသပ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Production ထဲမှာ စမ်းသပ်ခြင်း
+
+        - canary — version အသစ်ကို traffic နည်းနည်းဆီ အရင် ပို့
+        - baseline — တစ်ချိန်တည်း version ဟောင်း run နေတဲ့ ယှဉ်စရာ အုပ်စု
+        - change supervision — ခေါ်သုံးတဲ့ဘက်က ကိန်းဂဏန်း ဆိုးရင် rollout ကို အလိုအလျောက် ရပ်
+        - fault experiment — steady state + hypothesis၊ ပျက်စီးမှုကို ထိန်းချုပ်ပြီး inject
+        - soft dependency — မရှိလည်း အဓိက အလုပ် ဆက်ဖြစ်ရ၊ ညတိုင်း စမ်း
+        - game day — ပျက်စီးမှုကို အဖွဲ့လိုက် ကြိုလေ့ကျင့်တဲ့ နေ့
+
+        မေးခွန်း: canary ကောင်းနေတယ်။ ဘယ် အုပ်စု နှစ်ခုကို နှိုင်းယှဉ်နေရမလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Production ထဲမှာ စမ်းသပ်ခြင်း</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 19</p>
+              <h1>Production ထဲမှာ စမ်းသပ်ခြင်း</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l19-p01
+      contentType: google
+      name: "Cover: pricing's canary passed, Bill Pay broke"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p01
+    - id: l19-p02
+      contentType: google
+      name: Why test in production?
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p02
+    - id: l19-p02b
+      contentType: google
+      name: Learn after users are hurt, or before
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p02b
+    - id: l19-p03
+      contentType: google
+      name: A fault experiment
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p03
+    - id: l19-p03b
+      contentType: google
+      name: "Checkout's steady state"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p03b
+    - id: l19-p03c
+      contentType: google
+      name: The Thingyan game day
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p03c
+    - id: l19-p03d
+      contentType: google
+      name: After the game day
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p03d
+    - id: l19-p03e
+      contentType: google
+      name: Small, critical rules
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p03e
+    - id: l19-p04
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vSUjGpV7K11ualy0QUFQ7PS3QU2tpW2fht7U6kj23CDggGd66s-wmJg5vKNeX8RVqGstlnWtCqTwzi7/pub"
+      pageId: l19_p04
+  whiteboardAssets:
+    # ---- Board B1: a canary against a baseline (P2 comb), then the rollout strip
+    - {
+        id: l19-b1-users,
+        kind: rectangle,
+        x: 255,
+        y: 335,
+        width: 160,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-users-t,
+        kind: text,
+        x: 267,
+        y: 352,
+        width: 135,
+        height: 35,
+        text: "user တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-a0,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 419,
+        y: 350,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-bus,
+        kind: rectangle,
+        x: 459,
+        y: 225,
+        width: 10,
+        height: 290,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 473,
+        y: 247,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-base,
+        kind: rectangle,
+        x: 517,
+        y: 220,
+        width: 285,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b1-base-t1,
+        kind: text,
+        x: 531,
+        y: 231,
+        width: 130,
+        height: 35,
+        text: "baseline",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-base-t2,
+        kind: text,
+        x: 531,
+        y: 269,
+        width: 250,
+        height: 35,
+        text: "(version ဟောင်း)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 473,
+        y: 447,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-can,
+        kind: rectangle,
+        x: 517,
+        y: 420,
+        width: 285,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b1-can-t1,
+        kind: text,
+        x: 531,
+        y: 431,
+        width: 100,
+        height: 35,
+        text: "canary",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-can-t2,
+        kind: text,
+        x: 531,
+        y: 469,
+        width: 268,
+        height: 35,
+        text: "(version အသစ်) 1%",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 806,
+        y: 247,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 806,
+        y: 447,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-cmp,
+        kind: rectangle,
+        x: 850,
+        y: 220,
+        width: 220,
+        height: 295,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l19-b1-cmp-t,
+        kind: text,
+        x: 872,
+        y: 350,
+        width: 175,
+        height: 35,
+        text: "နှိုင်းယှဉ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Step 3 (the comb wiped): 1% → 10% → 50% → all, rollback under the first three.
+    - {
+        id: l19-b1-s1,
+        kind: rectangle,
+        x: 258,
+        y: 250,
+        width: 150,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l19-b1-s1-t,
+        kind: text,
+        x: 312,
+        y: 267,
+        width: 45,
+        height: 35,
+        text: "1%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-sa1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 412,
+        y: 265,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-s2,
+        kind: rectangle,
+        x: 458,
+        y: 250,
+        width: 150,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l19-b1-s2-t,
+        kind: text,
+        x: 501,
+        y: 267,
+        width: 65,
+        height: 35,
+        text: "10%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-sa2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 612,
+        y: 265,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-s3,
+        kind: rectangle,
+        x: 658,
+        y: 250,
+        width: 150,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l19-b1-s3-t,
+        kind: text,
+        x: 696,
+        y: 267,
+        width: 75,
+        height: 35,
+        text: "50%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-sa3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 812,
+        y: 265,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b1-s4,
+        kind: rectangle,
+        x: 858,
+        y: 250,
+        width: 170,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l19-b1-s4-t,
+        kind: text,
+        x: 888,
+        y: 267,
+        width: 110,
+        height: 35,
+        text: "အားလုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b1-rb-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 308,
+        y: 328,
+        width: 50,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l19-b1-rb-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 508,
+        y: 328,
+        width: 50,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l19-b1-rb-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 708,
+        y: 328,
+        width: 50,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l19-b1-rb,
+        kind: rectangle,
+        x: 258,
+        y: 386,
+        width: 550,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l19-b1-rb-t,
+        kind: text,
+        x: 471,
+        y: 403,
+        width: 125,
+        height: 35,
+        text: "rollback",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B2: each caller's latency by serving version (P5 bars, 0.2 px a ms)
+    - {
+        id: l19-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 270,
+        y: 496,
+        width: 500,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b2-leg7,
+        kind: text,
+        x: 280,
+        y: 165,
+        width: 232,
+        height: 35,
+        text: "v7 ကနေ latency",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-c7,
+        kind: rectangle,
+        x: 300,
+        y: 450,
+        width: 45,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l19-b2-xc,
+        kind: text,
+        x: 283,
+        y: 532,
+        width: 130,
+        height: 35,
+        text: "checkout",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-e7,
+        kind: rectangle,
+        x: 470,
+        y: 460,
+        width: 45,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l19-b2-xe,
+        kind: text,
+        x: 478,
+        y: 532,
+        width: 80,
+        height: 35,
+        text: "Eats",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-b7,
+        kind: rectangle,
+        x: 640,
+        y: 400,
+        width: 45,
+        height: 120,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l19-b2-xb,
+        kind: text,
+        x: 626,
+        y: 532,
+        width: 125,
+        height: 35,
+        text: "Bill Pay",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-leg8,
+        kind: text,
+        x: 560,
+        y: 165,
+        width: 125,
+        height: 35,
+        text: "v8 ကနေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-c8,
+        kind: rectangle,
+        x: 351,
+        y: 330,
+        width: 45,
+        height: 190,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l19-b2-e8,
+        kind: rectangle,
+        x: 521,
+        y: 340,
+        width: 45,
+        height: 180,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l19-b2-b8,
+        kind: rectangle,
+        x: 691,
+        y: 280,
+        width: 45,
+        height: 240,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l19-b2-lim,
+        kind: rectangle,
+        x: 628,
+        y: 318,
+        width: 120,
+        height: 4,
+        strokeColor: "#f08c00",
+        backgroundColor: "#f08c00",
+      }
+    - {
+        id: l19-b2-lim-t1,
+        kind: text,
+        x: 760,
+        y: 284,
+        width: 265,
+        height: 35,
+        text: "Bill Pay timeout:",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-lim-t2,
+        kind: text,
+        x: 760,
+        y: 319,
+        width: 140,
+        height: 35,
+        text: "1 စက္ကန့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-note,
+        kind: text,
+        x: 280,
+        y: 585,
+        width: 340,
+        height: 35,
+        text: "v8 က call တွေရဲ့ 2% ပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-hdr,
+        kind: text,
+        x: 280,
+        y: 222,
+        width: 340,
+        height: 35,
+        text: "header: ဖြေတဲ့ version",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b2-stop,
+        kind: rectangle,
+        x: 760,
+        y: 400,
+        width: 200,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l19-b2-stop-t,
+        kind: text,
+        x: 774,
+        y: 417,
+        width: 172,
+        height: 35,
+        text: "rollout ရပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board B3: the loyalty fault test (P1 flow), then the fix ---------------
+    - {
+        id: l19-b3-co,
+        kind: rectangle,
+        x: 258,
+        y: 260,
+        width: 165,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b3-co-t,
+        kind: text,
+        x: 272,
+        y: 277,
+        width: 130,
+        height: 35,
+        text: "checkout",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 275,
+        width: 222,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l19-b3-loy,
+        kind: rectangle,
+        x: 660,
+        y: 245,
+        width: 290,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l19-b3-loy-t1,
+        kind: text,
+        x: 675,
+        y: 257,
+        width: 218,
+        height: 35,
+        text: "loyalty points",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-loy-t2,
+        kind: text,
+        x: 675,
+        y: 297,
+        width: 95,
+        height: 35,
+        text: "(soft)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-inj-t1,
+        kind: text,
+        x: 440,
+        y: 185,
+        width: 110,
+        height: 35,
+        text: "inject:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-inj-t2,
+        kind: text,
+        x: 440,
+        y: 222,
+        width: 218,
+        height: 35,
+        text: "3 စက္ကန့် နှေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-def-t1,
+        kind: text,
+        x: 262,
+        y: 345,
+        width: 250,
+        height: 35,
+        text: "default timeout:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-def-t2,
+        kind: text,
+        x: 262,
+        y: 382,
+        width: 172,
+        height: 35,
+        text: "30 စက္ကန့်!",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-fix,
+        kind: rectangle,
+        x: 470,
+        y: 445,
+        width: 300,
+        height: 95,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l19-b3-fix-t1,
+        kind: text,
+        x: 485,
+        y: 457,
+        width: 265,
+        height: 35,
+        text: "timeout 300 ms +",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-fix-t2,
+        kind: text,
+        x: 485,
+        y: 495,
+        width: 265,
+        height: 35,
+        text: "point နောက်မှ ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b3-night,
+        kind: text,
+        x: 485,
+        y: 560,
+        width: 235,
+        height: 35,
+        text: "အခု ညတိုင်း run",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board B4: experiments scaled up step by step (P7 staircase) -----------
+    - {
+        id: l19-b4-st1,
+        kind: rectangle,
+        x: 255,
+        y: 560,
+        width: 345,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b4-st1-t,
+        kind: text,
+        x: 270,
+        y: 577,
+        width: 235,
+        height: 35,
+        text: "call တစ်ခု နှေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b4-st2,
+        kind: rectangle,
+        x: 380,
+        y: 480,
+        width: 345,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b4-st2-t,
+        kind: text,
+        x: 395,
+        y: 497,
+        width: 325,
+        height: 35,
+        text: "dependency တစ်ခု fail",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b4-st3,
+        kind: rectangle,
+        x: 505,
+        y: 400,
+        width: 345,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b4-st3-t,
+        kind: text,
+        x: 520,
+        y: 417,
+        width: 235,
+        height: 35,
+        text: "link တစ်ခု ဖြတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b4-st4,
+        kind: rectangle,
+        x: 630,
+        y: 320,
+        width: 345,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l19-b4-st4-t,
+        kind: text,
+        x: 645,
+        y: 337,
+        width: 250,
+        height: 35,
+        text: "zone တစ်ခု drain",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b4-st5,
+        kind: rectangle,
+        x: 755,
+        y: 205,
+        width: 345,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l19-b4-st5-t1,
+        kind: text,
+        x: 770,
+        y: 217,
+        width: 205,
+        height: 35,
+        text: "region ပျောက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l19-b4-st5-t2,
+        kind: text,
+        x: 770,
+        y: 257,
+        width: 235,
+        height: 35,
+        text: "(စာရွက်ပေါ်မှာ)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2619
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Canary pass ပေမဲ့ Bill Pay ပျက်
+    narration: >
+      [[mark:show-p01]] routing config ပြောင်းတိုင်း check သုံးဆင့် ဖြတ်ရပြီး live config ကိုလည်း Git နဲ့ ညတိုင်း တိုက်ကြည့်ပါတယ်။ ဒီတစ်ပတ် ဝန်ဆောင်ခ တွက်တဲ့ pricing က version ၈ ကို rollout လုပ်တော့ traffic နည်းနည်းဆီ အရင် ပို့တဲ့ canary က pass ဖြစ်ပြီး dashboard တွေလည်း အစိမ်းရောင်ပါ။
+      [[mark:hook-split]] ဒါပေမဲ့ Bill Pay မှာ မီတာခ ပေးလို့ မရဘူးဆိုတဲ့ တိုင်ကြားချက်တွေ ဝင်လာပါတယ်။ ခွဲကြည့်တော့ version ၈ ဆီ ရောက်တဲ့ Bill Pay call တွေရဲ့ ၃၀ ရာခိုင်နှုန်းက timeout ဖြစ်နေတာပါ။ ဒါဆို ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့တာလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      # -1750 / -1450, as in Module 1: a pull-back over 1780 ms pushes the first dialog
+      # past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l19-p01,
+        }
+
+  - id: canary
+    chapter: Canary ဆိုတာ နှိုင်းယှဉ်တာ
+    narration: >
+      [[mark:close-p01]] [[mark:b1-s1]] canary တစ်ခု ဘယ်လို အလုပ်လုပ်လဲ အရင် ကြည့်ရအောင်။ canary မှာ request ၁ ရာခိုင်နှုန်းကိုပဲ version အသစ်ဆီ အရင် ပို့ပြီး တစ်ချိန်တည်း version ဟောင်း run နေတဲ့ အရွယ်တူ အုပ်စု တစ်ခုကိုလည်း ယှဉ်ဖို့ ခွဲထားပါတယ်၊ အဲဒီ အုပ်စုကို baseline လို့ ခေါ်ပါတယ်။
+      [[mark:b1-s2]] အုပ်စု နှစ်ခုရဲ့ error နဲ့ latency ကို ဘေးချင်းယှဉ်ပြီး အသစ်က ပိုဆိုးလား စစ်တာကို canary analysis လို့ ခေါ်ပါတယ်၊ graph ကို မျက်စိနဲ့ ထိုင်ကြည့်တာ မဟုတ်ပါဘူး။ တစ်ချိန်တည်း ယှဉ်တော့ နေ့လယ်စာချိန်မှာ နှစ်ဖက်လုံး နှေးရင် version ကြောင့် မဟုတ်မှန်း သိပါတယ်။ code အသစ်က user အစစ်နဲ့ production config အစစ်ကို ပထမဆုံး တွေ့တဲ့ နေရာမို့ canary က တခြား test တွေ မမိတာကို မိတတ်ပါတယ်။
+      [[mark:b1-s3]] ကောင်းရင် ၁ ရာခိုင်နှုန်းကနေ ၁၀၊ ၅၀ ရာခိုင်နှုန်း၊ ပြီးမှ အားလုံးဆီ တိုးပြီး ပိုဆိုးရင် ချက်ချင်း rollback လုပ်ပါတယ်။ အဆင့်တစ်ခုစီကြားမှာ ပြဿနာ ပေါ်မလား စောင့်ကြည့်တဲ့ အချိန်ကို bake time လို့ ခေါ်ပြီး ထိတဲ့ user နည်းတဲ့ အစပိုင်းကို မြန်မြန်၊ user များတဲ့ နောက်ပိုင်းကို ဖြည်းဖြည်း သွားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - { id: close-p01, type: slide.close, at: { mark: close-p01, offsetMs: -400 } }
+      - id: b1-s1
+        type: whiteboard.apply
+        at: { mark: b1-s1 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l19-b1-users,
+            l19-b1-users-t,
+            l19-b1-a0,
+            l19-b1-bus,
+            l19-b1-a1,
+            l19-b1-base,
+            l19-b1-base-t1,
+            l19-b1-base-t2,
+            l19-b1-a2,
+            l19-b1-can,
+            l19-b1-can-t1,
+            l19-b1-can-t2,
+          ]
+        drawMs: 2400
+      - id: b1-s2
+        type: whiteboard.apply
+        at: { mark: b1-s2 }
+        upsertIds: [l19-b1-a3, l19-b1-a4, l19-b1-cmp, l19-b1-cmp-t]
+        drawMs: 1200
+      # Step 3 wipes the comb (the board stays open), then the strip lands in two
+      # applies, the second right after the first, so neither adds more than three
+      # labelled boxes: 1%, 10% and 50%, then "all" and the rollback branch.
+      - id: b1-s3
+        type: whiteboard.apply
+        at: { mark: b1-s3 }
+        clear: true
+        upsertIds:
+          [
+            l19-b1-s1,
+            l19-b1-s1-t,
+            l19-b1-sa1,
+            l19-b1-s2,
+            l19-b1-s2-t,
+            l19-b1-sa2,
+            l19-b1-s3,
+            l19-b1-s3-t,
+          ]
+        drawMs: 1800
+      - id: b1-s3-draw
+        type: whiteboard.apply
+        at: { afterAction: b1-s3 }
+        upsertIds:
+          [
+            l19-b1-sa3,
+            l19-b1-s4,
+            l19-b1-s4-t,
+            l19-b1-rb-a1,
+            l19-b1-rb-a2,
+            l19-b1-rb-a3,
+            l19-b1-rb,
+            l19-b1-rb-t,
+          ]
+        drawMs: 2000
+
+  - id: callers
+    chapter: ခေါ်သုံးတဲ့ဘက်က ကြည့်ပါ
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို ဘာ လွဲသွားလဲ? ငွေချေတဲ့ checkout၊ Eats နဲ့ Bill Pay တို့က pricing ကို ခေါ်သုံးပါတယ်။ အပြာရောင် bar တွေက version ၇ က ဖြေတဲ့အခါ အဲဒီ သုံးခုဘက်က စောင့်ရတဲ့ latency ပါ။
+      [[mark:b2-s2]] version ၈ ကတော့ ဝန်ဆောင်ခ ရှာတိုင်း ၆၀၀ millisecond လောက် ပိုကြာပါတယ်။ checkout နဲ့ Eats က ပိုကြာကြာ စောင့်နိုင်လို့ နည်းနည်း နှေးရုံပါပဲ၊ [[mark:b2-s2b]] Bill Pay ကတော့ ၁ စက္ကန့်ပဲ စောင့်လို့ version ၈ က ဖြေတဲ့ call အတော်များများ timeout ဖြစ်ပါတယ်။ ဒါပေမဲ့ pricing ရဲ့ canary က version ၈ ပိုနှေးတာကို ကိုယ့် ပစ်မှတ်အတွင်းမှာပဲမို့ လက်ခံလိုက်ပြီး Bill Pay လက်လျှော့ပြီးမှ ပို့တဲ့ အဖြေကိုတောင် အောင်မြင်တယ်လို့ မှတ်လို့ pass ဖြစ်ခဲ့တာပါ။
+      [[mark:b2-s3]] version ၈ က pricing call တွေရဲ့ ၂ ရာခိုင်နှုန်းလောက်ပဲ ဖြေနေသေးလို့ စုစုပေါင်း latency ကလည်း မလှုပ်သလောက်ပါ။ ဖြည်းဖြည်း ဖြန့်တာကိုက ပြဿနာကို ဖုံးထားလို့ ကိုယ့်ဘက်ကိုပဲ ကြည့်ရင် ခေါ်သုံးတဲ့သူတွေရဲ့ ဒုက္ခကို မမြင်ရပါဘူး။
+      [[mark:b2-s4]] ဒါကြောင့် pricing က အဖြေတိုင်းမှာ ဘယ် version က ဖြေလဲ ဆိုတာ header နဲ့ တွဲပို့ပြီး service တိုင်း မျှသုံးတဲ့ client library က call တိုင်းကို အဲဒီ version အလိုက် ခွဲမှတ်ပေးပါတယ်။ ခေါ်သုံးတဲ့ service တိုင်း ဘာမှ ထပ်မရေးဘဲ ဒီ bar တွေကို ရပြီး ပေးရတဲ့ အဖိုးကတော့ သိမ်းရမယ့် metric label တွေ များလာတာပါ။
+      [[mark:b2-s5]] အခုဆို ခေါ်သုံးတဲ့ ဘယ်သူ့ဘက်မှာမဆို version အသစ်ရဲ့ ကိန်းဂဏန်း ဆိုးလာတာနဲ့ rollout က အလိုအလျောက် ရပ်ပါတယ်။ ဒီ နည်းကို change supervision လို့ ခေါ်ပြီး lesson ၈ က အလိုအလျောက် rollback ကို ချဲ့ထားတာပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      # The axis and the v7 legend land with the board, then the three blue bars
+      # and their callers are drawn.
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l19-b2-axis, l19-b2-leg7],
+        }
+      - id: b2-s1-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s1 }
+        upsertIds: [l19-b2-c7, l19-b2-xc, l19-b2-e7, l19-b2-xe, l19-b2-b7, l19-b2-xb]
+        drawMs: 1800
+      - { id: b2-s2, type: whiteboard.apply, at: { mark: b2-s2 }, upsertIds: [l19-b2-leg8] }
+      - id: b2-s2-draw
+        type: whiteboard.apply
+        at: { afterAction: b2-s2 }
+        upsertIds: [l19-b2-c8, l19-b2-e8, l19-b2-b8]
+        drawMs: 1500
+      # Bill Pay's 1-second timeout line lands as the narration names it.
+      - id: b2-s2b
+        type: whiteboard.apply
+        at: { mark: b2-s2b }
+        upsertIds: [l19-b2-lim, l19-b2-lim-t1, l19-b2-lim-t2]
+        drawMs: 1200
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l19-b2-note],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-s4,
+          type: whiteboard.apply,
+          at: { mark: b2-s4 },
+          upsertIds: [l19-b2-hdr],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-s5,
+          type: whiteboard.apply,
+          at: { mark: b2-s5 },
+          upsertIds: [l19-b2-stop, l19-b2-stop-t],
+          drawMs: 900,
+        }
+
+  - id: why-production
+    chapter: Production ထဲမှာ ဘာလို့ စမ်းလဲ
+    narration: >
+      [[mark:close-b2]] [[mark:show-p02]] production ထဲမှာ စမ်းတာ အန္တရာယ် မများဘူးလားလို့ မေးစရာ ရှိပါတယ်။ ဒါပေမဲ့ staging ကို production နဲ့ ဘယ်လောက် ဆင်တူအောင် လုပ်ထားထား user အစစ်တွေရဲ့ အပြုအမူကို အတိအကျ မကူးနိုင်ပါဘူး။ ဒါကြောင့် user နည်းနည်းကိုပဲ ထိအောင် ထားပြီး မြန်မြန် ပြန်ဖြုတ်နိုင်ရင် testing in production က အယုံရဆုံး test ဖြစ်ပါတယ်။ ပြီးတော့ feature တွေကိုပဲ မဟုတ်ဘဲ ပျက်တာကိုပါ ကြိုစမ်းရပါမယ်။
+      [[mark:show-p02b]] postmortem က user ဒုက္ခရောက်ပြီးမှ သင်ပေးပြီး system ပြောင်းလဲတဲ့ အမြန်နှုန်းကိုလည်း မမီပါဘူး။ ကြိုစမ်းရင်တော့ user မထိခင် သိရပြီး ပုံမှန် ပြန်စမ်းနေလို့ အပြောင်းအလဲတွေကိုပါ မီပါတယ်။ လူ အပြည့်အဝ နားမလည်တဲ့ code များလာလေ ဒီလို စမ်းတာက အဓိက စစ်ချက် ဖြစ်လာလေပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l19-p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l19-p02b }
+
+  - id: fault-experiment
+    chapter: Fault experiment
+    narration: >
+      [[mark:show-p03]] ပျက်တာကို ကြိုစမ်းတဲ့ နည်းက fault experiment ပါ၊ ပျက်စီးမှု တစ်ခုကို production ထဲ တမင် inject လုပ်ပြီး system ဘယ်လို တုံ့ပြန်လဲ ကြည့်တာပါ။ ဒါကို စနစ်တကျ ပုံမှန် လုပ်တာကို chaos engineering လို့ ခေါ်ပေမဲ့ ကျပန်း ဖျက်တာ မဟုတ်ပါဘူး၊ လူတိုင်း ဖတ်လို့ရတဲ့ Principles of Chaos Engineering ထဲက အဆင့်တွေအတိုင်း သွားပြီး ထိခိုက်နိုင်တဲ့ နယ်ပယ်၊ blast radius ကို အမြဲ ကန့်သတ်ပါတယ်။
+      [[mark:show-p03b]] steady state ဆိုတာ ပုံမှန် ကျန်းမာနေတဲ့ ပုံကို သဘောတူထားတဲ့ ပစ်မှတ်၊ SLO လိုပဲ user ခံစားရတဲ့ ကိန်းဂဏန်းနဲ့ ရေးတာပါ။ Padauk ရဲ့ checkout အတွက်ဆို ၉၉.၅ ရာခိုင်နှုန်း အောင်မြင်ပြီး request ၉၅ ရာခိုင်နှုန်းက ၁.၅ စက္ကန့်အတွင်း ပြီးရပါမယ်။ hypothesis ကတော့ စမ်းပြီး စစ်မယ့် ယူဆချက်ပါ၊ point ပေးတဲ့ loyalty service က error ပြန်ပေးပေး၊ ၃ စက္ကန့် နှေးနှေး checkout က ဒီ steady state ထဲမှာ ဆက်ရှိမယ်လို့ ယူဆပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l19-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l19-p03b }
+
+  - id: loyalty-test
+    chapter: Soft ဖြစ်နေသေးလား
+    narration: >
+      [[mark:close-p03b]] [[mark:b3-s1]] point မရရင်တောင် ငွေချေတာ ဆက်ဖြစ်ရမှာမို့ loyalty က soft dependency ပါ၊ မရှိရင်လည်း အဓိက အလုပ် ဆက်လုပ်နိုင်ရမယ့် dependency ပါ။ မစခင် မသီရိရဲ့ အဖွဲ့က ဘာစမ်းမလဲ၊ ဘာကြည့်မလဲ၊ ဘယ်သူမဆို ချက်ချင်း ပြန်ရပ်နိုင်တဲ့ အဆင့်တွေ ပါတဲ့ plan ကို ရေးပြီး loyalty အဖွဲ့ကို review လုပ်ခိုင်းပါတယ်။
+      [[mark:b3-s2]] loyalty ကို တကယ် မဖျက်ဘဲ checkout ဘက်ကနေ ထွက်တဲ့ call တွေကိုပဲ နှေးအောင် လုပ်ပါတယ်၊ dependency ပျက်တာကို ကိုယ့်ဘက်ကနေ စမ်းတာပါ။ မနက် ၂ နာရီမှာ traffic ၁ ရာခိုင်နှုန်းမှာပဲ ၃ စက္ကန့် delay ကို inject လုပ်ပြီး အဲဒီ rule ကလည်း အချိန်ပြည့်ရင် ကိုယ့်ဘာသာ ပျောက်သွားပါတယ်။
+      [[mark:b3-s3]] ရလဒ်ကတော့ hypothesis နဲ့ မတူပါဘူး၊ checkout က point မပါဘဲ ဆက်သွားမယ့်အစား ၃ စက္ကန့်လုံး ထိုင်စောင့်နေလို့ steady state ရဲ့ ၁.၅ စက္ကန့်ကို ကျော်သွားပါတယ်။ ရှာကြည့်တော့ loyalty call မှာ timeout မသတ်မှတ်ထားလို့ default ၃၀ စက္ကန့် ဖြစ်နေတာပါ၊ loyalty တကယ် ရပ်သွားရင် checkout တိုင်း ၃၀ စက္ကန့်အထိ စောင့်ရမှာပါ။
+      [[mark:b3-s4]] ပြင်တာက ရိုးရိုးလေးပါ၊ loyalty ကို ၃၀၀ millisecond ပဲ စောင့်ပြီး မဖြေရင် point ကို နောက်မှ ထည့်ပေးတာပါ။ code ပြောင်းရင်း soft dependency တစ်ခုက ဘယ်သူမှ မသိဘဲ မရှိမဖြစ် dependency ဖြစ်သွားတတ်လို့ ဒီ test ကို အခု ညတိုင်း run ပါတယ်။ ရလဒ် မလှပေမဲ့ မဖုံးဘဲ မျှပေးတော့ တခြား အဖွဲ့တွေလည်း ကိုယ့် timeout တွေကို ပြန်စစ်ကြပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+      - {
+          title: "SRE book, 1st ed: Testing for Reliability",
+          url: "https://sre.google/sre-book/testing-reliability/",
+        }
+    actions:
+      - { id: close-p03b, type: slide.close, at: { mark: close-p03b, offsetMs: -400 } }
+      - id: b3-s1
+        type: whiteboard.apply
+        at: { mark: b3-s1 }
+        open: true
+        clear: true
+        upsertIds: [l19-b3-co, l19-b3-co-t, l19-b3-a1, l19-b3-loy, l19-b3-loy-t1, l19-b3-loy-t2]
+        drawMs: 1800
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds: [l19-b3-inj-t1, l19-b3-inj-t2],
+          drawMs: 1200,
+        }
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l19-b3-def-t1, l19-b3-def-t2],
+          drawMs: 1200,
+        }
+      - id: b3-s4
+        type: whiteboard.apply
+        at: { mark: b3-s4 }
+        upsertIds: [l19-b3-fix, l19-b3-fix-t1, l19-b3-fix-t2, l19-b3-night]
+        drawMs: 1800
+
+  - id: game-day
+    chapter: သင်္ကြန် game day
+    narration: >
+      [[mark:close-b3]] [[mark:b4-s1]] fault experiment တွေကို လှေကားထစ်လို တစ်ဆင့်ချင်း ကြီးအောင် လုပ်ပါတယ်၊ call တစ်ခု နှေးအောင် လုပ်တာကနေ dependency တစ်ခုလုံး fail ဖြစ်အောင် ဆက်တက်ပါတယ်။
+      [[mark:b4-s2]] နောက်တစ်ဆင့်မှာ service နှစ်ခုကြားက network link ကို ဖြတ်ကြည့်ပါတယ်၊ zone တစ်ခုကိုလည်း drain လုပ်ပြီး traffic ကို တခြား zone တွေဆီ လွှဲကြည့်ပါတယ်။ database connection ကုန်တာလို resource ပြတ်တာကို စမ်းရင်လည်း service က crash မဖြစ်ဘဲ ရှင်းတဲ့ error ပြပြီး alert တက်ရပါမယ်။
+      [[mark:b4-s3]] အမြင့်ဆုံး အဆင့်က region တစ်ခုလုံး ဆုံးရှုံးတာပါ။ Padauk မှာ region တစ်ခုပဲ ရှိလို့ ဒါကိုတော့ စာရွက်ပေါ်မှာပဲ လေ့ကျင့်ပါတယ်၊ ခေါင်းဆောင်တွေကလည်း ဒါကို သင်္ကြန် game day ခေါင်းစဉ်အဖြစ် ရွေးပါတယ်။
+      [[mark:close-b4]] [[mark:show-p03c]] game day ဆိုတာ ပျက်စီးမှုကို တမင် ဖန်တီးပြီး အဖွဲ့လိုက် ကြိုလေ့ကျင့်တဲ့ နေ့ပါ။ region ပျောက်ပြီ ဆိုတဲ့ ခေါင်းစဉ်အောက်မှာ အဖွဲ့တိုင်း ကိုယ့် test ကိုယ် ထည့်ပါတယ်၊ ဥပမာ Wallet က မနေ့က backup ကို တကယ် restore လုပ်ကြည့်ပြီး support ကတော့ settlement ကို ပြန် run တတ်တဲ့ ကိုအောင် ခွင့်ယူထားရင် ဘာလုပ်မလဲ ဆွေးနွေးပါတယ်။
+      [[mark:show-p03d]] Wallet နဲ့ Eats က တစ်ဖွဲ့ test ကို တစ်ဖွဲ့ စစ်ပေးပြီး တက်သင့်တဲ့ alert တွေ တကယ် တက်လားလည်း ကြည့်ပါတယ်။ တွေ့သမျှကို နောက် သုံးလပတ် plan ထဲ ထည့်ပါတယ်၊ ဒါက အမှတ်ပေးတဲ့ audit မဟုတ်ဘဲ ပိုကောင်းလာဖို့ပါ။
+      [[mark:show-p03e]] test တွေက ဖြစ်နိုင်တဲ့ အခြေအနေ တချို့ကိုပဲ စမ်းနိုင်ပါတယ်။ wallet balance ဘယ်တော့မှ သုညအောက် မရောက်ရဘူး ဆိုတဲ့ သေးပြီး အရေးကြီးတဲ့ rule မျိုးအတွက်တော့ model checker ဆိုတဲ့ tool က အဆင့်တွေရဲ့ အစဉ်တိုင်းကို စမ်းပေးပါတယ်။ ဒီတော့ request နှစ်ခု တစ်ပြိုင်နက် ဝင်လာရင် balance စစ်တာနဲ့ ငွေနှုတ်တာကြားက ကွက်လပ်ကို ရှာပေးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "SRE principles in practice for business continuity (Google Cloud Blog)",
+          url: "https://cloud.google.com/blog/products/management-tools/sre-principles-in-practice-for-business-continuity",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B3 400 ms early, keep the panel open.
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          clear: true,
+        }
+      - id: b4-s1
+        type: whiteboard.apply
+        at: { mark: b4-s1 }
+        open: true
+        clear: true
+        upsertIds: [l19-b4-st1, l19-b4-st1-t, l19-b4-st2, l19-b4-st2-t]
+        drawMs: 1600
+      - id: b4-s2
+        type: whiteboard.apply
+        at: { mark: b4-s2 }
+        upsertIds: [l19-b4-st3, l19-b4-st3-t, l19-b4-st4, l19-b4-st4-t]
+        drawMs: 1600
+      - id: b4-s3
+        type: whiteboard.apply
+        at: { mark: b4-s3 }
+        upsertIds: [l19-b4-st5, l19-b4-st5-t1, l19-b4-st5-t2]
+        drawMs: 1200
+      - {
+          id: close-b4,
+          type: whiteboard.apply,
+          at: { mark: close-b4, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l19-p03c }
+      - { id: show-p03d, type: slide.show, at: { mark: show-p03d }, slideId: l19-p03d }
+      - { id: show-p03e, type: slide.show, at: { mark: show-p03e }, slideId: l19-p03e }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p04]] production ထဲ စမ်းတာကို ဒီအပတ် စာရွက်ပေါ်ကနေ စပါ။ soft dependency တစ်ခုအတွက် steady state၊ hypothesis နဲ့ ပြန်ရပ်နည်း ပါတဲ့ fault experiment တစ်ခု ရေးကြည့်ပါ။ ကိုယ် ခေါ်သုံးနေတဲ့ service တစ်ခုရဲ့ latency ကို ဖြေတဲ့ version အလိုက် ခွဲကြည့်ပါ။ ပြီးတော့ တစ်နာရီ game day တစ်ခုကို calendar ထဲ ထည့်ထားပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l19-p04 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p04]] [[mark:open-notes]] notes ထဲက ခြောက်ခုကို pricing နဲ့ loyalty ပုံပြင်နဲ့ တွဲမှတ်ပါ။ [[mark:sel-canary]] canary က version အသစ်ကို traffic နည်းနည်းဆီ အရင် ပို့တာ ဖြစ်ပြီး၊ [[mark:sel-baseline]] baseline က တစ်ချိန်တည်း version ဟောင်း run နေတဲ့ ယှဉ်စရာ အုပ်စုပါ။ [[mark:sel-change-supervision]] change supervision က ခေါ်သုံးတဲ့ဘက်က ကိန်းဂဏန်း ဆိုးလာတာနဲ့ rollout ကို အလိုအလျောက် ရပ်ပေးတာပါ။
+      [[mark:sel-fault-experiment]] fault experiment က steady state နဲ့ hypothesis ကနေ စပြီး ပျက်စီးမှုကို ထိန်းချုပ်ပြီး inject လုပ်ကြည့်တာပါ။ [[mark:sel-soft-dependency]] soft dependency က မရှိရင်လည်း အဓိက အလုပ် ဆက်ဖြစ်ရမယ့် dependency ဖြစ်ပြီး၊ [[mark:sel-game-day]] game day ကတော့ ပျက်စီးမှုကို အဖွဲ့လိုက် ကြိုလေ့ကျင့်တဲ့ နေ့ပါ။
+      [[mark:sel-question]] မေးခွန်း တစ်ခုနဲ့ ပိတ်ရအောင်။ [[mark:ask-question]] ကိုယ့် canary က ကောင်းနေတယ်လို့ ပြနေရင် အဲဒီ canary က ဘယ် အုပ်စု နှစ်ခုကို နှိုင်းယှဉ်နေရမှာလဲ?
+      [[mark:pause-question]] version အသစ် run နေတဲ့ canary နဲ့ တစ်ချိန်တည်းမှာ version ဟောင်း run နေတဲ့ baseline ပါ။ ဒီလိုနဲ့ သင်္ကြန် ရောက်ဖို့ ခြောက်ပတ်ပဲ လိုပါတော့တယ်၊ ပြီးခဲ့တဲ့ နှစ်က ညသန်းခေါင်မှာ Top-up ဆီ တစ်စက္ကန့်ကို request ၂၀၀၀၀ ရောက်လာခဲ့ပါတယ်။ ဒီနှစ်အတွက် ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "Workbook: Canarying Releases",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - { title: "Principles of Chaos Engineering", url: "https://principlesofchaos.org/" }
+    actions:
+      - { id: close-p04, type: slide.close, at: { mark: close-p04 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-canary,
+          type: editor.select,
+          at: { mark: sel-canary },
+          target: { file: notes.md, text: "canary", occurrence: 1 },
+        }
+      - {
+          id: sel-baseline,
+          type: editor.select,
+          at: { mark: sel-baseline },
+          target: { file: notes.md, text: "baseline", occurrence: 1 },
+        }
+      - {
+          id: sel-change-supervision,
+          type: editor.select,
+          at: { mark: sel-change-supervision },
+          target: { file: notes.md, text: "change supervision", occurrence: 1 },
+        }
+      - {
+          id: sel-fault-experiment,
+          type: editor.select,
+          at: { mark: sel-fault-experiment },
+          target: { file: notes.md, text: "fault experiment", occurrence: 1 },
+        }
+      - {
+          id: sel-soft-dependency,
+          type: editor.select,
+          at: { mark: sel-soft-dependency },
+          target: { file: notes.md, text: "soft dependency", occurrence: 1 },
+        }
+      - {
+          id: sel-game-day,
+          type: editor.select,
+          at: { mark: sel-game-day },
+          target: { file: notes.md, text: "game day", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause (as in lessons 3 and 32). sel-question marks where
+      # the voice script puts the select, but a select there would drag under the
+      # question and leave no pause, and one at pause-question would drag under the
+      # answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question, one more mark
+      # after the question's lead-in sentence, so the dialog it follows is only the
+      # question itself (95 characters): the select starts about as the question
+      # ends, its 1.2 s drag runs in silence, and the answer at pause-question waits
+      # for it. 6850 leaves about 2.7 / 1.3 / 0.35 s before the answer at
+      # 55 / 70 / 95 ms per char (at 95 the drag starts under the question's last
+      # words, as in lesson 7); an offset above ~6990 trips compile-check's 2.5 s
+      # inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 6850 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: canary ကောင်းနေတယ်။ ဘယ် အုပ်စု နှစ်ခုကို နှိုင်းယှဉ်နေရမလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
