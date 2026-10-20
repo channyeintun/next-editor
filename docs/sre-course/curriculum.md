@@ -1766,7 +1766,7 @@ capacity, data, design, platform". The loop's Build in station is lit.
   5. check integrity with designed reconciliation, and treat speed as part of data availability.
 - **Padauk:** a "delete my account" request reaches Ma Su's team: where does this person's data live? A
   developer copied real wallet data to a shared test server to debug a bug. Wallet balances are checked
-  against the cashback ledger every night. The Eats restaurant search index takes 6 hours to rebuild.
+  against the cashback ledger every night. Rebuilding the wallet balance table from the ledger takes 6 hours.
   Every legal rule is stated as hypothetical.
 - **Scenes:**
   1. **Hook.** Page `l21_p01` (K1) "'Please delete my account'" · "A request reaches Ma Su's team" · "Where
@@ -1776,10 +1776,10 @@ capacity, data, design, platform". The loop's Build in station is lit.
      Narration: that is why the business, legal and ethical questions about data come before any tool;
      integrity is never traded for speed or cost.
   3. **Where does she live?** Board B1 (P2 comb): (1) "delete request" → bus → "database", "caches",
-     "search index"; (2) → "analytics", "logs", "backups"; (3) small tags "original" on the database,
-     "derived" on the search index, "personal" on the logs. Narration: deletion is a pipeline, and each store
+     "balance table"; (2) → "analytics", "logs", "backups"; (3) small tags "original" on the database,
+     "derived" on the balance table, "personal" on the logs. Narration: deletion is a pipeline, and each store
      has its own deadline; derived data can be rebuilt, unless rebuilding takes so long that the product is
-     down meanwhile: the Eats search index takes 6 hours, so Padauk protects it like original data.
+     down meanwhile: the wallet balance table takes 6 hours, so Padauk protects it like original data.
   4. **Soft, then hard.** Board B2 (P1), cleared: (1) blue "soft delete: undo window" → red "hard delete:
      deadline"; (2) an orange note "automatic expiry: fixable first, with a global pause". Narration: a
      safe expiry can be stopped everywhere at once if a bug starts deleting the wrong things.
@@ -1803,7 +1803,7 @@ capacity, data, design, platform". The loop's Build in station is lit.
   9. **This week.** Page `l21_p06` (K2) "This week" · "Find production data outside production" · "Write
      where one user's data lives" · "Remove one standing admin access".
 - **Recap (`notes.md`):** entrusted data · soft vs hard delete · original vs derived · least privilege ·
-  reconciliation · **Question:** "A derived search index takes 6 hours to rebuild. Back it up, or not?"
+  reconciliation · **Question:** "A derived balance table takes 6 hours to rebuild. Back it up, or not?"
   (yes: the product is down while it rebuilds)
 - **Bridge:** "Next: a cashback bug turns out to be older than our backups. How far back can we go?"
 
