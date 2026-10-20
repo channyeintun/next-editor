@@ -600,7 +600,7 @@ lesson:
         kind: rectangle,
         x: 260,
         y: 330,
-        width: 200,
+        width: 214,
         height: 100,
         strokeColor: "#1971c2",
       }
@@ -618,7 +618,7 @@ lesson:
     - {
         id: l11-b3-refund-t2,
         kind: text,
-        x: 272,
+        x: 268,
         y: 380,
         width: 180,
         height: 35,
@@ -630,9 +630,9 @@ lesson:
         id: l11-b3-a2,
         kind: freedraw,
         stroke: arrow-right,
-        x: 466,
+        x: 478,
         y: 360,
-        width: 44,
+        width: 34,
         height: 40,
         strokeColor: "#1e1e1e",
       }

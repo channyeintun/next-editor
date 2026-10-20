@@ -454,7 +454,7 @@ lesson:
     - {
         id: l01-b3-app-label,
         kind: text,
-        x: 272,
+        x: 266,
         y: 357,
         width: 160,
         height: 35,
@@ -703,9 +703,9 @@ lesson:
     - {
         id: l01-b4-notice,
         kind: rectangle,
-        x: 843,
+        x: 835,
         y: 336,
-        width: 150,
+        width: 166,
         height: 56,
         strokeColor: "#1971c2",
         backgroundColor: "#ffffff",
@@ -713,7 +713,7 @@ lesson:
     - {
         id: l01-b4-notice-label,
         kind: text,
-        x: 856,
+        x: 848,
         y: 346,
         width: 130,
         height: 35,
@@ -766,9 +766,9 @@ lesson:
     - {
         id: l01-b4-build,
         kind: rectangle,
-        x: 367,
+        x: 353,
         y: 336,
-        width: 150,
+        width: 178,
         height: 56,
         strokeColor: "#1971c2",
         backgroundColor: "#ffffff",
@@ -776,7 +776,7 @@ lesson:
     - {
         id: l01-b4-build-label,
         kind: text,
-        x: 380,
+        x: 366,
         y: 346,
         width: 130,
         height: 35,

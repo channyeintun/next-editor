@@ -689,7 +689,7 @@ lesson:
         kind: rectangle,
         x: 250,
         y: 346,
-        width: 160,
+        width: 180,
         height: 56,
         strokeColor: "#1971c2",
         backgroundColor: "#ffffff",
