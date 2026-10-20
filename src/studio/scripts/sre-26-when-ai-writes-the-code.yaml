@@ -1,0 +1,1324 @@
+# SRE from zero, lesson 26: When AI writes the code (Burmese concept lesson).
+#
+# Built from the approved voice script
+# docs/sre-course/voice-scripts/sre-26-when-ai-writes-the-code.md. Every
+# spoken character is that script's "> " lines, unchanged; each ⟪…⟫ marker
+# became a [[mark:…]] at the same place. Check it with:
+#   bun ~/Documents/sre-course/work/check-narration.ts \
+#     docs/sre-course/voice-scripts/sre-26-when-ai-writes-the-code.md \
+#     src/studio/scripts/sre-26-when-ai-writes-the-code.yaml
+#
+# Nothing runs: deck pages and the whiteboard carry the lesson, and notes.md is
+# the recap. The workspace and runtime follow the validated no-code skeleton
+# (WebContainer, empty init command, a harmless dev script).
+#
+# The arc: the month the coding agents arrived (cover), and Module 6 opens on
+# the whole loop (m6_map). Page: code is cheap, so what isn't. Board B1 (P6
+# lanes): the four phases, the narrower "with AI" lane and the red production
+# wall before deploy, then the orange "one changed line" caveat. Board B2 (P5
+# bars): the 11 incidents by cause before and after the agents, and "trouble
+# grows with changes". Pages: payday night (the assistant against the
+# timeline), why people stay in incidents; roll back or roll forward, when
+# changes come too fast, which version is live. Board B3 (P2 fan-in): four
+# rounding helpers comb into "refund ≠ charge", then the fee spec, the change
+# record and one SLI per journey. Pages: what changes and what doesn't, blurred
+# team edges, keeping the skill, where SRE work moves, this week; recap on
+# notes.md.
+#
+# Nine marks add no spoken text and sit at an existing ။ or ၊:
+# hook-split, b1-split, p02b-split, p03-split and p05-split split dialogs of
+# 461-463 characters at their paragraph breaks (one dialog would pass the
+# 450-character limit; no action uses them); b1-s2b lands B1's red wall on the
+# sentence that points at it ("ဒီ အနီရောင် နံရံ"), b2-s2b lands B2's
+# "helper ထပ်" bar after "ဖြစ်လာပြီး၊" as the new cause is named, and b3-s1b
+# lands the last two helper boxes as the narration lists the four helpers, so
+# no apply adds more than three labelled boxes (the four-box lanes of B1 land
+# two and two through afterAction chains, as in Module 1). ask-question is the
+# voice script's ⟪select မေးခွန်း⟫ and pause-question its ⟪pause 3s⟫ (see
+# select-question). No page or board step holds longer than ~35 s at
+# 70 ms/char (the cover, then l26_p02b, l26_p03 and l26_p05 at ~34 s), so no
+# pacing page was added beyond the voice script's own.
+#
+# ⟪close board⟫ straight into the next board (scene 4) wipes B1 400 ms early
+# (whiteboard.apply clear) instead of closing the panel, as in lesson 8, so the
+# editor does not flash between two boards; B2 then draws with open: true,
+# clear: true as usual. A board followed by a deck page closes the panel
+# (open: false) 400 ms before the page, as in Module 1.
+#
+# Boards. Colour jobs: #1e1e1e ink (paints white) for arrows, the bus, the
+# axis, the bar names and the "with AI" lane title; blue the thing named (the
+# phases today, the "before agents" series, the four helpers, the change
+# record and the one SLI); violet the second series (the "with AI" lane, the
+# "after agents" bars); red failure or limit (the production wall, refunds that
+# don't match); green the fix (fee spec + money module + agent instruction
+# file); orange the caveat (one changed line, trouble grows with changes). A
+# label on two lines is two text assets, one per line, so each line meets the
+# 0.55 em width rule on its own. B1's orange caveat sits under both lanes, not
+# between them: the wall spans the gap between the lanes, and the 37-code-point
+# second line (570 px) would cross it there.
+#
+# Deck pages: deck "Next Editor · SRE 6A · AI", published; the /pub URL below
+# is final. The deck holds only the kit pages until this lesson's pages are
+# built from the page plan, so until then the Director reports page "l26_p01"
+# missing from the published deck. m6_map lights all five stations; the kit
+# has no Ops Buddy icon, so the page plan carries that as a note. Page plan:
+# ~/Documents/sre-course/work/pages/sre-26-when-ai-writes-the-code.json
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/sre-26-when-ai-writes-the-code.yaml
+#   bun scripts/studio-compile-check.ts src/studio/scripts/sre-26-when-ai-writes-the-code.yaml
+schemaVersion: 1
+
+lesson:
+  slug: sre-26-when-ai-writes-the-code
+  title: "SRE from zero 26: AI က code ရေးတဲ့ခေတ်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: SRE from zero
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # AI က code ရေးတဲ့ခေတ်
+
+        - production နံရံ — code ဘယ်လောက် မြန်မြန် ရေးရေး production ထဲ ဘေးကင်းကင်း ဝင်ရတာ မလွယ်လာ
+        - rollback အရင်၊ roll forward ဘေးကင်းကင်း — rollback သန့်ရင် rollback၊ မသန့်ရင် flag နောက်မှာ 5% ကစ canary နဲ့
+        - coherence drift — အပိုင်းလိုက် မှန်ပေမဲ့ system တစ်ခုလုံးရဲ့ design မညီညွတ်တော့
+        - fee spec — ပို့ခ တွက်ပုံကို လူရော agent ပါ ဖတ်ဖို့ တစ်နေရာတည်းမှာ ရေး
+        - change record — ပြောင်းလဲမှုတိုင်းရဲ့ task၊ အကြောင်းပြချက်၊ run ခဲ့တဲ့ test
+
+        မေးခွန်း: agent တွေကြောင့် merge 2 ဆ ဖြစ်လာတယ်။ တခြား ဘာမှ မပြောင်းရင် incident တွေ ဘာဖြစ်မလဲ?
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>AI က code ရေးတဲ့ခေတ်</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">SRE from zero · 26</p>
+              <h1>AI က code ရေးတဲ့ခေတ်</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #80868b;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.4;
+        }
+      package.json: |
+        {
+          "name": "sre-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: l26-p01
+      contentType: google
+      name: Cover
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p01
+    - id: m6-map
+      contentType: google
+      name: Module 6 map
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: m6_map
+    - id: l26-p02
+      contentType: google
+      name: Code is cheap now
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p02
+    - id: l26-p02b
+      contentType: google
+      name: "Payday night, two readings"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p02b
+    - id: l26-p02c
+      contentType: google
+      name: Why people stay in incidents
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p02c
+    - id: l26-p03
+      contentType: google
+      name: Roll back or roll forward
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p03
+    - id: l26-p03b
+      contentType: google
+      name: When changes come too fast
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p03b
+    - id: l26-p03c
+      contentType: google
+      name: Which version is live
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p03c
+    - id: l26-p04
+      contentType: google
+      name: "What changes, what doesn't"
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p04
+    - id: l26-p04b
+      contentType: google
+      name: Blurred team edges
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p04b
+    - id: l26-p04c
+      contentType: google
+      name: Keep the skill
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p04c
+    - id: l26-p05
+      contentType: google
+      name: Where SRE work moves
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p05
+    - id: l26-p06
+      contentType: google
+      name: This week
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS7FWAjVP-nqdl6yRwkaLAvXH1bzU_DGE6SL76_X25_RG8ha2QeMtjdhQDqLuili5asnh9tI1dg_fdg/pub"
+      pageId: l26_p06
+  whiteboardAssets:
+    # ---- Board B1: the production wall, two lanes (P6), English labels -----
+    - {
+        id: l26-b1-r1,
+        kind: rectangle,
+        x: 255,
+        y: 240,
+        width: 170,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b1-t1,
+        kind: text,
+        x: 270,
+        y: 257,
+        width: 140,
+        height: 35,
+        text: "design",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 429,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r2,
+        kind: rectangle,
+        x: 473,
+        y: 240,
+        width: 250,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b1-t2,
+        kind: text,
+        x: 488,
+        y: 257,
+        width: 220,
+        height: 35,
+        text: "build + test",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 727,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r3,
+        kind: rectangle,
+        x: 803,
+        y: 240,
+        width: 150,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b1-t3,
+        kind: text,
+        x: 818,
+        y: 257,
+        width: 120,
+        height: 35,
+        text: "deploy",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 957,
+        y: 255,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r4,
+        kind: rectangle,
+        x: 1001,
+        y: 240,
+        width: 95,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b1-t4,
+        kind: text,
+        x: 1016,
+        y: 257,
+        width: 70,
+        height: 35,
+        text: "run",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-lane2,
+        kind: text,
+        x: 260,
+        y: 340,
+        width: 160,
+        height: 45,
+        text: "with AI",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l26-b1-r5,
+        kind: rectangle,
+        x: 255,
+        y: 400,
+        width: 115,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l26-b1-t5,
+        kind: text,
+        x: 265,
+        y: 417,
+        width: 100,
+        height: 35,
+        text: "design",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 374,
+        y: 415,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r6,
+        kind: rectangle,
+        x: 414,
+        y: 400,
+        width: 205,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l26-b1-t6,
+        kind: text,
+        x: 424,
+        y: 417,
+        width: 190,
+        height: 35,
+        text: "build + test",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a6,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 623,
+        y: 415,
+        width: 144,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r7,
+        kind: rectangle,
+        x: 803,
+        y: 400,
+        width: 115,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l26-b1-t7,
+        kind: text,
+        x: 813,
+        y: 417,
+        width: 100,
+        height: 35,
+        text: "deploy",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-a7,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 922,
+        y: 415,
+        width: 36,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b1-r8,
+        kind: rectangle,
+        x: 962,
+        y: 400,
+        width: 70,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l26-b1-t8,
+        kind: text,
+        x: 972,
+        y: 417,
+        width: 52,
+        height: 35,
+        text: "run",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-wall,
+        kind: rectangle,
+        x: 773,
+        y: 215,
+        width: 24,
+        height: 330,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: l26-b1-wall-t,
+        kind: text,
+        x: 708,
+        y: 172,
+        width: 165,
+        height: 35,
+        text: "production",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-note1,
+        kind: text,
+        x: 255,
+        y: 565,
+        width: 460,
+        height: 35,
+        text: "code တစ်ကြောင်း ပြောင်းရုံနဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b1-note2,
+        kind: text,
+        x: 255,
+        y: 603,
+        width: 585,
+        height: 35,
+        text: "ဘယ်အဆင့်မှာမဆို reliability ပျက်နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B2: the 11 incidents by cause, before and after (P5 bars, 70 px an incident)
+    - {
+        id: l26-b2-legend-b,
+        kind: text,
+        x: 280,
+        y: 170,
+        width: 245,
+        height: 35,
+        text: "agent မတိုင်ခင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-legend-v,
+        kind: text,
+        x: 600,
+        y: 170,
+        width: 245,
+        height: 35,
+        text: "agent ရောက်ပြီး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-axis,
+        kind: freedraw,
+        stroke: underline,
+        x: 270,
+        y: 528,
+        width: 810,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b2-cb,
+        kind: rectangle,
+        x: 300,
+        y: 482,
+        width: 55,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l26-b2-xc,
+        kind: text,
+        x: 305,
+        y: 566,
+        width: 110,
+        height: 35,
+        text: "config",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-rb,
+        kind: rectangle,
+        x: 500,
+        y: 482,
+        width: 55,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l26-b2-xr,
+        kind: text,
+        x: 510,
+        y: 566,
+        width: 95,
+        height: 35,
+        text: "retry",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-sb,
+        kind: rectangle,
+        x: 700,
+        y: 482,
+        width: 55,
+        height: 70,
+        strokeColor: "#1971c2",
+        backgroundColor: "#1971c2",
+      }
+    - {
+        id: l26-b2-xs,
+        kind: text,
+        x: 705,
+        y: 566,
+        width: 110,
+        height: 35,
+        text: "schema",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-cv,
+        kind: rectangle,
+        x: 362,
+        y: 342,
+        width: 55,
+        height: 210,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l26-b2-rv,
+        kind: rectangle,
+        x: 562,
+        y: 342,
+        width: 55,
+        height: 210,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l26-b2-sv,
+        kind: rectangle,
+        x: 762,
+        y: 412,
+        width: 55,
+        height: 140,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l26-b2-hv,
+        kind: rectangle,
+        x: 932,
+        y: 342,
+        width: 55,
+        height: 210,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l26-b2-xh,
+        kind: text,
+        x: 885,
+        y: 566,
+        width: 170,
+        height: 35,
+        text: "helper ထပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b2-note,
+        kind: text,
+        x: 280,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "ပြောင်းလဲမှု များရင် ပြဿနာလည်း များ၊ နည်းတာ ရှား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board B3: four rounding helpers fan in to one mismatch (P2 fan-in), then the fixes
+    - {
+        id: l26-b3-r1,
+        kind: rectangle,
+        x: 255,
+        y: 175,
+        width: 225,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b3-t1,
+        kind: text,
+        x: 268,
+        y: 187,
+        width: 200,
+        height: 35,
+        text: "50 ကို round",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-r2,
+        kind: rectangle,
+        x: 255,
+        y: 265,
+        width: 225,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b3-t2,
+        kind: text,
+        x: 268,
+        y: 277,
+        width: 200,
+        height: 35,
+        text: "round up",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-r3,
+        kind: rectangle,
+        x: 255,
+        y: 355,
+        width: 225,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b3-t3,
+        kind: text,
+        x: 268,
+        y: 367,
+        width: 200,
+        height: 35,
+        text: "10 ကို round",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-r4,
+        kind: rectangle,
+        x: 255,
+        y: 445,
+        width: 225,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l26-b3-t4,
+        kind: text,
+        x: 268,
+        y: 457,
+        width: 200,
+        height: 35,
+        text: "round မလုပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 484,
+        y: 185,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 484,
+        y: 275,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 484,
+        y: 365,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 484,
+        y: 455,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-bus,
+        kind: rectangle,
+        x: 534,
+        y: 175,
+        width: 18,
+        height: 330,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-a5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 557,
+        y: 320,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l26-b3-red,
+        kind: rectangle,
+        x: 612,
+        y: 305,
+        width: 290,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l26-b3-red-t,
+        kind: text,
+        x: 627,
+        y: 322,
+        width: 260,
+        height: 35,
+        text: "refund ≠ ဖြတ်ငွေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-green,
+        kind: rectangle,
+        x: 612,
+        y: 395,
+        width: 385,
+        height: 130,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l26-b3-g1,
+        kind: text,
+        x: 627,
+        y: 405,
+        width: 165,
+        height: 35,
+        text: "fee spec +",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-g2,
+        kind: text,
+        x: 627,
+        y: 442,
+        width: 230,
+        height: 35,
+        text: "money module +",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-g3,
+        kind: text,
+        x: 627,
+        y: 479,
+        width: 355,
+        height: 35,
+        text: "agent instruction file",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-record,
+        kind: text,
+        x: 255,
+        y: 548,
+        width: 600,
+        height: 35,
+        text: "change record: task · ဘာကြောင့် · test",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l26-b3-sli,
+        kind: text,
+        x: 255,
+        y: 598,
+        width: 385,
+        height: 35,
+        text: "journey တစ်ခု၊ SLI တစ်ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+build:
+  # Studio swaps in the Burmese voice chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 2626
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: hook
+    chapter: Agent တွေ ရောက်လာတဲ့လ
+    narration: >
+      [[mark:show-p01]] Padauk ရဲ့ platform အဖွဲ့က အခု golden path၊ shared gateway client နဲ့ exception စာရင်းကို ထိန်းနေပါပြီ။ ဒီလမှာတော့ code ကို ကိုယ်တိုင် ရေး၊ ပြင်၊ test လုပ်ပေးတဲ့ coding agent တွေကို အဖွဲ့တိုင်းက စသုံးလာကြပါတယ်။
+      [[mark:hook-split]] engineer ၆၀ လောက် ရှိတဲ့ အဖွဲ့က အရင်အတိုင်း ဖြစ်ပေမဲ့ merge တွေက တစ်ရက်ကို ၁၅ ကနေ ၁၂၀ အထိ ခုန်တက်သွားပါတယ်။ incident တွေလည်း တစ်လကို ၃ ခုကနေ ပထမလမှာပဲ ၁၁ ခု ဖြစ်ပြီး ဆက်တက်နေပါတယ်။ ဒါဆို Site Reliability Engineering၊ SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?
+      [[mark:show-map]] Module ၆ မှာ AI က reliability loop ရဲ့ အဆင့်တိုင်းကို ရောက်လာပါတယ်။ code ရေးတာ၊ feature အဖြစ် run တာ၊ operations မှာ ကူတာကို အရင် ကြည့်ပြီး၊ ဘယ်ကုမ္ပဏီမှာမဆို SRE ကို ဘယ်လို စမလဲ၊ ရှေ့ဆက် ဘာလာမလဲ ဆိုတာနဲ့ အဆုံးသတ်ပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      # -1750 / -1450, not the skeleton's -1900 / -1600: a pull-back over 1780 ms pushes the
+      # first dialog past the 2 s opening handle, which src/studio/plans/index.test.ts rejects.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - {
+          id: show-p01,
+          type: slide.show,
+          at: { mark: show-p01, offsetMs: -1450 },
+          slideId: l26-p01,
+        }
+      # Module 6 opens: the module map advances in place from the cover.
+      - { id: show-map, type: slide.show, at: { mark: show-map }, slideId: m6-map }
+
+  - id: code-is-cheap
+    chapter: Code ဈေးပေါလာပြီ
+    narration: >
+      [[mark:show-p02]] lesson ၁ မှာ software ဆောက်ရတာ ခဏပဲ ကြာပြီး run ရတာက နှစ်နဲ့ချီ ကြာတယ်လို့ ပြောခဲ့ပါတယ်။ agent တွေက ဆောက်တဲ့ အပိုင်းကိုပဲ တိုစေလို့ code ရေးတာ လတိုင်း ဈေးပေါလာပေမဲ့ ကုန်ကျစရိတ်က ပျောက်မသွားဘဲ တခြား နေရာကို ရွေ့သွားတာပါ။
+      ဘေးကင်းကင်း run ရတာက အရင်လိုပဲ ခက်ပြီး code ကို နားလည်ရတာကတော့ ပိုခက်လာပါတယ်။ ဥပမာ agent ရေးပြီး review မှာ ခဏပဲ ကြည့်ခဲ့တဲ့ code တစ်ခု ညဘက် ပျက်တော့ on-call ကျနေတဲ့သူက အဲဒီ code ကို ပထမဆုံး အကြိမ် ဖတ်ရပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: show-p02 }, slideId: l26-p02 }
+
+  - id: production-wall
+    chapter: Production နံရံ
+    narration: >
+      [[mark:close-p02]] [[mark:b1-s1]] ပြောင်းလဲမှု တစ်ခုက design၊ code ရေးပြီး test၊ deploy ဆိုတဲ့ အဆင့်တွေ ဖြတ်ပြီးမှ user ဆီ ရောက်ပြီး အကြာကြီး run ရပါတယ်။ ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ ဆိုတာကို design မှာကတည်းက ဆုံးဖြတ်ရလို့ SRE က run တဲ့ အဆင့်ကျမှ မဟုတ်ဘဲ design ကတည်းက ပါရပါမယ်။
+      [[mark:b1-s2]] agent တွေ ရောက်လာတော့ အဆင့် တစ်ခုမှ မပျောက်ပါဘူး။ အဆင့်တိုင်း တိုသွားပြီး build နဲ့ test လည်း ပေါင်းသွားတော့ code တွေ အဆပေါင်းများစွာ ပိုထွက်လာပါတယ်။ [[mark:b1-s2b]] ဒါပေမဲ့ deploy ရှေ့က ဒီ အနီရောင် နံရံကို ကျော်ရတာကတော့ မလွယ်လာပါဘူး။ ဟိုဘက်မှာ user အစစ်တွေနဲ့ Bank X ကို ပေးထားတဲ့ ကတိတွေ ရှိလို့ ဘယ်သူ ရေးတဲ့ code ပဲ ဖြစ်ဖြစ် အမှားရဲ့ ဒဏ်က အတူတူပါပဲ။ ဒါကို production နံရံလို့ ခေါ်ပါမယ်။
+      [[mark:b1-s3]] code တစ်ကြောင်း ပြောင်းရုံနဲ့ reliability က ဘယ်အဆင့်မှာမဆို ပျက်နိုင်လို့ အဆင့်တိုင်းမှာ အလုပ် လုပ်ရပါတယ်။ ဒါပေမဲ့ အဆင့်တွေ တိုလာတော့ အမှားကို သတိထားမိပြီး ပြင်ဖို့ အချိန်က နည်းသွားပါတယ်။
+      [[mark:b1-split]] မြန်မြန် release လုပ်တော့ user တွေ feature ကို ကြိုက်လား ချက်ချင်း သိရပေမဲ့ reliability ပြဿနာကတော့ ကိုယ့်ဘာသာ ထွက်မပြောပါဘူး။ ဥပမာ timeout မပါတဲ့ call တစ်ခုဟာ test pass ဖြစ်ပေမဲ့ လစာထုတ်ရက် ညကျမှ ပြဿနာ ပေါ်လာတတ်ပါတယ်။ ဒါကြောင့် အလုပ်လုပ်တယ် ဆိုတာနဲ့ စိတ်ချရတယ် ဆိုတာ မတူပါဘူး။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "DORA AI Capabilities Model", url: "https://dora.dev/ai/capabilities-model/" }
+    actions:
+      - { id: close-p02, type: slide.close, at: { mark: close-p02, offsetMs: -400 } }
+      # Step 1: the top lane's four boxes land two and two while the first sentence names them.
+      - {
+          id: b1-s1,
+          type: whiteboard.apply,
+          at: { mark: b1-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l26-b1-r1, l26-b1-t1, l26-b1-a1, l26-b1-r2, l26-b1-t2],
+          drawMs: 1600,
+        }
+      - {
+          id: b1-s1b,
+          type: whiteboard.apply,
+          at: { afterAction: b1-s1 },
+          upsertIds: [l26-b1-a2, l26-b1-r3, l26-b1-t3, l26-b1-a3, l26-b1-r4, l26-b1-t4],
+          drawMs: 1600,
+        }
+      # Step 2: the "with AI" lane (title, then the narrower boxes two and two).
+      - { id: b1-s2, type: whiteboard.apply, at: { mark: b1-s2 }, upsertIds: [l26-b1-lane2] }
+      - {
+          id: b1-s2-draw,
+          type: whiteboard.apply,
+          at: { afterAction: b1-s2 },
+          upsertIds: [l26-b1-r5, l26-b1-t5, l26-b1-a5, l26-b1-r6, l26-b1-t6],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-s2-draw2,
+          type: whiteboard.apply,
+          at: { afterAction: b1-s2-draw },
+          upsertIds: [l26-b1-a6, l26-b1-r7, l26-b1-t7, l26-b1-a7, l26-b1-r8, l26-b1-t8],
+          drawMs: 1400,
+        }
+      # The red wall lands on the sentence that points at it.
+      - {
+          id: b1-s2b,
+          type: whiteboard.apply,
+          at: { mark: b1-s2b },
+          upsertIds: [l26-b1-wall, l26-b1-wall-t],
+          drawMs: 1200,
+        }
+      - {
+          id: b1-s3,
+          type: whiteboard.apply,
+          at: { mark: b1-s3 },
+          upsertIds: [l26-b1-note1, l26-b1-note2],
+          drawMs: 1600,
+        }
+
+  - id: eleven-incidents
+    chapter: Incident 11 ခု
+    narration: >
+      [[mark:close-b1]] [[mark:b2-s1]] မသီရိက incident ၁၁ ခုကို အကြောင်းရင်းအလိုက် ခွဲကြည့်ပါတယ်။ agent မရောက်ခင် လမှာတော့ config မှားတာ တစ်ခု၊ retry ကြောင့် တစ်ခု၊ database ရဲ့ data ပုံစံ၊ schema ပြောင်းတာကြောင့် တစ်ခု၊ စုစုပေါင်း သုံးခုပဲ ရှိခဲ့ပါတယ်။
+      [[mark:b2-s2]] agent ရောက်ပြီးတဲ့ လမှာတော့ config နဲ့ retry က သုံးခုစီ၊ schema က နှစ်ခု ဖြစ်လာပြီး၊ [[mark:b2-s2b]] အလုပ်တူ helper function တွေ ထပ်နေလို့ ဖြစ်တဲ့ အမျိုးအစား အသစ် သုံးခုလည်း ပေါ်လာပါတယ်။
+      [[mark:b2-s3]] merge ၁၅ ကနေ ၁၂၀ ဆိုတာ ရှစ်ဆပါ။ တခြား ဘာမှ မပြောင်းဘဲ ပြောင်းလဲမှုပဲ များလာရင် ပြဿနာလည်း အဲဒီနှုန်းနီးပါး များလာတတ်ပြီး အဲဒီထက် နည်းတာ ရှားပါတယ်။ ရိုးရိုး ပြဿနာတွေကို automation က ဖြေရှင်းပေးလေ လူဆီ ရောက်လာတာက ခက်ပြီး ရှားပါးတဲ့ ပြဿနာတွေ ဖြစ်လေပါပဲ။
+      [[mark:close-b2]] [[mark:show-p02b]] အဲဒီလို ပြဿနာ တစ်ခုက လစာထုတ်ရက် ညမှာ ရောက်လာပါတယ်။ Bank X ကို ငွေလွှဲတာတွေ timeout ဖြစ်လာတော့ AI assistant က database pool ပြည့်နေလို့ပါ၊ server အားလုံး restart လုပ်ပါလို့ သေချာတဲ့ လေသံနဲ့ အကြံပေးပါတယ်။
+      [[mark:p02b-split]] on-call ကျနေတဲ့ ကိုမင်းကတော့ ပြောင်းလဲမှုတွေရဲ့ timeline ကို ကြည့်ပါတယ်။ agent ထည့်ခဲ့တဲ့ retry၊ fraud rule အသစ်နဲ့ Bank X ရဲ့ လစာ batch သုံးခု တစ်ပြိုင်တည်း ဆုံနေတာ တွေ့တော့ retry ကို deploy ပြန်မလုပ်ဘဲ ဖွင့်ပိတ်လို့ရတဲ့ ခလုတ်၊ feature flag နဲ့ ပိတ်လိုက်ပါတယ်။
+      [[mark:show-p02c]] assistant က ဒီလို ပေါင်းစပ်မှုမျိုးကို တစ်ခါမှ မမြင်ဖူးခဲ့ပါဘူး၊ ဒါပေမဲ့ သေချာသလို ပြောခဲ့ပြီး မှားသွားတာပါ။ ပြီးတော့ ဘာဖြစ်ခဲ့လဲ ဆိုတာ Bank X နဲ့ ကိုနေလင်းကို ရှင်းပြပြီး တာဝန်ယူရမှာကလည်း လူပါ။ ဒါကြောင့် incident တွေမှာ လူ ဆက်ရှိနေရပါမယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      # ⟪close board⟫ into the next board: wipe B1 400 ms early, keep the panel open.
+      - {
+          id: close-b1,
+          type: whiteboard.apply,
+          at: { mark: close-b1, offsetMs: -400 },
+          clear: true,
+        }
+      - {
+          id: b2-s1,
+          type: whiteboard.apply,
+          at: { mark: b2-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l26-b2-axis, l26-b2-legend-b],
+        }
+      - {
+          id: b2-s1-draw,
+          type: whiteboard.apply,
+          at: { afterAction: b2-s1 },
+          upsertIds: [l26-b2-cb, l26-b2-xc, l26-b2-rb, l26-b2-xr, l26-b2-sb, l26-b2-xs],
+          drawMs: 1800,
+        }
+      - { id: b2-s2, type: whiteboard.apply, at: { mark: b2-s2 }, upsertIds: [l26-b2-legend-v] }
+      - {
+          id: b2-s2-draw,
+          type: whiteboard.apply,
+          at: { afterAction: b2-s2 },
+          upsertIds: [l26-b2-cv, l26-b2-rv, l26-b2-sv],
+          drawMs: 1500,
+        }
+      # The fourth cause, with no blue partner, lands as it is named.
+      - {
+          id: b2-s2b,
+          type: whiteboard.apply,
+          at: { mark: b2-s2b },
+          upsertIds: [l26-b2-hv, l26-b2-xh],
+          drawMs: 900,
+        }
+      - {
+          id: b2-s3,
+          type: whiteboard.apply,
+          at: { mark: b2-s3 },
+          upsertIds: [l26-b2-note],
+          drawMs: 1500,
+        }
+      - {
+          id: close-b2,
+          type: whiteboard.apply,
+          at: { mark: close-b2, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02b, type: slide.show, at: { mark: show-p02b }, slideId: l26-p02b }
+      - { id: show-p02c, type: slide.show, at: { mark: show-p02c }, slideId: l26-p02c }
+
+  - id: roll-forward
+    chapter: Rollback လား roll forward လား
+    narration: >
+      [[mark:show-p03]] အဲဒီလမှာပဲ Top-up မှာ SMS တစ်စောင်ကို နှစ်ခါ ပို့နေတဲ့ bug ပေါ်လာပါတယ်။ ပုံမှန်ဆို အရင် ကောင်းခဲ့တဲ့ version ကို ပြန်ပြောင်းတဲ့ rollback လုပ်ရုံပါ။ ဒါပေမဲ့ အဲဒီ deploy က schema ကိုပါ ပြောင်းထားလို့ version ဟောင်းက data အသစ်ကို မဖတ်နိုင်တော့ပါဘူး။
+      [[mark:p03-split]] ဒီတော့ ပြင်ထားတဲ့ version ကို ရှေ့ဆက် တင်တဲ့ roll forward ကို ရွေးပြီး fix ကို flag နောက်မှာ ထားပါတယ်။ user ၅ ရာခိုင်နှုန်းဆီ အရင် ဖွင့်ပြီး version ဟောင်းနဲ့ နှိုင်းယှဉ်ကြည့်တဲ့ canary မှာ ကောင်းနေမှ ဆက်ဖွင့်ပါတယ်။
+      [[mark:show-p03b]] ပြောင်းလဲမှုတွေက လူ လိုက်ကြည့်နိုင်တာထက် ပိုမြန်မြန် ရောက်လာရင် ပြန်သွားစရာ သန့်တဲ့ version မရှိတော့လို့ roll forward က rollback နေရာကို မကြာခဏ ယူလာမယ်လို့ မျှော်လင့်ရပါတယ်။ ဒါပေမဲ့ rollback သန့်သန့် လုပ်လို့ရရင်တော့ lesson ၁၀ မှာလိုပဲ rollback အရင်ပါ။
+      ပြင်ရတာ ဈေးပေါလာလို့ ကာကွယ်တဲ့ အလုပ်ကို ခေါင်းဆောင်တွေ ငွေ မစိုက်တော့ရင်တော့ မှားပါမယ်၊ မြန်မြန် ပြန်ကောင်းတာက အကြောင်းရင်းကို ပြင်တာကို အစားမထိုးပါဘူး။
+      [[mark:show-p03c]] တစ်နေကုန် deploy လုပ်နေတော့ ဘယ် version run နေလဲ ဆိုတာ အဖြေ တစ်ခုတည်း မရှိတော့သလို staging ကလည်း production နဲ့ မတူတော့ပါဘူး။ အဲဒီအတွက် Padauk က request တိုင်းမှာ ဘယ် build၊ ဘယ် flag တွေ၊ app ဘယ် version နဲ့ run ခဲ့လဲ မှတ်ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "DORA AI Capabilities Model", url: "https://dora.dev/ai/capabilities-model/" }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: show-p03 }, slideId: l26-p03 }
+      - { id: show-p03b, type: slide.show, at: { mark: show-p03b }, slideId: l26-p03b }
+      - { id: show-p03c, type: slide.show, at: { mark: show-p03c }, slideId: l26-p03c }
+
+  - id: coherence-drift
+    chapter: Coherence drift
+    narration: >
+      [[mark:close-p03c]] [[mark:b3-s1]] helper ထပ်တဲ့ incident တွေကို ကြည့်ရအောင်။ Eats ရဲ့ ပို့ခကို round လုပ်ဖို့ agent တွေက task လေးခုမှာ helper လေးခု ရေးခဲ့ပါတယ်။ [[mark:b3-s1b]] အနီးဆုံး ကျပ် ၅၀ ကို round လုပ်တာ၊ အမြဲ round up လုပ်တာ၊ ကျပ် ၁၀ ကို round လုပ်တာနဲ့ ဘာမှ round မလုပ်တာပါ။ တစ်ခုချင်း ကြည့်ရင် မှန်နေလို့ review မှာလည်း အောင်ခဲ့ပါတယ်။
+      [[mark:b3-s2]] ဒါပေမဲ့ ငွေဖြတ်တဲ့ code နဲ့ refund code က မတူတဲ့ helper တွေကို သုံးနေလို့ refund တွေက ဖြတ်ခဲ့တဲ့ ငွေနဲ့ မကိုက်တော့ပါဘူး။ နောက်ပိုင်း rounding ကို ပြင်ခိုင်းတဲ့ agent ကလည်း helper မှားကို သွားပြင်ပါတယ်။ agent တစ်ခုချင်းက ဖိုင် နည်းနည်းကိုပဲ မြင်လို့ ကိုယ့်အပိုင်းမှာ မှန်နေပေမဲ့ system တစ်ခုလုံးရဲ့ design ကတော့ တဖြည်းဖြည်း မညီညွတ်တော့ပါဘူး။ ဒါကို coherence drift လို့ ခေါ်ပါတယ်။
+      [[mark:b3-s3]] အဖြေကတော့ design စည်းမျဉ်းတွေကို လူရော agent ပါ ဖတ်ရအောင် စာနဲ့ ချရေးထားတာပါ။ platform အဖွဲ့က ပို့ခ တွက်ပုံကို fee spec အဖြစ် ရေးပြီး ငွေတွက်တဲ့ code ကို money module တစ်ခုတည်းထဲ စုပါတယ်။ agent တွေ အလုပ်မစခင် ဖတ်ရတဲ့ agent instruction file မှာလည်း ဒီ module ကိုပဲ သုံးဖို့ ရေးထားပြီး၊ module အပြင်မှာ round လုပ်ရင် lint rule က တားပါတယ်။
+      [[mark:b3-s4]] agent က helper မှားကို ဘာလို့ ပြင်ခဲ့လဲ၊ လစာထုတ်ရက် ညက retry ကို ဘာလို့ ထည့်ခဲ့လဲ ဆိုတာ ဘယ်သူမှ မသိခဲ့ပါဘူး၊ agent ရဲ့ အကြောင်းပြချက်ကို နောက်မှ မမြင်ရလို့ပါ။ ဒါကြောင့် အခု agent ပြောင်းလဲမှု တိုင်းမှာ ဘယ် task အတွက်လဲ၊ ဘာကြောင့်လဲ၊ ဘယ် test တွေ run ခဲ့လဲ ဆိုတာကို change record အဖြစ် မှတ်ပါတယ်။
+      [[mark:b3-s5]] metric ထည့်ရတာ လွယ်လာတော့ metric တွေမှာလည်း ဒီ drift ဖြစ်ပြီး incident တစ်ခုမှာ top-up အောင်မြင်နှုန်း သုံးမျိုး မတူဘဲ ပြနေခဲ့ပါတယ်။ အခုတော့ journey တစ်ခုစီမှာ owner ရှိတဲ့ service level indicator၊ SLI တစ်ခုတည်းပဲ ထားပါတယ်။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "DORA AI Capabilities Model", url: "https://dora.dev/ai/capabilities-model/" }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: close-p03c, type: slide.close, at: { mark: close-p03c, offsetMs: -400 } }
+      # Step 1: four helper boxes, two as the helpers are introduced and two as they are listed.
+      - {
+          id: b3-s1,
+          type: whiteboard.apply,
+          at: { mark: b3-s1 },
+          open: true,
+          clear: true,
+          upsertIds: [l26-b3-r1, l26-b3-t1, l26-b3-r2, l26-b3-t2],
+          drawMs: 1400,
+        }
+      - {
+          id: b3-s1b,
+          type: whiteboard.apply,
+          at: { mark: b3-s1b },
+          upsertIds: [l26-b3-r3, l26-b3-t3, l26-b3-r4, l26-b3-t4],
+          drawMs: 1400,
+        }
+      - {
+          id: b3-s2,
+          type: whiteboard.apply,
+          at: { mark: b3-s2 },
+          upsertIds:
+            [
+              l26-b3-a1,
+              l26-b3-a2,
+              l26-b3-a3,
+              l26-b3-a4,
+              l26-b3-bus,
+              l26-b3-a5,
+              l26-b3-red,
+              l26-b3-red-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: b3-s3,
+          type: whiteboard.apply,
+          at: { mark: b3-s3 },
+          upsertIds: [l26-b3-green, l26-b3-g1, l26-b3-g2, l26-b3-g3],
+          drawMs: 2000,
+        }
+      - {
+          id: b3-s4,
+          type: whiteboard.apply,
+          at: { mark: b3-s4 },
+          upsertIds: [l26-b3-record],
+          drawMs: 1500,
+        }
+      - {
+          id: b3-s5,
+          type: whiteboard.apply,
+          at: { mark: b3-s5 },
+          upsertIds: [l26-b3-sli],
+          drawMs: 1200,
+        }
+
+  - id: what-changes
+    chapter: ပြောင်းတာနဲ့ မပြောင်းတာ
+    narration: >
+      [[mark:close-b3]] [[mark:show-p04]] ဒီလကို ပြန်ကြည့်ရင် အဆင့်တစ်ခုစီရဲ့ ကြာချိန်နဲ့ code ရေးတဲ့သူ ပြောင်းသွားပေမဲ့ ပြောင်းလဲမှု တစ်ခုစီမှာ ပါတဲ့ bug နဲ့ deploy မှားရင် ပေးရတဲ့ တန်ဖိုးကတော့ မပြောင်းပါဘူး။ အဖွဲ့ နယ်နိမိတ် မပီပြင်တော့ပေမဲ့ system တစ်ခုလုံးကို မြင်နေတဲ့သူ လိုတာလည်း မပြောင်းပါဘူး။
+      [[mark:show-p04b]] အရင်က Eats ရဲ့ ပြောင်းလဲမှုက Wallet code ကို ထိရင် Wallet အဖွဲ့က review လုပ်ရပါတယ်။ အခုတော့ engineer တစ်ယောက်နဲ့ agent တစ်ခုက နှစ်ဖက်လုံးကို တစ်ခါတည်း ပြင်နိုင်လို့ အဲဒီ စစ်ဆေးမှုကို ကျော်သွားနိုင်ပါတယ်။ ဒါကြောင့် ledger ကို ထိရင် Wallet review ဆက်လိုမယ်လို့ Padauk က တမင် ဆုံးဖြတ်ပါတယ်။
+      [[mark:show-p04c]] မသုံးဖြစ်တဲ့ ကျွမ်းကျင်မှုကလည်း တဖြည်းဖြည်း ပျောက်တတ်လို့ Padauk က လစဉ် incident role-play ကို AI assistant ပိတ်ပြီး လုပ်ပါတယ်။ အများအားဖြင့် မှန်တဲ့ tool က ရှားပါးတဲ့ ပြဿနာမှာ အားအနည်းဆုံး ဖြစ်တတ်လို့ ဒီညလည်း မှန်မယ်လို့ မယူဆဘဲ ကိုမင်းလိုပဲ tool ရဲ့ အကြံကို ခလုတ် မနှိပ်ခင် စစ်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - {
+          id: close-b3,
+          type: whiteboard.apply,
+          at: { mark: close-b3, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p04, type: slide.show, at: { mark: show-p04 }, slideId: l26-p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: show-p04b }, slideId: l26-p04b }
+      - { id: show-p04c, type: slide.show, at: { mark: show-p04c }, slideId: l26-p04c }
+
+  - id: where-sre-moves
+    chapter: SRE အလုပ် ဘယ်ကို ရွေ့မလဲ
+    narration: >
+      [[mark:show-p05]] ဒါဆို SRE အလုပ်က ဘယ်ကို ရွေ့မလဲ? deploy မတိုင်ခင် spec နဲ့ guardrail ရေးတာ၊ ပြောင်းလဲမှုတွေကို သေးသေးလေး ခွဲပြီး flag နဲ့ canary နောက်က ထုတ်တာဘက်ကို ပိုရွေ့လာဖွယ် ရှိပါတယ်။ agent တွေက လစာထုတ်ရက်၊ သင်္ကြန်လို Padauk ရဲ့ လက်တွေ့ ကမ္ဘာကို နည်းနည်းပဲ သိသေးလို့ system တစ်ခုလုံးကို မြင်နေတဲ့သူလည်း ဆက်လိုပါမယ်။
+      [[mark:p05-split]] production ကို run ရတာကတော့ ဆက်ခက်နေဦးမှာပါ။ SRE တွေ tool အများကြီး ပိုလိုလာပေမဲ့ အများစုကို ကိုယ့်ဘာသာ လုပ်ခွင့် ပေးလောက်အောင် မယုံရသေးလို့ ဦးဆောင်တာက လူပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+      - { title: "DORA AI Capabilities Model", url: "https://dora.dev/ai/capabilities-model/" }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: show-p05 }, slideId: l26-p05 }
+
+  - id: this-week
+    narration: >
+      [[mark:show-p06]] agent တွေနဲ့ အလုပ်လုပ်တဲ့ အဖွဲ့ သေးသေးလေးမှာ ဒီအပတ် လုပ်ကြည့်ဖို့ သုံးခုပါ။ agent တွေ ဖတ်ရမယ့် design စည်းမျဉ်းတွေကို စာနဲ့ ချရေးပါ။ ငွေတွက်တာ၊ retry လို risk များတဲ့ ပြောင်းလဲမှု တစ်ခုကို feature flag နောက်မှာ ထားပါ။ ပြီးတော့ AI assistant ပိတ်ပြီး incident တစ်ခုကို လေ့ကျင့်ကြည့်ပါ။
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - { title: "DORA AI Capabilities Model", url: "https://dora.dev/ai/capabilities-model/" }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: show-p06 }, slideId: l26-p06 }
+
+  - id: recap
+    narration: >
+      [[mark:close-p06]] [[mark:open-notes]] agent တွေ ရောက်လာတဲ့ လမှာ သုံးခဲ့တဲ့ စကားလုံးတွေပါ။ [[mark:sel-wall]] production နံရံက code ဘယ်လောက် မြန်မြန် ရေးရေး production ထဲ ဘေးကင်းကင်း ဝင်ရတာ မလွယ်လာဘူး ဆိုတာပါ။ [[mark:sel-rollback]] rollback သန့်သန့် လုပ်လို့ရရင် rollback အရင် လုပ်ပြီး၊ မရရင်တော့ flag နောက်မှာ ၅ ရာခိုင်နှုန်းကစ canary နဲ့ roll forward လုပ်ပါတယ်။
+      [[mark:sel-drift]] coherence drift က အပိုင်းလိုက် မှန်နေပေမဲ့ system တစ်ခုလုံးရဲ့ design မညီညွတ်တော့တာပါ။ [[mark:sel-fee-spec]] fee spec က ပို့ခ တွက်ပုံကို လူရော agent ပါ ဖတ်ဖို့ တစ်နေရာတည်းမှာ ရေးထားတာ ဖြစ်ပြီး၊ [[mark:sel-change-record]] change record က ပြောင်းလဲမှု တိုင်းရဲ့ task၊ အကြောင်းပြချက်နဲ့ run ခဲ့တဲ့ test တွေပါ။
+      [[mark:ask-question]] agent တွေကြောင့် ကိုယ့်အဖွဲ့ရဲ့ merge တွေ နှစ်ဆ ဖြစ်လာပြီး တခြား ဘာမှ မပြောင်းရင် incident တွေ ဘာဖြစ်လာမယ်လို့ ထင်လဲ?
+      [[mark:pause-question]] incident တွေလည်း နှစ်ဆလောက် များလာမှာပါ၊ အဲဒီထက် နည်းဖို့ကတော့ ရှားပါတယ်။ AI က code ရေးရုံ မကဘဲ feature တစ်ခုလည်း ဖြစ်လာပါတယ်။ မြန်မာလို ဖြေပေးတဲ့ AI support assistant၊ Ask Padauk က chat တွေရဲ့ ၉၉.၉ ရာခိုင်နှုန်းမှာ success code ပြန်ပေးပေမဲ့ refund ticket တွေကို မှားတဲ့ transaction တွေအတွက် ဖွင့်နေပါတယ်။ success code ပြန်လာရုံနဲ့ ဘယ်တော့ မလုံလောက်တော့လဲ?
+    sources:
+      - {
+          title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
+          url: "https://sre.google/books/",
+        }
+      - {
+          title: "DORA: State of AI-assisted Software Development 2025",
+          url: "https://dora.dev/research/2025/dora-report/",
+        }
+      - {
+          title: "AI in SRE: How Google is Engineering the Future of Reliable Operations (sre.google)",
+          url: "https://sre.google/resources/practices-and-processes/ai-engineering-reliable-operations/",
+        }
+    actions:
+      - { id: close-p06, type: slide.close, at: { mark: close-p06 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: open-notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-wall,
+          type: editor.select,
+          at: { mark: sel-wall },
+          target: { file: notes.md, text: "production နံရံ", occurrence: 1 },
+        }
+      - {
+          id: sel-rollback,
+          type: editor.select,
+          at: { mark: sel-rollback },
+          target: { file: notes.md, text: "rollback အရင်", occurrence: 1 },
+        }
+      - {
+          id: sel-drift,
+          type: editor.select,
+          at: { mark: sel-drift },
+          target: { file: notes.md, text: "coherence drift", occurrence: 1 },
+        }
+      - {
+          id: sel-fee-spec,
+          type: editor.select,
+          at: { mark: sel-fee-spec },
+          target: { file: notes.md, text: "fee spec", occurrence: 1 },
+        }
+      - {
+          id: sel-change-record,
+          type: editor.select,
+          at: { mark: sel-change-record },
+          target: { file: notes.md, text: "change record", occurrence: 1 },
+        }
+      # The voice script's ⟪select မေးခွန်း⟫ and ⟪pause 3s⟫, the way the Module 1
+      # reviewers fixed the pause. ⟪select မေးခွန်း⟫ (ask-question) already starts
+      # the question's own dialog, but a select right there would drag under the
+      # question and leave no pause, and one at pause-question would drag under
+      # the answer's first words (the scheduler holds only the dialog after its
+      # anchor's). So the question-line select hangs off ask-question with an
+      # offset: it starts about as the question ends, its drag runs in silence,
+      # and the answer at pause-question waits for it. The question is 117
+      # characters, so 8200 leaves about 3.0 / 1.2 / 0.5 s of quiet before the
+      # answer at 55 / 70 / 95 ms per char (at 95 the drag runs under the
+      # question's last words, as in lessons 2 and 7); 8300 trips
+      # compile-check's 2.5 s inserted-silence warning at 55.
+      - id: select-question
+        type: editor.select
+        at: { mark: ask-question, offsetMs: 8200 }
+        target:
+          file: notes.md
+          text: "မေးခွန်း: agent တွေကြောင့် merge 2 ဆ ဖြစ်လာတယ်။ တခြား ဘာမှ မပြောင်းရင် incident တွေ ဘာဖြစ်မလဲ?"
+          occurrence: 1
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
