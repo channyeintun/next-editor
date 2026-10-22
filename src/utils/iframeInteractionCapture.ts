@@ -337,6 +337,13 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
+      // How far a scroller can scroll. The end of the page depends on the
+      // preview's size, so the recording carries it for the QA gate to tell a
+      // scroll that stopped at the end from one that fell short.
+      function maxScroll(scrollSize, clientSize) {
+        return Math.max(0, (scrollSize || 0) - (clientSize || 0));
+      }
+
       function isDocumentScrollTarget(target) {
         return (
           target === document ||
@@ -358,12 +365,16 @@ export function createIframeInteractionCaptureScript(
             emit('scroll', document.body, {
               scrollTop: scrollElement.scrollTop,
               scrollLeft: scrollElement.scrollLeft,
+              maxScrollTop: maxScroll(scrollElement.scrollHeight, scrollElement.clientHeight),
+              maxScrollLeft: maxScroll(scrollElement.scrollWidth, scrollElement.clientWidth),
               isDocument: true,
             });
           } else if (nextTarget instanceof Element) {
             emit('scroll', nextTarget, {
               scrollTop: nextTarget.scrollTop,
               scrollLeft: nextTarget.scrollLeft,
+              maxScrollTop: maxScroll(nextTarget.scrollHeight, nextTarget.clientHeight),
+              maxScrollLeft: maxScroll(nextTarget.scrollWidth, nextTarget.clientWidth),
               isDocument: false,
             });
           }

@@ -48,6 +48,13 @@ export interface IframeInteractionData {
   // Scroll data
   scrollTop?: number;
   scrollLeft?: number;
+  // How far the scroller could scroll when this event was posted
+  // (scrollHeight − clientHeight, and the width equivalent). Absent in earlier
+  // recordings. It lets the QA gate tell a scroll that stopped at the end of
+  // the page from one that fell short, since the end depends on the preview's
+  // size.
+  maxScrollTop?: number;
+  maxScrollLeft?: number;
   // Input data
   value?: string;
   // Flag for document-level scroll
@@ -222,6 +229,9 @@ export interface PreviewEvent {
   route?: string;
   scrollTop?: number;
   scrollLeft?: number;
+  /** For `preview_scroll`: how far the page could scroll (see IframeInteractionData). */
+  maxScrollTop?: number;
+  maxScrollLeft?: number;
   interaction?: IframeInteractionEvent;
   activeMode?: PreviewActiveMode;
   requestTab?: ApiClientRequestTab;

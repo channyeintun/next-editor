@@ -448,6 +448,49 @@ describe("createIframeInteractionCaptureScript", () => {
     ]);
   });
 
+  it("posts how far each scroller could scroll, so the end can be told from a short scroll", () => {
+    const { button, documentTarget, frameDocument, frameWindow, install, parentPostMessage } =
+      createCaptureHarness();
+    const frames = deferFrames(frameWindow);
+    install();
+    // An inner pane that scrolls 117 px at most, and a page whose end depends on
+    // how tall the preview is (1223 px of content in an 800 px preview).
+    const pane = Object.assign(button, {
+      scrollTop: 100,
+      scrollLeft: 0,
+      scrollHeight: 275,
+      clientHeight: 158,
+      scrollWidth: 400,
+      clientWidth: 400,
+    });
+    Object.assign(frameDocument.scrollingElement, {
+      scrollTop: 423,
+      scrollHeight: 1223,
+      clientHeight: 800,
+      scrollWidth: 432,
+      clientWidth: 432,
+    });
+
+    documentTarget.emit("scroll", { target: pane });
+    documentTarget.emit("scroll", { target: frameDocument });
+    frames.flush();
+
+    expect(postedScrolls(parentPostMessage)).toEqual([
+      expect.objectContaining({
+        scrollTop: 100,
+        maxScrollTop: 117,
+        maxScrollLeft: 0,
+        isDocument: false,
+      }),
+      expect.objectContaining({
+        scrollTop: 423,
+        maxScrollTop: 423,
+        maxScrollLeft: 0,
+        isDocument: true,
+      }),
+    ]);
+  });
+
   it("posts a scroller once per frame, however often and under whichever name it scrolled", () => {
     const { button, documentTarget, frameDocument, frameWindow, install, parentPostMessage } =
       createCaptureHarness();

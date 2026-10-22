@@ -328,6 +328,8 @@ export function usePreviewMessageBridge({
             size: sizeRef.current,
             scrollTop: data.scrollTop as number,
             scrollLeft: data.scrollLeft as number,
+            ...(isFiniteNumber(data.maxScrollTop) && { maxScrollTop: data.maxScrollTop }),
+            ...(isFiniteNumber(data.maxScrollLeft) && { maxScrollLeft: data.maxScrollLeft }),
           });
         }
 

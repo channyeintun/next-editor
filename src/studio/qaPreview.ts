@@ -49,6 +49,26 @@ function isPreviewCommandAction(action: StudioPlanAction): action is PreviewComm
   );
 }
 
+/**
+ * Whether a recorded scroll position fulfils an authored one: it is the same
+ * position, or the scroller ran out of room first. `scrollTo` clamps a target
+ * past the end, and where the end lies depends on the size of the preview that
+ * rendered the lesson, so a lesson can ask for "the end" with a position no
+ * preview can reach (a 5000 for the footer) and the recording holds the
+ * position it really reached. Only a recorded maximum can prove the scroll
+ * stopped at the end, so a recording without one (made before it was captured)
+ * matches exactly or not at all.
+ */
+function scrollPositionMatches(
+  recorded: number | undefined,
+  authored: number,
+  maxScroll: number | undefined,
+): boolean {
+  if (recorded === undefined) return false;
+  if (recorded === authored) return true;
+  return maxScroll !== undefined && recorded < authored && recorded >= maxScroll - 1;
+}
+
 function previewEventMatchesAction(
   event: RecordedPreviewEvent,
   action: PreviewCommandAction,
@@ -77,11 +97,19 @@ function previewEventMatchesAction(
         ? event.type === "preview_interaction" &&
             event.interaction?.type === "scroll" &&
             event.interaction.target.testId === action.target.value &&
-            event.interaction.data?.scrollTop === action.top &&
-            event.interaction.data?.scrollLeft === action.left
+            scrollPositionMatches(
+              event.interaction.data?.scrollTop,
+              action.top,
+              event.interaction.data?.maxScrollTop,
+            ) &&
+            scrollPositionMatches(
+              event.interaction.data?.scrollLeft,
+              action.left,
+              event.interaction.data?.maxScrollLeft,
+            )
         : event.type === "preview_scroll" &&
-            event.scrollTop === action.top &&
-            event.scrollLeft === action.left;
+            scrollPositionMatches(event.scrollTop, action.top, event.maxScrollTop) &&
+            scrollPositionMatches(event.scrollLeft, action.left, event.maxScrollLeft);
     case "preview.route":
       return event.type === "preview_route_change" && event.route === action.route;
   }

@@ -524,6 +524,103 @@ describe("runArtifactChecks", () => {
   });
 });
 
+describe("preview.scroll authored commands", () => {
+  function scrollPlan(top: number, target?: { by: "testId"; value: string }): StudioPlan {
+    const base = makePreviewPlan();
+    return parseStudioPlan({
+      ...base,
+      actions: [
+        ...base.actions.slice(0, 3),
+        {
+          id: "scroll",
+          type: "preview.scroll",
+          at: 40,
+          timeoutMs: 1_000,
+          top,
+          ...(target ? { target } : {}),
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+      ],
+    });
+  }
+
+  function scrollRecording(plan: StudioPlan, scrolls: NonNullable<Recording["previewEvents"]>) {
+    const recording = makePreviewRecording(plan);
+    recording.previewEvents = [recording.previewEvents![0], ...scrolls];
+    return recording;
+  }
+
+  async function interactionCheck(plan: StudioPlan, recording: Recording) {
+    const checks = await checksFor(recording, plan);
+    return checks.find((check) => check.id === "preview.interactions.authored")!;
+  }
+
+  const pageScroll = (scrollTop: number, maxScrollTop?: number) => ({
+    type: "preview_scroll" as const,
+    timestamp: 40,
+    scrollTop,
+    scrollLeft: 0,
+    ...(maxScrollTop === undefined ? {} : { maxScrollTop, maxScrollLeft: 0 }),
+  });
+
+  it("matches a scroll recorded at the authored position", async () => {
+    const plan = scrollPlan(300);
+    expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(300, 423)]))).ok).toBe(
+      true,
+    );
+  });
+
+  it("matches a scroll to a position past the end when the page stopped at its end", async () => {
+    // The footer is asked for with 5000; a taller preview leaves less to scroll,
+    // so the page ends at whatever its own size allows.
+    const plan = scrollPlan(5_000);
+    for (const end of [291, 423, 523]) {
+      expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(end, end)]))).ok).toBe(
+        true,
+      );
+    }
+  });
+
+  it("fails a scroll that fell short of the authored position without reaching the end", async () => {
+    const plan = scrollPlan(5_000);
+    const check = await interactionCheck(plan, scrollRecording(plan, [pageScroll(300, 423)]));
+    expect(check.ok).toBe(false);
+    expect(check.detail).toContain("scroll (preview.scroll)");
+  });
+
+  it("fails a scroll recorded past the authored position", async () => {
+    const plan = scrollPlan(300);
+    expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(400, 423)]))).ok).toBe(
+      false,
+    );
+  });
+
+  it("matches a clamped scroll only when the recording carries the page's maximum", async () => {
+    const plan = scrollPlan(5_000);
+    expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(423)]))).ok).toBe(false);
+  });
+
+  it("matches an element scroll that stopped at the end of the scroller", async () => {
+    const plan = scrollPlan(400, { by: "testId", value: "reviews" });
+    const elementScroll = (scrollTop: number, maxScrollTop: number) => ({
+      type: "preview_interaction" as const,
+      timestamp: 40,
+      interaction: {
+        type: "scroll" as const,
+        timestamp: 40,
+        target: { tagName: "div", testId: "reviews" },
+        data: { scrollTop, scrollLeft: 0, maxScrollTop, maxScrollLeft: 0, isDocument: false },
+      },
+    });
+    expect(
+      (await interactionCheck(plan, scrollRecording(plan, [elementScroll(127, 127)]))).ok,
+    ).toBe(true);
+    expect((await interactionCheck(plan, scrollRecording(plan, [elementScroll(64, 127)]))).ok).toBe(
+      false,
+    );
+  });
+});
+
 describe("runArtifactChecks decoded-artifact authority (STUDIO-01)", () => {
   it("fails checkpoint.file when the encoded artifact lacks the file content, even with a good in-memory recording", async () => {
     const plan = makePlan();
