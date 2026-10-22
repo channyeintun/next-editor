@@ -1394,14 +1394,11 @@ scenes:
       - title: 'MDN — list-style (accessibility: VoiceOver and role="list")'
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/list-style#accessibility"
     actions:
-      # Was 2000: the page is 1247 px tall here, so a preview up to about 828
-      # px high reaches 415; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-footer
         type: preview.scroll
         at: { mark: scroll-footer }
         timeoutMs: 5000
-        top: 415
+        top: 2000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-footer
         type: expect.preview
@@ -1443,14 +1440,11 @@ scenes:
       - title: "MDN — <dl>"
         url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dl"
     actions:
-      # Was 375: the page is 1197 px tall here, so a preview up to about 828 px
-      # high reaches 365; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-prices
         type: preview.scroll
         at: { mark: scroll-prices }
         timeoutMs: 5000
-        top: 365
+        top: 375
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-prices
         type: expect.preview
@@ -1674,14 +1668,11 @@ scenes:
       - title: "MDN — ::marker (Safari supports only color and font-size)"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/::marker#browser_compatibility"
     actions:
-      # Was 626: the page is 1213 px tall here, so a preview up to about 828
-      # px high reaches 385; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-cats
         type: preview.scroll
         at: { mark: scroll-cats }
         timeoutMs: 5000
-        top: 385
+        top: 626
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-cats
         type: expect.preview
@@ -1769,15 +1760,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-combos }
         open: false
-      # Was 872: the page is 1213 px tall here, so a preview up to about 828
-      # px high reaches 345; a larger target is clamped and the gate finds no
-      # recorded command. Kept off 385, the position before it: a scroll to
-      # where the page already is fires no event.
       - id: scroll-top-list
         type: preview.scroll
         at: { mark: close-combos }
         timeoutMs: 5000
-        top: 345
+        top: 872
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-index-top
         type: workspace.openFile

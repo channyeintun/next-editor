@@ -1626,9 +1626,12 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-grid }
         open: false
-      # The scroll for this step is gone: the page fits the preview at this
-      # height, so there is nothing to scroll and the gate would find no
-      # recorded command.
+      - id: scroll-photos
+        type: preview.scroll
+        at: { mark: scroll-photos }
+        timeoutMs: 5000
+        top: 260
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-photo
         type: editor.type
         at: { mark: type-photo }
@@ -1667,7 +1670,7 @@ scenes:
   - id: anchor-function
     chapter: "Anchor function နဲ့ နေရာချကြည့်ရအောင်"
     narration: >
-      position area က ရေးရ လွယ်ပါတယ်။ အနား တစ်ခုချင်းကို တိတိကျကျ ထိန်းချင်ရင်တော့
+      [[mark:scroll-top]] position area က ရေးရ လွယ်ပါတယ်။ အနား တစ်ခုချင်းကို တိတိကျကျ ထိန်းချင်ရင်တော့
       anchor function ကို သုံးပါတယ်။ [[mark:type-bubble]] ဈေးလျှော့ bubble ကိုလည်း tag လိုပဲ absolute
       ပေးပြီး၊ ဒီနေ့ အထူး နာမည်ကို default anchor အဖြစ် ပေးပါမယ်။ [[mark:type-insets]] ဒီတစ်ခါ position
       area အစား lesson 14 က offset လေးခုကို သုံးပါမယ်။ သူတို့ကို inset property လို့လည်း ခေါ်ပါတယ်။ bubble
@@ -1684,9 +1687,12 @@ scenes:
       - title: "MDN — anchor()"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/anchor"
     actions:
-      # The scroll for this step is gone: the page fits the preview at this
-      # height, so there is nothing to scroll and the gate would find no
-      # recorded command.
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-bubble
         type: editor.type
         at: { mark: type-bubble }
@@ -1936,9 +1942,12 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-overflow }
         open: false
-      # The scroll for this step is gone: the page fits the preview at this
-      # height, so there is nothing to scroll and the gate would find no
-      # recorded command.
+      - id: scroll-end
+        type: preview.scroll
+        at: { mark: close-overflow, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 2000
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-info
         type: editor.type
         at: { mark: type-info }
@@ -2061,9 +2070,12 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-more }
         open: false
-      # The scroll for this step is gone: the page fits the preview at this
-      # height, so there is nothing to scroll and the gate would find no
-      # recorded command.
+      - id: scroll-final
+        type: preview.scroll
+        at: { mark: close-more, offsetMs: 300 }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-final-tag
         type: expect.preview
         at: { mark: explain-support }

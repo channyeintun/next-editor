@@ -1609,15 +1609,11 @@ scenes:
       - title: "MDN — justify-content"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content"
     actions:
-      # Was 340: the page is 1139 px tall at a 432 px preview and only 1110 px
-      # at 576, so 280 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-chips
         type: preview.scroll
         at: { mark: scroll-chips }
         timeoutMs: 5000
-        top: 280
+        top: 340
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-chips
         type: editor.type
@@ -1914,15 +1910,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-lines-board }
         open: false
-      # Was 680: the page is 1283 px tall at a 432 px preview and only 1255 px
-      # at 576, so 425 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-cards
         type: preview.scroll
         at: { mark: scroll-cards }
         timeoutMs: 5000
-        top: 425
+        top: 680
         retry: { maxAttempts: 2, delayMs: 250 }
       # line-by-line: typed key by key, "display: flex" before "flex: 1" would
       # squeeze the cards to uneven widths for several seconds.
@@ -2222,15 +2214,11 @@ scenes:
       - title: "MDN — justify-content (start, end, flex-start, flex-end)"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content#values"
     actions:
-      # Was 900: the page is 1316 px tall at a 432 px preview and only 1212 px
-      # at 576, so 380 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-wide
         type: preview.scroll
         at: { mark: scroll-wide }
         timeoutMs: 5000
-        top: 380
+        top: 900
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-wide
         type: editor.type

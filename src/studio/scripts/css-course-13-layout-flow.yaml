@@ -1636,15 +1636,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-flex-grid }
         open: false
-      # Was 924: the page is 1767 px tall at a 432 px preview and only 1680 px
-      # at 576, so 880 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-about
         type: preview.scroll
         at: { mark: scroll-about }
         timeoutMs: 5000
-        top: 880
+        top: 924
         retry: { maxAttempts: 2, delayMs: 250 }
       # "float: lef" and "margin-right: 16" are invalid; only the full values
       # apply.
@@ -1764,15 +1760,11 @@ scenes:
       - title: "CSS Multi-column Layout Module Level 1"
         url: "https://www.w3.org/TR/css-multicol-1/"
     actions:
-      # Was 5000: the page is 1647 px tall at a 432 px preview and only 1561
-      # px at 576, so 760 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-towns
         type: preview.scroll
         at: { mark: scroll-towns }
         timeoutMs: 5000
-        top: 760
+        top: 5000
         retry: { maxAttempts: 2, delayMs: 250 }
       # "column-gap: 24" is invalid; the count 2 lands whole at its digit.
       - id: type-cols

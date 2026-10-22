@@ -1474,14 +1474,11 @@ scenes:
       - title: "MDN — position: fixed"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/position#fixed_positioning"
     actions:
-      # Was 5000: the page is 2024 px tall here, so a preview up to about 828
-      # px high reaches 1195; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-bottom
         type: preview.scroll
         at: { mark: scroll-bottom }
         timeoutMs: 5000
-        top: 1195
+        top: 5000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-fixed
         type: editor.type

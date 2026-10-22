@@ -2227,14 +2227,11 @@ scenes:
       - title: "CSS Grid Layout Module Level 2 — z-axis ordering of grid items"
         url: "https://drafts.csswg.org/css-grid/#z-order"
     actions:
-      # Was 1150: the page is 1497 px tall here, so a preview up to about 828
-      # px high reaches 665; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-photo
         type: preview.scroll
         at: { mark: scroll-photo }
         timeoutMs: 5000
-        top: 665
+        top: 1150
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-photo-grid
         type: editor.type

@@ -152,9 +152,9 @@ lesson:
           </body>
         </html>
       # base.css: kit sections A, B, B2 and C; section E gives the reviews box
-      # a white background, a top margin and tidy quote spacing, spaces the
-      # menu section, and caps the strip at 400 px wide. No height, border,
-      # padding, overflow or scroll declaration for the reviews or the strip.
+      # a white background, a top margin and tidy quote spacing, and spaces
+      # the menu section. No height, border, padding, overflow or scroll
+      # declaration for the reviews or the strip.
       base.css: |
         /*
           base.css: pinned, never typed during a lesson.
@@ -398,13 +398,6 @@ lesson:
 
         .menu-section {
           margin-top: 16px;
-        }
-
-        /* The strip keeps the 400 px its cards were measured at (a 432 px
-           preview), so the snap positions the lesson records do not move
-           with the preview's width. */
-        .menu-strip {
-          max-width: 400px;
         }
       styles.css: ""
 
@@ -1709,10 +1702,14 @@ scenes:
         target: { by: testId, value: reviews }
         textContains: "လက်ဖက်ရည် အရမ်းကောင်းတယ်။"
         retry: { maxAttempts: 3, delayMs: 300 }
-      # The scroll command for this step is gone: clip is not a scroll
-      # container, so scrollTo is a no-op that fires no scroll event, and the
-      # gate would never find a recorded command. The narration's point (the
-      # box does not scroll) needs none.
+      # clip is not a scroll container: scrollTo is a no-op (no scroll event).
+      - id: scroll-clip
+        type: preview.scroll
+        at: { mark: scroll-clip }
+        timeoutMs: 5000
+        target: { by: testId, value: reviews }
+        top: 64
+        retry: { maxAttempts: 2, delayMs: 250 }
       - id: select-clip
         type: editor.select
         at: { mark: select-clip }
@@ -1823,15 +1820,13 @@ scenes:
         textContains: "ဝန်ထမ်းတွေ ဖော်ရွေတယ်။"
         retry: { maxAttempts: 3, delayMs: 300 }
       # Chrome restores the old offset without a scroll event; this recorded
-      # scroll to near the end makes the replay deterministic. The box scrolls
-      # 127 px at most and the recorded scroll must equal `top`, so 400 (clamped
-      # to 127) never matched; 120 stays inside the range at every width.
+      # scroll to the end (clamped to 127) makes the replay deterministic.
       - id: scroll-trap
         type: preview.scroll
         at: { mark: scroll-trap }
         timeoutMs: 5000
         target: { by: testId, value: reviews }
-        top: 120
+        top: 400
         retry: { maxAttempts: 2, delayMs: 250 }
 
   - id: axes-board
@@ -2221,18 +2216,15 @@ scenes:
         target: { by: testId, value: card-coffee }
         textContains: "ကော်ဖီ"
         retry: { maxAttempts: 3, delayMs: 300 }
-      # The recorded scroll must equal `left`, and the browser only settles on
-      # a snap position: the second card's, 308 = 332 − 24 (rrweb records the
-      # settled position, so asking for 240 never matched). The cards are 80 %
-      # of the strip, which base.css caps at 400 px, so 308 holds at any
-      # preview 432 px wide or more.
+      # left 240 is past halfway to the second card's snap position (308 =
+      # 332 − 24): the browser settles there; rrweb records the settled 308.
       - id: scroll-strip
         type: preview.scroll
         at: { mark: scroll-strip }
         timeoutMs: 5000
         target: { by: testId, value: menu-strip }
         top: 0
-        left: 308
+        left: 240
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-snap
         type: expect.preview
@@ -2253,15 +2245,13 @@ scenes:
         text: "  scroll-margin-inline-start: 24px;\n"
       # Snap positions become 332 − 24 − 24 = 284. Chrome may re-snap when the
       # style lands; this recorded scroll makes the settled 284 deterministic.
-      # As above, `left` is the settled position, because the recorded scroll
-      # must equal it.
       - id: scroll-strip-again
         type: preview.scroll
         at: { mark: scroll-strip-again }
         timeoutMs: 5000
         target: { by: testId, value: menu-strip }
         top: 0
-        left: 284
+        left: 240
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-margin
         type: expect.preview

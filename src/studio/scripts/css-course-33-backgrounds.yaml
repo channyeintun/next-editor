@@ -1836,14 +1836,12 @@ scenes:
         textContains: "ဧည့်သည်တွေ ပြောတာ"
         retry: { maxAttempts: 3, delayMs: 300 }
       # The box scrolls 117 px at most (scrollHeight 275, clientHeight 158).
-      # The recorded scroll must equal `top`, so 120 never matched (it was
-      # clamped to 117); 110 stays inside the range at every preview width.
       - id: scroll-reviews
         type: preview.scroll
         at: { mark: scroll-reviews }
         timeoutMs: 5000
         target: { by: testId, value: reviews }
-        top: 110
+        top: 120
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-local
         type: editor.type

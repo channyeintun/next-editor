@@ -1566,15 +1566,11 @@ scenes:
         target: { by: testId, value: site-header }
         textContains: "ရွှေလက်ဖက်ရည်ဆိုင်"
         retry: { maxAttempts: 3, delayMs: 300 }
-      # Was 200: the page is 912 px tall at a 432 px preview and only 854 px
-      # at 576, so 25 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-footer
         type: preview.scroll
         at: { mark: scroll-footer }
         timeoutMs: 5000
-        top: 25
+        top: 200
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: select-grid-area
         type: editor.select
@@ -2003,15 +1999,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-align-board }
         open: false
-      # Was 320: the page is 1039 px tall at a 432 px preview and only 1013 px
-      # at 576, so 185 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-soon
         type: preview.scroll
         at: { mark: scroll-soon }
         timeoutMs: 5000
-        top: 185
+        top: 320
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-soon-grid
         type: editor.type

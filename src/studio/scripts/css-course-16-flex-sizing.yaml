@@ -2103,15 +2103,11 @@ scenes:
       - title: "web.dev Learn CSS — Flexbox: wrapping flex items"
         url: "https://web.dev/learn/css/flexbox#wrapping_flex_items"
     actions:
-      # Was 360: the page is 1191 px tall at a 432 px preview and only 1134 px
-      # at 576, so 335 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-squeeze
         type: preview.scroll
         at: { mark: scroll-squeeze }
         timeoutMs: 5000
-        top: 335
+        top: 360
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-squeeze
         type: editor.type
@@ -2167,15 +2163,11 @@ scenes:
       - title: "MDN — flex-basis"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/flex-basis"
     actions:
-      # Was 470: the page is 1139 px tall at a 432 px preview and only 1081 px
-      # at 576, so 280 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-layout
         type: preview.scroll
         at: { mark: scroll-layout }
         timeoutMs: 5000
-        top: 280
+        top: 470
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-layout
         type: editor.type
@@ -2279,15 +2271,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-sidebar-board }
         open: false
-      # Was 600: the page is 1155 px tall at a 432 px preview and only 961 px
-      # at 576, so 160 is reachable in a preview up to about 818 px high at
-      # either width; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-drinks
         type: preview.scroll
         at: { mark: scroll-drinks }
         timeoutMs: 5000
-        top: 160
+        top: 600
         retry: { maxAttempts: 2, delayMs: 250 }
       # block: typed keystroke by keystroke, "display: flex" alone would make
       # the four cards a squeezed row for a few seconds before the column lands.

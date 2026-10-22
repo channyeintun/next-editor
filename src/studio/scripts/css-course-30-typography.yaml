@@ -1720,14 +1720,11 @@ scenes:
         type: workspace.openFile
         at: { mark: open-styles-size }
         path: styles.css
-      # Was 400: the page is 1037 px tall here, so a preview up to about 828
-      # px high reaches 205; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-story
         type: preview.scroll
         at: { mark: scroll-story }
         timeoutMs: 5000
-        top: 205
+        top: 400
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-story
         type: expect.preview

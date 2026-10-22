@@ -1411,14 +1411,11 @@ scenes:
       - title: "CSS Backgrounds and Borders Module Level 3 — border-style"
         url: "https://www.w3.org/TR/css-backgrounds-3/#border-style"
     actions:
-      # Was 2000: the page is 910 px tall here, so a preview up to about 828
-      # px high reaches 80; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-badges
         type: preview.scroll
         at: { mark: scroll-badges }
         timeoutMs: 5000
-        top: 80
+        top: 2000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-dotted
         type: editor.type
@@ -1550,14 +1547,11 @@ scenes:
         target: { by: testId, value: card-lime-juice }
         textContains: "1,200 ကျပ်"
         retry: { maxAttempts: 3, delayMs: 300 }
-      # Was 2000: the page is 910 px tall here, so a preview up to about 828
-      # px high reaches 80; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-bottom
         type: preview.scroll
         at: { mark: scroll-bottom }
         timeoutMs: 5000
-        top: 80
+        top: 2000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-pill
         type: editor.type
@@ -2033,14 +2027,11 @@ scenes:
         type: editor.select
         at: { mark: select-first }
         target: { file: styles.css, text: "0 1px 2px rgb(0 0 0 / 15%),", occurrence: 1 }
-      # Was 2000: the page is 922 px tall here, so a preview up to about 828
-      # px high reaches 90; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-form
         type: preview.scroll
         at: { mark: scroll-form }
         timeoutMs: 5000
-        top: 90
+        top: 2000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-inset
         type: editor.type

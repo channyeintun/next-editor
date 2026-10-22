@@ -1726,14 +1726,11 @@ scenes:
       - title: "MDN — Using CSS custom properties: invalid custom properties"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties#invalid_custom_properties"
     actions:
-      # Was 5000: the page is 1669 px tall here, so a preview up to about 828
-      # px high reaches 840; a larger target is clamped and the gate finds no
-      # recorded command.
       - id: scroll-form
         type: preview.scroll
         at: { mark: scroll-form }
         timeoutMs: 5000
-        top: 840
+        top: 5000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-direct
         type: editor.type
@@ -1866,15 +1863,11 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-iacvt }
         open: false
-      # Was 1070: the page is 1669 px tall here, so a preview up to about 828
-      # px high reaches 800; a larger target is clamped and the gate finds no
-      # recorded command. Kept off 840, the position before it: a scroll to
-      # where the page already is fires no event.
       - id: scroll-cup
         type: preview.scroll
         at: { mark: scroll-cup }
         timeoutMs: 5000
-        top: 800
+        top: 1070
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-property
         type: editor.type
