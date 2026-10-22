@@ -856,10 +856,12 @@ scenes:
       - title: "MDN — :first-of-type"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:first-of-type"
     actions:
-      # The page is 1214 px tall, so a taller preview can scroll less (800 px:
-      # 414). A target past that range is clamped and the recording no longer
-      # holds the authored position, so this and scroll-footer stay at or
-      # below 230, the position scroll-cards already reaches.
+      # Every preview.scroll must land exactly on its `top` and move the page,
+      # or the gate finds no recorded command. The page is 1214 px tall, so a
+      # taller preview can scroll less (800 px: 414) and clamps a larger
+      # target; a scroll to where the page already is fires no event. So
+      # every `top` in this lesson stays at or below 230, the position
+      # scroll-cards reaches, and no two scrolls in a row share a position.
       - id: scroll-about
         type: preview.scroll
         at: { mark: scroll-about }
@@ -1327,11 +1329,12 @@ scenes:
       - title: "HTML Standard — case-sensitivity of selectors"
         url: "https://html.spec.whatwg.org/multipage/semantics-other.html#case-sensitivity-of-selectors"
     actions:
+      # Not 230: scroll-footer left the page there, so no scroll event fires.
       - id: scroll-cards-again
         type: preview.scroll
         at: { mark: scroll-cards-again }
         timeoutMs: 4000
-        top: 230
+        top: 150
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-upper
         type: editor.type
