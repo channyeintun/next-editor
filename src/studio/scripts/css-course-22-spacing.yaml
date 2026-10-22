@@ -1533,15 +1533,12 @@ scenes:
       - id: collapse-runner-dock
         type: runtime.collapseDock
         at: { afterAction: expect-button }
-      - id: scroll-footer
-        type: preview.scroll
-        at: { mark: scroll-footer }
-        timeoutMs: 5000
-        top: 1000
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 750 px tall, so in
+      # a preview this tall there is nothing to scroll and no scroll event to
+      # record.
       - id: expect-footer
         type: expect.preview
-        at: { afterAction: scroll-footer }
+        at: { mark: scroll-footer }
         timeoutMs: 5000
         target: { by: testId, value: footer }
         textContains: "ရန်ကုန်"
@@ -1558,15 +1555,12 @@ scenes:
         type: editor.select
         at: { mark: select-nbsp }
         target: { file: index.html, text: "1,500&nbsp;ကျပ်", occurrence: 1 }
-      - id: scroll-top
-        type: preview.scroll
-        at: { afterAction: select-nbsp }
-        timeoutMs: 5000
-        top: 0
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 750 px tall, so in
+      # a preview this tall there is nothing to scroll and no scroll event to
+      # record.
       - id: expect-price
         type: expect.preview
-        at: { afterAction: scroll-top }
+        at: { afterAction: select-nbsp }
         timeoutMs: 5000
         target: { by: testId, value: price-laphet-yay }
         textContains: "ကျပ်"
@@ -1847,15 +1841,12 @@ scenes:
       - title: "CSS 2.2 — Collapsing margins"
         url: "https://www.w3.org/TR/CSS22/box.html#collapsing-margins"
     actions:
-      - id: scroll-collapse
-        type: preview.scroll
-        at: { mark: scroll-collapse }
-        timeoutMs: 5000
-        top: 440
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 839 px tall, so in
+      # a preview this tall there is nothing to scroll and no scroll event to
+      # record.
       - id: expect-info
         type: expect.preview
-        at: { afterAction: scroll-collapse }
+        at: { mark: scroll-collapse }
         timeoutMs: 5000
         target: { by: testId, value: info }
         textContains: "နေ့တိုင်း"
@@ -2107,12 +2098,9 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-strategy-board }
         open: false
-      - id: scroll-top-tokens
-        type: preview.scroll
-        at: { mark: close-strategy-board }
-        timeoutMs: 5000
-        top: 0
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 909 px tall, so in
+      # a preview this tall there is nothing to scroll and no scroll event to
+      # record.
       - id: type-root
         type: editor.type
         at: { mark: type-root }

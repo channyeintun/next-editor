@@ -1891,11 +1891,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-conic-board }
         open: false
+      # Was 400: it ended at the same position as the coin scroll before it
+      # (the end of this short page). 25 is reachable in a preview up to about
+      # 900 px high and differs from the scroll before it, because a scroll to
+      # where the page already is fires no event.
       - id: scroll-pie
         type: preview.scroll
         at: { mark: scroll-pie }
         timeoutMs: 5000
-        top: 400
+        top: 25
         retry: { maxAttempts: 2, delayMs: 250 }
       # Empty rule first (see insert-radial-rule).
       - id: insert-conic-rule
@@ -2080,11 +2084,15 @@ scenes:
       - title: "CSS Color Module Level 4 — interpolation (default color space, legacy colors in sRGB)"
         url: "https://drafts.csswg.org/css-color-4/#interpolation"
     actions:
+      # Was 1000: it ended at the same position as the stats scroll before it
+      # (the end of this short page). 25 is reachable in a preview up to about
+      # 900 px high and differs from the scroll before it, because a scroll to
+      # where the page already is fires no event.
       - id: scroll-bars
         type: preview.scroll
         at: { mark: scroll-bars }
         timeoutMs: 5000
-        top: 1000
+        top: 25
         retry: { maxAttempts: 2, delayMs: 250 }
       # Empty rule first (see insert-radial-rule).
       - id: insert-bar-rule

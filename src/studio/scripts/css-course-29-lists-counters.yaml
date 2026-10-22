@@ -1760,11 +1760,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-combos }
         open: false
+      # Was 872: it ended at the same position as the scroll to the categories
+      # before it (the end of the page). 300 is reachable in a preview up to
+      # about 900 px high and differs from the end the scroll before it
+      # reaches, because a scroll to where the page already is fires no event.
       - id: scroll-top-list
         type: preview.scroll
         at: { mark: close-combos }
         timeoutMs: 5000
-        top: 872
+        top: 300
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-index-top
         type: workspace.openFile

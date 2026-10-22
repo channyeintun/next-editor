@@ -1729,11 +1729,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-folders }
         open: false
+      # Was 400: it ended at the same position as the scroll after it (the end
+      # of this page). 10 is reachable in a preview up to about 900 px high
+      # and differs from the end the next scroll reaches, because a scroll to
+      # where the page already is fires no event.
       - id: scroll-trap-a
         type: preview.scroll
         at: { mark: scroll-trap-a }
         timeoutMs: 5000
-        top: 400
+        top: 10
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-trap-a
         type: expect.preview
