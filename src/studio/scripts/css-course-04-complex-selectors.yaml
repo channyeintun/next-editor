@@ -1625,10 +1625,14 @@ scenes:
       - title: "MDN — :only-of-type"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/:only-of-type"
     actions:
+      # Must land exactly on `top` and move the page, or the gate finds no
+      # recorded command. The page is 1058 px tall, so an 800 px preview
+      # scrolls at most 258 and clamps a larger target: 220 keeps the first
+      # about paragraph in view and differs from the 180 either side of it.
       - id: scroll-about
         type: preview.scroll
         at: { mark: scroll-about }
-        top: 900
+        top: 220
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-index-about
         type: workspace.openFile
