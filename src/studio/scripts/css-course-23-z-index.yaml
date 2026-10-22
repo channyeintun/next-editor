@@ -1579,11 +1579,14 @@ scenes:
       - title: "MDN — z-index (negative values)"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/z-index"
     actions:
+      # Was 280: the page is 907 px tall here, so a preview up to about 828 px
+      # high reaches 75; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-leaf
         type: preview.scroll
         at: { mark: scroll-leaf }
         timeoutMs: 5000
-        top: 280
+        top: 75
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-leaf-abs
         type: editor.type
@@ -1729,11 +1732,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-folders }
         open: false
+      # Was 400: the page is 859 px tall here, so a preview up to about 828 px
+      # high reaches 30; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-trap-a
         type: preview.scroll
         at: { mark: scroll-trap-a }
         timeoutMs: 5000
-        top: 400
+        top: 30
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-trap-a
         type: expect.preview
@@ -1820,11 +1826,15 @@ scenes:
       - title: "CSS Color 4 — transparency: the opacity property"
         url: "https://drafts.csswg.org/css-color/#transparency"
     actions:
+      # Was 600: the page is 859 px tall here, so a preview up to about 828 px
+      # high reaches 10; a larger target is clamped and the gate finds no
+      # recorded command. Kept off 30, the position before it: a scroll to
+      # where the page already is fires no event.
       - id: scroll-trap-b
         type: preview.scroll
         at: { mark: scroll-trap-b }
         timeoutMs: 5000
-        top: 600
+        top: 10
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-trap-b-front
         type: expect.preview

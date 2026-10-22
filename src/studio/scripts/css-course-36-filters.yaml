@@ -1571,7 +1571,7 @@ scenes:
   - id: invert
     chapter: "Invert နဲ့ dark mode"
     narration: >
-      [[mark:scroll-night]] card သေးသေးဆီ ဆင်းသွားရအောင်။ [[mark:type-invert]] ဒီ card အတွက်
+      card သေးသေးဆီ ဆင်းသွားရအောင်။ [[mark:type-invert]] ဒီ card အတွက်
       ညဘက် ပုံစံ တစ်ခု အမြန် လိုချင်တယ် ဆိုပါစို့။ invert function ကို 1 နဲ့ စမ်းကြည့်ရအောင်။
       [[mark:after-invert]] အဖြူရောင် card က အမည်းရောင် ဖြစ်ပြီး၊ အရောင်ရင့် စာလုံးတွေက
       လင်းသွားလို့ ပထမတော့ dark mode လို ထင်ရပါတယ်။ ဒါပေမဲ့ ပုံကို ကြည့်ပါ။ ဓာတ်ပုံ ဖလင်လို
@@ -1587,12 +1587,9 @@ scenes:
       - title: "MDN — invert() (0 to 1, clamped; default 1)"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/filter-function/invert"
     actions:
-      - id: scroll-night
-        type: preview.scroll
-        at: { mark: scroll-night }
-        timeoutMs: 5000
-        top: 2000
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page fits the preview at this
+      # height, so there is nothing to scroll and the gate would find no
+      # recorded command.
       - id: type-invert
         type: editor.type
         at: { mark: type-invert }
@@ -1842,12 +1839,9 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-svg }
         open: false
-      - id: scroll-photo
-        type: preview.scroll
-        at: { mark: scroll-photo }
-        timeoutMs: 5000
-        top: 0
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page fits the preview at this
+      # height, so there is nothing to scroll and the gate would find no
+      # recorded command.
       - id: type-blur
         type: editor.type
         at: { mark: type-blur }

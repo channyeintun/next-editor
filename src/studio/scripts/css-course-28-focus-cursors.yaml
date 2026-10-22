@@ -1655,11 +1655,14 @@ scenes:
     actions:
       # Clamps to the end of the page: the form, the order button and the
       # empty status line under it are on screen.
+      # Was 900: the page is 1311 px tall here, so a preview up to about 828
+      # px high reaches 480; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-form
         type: preview.scroll
         at: { mark: scroll-form }
         timeoutMs: 5000
-        top: 900
+        top: 480
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-order-button
         type: expect.preview
@@ -1993,11 +1996,14 @@ scenes:
         open: false
       # Brings the sold-out falooda card near the top of the preview (a
       # 720 px viewport clamps it to 607).
+      # Was 640: the page is 1327 px tall here, so a preview up to about 828
+      # px high reaches 495; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-sold-out
         type: preview.scroll
         at: { mark: close-cursors, offsetMs: 300 }
         timeoutMs: 5000
-        top: 640
+        top: 495
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-sold-out
         type: expect.preview

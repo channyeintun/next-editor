@@ -1551,11 +1551,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-deco-board }
         open: false
+      # Was 860: the page is 1527 px tall at a 432 px preview and only 1442 px
+      # at 576, so 610 is reachable in a preview up to about 818 px high at
+      # either width; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-about
         type: preview.scroll
         at: { mark: scroll-about }
         timeoutMs: 5000
-        top: 860
+        top: 610
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-about-link
         type: expect.preview
@@ -1617,11 +1621,15 @@ scenes:
         target: { by: testId, value: hero }
         textContains: "မှာယူရန်"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # Was 860: the page is 1527 px tall at a 432 px preview and only 1442 px
+      # at 576, so 610 is reachable in a preview up to about 818 px high at
+      # either width; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-story
         type: preview.scroll
         at: { mark: scroll-story }
         timeoutMs: 5000
-        top: 860
+        top: 610
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-justify
         type: editor.type

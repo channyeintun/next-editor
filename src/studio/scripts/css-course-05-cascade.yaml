@@ -1636,11 +1636,14 @@ scenes:
         at: { mark: close-trays }
         open: false
       # The cards sit below the first screen of the 720 px preview.
+      # Was 360: the page is 1126 px tall here, so a preview up to about 828
+      # px high reaches 295; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-to-cards
         type: preview.scroll
         at: { mark: close-trays, offsetMs: 300 }
         timeoutMs: 4000
-        top: 360
+        top: 295
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-layer-order
         type: editor.type

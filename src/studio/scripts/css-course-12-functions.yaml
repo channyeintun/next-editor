@@ -2569,11 +2569,14 @@ scenes:
         target: { by: testId, value: about }
         textContains: "ဆိုင်အကြောင်း"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # Was 380: the page is 1173 px tall here, so a preview up to about 828
+      # px high reaches 345; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-drinks
         type: preview.scroll
         at: { mark: scroll-drinks }
         timeoutMs: 5000
-        top: 380
+        top: 345
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-h3
         type: editor.type

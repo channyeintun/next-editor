@@ -1917,11 +1917,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-hsl }
         open: false
+      # Was 2000: the page is 1152 px tall here, so a preview up to about 828
+      # px high reaches 320; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-end
         type: preview.scroll
         at: { mark: scroll-end }
         timeoutMs: 5000
-        top: 2000
+        top: 320
         retry: { maxAttempts: 2, delayMs: 250 }
       # line-by-line: every revealed line has balanced parentheses.
       - id: type-pattern

@@ -1628,11 +1628,14 @@ scenes:
       - title: "MDN — opacity"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/opacity"
     actions:
+      # Was 5000: the page is 1330 px tall here, so a preview up to about 828
+      # px high reaches 500; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-sold-out
         type: preview.scroll
         at: { mark: scroll-sold-out }
         timeoutMs: 5000
-        top: 5000
+        top: 500
         retry: { maxAttempts: 2, delayMs: 250 }
       # line-by-line: keystroke typing would pass through "opacity: 0"
       # (the card vanishes for a keystroke).
@@ -1827,11 +1830,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-percent }
         open: false
+      # Was 579: the page is 1305 px tall here, so a preview up to about 828
+      # px high reaches 475; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-snacks
         type: preview.scroll
         at: { mark: close-percent, offsetMs: 300 }
         timeoutMs: 5000
-        top: 579
+        top: 475
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-width
         type: editor.type

@@ -1992,11 +1992,14 @@ scenes:
       - title: "MDN — min-content"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/min-content"
     actions:
+      # Was 410: the page is 1154 px tall here, so a preview up to about 828
+      # px high reaches 325; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-snacks
         type: preview.scroll
         at: { mark: scroll-snacks }
         timeoutMs: 5000
-        top: 410
+        top: 325
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-snacks
         type: editor.type
@@ -2132,11 +2135,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-minmax-board }
         open: false
+      # Was 840: the page is 992 px tall at a 432 px preview and only 938 px
+      # at 576, so 135 is reachable in a preview up to about 818 px high at
+      # either width; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-prices
         type: preview.scroll
         at: { mark: scroll-prices }
         timeoutMs: 5000
-        top: 840
+        top: 135
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-prices
         type: editor.type
@@ -2193,11 +2200,15 @@ scenes:
           { file: styles.css, after: "  grid-template-columns: max-content 1fr;\n", occurrence: 1 }
         text: "  grid-template-columns: min-content 1fr;\n"
       # The long name grows to five lines; keep the whole list in view.
+      # Was 840: the page is 1152 px tall at a 432 px preview and only 1127 px
+      # at 576, so 295 is reachable in a preview up to about 818 px high at
+      # either width; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-prices-again
         type: preview.scroll
         at: { mark: after-min }
         timeoutMs: 5000
-        top: 840
+        top: 295
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-min
         type: expect.preview

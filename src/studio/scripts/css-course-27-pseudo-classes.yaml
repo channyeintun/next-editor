@@ -1860,11 +1860,14 @@ scenes:
       - title: "webstatus.dev — :nth-child() of S"
         url: "https://webstatus.dev/features/nth-child-of"
     actions:
+      # Was 1316: the page is 2017 px tall here, so a preview up to about 828
+      # px high reaches 1185; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-snacks
         type: preview.scroll
         at: { mark: scroll-snacks }
         timeoutMs: 5000
-        top: 1316
+        top: 1185
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-snacks
         type: expect.preview

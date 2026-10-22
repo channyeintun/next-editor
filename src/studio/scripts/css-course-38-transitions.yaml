@@ -1626,11 +1626,14 @@ scenes:
       - title: "Filter Effects Module Level 1 — interpolation of filters"
         url: "https://www.w3.org/TR/filter-effects-1/#interpolation-of-filters"
     actions:
+      # Was 960: the page is 1621 px tall here, so a preview up to about 828
+      # px high reaches 790; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-gallery
         type: preview.scroll
         at: { mark: scroll-gallery }
         timeoutMs: 5000
-        top: 960
+        top: 790
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-grey
         type: editor.type
@@ -1950,11 +1953,14 @@ scenes:
       - title: "CSS Properties and Values API Level 1 — animation behavior"
         url: "https://www.w3.org/TR/css-properties-values-api-1/#animation-behavior-of-custom-properties"
     actions:
+      # Was 2000: the page is 1636 px tall here, so a preview up to about 828
+      # px high reaches 805; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-cup
         type: preview.scroll
         at: { mark: scroll-cup }
         timeoutMs: 5000
-        top: 2000
+        top: 805
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-cup
         type: editor.type

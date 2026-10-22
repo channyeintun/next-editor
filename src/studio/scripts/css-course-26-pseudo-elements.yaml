@@ -1598,11 +1598,14 @@ scenes:
       - title: "MDN — margin-inline-end"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/margin-inline-end"
     actions:
+      # Was 505: the page is 1280 px tall here, so a preview up to about 828
+      # px high reaches 450; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-quote
         type: preview.scroll
         at: { mark: scroll-quote }
         timeoutMs: 5000
-        top: 505
+        top: 450
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-quote
         type: expect.preview
@@ -1785,11 +1788,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-allowed }
         open: false
+      # Was 700: the page is 1309 px tall here, so a preview up to about 828
+      # px high reaches 480; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-hours
         type: preview.scroll
         at: { mark: scroll-hours }
         timeoutMs: 5000
-        top: 700
+        top: 480
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: expect-hours
         type: expect.preview
@@ -1946,11 +1952,14 @@ scenes:
       - title: "MDN — <label>"
         url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label"
     actions:
+      # Was 900: the page is 1349 px tall here, so a preview up to about 828
+      # px high reaches 520; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-form
         type: preview.scroll
         at: { mark: scroll-form }
         timeoutMs: 5000
-        top: 900
+        top: 520
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-placeholder
         type: editor.type

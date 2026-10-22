@@ -1784,11 +1784,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-complex }
         open: false
+      # Was 2000: the page is 1276 px tall at a 432 px preview and only 1161
+      # px at 576, so 360 is reachable in a preview up to about 818 px high at
+      # either width; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-about
         type: preview.scroll
         at: { mark: close-complex, offsetMs: 300 }
         timeoutMs: 5000
-        top: 2000
+        top: 360
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-teapot
         type: editor.type

@@ -1634,11 +1634,14 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-ruler }
         open: false
+      # Was 200: the page is 886 px tall here, so a preview up to about 828 px
+      # high reaches 55; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-glass
         type: preview.scroll
         at: { mark: scroll-glass }
         timeoutMs: 5000
-        top: 200
+        top: 55
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-glass
         type: editor.type
@@ -1755,11 +1758,14 @@ scenes:
       - title: "CSS Images Module Level 3 — radial gradients (ending shape and size)"
         url: "https://drafts.csswg.org/css-images-3/#radial-gradients"
     actions:
+      # Was 200: the page is 886 px tall here, so a preview up to about 828 px
+      # high reaches 55; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-coin
         type: preview.scroll
         at: { mark: scroll-coin }
         timeoutMs: 5000
-        top: 200
+        top: 55
         retry: { maxAttempts: 2, delayMs: 250 }
       # The empty rule lands first, so a '}' always follows the cursor: at the end of the file the browser would close an open '(' and '{' by itself, and a half-typed colour would paint as a one-colour gradient.
       - id: insert-radial-rule
@@ -1891,11 +1897,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-conic-board }
         open: false
+      # Was 400: the page is 886 px tall here, so a preview up to about 828 px
+      # high reaches 25; a larger target is clamped and the gate finds no
+      # recorded command. Kept off 55, the position before it: a scroll to
+      # where the page already is fires no event.
       - id: scroll-pie
         type: preview.scroll
         at: { mark: scroll-pie }
         timeoutMs: 5000
-        top: 400
+        top: 25
         retry: { maxAttempts: 2, delayMs: 250 }
       # Empty rule first (see insert-radial-rule).
       - id: insert-conic-rule
@@ -2002,11 +2012,14 @@ scenes:
       - title: "MDN — background-size"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/background-size"
     actions:
+      # Was 400: the page is 886 px tall here, so a preview up to about 828 px
+      # high reaches 55; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-stats
         type: preview.scroll
         at: { mark: scroll-stats }
         timeoutMs: 5000
-        top: 400
+        top: 55
         retry: { maxAttempts: 2, delayMs: 250 }
       # Empty rule first (see insert-radial-rule).
       - id: insert-dots-rule
@@ -2080,11 +2093,15 @@ scenes:
       - title: "CSS Color Module Level 4 — interpolation (default color space, legacy colors in sRGB)"
         url: "https://drafts.csswg.org/css-color-4/#interpolation"
     actions:
+      # Was 1000: the page is 886 px tall here, so a preview up to about 828
+      # px high reaches 25; a larger target is clamped and the gate finds no
+      # recorded command. Kept off 55, the position before it: a scroll to
+      # where the page already is fires no event.
       - id: scroll-bars
         type: preview.scroll
         at: { mark: scroll-bars }
         timeoutMs: 5000
-        top: 1000
+        top: 25
         retry: { maxAttempts: 2, delayMs: 250 }
       # Empty rule first (see insert-radial-rule).
       - id: insert-bar-rule

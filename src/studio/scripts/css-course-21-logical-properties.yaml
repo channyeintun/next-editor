@@ -1440,7 +1440,7 @@ scenes:
   - id: icon-gap
     chapter: "Icon နဲ့ စာကြားက နေရာလွတ်"
     narration: >
-      [[mark:scroll-cards]] မှာမယ် ခလုတ်တွေကနေ စကြည့်ရအောင်။ ခွက်ပုံ icon က စာနဲ့ ကပ်နေလို့ နေရာလွတ်
+      မှာမယ် ခလုတ်တွေကနေ စကြည့်ရအောင်။ ခွက်ပုံ icon က စာနဲ့ ကပ်နေလို့ နေရာလွတ်
       နည်းနည်း လိုပါတယ်။ [[mark:type-icon]] ပုံမှန်ဆိုရင် icon ရဲ့ ညာဘက်မှာ margin ပေးကြပါတယ်။ ဒီမှာလည်း 8
       pixel ပေးလိုက်ပါမယ်။ [[mark:after-icon]] ပထမ card မှာ ခွက်နဲ့ စာကြားမှာ နေရာလွတ် ပေါ်လာပါပြီ။
       [[mark:look-rtl-icon]] ဒါပေမဲ့ ဒုတိယ card ကို ကြည့်ပါ။ ညာကနေ ဘယ် ရေးတဲ့အတွက် icon က စာရဲ့ ညာဘက်ကို
@@ -1459,12 +1459,9 @@ scenes:
       - title: "MDN — gap"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/gap"
     actions:
-      - id: scroll-cards
-        type: preview.scroll
-        at: { mark: scroll-cards }
-        timeoutMs: 5000
-        top: 140
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 777 px tall here,
+      # so a preview this tall cannot scroll it and the gate would find no
+      # recorded command.
       - id: type-icon
         type: editor.type
         at: { mark: type-icon }
@@ -1579,12 +1576,9 @@ scenes:
         open: false
       # The browser clamps to the maximum scroll, so the about box is in view
       # at the bottom at any preview height.
-      - id: scroll-about
-        type: preview.scroll
-        at: { mark: scroll-about }
-        timeoutMs: 5000
-        top: 700
-        retry: { maxAttempts: 2, delayMs: 250 }
+      # The scroll for this step is gone: the page is only 777 px tall here,
+      # so a preview this tall cannot scroll it and the gate would find no
+      # recorded command.
       - id: type-about
         type: editor.type
         at: { mark: type-about }
@@ -1621,11 +1615,14 @@ scenes:
       - title: "MDN — text-align"
         url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-align"
     actions:
+      # Was 140: the page is 863 px tall here, so a preview up to about 828 px
+      # high reaches 35; a larger target is clamped and the gate finds no
+      # recorded command.
       - id: scroll-cards-2
         type: preview.scroll
         at: { mark: scroll-cards-2 }
         timeoutMs: 5000
-        top: 140
+        top: 35
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-price
         type: editor.type
