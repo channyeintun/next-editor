@@ -1281,11 +1281,15 @@ scenes:
         target: { by: testId, value: note }
         textContains: "ရေခဲ မပါဘဲလည်း"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # Every preview.scroll here must land exactly on its `top` and move the
+      # page, or the gate finds no recorded command. The page is 1091 px tall
+      # now, so an 800 px preview scrolls at most 291 and clamps a larger
+      # target: 260 puts the cards (y 477-840) in view.
       - id: scroll-to-cards
         type: preview.scroll
         at: { afterAction: expect-note }
         timeoutMs: 5000
-        top: 420
+        top: 260
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: collapse-runner-dock
         type: runtime.collapseDock
@@ -1590,11 +1594,15 @@ scenes:
         type: editor.select
         at: { mark: select-sibling }
         target: { file: styles.css, text: "& + &", occurrence: 1 }
+      # The page is 1223 px tall, so a preview up to about 828 px high reaches
+      # 395; a larger target (5000 before) is clamped to whatever the page's
+      # end is. 395 keeps the promo line (y 1050) in view, and the phone and
+      # Facebook links (y 1129-1154) in a preview 760 px or taller.
       - id: scroll-footer
         type: preview.scroll
         at: { mark: scroll-footer }
         timeoutMs: 5000
-        top: 5000
+        top: 395
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-flip
         type: editor.type
@@ -1759,11 +1767,13 @@ scenes:
         target: { by: testId, value: nav-drinks }
         textContains: "မီနူး"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # The same 395 as scroll-footer: scroll-top moved the page back to 0
+      # in between, so this still moves it.
       - id: scroll-bottom
         type: preview.scroll
         at: { mark: scroll-bottom }
         timeoutMs: 5000
-        top: 5000
+        top: 395
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: type-promo-a
         type: editor.type
