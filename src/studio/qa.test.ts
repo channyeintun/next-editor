@@ -595,6 +595,15 @@ describe("preview.scroll authored commands", () => {
     );
   });
 
+  it("does not take a page that cannot scroll as having scrolled to the end", async () => {
+    // A layout change can leave an event at 0 with nothing to scroll; it is no
+    // evidence that the authored scroll to the end happened.
+    const plan = scrollPlan(5_000);
+    expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(0, 0)]))).ok).toBe(
+      false,
+    );
+  });
+
   it("matches a clamped scroll only when the recording carries the page's maximum", async () => {
     const plan = scrollPlan(5_000);
     expect((await interactionCheck(plan, scrollRecording(plan, [pageScroll(423)]))).ok).toBe(false);

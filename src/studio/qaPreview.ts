@@ -57,7 +57,9 @@ function isPreviewCommandAction(action: StudioPlanAction): action is PreviewComm
  * preview can reach (a 5000 for the footer) and the recording holds the
  * position it really reached. Only a recorded maximum can prove the scroll
  * stopped at the end, so a recording without one (made before it was captured)
- * matches exactly or not at all.
+ * matches exactly or not at all. A position of 0 is no end: a page that cannot
+ * scroll (or one a layout change sent back to the top) has not scrolled
+ * anywhere, and an event at 0 is no evidence of a scroll to the end.
  */
 function scrollPositionMatches(
   recorded: number | undefined,
@@ -66,7 +68,9 @@ function scrollPositionMatches(
 ): boolean {
   if (recorded === undefined) return false;
   if (recorded === authored) return true;
-  return maxScroll !== undefined && recorded < authored && recorded >= maxScroll - 1;
+  return (
+    maxScroll !== undefined && recorded > 0 && recorded < authored && recorded >= maxScroll - 1
+  );
 }
 
 function previewEventMatchesAction(
