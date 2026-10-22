@@ -1375,11 +1375,13 @@ scenes:
         target: { by: testId, value: site-header }
         textContains: "Yangon"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # The QA gate checks the final file, so this names only text that stays
+      # adjacent: the hex line is inserted before the closing brace later.
       - id: expect-tomato-typed
         type: expect.file
         at: { afterAction: expect-header }
         path: styles.css
-        contains: ".site-header {\n  background: tomato;\n}\n"
+        contains: ".site-header {\n  background: tomato;\n"
 
   - id: hex
     narration: >
@@ -1414,11 +1416,13 @@ scenes:
         cadence: line-by-line
         target: { file: styles.css, after: "  background: tomato;\n", occurrence: 1 }
         text: "  background: #8b5a2b;\n"
+      # Final-file rule again: "cc" is appended to this value later, so the
+      # semicolon is not part of what stays.
       - id: expect-hex-typed
         type: expect.file
         at: { mark: after-hex }
         path: styles.css
-        contains: "  background: #8b5a2b;\n"
+        contains: "  background: tomato;\n  background: #8b5a2b"
       - id: open-hex-board
         type: whiteboard.apply
         at: { mark: open-hex-board }
@@ -1786,11 +1790,13 @@ scenes:
         target: { by: testId, value: price-laphet-yay }
         textContains: "1,500 ကျပ်"
         retry: { maxAttempts: 3, delayMs: 300 }
+      # Final-file rule again: seagreen is inserted before the closing brace
+      # later.
       - id: expect-price-typed
         type: expect.file
         at: { afterAction: expect-price }
         path: styles.css
-        contains: "  border-bottom: 2px solid currentColor;\n}\n"
+        contains: ".price {\n  color: sienna;\n  border-bottom: 2px solid currentColor;\n"
       - id: type-green
         type: editor.type
         at: { mark: type-green }
