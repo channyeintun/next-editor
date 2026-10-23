@@ -339,106 +339,115 @@ export default function NarratorVoicePanel({
       {/* AthanLab voices come from the user's AthanLab account (AthanLabPanel);
           the browser-local clone/reference voices are for the others. */}
       {provider === "athanlab" ? null : (
-        <div className="mt-2 flex items-center gap-2">
-          <select
-            ref={voiceSelectRef}
-            value={selectedVoice ? selectedVoice.id : "default"}
-            disabled={disabled || voiceBusy !== null}
-            onChange={(event) => chooseVoice(event.target.value)}
-            aria-label="Narrator voice"
-            className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-          >
-            <option value="default">
-              {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}
-            </option>
-            {customVoices.map((voice) => (
-              <option key={voice.id} value={voice.id}>
-                voice: {voice.name} ({provider === "voxcpm2" ? "reference" : "cloned"})
+        <div className="mt-2 flex flex-col gap-2">
+          {/* The voice a render narrates with, and what can be done with it. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              ref={voiceSelectRef}
+              value={selectedVoice ? selectedVoice.id : "default"}
+              disabled={disabled || voiceBusy !== null}
+              onChange={(event) => chooseVoice(event.target.value)}
+              aria-label="Narrator voice"
+              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            >
+              <option value="default">
+                {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}
               </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={disabled || voiceBusy !== null || voiceRecording}
-            onClick={() => voiceFileInputRef.current?.click()}
-            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-            title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
-          >
-            {provider === "voxcpm2" ? "Reference…" : "Clone…"}
-            <HoverRing />
-          </button>
-          <button
-            type="button"
-            disabled={disabled || voiceBusy !== null}
-            onClick={toggleVoiceRecording}
-            className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              voiceRecording
-                ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
-                : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
-            }`}
-            title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
-          >
-            {voiceRecording ? "Stop" : "Record"}
-            <HoverRing />
-          </button>
-          <button
-            ref={lessonPickerButtonRef}
-            type="button"
-            disabled={disabled || voiceBusy !== null || voiceRecording}
-            onClick={() => setLessonPickerOpen((open) => !open)}
-            aria-expanded={lessonPickerOpen}
-            aria-controls={lessonPickerOpen ? lessonPickerId : undefined}
-            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-            title="Take a reference clip from one of your lessons"
-          >
-            Lesson…
-            <HoverRing />
-          </button>
-          {selectedVoice ? (
-            <>
-              <button
-                type="button"
-                disabled={
-                  disabled ||
-                  voiceBusy !== null ||
-                  voiceRecording ||
-                  (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady)
+              {customVoices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  voice: {voice.name} ({provider === "voxcpm2" ? "reference" : "cloned"})
+                </option>
+              ))}
+            </select>
+            {selectedVoice ? (
+              <>
+                <button
+                  type="button"
+                  disabled={
+                    disabled ||
+                    voiceBusy !== null ||
+                    voiceRecording ||
+                    (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady)
+                  }
+                  onClick={previewVoice}
+                  className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Synthesize a short preview sentence with this voice"
+                >
+                  Preview
+                  <HoverRing />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || voiceBusy !== null || voiceRecording}
+                  onClick={() => {
+                    removeVoice().catch((error: unknown) => onError(messageOf(error)));
+                  }}
+                  aria-label="Delete voice"
+                  className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Delete this reference voice from the browser"
+                >
+                  <Trash aria-hidden="true" className="inline-block size-3.5" />
+                  <HoverRing />
+                </button>
+              </>
+            ) : null}
+          </div>
+          {/* Ways to add a voice: an audio file, the microphone, or a lesson clip. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-slate-400">
+              {provider === "voxcpm2" ? "Add reference" : "Add voice"}
+            </span>
+            <button
+              type="button"
+              disabled={disabled || voiceBusy !== null || voiceRecording}
+              onClick={() => voiceFileInputRef.current?.click()}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
+            >
+              Upload…
+              <HoverRing />
+            </button>
+            <button
+              type="button"
+              disabled={disabled || voiceBusy !== null}
+              onClick={toggleVoiceRecording}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                voiceRecording
+                  ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
+                  : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
+              }`}
+              title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
+            >
+              {voiceRecording ? "Stop" : "Record"}
+              <HoverRing />
+            </button>
+            <button
+              ref={lessonPickerButtonRef}
+              type="button"
+              disabled={disabled || voiceBusy !== null || voiceRecording}
+              onClick={() => setLessonPickerOpen((open) => !open)}
+              aria-expanded={lessonPickerOpen}
+              aria-controls={lessonPickerOpen ? lessonPickerId : undefined}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Take a reference clip from one of your lessons"
+            >
+              Lesson…
+              <HoverRing />
+            </button>
+            <input
+              ref={voiceFileInputRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) {
+                  handleVoiceFile(file);
                 }
-                onClick={previewVoice}
-                className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-                title="Synthesize a short preview sentence with this voice"
-              >
-                Preview
-                <HoverRing />
-              </button>
-              <button
-                type="button"
-                disabled={disabled || voiceBusy !== null || voiceRecording}
-                onClick={() => {
-                  removeVoice().catch((error: unknown) => onError(messageOf(error)));
-                }}
-                aria-label="Delete voice"
-                className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                title="Delete this reference voice from the browser"
-              >
-                <Trash aria-hidden="true" className="inline-block size-3.5" />
-                <HoverRing />
-              </button>
-            </>
-          ) : null}
-          <input
-            ref={voiceFileInputRef}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) {
-                handleVoiceFile(file);
-              }
-            }}
-          />
+              }}
+            />
+          </div>
         </div>
       )}
       {provider !== "athanlab" && lessonPickerOpen ? (
