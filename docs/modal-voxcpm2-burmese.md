@@ -39,11 +39,28 @@ duration limit while the client is connected). The Worker gives up after
 280 s, which leaves about 160 s for a GPU queue on top of the slowest cold start
 and dialog seen, cancels the job so the single L4 is free for the next dialog,
 and answers 504; "Render again" resumes from the dialog cache. It sends at most
-47 subrequests per dialog (one submit, up to 45 polls, one cancel), under the
-Workers Free limit of 50. A failed poll (a dropped connection, a
-502/503/504/524 between the Worker and Modal, or the jobs app's own 503 when it
-briefly cannot reach Modal's API) is polled again; three in a row end the wait.
-Whenever the Worker stops waiting without audio, it cancels the job.
+49 subrequests per dialog (up to three submits, up to 45 polls, one cancel),
+under the Workers Free limit of 50. A failed poll (a dropped connection, a
+502/503/504 or Cloudflare 520–524 between the Worker and Modal, or the jobs
+app's own 503 when it briefly cannot reach Modal's API) is polled again; three
+in a row end the wait. Whenever the Worker stops waiting without audio, it
+cancels the job.
+
+### The reference travels by hash
+
+Every dialog of a render uses the same reference recording, about 1 MB as
+base64. Sending it with each of a lesson's ~100 jobs failed on 2026-10-24: the
+upload from Cloudflare to Modal stalled, the jobs app's 60 s limit cancelled
+`POST /jobs` (or the connection reset, a 520), and the render stopped. Now the
+Worker names the recording by the SHA-256 of its base64 text
+(`reference_sha256`) and the jobs app keeps the decoded WAV in the Modal Dict
+`next-editor-voxcpm2-references`. When the Dict does not have it yet (the first
+dialog, or after 7 days without use) the jobs app answers 409 and the Worker
+sends the job again with the audio. A submit that fails before any job exists
+(a dropped connection, a 500 for a body that never arrived whole, 502–504, or
+Cloudflare 520–524) is sent again after 2 s, three submits at most. The jobs
+app still accepts the old audio-in-every-job request, so the Worker and Modal
+can be deployed in either order.
 A dropped browser connection ("Failed to fetch", no response) is retried twice
 for that dialog; an error response from the Worker is not.
 

@@ -48,14 +48,29 @@ const MIN_POLL_INTERVAL_MS = 5_000;
 // The browser request stays open this long at most: a cold start (≈66 s) plus
 // the longest dialog seen (≈49 s) leaves about 160 s for GPU queueing.
 const SYNTHESIS_DEADLINE_MS = 280_000;
-// Keeps submit + polls + cancel under the 50-subrequest Workers Free limit.
+// Keeps submits + polls + cancel under the 50-subrequest Workers Free limit.
 const MAX_POLLS = 45;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 const CANCEL_TIMEOUT_MS = 5_000;
+// Cloudflare's answers for an origin that reset the connection (520), refused
+// or dropped it (521, 522, 523), or did not answer in time (524).
+const CLOUDFLARE_ORIGIN_ERRORS = [520, 521, 522, 523, 524];
 // Statuses that say the job could not be read, not that it failed: a hiccup
 // between the Worker and Modal, or the jobs app's 503 when it briefly cannot
 // reach Modal's API. The same job is polled again.
-const TRANSIENT_POLL_STATUSES = new Set([502, 503, 504, 524]);
+const TRANSIENT_POLL_STATUSES = new Set([502, 503, 504, ...CLOUDFLARE_ORIGIN_ERRORS]);
+// A render sends the same reference recording with every dialog. Modal keeps it
+// by the SHA-256 of its base64 text, so a submit names it by that hash (a few
+// KB) and carries the audio (about 1 MB) only after Modal answers 409 because
+// it does not hold the recording yet. A ~1 MB upload that stalled between
+// Cloudflare and Modal used to hit the jobs app's 60 s limit and end the render.
+// 3 submits + MAX_POLLS + 1 cancel = 49 subrequests at most.
+const MAX_SUBMIT_REQUESTS = 3;
+// Submits that fail before any job exists: the request never reached Modal
+// whole (a dropped connection, or the jobs app's 500 for a body that stopped
+// arriving) or a hiccup between the Worker and Modal. They are sent again.
+const TRANSIENT_SUBMIT_STATUSES = new Set([500, ...TRANSIENT_POLL_STATUSES]);
+const SUBMIT_RETRY_DELAY_MS = 2_000;
 
 interface ModalConfig {
   /** Base URL of the Modal jobs app (`/jobs`, `/jobs/{id}`). */
@@ -318,23 +333,9 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
   const clientGone = c.req.raw.signal;
   if (clientGone.aborted) return clientClosedResponse();
 
-  let submitted: Response;
-  try {
-    submitted = await fetch(new URL("/jobs", modal.jobsUrl), {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...modalAuthHeaders(modal),
-      },
-      body: JSON.stringify({
-        text: request.text,
-        seed: request.seed,
-        reference_audio_base64: request.referenceAudioBase64,
-      }),
-      signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
-    });
-  } catch {
+  const submitted = await submitJob(c, modal, request);
+  if (submitted === "client-gone") return clientClosedResponse();
+  if (!submitted) {
     console.error("VoxCPM2 Modal job submission failed");
     return c.json({ error: "Burmese narration service is unavailable" }, 502);
   }
@@ -378,6 +379,63 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
   if (!result.ok) await cancelJob(modal, callId);
   return result;
 });
+
+/**
+ * Submit a job by the reference's hash, adding the audio once Modal answers 409
+ * (it does not hold that recording yet), and send it again after a transient
+ * failure, MAX_SUBMIT_REQUESTS requests at most. Resolves to Modal's answer —
+ * the last one when every request failed — or null when the last request never
+ * got one, or "client-gone" when the browser left between requests.
+ */
+async function submitJob(
+  c: Context,
+  modal: ModalConfig,
+  request: { text: string; seed: number; referenceAudioBase64: string },
+): Promise<Response | null | "client-gone"> {
+  const referenceSha256 = await sha256Hex(request.referenceAudioBase64);
+  let withAudio = false;
+  let submitted: Response | null = null;
+  for (let requests = 1; requests <= MAX_SUBMIT_REQUESTS; requests++) {
+    if (requests > 1) {
+      await submitted?.body?.cancel().catch(() => undefined);
+      if (c.req.raw.signal.aborted) return "client-gone";
+    }
+    try {
+      submitted = await fetch(new URL("/jobs", modal.jobsUrl), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...modalAuthHeaders(modal),
+        },
+        body: JSON.stringify({
+          text: request.text,
+          seed: request.seed,
+          reference_sha256: referenceSha256,
+          ...(withAudio ? { reference_audio_base64: request.referenceAudioBase64 } : {}),
+        }),
+        signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
+      });
+    } catch {
+      submitted = null;
+    }
+    if (submitted?.status === 409 && !withAudio) {
+      withAudio = true;
+      continue;
+    }
+    if (submitted && !TRANSIENT_SUBMIT_STATUSES.has(submitted.status)) return submitted;
+    if (requests < MAX_SUBMIT_REQUESTS) {
+      await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_DELAY_MS));
+    }
+  }
+  return submitted;
+}
+
+/** Lowercase hex SHA-256 of a string's UTF-8 bytes (the reference's base64 text). */
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 /** Cancel a job; a cancel that fails changes nothing, so it never throws. */
 async function cancelJob(modal: ModalConfig, callId: string): Promise<void> {

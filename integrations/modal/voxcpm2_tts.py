@@ -12,6 +12,12 @@ with a 524, so a request held open across all of that failed on cold starts.
 The Worker submits a job (`POST /jobs`) and polls it (`GET /jobs/{id}`) instead;
 each poll waits at most POLL_WAIT_SECONDS here, far inside that timeout.
 
+A render sends the same reference recording with every dialog. Each job names
+it by the SHA-256 of its base64 text and carries the audio only when this app
+answers 409 because it does not hold that recording yet; otherwise the audio
+comes from `reference_cache`. A submit is then a few KB instead of about 1 MB, so
+a slow Cloudflare-to-Modal upload can no longer stall it past the jobs timeout.
+
 No `from __future__ import annotations`: FastAPI resolves route annotations
 from module globals, and `Request` is imported inside `jobs()` so `modal deploy`
 does not need FastAPI installed locally.
@@ -19,6 +25,7 @@ does not need FastAPI installed locally.
 
 import base64
 import binascii
+import hashlib
 import io
 import re
 import tempfile
@@ -47,6 +54,8 @@ MAX_REFERENCE_WAV_BYTES = 44 + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2
 POLL_WAIT_SECONDS = 20
 # Modal FunctionCall ids, e.g. "fc-01K…". Anything else is not a job of ours.
 CALL_ID_PATTERN = re.compile(r"fc-[0-9A-Za-z]{1,64}")
+# A reference recording's key: the lowercase hex SHA-256 of its base64 text.
+REFERENCE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 # Delivery is pinned here, server-side, so a lesson's narration cannot drift
 # with a client-supplied prompt.
 #
@@ -108,21 +117,54 @@ def decode_reference_wav(encoded: object) -> bytes:
     return reference_wav
 
 
-def parse_synthesis_request(item: object) -> tuple[str, int, bytes]:
-    """The validated (text, seed, reference WAV) of a synthesis request.
-
-    Raises ValueError with a message that is safe to return to the caller.
-    """
-    if not isinstance(item, dict) or set(item) != {"text", "seed", "reference_audio_base64"}:
-        raise ValueError("'text', 'seed', and reference audio are required")
-
+def parse_text_and_seed(item: dict) -> tuple[str, int]:
     text = item["text"]
     seed = item["seed"]
     if not isinstance(text, str) or not text.strip() or len(text.strip()) > MAX_TEXT_CHARS:
         raise ValueError(f"'text' must contain 1-{MAX_TEXT_CHARS} characters")
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0 or seed > MAX_SEED:
         raise ValueError(f"'seed' must be an integer between 0 and {MAX_SEED}")
-    return text.strip(), seed, decode_reference_wav(item["reference_audio_base64"])
+    return text.strip(), seed
+
+
+def parse_synthesis_request(item: object) -> tuple[str, int, bytes]:
+    """The validated (text, seed, reference WAV) of a request that carries the audio.
+
+    Raises ValueError with a message that is safe to return to the caller.
+    """
+    if not isinstance(item, dict) or set(item) != {"text", "seed", "reference_audio_base64"}:
+        raise ValueError("'text', 'seed', and reference audio are required")
+
+    text, seed = parse_text_and_seed(item)
+    return text, seed, decode_reference_wav(item["reference_audio_base64"])
+
+
+def parse_job_request(item: object) -> tuple[str, int, str, str | None]:
+    """The validated (text, seed, reference SHA-256, reference base64 or None) of a job.
+
+    The audio is optional: without it the job uses the cached recording of that
+    hash. With it, the hash must be the SHA-256 of exactly that base64 text, so
+    a recording can never be cached under another recording's key.
+    Raises ValueError with a message that is safe to return to the caller.
+    """
+    keys = set(item) if isinstance(item, dict) else None
+    if keys not in (
+        {"text", "seed", "reference_sha256"},
+        {"text", "seed", "reference_sha256", "reference_audio_base64"},
+    ):
+        raise ValueError("'text', 'seed', and 'reference_sha256' are required")
+
+    text, seed = parse_text_and_seed(item)
+    digest = item["reference_sha256"]
+    if not isinstance(digest, str) or not REFERENCE_SHA256_PATTERN.fullmatch(digest):
+        raise ValueError("'reference_sha256' must be a lowercase hex SHA-256")
+    encoded = item.get("reference_audio_base64")
+    if encoded is not None:
+        if not isinstance(encoded, str) or not encoded.isascii():
+            raise ValueError("reference audio is not valid base64")
+        if hashlib.sha256(encoded.encode("ascii")).hexdigest() != digest:
+            raise ValueError("'reference_sha256' does not match the reference audio")
+    return text, seed, digest, encoded
 
 
 def wav_response(wav: bytes):
@@ -160,6 +202,11 @@ image = (
 )
 
 app = modal.App(APP_NAME)
+
+# Reference recordings by the SHA-256 of their base64 text (decoded WAV bytes).
+# Modal drops an entry after 7 days without a read or write; the Worker then
+# gets a 409 and sends the audio again.
+reference_cache = modal.Dict.from_name(f"{APP_NAME}-references", create_if_missing=True)
 
 
 @app.cls(
@@ -285,9 +332,31 @@ def jobs():
         except ValueError:
             raise HTTPException(status_code=400, detail="invalid JSON body") from None
         try:
-            text, seed, reference_wav = parse_synthesis_request(item)
+            if isinstance(item, dict) and "reference_sha256" not in item:
+                # A Worker deployed before reference caching sends the audio itself.
+                text, seed, reference_wav = parse_synthesis_request(item)
+                digest, encoded = None, None
+            else:
+                text, seed, digest, encoded = parse_job_request(item)
+                reference_wav = decode_reference_wav(encoded) if encoded is not None else None
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+        if digest is not None:
+            try:
+                if reference_wav is None:
+                    reference_wav = await reference_cache.get.aio(digest)
+                    if reference_wav is None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="reference audio is not cached; send it with the job",
+                        )
+                else:
+                    await reference_cache.put.aio(digest, reference_wav)
+            except unreachable as error:
+                raise HTTPException(
+                    status_code=503, detail=f"Modal unreachable: {type(error).__name__}"
+                ) from None
 
         call = await VoxCpm2Tts().generate.spawn.aio(text, seed, reference_wav)
         return {"call_id": call.object_id}

@@ -179,6 +179,11 @@ async function withFakeTimers(run: () => Response | Promise<Response>): Promise<
   return response;
 }
 
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -315,10 +320,11 @@ describe("studioRoute VoxCPM2 proxy", () => {
       "Modal-Secret": "ws-test",
     });
     expect(submitInit?.signal).toBeInstanceOf(AbortSignal);
+    // The reference travels by hash; Modal answers 409 when it needs the audio.
     expect(JSON.parse(String(submitInit?.body))).toEqual({
       text: "မင်္ဂလာပါ။",
       seed: 42,
-      reference_audio_base64: REFERENCE_AUDIO_BASE64,
+      reference_sha256: await sha256Hex(REFERENCE_AUDIO_BASE64),
     });
 
     const [pollUrl, pollInit] = fetchSpy.mock.calls[1];
@@ -330,6 +336,98 @@ describe("studioRoute VoxCPM2 proxy", () => {
     });
     expect(pollInit?.signal).toBeInstanceOf(AbortSignal);
     expect(pollInit?.body).toBeUndefined();
+  });
+
+  it("sends the reference audio with the job only when Modal does not hold it yet", async () => {
+    let submits = 0;
+    const fetchSpy = stubModal({
+      submit: () =>
+        ++submits === 1
+          ? jsonResponse({ detail: "reference audio is not cached; send it with the job" }, 409)
+          : jsonResponse({ call_id: CALL_ID }, 202),
+    });
+
+    const response = await postSynthesis(makeEnv());
+
+    expect(response.status).toBe(200);
+    const [first, second] = callsWith(fetchSpy, "POST").map(([, init]) =>
+      JSON.parse(String(init?.body)),
+    );
+    expect(first).toEqual({
+      text: "မင်္ဂလာပါ။",
+      seed: 42,
+      reference_sha256: await sha256Hex(REFERENCE_AUDIO_BASE64),
+    });
+    expect(second).toEqual({ ...first, reference_audio_base64: REFERENCE_AUDIO_BASE64 });
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(1);
+  });
+
+  it("submits again after a dropped connection or a submit that never reached Modal whole", async () => {
+    let submits = 0;
+    const fetchSpy = stubModal({
+      submit: () => {
+        submits += 1;
+        if (submits === 1) throw new TypeError("Network connection lost.");
+        if (submits === 2) return jsonResponse({ detail: "Internal Server Error" }, 500);
+        return jsonResponse({ call_id: CALL_ID }, 202);
+      },
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(200);
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(3);
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(1);
+  });
+
+  it("treats Cloudflare's 520–523 origin errors as transient for a submit and a poll", async () => {
+    let submits = 0;
+    const fetchSpy = stubModal({
+      submit: () =>
+        ++submits === 1
+          ? new Response("error code: 520", { status: 520 })
+          : jsonResponse({ call_id: CALL_ID }, 202),
+      polls: [() => new Response("error code: 520", { status: 520 }), wavResponse],
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(200);
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(2);
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(2);
+  });
+
+  it("gives up after three failed submits and never polls", async () => {
+    const fetchSpy = stubModal({
+      submit: () => jsonResponse({ detail: "Internal Server Error" }, 500),
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: "Burmese narration service failed with HTTP 500: Internal Server Error",
+    });
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(3);
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(0);
+  });
+
+  it("stays within the subrequest budget after retried submits and a job that outlives the wait", async () => {
+    let submits = 0;
+    const fetchSpy = stubModal({
+      submit: () =>
+        ++submits < 3
+          ? jsonResponse({ detail: "Internal Server Error" }, 500)
+          : jsonResponse({ call_id: CALL_ID }, 202),
+      polls: Array.from({ length: 100 }, () => pendingResponse),
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(504);
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(3);
+    // Workers Free allows 50 external subrequests per invocation.
+    expect(fetchSpy.mock.calls.length).toBeLessThanOrEqual(50);
   });
 
   it("keeps polling a pending job until its audio is ready", async () => {
@@ -579,7 +677,8 @@ describe("studioRoute VoxCPM2 proxy", () => {
           headers: { "Content-Type": "text/html" },
         }),
     });
-    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+    // 524 and 500 are retried first; the last answer is the one reported.
+    expect(await (await withFakeTimers(() => postSynthesis(makeEnv()))).json()).toEqual({
       error: "Burmese narration service failed with HTTP 524",
     });
 
@@ -590,25 +689,25 @@ describe("studioRoute VoxCPM2 proxy", () => {
           headers: { "Content-Type": "text/plain" },
         }),
     });
-    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+    expect(await (await withFakeTimers(() => postSynthesis(makeEnv()))).json()).toEqual({
       error: "Burmese narration service failed with HTTP 500",
     });
   });
 
   it("releases an upstream error body refused by its Content-Length", async () => {
     const cancel = vi.fn<() => void>();
-    const body = new ReadableStream<Uint8Array>({ cancel });
     stubModal({
       submit: () =>
-        new Response(body, {
+        new Response(new ReadableStream<Uint8Array>({ cancel }), {
           status: 500,
           headers: { "Content-Type": "text/plain", "Content-Length": "5000" },
         }),
     });
 
-    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+    expect(await (await withFakeTimers(() => postSynthesis(makeEnv()))).json()).toEqual({
       error: "Burmese narration service failed with HTTP 500",
     });
-    expect(cancel).toHaveBeenCalled();
+    // Both retried answers and the reported one are released.
+    expect(cancel).toHaveBeenCalledTimes(3);
   });
 });
