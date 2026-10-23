@@ -170,9 +170,13 @@ export function compileLessonScript({
   const {
     cursorMoves,
     dockOpenings,
+    dockClosings,
     warnings: pointerWarnings,
   } = planPointerChoreography({ script, authored, busyMs: busyById });
   warnings.push(...pointerWarnings);
+  // A closing shares its select's instant, so it is placed right before that
+  // select: the sort below keeps ties in array order.
+  const closingBefore = new Map(dockClosings.map((closing) => [closing.beforeActionId, closing]));
 
   // ---- Assemble the plan ---------------------------------------------------
   const planActions: StudioPlanActionInput[] = [
@@ -191,7 +195,7 @@ export function compileLessonScript({
       durationMs: move.durationMs,
       press: true,
     })),
-    ...authored.map(({ action, at }): StudioPlanActionInput => {
+    ...authored.flatMap(({ action, at }): StudioPlanActionInput | StudioPlanActionInput[] => {
       switch (action.type) {
         case "editor.type":
           return {
@@ -203,8 +207,8 @@ export function compileLessonScript({
             anchor: { after: action.target.after, occurrence: action.target.occurrence },
             chunks: typingChunksOf(action, typingSeed.get(action.id)!),
           };
-        case "editor.select":
-          return {
+        case "editor.select": {
+          const select: StudioPlanActionInput = {
             id: action.id,
             type: action.type,
             at,
@@ -213,6 +217,14 @@ export function compileLessonScript({
             selection: { text: action.target.text, occurrence: action.target.occurrence },
             durationMs: selectDurationOf(action, typingSeed.get(action.id)!),
           };
+          const closing = closingBefore.get(action.id);
+          return closing
+            ? [
+                { id: closing.id, type: "runtime.collapseDock", at: closing.at, timeoutMs: 2_000 },
+                select,
+              ]
+            : select;
+        }
         case "console.point":
           return {
             id: action.id,

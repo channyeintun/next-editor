@@ -52,6 +52,13 @@ export interface DockOpening {
   at: number;
 }
 
+/** A dock closing at the instant of the `editor.select` it clears the editor for. */
+export interface DockClosing {
+  id: string;
+  at: number;
+  beforeActionId: string;
+}
+
 export interface PointerChoreographyInput {
   script: LessonScript;
   /** Every authored action in plan order (sorted by time, ties in authored order). */
@@ -63,6 +70,7 @@ export interface PointerChoreographyInput {
 export interface PointerChoreography {
   cursorMoves: CursorMove[];
   dockOpenings: DockOpening[];
+  dockClosings: DockClosing[];
   warnings: string[];
 }
 
@@ -124,8 +132,9 @@ function advancePointerUiState(action: ScriptAction, ui: PointerUiState): void {
 }
 
 /**
- * Derive the click before every action that has a control on screen, and the
- * dock opening before a run whose dock is shut. A click that has no room is
+ * Derive the click before every action that has a control on screen, the dock
+ * opening before a run whose dock is shut, and the dock closing before a
+ * select while it is open. A click that has no room is
  * skipped with a warning; a `console.point` with no output to land on, or with
  * the dock shut, is a CompileError, as is an edit to a file that is not open
  * or an `expect.output` before the first run.
@@ -137,10 +146,12 @@ export function planPointerChoreography({
 }: PointerChoreographyInput): PointerChoreography {
   const cursorMoves: CursorMove[] = [];
   const dockOpenings: DockOpening[] = [];
+  const dockClosings: DockClosing[] = [];
   const warnings: string[] = [];
   const ui: PointerUiState = {
     activeFile: script.lesson.workspace.entryFilePath,
-    dockOpen: !runtimeDockStartsCollapsed(script.runtime),
+    // A lesson with no runtime renders no dock at all.
+    dockOpen: script.runtime.kind !== "none" && !runtimeDockStartsCollapsed(script.runtime),
   };
   let lastBusyUntilMs = 0;
   let prevAuthoredAtMs = 0;
@@ -149,6 +160,48 @@ export function planPointerChoreography({
     ? "runtime.run"
     : "runtime.start";
   let hasRunOutput = false;
+
+  /** The pointer move that clicks `target` just before the action `id` at `at`. */
+  function planClick(id: string, at: number, target: StudioTargetRef, opensDockFirst = false) {
+    // A move may not start while an earlier edit is still typing, and — the
+    // Performer being strictly sequential — not before the preceding action's
+    // planned start either, or it would push that action late.
+    const floorMs = Math.max(lastBusyUntilMs, prevAuthoredAtMs);
+    const releaseMs = at - CURSOR_CLICK_LEAD_MS;
+    const windowMs = releaseMs - floorMs;
+    if (opensDockFirst && windowMs >= CURSOR_OPEN_AND_RUN_NEEDS_MS) {
+      const moveMs = Math.min(
+        Math.floor((windowMs - CURSOR_CLICK_LEAD_MS) / 2),
+        CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS,
+      );
+      const runMoveAt = releaseMs - moveMs;
+      cursorMoves.push({
+        id: `cursor-${id}-dock`,
+        at: runMoveAt - CURSOR_CLICK_LEAD_MS - moveMs,
+        target,
+        durationMs: moveMs,
+      });
+      dockOpenings.push({ id: `open-dock-${id}`, at: runMoveAt });
+      cursorMoves.push({
+        id: `cursor-${id}`,
+        at: runMoveAt,
+        target: { kind: "run-button" },
+        durationMs: moveMs,
+      });
+    } else if (windowMs >= CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) {
+      const durationMs = Math.min(windowMs, CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS);
+      cursorMoves.push({ id: `cursor-${id}`, at: releaseMs - durationMs, target, durationMs });
+      if (opensDockFirst) {
+        warnings.push(
+          `Only the dock's chevron is clicked before "${id}" — pressing Run after opening the dock needs ${CURSOR_OPEN_AND_RUN_NEEDS_MS + CURSOR_CLICK_LEAD_MS}ms clear before it`,
+        );
+      }
+    } else {
+      warnings.push(
+        `Skipped the pointer click before "${id}" — only ${Math.max(0, Math.round(at - floorMs))}ms clear before it (a click needs ${CURSOR_CLICK_NEEDS_MS}ms after the previous action starts and any typing, select drag or whiteboard drawing ends)`,
+      );
+    }
+  }
 
   for (const entry of authored) {
     // Only workspace.openFile changes the file on screen, and the driver
@@ -176,64 +229,43 @@ export function planPointerChoreography({
       }
       if (!ui.dockOpen) {
         throw new CompileError(
-          `console.point "${entry.action.id}" points at the console while the runner dock is shut — move it before the runtime.collapseDock, or run again first`,
+          `console.point "${entry.action.id}" points at the console while the runner dock is shut — move it before the runtime.collapseDock or editor.select that shuts it, or run again first`,
         );
       }
     }
     if (entry.action.type === runActionType) {
       hasRunOutput = true;
     }
+    // How many editor rows the open dock covers depends on the viewer's
+    // screen, so code that is clear of it here can sit under it on a shorter
+    // display, and the select would sweep and point at code nobody sees. The
+    // hand shuts the dock first, as an authored runtime.collapseDock does;
+    // only console.point ever aims inside the dock.
+    if (entry.action.type === "editor.select" && ui.dockOpen) {
+      const closing = {
+        id: `collapse-dock-${entry.action.id}`,
+        at: entry.at,
+        beforeActionId: entry.action.id,
+      };
+      dockClosings.push(closing);
+      if (isPlaygroundRuntimeKind(script.runtime.kind)) {
+        planClick(closing.id, closing.at, { kind: "target-id", id: STUDIO_DOCK_TOGGLE_TARGET_ID });
+      }
+      ui.dockOpen = false;
+    }
     const target = clickTargetForAction(entry.action, script, ui);
     const entryBusyMs = busyMs.get(entry.action.id) ?? 0;
 
     if (target) {
-      // A move may not start while an earlier edit is still typing, and — the
-      // Performer being strictly sequential — not before the preceding action's
-      // planned start either, or it would push that action late.
-      const floorMs = Math.max(lastBusyUntilMs, prevAuthoredAtMs);
-      const releaseMs = entry.at - CURSOR_CLICK_LEAD_MS;
-      const windowMs = releaseMs - floorMs;
-      // A shut dock shows no Run button. Clicking only its chevron would read as
-      // the chevron running the program, so the pointer opens the dock and
-      // then presses Run — the one control that runs code.
-      const opensDockFirst = entry.action.type === "runtime.run" && !ui.dockOpen;
-      if (opensDockFirst && windowMs >= CURSOR_OPEN_AND_RUN_NEEDS_MS) {
-        const moveMs = Math.min(
-          Math.floor((windowMs - CURSOR_CLICK_LEAD_MS) / 2),
-          CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS,
-        );
-        const runMoveAt = releaseMs - moveMs;
-        cursorMoves.push({
-          id: `cursor-${entry.action.id}-dock`,
-          at: runMoveAt - CURSOR_CLICK_LEAD_MS - moveMs,
-          target,
-          durationMs: moveMs,
-        });
-        dockOpenings.push({ id: `open-dock-${entry.action.id}`, at: runMoveAt });
-        cursorMoves.push({
-          id: `cursor-${entry.action.id}`,
-          at: runMoveAt,
-          target: { kind: "run-button" },
-          durationMs: moveMs,
-        });
-      } else if (windowMs >= CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) {
-        const durationMs = Math.min(windowMs, CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS);
-        cursorMoves.push({
-          id: `cursor-${entry.action.id}`,
-          at: releaseMs - durationMs,
-          target,
-          durationMs,
-        });
-        if (opensDockFirst) {
-          warnings.push(
-            `Only the dock's chevron is clicked before "${entry.action.id}" — pressing Run after opening the dock needs ${CURSOR_OPEN_AND_RUN_NEEDS_MS + CURSOR_CLICK_LEAD_MS}ms clear before it`,
-          );
-        }
-      } else {
-        warnings.push(
-          `Skipped the pointer click before "${entry.action.id}" — only ${Math.max(0, Math.round(entry.at - floorMs))}ms clear before it (a click needs ${CURSOR_CLICK_NEEDS_MS}ms after the previous action starts and any typing, select drag or whiteboard drawing ends)`,
-        );
-      }
+      planClick(
+        entry.action.id,
+        entry.at,
+        target,
+        // A shut dock shows no Run button. Clicking only its chevron would
+        // read as the chevron running the program, so the pointer opens the
+        // dock and then presses Run — the one control that runs code.
+        entry.action.type === "runtime.run" && !ui.dockOpen,
+      );
     }
 
     advancePointerUiState(entry.action, ui);
@@ -241,5 +273,5 @@ export function planPointerChoreography({
     lastBusyUntilMs = Math.max(lastBusyUntilMs, entry.at + entryBusyMs);
   }
 
-  return { cursorMoves, dockOpenings, warnings };
+  return { cursorMoves, dockOpenings, dockClosings, warnings };
 }

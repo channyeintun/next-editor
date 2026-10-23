@@ -118,6 +118,20 @@ function selectScript(): LessonScript {
 }
 
 describe("compileLessonScript", () => {
+  it("shuts the open runner dock right before a select, clicking its chevron", () => {
+    const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
+
+    const index = plan.actions.findIndex((action) => action.id === "point");
+    expect(plan.actions[index - 1]).toMatchObject({
+      id: "collapse-dock-point",
+      type: "runtime.collapseDock",
+      at: plan.actions[index].at,
+    });
+    expect(plan.actions.find((action) => action.id === "cursor-collapse-dock-point")).toMatchObject(
+      { type: "cursor.moveTo", target: { kind: "target-id" } },
+    );
+  });
+
   it("materializes an editor.select drag and adds no cursor move to the editor", () => {
     const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
 
@@ -141,7 +155,11 @@ describe("compileLessonScript", () => {
     // selectScript opens main.go, its entry file: the row would click nothing.
     const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
 
-    expect(plan.actions.some((action) => action.type === "cursor.moveTo")).toBe(false);
+    expect(
+      plan.actions.some(
+        (action) => action.type === "cursor.moveTo" && action.target.kind === "file",
+      ),
+    ).toBe(false);
   });
 
   it("clicks the Run button while the dock is open and its chevron while it is shut", () => {

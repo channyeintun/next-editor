@@ -12,6 +12,13 @@ import { CompileError } from "./errors";
 import { planPointerChoreography, type PlacedAction } from "./pointerChoreography";
 import { parseLessonScript, type LessonScript, type ScriptAction } from "./schema";
 
+/** javascript-minimal: a WebContainer lesson whose dock opens expanded. */
+function javascriptMinimal(): LessonScript {
+  return parseLessonScript(
+    YAML.parse(readFileSync(resolve(__dirname, "./__fixtures__/javascript-minimal.yaml"), "utf8")),
+  );
+}
+
 /** go-cube: a Go Playground lesson opening main.go, with square.go beside it. */
 function goCube(dockStartsCollapsed = false): LessonScript {
   const raw = YAML.parse(readFileSync(resolve(__dirname, "./__fixtures__/go-cube.yaml"), "utf8"));
@@ -55,6 +62,20 @@ const selectSquare: ScriptAction = {
   at,
   timeoutMs: 10_000,
   target: { file: "square.go", text: "value", occurrence: 1 },
+};
+const selectMain: ScriptAction = {
+  id: "select-main",
+  type: "editor.select",
+  at,
+  timeoutMs: 10_000,
+  target: { file: "main.go", text: "main", occurrence: 1 },
+};
+const pointOutput: ScriptAction = {
+  id: "point-output",
+  type: "console.point",
+  at,
+  timeoutMs: 10_000,
+  target: { text: "cubed", occurrence: 1 },
 };
 const expectOutput: ScriptAction = {
   id: "expect-output",
@@ -173,5 +194,58 @@ describe("planPointerChoreography", () => {
         { action: expectOutput, at: 5_000 },
       ]),
     ).not.toThrow();
+  });
+
+  // How much of the editor the open dock covers depends on the viewer's
+  // screen, so a select clear of it on one display swept code hidden under it
+  // on a shorter one.
+  it("shuts an open dock with its chevron right before a select", () => {
+    const { cursorMoves, dockClosings, warnings } = choreograph(goCube(), [
+      { action: run, at: 1_000 },
+      { action: selectMain, at: 5_000 },
+    ]);
+
+    expect(dockClosings).toEqual([
+      { id: "collapse-dock-select-main", at: 5_000, beforeActionId: "select-main" },
+    ]);
+    const chevron = cursorMoves.find((move) => move.id === "cursor-collapse-dock-select-main");
+    expect(chevron?.target).toEqual({ kind: "target-id", id: STUDIO_DOCK_TOGGLE_TARGET_ID });
+    expect(chevron && chevron.at + chevron.durationMs).toBe(5_000 - LEAD_MS);
+    expect(warnings).toEqual([]);
+  });
+
+  it("leaves a shut dock alone, and reopens one a select shut before the next run", () => {
+    expect(choreograph(goCube(true), [{ action: selectMain, at: 5_000 }]).dockClosings).toEqual([]);
+
+    const { dockOpenings } = choreograph(goCube(), [
+      { action: selectMain, at: 3_000 },
+      { action: run, at: 8_000 },
+    ]);
+    expect(dockOpenings).toEqual([{ id: "open-dock-run", at: expect.any(Number) }]);
+  });
+
+  it("shuts a WebContainer dock before a select without a click", () => {
+    const select: ScriptAction = {
+      ...selectMain,
+      target: { file: "server.js", text: "createServer", occurrence: 1 },
+    };
+    const { cursorMoves, dockClosings } = choreograph(javascriptMinimal(), [
+      { action: select, at: 5_000 },
+    ]);
+
+    expect(dockClosings.map((closing) => closing.id)).toEqual(["collapse-dock-select-main"]);
+    expect(cursorMoves).toEqual([]);
+  });
+
+  it("rejects a console.point after a select has shut the dock", () => {
+    const compile = () =>
+      choreograph(goCube(), [
+        { action: run, at: 1_000 },
+        { action: selectMain, at: 5_000 },
+        { action: pointOutput, at: 9_000 },
+      ]);
+    expect(compile).toThrow(
+      /^console\.point "point-output" points at the console while the runner dock is shut/,
+    );
   });
 });
