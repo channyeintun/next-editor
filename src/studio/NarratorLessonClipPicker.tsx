@@ -95,6 +95,8 @@ function LessonClipChooser({
   const [lengthSeconds, setLengthSeconds] = useState(0);
   const [startSeconds, setStartSeconds] = useState(0);
   const [listening, setListening] = useState(false);
+  // Until the author moves the start, a new length re-suggests the start.
+  const [startTouched, setStartTouched] = useState(false);
   const loadRef = useRef<AbortController | null>(null);
   const stopListeningRef = useRef<(() => void) | null>(null);
   const lessonFieldId = useId();
@@ -118,6 +120,15 @@ function LessonClipChooser({
     setListening(false);
   };
 
+  // A disabled picker cannot be stopped, and the panel disables it while the
+  // microphone records: a clip still playing would bleed into that take.
+  useEffect(() => {
+    if (!disabled || !stopListeningRef.current) return;
+    stopListeningRef.current();
+    stopListeningRef.current = null;
+    setListening(false);
+  }, [disabled]);
+
   const sources = lessonsQuery.data
     ? lessonClipSources(lessonsQuery.data, window.location.origin)
     : [];
@@ -127,6 +138,7 @@ function LessonClipChooser({
     loadRef.current?.abort();
     loadRef.current = null;
     setLessonId(id);
+    setStartTouched(false);
     setNarration(null);
     setLoading(false);
     setNotice(null);
@@ -176,12 +188,22 @@ function LessonClipChooser({
 
   const changeStart = (value: number) => {
     stopListening();
+    setStartTouched(true);
     setStartSeconds(clampClipStart(value, lengthSeconds, duration));
   };
 
   const changeLength = (value: number) => {
     stopListening();
     setLengthSeconds(value);
+    if (narration && !startTouched) {
+      const { buffer } = narration;
+      const start = suggestClipStart(buffer.getChannelData(0), buffer.sampleRate, value);
+      setStartSeconds(start);
+      setNotice(
+        `Suggested clip: ${formatClipTime(start)}–${formatClipTime(start + value)} of ${formatClipTime(buffer.duration)}.`,
+      );
+      return;
+    }
     setStartSeconds(clampClipStart(startSeconds, value, duration));
   };
 
@@ -296,7 +318,6 @@ function LessonClipChooser({
               type="button"
               disabled={disabled}
               onClick={toggleListening}
-              aria-pressed={listening}
               className={BUTTON_CLASS}
               title="Play this clip of the lesson's narration"
             >
