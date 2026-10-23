@@ -11,7 +11,6 @@ interface SlidePreviewProps {
   slides: Slide[];
   currentSlideIndex: number;
   onSlideEvent?: (event: SlideEvent) => boolean | void;
-  onStopPlayback?: () => void;
   onClose?: () => void;
   isOpen: boolean;
   verticalIndex?: number;
@@ -32,7 +31,6 @@ function SlidePreview({
   slides,
   currentSlideIndex,
   onSlideEvent,
-  onStopPlayback,
   onClose,
   isOpen,
   verticalIndex = 0,
@@ -69,7 +67,6 @@ function SlidePreview({
     const hadFocus = overlayHasFocus();
     collaboration?.stopFollowing("local-slide-input");
     onClose?.();
-    onStopPlayback?.();
     if (hadFocus) returnFocusToSlidesButton();
   };
 
@@ -77,7 +74,6 @@ function SlidePreview({
     const hadFocus = overlayHasFocus();
     collaboration?.stopFollowing("local-slide-input");
     emitSlideEvent("slide_minimize", currentSlide?.id, false);
-    onStopPlayback?.();
     if (hadFocus) returnFocusToSlidesButton();
   };
 

@@ -8,6 +8,7 @@ type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const mocks = vi.hoisted(() => ({
   recordSlideEvent: vi.fn<NextEditorActions["handleSlideEvent"]>(),
+  holdViewerPanelView: vi.fn<NextEditorActions["handleViewerPanelViewChange"]>(),
   publishCurrentSlide: vi.fn<CollaborationContextValue["publishCurrentSlide"]>(),
 }));
 
@@ -18,7 +19,10 @@ vi.mock("./SlidesStoreContext", () => ({
   useSlidesStore: () => ({ store: slidesStore }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorActions: () => ({ handleSlideEvent: mocks.recordSlideEvent }),
+  useNextEditorActions: () => ({
+    handleSlideEvent: mocks.recordSlideEvent,
+    handleViewerPanelViewChange: mocks.holdViewerPanelView,
+  }),
 }));
 vi.mock("./CollaborationContext", () => ({
   useOptionalCollaboration: () => collaborationState,
@@ -208,5 +212,44 @@ describe("SlidesContext live-room ownership", () => {
       currentSlideId: "one",
       indexv: 2,
     });
+  });
+});
+
+describe("SlidesContext viewer panel view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    seedStore();
+    collaborationState = {};
+  });
+
+  it("reports opening, minimizing and closing the deck, not moving through it", () => {
+    const { result } = renderHook(() => useSlidesContext(), { wrapper: SlidesProvider });
+
+    act(() => result.current.openPresentation());
+    expect(mocks.holdViewerPanelView).toHaveBeenCalledExactlyOnceWith("slides");
+
+    act(() => {
+      result.current.handleSlideEvent({
+        type: "slide_change",
+        timestamp: 1,
+        slideId: "two",
+        indexv: 0,
+      });
+    });
+    expect(mocks.holdViewerPanelView).toHaveBeenCalledOnce();
+
+    act(() => {
+      result.current.handleSlideEvent({
+        type: "slide_minimize",
+        timestamp: 2,
+        slideId: "two",
+        isMaximized: false,
+      });
+    });
+    act(() => result.current.openPresentation());
+    act(() => result.current.closePresentation());
+
+    expect(mocks.holdViewerPanelView).toHaveBeenCalledTimes(4);
+    expect(slidesStore.getSnapshot().context.previewState.isOpen).toBe(false);
   });
 });

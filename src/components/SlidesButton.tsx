@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useId, useState } from "react";
 import { Presentation, Circle } from "lucide-react";
-import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
@@ -28,10 +28,8 @@ export default function SlidesButton({
    *  (used in read-only mode, where editing the deck isn't available). */
   presentationToggleOnly?: boolean;
 }) {
-  const { pause } = useNextEditorActions();
-  const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata((m) => ({
+  const { isRecording, usesPlaybackModel } = useNextEditorMetadata((m) => ({
     isRecording: m.isRecording,
-    isPlaying: m.isPlaying,
     usesPlaybackModel: m.usesPlaybackModel,
   }));
   const [showManager, setShowManager] = useState(false);
@@ -72,10 +70,8 @@ export default function SlidesButton({
       return;
     }
 
-    if (isPlaying) {
-      pause();
-    }
-
+    // A playing lesson plays on: the replay keeps the viewer's deck as they left it until
+    // the recording next opens, closes or resizes it (machine/viewerPanels.ts).
     collaboration?.stopFollowing("local-surface-change");
 
     if (isPresentationVisible) {

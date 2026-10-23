@@ -51,15 +51,8 @@ describe("SlidePreview local follow intent", () => {
 
   it("stops following before minimizing and records only local view state", () => {
     const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
-    const onStopPlayback = vi.fn<() => void>();
     render(
-      <SlidePreview
-        slides={slides}
-        currentSlideIndex={0}
-        isOpen
-        onSlideEvent={onSlideEvent}
-        onStopPlayback={onStopPlayback}
-      />,
+      <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Minimize slides" }));
@@ -70,7 +63,6 @@ describe("SlidePreview local follow intent", () => {
     expect(stopFollowing.mock.invocationCallOrder[0]).toBeLessThan(
       onSlideEvent.mock.invocationCallOrder[0],
     );
-    expect(onStopPlayback).toHaveBeenCalledTimes(1);
   });
 
   it("stops following before whole-slide arrows, close, and backdrop actions", () => {

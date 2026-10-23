@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
-import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { useSlidesContext } from "../contexts/SlidesContext";
 import type { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
@@ -13,7 +12,6 @@ type WhiteboardContextValue = ReturnType<typeof useWhiteboardContext>;
 const mocks = vi.hoisted(() => ({
   closePresentation: vi.fn<SlidesContextValue["closePresentation"]>(),
   openPresentation: vi.fn<SlidesContextValue["openPresentation"]>(),
-  pause: vi.fn<NextEditorActions["pause"]>(),
   setWhiteboardOpen: vi.fn<WhiteboardContextValue["setOpen"]>(),
   stopFollowing: vi.fn<CollaborationContextValue["stopFollowing"]>(),
 }));
@@ -23,7 +21,6 @@ let slidesState: Record<string, unknown>;
 let whiteboardOpen = false;
 
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorActions: () => ({ pause: mocks.pause }),
   useNextEditorMetadata: (select?: MetadataSelector) =>
     selectMetadata({ isRecording: false, isPlaying: false, usesPlaybackModel: false }, select),
 }));
