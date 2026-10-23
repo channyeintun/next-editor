@@ -7,6 +7,7 @@ import {
   selectViewerFullHeight,
 } from "../stores/runtimePanelStore";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
+import type { NextEditorActions } from "../contexts/NextEditorContext";
 import { selectMetadata, type MetadataSelector } from "../test/selectMetadata";
 
 const metadata = vi.hoisted(() => ({
@@ -18,7 +19,12 @@ const metadata = vi.hoisted(() => ({
   },
 }));
 
+const actions = vi.hoisted(() => ({
+  handleViewerPanelViewChange: vi.fn<NextEditorActions["handleViewerPanelViewChange"]>(),
+}));
+
 vi.mock("./useNextEditorContext", () => ({
+  useNextEditorActions: () => actions,
   useNextEditorMetadata: (select?: MetadataSelector) => selectMetadata(metadata.current, select),
 }));
 
@@ -50,6 +56,7 @@ function replaying(runtimeSnapshot: RuntimeRecordingSnapshot) {
 
 describe("useRuntimeDockLayout", () => {
   beforeEach(() => {
+    actions.handleViewerPanelViewChange.mockClear();
     metadata.current = {
       currentRecording: null,
       isPlaying: false,
@@ -193,6 +200,72 @@ describe("useRuntimeDockLayout", () => {
     act(() => result.current.layout.toggleCollapsed());
     expect(selectIsCollapsed(result.current.store.getSnapshot().context)).toBe(false);
     expect(result.current.layout.displayIsCollapsed).toBe(false);
+    expect(actions.handleViewerPanelViewChange).not.toHaveBeenCalled();
+  });
+
+  describe("the viewer's collapse choice", () => {
+    const recorded: RuntimeRecordingSnapshot = {
+      mode: "single-file",
+      status: "idle",
+      isCollapsed: false,
+    };
+
+    function renderReplay() {
+      replaying(recorded);
+      const rendered = renderLayout();
+      // The machine shows the replayed frame through the store, as applyRuntimeSnapshot does.
+      act(() => rendered.result.current.store.trigger.setPlaybackSnapshot({ snapshot: recorded }));
+      return rendered;
+    }
+
+    it("collapses the replayed dock at once and asks the replay to keep it", () => {
+      const { result } = renderReplay();
+      expect(result.current.layout.displayIsCollapsed).toBe(false);
+
+      act(() => result.current.layout.toggleCollapsed());
+
+      expect(result.current.layout.displayIsCollapsed).toBe(true);
+      expect(actions.handleViewerPanelViewChange).toHaveBeenCalledExactlyOnceWith("runtimeDock");
+      // The recording's own frame is not changed, only the copy on screen.
+      expect(recorded.isCollapsed).toBe(false);
+    });
+
+    it("keeps the dock collapsed when playback pauses, where the live dock shows", () => {
+      const { result, rerender } = renderReplay();
+      act(() => result.current.layout.toggleCollapsed());
+
+      metadata.current = { ...metadata.current, isPlaying: false };
+      rerender();
+
+      expect(result.current.layout.isPlaybackSnapshotActive).toBe(false);
+      expect(result.current.layout.displayIsCollapsed).toBe(true);
+    });
+
+    it("makes a press while paused the viewer's choice too", () => {
+      replaying(recorded);
+      metadata.current = { ...metadata.current, isPlaying: false };
+      const { result } = renderLayout();
+
+      act(() => result.current.layout.toggleCollapsed());
+
+      expect(result.current.layout.displayIsCollapsed).toBe(true);
+      expect(actions.handleViewerPanelViewChange).toHaveBeenCalledExactlyOnceWith("runtimeDock");
+    });
+
+    it("flips only the live collapse while a take is being recorded", () => {
+      metadata.current = {
+        currentRecording: null,
+        isPlaying: false,
+        isRecording: true,
+        isReplayLoaded: false,
+      };
+      const { result } = renderLayout();
+
+      act(() => result.current.layout.toggleCollapsed());
+
+      expect(selectIsCollapsed(result.current.store.getSnapshot().context)).toBe(true);
+      expect(actions.handleViewerPanelViewChange).not.toHaveBeenCalled();
+    });
   });
 
   describe("the viewer's full-height choice", () => {

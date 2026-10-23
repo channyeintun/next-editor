@@ -5,6 +5,7 @@ import type {
   RuntimeRecordingSnapshot,
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
+import { withRuntimeDockView } from "../core/src/machine/replayState/runtime";
 
 export interface RuntimePanelContext {
   activeTab: RuntimeDockTab;
@@ -52,6 +53,21 @@ export function createRuntimePanelStore() {
         event.collapsed === context.isCollapsed
           ? context
           : { ...context, isCollapsed: event.collapsed },
+      /**
+       * The viewer collapsed or expanded the dock while a replay is loaded: the live dock
+       * and the replayed frame on screen both take it, so it shows at once whether the
+       * lesson plays or not. The replay then keeps it until the recording next collapses or
+       * expands the dock (machine/viewerPanels.ts).
+       */
+      setViewerCollapsed: (context, event: { collapsed: boolean }) => {
+        const playbackSnapshot =
+          context.playbackSnapshot &&
+          withRuntimeDockView(context.playbackSnapshot, event.collapsed);
+        return event.collapsed === context.isCollapsed &&
+          playbackSnapshot === context.playbackSnapshot
+          ? context
+          : { ...context, isCollapsed: event.collapsed, playbackSnapshot };
+      },
       setIsFullHeight: (context, event: { fullHeight: boolean }) =>
         event.fullHeight === context.isFullHeight
           ? context

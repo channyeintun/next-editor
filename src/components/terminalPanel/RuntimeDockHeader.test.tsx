@@ -61,12 +61,12 @@ describe("RuntimeDockHeader", () => {
     expect(onSelectTab).toHaveBeenCalledWith("runner");
   });
 
-  it("makes the tabs and the collapse toggle read-only during playback, but not the height", () => {
+  it("makes the tabs read-only during playback, but not the height or the collapse", () => {
     renderHeader({ disabled: true });
 
     expect(screen.getByRole("button", { name: "Runner" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Agent" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: DOCK_TOGGLE })).toBeDisabled();
+    expect(screen.getByRole("button", { name: DOCK_TOGGLE })).toBeEnabled();
     expect(screen.getByRole("button", { name: FULL_HEIGHT_TOGGLE })).toBeEnabled();
   });
 

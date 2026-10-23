@@ -1128,11 +1128,11 @@ describe("playground runner panels", () => {
     expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
     expect(screen.getByRole("button", { name: panel.runnerTab })).toBeDisabled();
-    // The recorded height shows as pressed, and stays the viewer's to change.
+    // The recorded height and collapse show, and stay the viewer's to change.
     expect(
       screen.getByRole("button", { name: "Full-height runtime dock", pressed: true }),
     ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Runtime dock", expanded: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Runtime dock", expanded: true })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /^sign in/i })).toBeNull();
   });
 

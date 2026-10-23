@@ -9,7 +9,7 @@ import {
   selectViewerFullHeight,
 } from "../stores/runtimePanelStore";
 import type { RuntimeDockTab, RuntimeRecordingSnapshot } from "../types/runtime";
-import { useNextEditorMetadata } from "./useNextEditorContext";
+import { useNextEditorActions, useNextEditorMetadata } from "./useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "./useRuntimeDockRecordedSnapshot";
 
 export interface RuntimeDockLayout {
@@ -35,17 +35,22 @@ export interface RuntimeDockLayout {
    * viewer's choice; otherwise (record mode, idle) it flips the live value.
    */
   toggleFullHeight: () => void;
-  /** The collapse toggle: it flips the live collapse, which recordings capture. */
+  /**
+   * The collapse toggle. While a replay is loaded it collapses or expands the dock on
+   * screen, the replayed frame included, until the recording next collapses or expands
+   * it; otherwise (record mode, idle) it flips the live collapse, which recordings capture.
+   */
   toggleCollapsed: () => void;
 }
 
 /**
  * The runtime dock's layout, live and on screen. During playback the dock
  * shows the recorded tab, collapse and height; the live values are still what
- * a recording captures, so both are returned. Full height is the exception: the
- * viewer may toggle it mid-replay, and their choice (the store's
- * viewerFullHeight) then stays on screen until the editor leaves playback,
- * including a reload of the same lesson (see useEndViewerDockOverride).
+ * a recording captures, so both are returned. The viewer may collapse or expand
+ * the dock mid-replay: that holds until the recording next collapses or expands
+ * it (machine/viewerPanels.ts). They may also toggle full height, and that choice
+ * (the store's viewerFullHeight) stays on screen until the editor leaves
+ * playback, including a reload of the same lesson (see useEndViewerDockOverride).
  */
 export function useRuntimeDockLayout(): RuntimeDockLayout {
   const { store: runtimePanelStore } = useRuntimePanelStore();
@@ -54,6 +59,7 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const viewerFullHeight = useSelector(runtimePanelStore, (s) => selectViewerFullHeight(s.context));
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
+  const { handleViewerPanelViewChange } = useNextEditorActions();
   const { isRecording, isReplayLoaded } = useNextEditorMetadata((m) => ({
     isRecording: m.isRecording,
     isReplayLoaded: m.isReplayLoaded,
@@ -84,6 +90,13 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
   };
 
   const toggleCollapsed = () => {
+    // Any press while a replay is loaded is the viewer's, as with the height: the dock they
+    // see changes, and the replay keeps it until the recording changes it.
+    if (isReplayLoaded && !isRecording) {
+      runtimePanelStore.trigger.setViewerCollapsed({ collapsed: !displayIsCollapsed });
+      handleViewerPanelViewChange("runtimeDock");
+      return;
+    }
     runtimePanelStore.trigger.setIsCollapsed({
       collapsed: !runtimePanelStore.getSnapshot().context.isCollapsed,
     });

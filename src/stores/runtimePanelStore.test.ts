@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   createRuntimePanelStore,
+  selectIsCollapsed,
   selectIsFullHeight,
+  selectPlaybackSnapshot,
   selectRecordingState,
   selectTerminalScrollLines,
   selectViewerFullHeight,
@@ -52,6 +54,44 @@ describe("runtimePanelStore viewer full height", () => {
 
     expect(recorded.isFullHeight).toBe(false);
     expect(recorded).not.toHaveProperty("viewerFullHeight");
+  });
+});
+
+describe("runtimePanelStore viewer collapse", () => {
+  it("collapses the live dock and the replayed frame on screen together", () => {
+    const store = createRuntimePanelStore();
+    const replayed = { mode: "single-file", status: "idle", isCollapsed: false } as const;
+    store.trigger.setPlaybackSnapshot({ snapshot: replayed });
+
+    store.trigger.setViewerCollapsed({ collapsed: true });
+
+    const context = store.getSnapshot().context;
+    expect(selectIsCollapsed(context)).toBe(true);
+    expect(selectPlaybackSnapshot(context)).toEqual({ ...replayed, isCollapsed: true });
+    // The replayed frame belongs to the recording's runtime track: it is copied, not changed.
+    expect(replayed.isCollapsed).toBe(false);
+  });
+
+  it("collapses only the live dock when no replayed frame is shown", () => {
+    const store = createRuntimePanelStore();
+
+    store.trigger.setViewerCollapsed({ collapsed: true });
+
+    expect(selectIsCollapsed(store.getSnapshot().context)).toBe(true);
+    expect(selectPlaybackSnapshot(store.getSnapshot().context)).toBeNull();
+  });
+
+  it("leaves the store untouched when both already show it", () => {
+    const store = createRuntimePanelStore();
+    store.trigger.setPlaybackSnapshot({
+      snapshot: { mode: "single-file", status: "idle", isCollapsed: true },
+    });
+    store.trigger.setIsCollapsed({ collapsed: true });
+    const before = store.getSnapshot().context;
+
+    store.trigger.setViewerCollapsed({ collapsed: true });
+
+    expect(store.getSnapshot().context).toBe(before);
   });
 });
 

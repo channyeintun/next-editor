@@ -25,7 +25,7 @@ interface RuntimeDockHeaderProps {
   tabs: readonly RuntimeDockTabConfig[];
   /** The tab on screen, which is marked as pressed. */
   activeTab: RuntimeDockTab;
-  /** While a replay is on screen, the tabs and the collapse toggle are read-only. */
+  /** While a replay is on screen, the tabs are read-only. */
   disabled: boolean;
   onSelectTab: (tab: RuntimeDockTab) => void;
   layout: Pick<
@@ -97,7 +97,7 @@ function RuntimeDockHeader({
 
       <button
         type="button"
-        // The one dock control a viewer keeps during playback; their choice stays
+        // Like the collapse toggle, a viewer keeps it during playback; their choice stays
         // on screen without reaching the recording (see useRuntimeDockLayout).
         disabled={displayIsCollapsed}
         onClick={toggleFullHeight}
@@ -117,9 +117,8 @@ function RuntimeDockHeader({
         type="button"
         data-runtime-dock-toggle=""
         {...collapseToggleAttributes}
-        disabled={disabled}
         onClick={toggleCollapsed}
-        className="inline-flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+        className="inline-flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:text-white size-10"
         aria-label="Runtime dock"
         aria-expanded={!displayIsCollapsed}
         title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
