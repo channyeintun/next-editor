@@ -40,9 +40,40 @@ AI-generated." The build provenance (plan slug, plan hash, runtime mode,
 narration provider, and the cloned, reference, or AthanLab voice) and the review
 reminder are in the **Create draft…** button's tooltip. `build-manifest.json`
 holds the full plan hash, seed, runtime contract, and artifact hashes; the
-narration provider and voice name appear only in the tooltip. Publishing
-remains a separate owner action in the lessons UI — the studio has no publish
-path. Requires `bun run dev:worker` and a signed-in session.
+narration provider and voice name appear only in the tooltip. Publishing is
+the owner's action: the upload modal's Publish button, the lessons UI, or a
+studio workflow the owner started with "Publish the draft" checked (below).
+Requires `bun run dev:worker` and a signed-in session.
+
+## Studio workflow (batch render → draft → publish)
+
+The console's **Workflow** tab takes many lessons through the same steps
+unattended (`src/studio/workflow/`):
+
+1. Pick lessons — a whole course with its group checkbox, or filter and pick.
+2. **Choose folder…** with the course's exported thumbnails
+   (`docs/css-course-thumbnails/` and the like). Images match lessons by file
+   name: `01-basics.png` for `css-course-01-basics`, `02-rust-variables.png`
+   for `rust-variables`. Lessons with no match block Start unless "Use the
+   default thumbnail" is checked.
+3. Choose the steps (create a draft; publish it) and press **Start workflow**.
+   Lessons run in course order, each with the narration set in the Render tab.
+   With screen recording on, the screen picker opens once, at Start, and every
+   lesson records into that one share.
+
+While a lesson performs, the console is invisible, so it covers nothing on the
+stage and stays out of the screen recording. The tab title shows the progress.
+**Stop after this lesson** finishes the lesson in progress first.
+
+The workflow stops at the first failure: a render that fails a check or an
+action, a failed upload, or a failed publish. Its issue card has **Copy issue
+for Claude** (Markdown: the step and phase, the error, the failed checks and
+actions, page errors, Director warnings, and the lesson's YAML path) and
+**Download issue**. The same queue, with its issue report, is on
+`window.__NEXT_EDITOR_STUDIO__.workflow`. The queue lives in localStorage and
+the picked thumbnails in IndexedDB, so after a fix and a reload, **Resume**
+picks up at the failed lesson. A lesson that already has its draft only
+publishes again; it does not render again.
 
 Mistimed builds are rejected mechanically: a script's
 `{ type: timing.p95Ms, max: N }` check compiles into the plan's timing gate,

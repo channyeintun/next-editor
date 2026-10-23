@@ -1,5 +1,6 @@
 import type { StudioRuntimeMode } from "./plan";
 import type { StudioBuildManifest, StudioCheckResult, StudioRenderReport } from "./report";
+import type { StudioWorkflow } from "./workflow/workflowQueue";
 
 /**
  * What /studio publishes on `window.__NEXT_EDITOR_STUDIO__` so an automation
@@ -14,6 +15,11 @@ export interface StudioWindowHandle {
   /** The repeatability verdict, published after the second render. */
   comparison: StudioCheckResult[] | null;
   running: boolean;
+  /**
+   * The studio workflow's queue (useStudioWorkflow), with the issue report of
+   * a lesson it stopped at; absent until the workflow hook publishes it.
+   */
+  workflow?: StudioWorkflow | null;
 }
 
 /** One finished render as the window handle carries it. */

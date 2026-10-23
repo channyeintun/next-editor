@@ -53,6 +53,11 @@ export {
 export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
 export { THUMBNAIL_ACCEPT } from "./upload/thumbnailConstraints";
 export { prepareThumbnail } from "./upload/prepareThumbnail";
+// The upload modal's two calls, for the studio workflow that drafts and
+// publishes lessons with no modal open.
+export { uploadLesson } from "./upload/uploadLesson";
+export type { UploadLessonInput, UploadedLesson } from "./upload/uploadLesson";
+export { publishLesson } from "./library/myLessonsApi";
 export { MAX_TITLE_CHARS, MAX_DESCRIPTION_CHARS } from "../lessons/metadataLimits";
 export { useStudioCapabilities } from "./studio/useStudioCapabilities";
 export type { StudioCapabilities } from "./studio/useStudioCapabilities";

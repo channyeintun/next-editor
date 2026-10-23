@@ -73,6 +73,10 @@ import {
 } from "./narrationLanguage";
 import AthanLabPanel from "./AthanLabPanel";
 import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
+import StudioWorkflowPanel from "./workflow/StudioWorkflowPanel";
+import { useStudioWorkflow } from "./workflow/useStudioWorkflow";
+import type { LessonRenderAttempt } from "./workflow/workflowRunner";
+import { workflowProgressOf } from "./workflow/workflowQueue";
 
 /**
  * The studio render console: pick a lesson (checked-in scripts auto-register;
@@ -100,13 +104,34 @@ function storeNarrationProvider(provider: StudioNarrationProvider): void {
 /** No voice task running in <NarratorVoicePanel>. */
 const NO_VOICE_TASK: NarratorVoiceTask = { busy: null, recording: false };
 
+/**
+ * The render phases the recorder runs in. The console steps off the screen for
+ * them: it would sit over the stage, and in every frame of a screen recording.
+ */
+const RECORDING_PHASES: ReadonlySet<string> = new Set(["start-recording", "perform", "finalize"]);
+
+/** What a failed render reports as its error: the first gate or action that failed. */
+function renderFailureOf(report: StudioRunResult["report"]): string {
+  const failedChecks = report.checks.filter((check) => !check.ok);
+  const failedAction = report.receipts.find((receipt) => receipt.status === "failed");
+  if (failedAction?.error) {
+    return `Action "${failedAction.actionId}" (${failedAction.actionType}) failed: ${failedAction.error}`;
+  }
+  if (failedChecks.length > 0) {
+    return `The render failed ${failedChecks.length === 1 ? "a check" : `${failedChecks.length} checks`}: ${failedChecks
+      .map((check) => `${check.id} — ${check.detail}`)
+      .join("; ")}`;
+  }
+  return report.errors[0] ?? "The render failed";
+}
+
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
 const ATHANLAB_NOT_REPORTED = { ready: false, reason: "Checking your AthanLab setup…" };
 
 /**
  * Why the selected lesson cannot be narrated by the selected provider, or null.
- * Shared by the Start guard and runRender. `scriptLocale` is null when no
- * script is selected or it fails to parse (runRender reports the schema error).
+ * Shared by the Start guard and renderLesson. `scriptLocale` is null when no
+ * script is selected or it fails to parse (renderLesson reports the schema error).
  */
 function narrationSetupErrorOf(
   scriptLocale: string | null,
@@ -191,6 +216,8 @@ function storeSemantics(slug: string, mode: StudioRuntimeMode, semantics: Render
 
 function publishWindowHandle(comparison: StudioCheckResult[] | null, running: boolean): void {
   const handle: StudioWindowHandle = {
+    // The workflow hook owns this field; keep what it last published.
+    workflow: window.__NEXT_EDITOR_STUDIO__?.workflow ?? null,
     runs: runHistory.map((entry) => ({
       index: entry.index,
       mode: entry.mode,
@@ -245,12 +272,13 @@ export default function StudioController() {
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
   const waitingForVisibleTab = running && phase === WAITING_FOR_VISIBLE_TAB_PHASE;
-  // This view owns the studio's title (StudioRoute passes null) because the
-  // tab strip is the only surface Chan can see while the render holds for a
-  // background tab; the in-page hint is gone the moment the tab is in front.
-  useDocumentTitle(
-    waitingForVisibleTab ? "Waiting for you · Studio | Next Editor" : "Studio | Next Editor",
-  );
+  // The phase a failed render was in, for the workflow's issue report: the
+  // state above has moved on to "failed" by the time the render returns.
+  const phaseRef = useRef("idle");
+  const reportPhase = (next: string) => {
+    phaseRef.current = next;
+    setPhase(next);
+  };
   const [receipts, setReceipts] = useState<ActionReceipt[]>([]);
   const [latest, setLatest] = useState<StudioRunEntry | null>(runHistory.at(-1) ?? null);
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
@@ -413,11 +441,27 @@ export default function StudioController() {
     markTourSeen();
   }, []);
 
-  const runRender = async () => {
+  /**
+   * Render one lesson. `screenStream` is the workflow's (a stream, or null for
+   * none); left out, the Start render click asks for one when screen recording
+   * is on. Never throws: a failure comes back as the attempt's error.
+   */
+  const renderLesson = async (
+    slug: string,
+    screenStream?: MediaStream | null,
+  ): Promise<LessonRenderAttempt> => {
     if (runningRef.current) {
-      return;
+      return {
+        ok: false,
+        error: "Another render is already running",
+        phase: null,
+        report: null,
+        buildWarnings: [],
+      };
     }
     runningRef.current = true;
+    phaseRef.current = "preflight";
+    let warnings: string[] = [];
     // Captured once: the provider select is disabled while rendering, but the
     // finally below must refresh the account this render actually used.
     const renderProvider = provider;
@@ -439,11 +483,9 @@ export default function StudioController() {
     let acquiredScreenStream: MediaStream | undefined;
 
     try {
-      const source = sources[planSlug];
+      const source = sources[slug];
       if (!source) {
-        throw new Error(
-          `Unknown lesson "${planSlug}" — available: ${Object.keys(sources).join(", ")}`,
-        );
+        throw new Error(`Unknown lesson "${slug}" — available: ${Object.keys(sources).join(", ")}`);
       }
       // Everything checkable without a network round trip — the script's
       // locale against the provider, the provider's own requirements — fails
@@ -492,7 +534,9 @@ export default function StudioController() {
       // that is non-fatal — the .ne bundle is the primary artifact, so render on
       // without the video. The recorder machine owns the stream from here and
       // saves the video via onScreenRecordingReady (saveScreenRecordingLocally).
-      if (screenRecordingEnabled && isScreenSupported) {
+      if (screenStream !== undefined) {
+        acquiredScreenStream = screenStream ?? undefined;
+      } else if (screenRecordingEnabled && isScreenSupported) {
         try {
           acquiredScreenStream = await acquireDisplayStream(true);
         } catch (error) {
@@ -502,9 +546,10 @@ export default function StudioController() {
 
       // The in-page Director: per-dialog synthesis (cached; seeded where the
       // provider allows), joint scheduling, stitching, compilation.
-      const built = await buildPlanFromScript(script, { onPhase: setPhase, voiceProfile });
+      const built = await buildPlanFromScript(script, { onPhase: reportPhase, voiceProfile });
       const plan = built.plan;
       const narrationProvider = narrationProviderLabel(renderProvider);
+      warnings = built.warnings;
       setBuildWarnings(built.warnings);
       const mode: StudioRuntimeMode = requestedMode ?? defaultRuntimeModeOf(plan.runtime);
 
@@ -545,7 +590,7 @@ export default function StudioController() {
               return capture();
             },
           },
-          onPhase: setPhase,
+          onPhase: reportPhase,
           onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
         },
         { startedAt, narration: built.narration, screenStream: acquiredScreenStream },
@@ -555,7 +600,7 @@ export default function StudioController() {
         index: runHistory.length + 1,
         mode,
         slug: plan.lesson.slug,
-        sourceRevision: sourceRevisionOf(planSlug, importedScripts),
+        sourceRevision: sourceRevisionOf(slug, importedScripts),
         title: script.lesson.title,
         voiceName,
         voiceKind,
@@ -587,6 +632,20 @@ export default function StudioController() {
       }
       publishWindowHandle(nextComparison, false);
       setPhase(result.report.outcome === "passed" ? "done" : "failed");
+      if (result.report.outcome === "passed" && result.artifacts) {
+        return { ok: true, title: script.lesson.title, recording: result.artifacts.recording };
+      }
+      return {
+        ok: false,
+        error: renderFailureOf(result.report),
+        // A failed action stopped the performance; the phases after it only
+        // collected the evidence.
+        phase: result.report.receipts.some((receipt) => receipt.status === "failed")
+          ? "perform"
+          : phaseRef.current,
+        report: result.report,
+        buildWarnings: warnings,
+      };
     } catch (error) {
       // A throw before startRecording (e.g. plan-build failure) means the
       // recorder never took the display stream — release it so the browser's
@@ -595,9 +654,17 @@ export default function StudioController() {
       for (const track of acquiredScreenStream?.getTracks() ?? []) {
         track.stop();
       }
-      setFatal(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setFatal(message);
       setPhase("failed");
       publishWindowHandle(null, false);
+      return {
+        ok: false,
+        error: message,
+        phase: phaseRef.current,
+        report: null,
+        buildWarnings: warnings,
+      };
     } finally {
       runningRef.current = false;
       setRunning(false);
@@ -620,7 +687,7 @@ export default function StudioController() {
   // It waits for the state a clicked Start render would see: the session and
   // its capabilities (and the VoxCPM2 fallback they trigger), the saved
   // voices, and — for AthanLab, whose Start stays disabled until then — a
-  // ready panel. Before that, runRender would read the mount-time defaults.
+  // ready panel. Before that, renderLesson would read the mount-time defaults.
   const autostartReady =
     !authLoading &&
     !studioCapabilitiesLoading &&
@@ -632,8 +699,8 @@ export default function StudioController() {
       return;
     }
     autostartFired = true;
-    void runRender();
-  }, [autostart, autostartReady, runRender]);
+    void renderLesson(planSlug);
+  }, [autostart, autostartReady, renderLesson, planSlug]);
 
   const source = sources[planSlug];
   // A completed run's bundle/report/draft are exposed only while the current
@@ -667,13 +734,69 @@ export default function StudioController() {
   const effectiveModeLabel =
     requestedMode ?? (selectedScript ? defaultRuntimeModeOf(selectedScript.runtime) : "?");
   // Disables Start render with its reason, so a locale/provider mismatch is
-  // caught before the screen picker opens (runRender checks again).
+  // caught before the screen picker opens (renderLesson checks again).
   const narrationSetupError = narrationSetupErrorOf(selectedScriptLocale, provider);
   const startBlockedReason =
     narrationSetupError ??
     (provider === "athanlab" && !athanLabReadiness.ready
       ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
       : null);
+
+  // The workflow renders with whatever narration this console is set to, so
+  // it takes the same settings Start render does, lesson after lesson.
+  const workflow = useStudioWorkflow({
+    renderLesson: (slug, screenStream) => {
+      selectLesson(slug);
+      return renderLesson(slug, screenStream);
+    },
+    narration: {
+      provider: narrationProviderLabel(provider),
+      voice:
+        provider === "athanlab" ? (athanLabVoice?.name ?? null) : (narratorVoice?.name ?? null),
+      runtimeMode: requestedMode,
+    },
+    isImported: (slug) => importedScripts[slug] !== undefined,
+    screenRecording: screenRecordingEnabled && isScreenSupported,
+  });
+  const busy = running || workflow.active;
+  const workflowBlockedReason =
+    running && !workflow.active
+      ? "A render is running."
+      : voiceTask.busy !== null || voiceTask.recording
+        ? "Finish the narrator voice task first."
+        : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
+          ? "Choose a narrator reference in the Render tab first."
+          : provider === "athanlab" && !athanLabReadiness.ready
+            ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+            : null;
+  // A lesson the workflow cannot narrate fails before the workflow starts, not
+  // hours in: its script must parse and its locale suit the chosen narration.
+  const workflowLessonOf = (slug: string): { title: string } | { error: string } => {
+    try {
+      const script = sources[slug]?.load();
+      if (!script) return { error: "unknown lesson" };
+      const mismatch = narrationSetupErrorOf(script.lesson.locale, provider);
+      return mismatch ? { error: mismatch } : { title: script.lesson.title };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+  const [consoleTab, setConsoleTab] = useState<"render" | "workflow">(() =>
+    workflow.workflow ? "workflow" : "render",
+  );
+  const workflowProgress =
+    workflow.active && workflow.workflow ? workflowProgressOf(workflow.workflow) : null;
+  // This view owns the studio's title (StudioRoute passes null) because the
+  // tab strip is the only surface Chan can see while the render holds for a
+  // background tab — or while the console is off the screen for the recording.
+  useDocumentTitle(
+    waitingForVisibleTab
+      ? "Waiting for you · Studio | Next Editor"
+      : workflowProgress
+        ? `Workflow ${workflowProgress.done}/${workflowProgress.total} · Studio | Next Editor`
+        : "Studio | Next Editor",
+  );
+  const recordingOnScreen = running && RECORDING_PHASES.has(phase);
 
   const downloadBundle = () => {
     if (!activeRun || !artifacts) {
@@ -729,14 +852,17 @@ export default function StudioController() {
 
   // Collapsing keeps the header (status badge + toggle) right-anchored where it
   // was, so the toggle stays under the pointer and the preview behind the
-  // panel is uncovered mid-render. The body stays mounted, only hidden.
+  // panel is uncovered mid-render. The body stays mounted, only hidden. While
+  // the recorder runs the whole console is invisible (still mounted): it
+  // would cover the stage, and sit in every frame of a screen recording. The
+  // tab title carries the progress meanwhile.
   return (
     <div
       className={`fixed right-3 top-14 z-70 rounded-xl border border-slate-700 bg-[#0d1117]/95 text-slate-200 shadow-2xl backdrop-blur text-[13px] leading-5 ${
         collapsed
           ? "py-2 pl-3 pr-2"
-          : "w-96 max-w-[calc(100vw-1.5rem)] max-h-[75vh] overflow-y-auto p-4"
-      }`}
+          : `${consoleTab === "workflow" ? "w-[30rem]" : "w-96"} max-w-[calc(100vw-1.5rem)] max-h-[75vh] overflow-y-auto p-4`
+      } ${recordingOnScreen ? "invisible" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold text-white">Studio render</h2>
@@ -790,234 +916,285 @@ export default function StudioController() {
       ) : null}
 
       <div hidden={collapsed}>
-        <div className="mt-2 flex items-center gap-2">
-          <select
-            value={planSlug}
-            disabled={running}
-            onChange={(event) => selectLesson(event.target.value)}
-            aria-label="Lesson to render"
-            className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-          >
-            {Object.keys(sources)
-              .sort()
-              .map((slug) => (
-                <option key={slug} value={slug}>
-                  {slug}
-                  {importedScripts[slug] ? " (imported)" : ""}
-                </option>
-              ))}
-          </select>
-          <button
-            type="button"
-            disabled={running}
-            onClick={() => importInputRef.current?.click()}
-            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-            title="Import a LessonScript YAML (validated and critiqued here in the page)"
-          >
-            Import…
-            <HoverRing />
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".yaml,.yml"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) {
-                void handleImportFile(file);
-              }
-            }}
-          />
-        </div>
-
-        <div className="mt-2">
-          <select
-            value={provider}
-            disabled={
-              running || studioCapabilitiesLoading || voiceTask.busy !== null || voiceTask.recording
-            }
-            onChange={(event) => {
-              if (isStudioNarrationProvider(event.target.value)) {
-                chooseProvider(event.target.value);
-              }
-            }}
-            aria-label="Narration language and provider"
-            className="w-full rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-          >
-            <option value="pocket">English · Pocket-TTS</option>
-            <option value="athanlab">မြန်မာ · AthanLab (your API key)</option>
-            {studioCapabilities.burmeseVoxCpm2 ? (
-              <option value="voxcpm2">မြန်မာ · VoxCPM2 (Modal)</option>
-            ) : null}
-          </select>
-        </div>
-
-        {provider === "athanlab" ? (
-          <AthanLabPanel
-            userId={userId}
-            capabilityAvailable={studioCapabilities.athanlab}
-            capabilitiesLoading={authLoading || studioCapabilitiesLoading}
-            disabled={running || voiceTask.busy !== null}
-            onVoiceChange={reportAthanLabVoice}
-            onReadyChange={reportAthanLabReadiness}
-          />
-        ) : null}
-
-        <NarratorVoicePanel
-          provider={provider}
-          disabled={running}
-          onSelectedVoiceChange={reportNarratorVoice}
-          onTaskChange={reportVoiceTask}
-          onError={setFatal}
-        />
-
-        <label
-          className={`mt-2 flex items-center gap-2 text-[12px] ${
-            isScreenSupported ? "text-slate-300" : "text-slate-500"
-          }`}
-          title={
-            isScreenSupported
-              ? 'Also capture this render as a screen recording — a video downloaded alongside the bundle (saved locally, never uploaded). You\'ll pick a screen or tab when the render starts. Narration is captured only when you share a browser tab with "share tab audio" on; sharing a screen or window records a silent video (saved as "…-silent").'
-              : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
-          }
+        <div
+          role="tablist"
+          aria-label="Studio mode"
+          className="mt-2 flex gap-1 rounded-lg bg-[#151a22] p-0.5"
         >
-          <input
-            type="checkbox"
-            checked={screenRecordingEnabled && isScreenSupported}
-            disabled={running || !isScreenSupported}
-            onChange={(event) =>
-              recordingSettingsStore.trigger.setScreenRecordingEnabled({
-                enabled: event.target.checked,
-              })
-            }
-            className="size-3.5 accent-sky-500 disabled:opacity-50"
-          />
-          Screen recording
-          <span className="text-slate-400">
-            {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
-          </span>
-        </label>
-
-        <p className="mt-1 text-slate-400">
-          runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
-          {" · run #"}
-          {runHistory.length + (running ? 1 : 0) || 1}
-        </p>
-
-        {runtimeModeParam.invalid ? (
-          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
-            Ignoring <span className="font-mono">runtime={runtimeModeParam.raw}</span> — expected{" "}
-            <span className="font-mono">fixture</span> or <span className="font-mono">live</span>.
-            Using the plan default (<span className="font-mono">{effectiveModeLabel}</span>).
-          </p>
-        ) : null}
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              void runRender();
-            }}
-            disabled={
-              running ||
-              voiceTask.busy !== null ||
-              voiceTask.recording ||
-              (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
-              startBlockedReason !== null
-            }
-            aria-describedby={
-              startBlockedReason && !running ? "studio-start-blocked-reason" : undefined
-            }
-            className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {runHistory.length === 0 ? "Start render" : "Render again"}
-          </button>
-          <button
-            type="button"
-            onClick={downloadBundle}
-            disabled={!artifacts}
-            className="rounded-md bg-[#222d3b] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Download bundle
-          </button>
-          {report && !artifacts ? (
+          {(["render", "workflow"] as const).map((tab) => (
             <button
+              key={tab}
               type="button"
-              onClick={downloadReport}
-              className="rounded-md bg-[#3b2a22] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#efb28d] transition-colors hover:bg-[#4d382a]"
-            >
-              Download report
-            </button>
-          ) : null}
-          {artifacts ? (
-            <button
-              ref={draftButtonRef}
-              type="button"
-              onClick={() => setShowDraftModal(true)}
-              className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
-              title={`Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action.${
-                activeRun ? ` ${describeDraftProvenance(activeRun)}` : ""
+              role="tab"
+              id={`studio-tab-${tab}`}
+              aria-selected={consoleTab === tab}
+              aria-controls={`studio-tabpanel-${tab}`}
+              // Same as the collapse toggle: a click mid-render must not blur the editor.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setConsoleTab(tab)}
+              className={`flex-1 rounded-md px-2 py-1 text-[12px] font-semibold transition-colors ${
+                consoleTab === tab
+                  ? "bg-[#222d3b] text-white"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              Create draft…
+              {tab === "render" ? "Render" : "Workflow"}
+              {tab === "workflow" && workflowProgress
+                ? ` · ${workflowProgress.done}/${workflowProgress.total}`
+                : ""}
             </button>
-          ) : null}
+          ))}
         </div>
 
-        {/* Describes the disabled Start button. Not a live region: for AthanLab
-            it repeats the panel's own message, which would be announced twice. */}
-        {startBlockedReason && !running ? (
-          <p id="studio-start-blocked-reason" className="mt-2 text-[12px] text-amber-300">
-            {startBlockedReason}
-          </p>
-        ) : null}
-
-        {fatal ? (
-          <p
-            role="alert"
-            className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200"
-          >
-            {fatal}
-          </p>
-        ) : null}
-
-        {buildWarnings.length > 0 ? (
-          <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
-            {buildWarnings.map((warning) => (
-              <li key={warning} className="flex items-start gap-1.5">
-                <TriangleAlert aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
-                <span className="min-w-0">{warning}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {criticNotes.length > 0 ? (
-          <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-[12px] text-sky-200">
-            <p className="font-semibold">Critic notes (advisory)</p>
-            <ul className="mt-1 space-y-0.5">
-              {criticNotes.map((note) => (
-                <li
-                  key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}
-                  className="flex items-start gap-1.5"
-                >
-                  <Info aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
-                  <span className="min-w-0">{note.message}</span>
-                </li>
-              ))}
-            </ul>
+        {consoleTab === "workflow" ? (
+          <div role="tabpanel" id="studio-tabpanel-workflow" aria-labelledby="studio-tab-workflow">
+            <StudioWorkflowPanel
+              api={workflow}
+              slugs={Object.keys(sources)}
+              lessonOf={workflowLessonOf}
+              blockedReason={workflowBlockedReason}
+              phase={phase}
+            />
           </div>
         ) : null}
 
-        {receipts.length > 0 ? <ReceiptList receipts={receipts} /> : null}
+        {/* Kept mounted on the Workflow tab: the voice and AthanLab panels
+            report the narration the workflow renders with. */}
+        <div
+          role="tabpanel"
+          id="studio-tabpanel-render"
+          aria-labelledby="studio-tab-render"
+          hidden={consoleTab !== "render"}
+        >
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              value={planSlug}
+              disabled={busy}
+              onChange={(event) => selectLesson(event.target.value)}
+              aria-label="Lesson to render"
+              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            >
+              {Object.keys(sources)
+                .sort()
+                .map((slug) => (
+                  <option key={slug} value={slug}>
+                    {slug}
+                    {importedScripts[slug] ? " (imported)" : ""}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => importInputRef.current?.click()}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Import a LessonScript YAML (validated and critiqued here in the page)"
+            >
+              Import…
+              <HoverRing />
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".yaml,.yml"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) {
+                  void handleImportFile(file);
+                }
+              }}
+            />
+          </div>
 
-        {report ? <CheckList report={report} /> : null}
+          <div className="mt-2">
+            <select
+              value={provider}
+              disabled={
+                busy || studioCapabilitiesLoading || voiceTask.busy !== null || voiceTask.recording
+              }
+              onChange={(event) => {
+                if (isStudioNarrationProvider(event.target.value)) {
+                  chooseProvider(event.target.value);
+                }
+              }}
+              aria-label="Narration language and provider"
+              className="w-full rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            >
+              <option value="pocket">English · Pocket-TTS</option>
+              <option value="athanlab">မြန်မာ · AthanLab (your API key)</option>
+              {studioCapabilities.burmeseVoxCpm2 ? (
+                <option value="voxcpm2">မြန်မာ · VoxCPM2 (Modal)</option>
+              ) : null}
+            </select>
+          </div>
 
-        {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
+          {provider === "athanlab" ? (
+            <AthanLabPanel
+              userId={userId}
+              capabilityAvailable={studioCapabilities.athanlab}
+              capabilitiesLoading={authLoading || studioCapabilitiesLoading}
+              disabled={busy || voiceTask.busy !== null}
+              onVoiceChange={reportAthanLabVoice}
+              onReadyChange={reportAthanLabReadiness}
+            />
+          ) : null}
 
-        {comparison ? <RepeatabilityVerdict checks={comparison} /> : null}
+          <NarratorVoicePanel
+            provider={provider}
+            disabled={busy}
+            onSelectedVoiceChange={reportNarratorVoice}
+            onTaskChange={reportVoiceTask}
+            onError={setFatal}
+          />
+
+          <label
+            className={`mt-2 flex items-center gap-2 text-[12px] ${
+              isScreenSupported ? "text-slate-300" : "text-slate-500"
+            }`}
+            title={
+              isScreenSupported
+                ? 'Also capture this render as a screen recording — a video downloaded alongside the bundle (saved locally, never uploaded). You\'ll pick a screen or tab when the render starts. Narration is captured only when you share a browser tab with "share tab audio" on; sharing a screen or window records a silent video (saved as "…-silent").'
+                : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
+            }
+          >
+            <input
+              type="checkbox"
+              checked={screenRecordingEnabled && isScreenSupported}
+              disabled={busy || !isScreenSupported}
+              onChange={(event) =>
+                recordingSettingsStore.trigger.setScreenRecordingEnabled({
+                  enabled: event.target.checked,
+                })
+              }
+              className="size-3.5 accent-sky-500 disabled:opacity-50"
+            />
+            Screen recording
+            <span className="text-slate-400">
+              {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
+            </span>
+          </label>
+
+          <p className="mt-1 text-slate-400">
+            runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
+            {" · run #"}
+            {runHistory.length + (running ? 1 : 0) || 1}
+          </p>
+
+          {runtimeModeParam.invalid ? (
+            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+              Ignoring <span className="font-mono">runtime={runtimeModeParam.raw}</span> — expected{" "}
+              <span className="font-mono">fixture</span> or <span className="font-mono">live</span>.
+              Using the plan default (<span className="font-mono">{effectiveModeLabel}</span>).
+            </p>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void renderLesson(planSlug);
+              }}
+              disabled={
+                busy ||
+                voiceTask.busy !== null ||
+                voiceTask.recording ||
+                (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
+                startBlockedReason !== null
+              }
+              aria-describedby={
+                startBlockedReason && !running ? "studio-start-blocked-reason" : undefined
+              }
+              className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {runHistory.length === 0 ? "Start render" : "Render again"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadBundle}
+              disabled={!artifacts}
+              className="rounded-md bg-[#222d3b] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Download bundle
+            </button>
+            {report && !artifacts ? (
+              <button
+                type="button"
+                onClick={downloadReport}
+                className="rounded-md bg-[#3b2a22] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#efb28d] transition-colors hover:bg-[#4d382a]"
+              >
+                Download report
+              </button>
+            ) : null}
+            {artifacts ? (
+              <button
+                ref={draftButtonRef}
+                type="button"
+                onClick={() => setShowDraftModal(true)}
+                className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
+                title={`Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action.${
+                  activeRun ? ` ${describeDraftProvenance(activeRun)}` : ""
+                }`}
+              >
+                Create draft…
+              </button>
+            ) : null}
+          </div>
+
+          {/* Describes the disabled Start button. Not a live region: for AthanLab
+            it repeats the panel's own message, which would be announced twice. */}
+          {startBlockedReason && !running ? (
+            <p id="studio-start-blocked-reason" className="mt-2 text-[12px] text-amber-300">
+              {startBlockedReason}
+            </p>
+          ) : null}
+
+          {fatal ? (
+            <p
+              role="alert"
+              className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200"
+            >
+              {fatal}
+            </p>
+          ) : null}
+
+          {buildWarnings.length > 0 ? (
+            <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+              {buildWarnings.map((warning) => (
+                <li key={warning} className="flex items-start gap-1.5">
+                  <TriangleAlert aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
+                  <span className="min-w-0">{warning}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {criticNotes.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-[12px] text-sky-200">
+              <p className="font-semibold">Critic notes (advisory)</p>
+              <ul className="mt-1 space-y-0.5">
+                {criticNotes.map((note) => (
+                  <li
+                    key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}
+                    className="flex items-start gap-1.5"
+                  >
+                    <Info aria-hidden="true" className="mt-0.75 size-3.5 shrink-0" />
+                    <span className="min-w-0">{note.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {receipts.length > 0 ? <ReceiptList receipts={receipts} /> : null}
+
+          {report ? <CheckList report={report} /> : null}
+
+          {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
+
+          {comparison ? <RepeatabilityVerdict checks={comparison} /> : null}
+        </div>
       </div>
     </div>
   );

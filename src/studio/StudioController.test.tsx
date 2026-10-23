@@ -25,6 +25,7 @@ vi.mock("react-router", () => ({
 
 vi.mock("@next-editor/infra", () => ({
   invalidateAthanLabAccount: () => Promise.resolve(),
+  THUMBNAIL_ACCEPT: "image/png,image/jpeg",
   UploadLessonModal: ({ onClose }: { onClose: () => void }) => (
     <button type="button" onClick={onClose}>
       Close draft upload
@@ -138,6 +139,14 @@ vi.mock("./plans", () => {
     },
   };
 });
+
+// jsdom has no IndexedDB; the workflow's thumbnails live there.
+vi.mock("./workflow/workflowStorage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./workflow/workflowStorage")>()),
+  storeWorkflowThumbnails: () => Promise.resolve(),
+  loadWorkflowThumbnail: () => Promise.resolve(null),
+  clearWorkflowThumbnails: () => Promise.resolve(),
+}));
 
 const { default: StudioController } = await import("./StudioController");
 
@@ -253,6 +262,31 @@ describe("StudioController status messages", () => {
     await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: failed"));
     expect(screen.queryByText(/Bring this tab to the front/)).toBeNull();
     expect(document.title).toBe("Studio | Next Editor");
+  });
+
+  // Over the stage it covered code the performance pointed at, and it sat in
+  // every frame of the screen recording.
+  it("steps off the screen while the recorder runs, and comes back after it", async () => {
+    let finishPerform: () => void = () => {};
+    studio.runRender.mockImplementation((_plan, _mode, deps) => {
+      deps.onPhase?.("perform");
+      return new Promise((_resolve, reject) => {
+        finishPerform = () => {
+          deps.onPhase?.("qa");
+          reject(new Error("stopped by the test"));
+        };
+      });
+    });
+    renderController();
+    const panel = renderStatus().closest(".fixed");
+
+    fireEvent.click(startButton());
+    await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: perform"));
+    expect(panel).toHaveClass("invisible");
+
+    finishPerform();
+    await waitFor(() => expect(renderStatus()).toHaveTextContent("Render status: failed"));
+    expect(panel).not.toHaveClass("invisible");
   });
 
   it("keeps the collapse toggle's name constant while aria-expanded reports the state", () => {
@@ -517,6 +551,68 @@ describe("StudioController run history", () => {
     expect(handle?.runs[0]?.manifest).toBe(first.manifest);
     expect(handle?.runs[1]?.report).toBe(second.report);
     expect(handle?.comparison?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("StudioController workflow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+  });
+
+  function pickLesson(slug: string) {
+    fireEvent.click(screen.getByRole("tab", { name: "Workflow" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Filter lessons" }), {
+      target: { value: slug },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: slug }));
+  }
+
+  it("renders the picked lessons one after another and reports each one", async () => {
+    studio.runRender.mockResolvedValue({
+      report: {
+        planSlug: "english-script",
+        outcome: "passed",
+        checks: [],
+        errors: [],
+        receipts: [],
+      },
+      manifest: { planSlug: "english-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: null,
+      artifacts: {
+        neBlob: new Blob(),
+        audioBlob: new Blob(),
+        audioFileName: "a.ogg",
+        recording: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    // A fresh module: this render stays out of the other tests' run history.
+    renderController(await freshStudioController());
+    pickLesson("english-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
+
+    await waitFor(() => expect(screen.getByText("1/1 done")).toBeInTheDocument());
+    expect(screen.getByText("rendered")).toBeInTheDocument();
+    expect(studio.runRender).toHaveBeenCalledTimes(1);
+    expect(window.__NEXT_EDITOR_STUDIO__?.workflow?.state).toBe("finished");
+  });
+
+  it("refuses a lesson the chosen narration cannot speak before anything renders", () => {
+    renderController();
+    pickLesson("burmese-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
+
+    expect(screen.getByRole("alert").textContent).toMatch(/^burmese-script: /);
+    expect(studio.runRender).not.toHaveBeenCalled();
   });
 });
 
