@@ -19,6 +19,12 @@ export interface RecordingLoadSink extends RecordingStreamSink {
    * NARRATION_GATE_TIMEOUT_MS.
    */
   narrationGate?: () => Promise<void>;
+  /**
+   * Called once the lesson's external audio and camera have resolved: with the recording that
+   * carries them (the loaded one when nothing changed), or with why resolving failed. Never
+   * called once the sink is stale or `signal` has aborted.
+   */
+  mediaSettled?: (outcome: { recording: Recording } | { error: unknown }) => void;
 }
 
 // The longest the narration download waits for the sink's gate. The gate settles on its own
@@ -54,7 +60,7 @@ async function resolveExternalMedia(
   neUrl: string,
   signal: AbortSignal,
   sink: RecordingLoadSink,
-): Promise<void> {
+): Promise<Recording> {
   let current = recording;
   let handedOver = recording;
 
@@ -87,6 +93,7 @@ async function resolveExternalMedia(
   if (current !== handedOver && !sink.isStale()) {
     sink.extend(current);
   }
+  return current;
 }
 
 /**
@@ -147,8 +154,15 @@ export async function loadRecordingFromUrl(
     .catch(() => {});
 
   // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
-  resolveExternalMedia(loaded, url, signal, sink).catch((error: unknown) => {
-    // Leaving or replacing the lesson aborts these downloads; that is not a failure.
-    if (!signal.aborted) console.warn("Resolving the lesson's sibling media failed:", error);
-  });
+  resolveExternalMedia(loaded, url, signal, sink).then(
+    (recording) => {
+      if (!signal.aborted && !sink.isStale()) sink.mediaSettled?.({ recording });
+    },
+    (error: unknown) => {
+      // Leaving or replacing the lesson aborts these downloads; that is not a failure.
+      if (signal.aborted) return;
+      console.warn("Resolving the lesson's sibling media failed:", error);
+      if (!sink.isStale()) sink.mediaSettled?.({ error });
+    },
+  );
 }

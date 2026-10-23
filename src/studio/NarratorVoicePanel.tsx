@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Trash } from "lucide-react";
 import HoverRing from "../components/hoverRing/HoverRing";
 import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
+import NarratorLessonClipPicker from "./NarratorLessonClipPicker";
 import type { StudioNarrationProvider } from "./narrationLanguage";
 import {
   deleteCustomVoice,
@@ -15,13 +16,15 @@ import {
   type SavedCustomVoice,
   voxCpm2ReferenceTooShort,
 } from "./tts/customVoices";
+import { type LessonClip, saveLessonClipVoice } from "./tts/lessonVoiceClip";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { customVoiceProfileOf, modalVoxCpm2BurmeseProfileOf } from "./tts/profiles";
 
 /**
  * The narrator voice library inside the Studio render panel. Narrator
- * references live in this browser's IndexedDB: upload or record one, preview
+ * references live in this browser's IndexedDB: upload or record one, take a
+ * clip from one of the author's lessons (NarratorLessonClipPicker), preview
  * it, delete it, and pick the one a render narrates with. The selected sample
  * either clones Pocket-TTS locally or conditions Burmese VoxCPM2 through the
  * authenticated Worker at render time. AthanLab voices come from the user's
@@ -62,20 +65,22 @@ function messageOf(error: unknown): string {
 
 /**
  * Runs one voice task with `notice` shown as busy, reporting a failure through
- * `onError`. The try blocks of this panel live at module level so the
- * component compiles under the React Compiler.
+ * `onError`. Resolves whether the task succeeded. The try blocks of this panel
+ * live at module level so the component compiles under the React Compiler.
  */
 async function runVoiceTask(
   setBusy: (notice: string | null) => void,
   onError: (message: string) => void,
   notice: string,
   task: () => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
   setBusy(notice);
   try {
     await task();
+    return true;
   } catch (error) {
     onError(messageOf(error));
+    return false;
   } finally {
     setBusy(null);
   }
@@ -188,6 +193,12 @@ export default function NarratorVoicePanel({
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSelectRef = useRef<HTMLSelectElement | null>(null);
   const voiceTakeRef = useRef<VoiceTake | null>(null);
+  const [lessonPickerOpen, setLessonPickerOpen] = useState(false);
+  const lessonPickerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lessonPickerId = useId();
+  // Set when the picker closes: focus then returns to the button that opens it,
+  // once that button is enabled again (a saved clip closes it mid-task).
+  const returnFocusToLessonButtonRef = useRef(false);
   // True while a take waits for the microphone (the permission prompt or the
   // device opening). A Record click then does nothing, so it cannot start a
   // second take that Stop never reaches.
@@ -223,6 +234,13 @@ export default function NarratorVoicePanel({
     onTaskChange({ busy: voiceBusy, recording: voiceRecording });
   }, [voiceBusy, voiceRecording]);
 
+  // The picker's controls unmount with it; keep focus on the button that opens it.
+  useEffect(() => {
+    if (lessonPickerOpen || voiceBusy !== null || !returnFocusToLessonButtonRef.current) return;
+    returnFocusToLessonButtonRef.current = false;
+    lessonPickerButtonRef.current?.focus();
+  }, [lessonPickerOpen, voiceBusy]);
+
   const selectedVoiceIsBurmeseReady =
     selectedVoice !== null && isVoxCpm2ReferenceReady(selectedVoice);
   const requiredVoiceSeconds =
@@ -233,12 +251,31 @@ export default function NarratorVoicePanel({
     writeStoredPreference(VOICE_CHOICE_KEY, value);
   };
 
-  const saveVoiceFromAudio = (bytes: ArrayBuffer, suggestedName: string) =>
-    runVoiceTask(setVoiceBusy, onError, "Preparing the sample (24 kHz mono)…", async () => {
-      const voice = await prepareAndSaveVoice(bytes, suggestedName, provider);
+  /** Stores the voice `prepare` saves, then selects it. Resolves whether it was saved. */
+  const storeVoice = (notice: string, prepare: () => Promise<SavedCustomVoice>) =>
+    runVoiceTask(setVoiceBusy, onError, notice, async () => {
+      const voice = await prepare();
       setCustomVoices(await listCustomVoices());
       chooseVoice(voice.id);
     });
+
+  const saveVoiceFromAudio = (bytes: ArrayBuffer, suggestedName: string) =>
+    storeVoice("Preparing the sample (24 kHz mono)…", () =>
+      prepareAndSaveVoice(bytes, suggestedName, provider),
+    );
+
+  const closeLessonPicker = () => {
+    setLessonPickerOpen(false);
+    returnFocusToLessonButtonRef.current = true;
+  };
+
+  const saveLessonClip = (clip: LessonClip) => {
+    void storeVoice("Preparing the clip (24 kHz mono)…", () => saveLessonClipVoice(clip)).then(
+      (saved) => {
+        if (saved) closeLessonPicker();
+      },
+    );
+  };
 
   const handleVoiceFile = (file: File) => {
     void file
@@ -344,6 +381,19 @@ export default function NarratorVoicePanel({
             {voiceRecording ? "Stop" : "Record"}
             <HoverRing />
           </button>
+          <button
+            ref={lessonPickerButtonRef}
+            type="button"
+            disabled={disabled || voiceBusy !== null || voiceRecording}
+            onClick={() => setLessonPickerOpen((open) => !open)}
+            aria-expanded={lessonPickerOpen}
+            aria-controls={lessonPickerOpen ? lessonPickerId : undefined}
+            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Take a reference clip from one of your lessons"
+          >
+            Lesson…
+            <HoverRing />
+          </button>
           {selectedVoice ? (
             <>
               <button
@@ -391,6 +441,14 @@ export default function NarratorVoicePanel({
           />
         </div>
       )}
+      {provider !== "athanlab" && lessonPickerOpen ? (
+        <NarratorLessonClipPicker
+          id={lessonPickerId}
+          disabled={disabled || voiceBusy !== null || voiceRecording}
+          onUseClip={saveLessonClip}
+          onClose={closeLessonPicker}
+        />
+      ) : null}
       {/* Always mounted, so the voice-task notices it fills are announced. */}
       <div role="status">
         {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}

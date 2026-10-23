@@ -80,27 +80,53 @@ export function clampVoiceSamples(samples: Float32Array, sampleRate: number): Fl
 }
 
 /**
- * Decode any browser-supported audio (wav/mp3/webm/…) and resample it to the
- * pocket-tts reference format: 24 kHz mono float32.
+ * Decodes any browser-supported audio (wav/mp3/webm/ogg/…). At the device's
+ * rate by default; at `sampleRate` when one is given, which keeps a long
+ * lesson's narration to the size it is stored at.
  */
-export async function prepareVoiceSample(bytes: ArrayBuffer): Promise<Float32Array> {
+export async function decodeVoiceAudio(
+  bytes: ArrayBuffer,
+  sampleRate?: number,
+): Promise<AudioBuffer> {
+  if (sampleRate !== undefined) {
+    // An offline context decodes at its own rate and needs no closing.
+    return new OfflineAudioContext(1, 1, sampleRate).decodeAudioData(bytes.slice(0));
+  }
   const probe = new AudioContext();
-  let decoded: AudioBuffer;
   try {
-    decoded = await probe.decodeAudioData(bytes.slice(0));
+    return await probe.decodeAudioData(bytes.slice(0));
   } finally {
     await probe.close();
   }
+}
 
-  const targetLength = Math.ceil(decoded.duration * VOICE_SAMPLE_RATE);
+/**
+ * Renders `durationSeconds` of decoded audio from `startSeconds` (the whole
+ * buffer by default) to the reference format: VOICE_SAMPLE_RATE mono float32,
+ * channels mixed down. Not clamped to the sample bounds.
+ */
+export async function renderVoiceSamples(
+  decoded: AudioBuffer,
+  startSeconds = 0,
+  durationSeconds = decoded.duration - startSeconds,
+): Promise<Float32Array> {
+  const targetLength = Math.ceil(durationSeconds * VOICE_SAMPLE_RATE);
   const offline = new OfflineAudioContext(1, targetLength, VOICE_SAMPLE_RATE);
   const source = offline.createBufferSource();
   source.buffer = decoded;
   source.connect(offline.destination);
-  source.start();
+  source.start(0, startSeconds, durationSeconds);
   const rendered = await offline.startRendering();
+  return rendered.getChannelData(0);
+}
 
-  return clampVoiceSamples(rendered.getChannelData(0), VOICE_SAMPLE_RATE);
+/**
+ * Decode any browser-supported audio (wav/mp3/webm/…) and resample it to the
+ * pocket-tts reference format: 24 kHz mono float32.
+ */
+export async function prepareVoiceSample(bytes: ArrayBuffer): Promise<Float32Array> {
+  const decoded = await decodeVoiceAudio(bytes);
+  return clampVoiceSamples(await renderVoiceSamples(decoded), VOICE_SAMPLE_RATE);
 }
 
 export async function saveCustomVoice(

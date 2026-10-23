@@ -330,6 +330,52 @@ describe("loadRecordingFromUrl", () => {
       expect(fetchedUrls()).toEqual([LESSON_URL]);
     });
 
+    it("reports the recording that carries the narration once the media has settled", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      const mediaSettled = vi.fn<NonNullable<RecordingLoadSink["mediaSettled"]>>();
+      const sink = { ...createSink(), mediaSettled };
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+
+      await vi.waitFor(() => expect(mediaSettled).toHaveBeenCalledTimes(1));
+      const outcome = mediaSettled.mock.calls[0][0];
+      expect("recording" in outcome && outcome.recording.audioBlob).toBeInstanceOf(Blob);
+    });
+
+    it("reports a lesson without narration as settled too", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2));
+      vi.mocked(fetchNextEditorUrl).mockResolvedValue(streamedResponse(bytes));
+      const mediaSettled = vi.fn<NonNullable<RecordingLoadSink["mediaSettled"]>>();
+      const sink = { ...createSink(), mediaSettled };
+
+      await loadRecordingFromUrl(LESSON_URL, new AbortController().signal, sink);
+
+      await vi.waitFor(() => expect(mediaSettled).toHaveBeenCalledTimes(1));
+      const outcome = mediaSettled.mock.calls[0][0];
+      expect("recording" in outcome && outcome.recording.audioBlob).toBeUndefined();
+    });
+
+    it("reports nothing once the lesson is left", async () => {
+      const bytes = await encodeRecordingToStream(createRecording(2, narrated));
+      vi.mocked(fetchNextEditorUrl).mockImplementation(async (url) =>
+        url.endsWith(".ne") ? streamedResponse(bytes) : audioResponse(),
+      );
+      const { gate } = narrationGate();
+      const mediaSettled = vi.fn<NonNullable<RecordingLoadSink["mediaSettled"]>>();
+      const sink = { ...createSink(), narrationGate: gate, mediaSettled };
+      const controller = new AbortController();
+
+      await loadRecordingFromUrl(LESSON_URL, controller.signal, sink);
+      await settle();
+      controller.abort();
+      await settle();
+
+      expect(mediaSettled).not.toHaveBeenCalled();
+    });
+
     it("hands a camera fix over without waiting for the gate", async () => {
       const bytes = await encodeRecordingToStream(
         createRecording(2, { ...narrated, cameraFile: "renamed.webm" }),
