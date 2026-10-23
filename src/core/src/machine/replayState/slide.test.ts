@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
 import type { Slide, SlideEvent } from "../../slides";
-import { getSlideReplayResult } from "./slide";
+import { getSlideReplayResult, getSlideViewChangeIndex } from "./slide";
 
 const slides: Slide[] = [
   { id: "one", order: 0, content: "one", contentType: "html" },
@@ -308,6 +308,68 @@ describe("slide replay resync", () => {
           }
         },
       ),
+    );
+  });
+});
+
+describe("getSlideViewChangeIndex", () => {
+  it("marks opening, closing, maximizing and minimizing, not navigation", () => {
+    const events: SlideEvent[] = [
+      { type: "slide_open", timestamp: 0, slideId: "one", isMaximized: true },
+      { type: "slide_change", timestamp: 10, slideId: "two" },
+      // Opening a deck that is already open as it leaves it is navigation too.
+      { type: "slide_open", timestamp: 20, slideId: "one", isMaximized: true },
+      { type: "slide_minimize", timestamp: 30, slideId: "one" },
+      { type: "slide_interaction", timestamp: 40, slideId: "one" },
+      { type: "slide_close", timestamp: 50, slideId: "one" },
+    ];
+
+    expect(events.map((_, index) => getSlideViewChangeIndex(events, index))).toEqual([
+      0, 0, 0, 3, 3, 5,
+    ]);
+  });
+
+  it("changes exactly where the replayed deck is shown differently", () => {
+    const slideEvent = fc.record({
+      type: fc.constantFrom<SlideEvent["type"]>(
+        "slide_open",
+        "slide_close",
+        "slide_change",
+        "slide_maximize",
+        "slide_minimize",
+      ),
+      slideId: fc.constantFrom("one", "two"),
+      isMaximized: fc.option(fc.boolean(), { nil: undefined }),
+    });
+
+    fc.assert(
+      fc.property(fc.array(slideEvent, { minLength: 1, maxLength: 12 }), (records) => {
+        const events: SlideEvent[] = records.map((record, index) => ({
+          ...record,
+          timestamp: index * 10,
+        }));
+        const shownAt = (index: number) => {
+          const state = getSlideReplayResult({
+            slideEvents: events,
+            slides,
+            currentTime: index * 10,
+            lastAppliedIndex: -1,
+            isResync: true,
+          }).applications[0]!.slideState;
+          return `${state.isOpen}/${state.isMaximized}`;
+        };
+
+        const closed = "false/false";
+        events.forEach((_, index) => {
+          const changedAt = getSlideViewChangeIndex(events, index);
+          const before = changedAt > 0 ? shownAt(changedAt - 1) : closed;
+          const fromChange = changedAt >= 0 ? shownAt(changedAt) : closed;
+          // The deck is shown as the latest change left it (closed before any)...
+          expect(shownAt(index)).toBe(fromChange);
+          // ...and that change did change it.
+          expect(changedAt < 0 || fromChange !== before).toBe(true);
+        });
+      }),
     );
   });
 });

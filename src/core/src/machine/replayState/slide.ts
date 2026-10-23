@@ -1,6 +1,12 @@
-import type { Slide, SlideEvent, SlidePreviewState } from "../../slides";
+import {
+  isSlideViewEvent,
+  type Slide,
+  type SlideEvent,
+  type SlidePreviewState,
+} from "../../slides";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 import { isCursorAheadOf } from "./cursor";
+import { createViewChangeResolver } from "./viewChanges";
 
 // ============================================================================
 // Slide track replay.
@@ -21,18 +27,6 @@ export interface SlideReplayResult {
 }
 
 const SLIDE_VISIBILITY_EVENT_TYPES = new Set<SlideEvent["type"]>(["slide_open", "slide_close"]);
-
-const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
-  "slide_maximize",
-  "slide_minimize",
-]);
-
-/** An event that changes how the deck is shown: opened, closed, maximized or minimized. */
-function isViewEvent(event: SlideEvent): boolean {
-  return (
-    SLIDE_VISIBILITY_EVENT_TYPES.has(event.type) || SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type)
-  );
-}
 
 /** The vertical index a closed deck reports. */
 const CLOSED_DECK_INDEXV = 0;
@@ -94,7 +88,7 @@ function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): 
   const targetSlideId = slideEvent.slideId || lastPositionEvent?.slideId;
   const isOpen = lastVisibilityEvent?.type === "slide_open";
   const isMaximized =
-    isOpen && resolveMaximized(findLastEventAtOrBefore(slideEvents, eventIndex, isViewEvent));
+    isOpen && resolveMaximized(findLastEventAtOrBefore(slideEvents, eventIndex, isSlideViewEvent));
 
   let indexv: number | undefined;
   if (slideEvent.type === "slide_close") {
@@ -235,4 +229,33 @@ export function getSlideReplayResult({
     applications,
     nextIndex,
   };
+}
+
+/** How the deck is shown: the part of its state a viewer may change while a lesson plays. */
+export type SlidePanelView = Required<Pick<SlidePreviewState, "isOpen" | "isMaximized">>;
+
+/**
+ * The latest slide event at or before `index` that changed how the deck is shown, as
+ * `buildSlideStateAtEvent` shows it: opened or closed, maximized or minimized, or -1. A
+ * navigation, or a `slide_open` on a deck already open as it leaves it, is not a change.
+ */
+export const getSlideViewChangeIndex = createViewChangeResolver<SlideEvent, SlidePanelView>({
+  initial: { isOpen: false, isMaximized: false },
+  next: (view, event) => {
+    if (!isSlideViewEvent(event)) return view;
+    const isOpen = SLIDE_VISIBILITY_EVENT_TYPES.has(event.type)
+      ? event.type === "slide_open"
+      : view.isOpen;
+    return { isOpen, isMaximized: isOpen && resolveMaximized(event) };
+  },
+  isSameView: (left, right) =>
+    left.isOpen === right.isOpen && left.isMaximized === right.isMaximized,
+});
+
+/** A recorded deck state with the deck shown as `view` has it. */
+export function withSlideView(
+  slideState: SlidePreviewState,
+  view: SlidePanelView,
+): SlidePreviewState {
+  return { ...slideState, isOpen: view.isOpen, isMaximized: view.isMaximized };
 }

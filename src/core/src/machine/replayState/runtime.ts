@@ -1,6 +1,7 @@
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../runtime";
 import { resolveRuntimeSnapshotAt } from "../../runtimeTrack";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
+import { createViewChangeResolver } from "./viewChanges";
 
 // ============================================================================
 // Runtime track replay.
@@ -37,4 +38,30 @@ export function getRuntimeReplayResult({
   return {
     nextIndex,
   };
+}
+
+/**
+ * The latest runtime event at or before `index` that collapsed or expanded the dock, or -1.
+ * Every record, checkpoint or delta, stores the dock's state whole, so no fold is needed; a
+ * record without it (an older take) shows the dock expanded, as the dock does. An entry with
+ * neither a snapshot nor a delta changes nothing, as in resolveRuntimeSnapshotAt.
+ */
+export const getRuntimeDockViewChangeIndex = createViewChangeResolver<
+  RuntimeRecordingEvent,
+  boolean
+>({
+  initial: false,
+  next: (isCollapsed, event) => {
+    const record = event.snapshot ?? event.delta;
+    return record ? (record.isCollapsed ?? false) : isCollapsed;
+  },
+  isSameView: (left, right) => left === right,
+});
+
+/** A recorded runtime state with the dock collapsed or expanded as the viewer has it. */
+export function withRuntimeDockView(
+  snapshot: RuntimeRecordingSnapshot,
+  isCollapsed: boolean,
+): RuntimeRecordingSnapshot {
+  return (snapshot.isCollapsed ?? false) === isCollapsed ? snapshot : { ...snapshot, isCollapsed };
 }

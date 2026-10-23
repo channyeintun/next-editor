@@ -29,6 +29,12 @@ import { applyFrameAtTime, RENDERED_FRAME_RESET } from "./frameReplay";
 import { reportMachineError } from "./machineError";
 import { resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
 import {
+  showRuntimeDockForViewer,
+  showSlidesForViewer,
+  showWhiteboardForViewer,
+  VIEWER_PANEL_HOLDS_RESET,
+} from "./viewerPanels";
+import {
   RECORDING_TRACK_NAMES,
   type RecordingTrackName,
   type RecordingTracks,
@@ -162,6 +168,7 @@ export const setRecording = (
     recording,
     recordingStreamCursor: 0,
     hasManualWorkspaceOverride: false,
+    ...VIEWER_PANEL_HOLDS_RESET,
     learnerWorkspaceBaseline: null,
     pendingPlaybackEditorSync: false,
     playbackAudioSpawned: false,
@@ -466,6 +473,7 @@ export const invalidateRenderedPlaybackState = (): EditorContextUpdate => ({
 
 export const clearRecording = ({ context }: EditorActionArgs): EditorContextUpdate => ({
   hasManualWorkspaceOverride: false,
+  ...VIEWER_PANEL_HOLDS_RESET,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
   recording: null,
@@ -661,8 +669,14 @@ const applyRuntimeEventsAtTime = ({ context, event }: EditorActionArgs): EditorC
   });
 
   if (replayResult.snapshotToApply) {
-    applyRuntimeSnapshot(replayResult.snapshotToApply);
-    return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
+    const shown = showRuntimeDockForViewer(
+      context,
+      recording.runtimeEvents,
+      replayResult.nextIndex,
+      replayResult.snapshotToApply,
+    );
+    applyRuntimeSnapshot(shown.snapshot);
+    return { ...shown.update, lastAppliedRuntimeEventIndex: replayResult.nextIndex };
   }
 
   if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
@@ -733,15 +747,23 @@ const applyWhiteboardEventsAtTime = ({ context, event }: EditorActionArgs): Edit
     lastAppliedIndex: lastAppliedWhiteboardEventIndex,
   });
 
+  let update: EditorContextUpdate = {};
   if (replayResult.stateToApply) {
-    applyWhiteboardState(replayResult.stateToApply);
+    const shown = showWhiteboardForViewer(
+      context,
+      recording.whiteboardEvents,
+      replayResult.nextIndex,
+      replayResult.stateToApply,
+    );
+    applyWhiteboardState(shown.scene);
+    update = shown.update;
   }
 
   if (replayResult.nextIndex !== lastAppliedWhiteboardEventIndex) {
-    return { lastAppliedWhiteboardEventIndex: replayResult.nextIndex };
+    return { ...update, lastAppliedWhiteboardEventIndex: replayResult.nextIndex };
   }
 
-  return {};
+  return update;
 };
 
 const applySlideEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
@@ -759,17 +781,24 @@ const applySlideEventsAtTime = ({ context, event }: EditorActionArgs): EditorCon
     isResync: isReplayResync(event, lastAppliedSlideEventIndex),
   });
 
-  replayResult.applications.forEach((application) => {
+  const shown = showSlidesForViewer(
+    context,
+    recording.slideEvents,
+    replayResult.nextIndex,
+    replayResult.applications,
+  );
+  shown.applications.forEach((application) => {
     applySlideState(application.slideState, application.slideIndex);
   });
 
   if (replayResult.nextIndex !== lastAppliedSlideEventIndex) {
     return {
+      ...shown.update,
       lastAppliedSlideEventIndex: replayResult.nextIndex,
     };
   }
 
-  return {};
+  return shown.update;
 };
 
 /**

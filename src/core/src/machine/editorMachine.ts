@@ -93,6 +93,7 @@ import {
   setEditorRef,
 } from "./replayActions";
 import { clearCursorDecorations } from "./frameReplay";
+import { holdViewerPanelView } from "./viewerPanels";
 import {
   adoptPlaybackWorkspaceAtPause,
   captureLearnerWorkspaceBaseline,
@@ -343,6 +344,7 @@ export const editorMachine = setup({
     preserveLearnerWorkspace: enqueueActions(preserveLearnerWorkspace),
     applyLearnerWorkspace,
     resetPlayback: assign(resetPlayback),
+    holdViewerPanelView: assign(holdViewerPanelView),
     invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),
     detachPlaybackWorkspace: assign(detachPlaybackWorkspace),
     reattachPlaybackWorkspace: assign(reattachPlaybackWorkspace),
@@ -855,6 +857,11 @@ export const editorMachine = setup({
         },
         SET_VOLUME: {
           actions: ["setVolume", "syncPlaybackAudioVolume"],
+        },
+        // The viewer opened, closed, maximized or collapsed a replayed panel: it stays that
+        // way until the recording next changes how that panel is shown.
+        VIEWER_PANEL_VIEW_CHANGED: {
+          actions: "holdViewerPanelView",
         },
         // resetPlayback already returns the workspace to the recording, so there is no
         // reattach: the frame is applied here, without waiting for SET_EDITOR_REF.

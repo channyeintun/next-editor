@@ -7,6 +7,7 @@ import {
   type WhiteboardSceneState,
 } from "../../whiteboard";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
+import { createViewChangeResolver } from "./viewChanges";
 
 // ============================================================================
 // Whiteboard track replay.
@@ -251,4 +252,58 @@ export function getWhiteboardReplayResult({
     nextIndex,
     stateToApply: getWhiteboardSceneAt(whiteboardEvents, nextIndex),
   };
+}
+
+/** How the board is shown: the part of the scene a viewer may change while a lesson plays. */
+export type WhiteboardPanelView = Pick<WhiteboardSceneState, "isOpen" | "isMaximized">;
+
+const sameWhiteboardView = (left: WhiteboardPanelView, right: WhiteboardPanelView) =>
+  left.isOpen === right.isOpen && left.isMaximized === right.isMaximized;
+
+/**
+ * The latest whiteboard event at or before `index` that opened, closed, maximized or
+ * restored the board, or -1. An event carries `isOpen`/`isMaximized` only when it set them,
+ * and one that sets them to what they already were changes nothing.
+ */
+export const getWhiteboardViewChangeIndex = createViewChangeResolver<
+  WhiteboardEvent,
+  WhiteboardPanelView
+>({
+  initial: {
+    isOpen: EMPTY_WHITEBOARD_SCENE.isOpen,
+    isMaximized: EMPTY_WHITEBOARD_SCENE.isMaximized,
+  },
+  next: (view, event) =>
+    event.isOpen === undefined && event.isMaximized === undefined
+      ? view
+      : {
+          isOpen: event.isOpen ?? view.isOpen,
+          isMaximized: event.isMaximized ?? view.isMaximized,
+        },
+  isSameView: sameWhiteboardView,
+});
+
+const scenesShownTheViewersWay = new WeakMap<WhiteboardSceneState, WhiteboardSceneState>();
+
+/**
+ * `scene` with the board shown as `view` has it. The same object for the same scene and
+ * view, so a tick that re-applies an unchanged scene (the empty board before the first
+ * event is applied on every tick) still leaves the store alone.
+ */
+export function withWhiteboardView(
+  scene: WhiteboardSceneState,
+  view: WhiteboardPanelView,
+): WhiteboardSceneState {
+  if (sameWhiteboardView(scene, view)) {
+    return scene;
+  }
+
+  const shown = scenesShownTheViewersWay.get(scene);
+  if (shown && sameWhiteboardView(shown, view)) {
+    return shown;
+  }
+
+  const next = { ...scene, isOpen: view.isOpen, isMaximized: view.isMaximized };
+  scenesShownTheViewersWay.set(scene, next);
+  return next;
 }

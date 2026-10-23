@@ -38,6 +38,7 @@ import type {
   PreserveLearnerWorkspaceEvent,
   RestoreLearnerWorkspaceEvent,
 } from "./learnerWorkspace";
+import type { ViewerPanelHolds, ViewerPanelViewChangedEvent } from "./viewerPanels";
 import { createIdleAudioState, type AudioState } from "./audioCaptureActions";
 import { createIdleCameraState, type CameraState } from "./cameraCaptureActions";
 import { createIdleScreenState, type ScreenState } from "./screenCaptureActions";
@@ -309,6 +310,11 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   /** Whether manual workspace changes should suppress recorded workspace replay */
   hasManualWorkspaceOverride: boolean;
   /**
+   * The replayed panels the viewer has shown their own way (opened, closed, maximized,
+   * collapsed), each until the recording next changes how it is shown. See viewerPanels.ts.
+   */
+  viewerPanelHolds: ViewerPanelHolds;
+  /**
    * The recorded workspace as it was handed to the viewer — on pause and at the end —
    * or as they had it when their edits were last saved. Anything the viewer
    * changes after that is theirs, and is saved through `onLearnerWorkspaceSaved`
@@ -553,7 +559,8 @@ type PlaybackEvent =
   | SetVolumeEvent
   | TickEvent
   | FinishedEvent
-  | UserInteractionEvent;
+  | UserInteractionEvent
+  | ViewerPanelViewChangedEvent;
 
 /** Keeping and bringing back the viewer's own edits to a lesson. */
 type LearnerWorkspaceEvent =
@@ -690,6 +697,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
     error: null,
     hasManualWorkspaceOverride: false,
+    viewerPanelHolds: {},
     learnerWorkspaceBaseline: null,
     pendingPlaybackEditorSync: false,
     playbackAudioSpawned: false,

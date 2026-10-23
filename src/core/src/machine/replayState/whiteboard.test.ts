@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { getWhiteboardReplayResult } from "./whiteboard";
+import {
+  getWhiteboardReplayResult,
+  getWhiteboardViewChangeIndex,
+  withWhiteboardView,
+} from "./whiteboard";
 import {
   applyWhiteboardEvent,
   EMPTY_WHITEBOARD_SCENE,
@@ -163,5 +167,69 @@ describe("whiteboard replay", () => {
         }).stateToApply?.elements.map((e) => e.id),
       ).toEqual(foldDirectly(events, index).elements.map((e) => e.id));
     }
+  });
+});
+
+describe("getWhiteboardViewChangeIndex", () => {
+  it("marks where the board was opened, closed, maximized or restored, not where it was drawn on", () => {
+    const events: WhiteboardEvent[] = [
+      { timestamp: 0, upserts: [element("a")] },
+      { timestamp: 10, isOpen: true },
+      { timestamp: 20, upserts: [element("b")] },
+      { timestamp: 30, isMaximized: true },
+      { timestamp: 40, view: { scrollX: 5, scrollY: 0, zoom: 1 } },
+      { timestamp: 50, isOpen: false },
+    ];
+
+    expect(events.map((_, index) => getWhiteboardViewChangeIndex(events, index))).toEqual([
+      -1, 1, 1, 3, 3, 5,
+    ]);
+    expect(getWhiteboardViewChangeIndex(events, -1)).toBe(-1);
+  });
+
+  it("does not count an event that sets the view it already had", () => {
+    const events: WhiteboardEvent[] = [
+      { timestamp: 0, isOpen: true },
+      { timestamp: 10, isOpen: true, upserts: [element("a")] },
+      { timestamp: 20, isMaximized: false },
+    ];
+
+    expect(getWhiteboardViewChangeIndex(events, 2)).toBe(0);
+  });
+
+  it("keeps up with a track that streams in", () => {
+    const events: WhiteboardEvent[] = [{ timestamp: 0, isOpen: true }];
+    expect(getWhiteboardViewChangeIndex(events, 0)).toBe(0);
+
+    events.push({ timestamp: 10, upserts: [element("a")] }, { timestamp: 20, isOpen: false });
+
+    expect(getWhiteboardViewChangeIndex(events, 1)).toBe(0);
+    expect(getWhiteboardViewChangeIndex(events, 2)).toBe(2);
+  });
+});
+
+describe("withWhiteboardView", () => {
+  it("shows a scene the way the viewer has the board, keeping its content", () => {
+    const scene = applyWhiteboardEvent(EMPTY_WHITEBOARD_SCENE, {
+      timestamp: 0,
+      upserts: [element("a")],
+      isOpen: true,
+    });
+
+    const shown = withWhiteboardView(scene, { isOpen: false, isMaximized: true });
+
+    expect(shown).toEqual({ ...scene, isOpen: false, isMaximized: true });
+    expect(shown.elements).toBe(scene.elements);
+    expect(scene.isOpen).toBe(true);
+  });
+
+  it("returns the same object for the same scene and view, so re-applying it is free", () => {
+    const view = { isOpen: true, isMaximized: false };
+    const shown = withWhiteboardView(EMPTY_WHITEBOARD_SCENE, view);
+
+    expect(withWhiteboardView(EMPTY_WHITEBOARD_SCENE, view)).toBe(shown);
+    expect(withWhiteboardView(EMPTY_WHITEBOARD_SCENE, EMPTY_WHITEBOARD_SCENE)).toBe(
+      EMPTY_WHITEBOARD_SCENE,
+    );
   });
 });

@@ -8,6 +8,7 @@
 //   * slide.ts     — slide deck state
 //   * whiteboard.ts — whiteboard scene state
 //   * chat.ts      — coding-agent chat transcript
+//   * viewChanges.ts — where a track last changed how its panel is shown
 //
 // Re-exported here so callers keep importing from "replayState" unchanged.
 
@@ -19,7 +20,22 @@ export {
   resolveWorkspaceSnapshotBetween,
   withReplayedSidebarPreference,
 } from "./workspace";
-export { getRuntimeReplayResult } from "./runtime";
+export {
+  getRuntimeDockViewChangeIndex,
+  getRuntimeReplayResult,
+  withRuntimeDockView,
+} from "./runtime";
 export { EMPTY_CHAT_CHECKPOINT, getChatReplayResult } from "./chat";
-export { getSlideReplayResult } from "./slide";
-export { getWhiteboardReplayResult } from "./whiteboard";
+export {
+  getSlideReplayResult,
+  getSlideViewChangeIndex,
+  withSlideView,
+  type SlidePanelView,
+  type SlideReplayApplication,
+} from "./slide";
+export {
+  getWhiteboardReplayResult,
+  getWhiteboardViewChangeIndex,
+  withWhiteboardView,
+  type WhiteboardPanelView,
+} from "./whiteboard";

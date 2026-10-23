@@ -19,6 +19,7 @@ import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "./workspa
 import { isAtPlaybackEnd } from "./machine/playbackValues";
 import { usePlaybackInteractionPause } from "./machine/playbackInteraction";
 import type { RecordingClock } from "./machine/recordingClock";
+import type { ViewerPanel } from "./machine/viewerPanels";
 
 // ============================================================================
 // Type for machine snapshot
@@ -257,6 +258,10 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "CHAT_EVENT", event });
   };
 
+  const handleViewerPanelViewChange = (panel: ViewerPanel) => {
+    actorRef.send({ type: "VIEWER_PANEL_VIEW_CHANGED", panel });
+  };
+
   return {
     startRecording,
     stopRecording,
@@ -298,6 +303,11 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     handleRuntimeEvent,
     handleWhiteboardEvent,
     handleChatEvent,
+    /**
+     * The viewer changed how a replayed panel is shown, after showing it: during playback it
+     * holds until the recording next changes that panel's view (machine/viewerPanels.ts).
+     */
+    handleViewerPanelViewChange,
   };
 };
 

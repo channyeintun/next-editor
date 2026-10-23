@@ -75,6 +75,7 @@ function makeActionsMock(): NextEditorActions {
     handleRuntimeEvent: vi.fn(),
     handleWhiteboardEvent: vi.fn(),
     handleChatEvent: vi.fn(),
+    handleViewerPanelViewChange: vi.fn(),
     exportAsFile: vi.fn(),
     importFromFile: vi.fn(),
   };

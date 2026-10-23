@@ -107,3 +107,13 @@ export interface SlideEvent {
   indexv?: number;
   interaction?: IframeInteractionEvent;
 }
+
+/** A slide event that changes how the deck is shown: opened, closed, maximized or minimized. */
+export function isSlideViewEvent(event: Pick<SlideEvent, "type">): boolean {
+  return (
+    event.type === "slide_open" ||
+    event.type === "slide_close" ||
+    event.type === "slide_maximize" ||
+    event.type === "slide_minimize"
+  );
+}
