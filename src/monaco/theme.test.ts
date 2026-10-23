@@ -14,4 +14,14 @@ describe("getEditorOptions", () => {
     // worker's symbol outline.
     expect(options.stickyScroll).toEqual({ defaultModel: "indentationModel" });
   });
+
+  it("pins the text grid every lesson was recorded on", () => {
+    const options = getEditorOptions(false);
+
+    // Recorded pointer samples are pixel offsets over this grid. Leaving the
+    // line height to Monaco would give 19px instead of 21px off macOS.
+    expect(options.fontFamily).toBe('"Source Code Pro", "Noto Sans Myanmar"');
+    expect(options.fontSize).toBe(14);
+    expect(options.lineHeight).toBe(21);
+  });
 });

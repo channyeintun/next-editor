@@ -1,4 +1,5 @@
 import type { Monaco } from "./runtime";
+import { EDITOR_FONT_FAMILY, EDITOR_FONT_SIZE, EDITOR_LINE_HEIGHT } from "./editorFont";
 
 export const NEXT_EDITOR_MONACO_THEME = "next-editor-dark";
 
@@ -148,7 +149,10 @@ export function defineNextEditorTheme(monaco: Monaco) {
 
 const EDITOR_OPTIONS = {
   minimap: { enabled: false },
-  fontSize: 14,
+  // The text grid recordings are made on (see editorFont.ts).
+  fontFamily: EDITOR_FONT_FAMILY,
+  fontSize: EDITOR_FONT_SIZE,
+  lineHeight: EDITOR_LINE_HEIGHT,
   lineNumbers: "on" as const,
   roundedSelection: false,
   scrollBeyondLastLine: true,
@@ -178,7 +182,6 @@ const EDITOR_OPTIONS = {
   occurrencesHighlight: "off" as const,
   selectionHighlight: true,
   renderLineHighlight: "line" as const,
-  fontFamily: "Source Code Pro",
   fontLigatures: false,
   wrappingIndent: "same" as const,
   dragAndDrop: false,
