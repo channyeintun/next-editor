@@ -13,7 +13,7 @@ interface WhiteboardProviderProps {
 }
 
 export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
-  const { handleWhiteboardEvent } = useNextEditorActions();
+  const { handleWhiteboardEvent, handleViewerPanelViewChange } = useNextEditorActions();
   const { usesPlaybackModel, isInPlaybackSession, isPlaying, currentRecording } =
     useNextEditorMetadata();
   const { store } = useWhiteboardStore();
@@ -21,6 +21,12 @@ export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
   useWhiteboardPanelPrefetch(currentRecording, isPlaying);
 
   const handleEvent = (event: WhiteboardEvent) => {
+    // The board was opened, closed, maximized or restored, and the store already shows it.
+    // During a replay that is the viewer's view, which the replay keeps until the recording
+    // next changes it; outside playback the machine ignores it.
+    if (event.isOpen !== undefined || event.isMaximized !== undefined) {
+      handleViewerPanelViewChange("whiteboard");
+    }
     const hasSharedDelta = Boolean(event.upserts?.length || event.removedIds?.length);
     if (collaboration?.provider && collaboration.teaching.initialized && hasSharedDelta) {
       const accepted = collaboration.publishWhiteboardDelta({

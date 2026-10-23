@@ -9,6 +9,7 @@ type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 const mocks = vi.hoisted(() => ({
   publishWhiteboardDelta: vi.fn<CollaborationContextValue["publishWhiteboardDelta"]>(),
   recordWhiteboardEvent: vi.fn<NextEditorActions["handleWhiteboardEvent"]>(),
+  holdViewerPanelView: vi.fn<NextEditorActions["handleViewerPanelViewChange"]>(),
 }));
 
 let whiteboardStore: WhiteboardStoreInstance;
@@ -19,7 +20,10 @@ vi.mock("./WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store: whiteboardStore }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorActions: () => ({ handleWhiteboardEvent: mocks.recordWhiteboardEvent }),
+  useNextEditorActions: () => ({
+    handleWhiteboardEvent: mocks.recordWhiteboardEvent,
+    handleViewerPanelViewChange: mocks.holdViewerPanelView,
+  }),
   useNextEditorMetadata: () => metadata,
 }));
 vi.mock("./CollaborationContext", () => ({
@@ -123,5 +127,51 @@ describe("WhiteboardContext playback viewer view", () => {
     };
     rerender();
     expect(whiteboardStore.getSnapshot().context.playbackViewerView).toBeNull();
+  });
+});
+
+describe("WhiteboardContext viewer panel view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    whiteboardStore = createWhiteboardStore();
+    collaborationState = {};
+    metadata = { usesPlaybackModel: true, isInPlaybackSession: true };
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("reports opening, closing and maximizing the board after the store shows it", () => {
+    const { result } = renderHook(() => useWhiteboardContext(), {
+      wrapper: WhiteboardProvider,
+    });
+    mocks.holdViewerPanelView.mockImplementation(() => {
+      // The machine reads the view back from the store, so it must already be there.
+      expect(whiteboardStore.getSnapshot().context.scene.isOpen).toBe(true);
+    });
+
+    act(() => result.current.setOpen(true));
+    act(() => result.current.setMaximized(true));
+
+    expect(mocks.holdViewerPanelView).toHaveBeenCalledTimes(2);
+    expect(mocks.holdViewerPanelView).toHaveBeenCalledWith("whiteboard");
+  });
+
+  it("does not report a drawing or a pan", () => {
+    const { result } = renderHook(() => useWhiteboardContext(), {
+      wrapper: WhiteboardProvider,
+    });
+
+    act(() => {
+      result.current.handleExcalidrawChange(
+        [element("stroke")],
+        { scrollX: 10, scrollY: 0, zoom: 1 },
+        false,
+      );
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(mocks.recordWhiteboardEvent).toHaveBeenCalled();
+    expect(mocks.holdViewerPanelView).not.toHaveBeenCalled();
   });
 });
