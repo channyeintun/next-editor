@@ -2,6 +2,7 @@
 // theme, and TypeScript defaults before any raw editor instance is created.
 import * as monaco from "monaco-editor/editor";
 import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme } from "./theme";
+import { loadEditorFonts } from "./editorFont";
 import { configureMonacoTypeScript } from "./typescriptDefaults";
 import { disableUnseenLanguageFeatures } from "./languageServiceModes";
 import { registerKiteLanguage } from "./kiteLanguage";
@@ -102,6 +103,8 @@ function ensureMonacoRuntimeInitialized() {
   defineNextEditorTheme(monaco);
   // Activate immediately so the first editor never paints Monaco's default theme.
   monaco.editor.setTheme(NEXT_EDITOR_MONACO_THEME);
+  // Starts the editor fonts loading before the first editor exists.
+  void loadEditorFonts(monaco);
   configureMonacoTypeScript();
   // Has to run before any model exists (see languageServiceModes.ts).
   disableUnseenLanguageFeatures({
