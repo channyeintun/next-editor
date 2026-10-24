@@ -1267,7 +1267,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ keyframe animation တွေကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ အချိန်ကနေ နေရာဘက်
       ကူးပြီး၊ element တစ်ခုကို တခြား element တစ်ခုရဲ့ ဘေးမှာ CSS သက်သက်နဲ့ ကပ်ထားကြည့်ပါမယ်။
-      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-old]] ဥပမာ၊ ခလုတ် တစ်ခုရဲ့ ဘေးမှာ ကပ်ပေါ်ရမယ့် label သေးသေး ဒါမှမဟုတ် menu တစ်ခုကို
       စဉ်းစားကြည့်ပါ။ မကြာသေးခင်အထိ JavaScript library တစ်ခုက ခလုတ် ဘယ်မှာ ရှိလဲ တိုင်းပြီး၊ label ကို
       အဲဒီ ဘေးကို ရွှေ့ပေးရပါတယ်။ [[mark:draw-old-cost]] ပြီးတော့ scroll လုပ်တိုင်း၊ resize ဖြစ်တိုင်း
