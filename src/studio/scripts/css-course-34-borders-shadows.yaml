@@ -1144,7 +1144,7 @@ scenes:
       ပြီးခဲ့တဲ့ lesson မှာ box ရဲ့ content နောက်က နောက်ခံ အရောင်နဲ့ ပုံတွေကို
       ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ box ရဲ့ အစွန်းကို ကြည့်ပြီး၊ border ကို အရင်၊
       အရိပ်တွေကို နောက်မှ ကြည့်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board
-      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-box]] lesson 2 မှာ ကြည့်ခဲ့တဲ့ box
+      နောက်မှာ dev server ကို စ နေပါပြီ။ [[mark:draw-box]] lesson 2 မှာ ကြည့်ခဲ့တဲ့ box
       model ကို ပြန်စဉ်းစားကြည့်ပါ။ border ဆိုတာ box ကို ပတ်ထားတဲ့ ဘောင်ပါ။
       [[mark:draw-layers]] သူက padding ရဲ့ အပြင်ဘက်၊ margin ရဲ့ အတွင်းဘက်မှာ ရှိပါတယ်။ box
       sizing က border box ဖြစ်လို့၊ border ထူလာရင် ပေးထားတဲ့ အကျယ်ထက် မကြီးဘဲ content နေရာ
