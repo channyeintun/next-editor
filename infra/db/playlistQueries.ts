@@ -327,6 +327,83 @@ export async function addLessonToPlaylist(
   return { status: "ok" };
 }
 
+/** The most lessons one bulk add takes; a course is tens of lessons. */
+export const MAX_LESSONS_PER_ADD = 200;
+
+/** D1 binds at most 100 parameters per statement; one is the owner id. */
+const LESSON_ID_CHUNK = 90;
+
+export type AddLessonsResult =
+  | {
+      status: "ok";
+      /** Added, at the end of the playlist, in the order they were given. */
+      added: string[];
+      /** Already members; left where they are. */
+      alreadyAdded: string[];
+      /** Not one of the owner's published lessons. */
+      notEligible: string[];
+    }
+  | { status: "not_found" };
+
+// The bulk form of addLessonToPlaylist, so a whole course goes in with one
+// request: the same ownership and published checks, then one atomic batch that
+// appends every new member in the given order. A lesson that is already a
+// member (including one a concurrent add landed after the reads) is skipped,
+// not an error, so retrying a partly applied add is safe.
+export async function addLessonsToPlaylist(
+  db: D1Database,
+  playlistId: string,
+  ownerId: string,
+  lessonIds: readonly string[],
+): Promise<AddLessonsResult> {
+  if (!(await ownsPlaylist(db, playlistId, ownerId))) return { status: "not_found" };
+
+  const requested = [...new Set(lessonIds)];
+  const eligible = new Set<string>();
+  for (let start = 0; start < requested.length; start += LESSON_ID_CHUNK) {
+    const chunk = requested.slice(start, start + LESSON_ID_CHUNK);
+    const rows = await db
+      .prepare(
+        `SELECT id FROM lessons
+         WHERE owner_id = ? AND status = 'published' AND id IN (${chunk.map(() => "?").join(", ")})`,
+      )
+      .bind(ownerId, ...chunk)
+      .all<{ id: string }>();
+    for (const row of rows.results ?? []) eligible.add(row.id);
+  }
+  const membersResult = await db
+    .prepare("SELECT lesson_id FROM playlist_lessons WHERE playlist_id = ?")
+    .bind(playlistId)
+    .all<{ lesson_id: string }>();
+  const members = new Set((membersResult.results ?? []).map((row) => row.lesson_id));
+
+  const toAdd = requested.filter((id) => eligible.has(id) && !members.has(id));
+  const alreadyAdded = requested.filter((id) => eligible.has(id) && members.has(id));
+  const notEligible = requested.filter((id) => !eligible.has(id));
+  if (toAdd.length === 0) return { status: "ok", added: [], alreadyAdded, notEligible };
+
+  const now = Date.now();
+  // Each INSERT takes the position after the previous one's, in batch order.
+  const results = await db.batch([
+    ...toAdd.map((lessonId) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO playlist_lessons (playlist_id, lesson_id, position, added_at)
+           VALUES (?, ?, COALESCE((SELECT MAX(position) + 1 FROM playlist_lessons WHERE playlist_id = ?), 0), ?)`,
+        )
+        .bind(playlistId, lessonId, playlistId, now),
+    ),
+    db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId),
+  ]);
+  const added = toAdd.filter((_, index) => (results[index].meta.changes ?? 0) > 0);
+  return {
+    status: "ok",
+    added,
+    alreadyAdded: [...alreadyAdded, ...toAdd.filter((id) => !added.includes(id))],
+    notEligible,
+  };
+}
+
 /** Removes the membership; whether a row was removed. */
 export async function removeLessonFromPlaylist(
   db: D1Database,

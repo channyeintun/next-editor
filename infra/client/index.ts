@@ -47,10 +47,12 @@ export {
   useUpdatePlaylist,
   useDeletePlaylist,
   useAddLessonToPlaylist,
+  useAddLessonsToPlaylist,
   useRemoveLessonFromPlaylist,
   useReorderPlaylistLessons,
 } from "./playlists/usePlaylists";
 export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
+export type { AddLessonsOutcome } from "./playlists/playlistsApi";
 export { THUMBNAIL_ACCEPT } from "./upload/thumbnailConstraints";
 export { prepareThumbnail } from "./upload/prepareThumbnail";
 // The upload modal's two calls, for the studio workflow that drafts and

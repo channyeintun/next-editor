@@ -3,6 +3,8 @@ import type { Env } from "../env";
 import { readJsonWithLimit } from "../httpBody";
 import {
   addLessonToPlaylist,
+  addLessonsToPlaylist,
+  MAX_LESSONS_PER_ADD,
   deletePlaylist,
   getOwnedPlaylistById,
   getOwnedPlaylistLessons,
@@ -176,6 +178,7 @@ playlistsRoute.delete("/:id", requireUser, async (c) => {
 
 interface AddLessonBody {
   lessonId?: unknown;
+  lessonIds?: unknown;
 }
 
 playlistsRoute.post("/:id/lessons", requireUser, async (c) => {
@@ -186,6 +189,31 @@ playlistsRoute.post("/:id/lessons", requireUser, async (c) => {
     return c.json({ error: "request body is too large" }, 413);
   }
   const body = read.status === "ok" ? (read.value as AddLessonBody | null) : null;
+
+  // The bulk form, for adding a whole course at once.
+  if (body && body.lessonIds !== undefined) {
+    const lessonIds = body.lessonIds;
+    if (
+      !Array.isArray(lessonIds) ||
+      lessonIds.length === 0 ||
+      lessonIds.length > MAX_LESSONS_PER_ADD ||
+      !lessonIds.every((id) => typeof id === "string" && id)
+    ) {
+      return c.json({ error: `lessonIds must be 1 to ${MAX_LESSONS_PER_ADD} lesson ids` }, 400);
+    }
+    const result = await addLessonsToPlaylist(
+      c.env.DB,
+      c.req.param("id"),
+      user.id,
+      lessonIds as string[],
+    );
+    if (result.status === "not_found") {
+      return c.json({ error: "not found" }, 404);
+    }
+    const { added, alreadyAdded, notEligible } = result;
+    return c.json({ added, alreadyAdded, notEligible }, added.length > 0 ? 201 : 200);
+  }
+
   if (!body || typeof body.lessonId !== "string" || !body.lessonId) {
     return c.json({ error: "lessonId is required" }, 400);
   }

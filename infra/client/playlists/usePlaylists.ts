@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { playlistKeys } from "../../lessons/queryKeys";
 import {
   addLessonToPlaylist,
+  addLessonsToPlaylist,
   createPlaylist,
   deletePlaylist,
   fetchMyPlaylists,
@@ -85,6 +86,12 @@ export function useDeletePlaylist() {
 export function useAddLessonToPlaylist() {
   return useMyPlaylistsMutation((params: { playlistId: string; lessonId: string }) =>
     addLessonToPlaylist(params.playlistId, params.lessonId),
+  );
+}
+
+export function useAddLessonsToPlaylist() {
+  return useMyPlaylistsMutation((params: { playlistId: string; lessonIds: string[] }) =>
+    addLessonsToPlaylist(params.playlistId, params.lessonIds),
   );
 }
 

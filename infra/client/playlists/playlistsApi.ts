@@ -49,6 +49,25 @@ export async function addLessonToPlaylist(playlistId: string, lessonId: string):
   await apiClient.post(`/playlists/${playlistId}/lessons`, { lessonId });
 }
 
+/** What a bulk add did with each lesson id it was given. */
+export interface AddLessonsOutcome {
+  added: string[];
+  alreadyAdded: string[];
+  notEligible: string[];
+}
+
+// Adds many lessons in one request, appended in the given order. Lessons
+// already in the playlist are skipped rather than failing the request.
+export async function addLessonsToPlaylist(
+  playlistId: string,
+  lessonIds: string[],
+): Promise<AddLessonsOutcome> {
+  const res = await apiClient.post<AddLessonsOutcome>(`/playlists/${playlistId}/lessons`, {
+    lessonIds,
+  });
+  return res.data;
+}
+
 export async function removeLessonFromPlaylist(
   playlistId: string,
   lessonId: string,

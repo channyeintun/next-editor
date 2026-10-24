@@ -3,6 +3,7 @@ import { playlistsRoute } from "./playlists";
 import { getCurrentUser } from "../auth/session";
 import {
   addLessonToPlaylist,
+  addLessonsToPlaylist,
   deletePlaylist,
   getPlaylistBySlug,
   insertPlaylist,
@@ -20,6 +21,8 @@ vi.mock("../../db/playlistQueries", () => ({
   updatePlaylist: vi.fn<() => Promise<PlaylistRow | null>>(async () => null),
   deletePlaylist: vi.fn<() => Promise<boolean>>(),
   addLessonToPlaylist: vi.fn<() => Promise<unknown>>(),
+  addLessonsToPlaylist: vi.fn<() => Promise<unknown>>(),
+  MAX_LESSONS_PER_ADD: 200,
   getPlaylistBySlug: vi.fn<() => Promise<PlaylistWithLessons | null>>(),
 }));
 
@@ -124,6 +127,50 @@ describe("playlistsRoute mutations", () => {
     const response = await send("POST", "/playlist-1/lessons", { lessonId: "lesson-1" });
 
     expect(response.status).toBe(201);
+  });
+
+  it("adds a list of lessons in one request and says what happened to each", async () => {
+    vi.mocked(addLessonsToPlaylist).mockResolvedValue({
+      status: "ok",
+      added: ["lesson-1"],
+      alreadyAdded: ["lesson-2"],
+      notEligible: [],
+    });
+
+    const response = await send("POST", "/playlist-1/lessons", {
+      lessonIds: ["lesson-1", "lesson-2"],
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      added: ["lesson-1"],
+      alreadyAdded: ["lesson-2"],
+      notEligible: [],
+    });
+    expect(addLessonsToPlaylist).toHaveBeenCalledWith(expect.anything(), "playlist-1", "user-1", [
+      "lesson-1",
+      "lesson-2",
+    ]);
+  });
+
+  it.each([
+    ["an empty list", []],
+    ["a list over the limit", Array.from({ length: 201 }, (_, index) => `l-${index}`)],
+    ["a non-string id", ["lesson-1", 7]],
+    ["an empty id", ["lesson-1", ""]],
+  ])("refuses %s", async (_label, lessonIds) => {
+    const response = await send("POST", "/playlist-1/lessons", { lessonIds });
+
+    expect(response.status).toBe(400);
+    expect(addLessonsToPlaylist).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a bulk add to a playlist the caller does not own", async () => {
+    vi.mocked(addLessonsToPlaylist).mockResolvedValue({ status: "not_found" });
+
+    const response = await send("POST", "/playlist-1/lessons", { lessonIds: ["lesson-1"] });
+
+    expect(response.status).toBe(404);
   });
 });
 
