@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useModalFocus } from "@app/hooks/useModalFocus";
+import { isImeComposingKey } from "@app/utils/keyboardPlatform";
 import LangText from "@app/components/LangText";
 import HoverRing from "@app/components/hoverRing/HoverRing";
 import {
@@ -70,10 +71,12 @@ export default function PlaylistManagePanel({
   const orderedMembers = orderMembers(members ?? [], localOrder);
 
   // Still closes on Escape when focus has fallen to <body> (a removed row's
-  // button unmounts), where the card's own handler above cannot hear it.
+  // button unmounts), where the card's own handler above cannot hear it — but
+  // not on the Escape that cancels an IME composition in the filter box, which
+  // the card's handler lets through on purpose.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !isImeComposingKey(e)) onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -106,6 +109,9 @@ export default function PlaylistManagePanel({
     removeLesson.mutate(
       { playlistId: playlist.id, lessonId },
       {
+        // Out of the local order too: added back later, the server puts it at
+        // the end, and the list must not show it in its old place.
+        onSuccess: () => setLocalOrder((order) => order?.filter((id) => id !== lessonId) ?? null),
         onSettled: () => setRemovingLessonId(null),
         onError: () => setActionError("Couldn't remove that lesson — try again."),
       },
@@ -460,9 +466,12 @@ function AddLessons({
 
   if (isPending) return <p className="text-xs text-slate-400">Loading…</p>;
   if (candidates.length === 0) {
+    const anyPublished = (myLessons ?? []).some((lesson) => lesson.status === "published");
     return (
       <p className="text-xs text-slate-400">
-        Every one of your published lessons is already in this playlist.
+        {anyPublished
+          ? "Every one of your published lessons is already in this playlist."
+          : "You have no published lessons yet. Publish a lesson to add it to a playlist."}
       </p>
     );
   }

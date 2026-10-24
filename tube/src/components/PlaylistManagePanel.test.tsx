@@ -15,6 +15,16 @@ const removeLesson = vi.hoisted(() =>
 const saveOrder = vi.hoisted(() =>
   vi.fn<(playlistId: string, lessonIds: string[]) => Promise<void>>(),
 );
+const library = vi.hoisted(() => ({
+  lessons: [] as Array<{ id: string; title: string; status: string }>,
+}));
+const LIBRARY = [
+  { id: "l1", title: "Intro", status: "published" },
+  { id: "c11", title: "CSS course 11: Variables", status: "published" },
+  { id: "c3", title: "CSS course 3: Selectors", status: "published" },
+  { id: "draft", title: "CSS course 12: Draft", status: "draft" },
+  { id: "rust", title: "Rust: Ownership", status: "published" },
+];
 const addLessons = vi.hoisted(() =>
   vi.fn<(variables: { playlistId: string; lessonIds: string[] }, options?: AddOptions) => void>(),
 );
@@ -29,16 +39,7 @@ vi.mock("@next-editor/infra", () => ({
     ],
     isPending: false,
   }),
-  useMyLessons: () => ({
-    data: [
-      { id: "l1", title: "Intro", status: "published" },
-      { id: "c11", title: "CSS course 11: Variables", status: "published" },
-      { id: "c3", title: "CSS course 3: Selectors", status: "published" },
-      { id: "draft", title: "CSS course 12: Draft", status: "draft" },
-      { id: "rust", title: "Rust: Ownership", status: "published" },
-    ],
-    isPending: false,
-  }),
+  useMyLessons: () => ({ data: library.lessons, isPending: false }),
   useRemoveLessonFromPlaylist: () => ({ mutate: removeLesson, isPending: false }),
   useSavePlaylistOrder: () => saveOrder,
   useAddLessonsToPlaylist: () => ({ mutate: addLessons, isPending: false }),
@@ -156,6 +157,22 @@ describe("PlaylistManagePanel ordering", () => {
   beforeEach(() => {
     saveOrder.mockReset();
     saveOrder.mockResolvedValue();
+    removeLesson.mockReset();
+  });
+
+  // Re-added, the server puts the lesson at the end; the panel's own order
+  // must not keep showing it in its old place.
+  it("forgets a removed lesson's place in its own order", () => {
+    removeLesson.mockImplementation((_variables, options) =>
+      (options as { onSuccess?: () => void } | undefined)?.onSuccess?.(),
+    );
+    render(<PlaylistManagePanel playlist={playlist} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by title" }));
+
+    // The mocked members still hold it, as after it was added back.
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+
+    expect(listedTitles().at(-1)).toBe("CSS course 2: Box model");
   });
 
   it("sorts the whole playlist by title in one save", () => {
@@ -217,7 +234,28 @@ describe("PlaylistManagePanel ordering", () => {
 });
 
 describe("PlaylistManagePanel adding", () => {
-  beforeEach(() => addLessons.mockReset());
+  beforeEach(() => {
+    addLessons.mockReset();
+    library.lessons = LIBRARY;
+  });
+
+  it("says so when the author has no published lesson to add", () => {
+    library.lessons = [{ id: "draft", title: "CSS course 12: Draft", status: "draft" }];
+    render(<PlaylistManagePanel playlist={playlist} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Add lessons" }));
+
+    expect(screen.getByText(/You have no published lessons yet/)).toBeInTheDocument();
+  });
+
+  it("keeps the dialog open on the Escape that cancels an IME composition", () => {
+    const onClose = vi.fn<() => void>();
+    render(<PlaylistManagePanel playlist={playlist} onClose={onClose} />);
+
+    fireEvent.keyDown(document.body, { key: "Escape", keyCode: 229 });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 
   it("adds every filtered lesson in one request, in title order", () => {
     addLessons.mockImplementation((_variables, options) =>
