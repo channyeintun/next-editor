@@ -49,7 +49,7 @@ export {
   useAddLessonToPlaylist,
   useAddLessonsToPlaylist,
   useRemoveLessonFromPlaylist,
-  useReorderPlaylistLessons,
+  useSavePlaylistOrder,
 } from "./playlists/usePlaylists";
 export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
 export type { AddLessonsOutcome } from "./playlists/playlistsApi";

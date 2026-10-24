@@ -9,9 +9,9 @@ import {
   fetchMyPlaylistsForLesson,
   fetchPlaylistLessons,
   removeLessonFromPlaylist,
-  reorderPlaylistLessons,
   updatePlaylist,
 } from "./playlistsApi";
+import { savePlaylistOrder } from "./playlistOrderQueue";
 
 export function useMyPlaylists() {
   return useQuery({
@@ -101,8 +101,14 @@ export function useRemoveLessonFromPlaylist() {
   );
 }
 
-export function useReorderPlaylistLessons() {
-  return useMyPlaylistsMutation((params: { playlistId: string; lessonIds: string[] }) =>
-    reorderPlaylistLessons(params.playlistId, params.lessonIds),
-  );
+// The manage panel's moves: the panel shows each new order at once, and this
+// saves it through the per-playlist queue (playlistOrderQueue.ts), then
+// refetches so every view settles on what the server holds — also after a
+// failed save, which the returned promise rejects with.
+export function useSavePlaylistOrder() {
+  const queryClient = useQueryClient();
+  return (playlistId: string, lessonIds: string[]) =>
+    savePlaylistOrder(playlistId, lessonIds).finally(() =>
+      queryClient.invalidateQueries({ queryKey: playlistKeys.all }),
+    );
 }
