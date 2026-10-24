@@ -13,10 +13,14 @@ import {
 } from "./playlistsApi";
 import { savePlaylistOrder } from "./playlistOrderQueue";
 
-export function useMyPlaylists() {
+// `fresh` refetches on mount and whenever the tab comes back into focus: the
+// studio workflow lists playlists the author may just have made in the
+// library, in another tab, while the app's queries otherwise never go stale.
+export function useMyPlaylists({ fresh = false }: { fresh?: boolean } = {}) {
   return useQuery({
     queryKey: playlistKeys.mine,
     queryFn: fetchMyPlaylists,
+    ...(fresh ? { staleTime: 0, refetchOnWindowFocus: true } : {}),
   });
 }
 

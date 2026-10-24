@@ -327,9 +327,6 @@ export async function addLessonToPlaylist(
   return { status: "ok" };
 }
 
-/** The most lessons one bulk add takes; a course is tens of lessons. */
-export const MAX_LESSONS_PER_ADD = 200;
-
 /** D1 binds at most 100 parameters per statement; one is the owner id. */
 const LESSON_ID_CHUNK = 90;
 

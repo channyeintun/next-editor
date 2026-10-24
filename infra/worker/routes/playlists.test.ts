@@ -22,7 +22,6 @@ vi.mock("../../db/playlistQueries", () => ({
   deletePlaylist: vi.fn<() => Promise<boolean>>(),
   addLessonToPlaylist: vi.fn<() => Promise<unknown>>(),
   addLessonsToPlaylist: vi.fn<() => Promise<unknown>>(),
-  MAX_LESSONS_PER_ADD: 200,
   getPlaylistBySlug: vi.fn<() => Promise<PlaylistWithLessons | null>>(),
 }));
 

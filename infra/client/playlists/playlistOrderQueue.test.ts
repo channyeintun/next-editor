@@ -57,4 +57,20 @@ describe("savePlaylistOrder", () => {
 
     expect(sent).toEqual([["a"], ["b"]]);
   });
+
+  it("lets a failed order settle with the newer order that carries its change", async () => {
+    const { sent, pending, send } = heldSend();
+
+    const older = savePlaylistOrder("p5", ["a", "b"], send);
+    const newer = savePlaylistOrder("p5", ["b", "a"], send);
+    pending[0].reject(new Error("blip"));
+    await flush();
+
+    expect(sent).toEqual([
+      ["a", "b"],
+      ["b", "a"],
+    ]);
+    pending[1].resolve();
+    await expect(Promise.all([older, newer])).resolves.toEqual([undefined, undefined]);
+  });
 });

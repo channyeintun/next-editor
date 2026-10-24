@@ -4,7 +4,6 @@ import { readJsonWithLimit } from "../httpBody";
 import {
   addLessonToPlaylist,
   addLessonsToPlaylist,
-  MAX_LESSONS_PER_ADD,
   deletePlaylist,
   getOwnedPlaylistById,
   getOwnedPlaylistLessons,
@@ -31,6 +30,7 @@ import {
 } from "../../db/slug";
 import { requireUser } from "../auth/requireUser";
 import { metadataTextError } from "../../lessons/metadataLimits";
+import { MAX_LESSONS_PER_ADD } from "../../lessons/playlistLimits";
 
 // Mounted at /api/playlists in worker/index.ts. GET /:slug is public; a
 // playlist is always public once created (no draft/published state, unlike

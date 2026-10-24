@@ -1,4 +1,5 @@
 import { apiClient } from "../apiClient";
+import { MAX_LESSONS_PER_ADD } from "../../lessons/playlistLimits";
 import type { OwnedLesson, OwnedPlaylist, OwnedPlaylistWithMembership } from "../../db/types";
 
 export async function fetchMyPlaylists(): Promise<OwnedPlaylist[]> {
@@ -56,16 +57,23 @@ export interface AddLessonsOutcome {
   notEligible: string[];
 }
 
-// Adds many lessons in one request, appended in the given order. Lessons
+// Adds many lessons, appended in the given order: one request per
+// MAX_LESSONS_PER_ADD ids, sent one after another so the order holds. Lessons
 // already in the playlist are skipped rather than failing the request.
 export async function addLessonsToPlaylist(
   playlistId: string,
   lessonIds: string[],
 ): Promise<AddLessonsOutcome> {
-  const res = await apiClient.post<AddLessonsOutcome>(`/playlists/${playlistId}/lessons`, {
-    lessonIds,
-  });
-  return res.data;
+  const outcome: AddLessonsOutcome = { added: [], alreadyAdded: [], notEligible: [] };
+  for (let start = 0; start < lessonIds.length; start += MAX_LESSONS_PER_ADD) {
+    const res = await apiClient.post<AddLessonsOutcome>(`/playlists/${playlistId}/lessons`, {
+      lessonIds: lessonIds.slice(start, start + MAX_LESSONS_PER_ADD),
+    });
+    outcome.added.push(...res.data.added);
+    outcome.alreadyAdded.push(...res.data.alreadyAdded);
+    outcome.notEligible.push(...res.data.notEligible);
+  }
+  return outcome;
 }
 
 export async function removeLessonFromPlaylist(

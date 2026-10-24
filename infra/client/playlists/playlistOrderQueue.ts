@@ -52,6 +52,13 @@ async function drain(
     await send(playlistId, order.lessonIds).catch((error: unknown) => {
       failure = error ?? new Error("Saving the playlist order failed");
     });
+    const newer = waitingOrder(queue);
+    if (failure && newer) {
+      // The newer order already carries this change, and goes out next: its
+      // result is this order's result too.
+      newer.settle.unshift(...order.settle);
+      continue;
+    }
     for (const waiter of order.settle) {
       if (failure) waiter.reject(failure);
       else waiter.resolve();
@@ -59,4 +66,13 @@ async function drain(
   }
   queue.inFlight = false;
   queues.delete(playlistId);
+}
+
+/**
+ * The order waiting behind the one just sent. A read through a call, because
+ * TypeScript keeps `queue.next` narrowed to the null assigned before the
+ * await, though a save during that await sets it.
+ */
+function waitingOrder(queue: PlaylistQueue): PendingOrder | null {
+  return queue.next;
 }
