@@ -28,19 +28,19 @@ const CODE_IN_NARRATION = /[{}<>=;()[\]`]|\w+\.\w+\(|\bdata-testid\b|\bclassName
 const BURMESE_DIALOG_END = /[။!?.၊]$/u;
 
 /**
- * Burmese writes a verb and its particle with no space between them, so a
- * pair can spell another word, and the voice says that word instead: the verb
- * စ ("start") before the progressive နေ spells စနေ, Saturday (Chan,
- * 2026-10-24: "not စနေပါပြီ, it's စ နေပါပြီ"). Each spelling matches only
- * before a particle, so the real word (စနေနေ့, "စနေ၊ တနင်္ဂနွေ") passes.
+ * Burmese writes a verb and what follows it with no space, so a pair can spell
+ * another word, and the voice says that word instead. The verb စ ("start")
+ * before the progressive နေ spells စနေ, Saturday (Chan, 2026-10-24: "not
+ * စနေပါပြီ, it's စ နေပါပြီ"); before the verb ရိုက် ("type") it spells
+ * စရိုက်, "character", said with a reduced first syllable. A spelling fails
+ * only before a verb particle, so the real word (စနေနေ့, "စနေ၊ တနင်္ဂနွေ")
+ * passes — and the particles leave out နေ, which would catch နေ့.
  */
+const BEFORE_VERB_PARTICLE = "(?=ပါ|ပြီ|တယ်|လို့|တုန်း|ရင်|မယ်|ခဲ့|တာ|ကြ|လိုက်)";
 const BURMESE_RUN_TOGETHER: readonly { spelling: RegExp; write: string; reads: string }[] = [
-  {
-    spelling: /စနေ(?=ပါ|ပြီ|တယ်|လို့|တုန်း|ရင်း|မယ်|ခဲ့|တာ|ကြ)/u,
-    write: "စ နေ",
-    reads: "စနေ, Saturday",
-  },
-];
+  { word: "စနေ", write: "စ နေ", reads: "စနေ, Saturday" },
+  { word: "စရိုက်", write: "စ ရိုက်", reads: "စရိုက်, character" },
+].map(({ word, ...rest }) => ({ spelling: new RegExp(word + BEFORE_VERB_PARTICLE, "u"), ...rest }));
 
 export function narrationIssues(
   locale: string,

@@ -54,9 +54,16 @@ describe("narrationIssues", () => {
     expect(issue).toMatchObject({ severity: "error" });
     expect(issue.message).toContain('write "စ နေ" with the space');
     expect(severities("my-MM", "card selector နဲ့ စနေလို့ ထပ်နေပါတယ်။")).toEqual(["scene.0 error"]);
+    expect(severities("my-MM", "စာ စရိုက်တာနဲ့ ပျောက်သွားပါတယ်။")).toEqual(["scene.0 error"]);
     // The written-out verb, and the real Saturday, pass.
     expect(
-      severities("my-MM", "dev server ကို စ နေပါပြီ။", "စနေနေ့က ပထမ ကြောင်းပါ။", "စနေ၊ တနင်္ဂနွေ ဖွင့်ပါတယ်။"),
+      severities(
+        "my-MM",
+        "dev server ကို စ နေပါပြီ။",
+        "စာ စ ရိုက်တာနဲ့ ပျောက်သွားပါတယ်။",
+        "စနေနေ့က ပထမ ကြောင်းပါ။",
+        "စနေ၊ တနင်္ဂနွေ ဖွင့်ပါတယ်။",
+      ),
     ).toEqual([]);
   });
 });
