@@ -136,9 +136,11 @@ query basics and `@layer` syntax) to exactly one lesson, and each lesson's revie
   hidden status line, so `expect.preview` can assert it.
 - **Lesson 43 (Tailwind):** `vite` 5.4.21, `tailwindcss` 4.3.3 and `@tailwindcss/vite` 4.3.3. The
   native oxide and lightningcss bindings load in the WebContainer. A cold install takes 55–77 s, so
-  `runtime.start` has a 120 s timeout. `webcontainer-fix.js` works around a WebContainer bug: classes
-  typed into `index.html` were not regenerated until the CSS file's mtime changed. On real Node it
-  does nothing. Every CSS edit in that lesson is a block insert, because the Tailwind plugin shows an
+  `runtime.start` has a 120 s timeout. `webcontainer-fix.js` works around two problems. In the
+  WebContainer, classes typed into `index.html` were not regenerated until the CSS file's mtime
+  changed. And Vite 5 sends an edit's full-reload only to pages that are already connected; a page
+  still waiting for Tailwind's CSS missed the last keystroke's reload and stayed on the older HTML. The
+  plugin reloads a page that connects with older HTML once more. On real Node it does nothing. Every CSS edit in that lesson is a block insert, because the Tailwind plugin shows an
   overlay for any half-typed CSS.
 
 ## Rendering a lesson
