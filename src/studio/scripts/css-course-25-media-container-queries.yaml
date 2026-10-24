@@ -1414,7 +1414,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ box ထဲ မဆံ့တဲ့ content အကြောင်း ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့
       ရတဲ့ နေရာနဲ့ ကိုက်အောင် layout ပြောင်းတဲ့ component တွေကို ကြည့်ပါမယ်။
-      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-viewport]] media query က page ကို မြင်ရတဲ့ viewport အကြောင်း၊ ဒါမှမဟုတ်
       ကြည့်နေတဲ့ စက် အကြောင်းကို မေးပါတယ်။ [[mark:draw-narrow]] ကိုယ့် preview ကတော့ အမြဲ
       ဖုန်း screen လောက်ပဲ ကျယ်ပါတယ်။ ဒါကြောင့် lesson 5 က screen ကျယ်မှ အလုပ်လုပ်တဲ့ media
