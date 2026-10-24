@@ -48,10 +48,14 @@ reviewers judge drafts by.
   pronunciation lexicon handles speech, never the display text. English
   narration gets the Pocket voice's respellings. Burmese narration gets only a
   short list of English terms the Burmese voice says wrong (Vite → "veet",
-  DOM → "Dom", className → "class name", App → "Up"), and everything else is spoken as
+  DOM → "Dom", className → "class name", App → "Up", dev → "Deaf"), and everything else is spoken as
   written. When the Burmese voice mispronounces another term, add it to that
   list in the studio's pronunciation lexicon rather than respelling the
   narration.
+- In Burmese narration, put a space between a verb and a particle that would
+  otherwise spell another word, because the voice says that word: "dev server
+  ကို စ နေပါပြီ", never စနေပါပြီ, which it reads as စနေ (Saturday). The
+  compile check fails the run-together spellings it knows.
 - In Burmese narration, keep the technical terms Burmese developers say in
   English in English: screen, tree, memory, component, state and the like,
   not မျက်နှာပြင်, သစ်ပင် or မှတ်ဉာဏ်. Say "handle လုပ်ပေး" for

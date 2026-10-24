@@ -27,6 +27,21 @@ const CODE_IN_NARRATION = /[{}<>=;()[\]`]|\w+\.\w+\(|\bdata-testid\b|\bclassName
 /** Burmese ends a sentence at ။ (or ! ? .) and pauses at ၊; any other end cuts a clause in two. */
 const BURMESE_DIALOG_END = /[။!?.၊]$/u;
 
+/**
+ * Burmese writes a verb and its particle with no space between them, so a
+ * pair can spell another word, and the voice says that word instead: the verb
+ * စ ("start") before the progressive နေ spells စနေ, Saturday (Chan,
+ * 2026-10-24: "not စနေပါပြီ, it's စ နေပါပြီ"). Each spelling matches only
+ * before a particle, so the real word (စနေနေ့, "စနေ၊ တနင်္ဂနွေ") passes.
+ */
+const BURMESE_RUN_TOGETHER: readonly { spelling: RegExp; write: string; reads: string }[] = [
+  {
+    spelling: /စနေ(?=ပါ|ပြီ|တယ်|လို့|တုန်း|ရင်း|မယ်|ခဲ့|တာ|ကြ)/u,
+    write: "စ နေ",
+    reads: "စနေ, Saturday",
+  },
+];
+
 export function narrationIssues(
   locale: string,
   { dialogs, speechTexts }: Pick<ScriptNarration, "dialogs" | "speechTexts">,
@@ -53,6 +68,15 @@ export function narrationIssues(
     }
     if (burmese && !BURMESE_DIALOG_END.test(text)) {
       issue("warning", `does not end at a sentence end or a ၊ pause: …${text.slice(-30)}`);
+    }
+    for (const word of burmese ? BURMESE_RUN_TOGETHER : []) {
+      const run = word.spelling.exec(text);
+      if (run) {
+        issue(
+          "error",
+          `writes "${run[0]}", which the voice reads as ${word.reads} — write "${word.write}" with the space`,
+        );
+      }
     }
     const code = text.match(CODE_IN_NARRATION);
     if (code) {

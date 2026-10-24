@@ -103,6 +103,8 @@ const BURMESE_RESPELLINGS: PronunciationLexicon = {
     // Spelled out as A P P; developers say "app" as the word "up".
     App: "Up",
     app: "up",
+    // Read as "deev"; developers say "dev" (a dev server) like the word "deaf".
+    dev: "Deaf",
   },
 };
 

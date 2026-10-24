@@ -47,4 +47,16 @@ describe("narrationIssues", () => {
     expect(issue.message).toContain('["Math.max(",")","{","}"]');
     expect(severities("en-US", "The data-testid attribute.")).toEqual(["scene.0 warning"]);
   });
+
+  // VoxCPM2 said Saturday where the lesson meant "the dev server is starting".
+  it("fails a Burmese verb run into its particle so it spells another word", () => {
+    const [issue] = narrationIssues("my-MM", spoken("dev server ကို စနေပါပြီ။"));
+    expect(issue).toMatchObject({ severity: "error" });
+    expect(issue.message).toContain('write "စ နေ" with the space');
+    expect(severities("my-MM", "card selector နဲ့ စနေလို့ ထပ်နေပါတယ်။")).toEqual(["scene.0 error"]);
+    // The written-out verb, and the real Saturday, pass.
+    expect(
+      severities("my-MM", "dev server ကို စ နေပါပြီ။", "စနေနေ့က ပထမ ကြောင်းပါ။", "စနေ၊ တနင်္ဂနွေ ဖွင့်ပါတယ်။"),
+    ).toEqual([]);
+  });
 });
