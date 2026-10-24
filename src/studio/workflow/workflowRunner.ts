@@ -75,7 +75,7 @@ export interface WorkflowRunnerIo {
   uploadDraft: (input: WorkflowUploadInput) => Promise<WorkflowDraft>;
   publishDraft: (draft: WorkflowDraft) => Promise<void>;
   addToPlaylist: (playlistId: string, lessonId: string) => Promise<void>;
-  /** A lesson was published or joined a playlist: the library's cached lists are stale. */
+  /** A lesson was uploaded, published or added to a playlist: the library's cached lists are stale. */
   onLibraryChanged: () => void;
   newId: () => string;
   nowIso: () => string;
@@ -186,6 +186,7 @@ export function createWorkflowRunner(
         onProgress: io.onUploadProgress,
       });
       update(lesson.slug, { draft });
+      io.onLibraryChanged();
       return true;
     } catch (error) {
       return fail(lesson, "draft", { message: describeWorkflowError(error) });

@@ -105,7 +105,7 @@ function WorkflowSetup({
     defaultThumbnailWhenMissing: false,
     playlist: null,
   });
-  const { data: playlists } = useMyPlaylists();
+  const { data: playlists } = useMyPlaylists({ fresh: true });
   const [thumbnails, setThumbnails] = useState<{ folder: string; files: Map<string, File> }>({
     folder: "",
     files: new Map(),
@@ -368,7 +368,6 @@ function WorkflowSetup({
                 playlist: picked ? { id: picked.id, title: picked.title } : null,
               }));
             }}
-            aria-label="Playlist each published lesson joins"
             className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1 text-[12px] text-slate-200 disabled:opacity-50"
           >
             <option value="">no playlist</option>
@@ -381,7 +380,8 @@ function WorkflowSetup({
         </label>
         {settings.publish && playlists?.length === 0 ? (
           <p className="mt-1 text-[12px] text-slate-400">
-            Create a playlist in your library to add lessons to one as they publish.
+            Create a playlist in your library (another tab is fine) to add lessons to one as they
+            publish; it shows here when you come back.
           </p>
         ) : null}
       </fieldset>

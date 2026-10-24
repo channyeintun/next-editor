@@ -309,8 +309,8 @@ describe("createWorkflowRunner", () => {
     expect(run.latest().state).toBe("finished");
     expect(run.playlisted).toEqual(["css:lesson-id-2", "css:lesson-id-3"]);
     expect(run.latest().lessons.every((lesson) => lesson.inPlaylist)).toBe(true);
-    // Each publish and each add refreshes the library's cached lists.
-    expect(run.libraryChanges.count).toBe(4);
+    // Each upload, publish and add refreshes the library's cached lists.
+    expect(run.libraryChanges.count).toBe(6);
   });
 
   it("resumes a failed playlist add by adding only", async () => {
