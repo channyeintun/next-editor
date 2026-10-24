@@ -1238,7 +1238,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ anchor positioning နဲ့ element နှစ်ခုကို ကပ်ထားခဲ့ပါတယ်။ ဒီ lesson မှာတော့
       page ပေါ်မှာ ပွင့်လာတဲ့ menu၊ ရွေးစရာ box၊ message တိုတို လို popover တွေနဲ့ dialog box ကို
-      လုပ်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      လုပ်ပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-page]] lesson 23 မှာ browser က page ကို အလွှာလိုက် ဆွဲတယ် ဆိုတာနဲ့၊ z-index က သူ့
       stacking context အပြင်ကို ကျော်မထွက်နိုင်ဘူး ဆိုတာ မြင်ခဲ့ပါတယ်။ [[mark:draw-card]] ဒါကြောင့်
       card ထဲက menu ကို နောက် card က ဖုံးသွားတတ်ပြီး၊ developer တွေက z-index ကို ပိုကြီးကြီး ပေးတာ၊
@@ -1611,7 +1611,7 @@ scenes:
       [[mark:type-area]] ရွေးစရာ box က သူ့ ခလုတ်ရဲ့ အောက်မှာ ကျလာသင့်ပါတယ်။ lesson 40 မှာ absolute၊
       anchor name နဲ့ position anchor လိုခဲ့ပါတယ်။ popover က fixed ဖြစ်ပြီးသားမို့ ဒီမှာတော့ position
       area ကို bottom span right ပေးရုံပါပဲ။ [[mark:after-area]] သကြား ရွေးစရာတွေက ခလုတ်ရဲ့ အောက်ကို
-      ခုန်ရောက်သွားပြီး၊ ခလုတ်ရဲ့ ဘယ်အစွန်းကနေ စနေပါပြီ။ [[mark:explain-implicit]] ဒီ position area
+      ခုန်ရောက်သွားပြီး၊ ခလုတ်ရဲ့ ဘယ်အစွန်းကနေ စ နေပါပြီ။ [[mark:explain-implicit]] ဒီ position area
       ကို ကြည့်ပါ။ anchor name မပေးခဲ့ပါဘူး။ popover target နဲ့ ဖွင့်တဲ့ ခလုတ်က အလိုလို popover ရဲ့
       implicit anchor ဖြစ်လို့ပါ။ [[mark:explain-margin]] ခုနက အလယ်ပို့ပေးခဲ့တာက auto margin တွေပါ။
       position area သုံးရင် auto margin ကို သုညလို့ တွက်ပါတယ်။ lesson 40 က anchor function
