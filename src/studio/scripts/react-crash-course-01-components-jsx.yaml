@@ -977,7 +977,7 @@ scenes:
       အဲဒီအတိုင်း ပြင်တာက React ရဲ့ အလုပ်ပါ။ [[mark:draw-formula]] အတိုချုပ်
       ပြောရရင်၊ data က function ထဲ ဝင်သွားပြီး၊ screen ထွက်လာတာပါ။
       [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ
-      React ကို install လုပ်ပြီး၊ dev server ကို စနေပါပြီ။ dev server ဆိုတာ
+      React ကို install လုပ်ပြီး၊ dev server ကို စ နေပါပြီ။ dev server ဆိုတာ
       ကိုယ့် ဖိုင်တွေကို browser ဆီ ပို့ပေးပြီး၊ ဖိုင် ပြောင်းလိုက်တိုင်း page
       ကို လိုက်ပြောင်းပေးတဲ့ server ပါ။ နောက်ပိုင်း page လိုတဲ့အခါ အသင့်
       ဖြစ်နေအောင်ပါ။ [[mark:why-describe]] ဒါဆို page ကို ကိုယ်တိုင်
