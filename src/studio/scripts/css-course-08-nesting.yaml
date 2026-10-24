@@ -1139,9 +1139,9 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ parent ရဲ့ တန်ဖိုးတွေ child ဆီ inheritance နဲ့ ဆင်းသွားတာကို
       မြင်ခဲ့ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
-      စနေပါပြီ။ [[mark:draw-flat]] ဒီ lesson မှာတော့ selector တူတူကို ထပ်ခါထပ်ခါ မရေးရအောင်
+      စ နေပါပြီ။ [[mark:draw-flat]] ဒီ lesson မှာတော့ selector တူတူကို ထပ်ခါထပ်ခါ မရေးရအောင်
       လုပ်ပါမယ်။ ဒါက menu card တွေအတွက် rule ငါးခုကို အခုထိ ရေးခဲ့တဲ့ အတိုင်း ရေးထားတာပါ။
-      [[mark:circle-repeat]] စာကြောင်းတိုင်းက card selector နဲ့ စနေလို့ ငါးခါ ထပ်နေပါတယ်။ class
+      [[mark:circle-repeat]] စာကြောင်းတိုင်းက card selector နဲ့ စ နေလို့ ငါးခါ ထပ်နေပါတယ်။ class
       နာမည် ပြောင်းရင် ငါးနေရာ လိုက်ပြင်ရပါမယ်။ [[mark:draw-nested]] ညာဘက်မှာတော့ card selector ကို
       တစ်ခါပဲ ရေးပြီး၊ ကျန်တဲ့ rule တွေကို သူ့ rule ထဲမှာ ထည့်ရေးထားပါတယ်။ browser က အထဲက selector
       တစ်ခုစီကို အပြင်က selector နဲ့ ဆက်ဖတ်လို့၊ ဘယ်ဘက်က selector ငါးခုနဲ့ အတူတူပဲ ဖြစ်ပါတယ်။
