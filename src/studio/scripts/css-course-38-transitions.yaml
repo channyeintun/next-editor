@@ -1073,7 +1073,7 @@ scenes:
       ပြီးခဲ့တဲ့ lesson မှာ blend mode နဲ့ အရောင်တွေကို နောက်က အလွှာတွေနဲ့ ရောခဲ့ပြီး၊
       course ရဲ့ အလှဆင်တဲ့ အပိုင်း ပြီးသွားပါပြီ။ ဒီ lesson ကစပြီး page ပေါ်က အရာတွေ
       လှုပ်ရှားလာပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev
-      server ကို စနေပါပြီ။ [[mark:draw-states]] element တွေမှာ state တွေ ရှိပါတယ်။ menu
+      server ကို စ နေပါပြီ။ [[mark:draw-states]] element တွေမှာ state တွေ ရှိပါတယ်။ menu
       က ပွင့်တာ ပိတ်တာ၊ ခလုတ်က ပုံမှန်နဲ့ active ဖြစ်တာမျိုးပါ။ state တစ်ခုစီမှာ style
       ကိုယ်စီ ရှိနိုင်ပါတယ်။ [[mark:draw-jump]] state ပြောင်းတဲ့အခါ CSS က style အသစ်ကို
       frame တစ်ခုတည်းမှာ ပြောင်းထည့်လို့၊ ကြားမှာ ဘာမှ မရှိပါဘူး။ transition ဆိုတာ
