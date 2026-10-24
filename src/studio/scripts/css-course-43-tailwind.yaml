@@ -28,7 +28,10 @@
 # gets two complete `block` inserts. Utility classes are typed into
 # index.html class attributes (each saved state reloads the page; Tailwind
 # ignores half-typed class names). webcontainer-fix.js (pinned, never typed)
-# makes Tailwind regenerate after HTML edits inside the WebContainer.
+# makes Tailwind regenerate after HTML edits inside the WebContainer, and
+# reloads a page that connects holding older HTML: Vite 5 sends each edit's
+# full-reload only to pages already connected, and a page still waiting for
+# Tailwind's CSS missed the last keystroke's ("…text-whit", 2026-10-24).
 # State shown live is attribute state that replays: aria-pressed (inserted
 # into the file) and <details open> (a click). hover:, focus:, dark: are
 # explained or drawn only (PLATFORM.md §3).
@@ -79,13 +82,23 @@ lesson:
           plugins: [tailwindcss(), rescanTailwind()],
         });
       webcontainer-fix.js: |
-        // webcontainer-fix.js: in the browser's WebContainer, Tailwind does not notice
-        // classes typed into index.html unless the CSS file looks changed. This plugin
-        // touches the CSS file after an HTML/JS edit. On a real computer it does nothing useful.
+        // webcontainer-fix.js: two fixes for the browser's WebContainer. Tailwind does not
+        // notice classes typed into index.html unless the CSS file looks changed, so this
+        // touches the CSS file after an HTML/JS edit. And a page that is still loading can
+        // miss the reload for the newest edit, so a page that connects with older HTML is
+        // reloaded once more. On a real computer you do not need it.
         import fs from "node:fs";
         export function rescanTailwind() {
+          let servedHtml = null;
           return {
             name: "rescan-tailwind",
+            transformIndexHtml: { order: "pre", handler(html) { servedHtml = html; } },
+            configureServer(server) {
+              server.ws.on("connection", (socket) => {
+                const html = fs.readFileSync(server.config.root + "/index.html", "utf8");
+                if (servedHtml !== null && html !== servedHtml) socket.send(JSON.stringify({ type: "full-reload" }));
+              });
+            },
             handleHotUpdate({ file, server }) {
               if (!/\.(html|js|jsx|ts|tsx)$/.test(file)) return;
               for (const mod of server.moduleGraph.idToModuleMap.values()) {
