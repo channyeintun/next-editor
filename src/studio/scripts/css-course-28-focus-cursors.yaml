@@ -1307,7 +1307,7 @@ scenes:
       ပြီးခဲ့တဲ့ lesson မှာ mouse တင်ထားတာ၊ check လုပ်ထားတာ၊ disabled ဖြစ်နေတာလို
       အခြေအနေတွေကို ကြည့်ပြီး style ပေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ချန်ထားခဲ့တဲ့ focus ကို
       ကြည့်ပြီး၊ mouse cursor ကိုပါ ကြည့်ပါမယ်။ [[mark:start-server]] ပြောနေတုန်းမှာပဲ၊
-      board နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-keys]] လူတိုင်း mouse သုံးတာ
+      board နောက်မှာ dev server ကို စ နေပါပြီ။ [[mark:draw-keys]] လူတိုင်း mouse သုံးတာ
       မဟုတ်ပါဘူး။ လူအများကြီးက keyboard နဲ့ သွားလာကြပါတယ်။ Tab key နှိပ်ရင် နောက် ခလုတ်
       ဒါမှမဟုတ် field ကို ရောက်ပြီး၊ Shift နဲ့ Tab တွဲနှိပ်ရင် နောက်ပြန် ဆုတ်ပါတယ်။
       [[mark:draw-users]] ခလုတ်ကြီးတွေပဲ ပါတဲ့ switch device သုံးသူတွေ၊ screen reader သုံးသူ
