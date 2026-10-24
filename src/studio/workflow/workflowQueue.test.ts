@@ -57,4 +57,34 @@ describe("workflow queue", () => {
     expect(isStudioWorkflow({ version: 2, lessons: [] })).toBe(false);
     expect(isStudioWorkflow(null)).toBe(false);
   });
+
+  it("adds a published lesson to the playlist last, and only when publishing", () => {
+    const withPlaylist = createWorkflow({
+      id: "w",
+      createdAtIso: "2026-10-25T00:00:00.000Z",
+      settings: {
+        createDraft: true,
+        publish: true,
+        defaultThumbnailWhenMissing: false,
+        playlist: { id: "p", title: "CSS course" },
+      },
+      lessons: [{ slug: "a", title: "A", thumbnail: null }],
+    });
+    const drafted = { ...withPlaylist.lessons[0], draft: { lessonId: "l", urlSlug: "a" } };
+
+    expect(nextStepOf(drafted, withPlaylist.settings)).toBe("publish");
+    expect(nextStepOf({ ...drafted, published: true }, withPlaylist.settings)).toBe("playlist");
+    expect(
+      nextStepOf({ ...drafted, published: true, inPlaylist: true }, withPlaylist.settings),
+    ).toBeNull();
+    // Without publishing there is nothing a playlist would take.
+    expect(
+      createWorkflow({
+        id: "w",
+        createdAtIso: "2026-10-25T00:00:00.000Z",
+        settings: { ...withPlaylist.settings, publish: false },
+        lessons: [],
+      }).settings.playlist,
+    ).toBeNull();
+  });
 });

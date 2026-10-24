@@ -9,7 +9,7 @@ import {
   ImageOff,
   LoaderCircle,
 } from "lucide-react";
-import { THUMBNAIL_ACCEPT } from "@next-editor/infra";
+import { THUMBNAIL_ACCEPT, useMyPlaylists } from "@next-editor/infra";
 import HoverRing from "../../components/hoverRing/HoverRing";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { downloadBlob } from "../../utils/downloadBlob";
@@ -103,7 +103,9 @@ function WorkflowSetup({
     createDraft: true,
     publish: true,
     defaultThumbnailWhenMissing: false,
+    playlist: null,
   });
+  const { data: playlists } = useMyPlaylists();
   const [thumbnails, setThumbnails] = useState<{ folder: string; files: Map<string, File> }>({
     folder: "",
     files: new Map(),
@@ -354,6 +356,34 @@ function WorkflowSetup({
           />
           Use the default thumbnail when none matches
         </label>
+        <label className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-300">
+          <span className="shrink-0">Then add it to</span>
+          <select
+            value={settings.publish ? (settings.playlist?.id ?? "") : ""}
+            disabled={!settings.publish || !playlists?.length}
+            onChange={(event) => {
+              const picked = playlists?.find((playlist) => playlist.id === event.target.value);
+              setSettings((current) => ({
+                ...current,
+                playlist: picked ? { id: picked.id, title: picked.title } : null,
+              }));
+            }}
+            aria-label="Playlist each published lesson joins"
+            className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1 text-[12px] text-slate-200 disabled:opacity-50"
+          >
+            <option value="">no playlist</option>
+            {(playlists ?? []).map((playlist) => (
+              <option key={playlist.id} value={playlist.id}>
+                {playlist.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        {settings.publish && playlists?.length === 0 ? (
+          <p className="mt-1 text-[12px] text-slate-400">
+            Create a playlist in your library to add lessons to one as they publish.
+          </p>
+        ) : null}
       </fieldset>
 
       {api.setupError || startError ? (
@@ -415,7 +445,7 @@ function WorkflowRun({
   const canResume =
     !api.active && workflow.state !== "finished" && done < total && blockedReason === null;
   const steps = workflow.settings.publish
-    ? "render → draft → publish"
+    ? `render → draft → publish${workflow.settings.playlist ? ` → “${workflow.settings.playlist.title}”` : ""}`
     : workflow.settings.createDraft
       ? "render → draft"
       : "render only";
@@ -573,6 +603,9 @@ function WorkflowLessonRow({
       break;
     case "uploading":
       detail = `uploading${active && uploadProgress !== null ? ` ${Math.round(uploadProgress * 100)}%` : ""}`;
+      break;
+    case "adding":
+      detail = "adding to playlist";
       break;
     case "publishing":
       detail = "publishing";

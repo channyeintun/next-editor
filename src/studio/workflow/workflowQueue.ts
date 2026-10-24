@@ -7,13 +7,14 @@
  * drives it; workflowStorage persists it.
  */
 
-export type WorkflowStep = "render" | "draft" | "publish";
+export type WorkflowStep = "render" | "draft" | "publish" | "playlist";
 
 export type WorkflowLessonStatus =
   | "queued"
   | "rendering"
   | "uploading"
   | "publishing"
+  | "adding"
   | "done"
   | "failed";
 
@@ -24,6 +25,11 @@ export interface WorkflowSettings {
   publish: boolean;
   /** Give a lesson no picked image matches the site's default thumbnail. */
   defaultThumbnailWhenMissing: boolean;
+  /**
+   * The playlist every published lesson joins, at its end, so a course lands
+   * in course order. Requires publish. Absent in workflows stored before it.
+   */
+  playlist?: { id: string; title: string } | null;
 }
 
 /** The draft lesson a passing render was uploaded as. */
@@ -57,6 +63,8 @@ export interface WorkflowLesson {
   uploadId: string | null;
   draft: WorkflowDraft | null;
   published: boolean;
+  /** Added to the settings' playlist. Absent in workflows stored before it. */
+  inPlaylist?: boolean;
   issue: WorkflowIssue | null;
 }
 
@@ -95,10 +103,12 @@ export function createWorkflow(input: {
     version: 1,
     id: input.id,
     createdAtIso: input.createdAtIso,
-    // Publishing needs a draft to publish.
+    // Publishing needs a draft to publish, and only a published lesson can
+    // join a playlist.
     settings: {
       ...input.settings,
       createDraft: input.settings.createDraft || input.settings.publish,
+      playlist: input.settings.publish ? (input.settings.playlist ?? null) : null,
     },
     state: "ready",
     lessons: input.lessons.map((lesson) => ({
@@ -107,6 +117,7 @@ export function createWorkflow(input: {
       uploadId: null,
       draft: null,
       published: false,
+      inPlaylist: false,
       issue: null,
     })),
   };
@@ -126,7 +137,8 @@ export function restoreWorkflow(stored: StudioWorkflow): StudioWorkflow {
     lessons: stored.lessons.map((lesson) =>
       lesson.status === "rendering" ||
       lesson.status === "uploading" ||
-      lesson.status === "publishing"
+      lesson.status === "publishing" ||
+      lesson.status === "adding"
         ? { ...lesson, status: "queued" }
         : lesson,
     ),
@@ -135,7 +147,8 @@ export function restoreWorkflow(stored: StudioWorkflow): StudioWorkflow {
 
 /**
  * The next step a lesson needs, or null once it is complete. A lesson with a
- * draft never renders again: resuming after a failed publish only publishes.
+ * draft never renders again: resuming after a failed publish only publishes,
+ * and after a failed playlist add only adds.
  */
 export function nextStepOf(
   lesson: WorkflowLesson,
@@ -146,6 +159,7 @@ export function nextStepOf(
     return "render";
   }
   if (settings.publish && !lesson.published) return "publish";
+  if (settings.playlist && lesson.published && !lesson.inPlaylist) return "playlist";
   return null;
 }
 

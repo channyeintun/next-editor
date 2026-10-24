@@ -78,11 +78,15 @@ function harness(options: {
   screenRecording?: boolean;
   /** Runs while a lesson renders, as Chan clicking mid-render would. */
   duringRender?: (slug: string) => void;
+  playlistFailures?: number;
 }) {
   const commits: StudioWorkflow[] = [];
   const renderCalls: { slug: string; stream: MediaStream | null }[] = [];
   const uploads: { uploadId: string; title: string; thumbnail: File | null }[] = [];
   const published: string[] = [];
+  const playlisted: string[] = [];
+  let playlistFailures = options.playlistFailures ?? 0;
+  const libraryChanges = { count: 0 };
   let publishFailures = options.publishFailures ?? 0;
   const screen = fakeStream();
   const storedThumbnails = new Map(Object.entries(options.thumbnails ?? {}));
@@ -124,6 +128,16 @@ function harness(options: {
       }
       published.push(draft.lessonId);
     },
+    addToPlaylist: async (playlistId, lessonId) => {
+      if (playlistFailures > 0) {
+        playlistFailures -= 1;
+        throw new Error("playlist refused");
+      }
+      playlisted.push(`${playlistId}:${lessonId}`);
+    },
+    onLibraryChanged: () => {
+      libraryChanges.count += 1;
+    },
     newId: () => `id-${++ids}`,
     nowIso: () => "2026-10-24T00:00:00.000Z",
     environment: () => ({ origin: "https://example.test", userAgent: "test" }),
@@ -131,7 +145,18 @@ function harness(options: {
   const runner = createWorkflowRunner(null, deps, io);
   runnerRef.current = runner;
   const latest = () => commits.at(-1)!;
-  return { runner, commits, latest, renderCalls, uploads, published, screen, storedThumbnails };
+  return {
+    runner,
+    commits,
+    latest,
+    renderCalls,
+    uploads,
+    published,
+    playlisted,
+    libraryChanges,
+    screen,
+    storedThumbnails,
+  };
 }
 
 const lessons = [
@@ -270,5 +295,42 @@ describe("createWorkflowRunner", () => {
     expect(run.latest().state).toBe("finished");
     expect(run.latest().lessons[0]).toMatchObject({ status: "done", draft: null });
     expect(run.uploads).toEqual([]);
+  });
+
+  it("appends each published lesson to the chosen playlist, in workflow order", async () => {
+    const run = harness({ renders: { a: [passed("A")], b: [passed("B")] } });
+
+    await run.runner.start({
+      lessons: unillustrated,
+      settings: { ...SETTINGS, playlist: { id: "css", title: "CSS course" } },
+      thumbnails: new Map(),
+    });
+
+    expect(run.latest().state).toBe("finished");
+    expect(run.playlisted).toEqual(["css:lesson-id-2", "css:lesson-id-3"]);
+    expect(run.latest().lessons.every((lesson) => lesson.inPlaylist)).toBe(true);
+    // Each publish and each add refreshes the library's cached lists.
+    expect(run.libraryChanges.count).toBe(4);
+  });
+
+  it("resumes a failed playlist add by adding only", async () => {
+    const run = harness({ renders: { a: [passed("A")], b: [passed("B")] }, playlistFailures: 1 });
+    const settings = { ...SETTINGS, playlist: { id: "css", title: "CSS course" } };
+
+    await run.runner.start({ lessons: unillustrated, settings, thumbnails: new Map() });
+
+    expect(run.latest().lessons[0]).toMatchObject({
+      status: "failed",
+      published: true,
+      inPlaylist: false,
+      issue: { step: "playlist", message: "playlist refused" },
+    });
+
+    await run.runner.start();
+
+    expect(run.latest().state).toBe("finished");
+    expect(run.renderCalls.map((call) => call.slug)).toEqual(["a", "b"]);
+    expect(run.published).toHaveLength(2);
+    expect(run.playlisted).toEqual(["css:lesson-id-2", "css:lesson-id-3"]);
   });
 });

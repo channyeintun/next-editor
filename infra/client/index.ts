@@ -60,6 +60,8 @@ export { prepareThumbnail } from "./upload/prepareThumbnail";
 export { uploadLesson } from "./upload/uploadLesson";
 export type { UploadLessonInput, UploadedLesson } from "./upload/uploadLesson";
 export { publishLesson } from "./library/myLessonsApi";
+export { addLessonsToPlaylist } from "./playlists/playlistsApi";
+export { invalidateLessonDerivedQueries } from "./library/useMyLessons";
 export { MAX_TITLE_CHARS, MAX_DESCRIPTION_CHARS } from "../lessons/metadataLimits";
 export { useStudioCapabilities } from "./studio/useStudioCapabilities";
 export type { StudioCapabilities } from "./studio/useStudioCapabilities";

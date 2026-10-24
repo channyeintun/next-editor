@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateLessonDerivedQueries } from "@next-editor/infra";
 import { acquireDisplayStream } from "../../utils/displayCapture";
 import type { StudioRenderReport } from "../report";
 import { isWorkflowActive, restoreWorkflow, type StudioWorkflow } from "./workflowQueue";
@@ -10,7 +12,11 @@ import {
   storeWorkflow,
   storeWorkflowThumbnails,
 } from "./workflowStorage";
-import { publishWorkflowDraft, uploadWorkflowDraft } from "./workflowUpload";
+import {
+  addWorkflowLessonToPlaylist,
+  publishWorkflowDraft,
+  uploadWorkflowDraft,
+} from "./workflowUpload";
 
 /** The workflow as `window.__NEXT_EDITOR_STUDIO__` carries it, for automation and Claude. */
 function publishWorkflowHandle(workflow: StudioWorkflow | null): void {
@@ -35,6 +41,7 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
   // The failed render's full report lives only in this page: it is too big to
   // keep with the queue, and the issue report already carries its findings.
   const [failedReport, setFailedReport] = useState<StudioRenderReport | null>(null);
+  const queryClient = useQueryClient();
   const [runner] = useState(() =>
     createWorkflowRunner(workflow, deps, {
       commit: (next) => {
@@ -52,6 +59,8 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
       clearThumbnails: clearWorkflowThumbnails,
       uploadDraft: uploadWorkflowDraft,
       publishDraft: publishWorkflowDraft,
+      addToPlaylist: addWorkflowLessonToPlaylist,
+      onLibraryChanged: () => void invalidateLessonDerivedQueries(queryClient),
       newId: () => crypto.randomUUID(),
       nowIso: () => new Date().toISOString(),
       environment: () => ({ origin: window.location.origin, userAgent: navigator.userAgent }),

@@ -31,6 +31,7 @@ const STEP_LABELS: Record<WorkflowStep, string> = {
   render: "render",
   draft: "draft upload",
   publish: "publish",
+  playlist: "add to playlist",
 };
 
 /** At most this many entries per evidence list; the rest are counted. */

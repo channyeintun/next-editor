@@ -74,6 +74,9 @@ export interface WorkflowRunnerIo {
   clearThumbnails: () => Promise<void>;
   uploadDraft: (input: WorkflowUploadInput) => Promise<WorkflowDraft>;
   publishDraft: (draft: WorkflowDraft) => Promise<void>;
+  addToPlaylist: (playlistId: string, lessonId: string) => Promise<void>;
+  /** A lesson was published or joined a playlist: the library's cached lists are stale. */
+  onLibraryChanged: () => void;
   newId: () => string;
   nowIso: () => string;
   environment: () => { origin: string; userAgent: string };
@@ -224,6 +227,20 @@ export function createWorkflowRunner(
         return fail(ready, "publish", { message: describeWorkflowError(error) });
       }
       update(slug, { published: true });
+      io.onLibraryChanged();
+    }
+
+    const listed = lessonOf(slug);
+    const playlist = settings.playlist;
+    if (nextStepOf(listed, settings) === "playlist" && listed.draft && playlist) {
+      update(slug, { status: "adding", issue: null });
+      try {
+        await io.addToPlaylist(playlist.id, listed.draft.lessonId);
+      } catch (error) {
+        return fail(listed, "playlist", { message: describeWorkflowError(error) });
+      }
+      update(slug, { inPlaylist: true });
+      io.onLibraryChanged();
     }
 
     update(slug, { status: "done", issue: null });

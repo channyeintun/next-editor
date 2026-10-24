@@ -26,6 +26,8 @@ vi.mock("react-router", () => ({
 vi.mock("@next-editor/infra", () => ({
   invalidateAthanLabAccount: () => Promise.resolve(),
   THUMBNAIL_ACCEPT: "image/png,image/jpeg",
+  useMyPlaylists: () => ({ data: [] }),
+  invalidateLessonDerivedQueries: () => Promise.resolve(),
   UploadLessonModal: ({ onClose }: { onClose: () => void }) => (
     <button type="button" onClick={onClose}>
       Close draft upload

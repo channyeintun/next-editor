@@ -56,8 +56,10 @@ unattended (`src/studio/workflow/`):
    name: `01-basics.png` for `css-course-01-basics`, `02-rust-variables.png`
    for `rust-variables`. Lessons with no match block Start unless "Use the
    default thumbnail" is checked.
-3. Choose the steps (create a draft; publish it) and press **Start workflow**.
-   Lessons run in course order, each with the narration set in the Render tab.
+3. Choose the steps (create a draft; publish it; then add it to a playlist) and
+   press **Start workflow**.
+   Lessons run in course order, each with the narration set in the Render tab,
+   so a playlist receives them in course order too.
    With screen recording on, the screen picker opens once, at Start, and every
    lesson records into that one share.
 

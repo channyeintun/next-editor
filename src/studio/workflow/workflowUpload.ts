@@ -1,4 +1,5 @@
 import {
+  addLessonsToPlaylist,
   MAX_DESCRIPTION_CHARS,
   MAX_TITLE_CHARS,
   prepareThumbnail,
@@ -68,4 +69,17 @@ export async function uploadWorkflowDraft(input: WorkflowUploadInput): Promise<W
 
 export async function publishWorkflowDraft(draft: WorkflowDraft): Promise<void> {
   await publishLesson(draft.lessonId);
+}
+
+/** Append a published lesson to the workflow's playlist; one already there is fine. */
+export async function addWorkflowLessonToPlaylist(
+  playlistId: string,
+  lessonId: string,
+): Promise<void> {
+  const { notEligible } = await addLessonsToPlaylist(playlistId, [lessonId]);
+  if (notEligible.includes(lessonId)) {
+    throw new Error(
+      "The playlist refused the lesson: it is not one of your published lessons (was it unpublished?)",
+    );
+  }
 }
