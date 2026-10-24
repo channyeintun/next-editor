@@ -1836,7 +1836,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ transition နဲ့ state ပြောင်းတာကို ချောမွေ့အောင် လုပ်ခဲ့ပါတယ်။ ဒီ
       lesson မှာတော့ keyframe animation နဲ့ အရာတွေကို သူ့ဘာသာ လှုပ်ရှားစေပါမယ်။
-      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-timeline]] animation က timeline ပေါ်မှာ run ပါတယ်။ keyframe ဆိုတာ အဲဒီ အချိန်
       တစ်နေရာမှာ element ဘယ်လို ပုံစံ ရှိရမလဲ မှတ်ထားတဲ့ အဆင့်ဖြစ်ပြီး၊ ရာခိုင်နှုန်းနဲ့
       ရေးပါတယ်။ [[mark:draw-states]] ဥပမာ ဒီ အစက်လေးက အစမှာ သေးပါတယ်။ တစ်ဝက်မှာ ကြီးပြီး
