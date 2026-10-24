@@ -1588,7 +1588,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ flex item တွေကို align လုပ်ခဲ့ပါတယ်။ ဒါပေမဲ့ flexbox က item တွေကို တန်း
       တစ်တန်းချင်း သီးသန့် စီလို့၊ တန်း မတူတဲ့ item တွေက အပေါ်အောက် column လိုက် မညီကြပါဘူး။
-      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-grid-box]] ဒီ lesson ကနေ စမယ့် grid ကတော့ row နဲ့ column နှစ်ဘက်လုံးကို တစ်ပြိုင်နက် စီမံတဲ့
       layout နည်းပါ။ [[mark:draw-two-dir]] ဆိုလိုတာက၊ item တိုင်းက ဘေးက item တွေနဲ့ row တစ်တန်းတည်း
       ညီနေသလို၊ အပေါ်အောက်က item တွေနဲ့လည်း column တစ်ခုတည်း ညီနေပါတယ်။ ဒါကြောင့် column တွေက အပေါ်ကနေ
