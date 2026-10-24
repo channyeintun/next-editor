@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CSS course poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      The free Burmese CSS course's announcement poster, 1080×1350 (4:5, the tallest
+      image a Facebook feed shows whole). Same brand as docs/css-course-thumbnail.html:
+      cream page, ink, yellow/purple/teal, Google Sans + Google Sans Code, Burmese in
+      Noto Sans Myanmar, and Boxy, the course's original box-model mascot.
+      Render it with `bun docs/css-course-poster-render.ts` (writes
+      docs/css-course-poster.png).
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #5f6368;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", "Noto Sans Myanmar", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px;
+        background: #2b2b2e;
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: var(--sans);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      /* Burmese shapes only when one font holds the whole run. */
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .series {
+        position: absolute;
+        left: 64px;
+        top: 58px;
+        font: 700 38px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 64px;
+        top: 46px;
+        padding: 10px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 30px/1.3 var(--mm);
+      }
+
+      .headline {
+        position: absolute;
+        left: 64px;
+        top: 146px;
+        margin: 0;
+        font: 700 72px/1.45 var(--mm);
+        letter-spacing: 0;
+      }
+
+      .headline .latin {
+        font-family: var(--sans);
+        letter-spacing: -0.02em;
+      }
+
+      .headline .mark {
+        background: linear-gradient(
+          transparent 62%,
+          rgb(77 229 214 / 0.55) 62% 92%,
+          transparent 92%
+        );
+      }
+
+      .free {
+        position: absolute;
+        right: 64px;
+        top: 150px;
+        width: 196px;
+        height: 196px;
+        border: 5px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+        box-shadow: 8px 8px 0 var(--ink);
+        transform: rotate(10deg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+
+      .free .mm {
+        font: 700 42px/1.4 var(--mm);
+      }
+
+      .free .en {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.14em;
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 388px;
+        width: 330px;
+        height: 304px;
+        border-radius: 30px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .number .value {
+        font: 700 184px/0.92 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .number .label {
+        font: 700 30px/1 var(--mono);
+        letter-spacing: 0.18em;
+      }
+
+      .number .range {
+        margin-top: 10px;
+        font: 700 25px/1.2 var(--mono);
+        color: var(--ink);
+      }
+
+      .mascot {
+        position: absolute;
+        left: 470px;
+        top: 364px;
+        width: 546px;
+        height: 340px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 26px;
+      }
+
+      .bubble {
+        position: relative;
+        padding: 6px 28px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 26px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font: 700 34px/1.6 var(--mm);
+        white-space: nowrap;
+      }
+
+      .bubble .latin {
+        font-family: var(--sans);
+      }
+
+      .bubble::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -17px;
+        width: 26px;
+        height: 26px;
+        margin-left: -13px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .boxy {
+        width: 324px;
+        height: 210px;
+        overflow: visible;
+        transform: rotate(-5deg);
+        transform-origin: center bottom;
+      }
+
+      .topics {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 738px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px 12px;
+      }
+
+      .chip {
+        padding: 9px 20px 11px;
+        border: 3px solid var(--ink);
+        border-radius: 999px;
+        background: var(--white);
+        box-shadow: 4px 4px 0 var(--ink);
+        font: 600 25px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .chip.hot {
+        background: var(--teal);
+      }
+
+      .chip.more {
+        background: transparent;
+        box-shadow: none;
+        border-style: dashed;
+        color: var(--gray);
+      }
+
+      .features {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 952px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .features li {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font: 700 29px/1.6 var(--mm);
+      }
+
+      .features .icon {
+        flex: none;
+        width: 44px;
+        height: 44px;
+        border: 3px solid var(--ink);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .features .icon svg {
+        width: 26px;
+        height: 26px;
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .features .latin {
+        font-family: var(--sans);
+      }
+
+      .link {
+        left: 64px;
+        right: 64px;
+        top: 1164px;
+        height: 84px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 30px;
+        font: 700 33px/1 var(--mono);
+      }
+
+      .link .tab {
+        position: absolute;
+        left: 26px;
+        top: -22px;
+        padding: 6px 16px 8px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 22px/1 var(--mono);
+      }
+
+      .link .host {
+        color: var(--purple);
+      }
+
+      .link .path {
+        color: var(--teal-dk);
+      }
+
+      .link .go {
+        margin-left: auto;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: var(--yellow);
+        border: 3px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 26px/1 var(--sans);
+      }
+
+      .footer {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 50px;
+        height: 50px;
+      }
+
+      .oss {
+        font: 700 24px/1 var(--mono);
+        color: var(--gray);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <div class="series"><span class="brace">{</span> CSS course <span class="brace">}</span></div>
+      <div class="lang">မြန်မာ အသံနဲ့</div>
+
+      <h1 class="headline">
+        <span class="latin mark">CSS</span> ကို မြန်မာလို<br />
+        အစအဆုံး လေ့လာမယ်
+      </h1>
+
+      <div class="free" aria-label="Free">
+        <span class="mm">အခမဲ့</span>
+        <span class="en">FREE</span>
+      </div>
+
+      <div class="card number">
+        <span class="value">43</span>
+        <span class="label">LESSONS</span>
+        <span class="range">Basics → Tailwind</span>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble"><span class="latin">Crash course</span> မဟုတ်ဘူး!</div>
+        <svg
+          class="boxy"
+          id="boxy"
+          viewBox="-160 -110 320 210"
+          role="img"
+          aria-label="Boxy, the course's box-model mascot"
+        ></svg>
+      </div>
+
+      <div class="topics">
+        <span class="chip">Box model</span>
+        <span class="chip">Selector</span>
+        <span class="chip">Cascade</span>
+        <span class="chip">Specificity</span>
+        <span class="chip hot">Flexbox</span>
+        <span class="chip hot">Grid</span>
+        <span class="chip">Container query</span>
+        <span class="chip">Animation</span>
+        <span class="chip">Anchor positioning</span>
+        <span class="chip">View transition</span>
+        <span class="chip hot">Tailwind CSS</span>
+        <span class="chip more"><span class="mm">နောက်ထပ် အများကြီး</span></span>
+      </div>
+
+      <ul class="features">
+        <li>
+          <span class="icon" style="background: var(--teal)"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" /></svg
+          ></span>
+          <span>အချိန်နောက်ပြန်သွားလိုက်ရသလို ပြန်ကြည့်လို့ရ</span>
+        </li>
+        <li>
+          <span class="icon" style="background: var(--yellow)"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"
+              />
+              <path d="m15 5 4 4" /></svg
+          ></span>
+          <span>ရပ်ပြီး <span class="latin">code</span> ကို ကိုယ်တိုင် ပြင်ကြည့်လို့ရ</span>
+        </li>
+        <li>
+          <span class="icon" style="background: #c9c0ff"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 7v14" />
+              <path
+                d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
+              /></svg
+          ></span>
+          <span><span class="latin">web.dev Learn CSS</span> ကို မှီငြမ်းထား</span>
+        </li>
+      </ul>
+
+      <div class="card link">
+        <span class="tab">course link</span>
+        <span
+          ><span class="host">nexteditor.dev</span
+          ><span class="path">/learn/playlist/css-course</span></span
+        >
+        <span class="go">→</span>
+      </div>
+
+      <div class="footer">
+        <div class="brand">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true">
+            <defs>
+              <linearGradient
+                id="g2c"
+                x1="300"
+                y1="312"
+                x2="724"
+                y2="712"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#4DE5D6" />
+                <stop offset="0.5" stop-color="#FFD255" />
+                <stop offset="1" stop-color="#6D57FF" />
+              </linearGradient>
+            </defs>
+            <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+            <polygon
+              points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+              fill="url(#g2c)"
+            />
+          </svg>
+          Next Editor
+        </div>
+        <div class="oss">github.com/channyeintun/next-editor</div>
+      </div>
+    </div>
+
+    <script>
+      // Boxy, drawn exactly as in docs/css-course-thumbnail.html (the "joy" pose):
+      // a dashed margin, a purple border band, teal padding and the yellow content
+      // box that holds the face.
+      const INK = "#1e1e1e";
+      const LAYER = {
+        margin: { x: -106, y: -100, w: 212, h: 192, r: 46 },
+        border: { x: -84, y: -78, w: 168, h: 152, r: 30 },
+        padding: { x: -69, y: -63, w: 138, h: 122, r: 20 },
+        content: { x: -52, y: -46, w: 104, h: 88, r: 11 },
+      };
+      const rect = (box, attrs, dx = 0, dy = 0) =>
+        `<rect x="${box.x + dx}" y="${box.y + dy}" width="${box.w}" height="${box.h}" rx="${box.r}" ${attrs}/>`;
+      const arm = (d, hx, hy) =>
+        `<path d="${d}" fill="none" stroke="${INK}" stroke-width="10" stroke-linecap="round"/>` +
+        `<circle cx="${hx}" cy="${hy}" r="10.5" fill="#ffd255" stroke="${INK}" stroke-width="5"/>`;
+      const sparkle = (x, y, s) =>
+        `<path d="M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z" fill="#ffd255" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      const { margin, border, padding, content } = LAYER;
+      document.getElementById("boxy").innerHTML =
+        sparkle(-138, -80, 11) +
+        sparkle(142, -88, 10) +
+        rect(
+          margin,
+          `fill="#ff8f7e" fill-opacity="0.14" stroke="#ff8f7e" stroke-width="4.5" stroke-dasharray="12 9" stroke-linecap="round"`,
+        ) +
+        arm("M -80 2 Q -110 -22 -118 -58", -118, -58) +
+        arm("M 80 2 Q 110 -22 118 -58", 118, -58) +
+        `<ellipse cx="-34" cy="86" rx="21" ry="12" fill="${INK}"/>` +
+        `<ellipse cx="34" cy="86" rx="21" ry="12" fill="${INK}"/>` +
+        rect(border, `fill="${INK}"`, 7, 7) +
+        rect(border, `fill="#6d57ff" stroke="${INK}" stroke-width="7"`) +
+        rect(padding, `fill="#4de5d6" stroke="${INK}" stroke-width="4.5"`) +
+        rect(content, `fill="#ffd255" stroke="${INK}" stroke-width="4.5"`) +
+        `<ellipse cx="-34" cy="-34" rx="9" ry="4.5" fill="#fff" opacity="0.6" transform="rotate(-30 -34 -34)"/>` +
+        `<path d="M -32 -6 Q -21 -22 -10 -6" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+        `<path d="M 10 -6 Q 21 -22 32 -6" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+        `<ellipse cx="-35" cy="10" rx="9" ry="5.5" fill="#ff8f7e" opacity="0.6"/>` +
+        `<ellipse cx="35" cy="10" rx="9" ry="5.5" fill="#ff8f7e" opacity="0.6"/>` +
+        `<path d="M -21 5 Q 0 42 21 5 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+        `<ellipse cx="0" cy="21" rx="9" ry="4.5" fill="#ff7f72"/>`;
+      window.posterReady = document.fonts.ready;
+    </script>
+  </body>
+</html>
