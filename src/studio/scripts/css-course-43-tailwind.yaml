@@ -1204,7 +1204,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ view transition ကို ကြည့်ပြီး၊ ဒီ course ရဲ့ CSS သက်သက် အပိုင်း ပြီးသွားပါပြီ။ ဒီ
       နောက်ဆုံး lesson မှာတော့ Tailwind CSS ကို ကြည့်ပြီး၊ course ကို အဆုံးသတ်ပါမယ်။ [[mark:start-server]]
-      board နောက်မှာ dev server ကို စနေပါပြီ။ ဒီတစ်ခါ Tailwind ကိုပါ install လုပ်ရလို့ တစ်မိနစ်လောက် ကြာပါမယ်။
+      board နောက်မှာ dev server ကို စ နေပါပြီ။ ဒီတစ်ခါ Tailwind ကိုပါ install လုပ်ရလို့ တစ်မိနစ်လောက် ကြာပါမယ်။
       [[mark:draw-classic]] အခုထိ ကိုယ်က element တစ်ခုကို menu card လိုမျိုး class နာမည် ပေးပြီး၊ CSS
       ဖိုင်ထဲမှာ သူ့အတွက် rule တစ်ခု ရေးခဲ့ပါတယ်။ [[mark:draw-utility]] Tailwind CSS ကတော့ ပြောင်းပြန်ပါ။
       property တစ်ခုလောက်ပဲ လုပ်တဲ့ utility class သေးသေးလေးတွေကို HTML ထဲမှာ တိုက်ရိုက် ပေါင်းသုံးတာပါ။ ဒီ
