@@ -1551,7 +1551,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson မှာ flex container လုပ်တာ၊ main axis နဲ့ cross axis၊ item တွေကို wrap
       လုပ်ခွင့် ပေးတာတွေကို ကြည့်ခဲ့ပါတယ်။ ဒါပေမဲ့ item တိုင်းက သူ့ content လောက်ပဲ ကျယ်နေတုန်းပါ။
-      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စနေပါပြီ။
+      [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို စ နေပါပြီ။
       [[mark:draw-code]] ဒီ lesson မှာတော့ flex item တွေက row ထဲက နေရာကို ဘယ်လို ခွဲယူကြလဲ ဆိုတာ
       ကြည့်ပါမယ်။ flex item တိုင်းမှာ ဒါကို ထိန်းတဲ့ တန်ဖိုး သုံးခု ရှိပါတယ်။ အဲဒီ သုံးခုရဲ့ default
       ကို board ပေါ်မှာ တစ်တွဲတည်း ရေးထားပါတယ်။ [[mark:draw-grow]] ပထမ တန်ဖိုးက grow ပါ။ သူက 0
