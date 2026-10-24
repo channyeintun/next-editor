@@ -1071,7 +1071,7 @@ scenes:
       ပြီးခဲ့တဲ့ lesson မှာ element ရဲ့ အစိတ်အပိုင်းတွေကို colon နှစ်ခုနဲ့ ရွေးခဲ့ပါတယ်။
       ဒီ lesson ကတော့ colon တစ်ခုနဲ့ ရေးတဲ့ pseudo-class တွေ အကြောင်းပါ။
       [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ dev server ကို
-      စနေပါပြီ။ [[mark:draw-def]] pseudo-class ဆိုတာ element ကို သူ့ အခြေအနေနဲ့ ရွေးတဲ့
+      စ နေပါပြီ။ [[mark:draw-def]] pseudo-class ဆိုတာ element ကို သူ့ အခြေအနေနဲ့ ရွေးတဲ့
       selector ပါ။ check လုပ်ထားတဲ့ checkbox၊ ဖြည့်ထားတာ မမှန်တဲ့ field၊ pointer တင်ထားတဲ့
       card စတာမျိုးပါ။ [[mark:draw-class]] အခြေအနေ ပြောင်းတိုင်း browser က ကိုယ့်အစား
       ထည့်ပေး ဖြုတ်ပေးတဲ့ class တစ်ခုလို စဉ်းစားလို့ ရပါတယ်။ [[mark:draw-families]]
