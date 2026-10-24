@@ -1502,7 +1502,7 @@ scenes:
       ကြည့်ခဲ့ပါတယ်။ [[mark:draw-steps]] browser က relevance ကို အရင် စစ်ပြီး၊ origin နဲ့ important၊
       style attribute နဲ့ layer၊ ပြီးရင် specificity ကို စစ်ပါတယ်။ ရေးထားတဲ့ အစဉ်ကိုတော့ အဆုံးမှာမှ
       ကြည့်ပါတယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်က editor ထဲမှာ dev server
-      ကို စနေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။ [[mark:circle-spec]] ဒီ lesson မှာ အစဉ်
+      ကို စ နေပါပြီ။ ဒါမှ page လိုတဲ့အခါ အသင့် ဖြစ်နေမှာပါ။ [[mark:circle-spec]] ဒီ lesson မှာ အစဉ်
       မတိုင်ခင် အဆင့်၊ selector ရဲ့ အလေးချိန် ဖြစ်တဲ့ specificity ကို အသေးစိတ် ကြည့်ပါမယ်။
       [[mark:draw-question]] ပြီးခဲ့တဲ့ lesson မှာ class နဲ့ ရွေးတဲ့ rule က မှာမယ် ခလုတ်ကို အရောင်
       ပေးထားပြီး၊ နောက်မှ ရေးထားတဲ့ ခလုတ် အားလုံးကို ရွေးတဲ့ rule က ရှုံးသွားခဲ့ပါတယ်။ ဘာကြောင့်လဲ
