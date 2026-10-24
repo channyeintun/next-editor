@@ -1348,7 +1348,7 @@ scenes:
       ပြီးခဲ့တဲ့ lesson မှာ popover လို element တစ်ခု ပေါ်တာ ပျောက်တာကို
       animation ထည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ page ရဲ့ ပုံစံ တစ်ခုလုံး
       ပြောင်းသွားတာကို animation ထည့်ကြည့်ပါမယ်။ [[mark:start-server]] board
-      နောက်မှာ dev server ကို စနေပါပြီ။ [[mark:draw-spa]] single-page app မှာ
+      နောက်မှာ dev server ကို စ နေပါပြီ။ [[mark:draw-spa]] single-page app မှာ
       browser က page တစ်ခုတည်းကိုပဲ ဖွင့်ထားပါတယ်။ တစ်ခုခု နှိပ်လိုက်ရင် page
       အသစ် မဖွင့်ဘဲ၊ JavaScript က page ထဲက အကြောင်းအရာကို လဲပေးတာပါ။ အဲဒီလို
       လဲပြီး ပြတဲ့ screen တစ်ခုစီကို view လို့ ခေါ်ပါတယ်။ [[mark:draw-instant]]
