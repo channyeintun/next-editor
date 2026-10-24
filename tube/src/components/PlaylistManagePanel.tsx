@@ -183,10 +183,10 @@ export default function PlaylistManagePanel({
           role="tabpanel"
           id={`${titleId}-panel-${view}`}
           aria-labelledby={`${titleId}-tab-${view}`}
-          className="max-h-[60vh] overflow-y-auto p-5"
+          className="flex max-h-[60vh] min-h-0 flex-col"
         >
           {actionError && (
-            <p role="alert" className="mb-2 text-xs text-rose-300">
+            <p role="alert" className="mx-5 mt-4 shrink-0 text-xs text-rose-300">
               {actionError}
             </p>
           )}
@@ -241,10 +241,10 @@ function MemberList({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
 
-  if (pending) return <p className="text-xs text-slate-400">Loading…</p>;
+  if (pending) return <p className="px-5 py-4 text-xs text-slate-400">Loading…</p>;
   if (members.length === 0) {
     return (
-      <p className="text-xs text-slate-400">
+      <p className="px-5 py-4 text-xs text-slate-400">
         No lessons yet. Add some from &ldquo;Add lessons&rdquo;.
       </p>
     );
@@ -268,7 +268,7 @@ function MemberList({
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-3 pt-4">
         <p className="text-xs text-slate-400">
           Drag a lesson, or use the arrows. Changes save as you go.
         </p>
@@ -283,7 +283,7 @@ function MemberList({
           <HoverRing />
         </button>
       </div>
-      <ol className="space-y-1">
+      <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto px-5 pb-5">
         {members.map((lesson, index) => {
           const last = members.length - 1;
           const indicator =
@@ -464,11 +464,11 @@ function AddLessons({
     );
   };
 
-  if (isPending) return <p className="text-xs text-slate-400">Loading…</p>;
+  if (isPending) return <p className="px-5 py-4 text-xs text-slate-400">Loading…</p>;
   if (candidates.length === 0) {
     const anyPublished = (myLessons ?? []).some((lesson) => lesson.status === "published");
     return (
-      <p className="text-xs text-slate-400">
+      <p className="px-5 py-4 text-xs text-slate-400">
         {anyPublished
           ? "Every one of your published lessons is already in this playlist."
           : "You have no published lessons yet. Publish a lesson to add it to a playlist."}
@@ -478,33 +478,35 @@ function AddLessons({
 
   return (
     <>
-      <input
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Filter your published lessons"
-        aria-label="Filter your published lessons"
-        className="w-full rounded-lg border border-white/10 bg-[#0f1219] px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-400 focus:border-sky-400/60 focus:outline-none"
-      />
-      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
+      <div className="shrink-0 px-5 pt-4">
         <input
-          type="checkbox"
-          checked={shown.length > 0 && shownSelected === shown.length}
-          ref={(input) => {
-            if (input) input.indeterminate = shownSelected > 0 && shownSelected < shown.length;
-          }}
-          disabled={shown.length === 0}
-          onChange={(event) =>
-            toggle(
-              shown.map((lesson) => lesson.id),
-              event.target.checked,
-            )
-          }
-          className="size-3.5 accent-sky-500"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter your published lessons"
+          aria-label="Filter your published lessons"
+          className="w-full rounded-lg border border-white/10 bg-[#0f1219] px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-400 focus:border-sky-400/60 focus:outline-none"
         />
-        Select all {shown.length} shown
-      </label>
-      <ul className="mt-2 space-y-0.5">
+        <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-300">
+          <input
+            type="checkbox"
+            checked={shown.length > 0 && shownSelected === shown.length}
+            ref={(input) => {
+              if (input) input.indeterminate = shownSelected > 0 && shownSelected < shown.length;
+            }}
+            disabled={shown.length === 0}
+            onChange={(event) =>
+              toggle(
+                shown.map((lesson) => lesson.id),
+                event.target.checked,
+              )
+            }
+            className="size-3.5 accent-sky-500"
+          />
+          Select all {shown.length} shown
+        </label>
+      </div>
+      <ul className="mt-2 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-5 pb-3">
         {shown.map((lesson) => (
           <li key={lesson.id}>
             <label className="flex items-center gap-2 rounded-md px-1 py-0.5 text-sm text-slate-300 hover:bg-white/5">
@@ -522,7 +524,7 @@ function AddLessons({
         ))}
         {shown.length === 0 && <li className="text-xs text-slate-400">No lesson matches.</li>}
       </ul>
-      <div className="sticky bottom-0 -mx-5 -mb-5 mt-3 flex items-center justify-between gap-3 border-t border-white/10 bg-[#151821] px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/10 px-5 py-3">
         <span className="text-xs text-slate-400">
           They go to the end of the playlist, by title.
         </span>
