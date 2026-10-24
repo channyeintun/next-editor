@@ -1252,7 +1252,7 @@ scenes:
     narration: >
       ပြီးခဲ့တဲ့ lesson နဲ့ course ရဲ့ စာသား အပိုင်း ပြီးပါပြီ။ ဒီ lesson မှာတော့ အလှဆင်တဲ့
       အပိုင်းကို gradient နဲ့ စပါမယ်။ [[mark:start-server]] ဒီလို ပြောနေတုန်းမှာပဲ၊ board နောက်မှာ
-      dev server ကို စနေပါပြီ။ [[mark:draw-swatch]] gradient ဆိုတာ အရောင် တစ်ခုကနေ နောက်တစ်ခုကို
+      dev server ကို စ နေပါပြီ။ [[mark:draw-swatch]] gradient ဆိုတာ အရောင် တစ်ခုကနေ နောက်တစ်ခုကို
       ဖြည်းဖြည်း ကူးသွားတဲ့ နောက်ခံ ပုံပါ။ ဥပမာအားဖြင့် အညိုရင့်ကနေ ရွှေရောင်ကို ကူးသွားတဲ့ banner
       မျိုးပါ။ [[mark:draw-image]] ဒါပေမဲ့ CSS မှာ gradient က အရောင် မဟုတ်ပါဘူး။ browser က ဆွဲပေးတဲ့
       ပုံ တစ်ပုံ ဖြစ်လို့၊ ပုံကို လက်ခံတဲ့ property ဖြစ်တဲ့ background image ထဲမှာ ထည့်ရပါတယ်။
