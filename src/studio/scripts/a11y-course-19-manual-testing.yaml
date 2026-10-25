@@ -1,0 +1,2237 @@
+# Accessibility course (Burmese), lesson 19: manual testing.
+#
+# Hands-on lesson on the tea-shop page (base-axe workspace; panel modes
+# tabs + contrast + axe). The page passes axe ("no issues" all lesson long)
+# but fails five manual checks. Shape: board (what manual testing is: the
+# keyboard / visual / content areas, pros and cons) → board (what a tool can
+# check vs what needs a person; start from a trusted checklist) → the page:
+# axe no issues, 5 tab stops (everything reachable), two failing contrast
+# rows → keyboard: Tab once, focus moves but no ring → typed :focus-visible
+# ring → Tab on: focus jumps back up to the featured card (moved first with
+# CSS order) → typed override, visual order = DOM order → visual: pale
+# Burmese link (2.67, no underline; axe skips the word) and the footer phone
+# icon (1.62; axe never checks icons) fixed with typed CSS → zoom/reflow
+# explained honestly (try it in your own browser) and text spacing shown
+# with a pinned test style sheet: the special box clips its last line until
+# its fixed height is released → board: content checks → recap → next:
+# assistive technology (screen reader) testing.
+#
+# Start state (base.css section E, never typed or shown): `:focus { outline:
+# none }`, `.featured { order: -1; grid-column: 1 / -1 }`, `.hero a` #b39478
+# without underline, `.site-footer .call-link` #5c4433 on #3b2314, `.special
+# { height: 9rem; overflow: hidden }`. text-spacing.css is pinned and linked
+# by an inserted <link> in the spacing scene.
+# Measured with research/smoke (headless Chrome 155, 432 × 720, drawer 40 %):
+# axe 4.14.0 no issues (the Burmese link word is neither pass nor violation;
+# link-in-text-block passes), tab stops 5, contrast 2.67 / 1.62; after the
+# fixes 6.72 / 11.12, axe still no issues; with text-spacing.css the special
+# box's scroll height 182 > 140 (last line cut by the border).
+#
+# Workspace: ws/ pinned byte-exact with tools/pin-files.ts (this file is the
+# template; `bun ../../probe/build.ts template.yaml ws <slug>.yaml`).
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-19-manual-testing
+  title: "Accessibility course 19: Manual testing"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course 19
+    entryFilePath: index.html
+    files:
+      axe.js: |
+        // axe.js: pinned in the automated-testing lesson only (base-axe/package.json
+        // installs axe-core). It hands axe to the A11y panel's "axe" mode; panel.js
+        // never imports axe-core itself, so every other lesson installs without it.
+        import axe from "axe-core";
+
+        window.a11yPanelAxe = axe;
+        window.dispatchEvent(new Event("a11y-panel-axe"));
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture, in its accessible form: every text
+          colour passes WCAG AA, form fields have 3:1 borders, nothing hides focus.
+          A lesson keeps the sections it needs and drops any declaration its own demo
+          types or relies on being absent (COURSE-KIT.md, "Deriving a lesson
+          workspace"). Section E holds the few rules a start state pins on purpose,
+          including deliberately broken ones (a pale colour, a removed outline).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --field: #8a7866;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* A class that sets display must never un-hide a [hidden] element. */
+        [hidden] {
+          display: none !important;
+        }
+
+        /* Text for screen readers only (the forms and images lessons use it). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .skip-link {
+          position: absolute;
+          top: -48px;
+          left: 8px;
+          padding: 4px 12px;
+          background: var(--cream);
+          color: var(--tea-dark);
+        }
+
+        .skip-link:focus {
+          top: 8px;
+        }
+
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .divider {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0 auto 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .status {
+          margin-left: 8px;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .sold-out .name {
+          text-decoration: line-through;
+        }
+
+        .order-link,
+        .order-btn,
+        .confirm-btn,
+        .disclosure,
+        .fav,
+        .confirm button {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .fav {
+          margin-left: 8px;
+          padding: 0 12px;
+          font-size: 14px;
+        }
+
+        .fav[aria-pressed="true"] {
+          background: var(--leaf);
+        }
+
+        .tea-options {
+          margin: 16px 0;
+        }
+
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .chips li {
+          padding: 2px 12px;
+          border: 1px solid var(--field);
+          border-radius: 999px;
+          background: #fff;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+          font-style: italic;
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .hours-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+        }
+
+        .hours-table caption {
+          text-align: start;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-table th,
+        .hours-table td {
+          padding: 4px 8px;
+          border: 1px solid var(--line);
+          text-align: start;
+        }
+
+        .hours-table thead th {
+          background: var(--cream);
+        }
+
+        .location {
+          margin: 16px 0;
+        }
+
+        .map {
+          position: relative;
+          height: 120px;
+          border: 1px solid var(--field);
+          border-radius: var(--radius);
+          background:
+            linear-gradient(90deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+            linear-gradient(0deg, transparent 40%, #fff 40%, #fff 50%, transparent 50%),
+            #d9e8c9;
+        }
+
+        .map-pin {
+          position: absolute;
+          top: 34px;
+          left: 56%;
+          width: 18px;
+          height: 18px;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          background: var(--chili);
+        }
+
+        .address {
+          margin: 4px 0 0;
+        }
+
+        .order-form {
+          margin: 16px 0;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .hint {
+          margin: 2px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .sugar {
+          margin: 12px 0 0;
+          padding: 4px 12px 8px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+        }
+
+        .sugar label {
+          display: inline-block;
+          margin: 0 12px 0 0;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .error {
+          margin: 2px 0 0;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .alert {
+          margin: 8px 0 0;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: #fde8e4;
+          color: var(--chili);
+        }
+
+        .order-status {
+          min-height: 1.8em;
+          margin: 8px 0 0;
+          color: var(--leaf);
+          font-weight: 700;
+        }
+
+        .confirm {
+          margin: 16px auto auto;
+          max-width: 320px;
+          padding: 16px;
+          border: 0;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+        }
+
+        .confirm::backdrop {
+          background: rgb(0 0 0 / 0.25);
+        }
+
+        .confirm form {
+          display: flex;
+          gap: 8px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        .menu {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .menu .menu-card {
+          margin: 0;
+        }
+
+        .menu-card .name a {
+          color: var(--ink);
+        }
+
+        .special {
+          margin: 16px 0;
+          padding: 12px 16px;
+          border: 2px solid var(--gold);
+          border-radius: var(--radius);
+          background: #fff;
+        }
+
+        .special h2,
+        .special p {
+          margin: 0;
+        }
+
+        .call-link {
+          margin-top: 8px;
+          background: none;
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Lesson 19 start state (deliberate problems, never typed or shown):
+           1. every focus ring is removed;
+           2. the featured card is moved to the top with CSS, so the visual order
+              runs against the DOM (and Tab) order;
+           3. the drinks link in the hero is pale and has no underline;
+           4. the footer phone icon is almost the colour of the footer;
+           5. the special box has a fixed height that clips its text. */
+        :focus {
+          outline: none;
+        }
+
+        .featured {
+          order: -1;
+          grid-column: 1 / -1;
+        }
+
+        .hero a {
+          color: #b39478;
+          text-decoration: none;
+        }
+
+        .site-footer .call-link {
+          color: #5c4433;
+        }
+
+        .special {
+          height: 9rem;
+          overflow: hidden;
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" alt="" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              </div>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <section class="hero" data-testid="hero">
+                <h2>မင်္ဂလာပါ</h2>
+                <p>မနက်တိုင်း လာခဲ့ပါ။ ဆိုင်ရဲ့ <a href="#drinks" data-contrast data-contrast-label="သောက်စရာ link" data-testid="drinks-link">သောက်စရာ</a> တွေကို အောက်မှာ ကြည့်ပါ။</p>
+              </section>
+
+              <section class="menu-section" id="drinks" data-testid="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card" data-testid="card-coffee">
+                    <h3 class="name"><a href="#drinks" data-testid="link-coffee">ကော်ဖီ</a></h3>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-lime-juice">
+                    <h3 class="name"><a href="#drinks" data-testid="link-lime-juice">သံပုရာရည်</a></h3>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                  <li class="menu-card featured" data-testid="card-laphet-yay">
+                    <h3 class="name"><a href="#drinks" data-testid="link-laphet-yay">လက်ဖက်ရည်</a></h3>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="special" id="special" data-testid="special">
+                <h2>ယနေ့ အထူး</h2>
+                <p data-testid="special-text">မနက် ၆ နာရီကနေ ၉ နာရီအထိ လက်ဖက်ရည်နဲ့ ပလာတာ တွဲမှာရင် ၅၀၀ ကျပ် လျှော့ပါတယ်။ ဆိုင်ကို နေ့တိုင်း မနက် ၆ နာရီမှာ ဖွင့်ပါတယ်။</p>
+              </section>
+            </main>
+
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <a class="call-link" href="tel:+959123456789" aria-label="ဖုန်းဆက်ရန်" data-contrast data-contrast-label="ဖုန်း icon" data-testid="call-link"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5l2.6-.6 1.6 4.2-2 1.4a11 11 0 0 0 6.7 6.7l1.4-2 4.2 1.6-.6 2.6a2 2 0 0 1-2 1.6A15.5 15.5 0 0 1 3.5 4.9a2 2 0 0 1 1.6-2z" fill="currentColor"/></svg></a>
+            </footer>
+
+            <script type="module" src="/axe.js"></script>
+            <script type="module" src="/panel.js" data-modes="tabs contrast axe" data-height="40"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "axe-core": "4.14.0",
+            "dom-accessibility-api": "0.7.1",
+            "tabbable": "6.5.0",
+            "vite": "5.4.21"
+          }
+        }
+      panel.js: |
+        // panel.js: the course's A11y panel. Pinned, never typed, never edited.
+        // It shows what assistive technology gets from the page, as real DOM in a
+        // drawer at the bottom of the preview, so the recorded lesson replays it.
+        //
+        //   <script type="module" src="/panel.js" data-modes="tree tabs" data-scope="#order"></script>
+        //
+        //   data-modes     any of: tree tabs contrast live axe (drawn in that order)
+        //   data-scope     CSS selector; tree, contrast, live and axe look only inside
+        //                  it, tabs keeps page-wide numbers but lists only stops inside
+        //   data-height    drawer height, % of the preview height (20-60, default 40)
+        //   data-axe-tags  axe rule tags to run (default: axe's default rules)
+        //
+        // A row for an element with data-testid="x" gets data-testid="a11y-x" (tree),
+        // "tab-x" (tabs) or "contrast-x" (COURSE-KIT.md lists every test id). The
+        // panel is inert: never focusable, never in the accessibility tree, never in
+        // its own results. It rewrites a section only when its text changes. Names
+        // come from dom-accessibility-api (W3C accname), tab stops from tabbable,
+        // roles from Chrome's mapping of HTML elements.
+
+        import { computeAccessibleDescription, computeAccessibleName } from "dom-accessibility-api";
+        import { isFocusable, tabbable } from "tabbable";
+
+        const tag = document.querySelector('script[src*="panel.js"]');
+        const config = {
+          modes: (tag?.dataset.modes || "tree").split(/\s+/).filter((m) => ["tree", "tabs", "contrast", "live", "axe"].includes(m)),
+          scope: tag?.dataset.scope || "",
+          height: Math.min(60, Math.max(20, Number(tag?.dataset.height) || 40)),
+          axeTags: (tag?.dataset.axeTags || "").split(/\s+/).filter(Boolean),
+        };
+        const on = (mode) => config.modes.includes(mode);
+        const words = (text) => new Set(text.split(" "));
+
+        // ---------------------------------------------------------------- roles
+
+        const TAG_ROLES = {
+          article: "article", aside: "complementary", blockquote: "blockquote", button: "button", dialog: "dialog",
+          dd: "definition", details: "group", dl: "list", dt: "term", fieldset: "group", figure: "figure", hr: "separator",
+          iframe: "iframe", li: "listitem",
+          main: "main", menu: "list", meter: "meter", nav: "navigation", ol: "list", optgroup: "group", option: "option",
+          output: "status", p: "paragraph", progress: "progressbar", search: "search", summary: "button", table: "table",
+          textarea: "textbox", tr: "row", ul: "list", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+          h5: "heading", h6: "heading",
+        };
+        const INPUT_ROLES = {
+          button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox", radio: "radio",
+          range: "slider", number: "spinbutton", search: "searchbox", hidden: "none",
+        };
+        // Roles that get a row; paragraph and generic get one only with lang, aria-live or focus.
+        const ROWS = words(
+          "alert alertdialog article banner blockquote button cell checkbox columnheader combobox complementary " +
+            "contentinfo dialog figure form grid gridcell group heading iframe img link list listbox listitem log main " +
+            "menu menubar menuitem menuitemcheckbox menuitemradio meter navigation option progressbar radio radiogroup " +
+            "region row rowheader search searchbox separator slider spinbutton status switch tab table tablist tabpanel " +
+            "term definition textbox timer toolbar tooltip tree treeitem",
+        );
+        // Roles that must have an accessible name ("⚠ no name").
+        const NEEDS_NAME = words(
+          "button link img iframe dialog alertdialog checkbox radio switch textbox searchbox combobox listbox slider " +
+            "spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem option region form progressbar meter",
+        );
+        // Controls: one that cannot take focus gets "⚠ not focusable".
+        const INTERACTIVE = words(
+          "button link checkbox radio switch textbox searchbox combobox listbox slider spinbutton tab menuitem " +
+            "menuitemcheckbox menuitemradio treeitem",
+        );
+        // Roles whose children are presentational: the row stands for the whole control.
+        const LEAF = words("button checkbox radio switch img textbox searchbox spinbutton slider progressbar meter separator iframe tab");
+        // Roles that never take a name, so the panel skips computing one.
+        const UNNAMED = words("list listitem row paragraph generic separator blockquote term definition");
+
+        const explicitRole = (el) => (el.getAttribute("role") || "").trim().split(/\s+/)[0].toLowerCase();
+        const hasName = (el) => el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby") || el.hasAttribute("title");
+        const outsideSections = (el) => !el.parentElement?.closest("article, aside, main, nav, section");
+
+        function focusable(el) {
+          try {
+            return isFocusable(el);
+          } catch {
+            return false;
+          }
+        }
+
+        function roleOf(el) {
+          const role = explicitRole(el);
+          // An author cannot take the role away from something focusable or named.
+          if (role === "none" || role === "presentation") return focusable(el) || hasName(el) ? implicitRole(el) : "none";
+          return role || implicitRole(el);
+        }
+
+        function implicitRole(el) {
+          const tagName = el.localName;
+          const cellsHidden = () => ["none", "presentation"].includes(explicitRole(el.closest("table") || el));
+          switch (tagName) {
+            case "a":
+            case "area":
+              return el.hasAttribute("href") ? "link" : "generic";
+            case "img":
+              return el.getAttribute("alt") === "" && !hasName(el) ? "none" : "img";
+            case "svg":
+              return hasName(el) || el.querySelector(":scope > title") ? "img" : "none";
+            case "input":
+              return INPUT_ROLES[el.type] || (el.hasAttribute("list") ? "combobox" : "textbox");
+            case "select":
+              return el.multiple || el.size > 1 ? "listbox" : "combobox";
+            case "header":
+              return outsideSections(el) ? "banner" : "generic";
+            case "footer":
+              return outsideSections(el) ? "contentinfo" : "generic";
+            case "section":
+              return hasName(el) ? "region" : "generic";
+            case "form":
+              return hasName(el) ? "form" : "generic";
+            case "li":
+              return el.parentElement?.matches("ul, ol, menu") ? "listitem" : "generic";
+            case "tr":
+              return cellsHidden() ? "generic" : "row";
+            case "td":
+              return cellsHidden() ? "generic" : el.closest("[role=grid], [role=treegrid]") ? "gridcell" : "cell";
+            case "th": {
+              if (cellsHidden()) return "generic";
+              const scope = el.getAttribute("scope");
+              if (scope === "row" || scope === "rowgroup") return "rowheader";
+              if (scope === "col" || scope === "colgroup" || el.closest("thead")) return "columnheader";
+              const firstOfDataRow = el.parentElement?.firstElementChild === el && el.parentElement.querySelector(":scope > td");
+              return firstOfDataRow ? "rowheader" : "columnheader";
+            }
+            default:
+              return TAG_ROLES[tagName] || "generic";
+          }
+        }
+
+        // ---------------------------------------------------------------- names and states
+
+        const squash = (text) => (text || "").replace(/\s+/g, " ").trim();
+        const segmenter = new Intl.Segmenter();
+        function clip(text, max) {
+          const graphemes = Array.from(segmenter.segment(text), (part) => part.segment);
+          return graphemes.length > max ? `${graphemes.slice(0, max - 1).join("")}…` : text;
+        }
+
+        function nameOf(el) {
+          let name = "";
+          try {
+            name = squash(computeAccessibleName(el, { computedStyleSupportsPseudoElements: true }));
+          } catch {}
+          if (name) return { name, from: "" };
+          // Two HTML-AAM rules Chrome follows and accname leaves out.
+          if (el.localName === "figure") return { name: squash(el.querySelector(":scope > figcaption")?.textContent), from: "" };
+          const placeholder = /^(input|textarea)$/.test(el.localName) ? squash(el.getAttribute("placeholder")) : "";
+          return placeholder ? { name: placeholder, from: "from placeholder" } : { name: "", from: "" };
+        }
+
+        function statesOf(el, role) {
+          const states = [];
+          const aria = (name) => el.getAttribute(`aria-${name}`);
+          const summary = el.localName === "summary";
+          if (aria("expanded") === "true" || (summary && el.parentElement?.open)) states.push("expanded");
+          else if (aria("expanded") === "false" || summary) states.push("collapsed");
+          if (aria("pressed")) states.push({ true: "pressed", false: "not pressed", mixed: "mixed" }[aria("pressed")] || "");
+          if (["checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"].includes(role)) {
+            const native = el instanceof HTMLInputElement;
+            const mixed = native ? el.indeterminate : aria("checked") === "mixed";
+            states.push(mixed ? "mixed" : (native ? el.checked : aria("checked") === "true") ? "checked" : "not checked");
+          }
+          if (aria("selected") === "true" || (el instanceof HTMLOptionElement && el.selected)) states.push("selected");
+          if (aria("current") && aria("current") !== "false") states.push(`current=${aria("current")}`);
+          if (el.hasAttribute("required") || aria("required") === "true") states.push("required");
+          if (["true", "grammar", "spelling"].includes(aria("invalid"))) states.push("invalid");
+          if (el.hasAttribute("readonly") || aria("readonly") === "true") states.push("readonly");
+          const disabled = el.matches(":disabled") || aria("disabled") === "true";
+          if (disabled) states.push("disabled");
+          const canFocus = focusable(el);
+          if (canFocus && !INTERACTIVE.has(role) && role !== "iframe") states.push("focusable");
+          if (!canFocus && !disabled && INTERACTIVE.has(role)) states.push("⚠ not focusable");
+          if (el === activeElement()) states.push("focused");
+          if (aria("live") && aria("live") !== "off") states.push(`live=${aria("live")}`);
+          return states.filter(Boolean);
+        }
+
+        function activeElement() {
+          const el = document.activeElement;
+          return el && el !== document.body && el !== document.documentElement && !host.contains(el) ? el : null;
+        }
+
+        function openModal() {
+          try {
+            return document.querySelector("dialog:modal");
+          } catch {
+            return null;
+          }
+        }
+
+        function scopeRoot() {
+          try {
+            return (config.scope && document.querySelector(config.scope)) || document.body;
+          } catch {
+            return document.body;
+          }
+        }
+
+        // ---------------------------------------------------------------- tree
+
+        function describe(el, role) {
+          const states = statesOf(el, role);
+          const extra = el.hasAttribute("lang") || states.some((s) => s === "focusable" || s === "focused" || s.startsWith("live="));
+          if (role === "none" || !(ROWS.has(role) || extra)) return null;
+          const { name, from } = UNNAMED.has(role) ? { name: "", from: "" } : nameOf(el);
+          const level = role === "heading" ? Number(el.getAttribute("aria-level")) || Number(el.localName.slice(1)) || 2 : 0;
+          const parts = [{ cls: "role", text: level ? `heading level ${level}` : role }];
+          if (name) parts.push({ cls: "name", text: `"${clip(name, 60)}"` });
+          else if (NEEDS_NAME.has(role)) parts.push({ cls: "warn", text: "⚠ no name" });
+          if (from) parts.push({ cls: "muted", text: from });
+          if (role === "list" && el.localName !== "dl") {
+            const items = Array.from(el.children).filter((c) => c.localName === "li" || explicitRole(c) === "listitem");
+            parts.push({ cls: "muted", text: `${items.length} ${items.length === 1 ? "item" : "items"}` });
+          }
+          for (const state of states) parts.push({ cls: state.startsWith("⚠") ? "warn" : "state", text: state });
+          if (el.hasAttribute("aria-describedby")) {
+            let description = "";
+            try {
+              description = squash(computeAccessibleDescription(el));
+            } catch {}
+            if (description) parts.push({ cls: "muted", text: `desc "${clip(description, 40)}"` });
+          }
+          if (el.hasAttribute("lang")) parts.push({ cls: "state", text: `lang="${el.getAttribute("lang")}"` });
+          if (!name && ["paragraph", "generic", "blockquote", "status", "alert", "log", "term", "definition"].includes(role) && squash(el.textContent)) {
+            parts.push({ cls: "muted", text: `· ${clip(squash(el.textContent), 40)}` });
+          }
+          const warnings = parts.filter((part) => part.cls === "warn").length;
+          return { role, name, states, parts, warnings, testid: el.getAttribute("data-testid") };
+        }
+
+        function buildTree() {
+          const rows = [];
+          const visit = (el, depth) => {
+            if (el === host || /^(script|style|template|noscript|head|title|meta|link)$/.test(el.localName)) return;
+            if (el.getAttribute("aria-hidden") === "true" || el.hasAttribute("inert")) return;
+            const style = getComputedStyle(el);
+            if (style.display === "none") return;
+            let childDepth = depth;
+            if (style.visibility === "visible" && el !== document.body) {
+              const role = roleOf(el);
+              const row = describe(el, role);
+              if (row) {
+                rows.push({ ...row, depth });
+                childDepth = depth + 1;
+                if (LEAF.has(role)) return;
+              }
+            }
+            if (el.localName === "svg" || el.localName === "select") return;
+            for (const child of el.children) visit(child, childDepth);
+          };
+          // While a modal dialog is open, everything outside it is inert.
+          visit(openModal() || scopeRoot(), 0);
+          return { rows, title: squash(document.title), lang: document.documentElement.getAttribute("lang") || "" };
+        }
+
+        function renderTree({ rows, title, lang }) {
+          const warnings = rows.reduce((sum, r) => sum + r.warnings, 0) + (title ? 0 : 1) + (lang ? 0 : 1);
+          const label = warnings ? `Accessibility tree · ⚠ ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : "Accessibility tree · no warnings";
+          const head = row({ testid: "a11y-summary", head: true, attrs: { "data-warnings": warnings } }, [{ text: label }]);
+          const doc = row({ testid: "a11y-document", depth: 0, attrs: { "data-title": title, "data-lang": lang } }, [
+            { cls: "role", text: "document" },
+            title ? { cls: "name", text: `"${clip(title, 50)}"` } : { cls: "warn", text: "⚠ no title" },
+            lang ? { cls: "state", text: `lang="${lang}"` } : { cls: "warn", text: "⚠ no lang" },
+          ]);
+          const body = rows.map((r) =>
+            row(
+              {
+                testid: r.testid && `a11y-${r.testid}`,
+                depth: r.depth + 1,
+                focused: r.states.includes("focused"),
+                attrs: { "data-name": r.name, "data-states": r.states.join(" ") },
+              },
+              r.parts,
+            ),
+          );
+          return [head, doc, ...body];
+        }
+
+        // ---------------------------------------------------------------- tabs
+
+        function tabStops() {
+          let stops = [];
+          try {
+            stops = tabbable(openModal() || document.body, { displayCheck: "full" });
+          } catch {}
+          // A radio group with nothing checked is one stop (its first radio), as in Chrome.
+          const groups = new Set();
+          return stops.filter((el) => {
+            if (!(el instanceof HTMLInputElement) || el.type !== "radio" || !el.name) return true;
+            const group = Array.from((el.form || document).querySelectorAll("input[type=radio]")).filter((r) => r.name === el.name);
+            if (group.some((r) => r.checked)) return true;
+            if (groups.has(group[0])) return false;
+            groups.add(group[0]);
+            return true;
+          });
+        }
+
+        let marked = new Map();
+        function buildTabs() {
+          const scope = openModal() || (config.scope ? scopeRoot() : null);
+          const stops = tabStops().map((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const text = squash(el.textContent);
+            return {
+              el,
+              order: index + 1,
+              role: roleOf(el),
+              name: nameOf(el).name,
+              text,
+              testid: el.getAttribute("data-testid"),
+              ariaHidden: Boolean(el.closest('[aria-hidden="true"]')),
+              focused: el === activeElement(),
+              x: Math.round(rect.left + scrollX),
+              y: Math.round(rect.top + scrollY),
+              listed: !scope || scope.contains(el),
+            };
+          });
+          // data-a11y-tab="n" on a listed stop is what its badge anchors to.
+          const next = new Map(stops.filter((s) => s.listed && s.order <= 60).map((s) => [s.el, String(s.order)]));
+          for (const el of marked.keys()) if (!next.has(el)) el.removeAttribute("data-a11y-tab");
+          for (const [el, order] of next) if (el.getAttribute("data-a11y-tab") !== order) el.setAttribute("data-a11y-tab", order);
+          marked = next;
+          return stops;
+        }
+
+        function renderTabs(stops) {
+          const head = row({ testid: "tab-count", head: true, attrs: { "data-count": stops.length } }, [
+            { text: `Tab order · ${stops.length} stops` },
+          ]);
+          const items = stops
+            .filter((s) => s.listed)
+            .map((s) => {
+              const parts = [{ cls: "order", text: String(s.order) }, { cls: "role", text: s.role }];
+              if (s.name) parts.push({ cls: "name", text: `"${clip(s.name, 50)}"` });
+              else if (NEEDS_NAME.has(s.role)) parts.push({ cls: "warn", text: "⚠ no name" });
+              else if (s.text) parts.push({ cls: "muted", text: `· ${clip(s.text, 40)}` });
+              if (s.ariaHidden) parts.push({ cls: "warn", text: "⚠ aria-hidden" });
+              if (s.focused) parts.push({ cls: "state", text: "focused" });
+              return row({ testid: s.testid && `tab-${s.testid}`, depth: 0, focused: s.focused, attrs: { "data-order": s.order } }, parts);
+            });
+          return [head, ...(items.length ? items : [row({}, [{ cls: "muted", text: "(no tab stops here)" }])])];
+        }
+
+        // Studio cannot press keys, so a lesson clicks two hidden panel controls
+        // (preview.click on a11y-tab-next / a11y-tab-prev) to move focus the way Tab
+        // and Shift+Tab do. Past the last stop focus leaves the page (body).
+        function moveFocus(step) {
+          const stops = tabStops();
+          const active = activeElement();
+          let next = active ? null : step > 0 ? stops[0] : stops.at(-1);
+          if (active) {
+            let index = stops.indexOf(active);
+            if (index === -1) {
+              // Focus sits outside the order: continue from its place in the page.
+              const after = stops.findIndex((el) => active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              index = (after === -1 ? stops.length : after) - (step > 0 ? 1 : 0);
+            }
+            next = stops[index + step];
+          }
+          if (next) next.focus();
+          else active?.blur();
+        }
+
+        const renderBadges = (stops) =>
+          stops
+            .filter((s) => s.listed)
+            .map(
+              (s) =>
+                `<span class="a11yp-badge${s.focused ? " is-focused" : ""}" style="--x:${s.x}px;--y:${s.y}px;position-anchor:--a11yp-${s.order}">${s.order}</span>`,
+            );
+
+        // ---------------------------------------------------------------- contrast
+
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        function parseColor(value) {
+          const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+          if (match) {
+            const [r, g, b, a = 1] = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+            return { r, g, b, a };
+          }
+          // oklch(), color(), color-mix() and friends: let a 1px canvas convert them.
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = value;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        }
+
+        const over = (top, below) => ({
+          r: top.r * top.a + below.r * (1 - top.a),
+          g: top.g * top.a + below.g * (1 - top.a),
+          b: top.b * top.a + below.b * (1 - top.a),
+          a: 1,
+        });
+
+        // The colour behind an element: its own and its ancestors' background colours
+        // stacked on a white canvas. Background images and opacity are not counted.
+        function backgroundOf(el) {
+          const layers = [];
+          let image = false;
+          for (let node = el; node instanceof Element; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            image ||= style.backgroundImage !== "none";
+            layers.push(parseColor(style.backgroundColor));
+            if (layers.at(-1).a >= 1) break;
+          }
+          return { color: layers.reduceRight((below, layer) => over(layer, below), { r: 255, g: 255, b: 255, a: 1 }), image };
+        }
+
+        function luminance({ r, g, b }) {
+          const linear = (v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        }
+
+        const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+
+        function buildContrast() {
+          const root = scopeRoot();
+          const targets = [...(root.matches("[data-contrast]") ? [root] : []), ...root.querySelectorAll("[data-contrast]")];
+          return targets.map((el) => {
+            const style = getComputedStyle(el);
+            const border = el.dataset.contrast === "border";
+            const label = el.dataset.contrastLabel || clip(squash(el.textContent) || nameOf(el).name || el.localName, 18);
+            const item = { testid: el.getAttribute("data-testid"), label, border };
+            if (!el.getClientRects().length) return { ...item, hidden: true };
+            const behind = backgroundOf(border ? el.parentElement || el : el);
+            const side = ["Top", "Right", "Bottom", "Left"].find((s) => parseFloat(style[`border${s}Width`]) > 0);
+            const ink = border ? (side ? parseColor(style[`border${side}Color`]) : behind.color) : parseColor(style.color);
+            const fg = over(ink, behind.color);
+            const [high, low] = [luminance(fg), luminance(behind.color)].sort((x, y) => y - x);
+            const ratio = (high + 0.05) / (low + 0.05);
+            const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            // Compare the exact ratio, show it cut (not rounded) to 2 places: 4.499 shows 4.49 and fails.
+            const shown = (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+            return { ...item, shown, large, fg: hex(fg), bg: hex(behind.color), image: behind.image, aa: ratio >= (border || large ? 3 : 4.5), aaa: ratio >= (large ? 4.5 : 7) };
+          });
+        }
+
+        function renderContrast(items) {
+          const rows = items.map((item) => {
+            const parts = [{ cls: "name", text: `"${item.label}"` }];
+            const attrs = {};
+            const verdict = (ok, prefix) => ({ cls: ok ? "pass" : "warn", text: `${prefix}${ok ? "pass" : "fail"}` });
+            if (item.hidden) parts.push({ cls: "muted", text: "not rendered" });
+            else if (item.border) {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail" });
+              parts.push({ cls: "role", text: "border" }, { cls: "order", text: `${item.shown}:1` }, { cls: "muted", text: "needs 3:1" }, verdict(item.aa, ""));
+            } else {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail", "data-aaa": item.aaa ? "pass" : "fail" });
+              parts.push({ cls: "order", text: `${item.shown}:1` }, verdict(item.aa, "AA "), verdict(item.aaa, "AAA "));
+              if (item.large) parts.push({ cls: "muted", text: "large text" });
+            }
+            if (item.image) parts.push({ cls: "warn", text: "⚠ background image: check by eye" });
+            const swatches = item.hidden ? "" : `<span class="a11yp-swatch" style="background:${item.fg}"></span><span class="a11yp-swatch" style="background:${item.bg}"></span>`;
+            return row({ testid: item.testid && `contrast-${item.testid}`, depth: 0, attrs, prefix: swatches }, parts);
+          });
+          const head = row({ head: true }, [{ text: "Contrast (WCAG 2)" }]);
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(mark elements with data-contrast)" }])])];
+        }
+
+        // ---------------------------------------------------------------- live regions
+
+        // A simplified screen reader: it speaks a change to a live region that was
+        // already on the page, never the text a region arrives with (except an alert).
+        const liveState = new WeakMap();
+        const liveLog = [];
+        let liveCount = 0;
+        let liveBaseline = false;
+
+        function scanLive() {
+          if (!on("live")) return false;
+          let changed = false;
+          for (const el of scopeRoot().querySelectorAll("[aria-live], [role~=status], [role~=alert], [role~=log], output")) {
+            const alert = /\balert\b/.test(el.getAttribute("role") || "");
+            const politeness = el.getAttribute("aria-live") || (alert ? "assertive" : "polite");
+            const present = !el.closest('[hidden], [aria-hidden="true"], [inert]') && el.checkVisibility();
+            const now = { present, text: squash(el.innerText) };
+            const before = liveState.get(el);
+            liveState.set(el, now);
+            if (!liveBaseline || politeness === "off" || !now.present || !now.text) continue;
+            if (before?.present ? before.text === now.text : !alert) continue;
+            liveCount += 1;
+            liveLog.push({ n: liveCount, politeness, text: now.text });
+            if (liveLog.length > 6) liveLog.shift();
+            changed = true;
+          }
+          liveBaseline = true;
+          return changed;
+        }
+
+        function renderLive() {
+          const head = row({ testid: "live-count", head: true, attrs: { "data-count": liveCount } }, [
+            { text: "Live regions · likely spoken (simplified)" },
+          ]);
+          const rows = liveLog.map((entry) =>
+            row({ testid: `live-${entry.n}`, depth: 0 }, [
+              { cls: "order", text: String(entry.n) },
+              { cls: entry.politeness === "assertive" ? "warn" : "state", text: entry.politeness },
+              { cls: "name", text: `"${clip(entry.text, 60)}"` },
+            ]),
+          );
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(nothing announced yet)" }])])];
+        }
+
+        // ---------------------------------------------------------------- axe (base-axe workspaces: axe.js sets window.a11yPanelAxe)
+
+        const axeRun = { running: false, again: false, timer: 0, state: null };
+
+        function scheduleAxe(delay = 700) {
+          if (!on("axe") || !window.a11yPanelAxe) return;
+          clearTimeout(axeRun.timer);
+          axeRun.timer = setTimeout(runAxe, delay);
+        }
+
+        async function runAxe() {
+          const axe = window.a11yPanelAxe;
+          if (axeRun.running) return void (axeRun.again = true);
+          axeRun.running = true;
+          try {
+            const context = { exclude: [["#a11y-panel"]], ...(config.scope && { include: [[config.scope]] }) };
+            const options = { resultTypes: ["violations"], ...(config.axeTags.length && { runOnly: { type: "tag", values: config.axeTags } }) };
+            const { violations } = await axe.run(context, options);
+            axeRun.state = { violations: violations.map((v) => ({ id: v.id, impact: v.impact || "minor", help: v.help, nodes: v.nodes.length })) };
+          } catch (error) {
+            axeRun.state = { error: String(error?.message || error) };
+          }
+          axeRun.running = false;
+          render();
+          if (axeRun.again) {
+            axeRun.again = false;
+            scheduleAxe(300);
+          }
+        }
+
+        function renderAxe() {
+          const { state } = axeRun;
+          const version = window.a11yPanelAxe?.version;
+          if (!version) return [row({ head: true }, [{ text: "axe · not installed in this lesson" }])];
+          if (!state || state.error) {
+            return [row({ testid: "axe-count", head: true }, [state ? { cls: "warn", text: `axe error: ${clip(state.error, 60)}` } : { text: "axe · running…" }])];
+          }
+          const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+          const issues = state.violations.length;
+          const head = row({ testid: "axe-count", head: true, attrs: { "data-count": issues } }, [
+            { text: `axe-core ${version} · ${issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "no issues"}` },
+          ]);
+          const rows = state.violations
+            .sort((a, b) => impact[a.impact] - impact[b.impact] || a.id.localeCompare(b.id))
+            .map((v) =>
+              row({ testid: `axe-${v.id}`, depth: 0, attrs: { "data-count": v.nodes } }, [
+                { cls: impact[v.impact] < 2 ? "warn" : "state", text: v.impact },
+                { cls: "role", text: v.id },
+                { cls: "order", text: `×${v.nodes}` },
+                { cls: "muted", text: v.help },
+              ]),
+            );
+          return [head, ...rows];
+        }
+
+        // ---------------------------------------------------------------- drawing
+
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+        // One row. Its textContent is the parts joined by single spaces, exactly as
+        // it reads, so expect.preview's textContains matches what learners see.
+        function row({ testid, head = false, depth = -1, focused = false, attrs = {}, prefix = "" }, parts) {
+          const classes = `a11yp-row${head ? " a11yp-head" : ""}${focused ? " is-focused" : ""}`;
+          const extra = Object.entries(attrs).map(([key, value]) => ` ${key}="${escape(value)}"`).join("");
+          const id = testid ? ` data-testid="${escape(testid)}"` : "";
+          const indent = depth >= 0 ? ` style="--d:${Math.min(depth, 8)}"` : "";
+          const spans = parts.map((p) => (p.cls ? `<span class="a11yp-${p.cls}">${escape(p.text)}</span>` : escape(p.text))).join(" ");
+          return `<div class="${classes}"${id}${indent}${extra}>${prefix}${spans}</div>`;
+        }
+
+        const C = { bg: "#202124", head: "#303134", text: "#e8eaed", role: "#aecbfa", name: "#fdd663", state: "#d7aefb", muted: "#bdc1c6", warn: "#f6aea9", pass: "#a8dab5", focus: "#123a6e", ring: "#8ab4f8" };
+        const P = "#a11y-panel";
+        const CSS = `
+        :where(html){scroll-padding-bottom:calc(${config.height}vh + 16px)}
+        ${P} .a11yp-spacer{display:block;height:${config.height}vh}
+        ${P} .a11yp-drawer{position:fixed;inset:auto 0 0 0;z-index:2147483001;box-sizing:border-box;height:${config.height}vh;margin:0;padding:0 0 8px;overflow:auto;overscroll-behavior:contain;background:${C.bg};color:${C.text};border-top:3px solid ${C.ring};font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Sangam MN","Myanmar MN","Myanmar Text",Padauk,monospace;text-align:start;letter-spacing:normal;text-transform:none;font-style:normal}
+        ${P} .a11yp-row{display:block;margin:0;padding:1px 8px 1px calc(8px + var(--d,0) * 14px);border-left:4px solid transparent;overflow-wrap:anywhere}
+        ${P} .a11yp-head{position:sticky;top:0;z-index:1;padding-left:8px;background:${C.head};font-weight:700}
+        ${P} .a11yp-row.is-focused{background:${C.focus};border-left-color:${C.ring}}
+        ${P} .a11yp-role{color:${C.role}} ${P} .a11yp-name{color:${C.name}} ${P} .a11yp-state{color:${C.state}}
+        ${P} .a11yp-muted{color:${C.muted}} ${P} .a11yp-pass{color:${C.pass}} ${P} .a11yp-order{font-weight:700}
+        ${P} .a11yp-warn{color:${C.warn};font-weight:700}
+        ${P} .a11yp-swatch{display:inline-block;width:12px;height:12px;margin-right:4px;border:1px solid ${C.muted};vertical-align:middle}
+        ${P} .a11yp-badges{display:block;position:static;height:0}
+        ${P} .a11yp-badge{position:absolute;z-index:2147483000;top:var(--y);left:var(--x);box-sizing:border-box;min-width:20px;height:20px;margin:-8px 0 0 -8px;padding:0 4px;border-radius:10px;background:#174ea6;color:#fff;font:700 13px/20px ui-monospace,Menlo,monospace;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
+        ${P} .a11yp-badge.is-focused{background:#b3261e}
+        @supports (anchor-name: --a){${P} .a11yp-badge{top:anchor(top,var(--y));left:anchor(left,var(--x));position-visibility:anchors-visible}}
+        ${Array.from({ length: 60 }, (_, i) => `[data-a11y-tab="${i + 1}"]{anchor-name:--a11yp-${i + 1}}`).join("")}`;
+
+        const host = document.createElement("div");
+        host.id = "a11y-panel";
+        host.inert = true;
+        host.innerHTML =
+          `<style>${CSS}</style><div class="a11yp-badges"></div><div class="a11yp-spacer"></div>` +
+          `<span hidden data-step="1" data-testid="a11y-tab-next"></span><span hidden data-step="-1" data-testid="a11y-tab-prev"></span>` +
+          `<div class="a11yp-drawer" data-testid="a11y-panel">` +
+          `${config.modes.map((mode) => `<div data-mode="${mode}"></div>`).join("")}</div>`;
+        document.body.append(host);
+        const drawer = host.querySelector(".a11yp-drawer");
+        const badges = host.querySelector(".a11yp-badges");
+        const sections = Object.fromEntries(Array.from(drawer.children, (el) => [el.dataset.mode, el]));
+        const written = new Map();
+
+        // Rewrite only the rows whose text changed (a focus move touches two rows);
+        // a change in the number of rows redraws the section.
+        function write(el, rows) {
+          const before = written.get(el) || [];
+          written.set(el, rows);
+          if (before.length !== rows.length || el.children.length !== rows.length) el.innerHTML = rows.join("");
+          else rows.forEach((html, i) => html !== before[i] && (el.children[i].outerHTML = html));
+        }
+
+        // Keep the focused row and the newest announcement in view inside the drawer.
+        let shown = { focus: null, live: 0 };
+        function reveal() {
+          const focus = activeElement();
+          let target = null;
+          if (focus !== shown.focus) target = drawer.querySelector(".is-focused");
+          if (liveCount !== shown.live) target = drawer.querySelector(`[data-testid="live-${liveCount}"]`);
+          shown = { focus, live: liveCount };
+          if (!target) return;
+          const headHeight = target.parentElement.firstElementChild.offsetHeight;
+          const top = target.offsetTop - headHeight;
+          const bottom = target.offsetTop + target.offsetHeight - drawer.clientHeight;
+          if (top < drawer.scrollTop) drawer.scrollTop = top;
+          else if (bottom > drawer.scrollTop) drawer.scrollTop = bottom + 8;
+        }
+
+        function render() {
+          try {
+            if (on("tree")) write(sections.tree, renderTree(buildTree()));
+            if (on("tabs")) {
+              const stops = buildTabs();
+              write(sections.tabs, renderTabs(stops));
+              write(badges, renderBadges(stops));
+            }
+            if (on("contrast")) write(sections.contrast, renderContrast(buildContrast()));
+            if (on("live")) write(sections.live, renderLive());
+            if (on("axe")) write(sections.axe, renderAxe());
+            reveal();
+          } catch {
+            // The panel must never break a lesson; the next tick tries again.
+          }
+        }
+
+        // ---------------------------------------------------------------- updates
+
+        let timer = 0;
+        const schedule = (delay = 40) => {
+          clearTimeout(timer);
+          timer = setTimeout(render, delay);
+        };
+
+        new MutationObserver((records) => {
+          if (!records.some((r) => !host.contains(r.target) && r.attributeName !== "data-a11y-tab")) return;
+          scanLive();
+          schedule();
+          if (!axeRun.running) scheduleAxe();
+        }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+
+        document.addEventListener("focusin", () => schedule(0), true);
+        document.addEventListener("focusout", () => schedule(0), true);
+        // A CSS edit swaps the stylesheet <link>; its load (and image loads) can change contrast and layout.
+        document.addEventListener("load", () => (schedule(), scheduleAxe()), true);
+        addEventListener("resize", () => schedule(100));
+        addEventListener("a11y-panel-axe", () => scheduleAxe(0));
+        host.addEventListener("click", (event) => {
+          const step = Number(event.target.closest?.("[data-step]")?.dataset.step);
+          if (step) moveFocus(step);
+        });
+        // The drawer is inert, so the wheel would scroll the page under it; scroll the drawer instead.
+        addEventListener(
+          "wheel",
+          (event) => {
+            if (event.clientY < drawer.getBoundingClientRect().top) return;
+            event.preventDefault();
+            drawer.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+          },
+          { passive: false },
+        );
+
+        // A cheap periodic pass catches what no event reports (a style change that
+        // hides something or changes a colour). Timers, not animation frames: frames
+        // never run in a hidden tab.
+        (function tick() {
+          if (scanLive()) schedule(0);
+          render();
+          setTimeout(tick, 600);
+        })();
+        scheduleAxe(0);
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+      text-spacing.css: |
+        /* Text spacing test (WCAG 2.2, 1.4.12): spacing a reader may set
+           with their own style sheet. Nothing may be cut off or overlap.
+           Line height: this page already uses 1.8, above the 1.5 asked for. */
+        * {
+          letter-spacing: 0.12em !important;
+          word-spacing: 0.16em !important;
+        }
+
+        p {
+          margin-bottom: 2em !important;
+        }
+
+  whiteboardAssets:
+    # Board A — the three areas (blue / green / violet), pros green, cons
+    # red, the conclusion orange.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 46,
+        text: "Manual testing",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-kbd,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 150,
+        height: 36,
+        text: "keyboard",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-vis,
+        kind: text,
+        x: 500,
+        y: 240,
+        width: 250,
+        height: 36,
+        text: "မျက်စိ (visual)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-con,
+        kind: text,
+        x: 800,
+        y: 240,
+        width: 260,
+        height: 36,
+        text: "စာသား (content)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-pros,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 640,
+        height: 36,
+        text: "✓ မြန်တယ် · tool သိပ်မလို · ပိုတွေ့တယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-cons,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 700,
+        height: 36,
+        text: "✗ အချိန်ပိုကုန် · ထပ်ခါလုပ်ရခက် · အသိ ပိုလို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-both,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 620,
+        height: 36,
+        text: "automated + manual → နှစ်ခုလုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-both-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 498,
+        width: 480,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    # Board B — what a tool checks (blue, left) vs what needs a person
+    # (orange, right); the checklist advice in green.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "tool နဲ့ လူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-head-tool,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 300,
+        height: 36,
+        text: "tool စစ်နိုင်တယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-head-human,
+        kind: text,
+        x: 730,
+        y: 235,
+        width: 260,
+        height: 36,
+        text: "လူ လိုတယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-tool-1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 380,
+        height: 36,
+        text: "contrast · နောက်ခံ တစ်ရောင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-human-1,
+        kind: text,
+        x: 730,
+        y: 300,
+        width: 340,
+        height: 36,
+        text: "ပုံ · gradient ပေါ်က စာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-tool-2,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 380,
+        height: 36,
+        text: "alt text ရှိလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-human-2,
+        kind: text,
+        x: 730,
+        y: 360,
+        width: 340,
+        height: 36,
+        text: "alt text မှန်လား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-tool-3,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 380,
+        height: 36,
+        text: "heading · list ရှိလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-human-3,
+        kind: text,
+        x: 730,
+        y: 420,
+        width: 340,
+        height: 36,
+        text: "မှန်မှန် သုံးထားလား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-tool-4,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 380,
+        height: 36,
+        text: "focus ရနိုင်လား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-human-4,
+        kind: text,
+        x: 730,
+        y: 480,
+        width: 340,
+        height: 36,
+        text: "အစဉ် · ring မြင်ရလား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-checklist,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 700,
+        height: 36,
+        text: "ယုံကြည်ရတဲ့ checklist → ကိုယ်ပိုင် checklist",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board D — content checks, one colour per question; the "click here"
+    # anti-example struck in red.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 46,
+        text: "Content စစ်ချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 640,
+        height: 36,
+        text: "page title · ခေါင်းစဉ် · label ရှင်းလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-2,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 640,
+        height: 36,
+        text: "alt text တို၊ မှန်၊ အသုံးဝင်လား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-3,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 640,
+        height: 36,
+        text: "link စာက ဘယ်သွားမလဲ ပြောလား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-3-bad,
+        kind: text,
+        x: 840,
+        y: 355,
+        width: 200,
+        height: 36,
+        text: "ဒီမှာ နှိပ်ပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-3-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 830,
+        y: 352,
+        width: 200,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-4,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 640,
+        height: 36,
+        text: "အရောင် တစ်ခုတည်းနဲ့ မပြောဘူးလား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-5,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 640,
+        height: 36,
+        text: "ဘာသာစကား ပြောင်းရင် lang ပါလား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-6,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 700,
+        height: 36,
+        text: "နားလည်လွယ်တဲ့ စကား · အတိုကောက် ရှင်းပြလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-7,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 700,
+        height: 36,
+        text: "navigation · form က page တိုင်း တစ်ပုံစံတည်းလား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2619
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Manual testing ဆိုတာ ဘာလဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ axe နဲ့ ပြဿနာ ရှစ်ခုကို သုည ဖြစ်အောင် ပြင်ခဲ့ပေမယ့်၊ tool မမြင်တဲ့
+      ပြဿနာတွေ ကျန်ခဲ့တာကို တွေ့ခဲ့ပါတယ်။ ဒီ lesson မှာ အဲဒီလို ပြဿနာတွေကို လူကိုယ်တိုင်
+      ရှာတဲ့ manual testing ကို လုပ်ကြည့်ပါမယ်။ [[mark:start-server]] manual testing ဆိုတာ
+      tool မစစ်နိုင်တဲ့ အရာတွေကို လူတစ်ယောက်က checklist တစ်ခုနဲ့ လိုက်စစ်တာပါ။
+      [[mark:draw-areas]] အဓိက နယ်ပယ် သုံးခု ရှိပါတယ်။ mouse ကို ဘေးချထားပြီး keyboard နဲ့ပဲ
+      သုံးကြည့်တဲ့ keyboard စစ်ချက်၊ အရောင်၊ အကွာအဝေး၊ zoom လို မျက်စိနဲ့ မြင်ရတာတွေကို စစ်တဲ့
+      visual စစ်ချက်၊ ပြီးတော့ ခေါင်းစဉ်၊ link၊ alt text လို စာသားတွေကို စစ်တဲ့ content
+      စစ်ချက်တို့ ဖြစ်ပါတယ်။ [[mark:draw-pros]] manual testing က တော်တော် မြန်မြန် လုပ်လို့
+      ရပြီး၊ tool သီးသန့်လည်း သိပ် မလိုပါဘူး။ automated tool တစ်ခုတည်း သုံးတာထက် ပြဿနာ
+      ပိုများများ တွေ့ပါတယ်။ [[mark:draw-cons]] ဒါပေမဲ့ automated testing ထက် အချိန်
+      ပိုကုန်ပြီး၊ page အများကြီးမှာ ထပ်ခါထပ်ခါ လုပ်ဖို့ ခက်ပါတယ်။ ရလဒ်ကို နားလည်ဖို့
+      accessibility အသိလည်း ပိုလိုပါတယ်။ [[mark:draw-both]] ဒါကြောင့် တစ်ခုက တစ်ခုကို
+      အစားထိုးတာ မဟုတ်ဘဲ၊ automated နဲ့ manual နှစ်ခုလုံးကို တွဲသုံးရပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Manual testing basics)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Boot + pnpm install (axe-core included) + vite run under the two
+      # opening boards; waitForReady sits on the preview mark ~2 min later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 90000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-areas
+        type: whiteboard.apply
+        at: { mark: draw-areas }
+        upsertIds: [a-kbd, a-vis, a-con]
+        drawMs: 2400
+      - id: draw-pros
+        type: whiteboard.apply
+        at: { mark: draw-pros }
+        upsertIds: [a-pros]
+        drawMs: 1800
+      - id: draw-cons
+        type: whiteboard.apply
+        at: { mark: draw-cons }
+        upsertIds: [a-cons]
+        drawMs: 1800
+      - id: draw-both
+        type: whiteboard.apply
+        at: { mark: draw-both }
+        upsertIds: [a-both, a-both-line]
+        drawMs: 1600
+
+  - id: tool-vs-human
+    chapter: "Tool က စစ်နိုင်တာ၊ လူ လိုတာ"
+    narration: >
+      [[mark:board-split]] ဘာကို tool က စစ်နိုင်ပြီး၊ ဘာအတွက် လူ လိုလဲ ဆိုတာ ယှဉ်ကြည့်ရအောင်။
+      [[mark:draw-row-contrast]] နောက်ခံ တစ်ရောင်တည်းပေါ်က စာရဲ့ contrast ကို tool က
+      တိုင်းနိုင်ပေမယ့်၊ ပုံ ဒါမှမဟုတ် gradient ပေါ်က စာကိုတော့ လူက ကြည့်စစ်ရပါတယ်။
+      [[mark:draw-row-alt]] alt text ရှိလား ဆိုတာ tool က သိပေမယ့်၊ မှန်လား၊ အသုံးဝင်လား ဆိုတာ
+      လူကပဲ ဆုံးဖြတ်နိုင်ပါတယ်။ [[mark:draw-row-heading]] heading၊ list၊ landmark ရှိလား ဆိုတာ
+      tool က ရှာနိုင်ပေမယ့်၊ မှန်မှန်ကန်ကန် သုံးထားလား ဆိုတာကိုတော့ လူက စစ်ရပါတယ်။
+      [[mark:draw-row-focus]] focus ရနိုင်တဲ့ element တွေကို tool က ရှာနိုင်ပေမယ့်၊ focus အစဉ်
+      ယုတ္တိ ရှိလား၊ focus ring ကို မျက်စိနဲ့ မြင်ရလား ဆိုတာကတော့ keyboard နဲ့ ကိုယ်တိုင်
+      သုံးကြည့်မှ သိရပါတယ်။ [[mark:draw-checklist]] ကိုယ်တိုင် စစ်တဲ့အခါ ယုံကြည်ရတဲ့ နေရာက
+      checklist တစ်ခုကနေ စပြီး၊ ကိုယ့် product နဲ့ ကိုယ့် team အတွက် ကိုယ်ပိုင် checklist
+      လုပ်ထားရင် ကောင်းပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (can and can't be automated)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "IBM Equal Access Toolkit — Verify: manual testing checklist"
+        url: "https://www.ibm.com/able/toolkit/verify/manual"
+    actions:
+      - id: board-split
+        type: whiteboard.apply
+        at: { mark: board-split }
+        clear: true
+        upsertIds: [b-title, b-head-tool, b-head-human]
+      - id: draw-row-contrast
+        type: whiteboard.apply
+        at: { mark: draw-row-contrast }
+        upsertIds: [b-tool-1, b-human-1]
+        drawMs: 1600
+      - id: draw-row-alt
+        type: whiteboard.apply
+        at: { mark: draw-row-alt }
+        upsertIds: [b-tool-2, b-human-2]
+        drawMs: 1400
+      - id: draw-row-heading
+        type: whiteboard.apply
+        at: { mark: draw-row-heading }
+        upsertIds: [b-tool-3, b-human-3]
+        drawMs: 1400
+      - id: draw-row-focus
+        type: whiteboard.apply
+        at: { mark: draw-row-focus }
+        upsertIds: [b-tool-4, b-human-4]
+        drawMs: 1400
+      - id: draw-checklist
+        type: whiteboard.apply
+        at: { mark: draw-checklist }
+        upsertIds: [b-checklist]
+        drawMs: 1600
+
+  - id: first-look
+    chapter: "axe က ဘာမှ မတွေ့တဲ့ page"
+    narration: >
+      [[mark:close-split]] ဒါဆို ဆိုင်ရဲ့ page ကို စစ်ကြည့်ရအောင်။ [[mark:preview-opens]]
+      ညာဘက်မှာ ဆိုင်ရဲ့ page ကို မြင်ရပါပြီ။ မျက်စိနဲ့ ကြည့်ရင် သပ်သပ်ရပ်ရပ် ရှိပါတယ်။
+      [[mark:read-axe]] panel ရဲ့ အောက်ဆုံးကို ကြည့်ပါ။ axe က ဒီ page မှာ ပြဿနာ တစ်ခုမှ
+      မတွေ့ပါဘူး။ [[mark:read-tabs]] အပေါ်ဆုံးက tab order စာရင်းမှာ link ငါးခု ရှိပြီး၊ page
+      ပေါ်မှာလည်း နံပါတ် badge လေးတွေ ပေါ်နေပါတယ်။ link တိုင်း စာရင်းထဲ ပါနေလို့၊ mouse မပါဘဲ
+      အကုန် ရောက်နိုင်တယ် ဆိုတာ သိရပါတယ်။ ဒါက ပထမ keyboard စစ်ချက်ပါ။ [[mark:read-contrast]]
+      အလယ်က contrast row နှစ်ခုကိုတော့ နောက်မှ ပြန်လာကြည့်ပါမယ်။ mouse ကို ဘေးချပြီး keyboard
+      စစ်ချက်ကနေ ဆက်ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Demo)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+    actions:
+      - id: close-split
+        type: whiteboard.apply
+        at: { mark: close-split }
+        open: false
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-axe-clean
+        type: expect.preview
+        at: { mark: read-axe }
+        timeoutMs: 8000
+        target: { by: testId, value: axe-count }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 1500 }
+      - id: expect-five-stops
+        type: expect.preview
+        at: { mark: read-tabs }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-count }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: focus-visible
+    chapter: "Keyboard: focus ကို မြင်ရလား"
+    narration: >
+      keyboard နဲ့ စစ်တဲ့အခါ Tab key နဲ့ ရှေ့ကို၊ Shift နဲ့ Tab နဲ့ နောက်ကို သွားပါတယ်။ Enter
+      နဲ့ link ကို ဖွင့်ပြီး၊ Space နဲ့ ခလုတ်ကို နှိပ်တာ၊ page ကို ဆင်းတာ လုပ်နိုင်ပါတယ်။
+      arrow key နဲ့ ဆက်စပ်နေတဲ့ control တွေကြား ရွှေ့ပြီး၊ Escape နဲ့ ပေါ်လာတဲ့ အရာကို
+      ပိတ်ပါတယ်။ lesson ထဲမှာ key တကယ် နှိပ်လို့ မရလို့၊ panel ကနေ Tab နှိပ်သလို focus ကို
+      ရွှေ့ပါမယ်။ [[mark:tab-one]] Tab တစ်ချက် နှိပ်လိုက်ပါမယ်။ [[mark:after-tab-one]] panel
+      မှာ ပထမ link ကို focused လို့ ပြပြီး၊ badge လည်း အနီ ဖြစ်သွားပါပြီ။ ဒါပေမဲ့ page ပေါ်က
+      link မှာ ဘာ ဘောင်မှ မပေါ်ပါဘူး။ keyboard သုံးသူအတွက် ကိုယ် ဘယ်ရောက်နေလဲ မသိရတော့ပါဘူး။
+      CSS ထဲ တစ်နေရာမှာ focus ring ကို ဖျောက်ထားလို့ပါ။ ကိုယ့် code မှာဆိုရင် အဲဒီ rule ကို ရှာပြီး
+      ဖျက်ပစ်ပါ။ [[mark:open-styles]] ဒီမှာတော့ styles ဖိုင်မှာ focus visible အတွက် ကိုယ်ပိုင် ring
+      တစ်ခု ထည့်ပါမယ်။ [[mark:type-ring]] အညိုရင့် ဘောင်
+      အထူ ဖြစ်ပြီး၊ element နဲ့ နည်းနည်း ခွာထားပါမယ်။ focus visible ဆိုတာ keyboard နဲ့ focus
+      ရောက်လာလို့ browser က ring ပြသင့်တယ်လို့ ဆုံးဖြတ်တဲ့ အခြေအနေပါ။ [[mark:after-ring]]
+      ကြည့်ပါ၊ focus ရောက်နေတဲ့ link ပတ်လည်မှာ ring ပေါ်လာပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Keyboard checks, Issue 1)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "WCAG 2.2 — Understanding 2.4.7 Focus Visible"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html"
+      - title: "MDN — :focus-visible"
+        url: "https://developer.mozilla.org/docs/Web/CSS/:focus-visible"
+    actions:
+      - id: tab-one
+        type: preview.click
+        at: { mark: tab-one }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-tab-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-tab-one
+        type: expect.preview
+        at: { mark: after-tab-one }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-drinks-link }
+        textContains: '1 link "သောက်စရာ" focused'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: type-ring
+        type: editor.type
+        at: { mark: type-ring }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ":focus-visible {\n  outline: 3px solid var(--tea-dark);\n  outline-offset: 2px;\n}\n"
+      - id: expect-still-focused
+        type: expect.preview
+        at: { mark: after-ring }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-drinks-link }
+        textContains: '1 link "သောက်စရာ" focused'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: focus-order
+    chapter: "Keyboard: focus အစဉ် မှန်လား"
+    narration: >
+      [[mark:scroll-cards]] နောက် keyboard စစ်ချက်က focus အစဉ် ယုတ္တိ ရှိလား ဆိုတာပါ။
+      [[mark:tab-two]] Tab ဆက်နှိပ်ကြည့်ရအောင်။ focus က menu ရဲ့ ဒုတိယ တန်းက ကော်ဖီကို
+      ရောက်သွားပါတယ်။ [[mark:tab-three]] ပြီးတော့ ဘေးက သံပုရာရည်ကို ရောက်ပါတယ်။
+      [[mark:tab-four]] နောက်တစ်ချက်မှာတော့ အပေါ်ဆုံးက လက်ဖက်ရည်ဆီ ပြန်တက်သွားပါတယ်။
+      [[mark:after-tab-four]] မျက်စိနဲ့ ဖတ်တဲ့ အစဉ်မှာ လက်ဖက်ရည်က ပထမ ဖြစ်ပေမယ့်၊ Tab ကတော့
+      HTML ထဲက အစဉ်အတိုင်း သွားလို့ပါ။ HTML မှာ လက်ဖက်ရည် card က နောက်ဆုံးမှာ ရှိပြီး၊ CSS ကနေ
+      အပေါ်ကို ရွှေ့ထားတာပါ။ [[mark:type-order]] CSS နဲ့ ရွှေ့ထားတာကို ပယ်ဖျက်တဲ့ rule တစ်ခု
+      ထည့်ပါမယ်။ [[mark:after-order]] အခု card က အောက်ဆုံးကို ရောက်သွားလို့၊ မြင်ရတဲ့ အစဉ်နဲ့
+      Tab အစဉ် တူသွားပါပြီ။ လက်ဖက်ရည်ကို ရှေ့ဆုံးမှာ ထားချင်ရင်တော့ HTML ထဲမှာ card ကို
+      ရှေ့ဆုံး ရွှေ့ရပါမယ်။ ကိုယ့် page မှာဆိုရင် focus ပိတ်မိနေတဲ့ နေရာ ရှိလား၊ dialog
+      ပိတ်ရင် focus က နေရာမှန် ပြန်ရောက်လား၊ skip link ရှိလား ဆိုတာတွေကိုလည်း keyboard နဲ့
+      စစ်ပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Keyboard checks, Issue 2)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "WCAG 2.2 — Understanding 2.4.3 Focus Order"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/focus-order.html"
+      - title: "MDN — CSS order and accessibility"
+        url: "https://developer.mozilla.org/docs/Web/CSS/order#accessibility"
+    actions:
+      - id: scroll-cards
+        type: preview.scroll
+        at: { mark: scroll-cards }
+        timeoutMs: 5000
+        top: 100
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: tab-two
+        type: preview.click
+        at: { mark: tab-two }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-tab-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-tab-two
+        type: expect.preview
+        at: { afterAction: tab-two }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-link-coffee }
+        textContains: '2 link "ကော်ဖီ" focused'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: tab-three
+        type: preview.click
+        at: { mark: tab-three }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-tab-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: tab-four
+        type: preview.click
+        at: { mark: tab-four }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-tab-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-tab-four
+        type: expect.preview
+        at: { mark: after-tab-four }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-link-laphet-yay }
+        textContains: '4 link "လက်ဖက်ရည်" focused'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-order
+        type: editor.type
+        at: { mark: type-order }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline-offset: 2px;\n}\n", occurrence: 1 }
+        text: "\n.featured {\n  order: 0;\n}\n"
+      - id: expect-order-focus
+        type: expect.preview
+        at: { mark: after-order }
+        timeoutMs: 5000
+        target: { by: testId, value: tab-link-laphet-yay }
+        textContains: '4 link "လက်ဖက်ရည်" focused'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: contrast
+    chapter: "မျက်စိနဲ့ စစ်ရအောင်: link နဲ့ icon"
+    narration: >
+      [[mark:read-link-row]] ဒါဆို visual စစ်ချက်ကို ဆက်ရအောင်။ ကြိုဆိုတဲ့ စာထဲက သောက်စရာ link
+      ကို ကြည့်ပါ။ အရောင် ဖျော့နေပြီး underline လည်း မပါလို့၊ link မှန်း သိဖို့ ခက်ပါတယ်။
+      contrast row ကလည်း ၂.၆၇ နဲ့ ၁ နဲ့ fail လို့ ပြနေပါတယ်။ ဒါပေမဲ့ axe ကတော့ ဒီ မြန်မာ
+      စကားလုံးကို ကျော်သွားလို့ ဘာမှ မပြောပါဘူး။ ပြီးခဲ့တဲ့ lesson က တွေ့ခဲ့တဲ့ blind spot
+      အတိုင်းပါပဲ။ [[mark:type-link]] link ကို အညိုရင့် ပေးပြီး underline ပြန်ထည့်ပါမယ်။
+      underline ပါရင် အရောင် တစ်ခုတည်းကို မမှီဘဲ link မှန်း သိနိုင်ပါတယ်။ underline မပါတဲ့
+      link ဆိုရင်တော့ နောက်ခံနဲ့တင် မကဘဲ ဘေးက စာသားနဲ့လည်း အနည်းဆုံး ၃ နဲ့ ၁ ကွာရပါမယ်။
+      underline ထည့်တာက အရှင်းဆုံး နည်းပါ။ [[mark:after-link]] row က ၆.၇၂ နဲ့ ၁ ဖြစ်ပြီး pass
+      ပါပြီ။ [[mark:scroll-footer]] footer က ဖုန်း icon ကိုလည်း ကြည့်ပါ။ နောက်ခံနဲ့ အရောင်
+      နီးနေလို့ မြင်ရ ခက်ပြီး၊ row ကလည်း ၁.၆၂ နဲ့ ၁ ပဲ ပြပါတယ်။ အရေးကြီးတဲ့ icon တွေက
+      နောက်ခံနဲ့ အနည်းဆုံး ၃ နဲ့ ၁ ရှိရပါမယ်။ axe ရဲ့ contrast rule က စာသားကိုပဲ စစ်လို့ icon
+      ကို လုံးဝ မကြည့်ပါဘူး။ [[mark:type-icon]] icon ကို ခရင်မ်ရောင် အဖျော့ ပေးလိုက်ပါမယ်။
+      footer ရဲ့ နောက်ခံက အညိုရင့် ဖြစ်လို့ အဖျော့ရောင်နဲ့ဆိုရင် ကွာခြားမှု ကြီးကြီး ရပါတယ်။
+      icon ကို link ရဲ့ စာလုံး အရောင်နဲ့ ဆွဲထားတဲ့အတွက်၊ link ရဲ့ အရောင်ကို ပြောင်းလိုက်တာနဲ့
+      icon အရောင်ပါ လိုက်ပြောင်းပါတယ်။ ခုနက ထည့်ခဲ့တဲ့ အညိုရင့် focus ring ကလည်း ဒီ အညိုရင့်
+      နောက်ခံပေါ်မှာ မမြင်ရမှာ ဖြစ်လို့၊ keyboard focus lesson မှာလိုပဲ footer ထဲမှာတော့ ring ကို
+      ခရင်မ်ရောင် ပြောင်းပေးပါမယ်။ [[mark:after-icon]] row က ၁၁.၁၂ နဲ့ ၁ ဖြစ်သွားပြီး၊
+      icon ကို ရှင်းရှင်း မြင်ရပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Visual checks, Issues 3 and 4)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "WCAG 2.2 — Understanding 1.4.1 Use of Color"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+      - title: "WCAG 2.2 — Understanding 1.4.11 Non-text Contrast"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+      - title: "axe-core — color-contrast checks text only"
+        url: "https://github.com/dequelabs/axe-core/blob/develop/doc/rule-descriptions.md"
+    actions:
+      - id: expect-link-fails
+        type: expect.preview
+        at: { mark: read-link-row }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-drinks-link }
+        attribute: { name: data-ratio, value: "2.67" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-link
+        type: editor.type
+        at: { mark: type-link }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  order: 0;\n}\n", occurrence: 1 }
+        text: "\n.hero a {\n  color: saddlebrown;\n  text-decoration: underline;\n}\n"
+      - id: expect-link-passes
+        type: expect.preview
+        at: { mark: after-link }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-drinks-link }
+        attribute: { name: data-ratio, value: "6.72" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-footer
+        type: preview.scroll
+        at: { mark: scroll-footer }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-icon-fails
+        type: expect.preview
+        at: { afterAction: scroll-footer }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-call-link }
+        attribute: { name: data-ratio, value: "1.62" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-icon
+        type: editor.type
+        at: { mark: type-icon }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-decoration: underline;\n}\n", occurrence: 1 }
+        text: "\n.site-footer .call-link {\n  color: wheat;\n}\n\n.site-footer :focus-visible {\n  outline-color: var(--cream);\n}\n"
+      - id: expect-icon-passes
+        type: expect.preview
+        at: { mark: after-icon }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-call-link }
+        attribute: { name: data-ratio, value: "11.12" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-axe-still-clean
+        type: expect.preview
+        at: { afterAction: expect-icon-passes }
+        timeoutMs: 8000
+        target: { by: testId, value: axe-count }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 1500 }
+
+  - id: spacing
+    chapter: "Zoom နဲ့ စာလုံးကြား အကွာအဝေး"
+    narration: >
+      visual စစ်ချက်ထဲမှာ zoom လည်း ပါပါတယ်။ ကိုယ့် browser မှာ page ကို ၂၀၀ ရာခိုင်နှုန်း၊
+      ၄၀၀ ရာခိုင်နှုန်း ချဲ့ကြည့်ပြီး၊ စာ ဖြတ်မသွားလား၊ ဘေးတိုက် scroll မလိုလား စစ်ပါ။ အကျယ်
+      ၃၂၀ pixel လောက်မှာလည်း page ကို သုံးလို့ ရရပါမယ်။ lesson ထဲက preview ကို zoom ချဲ့လို့
+      မရလို့၊ ဒါကိုတော့ ကိုယ့် ကွန်ပျူတာမှာ စမ်းကြည့်ပါ။ ဒီမှာ စမ်းလို့ ရတာကတော့ စာလုံးကြား
+      အကွာအဝေးပါ။ [[mark:open-spacing]] ဒီ ဖိုင်က user တစ်ယောက်က ကိုယ်ပိုင် style နဲ့
+      စာလုံးကြား၊ စာပိုဒ်ကြားကို ချဲ့ထားသလို၊ WCAG ပြောထားတဲ့ အကွာအဝေးတွေနဲ့ စမ်းတဲ့ CSS ပါ။
+      [[mark:select-spacing]] စာလုံးကြားနဲ့ စကားလုံးကြားကို ချဲ့ထားပြီး၊ အောက်က rule က
+      စာပိုဒ်ကြားကို ချဲ့ပါတယ်။ line height ကတော့ ဒီ page မှာ WCAG တောင်းတဲ့ ၁.၅ ထက် များတဲ့
+      ၁.၈ ရှိပြီးသား ဖြစ်လို့ မပြောင်းပါဘူး။ [[mark:open-index-spacing]] page မှာ ဒီ ဖိုင်ကို ချိတ်ကြည့်ရအောင်။
+      [[mark:type-spacing-link]] styles ဖိုင်ကို ချိတ်ထားတဲ့ စာကြောင်းရဲ့ အောက်မှာ link တစ်ကြောင်း
+      ထည့်လိုက်ပါမယ်။
+      [[mark:scroll-special]] ယနေ့ အထူး box ကို ကြည့်ပါ။ စာလုံးတွေ ကျယ်သွားလို့ စာက နေရာ
+      ပိုယူလာပြီး၊ နောက်ဆုံး စာကြောင်းက box ရဲ့ အောက်ခြေမှာ ဖြတ်သွားပါတယ်။ အဲဒီ စာကို ဖတ်လို့
+      မရတော့ပါဘူး။ box ရဲ့ အမြင့်ကို ပုံသေ ပေးထားလို့ပါ။ [[mark:type-height]] အမြင့်ကို ပုံသေ
+      မထားဘဲ၊ စာနဲ့ လိုက်ပြီး ကြီးလာအောင် ပြင်ပါမယ်။ ဒီလို ပုံသေ အမြင့်တွေက zoom
+      ချဲ့တဲ့အခါမှာလည်း စာကို ဖြတ်တတ်ပါတယ်။ [[mark:after-height]] ကြည့်ပါ၊ box က ကြီးလာပြီး စာ
+      အကုန် ပြန်မြင်ရပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Visual checks)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "WCAG 2.2 — Understanding 1.4.12 Text Spacing"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html"
+      - title: "WCAG 2.2 — Understanding 1.4.4 Resize Text"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html"
+      - title: "WCAG 2.2 — Understanding 1.4.10 Reflow"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/reflow.html"
+    actions:
+      - id: open-spacing
+        type: workspace.openFile
+        at: { mark: open-spacing }
+        path: text-spacing.css
+      - id: select-spacing
+        type: editor.select
+        at: { mark: select-spacing }
+        target:
+          {
+            file: text-spacing.css,
+            text: "  letter-spacing: 0.12em !important;\n  word-spacing: 0.16em !important;\n",
+            occurrence: 1,
+          }
+      - id: open-index-spacing
+        type: workspace.openFile
+        at: { mark: open-index-spacing }
+        path: index.html
+      - id: type-spacing-link
+        type: editor.type
+        at: { mark: type-spacing-link }
+        cadence: block
+        target:
+          {
+            file: index.html,
+            after: "    <link rel=\"stylesheet\" href=\"/styles.css\" />\n",
+            occurrence: 1,
+          }
+        text: "    <link rel=\"stylesheet\" href=\"/text-spacing.css\" />\n"
+      - id: scroll-special
+        type: preview.scroll
+        at: { mark: scroll-special }
+        timeoutMs: 5000
+        top: 340
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-special-text
+        type: expect.preview
+        at: { afterAction: scroll-special }
+        timeoutMs: 5000
+        target: { by: testId, value: special-text }
+        textContains: "နေ့တိုင်း မနက် ၆ နာရီမှာ ဖွင့်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-styles-spacing
+        type: workspace.openFile
+        at: { mark: type-height }
+        path: styles.css
+      - id: type-height
+        type: editor.type
+        at: { afterAction: open-styles-spacing }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  outline-color: var(--cream);\n}\n", occurrence: 1 }
+        text: "\n.special {\n  height: auto;\n}\n"
+      - id: expect-axe-spacing
+        type: expect.preview
+        at: { mark: after-height }
+        timeoutMs: 8000
+        target: { by: testId, value: axe-count }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 1500 }
+
+  - id: content
+    chapter: "စာသားကို စစ်ရအောင်"
+    narration: >
+      [[mark:board-content]] နောက်ဆုံး နယ်ပယ်က content စစ်ချက်ပါ။ ဒီမှာ စာသားကိုယ်တိုင်ကို
+      ဖတ်ပြီး၊ တခြားသူ နားလည်မလား ဆိုတာ စစ်တာပါ။ [[mark:draw-content]] page title၊
+      ခေါင်းစဉ်နဲ့ form label တွေ ရှင်းလား၊ alt text တွေ တိုပြီး မှန်လား၊ link စာက ဘယ်ကို
+      သွားမလဲ ပြောလား၊ ဒီမှာ နှိပ်ပါ လို စာ မသုံးဘူးလား၊ အရောင် တစ်ခုတည်းနဲ့ အဓိပ္ပာယ်
+      ပြောနေလား၊ ဘာသာစကား ပြောင်းတဲ့ နေရာမှာ lang ပါလား၊ နားလည်လွယ်တဲ့ စကား သုံးပြီး
+      အတိုကောက်တွေကို ပထမဆုံး အကြိမ်မှာ ရှင်းပြထားလား၊ navigation နဲ့ form တွေက page တိုင်းမှာ
+      တစ်ပုံစံတည်း ဖြစ်လား ဆိုတာတွေပါ။ [[mark:content-script]] ဒီမှာ နှိပ်ပါ လို စာကို
+      script တစ်ခုနဲ့ ရှာလို့ ရပေမယ့်၊ အစားထိုးမယ့် စာကိုတော့ လူကပဲ ရေးနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Content checks)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "WCAG 2.2 — Understanding 2.4.4 Link Purpose (In Context)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-in-context.html"
+      - title: "WCAG 2.2 — Understanding 3.2.3 Consistent Navigation"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/consistent-navigation.html"
+      - title: "W3C WAI — Making Content Usable for People with Cognitive and Learning Disabilities"
+        url: "https://www.w3.org/TR/coga-usable/"
+    actions:
+      - id: board-content
+        type: whiteboard.apply
+        at: { mark: board-content }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-content
+        type: whiteboard.apply
+        at: { mark: draw-content }
+        upsertIds: [d-1, d-2, d-3, d-3-bad, d-3-strike, d-4, d-5, d-6, d-7]
+        drawMs: 6000
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-content]] ဒါဆို ပြန်ချုပ်ရရင်၊ axe က ပြဿနာ မတွေ့တဲ့ page မှာ ကိုယ်တိုင်
+      စစ်ကြည့်တော့ ပြဿနာ ငါးခု ထပ်တွေ့ခဲ့ပါတယ်။ [[mark:sel-ring]] focus ring မပေါ်တာ၊ focus
+      အစဉ် ခုန်နေတာ၊ [[mark:sel-link]] ဖျော့နေတဲ့ link နဲ့ icon၊ [[mark:sel-height]] ပြီးတော့
+      စာလုံးကြား ချဲ့ရင် ဖြတ်သွားတဲ့ box တို့ပါ။ keyboard၊ မျက်စိ၊ စာသား ဆိုတဲ့ checklist
+      သုံးမျိုးက automated testing မမြင်တာတွေကို ဖြည့်ပေးပါတယ်။ ကိုယ့် website မှာလည်း mouse
+      ကို ဘေးချပြီး စမ်းကြည့်ပါ။ နောက် lesson မှာတော့ screen reader လို assistive technology
+      နဲ့ တကယ် သုံးပြီး စမ်းသပ်တာကို ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Manual accessibility testing (Next step)"
+        url: "https://web.dev/learn/accessibility/test-manual"
+      - title: "web.dev Learn Accessibility — Assistive technology testing"
+        url: "https://web.dev/learn/accessibility/test-assistive-technology"
+    actions:
+      - id: close-content
+        type: whiteboard.apply
+        at: { mark: close-content }
+        open: false
+      - id: sel-ring
+        type: editor.select
+        at: { mark: sel-ring }
+        target: { file: styles.css, text: ":focus-visible {", occurrence: 1 }
+      - id: sel-link
+        type: editor.select
+        at: { mark: sel-link }
+        target: { file: styles.css, text: "  text-decoration: underline;", occurrence: 1 }
+      - id: sel-height
+        type: editor.select
+        at: { mark: sel-height }
+        target: { file: styles.css, text: "  height: auto;", occurrence: 1 }
+      - id: expect-file-css
+        type: expect.file
+        at: { afterAction: sel-height }
+        path: styles.css
+        contains: ":focus-visible {\n  outline: 3px solid var(--tea-dark);\n  outline-offset: 2px;\n}\n\n.featured {\n  order: 0;\n}\n\n.hero a {\n  color: saddlebrown;\n  text-decoration: underline;\n}\n\n.site-footer .call-link {\n  color: wheat;\n}\n\n.site-footer :focus-visible {\n  outline-color: var(--cream);\n}\n\n.special {\n  height: auto;\n}\n"
+      - id: expect-file-link
+        type: expect.file
+        at: { afterAction: expect-file-css }
+        path: index.html
+        contains: "    <link rel=\"stylesheet\" href=\"/text-spacing.css\" />\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
