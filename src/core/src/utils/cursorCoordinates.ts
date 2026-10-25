@@ -135,26 +135,6 @@ function findClosestReplayTarget(element: Element | null): ReplayTargetMatch | n
 }
 
 /**
- * `value` as a quoted CSS string: backslash and double quote are escaped, and
- * control characters, which would end or break the string, become hex escapes.
- * (jsdom has no `CSS.escape`.)
- */
-function toCssString(value: string): string {
-  let escaped = "";
-  for (const char of value) {
-    const code = char.charCodeAt(0);
-    if (char === "\\" || char === '"') {
-      escaped += `\\${char}`;
-    } else if (code < 0x20 || code === 0x7f) {
-      escaped += `\\${code.toString(16)} `;
-    } else {
-      escaped += char;
-    }
-  }
-  return `"${escaped}"`;
-}
-
-/**
  * The replay cursor resolves both tween endpoints on every animation frame,
  * so this is a single exact-match lookup rather than a scan of every target.
  * Every id in the DOM is an unpadded literal and recorded ids are trimmed at
@@ -163,7 +143,7 @@ function toCssString(value: string): string {
  */
 function findReplayTargetById(id: string, ownerDocument: Document): Element | null {
   try {
-    return ownerDocument.querySelector(`[${CURSOR_REPLAY_TARGET_ATTRIBUTE}=${toCssString(id)}]`);
+    return ownerDocument.querySelector(`[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CSS.escape(id)}"]`);
   } catch {
     return null;
   }
