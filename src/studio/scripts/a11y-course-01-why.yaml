@@ -1,0 +1,966 @@
+# Accessibility course, lesson 1: what accessibility is and who it is for.
+#
+# A concept lesson: nothing runs. Deck pages (course deck, kits K1-K10) and two
+# whiteboard boards carry the lesson, and the recap highlights the key lines in
+# notes.md. It opens the whole course (welcome, the tea-shop story, the four
+# lesson groups), defines digital accessibility (and shows the short written form
+# on a board without reading it aloud), then meets four invented tea-shop
+# customers on persona pages, the other needs, the permanent / temporary /
+# situational circle on a board, the wider group who benefits, business and law,
+# the life cycle, and a quiz page with its reveal.
+#
+# Deck: every page points at the course deck's placeholder /pub URL until Chan
+# publishes it; the Director's unreachable-deck warning is expected.
+# Page plan (kit fields per page): ~/Documents/a11y-course-work/pages/a11y-course-01-why.json
+#
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-01-why
+  title: "Accessibility course 1: Accessibility ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Accessibility ဆိုတာ ဘာလဲ
+
+        - accessibility (a11y) — မသန်စွမ်းမှု ဘယ်လိုပဲ ရှိရှိ၊ လူတိုင်း အဓိပ္ပာယ်ရှိရှိ၊ တန်းတူ သုံးနိုင်အောင် ဆောက်တာ
+        - 1.3 billion — ကမ္ဘာ့ လူဦးရေရဲ့ 16%၊ 6 ယောက်မှာ 1 ယောက်
+        - assistive technology — screen reader၊ magnifier၊ braille display၊ switch၊ voice control
+        - အမြဲတမ်း · ယာယီ · အခြေအနေအရ — တစ်ယောက်အတွက် ပြင်ရင် လူအများ အကျိုးရှိ
+        - plan → design → code → test — မသန်စွမ်းသူတွေနဲ့ အတူ၊ အစကတည်းက
+
+        နောက် lesson: accessibility ကို ဘယ်လို တိုင်းတာလဲ (WCAG)
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Accessibility ဆိုတာ ဘာလဲ — Accessibility course</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">Accessibility course · 1</p>
+              <h1>Accessibility ဆိုတာ ဘာလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #5b45e0;
+          font-weight: 600;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.6;
+        }
+      package.json: |
+        {
+          "name": "a11y-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - {
+        id: l01_p01,
+        contentType: google,
+        name: "Cover: what accessibility is",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p01,
+      }
+    - {
+        id: l01_p02,
+        contentType: google,
+        name: "Course map: four lesson groups",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p02,
+      }
+    - {
+        id: l01_p03,
+        contentType: google,
+        name: "1.3 billion people, 1 in 6",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p03,
+      }
+    - {
+        id: l01_p04,
+        contentType: google,
+        name: "Persona: Mya Mya (low vision)",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p04,
+      }
+    - {
+        id: l01_p05,
+        contentType: google,
+        name: "Vision: blind, low vision, colour blindness",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p05,
+      }
+    - {
+        id: l01_p06,
+        contentType: google,
+        name: "Persona: Aung Aung (mobility)",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p06,
+      }
+    - {
+        id: l01_p07,
+        contentType: google,
+        name: "Persona: Hla Hla (deaf)",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p07,
+      }
+    - {
+        id: l01_p08,
+        contentType: google,
+        name: "Persona: Maung Maung (dyslexia)",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p08,
+      }
+    - {
+        id: l01_p09,
+        contentType: google,
+        name: "More needs: seizure, vestibular",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p09,
+      }
+    - {
+        id: l01_p09b,
+        contentType: google,
+        name: "More needs: + speech",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p09b,
+      }
+    - {
+        id: l01_p10,
+        contentType: google,
+        name: "Who else benefits",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p10,
+      }
+    - {
+        id: l01_p11,
+        contentType: google,
+        name: "Business",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p11,
+      }
+    - {
+        id: l01_p11b,
+        contentType: google,
+        name: "Business and law",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p11b,
+      }
+    - {
+        id: l01_p12,
+        contentType: google,
+        name: "Plan to test, with disabled people",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p12,
+      }
+    - {
+        id: l01_p13,
+        contentType: google,
+        name: "Quiz: which circle?",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p13,
+      }
+    - {
+        id: l01_p13b,
+        contentType: google,
+        name: "Quiz answer: temporary",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l01_p13b,
+      }
+  whiteboardAssets:
+    # Board B1: the short written form and the definition.
+    # orange = the two letters kept, blue = the eleven letters replaced, violet = the count,
+    # green = the short form and "equivalent", blue box = "meaningful".
+    - {
+        id: l01-b1-a,
+        kind: text,
+        x: 300,
+        y: 180,
+        width: 40,
+        height: 60,
+        text: "a",
+        strokeColor: "#f08c00",
+        fontSize: 48,
+      }
+    - {
+        id: l01-b1-mid,
+        kind: text,
+        x: 345,
+        y: 180,
+        width: 270,
+        height: 60,
+        text: "ccessibilit",
+        strokeColor: "#1971c2",
+        fontSize: 48,
+      }
+    - {
+        id: l01-b1-y,
+        kind: text,
+        x: 625,
+        y: 180,
+        width: 40,
+        height: 60,
+        text: "y",
+        strokeColor: "#f08c00",
+        fontSize: 48,
+      }
+    - {
+        id: l01-b1-under,
+        kind: freedraw,
+        stroke: "underline",
+        x: 345,
+        y: 240,
+        width: 260,
+        height: 24,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b1-count,
+        kind: text,
+        x: 420,
+        y: 272,
+        width: 150,
+        height: 40,
+        text: "11 လုံး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-arrow,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 700,
+        y: 195,
+        width: 110,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l01-b1-short,
+        kind: text,
+        x: 850,
+        y: 175,
+        width: 170,
+        height: 70,
+        text: "a11y",
+        strokeColor: "#2f9e44",
+        fontSize: 56,
+      }
+    - {
+        id: l01-b1-rule,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 460,
+        height: 50,
+        text: "လူတိုင်း သုံးနိုင်ရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l01-b1-box1,
+        kind: rectangle,
+        x: 300,
+        y: 420,
+        width: 360,
+        height: 170,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l01-b1-box1-title,
+        kind: text,
+        x: 325,
+        y: 440,
+        width: 300,
+        height: 44,
+        text: "အဓိပ္ပာယ်ရှိရှိ",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: l01-b1-box1-line,
+        kind: text,
+        x: 325,
+        y: 515,
+        width: 300,
+        height: 40,
+        text: "မှာချင်တာ မှာလို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b1-box2,
+        kind: rectangle,
+        x: 720,
+        y: 420,
+        width: 360,
+        height: 170,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l01-b1-box2-title,
+        kind: text,
+        x: 745,
+        y: 440,
+        width: 200,
+        height: 44,
+        text: "တန်းတူ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: l01-b1-box2-line,
+        kind: text,
+        x: 745,
+        y: 515,
+        width: 300,
+        height: 40,
+        text: "တခြားသူနဲ့ အတူတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B2: the circle of beneficiaries, three rings centred on (510, 430).
+    # blue = permanent, violet = temporary, orange = situational, green = everyone.
+    # The examples sit in a column on the right, in their ring's colour.
+    - {
+        id: l01-b2-title,
+        kind: text,
+        x: 290,
+        y: 150,
+        width: 420,
+        height: 50,
+        text: "ဘယ်သူတွေ အကျိုးရှိလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l01-b2-inner,
+        kind: ellipse,
+        x: 430,
+        y: 365,
+        width: 160,
+        height: 130,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l01-b2-inner-label,
+        kind: text,
+        x: 458,
+        y: 412,
+        width: 120,
+        height: 36,
+        text: "အမြဲတမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-ex-permanent,
+        kind: text,
+        x: 790,
+        y: 320,
+        width: 280,
+        height: 36,
+        text: "လက် တစ်ဖက် မရှိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-middle,
+        kind: ellipse,
+        x: 355,
+        y: 300,
+        width: 310,
+        height: 260,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l01-b2-middle-label,
+        kind: text,
+        x: 482,
+        y: 318,
+        width: 80,
+        height: 36,
+        text: "ယာယီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-ex-temporary,
+        kind: text,
+        x: 790,
+        y: 385,
+        width: 280,
+        height: 36,
+        text: "လက်ကျိုး ပတ်တီး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-outer,
+        kind: ellipse,
+        x: 280,
+        y: 215,
+        width: 460,
+        height: 430,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l01-b2-outer-label,
+        kind: text,
+        x: 425,
+        y: 250,
+        width: 170,
+        height: 36,
+        text: "အခြေအနေအရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-ex-situational,
+        kind: text,
+        x: 790,
+        y: 450,
+        width: 280,
+        height: 36,
+        text: "ကလေး ချီထားရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-ex-sun,
+        kind: text,
+        x: 790,
+        y: 505,
+        width: 280,
+        height: 36,
+        text: "နေပူထဲ ဖုန်းကြည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l01-b2-all,
+        kind: text,
+        x: 790,
+        y: 572,
+        width: 280,
+        height: 42,
+        text: "လူတိုင်း အကျိုးရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: l01-b2-all-line,
+        kind: freedraw,
+        stroke: "underline",
+        x: 790,
+        y: 612,
+        width: 240,
+        height: 22,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2601
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: welcome
+    chapter: "Course ကို ကြိုဆိုပါတယ်"
+    narration: >
+      [[mark:p01]] မင်္ဂလာပါ ခင်ဗျာ။ Accessibility course ကို ကြိုဆိုပါတယ်။ ဒီ course က HTML နဲ့ CSS
+      ရေးတတ်ပြီးသား web developer တွေအတွက်ပါ။ course တစ်လျှောက်လုံး ရန်ကုန်က ရွှေလက်ဖက်ရည်ဆိုင် website
+      လေးကို သုံးသွားမှာပါ။ မျက်စိနဲ့ ကြည့်ရင် ဆိုင်ရဲ့ page က လှပေမယ့်၊ လူတိုင်းကတော့ သုံးလို့
+      မရသေးပါဘူး။ lesson တစ်ခုချင်းမှာ ပြဿနာ တစ်ခုစီကို ပြင်သွားမှာ ဖြစ်ပြီး၊ ပြင်လိုက်တိုင်း ဘာ
+      ပြောင်းသွားလဲ ဆိုတာ screen ပေါ်မှာ ကိုယ်တိုင် မြင်ရပါလိမ့်မယ်။ [[mark:p02]] lesson တွေကို အုပ်စု
+      လေးစု ခွဲထားပါတယ်။ ပထမ အုပ်စုက code ရဲ့ structure ဖြစ်ပြီး၊ အဓိပ္ပာယ် ပါတဲ့ HTML element တွေ၊
+      heading နဲ့ list တွေကို ကြည့်ပါမယ်။ ဒုတိယက keyboard၊ JavaScript နဲ့ form လို interaction ပိုင်းပါ။
+      [[mark:groups-design]] တတိယက ပုံ၊ အရောင်၊ animation နဲ့ စာလုံးလို မျက်စိနဲ့ မြင်ရတဲ့ design
+      ပိုင်းပါ။ နောက်ဆုံး အုပ်စုမှာတော့ page ကို ဘယ်လို စစ်ဆေးမလဲ ဆိုတာ လေ့လာပါမယ်။ ဒီ ပထမ lesson မှာတော့
+      code မရေးသေးဘဲ၊ accessibility ဆိုတာ ဘာလဲ၊ ဘယ်သူတွေအတွက်လဲ ဆိုတာကနေ စကြည့်ရအောင်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Welcome",
+          url: "https://web.dev/learn/accessibility/welcome",
+        }
+      - {
+          title: "web.dev Learn Accessibility (course outline)",
+          url: "https://web.dev/learn/accessibility",
+        }
+      - {
+          title: "W3C WAI: Introduction to Web Accessibility",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/",
+        }
+    actions:
+      # Same pull-backs as the shipped concept lessons: the dock collapses and the cover is
+      # up before the first word, inside the 2 s opening handle.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l01_p01 }
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l01_p02 }
+
+  - id: what-is-accessibility
+    chapter: "Accessibility ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:b1-word]] accessibility ဆိုတဲ့ စကားလုံးက ရှည်လို့ developer တွေက အတိုကောက် ရေးလေ့ ရှိပါတယ်။
+      ပထမ စာလုံး a နဲ့ နောက်ဆုံး စာလုံး y ကြားမှာ စာလုံး ဆယ့်တစ်လုံး ရှိပါတယ်။ [[mark:b1-short]] အဲဒီ
+      ဆယ့်တစ်လုံးကို ဂဏန်း ၁၁ နဲ့ အစားထိုးလိုက်တော့၊ board ပေါ်က အတိုကောက်လေး ရလာပါတယ်။ ဒီ အတိုကောက်ကို
+      article တွေမှာ ခဏခဏ တွေ့ရပါလိမ့်မယ်။ [[mark:b1-rule]] ဒါဆို accessibility ဆိုတာ တကယ်တော့ ဘာလဲ။
+      မသန်စွမ်းမှု ဘယ်လိုပဲ ရှိရှိ၊ လူတိုင်း website ကို အဓိပ္ပာယ်ရှိရှိ၊ တန်းတူ သုံးနိုင်အောင် design
+      ဆွဲပြီး ဆောက်တာပါ။ [[mark:b1-meaningful]] အဓိပ္ပာယ်ရှိရှိ ဆိုတာက၊ page ကို ကြည့်ရုံ မဟုတ်ဘဲ
+      လုပ်ချင်တဲ့ အလုပ်ကို အဆုံးထိ လုပ်နိုင်ရမယ် ဆိုတာပါ။ ဆိုင်ရဲ့ website မှာဆိုရင် လက်ဖက်ရည်ကို တကယ်
+      မှာလို့ ရရပါမယ်။ [[mark:b1-equal]] တန်းတူ ဆိုတာကတော့၊ တခြားသူတွေနဲ့ အတူတူ အတွေ့အကြုံ ရရမယ် ဆိုတာပါ။
+      မျက်မမြင် customer က website ပေါ်က menu ကို ဖတ်လို့ မရဘဲ ဖုန်းဆက်ပြီးမှ မှာရရင်၊ မှာလို့တော့ ရပေမယ့် တန်းတူ
+      မဖြစ်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: What is digital accessibility, and why does it matter?",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "The A11Y Project: a11y and other numeronyms",
+          url: "https://www.a11yproject.com/posts/a11y-and-other-numeronyms/",
+        }
+      - {
+          title: "W3C WAI: Introduction to Web Accessibility",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/",
+        }
+    actions:
+      - { id: close-p02, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: b1-word,
+          type: whiteboard.apply,
+          at: { mark: b1-word },
+          open: true,
+          clear: true,
+          upsertIds: [l01-b1-a, l01-b1-mid, l01-b1-y, l01-b1-under, l01-b1-count],
+          drawMs: 1800,
+        }
+      - {
+          id: b1-short,
+          type: whiteboard.apply,
+          at: { mark: b1-short },
+          upsertIds: [l01-b1-arrow, l01-b1-short],
+          drawMs: 1000,
+        }
+      - { id: b1-rule, type: whiteboard.apply, at: { mark: b1-rule }, upsertIds: [l01-b1-rule] }
+      - {
+          id: b1-meaningful,
+          type: whiteboard.apply,
+          at: { mark: b1-meaningful },
+          upsertIds: [l01-b1-box1, l01-b1-box1-title, l01-b1-box1-line],
+          drawMs: 1400,
+        }
+      - {
+          id: b1-equal,
+          type: whiteboard.apply,
+          at: { mark: b1-equal },
+          upsertIds: [l01-b1-box2, l01-b1-box2-title, l01-b1-box2-line],
+          drawMs: 1400,
+        }
+
+  - id: how-many-people
+    chapter: "ဘယ်သူတွေအတွက်လဲ"
+    narration: >
+      [[mark:p03]] ဒါဆို မသန်စွမ်းသူ ဘယ်လောက် ရှိလဲ။ ကမ္ဘာ့ ကျန်းမာရေး အဖွဲ့ရဲ့ ခန့်မှန်းချက်အရ
+      ကမ္ဘာပေါ်မှာ သိသာတဲ့ မသန်စွမ်းမှု ရှိသူ လူ သန်းပေါင်း ၁၃၀၀ လောက် ရှိပြီး၊ လူ ခြောက်ယောက်မှာ
+      တစ်ယောက်ပါ။ လူတွေ အသက် ပိုရှည်လာတာနဲ့အမျှ ဒီ အရေအတွက်က တိုးလာနေပြီး၊ ကိုယ်တိုင်လည်း တစ်နေ့ ဒီထဲ
+      ရောက်လာနိုင်ပါတယ်။ ဒါပေမဲ့ ကိန်းဂဏန်း ကြီးကြီးထက် လူ တစ်ယောက်ချင်းကို ကြည့်ရင် ပိုနားလည်ရပါတယ်။
+      ဒါကြောင့် ဆိုင်ကို လာနေကျ customer လေးယောက်ကို မိတ်ဆက်ပေးပါရစေ။
+    sources:
+      - {
+          title: "WHO fact sheet: Disability",
+          url: "https://www.who.int/news-room/fact-sheets/detail/disability-and-health",
+        }
+      - {
+          title: "web.dev Learn Accessibility: What is digital accessibility, and why does it matter?",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+    actions:
+      - { id: close-b1, type: whiteboard.apply, at: { scene: start, offsetMs: -400 }, open: false }
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l01_p03 }
+
+  - id: mya-mya
+    narration: >
+      [[mark:p04]] ပထမဆုံး မြမြပါ။ အသက် ခြောက်ဆယ်ကျော်ပြီး အမြင် အားနည်းလာလို့၊ ဖုန်းနဲ့ လက်ဖက်ရည်
+      မှာတဲ့အခါ စာလုံးကို အကြီးဆုံး ထားပြီး၊ screen ကို ချဲ့ကြည့်တဲ့ tool ဖြစ်တဲ့ screen magnifier ကို
+      သုံးပါတယ်။ ဆိုင်ရဲ့ page က zoom လုပ်ခွင့် မပေးရင်၊ ဒါမှမဟုတ် စာလုံး အရောင်က ဖျော့လွန်းရင်၊
+      မြမြက မှာလို့ မရတော့ပါဘူး။ ဒီနေရာမှာ ပြင်ရမှာက မြမြရဲ့ မျက်စိ မဟုတ်ဘဲ၊ ကိုယ်တို့
+      ဆောက်ထားတဲ့ page ပါ။ [[mark:p05]] လုံးဝ မမြင်ရတဲ့ မျက်မမြင်တွေကတော့ screen reader ကို သုံးပါတယ်။
+      screen reader ဆိုတာ screen ပေါ်က အကြောင်းအရာကို အသံနဲ့ ဒါမှမဟုတ် braille နဲ့ ဖတ်ပြတဲ့ software ပါ။
+      braille နဲ့ ဖတ်ချင်ရင်တော့၊ လက်နဲ့ စမ်းဖတ်ရတဲ့ braille အစက်လေးတွေ ထုတ်ပေးတဲ့ braille display ဆိုတဲ့
+      device ကို တွဲသုံးပါတယ်။ [[mark:color-blindness]] အရောင် ခွဲခြားရ ခက်တဲ့ color blindness ရှိသူကတော့
+      ယောကျ်ား ၁၂ ယောက်မှာ တစ်ယောက်လောက် ရှိပါတယ်။ သူတို့အတွက် အရောင်နဲ့ချည်း ခွဲပြတဲ့ chart က ဖတ်ရ
+      ခက်ပါတယ်။ ဒီလို မသန်စွမ်းသူတွေ device ကို သုံးဖို့ ကူညီပေးတဲ့ software နဲ့ hardware တွေကို assistive
+      technology လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (visual impairments)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: Diverse Abilities and Barriers (visual)",
+          url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/visual/",
+        }
+      - {
+          title: "W3C WAI: Tools and Techniques (assistive technologies)",
+          url: "https://www.w3.org/WAI/people-use-web/tools-techniques/",
+        }
+      - {
+          title: "Colour Blind Awareness: Colour blindness",
+          url: "https://www.colourblindawareness.org/colour-blindness/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l01_p04 }
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l01_p05 }
+
+  - id: aung-aung
+    narration: >
+      [[mark:p06]] ဒုတိယက အောင်အောင်ပါ။ ကျောရိုး ဒဏ်ရာကြောင့် wheelchair စီးရပြီး၊ လက်ကို သိပ်
+      မလှုပ်နိုင်လို့ mouse မသုံးနိုင်ပါဘူး။ အဲဒီအစား computer ကို အသံနဲ့ ခိုင်းတဲ့ voice control နဲ့၊
+      ခေါင်းနားမှာ တပ်ထားတဲ့ ခလုတ်လေးကို ခေါင်းနဲ့ ထိပြီး ရွေးတဲ့ switch ကို သုံးပါတယ်။ မျက်လုံးနဲ့
+      ထိန်းတဲ့ eye tracking ကို သုံးသူတွေလည်း ရှိပါတယ်။ ဒီ tool တွေ သုံးတဲ့သူတွေက mouse မပါဘဲ page ကို ထိန်းကြတာမို့၊
+      mouse တင်မှ ပေါ်တဲ့ menu ကို အောင်အောင် သုံးလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (mobility impairment)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: Diverse Abilities and Barriers (physical)",
+          url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/physical/",
+        }
+      - {
+          title: "W3C WAI: Tools and Techniques (assistive technologies)",
+          url: "https://www.w3.org/WAI/people-use-web/tools-techniques/",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: p06 }, slideId: l01_p06 }
+
+  - id: hla-hla
+    narration: >
+      [[mark:p07]] တတိယက လှလှပါ။ မွေးကတည်းက နားမကြားလို့ လက်ဟန်ပြ ဘာသာစကား၊ sign language နဲ့
+      စကားပြောပါတယ်။ ဆိုင်က လက်ဖက်ရည် ဖျော်နည်း video တင်ရင် လှလှအတွက် caption လိုပါတယ်။ caption ဆိုတာ
+      video ထဲက စကားနဲ့ အရေးကြီးတဲ့ အသံတွေကို အချိန်ကိုက် စာနဲ့ ပြတာပါ။ caption မပါရင်တော့ video ထဲမှာ
+      ဘာပြောနေလဲ မသိရပါဘူး။ podcast လို အသံ သက်သက်ဆိုရင်တော့၊ အကြောင်းအရာ အားလုံးကို စာနဲ့ ရေးထားတဲ့
+      transcript လိုပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (hearing impairment)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: Diverse Abilities and Barriers (auditory)",
+          url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/auditory/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: p07 }, slideId: l01_p07 }
+
+  - id: maung-maung
+    narration: >
+      [[mark:p08]] စတုတ္ထက ဆယ်တန်း ကျောင်းသား မောင်မောင်ပါ။ dyslexia ရှိလို့ စာ အရှည်ကြီးတွေ ဖတ်ရ ခက်ပြီး၊
+      စာကို အသံနဲ့ ဖတ်ပြတဲ့ tool နဲ့ နားထောင်လေ့ ရှိပါတယ်။ popup တွေ ပြည့်နေတဲ့ page၊ နေရာလွတ် မရှိဘဲ
+      စာတွေ ကပ်နေတဲ့ page၊ စာလုံး သေးသေးလေးတွေ၊ ဘယ်ညာ ညီအောင် ဆွဲဆန့်ထားတဲ့ justified စာပိုဒ်တွေက သူ့ကို ပိုခက်စေပါတယ်။ autism၊
+      ADHD၊ မှတ်ဉာဏ် ချို့ယွင်းတာလို သင်ယူမှု၊ အာရုံစိုက်မှုနဲ့ ဆိုင်တဲ့ မသန်စွမ်းမှု ရှိသူတွေကိုလည်း ရှင်းရှင်းလင်းလင်း
+      စီထားတဲ့ page က ကူညီပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (cognitive impairments)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: Diverse Abilities and Barriers (cognitive, learning, and neurological)",
+          url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/cognitive/",
+        }
+    actions:
+      - { id: show-p08, type: slide.show, at: { mark: p08 }, slideId: l01_p08 }
+
+  - id: more-needs
+    narration: >
+      [[mark:p09]] နောက်ထပ် လိုအပ်ချက် သုံးမျိုး ရှိပါသေးတယ်။ တက်တတ်တဲ့ seizure ရှိသူတွေအတွက် screen
+      ပေါ်မှာ လင်းလိုက် မှိန်လိုက် မြန်မြန် ဖြစ်တဲ့ flashing က အန္တရာယ် ရှိပါတယ်။ ဟန်ချက်နဲ့
+      မူးဝေတာဆိုင်ရာ ပြဿနာ၊ vestibular disorder ရှိသူတွေကိုတော့ scroll လုပ်ရင် နောက်ခံ ရွေ့သွားတဲ့
+      parallax၊ အလိုလို စဖွင့်တဲ့ video တွေက မူးဝေစေပါတယ်။ ဒါကြောင့် ဖုန်းနဲ့ computer တွေမှာ animation
+      လျှော့ခိုင်းတဲ့ setting ရှိပါတယ်။ [[mark:p09b]] စကားပြောရ ခက်တဲ့သူတွေကတော့ အသံနဲ့ပဲ ခိုင်းလို့ရတဲ့
+      app မှာ ဘာမှ လုပ်လို့ မရပါဘူး။ ဒါကြောင့် အသံ အပြင် တခြား နည်းလမ်းလည်း အမြဲ ပေးထားရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (seizure and vestibular disorders, speech impairment)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: Diverse Abilities and Barriers (speech)",
+          url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/speech/",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Three Flashes or Below Threshold",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold",
+        }
+      - {
+          title: "MDN: prefers-reduced-motion",
+          url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion",
+        }
+    actions:
+      - { id: show-p09, type: slide.show, at: { mark: p09 }, slideId: l01_p09 }
+      - { id: show-p09b, type: slide.show, at: { mark: p09b }, slideId: l01_p09b }
+
+  - id: circle-of-beneficiaries
+    chapter: "လူတိုင်း အကျိုးရှိတယ်"
+    narration: >
+      [[mark:b2-ring1]] ခုနက လူတွေက မသန်စွမ်းမှု အမြဲတမ်း ရှိသူတွေပါ။ ဒါပေမဲ့ accessibility က
+      သူတို့အတွက်ချည်း မဟုတ်ပါဘူး။ လက် တစ်ဖက်တည်းနဲ့ ဖုန်း သုံးရတာကို စဉ်းစားကြည့်ရအောင်။ အလယ်က အပြာရောင်
+      စက်ဝိုင်းမှာ လက် တစ်ဖက် မရှိတဲ့သူ ရှိပါတယ်၊ ဒါက အမြဲတမ်းပါ။ [[mark:b2-ring2]] သူ့ အပြင်ဘက်မှာ
+      လက်ကျိုးလို့ ပတ်တီး စည်းထားတဲ့ ကျောင်းသား ရှိပါတယ်။ အပတ် နည်းနည်း ကြာရင် ပြန်ကောင်းမှာမို့ ဒါက
+      ယာယီပါ။ [[mark:b2-ring3]] အပြင်ဆုံး စက်ဝိုင်းကတော့ အခြေအနေအရ ဖြစ်တာပါ။ ကလေးကို တစ်ဖက်က ချီထားရင်း
+      လက်ဖက်ရည် မှာနေတဲ့ အမေ၊ နေပူထဲမှာ screen ဖတ်ရ ခက်နေတဲ့ customer၊ ဘတ်စ်ကားပေါ်မှာ အသံ ဖွင့်လို့
+      မရတဲ့သူ စတာတွေပါ။ [[mark:b2-all]] ဆိုင်ရဲ့ page ကို လက် တစ်ဖက်တည်းနဲ့ သုံးလို့ရအောင် ဆောက်ထားရင်၊
+      စက်ဝိုင်း သုံးခုလုံးက လူတွေ အကျိုးရှိပါတယ်။ တစ်ယောက်အတွက် ပြင်လိုက်တာက လူ အများကြီးကို
+      ကူညီလိုက်တာပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (additional beneficiaries)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "Microsoft Inclusive Design (persona spectrum)",
+          url: "https://inclusive.microsoft.design/",
+        }
+      - {
+          title: "W3C WAI: Accessibility, Usability, and Inclusion",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-usability-inclusion/",
+        }
+    actions:
+      - { id: close-p09b, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: b2-ring1,
+          type: whiteboard.apply,
+          at: { mark: b2-ring1 },
+          open: true,
+          clear: true,
+          upsertIds: [l01-b2-title, l01-b2-inner, l01-b2-inner-label, l01-b2-ex-permanent],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-ring2,
+          type: whiteboard.apply,
+          at: { mark: b2-ring2 },
+          upsertIds: [l01-b2-middle, l01-b2-middle-label, l01-b2-ex-temporary],
+          drawMs: 1400,
+        }
+      - {
+          id: b2-ring3,
+          type: whiteboard.apply,
+          at: { mark: b2-ring3 },
+          upsertIds: [l01-b2-outer, l01-b2-outer-label, l01-b2-ex-situational, l01-b2-ex-sun],
+          drawMs: 1800,
+        }
+      - {
+          id: b2-all,
+          type: whiteboard.apply,
+          at: { mark: b2-all },
+          upsertIds: [l01-b2-all, l01-b2-all-line],
+          drawMs: 1000,
+        }
+
+  - id: who-else-benefits
+    narration: >
+      [[mark:p10]] စက်ဝိုင်း အပြင်ဘက်မှာ အကျိုးရှိသူ ကျန်ပါသေးတယ်။ အသက်ကြီးလို့ မျက်စိ မှုန်လာ၊ လက်
+      တုန်လာတဲ့ အဘိုးအဘွားတွေက စာလုံးကြီး၊ ခလုတ်ကြီး လိုချင်ကြပါတယ်။ မျက်မှန် တပ်သူ၊ caption
+      ဖွင့်ကြည့်သူလို အနည်းငယ် လိုအပ်သူတွေ၊ မြန်မာစာ မကျွမ်းလို့ ဖတ်ချိန် ပိုလိုတဲ့ နိုင်ငံခြားသား
+      ဧည့်သည်တွေလည်း ရှိပါတယ်။ search engine ရဲ့ bot တွေကလည်း မမြင်၊ မကြားဘဲ page ကို ဖတ်တာမို့၊
+      accessible ဖြစ်တဲ့ site ကို ပိုကောင်းကောင်း နားလည်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (additional beneficiaries)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: The Business Case for Digital Accessibility",
+          url: "https://www.w3.org/WAI/business-case/",
+        }
+    actions:
+      - { id: close-b2, type: whiteboard.apply, at: { scene: start, offsetMs: -400 }, open: false }
+      - { id: show-p10, type: slide.show, at: { mark: p10 }, slideId: l01_p10 }
+
+  - id: business-and-law
+    chapter: "Business နဲ့ ဥပဒေ"
+    narration: >
+      [[mark:p11]] business ဘက်ကလည်း ကြည့်ရအောင်။ မသန်စွမ်းသူတွေနဲ့ သူတို့ရဲ့ မိသားစု၊ သူငယ်ချင်းတွေက
+      အားလုံး သုံးလို့ရတဲ့ ဆိုင်ကို ရွေးပြီး အားပေးကြပါတယ်။ ဆိုင်ရဲ့ page ကို သုံးမရရင် အဲဒီ customer တွေ
+      တခြားဆိုင် ရောက်သွားမှာပါ။ နေ့တိုင်း သုံးနေတဲ့ keyboard၊ email၊ voice control၊ အလိုလို ဖွင့်ပေးတဲ့
+      တံခါးလို နည်းပညာ တချို့ကလည်း၊ မသန်စွမ်းသူတွေ အတွက် ဒါမှမဟုတ် သူတို့ ကိုယ်တိုင် တီထွင်ခဲ့တာကနေ
+      စခဲ့တာပါ။ [[mark:p11b]] ဥပဒေ ဘက်မှာလည်း နိုင်ငံ အများအပြားမှာ digital accessibility ဥပဒေ ရှိပါတယ်။
+      ဥပမာ ဥရောပ သမဂ္ဂရဲ့ European Accessibility Act က ၂၀၂၅ ခုနှစ် ဇွန်လကစပြီး စတင် ကျင့်သုံးနေပါပြီ။ ဒါပေမဲ့
+      တရားစွဲခံရမှာ ကြောက်လို့ မဟုတ်ဘဲ၊ customer အားလုံး သုံးနိုင်ဖို့က အဓိက ရည်ရွယ်ချက်ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (business impact, legal impact)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "W3C WAI: The Business Case for Digital Accessibility",
+          url: "https://www.w3.org/WAI/business-case/",
+        }
+      - {
+          title: "W3C WAI: Web Accessibility Laws and Policies",
+          url: "https://www.w3.org/WAI/policies/",
+        }
+      - {
+          title: "EUR-Lex: Directive (EU) 2019/882 (European Accessibility Act), applies from 28 June 2025",
+          url: "https://eur-lex.europa.eu/eli/dir/2019/882/oj",
+        }
+    actions:
+      - { id: show-p11, type: slide.show, at: { mark: p11 }, slideId: l01_p11 }
+      - { id: show-p11b, type: slide.show, at: { mark: p11b }, slideId: l01_p11b }
+
+  - id: whole-life-cycle
+    narration: >
+      [[mark:p12]] ဒါကြောင့် accessibility ကို project ပြီးခါနီးမှ ထည့်လို့ မရပါဘူး။ စီစဉ်တဲ့ အဆင့်ကနေ
+      design၊ code၊ test အထိ အဆင့်တိုင်းမှာ ထည့်စဉ်းစားရပါတယ်။ အရေးအကြီးဆုံးကတော့ မသန်စွမ်းသူတွေကို
+      ပါဝင်စေတာပါ။ သူတို့ ဘာလိုလဲ ဆိုတာ သူတို့ကိုယ်တိုင် အသိဆုံးမို့လို့၊ သူတို့ ပြောတာကို
+      နားထောင်ပြီး သူတို့နဲ့ အတူ စမ်းသပ်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (full product lifecycle)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Welcome",
+          url: "https://web.dev/learn/accessibility/welcome",
+        }
+      - {
+          title: "W3C WAI: Involving Users in Evaluating Web Accessibility",
+          url: "https://www.w3.org/WAI/test-evaluate/involving-users/",
+        }
+    actions:
+      - { id: show-p12, type: slide.show, at: { mark: p12 }, slideId: l01_p12 }
+
+  - id: quiz
+    chapter: "Quiz"
+    narration: >
+      [[mark:p13]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ရဲ့ customer တစ်ယောက်က မျက်စိ ခွဲစိတ်ထားလို့ နှစ်ပတ်လောက်
+      စာလုံး ကြီးကြီးကိုပဲ ဖတ်နိုင်ပါတယ်။ သူက စက်ဝိုင်း ဘယ်ထဲမှာ ရှိလဲ။ အမြဲတမ်းလား၊ ယာယီလား၊ အခြေအနေအရလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:p13b]] အဖြေကတော့ ယာယီပါ။ နှစ်ပတ်ကြာရင် ပြန်ကောင်းလာမှာမို့လို့ပါ။
+      ဒါပေမဲ့ အဲဒီ နှစ်ပတ်အတွင်းမှာ စာလုံး ချဲ့လို့ရတဲ့ page က သူ့ကိုလည်း ကူညီပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Why (temporary and situational disabilities)",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "Microsoft Inclusive Design (persona spectrum)",
+          url: "https://inclusive.microsoft.design/",
+        }
+    actions:
+      - { id: show-p13, type: slide.show, at: { mark: p13 }, slideId: l01_p13 }
+      - { id: show-p13b, type: slide.show, at: { mark: p13b }, slideId: l01_p13b }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:notes]] ဒီနေ့ လေ့လာခဲ့တာတွေကို ပြန်ချုပ်ကြည့်ရအောင်။ [[mark:sel-def]] accessibility ဆိုတာ
+      မသန်စွမ်းမှု ဘယ်လိုပဲ ရှိရှိ၊ လူတိုင်း အဓိပ္ပာယ်ရှိရှိ၊ တန်းတူ သုံးနိုင်အောင် ဆောက်တာပါ။
+      [[mark:sel-scale]] လူ ခြောက်ယောက်မှာ တစ်ယောက်က မသန်စွမ်းမှု ရှိပြီး၊ [[mark:sel-at]] screen reader
+      လို assistive technology အမျိုးမျိုးကို သုံးကြပါတယ်။ [[mark:sel-circle]] အမြဲတမ်း၊ ယာယီ၊ အခြေအနေအရ
+      ဆိုတဲ့ စက်ဝိုင်းတွေကြောင့် အကျိုးရှိသူက ထင်ထားတာထက် အများကြီး ပိုများပါတယ်။ [[mark:sel-cycle]]
+      ပြီးတော့ plan ကနေ test အထိ အဆင့်တိုင်းမှာ မသန်စွမ်းသူတွေနဲ့ အတူ ထည့်စဉ်းစားရပါတယ်။ နောက် lesson
+      မှာတော့ page တစ်ခု accessible ဖြစ်မဖြစ်ကို ဘယ်လို တိုင်းတာလဲ၊ WCAG ဆိုတဲ့ စံနှုန်းအကြောင်း
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: What is digital accessibility, and why does it matter?",
+          url: "https://web.dev/learn/accessibility/why",
+        }
+      - {
+          title: "web.dev Learn Accessibility: How is digital accessibility measured?",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+    actions:
+      - { id: close-p13b, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-def,
+          type: editor.select,
+          at: { mark: sel-def },
+          target: { file: notes.md, text: "လူတိုင်း အဓိပ္ပာယ်ရှိရှိ၊ တန်းတူ သုံးနိုင်အောင်", occurrence: 1 },
+        }
+      - {
+          id: sel-scale,
+          type: editor.select,
+          at: { mark: sel-scale },
+          target: { file: notes.md, text: "6 ယောက်မှာ 1 ယောက်", occurrence: 1 },
+        }
+      - {
+          id: sel-at,
+          type: editor.select,
+          at: { mark: sel-at },
+          target: { file: notes.md, text: "assistive technology", occurrence: 1 },
+        }
+      - {
+          id: sel-circle,
+          type: editor.select,
+          at: { mark: sel-circle },
+          target: { file: notes.md, text: "အမြဲတမ်း · ယာယီ · အခြေအနေအရ", occurrence: 1 },
+        }
+      - {
+          id: sel-cycle,
+          type: editor.select,
+          at: { mark: sel-cycle },
+          target: { file: notes.md, text: "plan → design → code → test", occurrence: 1 },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
