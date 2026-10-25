@@ -14,9 +14,9 @@
  * a Vite overlay or a console error. `preview.*` commands and
  * `expect.preview` go through the studio's real preview bridge, and
  * `expect.file` checks the typed workspace. Pointer, slides, whiteboard and
- * console runs are skipped, except that a maximized slide or an opening
- * whiteboard clears focus in the preview, as the studio's inert workspace does
- * during a render. `--speed=2` types twice as fast, never closer than
+ * console runs are skipped, except that typing or highlighting code, a
+ * maximized slide and an opening whiteboard clear focus in the preview, as they
+ * do during a render. `--speed=2` types twice as fast, never closer than
  * 90 ms a chunk; `--only-scene` types every earlier scene at once.
  *
  * Fidelity, all reused from src/:
@@ -849,14 +849,19 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
     note(reason);
     return { skipped: reason };
   };
-  // A maximized slide or the whiteboard covers the workspace, and the studio makes the
-  // editor and preview inert while one is open (useIsWorkspaceCovered). Going inert
-  // blurs whatever had focus in the preview, and closing the overlay never puts it
-  // back, so do the same here: a lesson must not rely on preview focus surviving one.
-  const coverWorkspace = async (reason: string) => {
+  // In a render, two things take keyboard focus away from the preview and never give
+  // it back: Monaco (the studio's driver calls editor.focus() to type or highlight,
+  // and Chrome then resets the cross-origin preview frame's focused element to its
+  // body), and an overlay (a maximized slide or the whiteboard makes the editor and
+  // preview inert, see useIsWorkspaceCovered). Do the same here, so a lesson cannot
+  // rely on preview focus surviving either.
+  const clearPreviewFocus = async () => {
     await previewFrame
       ?.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
       .catch(() => {});
+  };
+  const coverWorkspace = async (reason: string) => {
+    await clearPreviewFocus();
     return skip(`${reason}; preview focus cleared (the workspace goes inert)`);
   };
   const requireActive = (path: string) => {
@@ -878,6 +883,7 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
 
     async typeText({ path, anchor, chunks }) {
       requireActive(path);
+      await clearPreviewFocus();
       const content = files[path];
       const startOffset = resolveAnchorOffset(content, anchor);
       if (startOffset === null) {
@@ -923,6 +929,7 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
 
     async selectRange({ path, selection }) {
       requireActive(path);
+      await clearPreviewFocus();
       const end = resolveAnchorOffset(files[path], {
         after: selection.text,
         occurrence: selection.occurrence,
