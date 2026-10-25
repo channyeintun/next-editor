@@ -1,0 +1,2491 @@
+# Accessibility course (Burmese), lesson 11: colour and contrast.
+#
+# Hands-on lesson on the tea-shop page with the accessibility panel in
+# contrast mode. Shape: board (how people perceive colour, HSL, lightness) →
+# board (colour vision deficiency: the same two menu badges as seen with each
+# type) → the page and its contrast rows (pale lead 2.58:1 and coffee
+# description 2.28:1 fail; the phone field's red border passes 5.40:1) →
+# board (contrast ratio and the WCAG thresholds) → one rule typed into
+# styles.css turns both rows to pass (6.72 on cream: AA only; 7.09 on white:
+# AAA too) without a reload → never colour alone: the link gets its underline
+# back (CSS), the sold-out dish gets the words "ကုန်သွားပြီ" (HTML), the phone
+# field gets an icon + error text (HTML) while its border row still "passes" →
+# board (prefers-color-scheme, prefers-contrast, layering) → a prefers-contrast
+# rule typed honestly (the preview cannot switch the OS setting; the panel
+# keeps the same ratios) → recap pointing at the three rules → next: motion.
+#
+# Start state (base.css section E, never typed, never shown): .lead #a99a8c on
+# cream, .menu-card .desc #b8a99a on white, .note a without underline, the
+# sold-out name only red (C's line-through dropped), input.is-invalid only a
+# red border. Fixes are later rules in styles.css (same specificity, later
+# file) or inserted text; nothing is deleted.
+#
+# Workspace: ws/ pinned byte-exact with tools/pin-files.ts (this file is the
+# template; `bun probe/build.ts template.yaml ws <slug>.yaml` builds the YAML).
+# Measured at 432 × 720 (smoke.ts): drawer top 504 (data-height 30), hero
+# 138-306, shan-noodles card 750-855, form 872, phone 1018, document 1372.
+#
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-11-color-contrast
+  title: "Accessibility course 11: အရောင်နဲ့ contrast"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course 11
+    entryFilePath: index.html
+    files:
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture, in its accessible form: every text
+          colour passes WCAG AA, form fields have 3:1 borders, nothing hides focus.
+          A lesson keeps the sections it needs and drops any declaration its own demo
+          types or relies on being absent (COURSE-KIT.md, "Deriving a lesson
+          workspace"). Section E holds the few rules a start state pins on purpose,
+          including deliberately broken ones (a pale colour, a removed outline).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --field: #8a7866;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* A class that sets display must never un-hide a [hidden] element. */
+        [hidden] {
+          display: none !important;
+        }
+
+        /* Text for screen readers only (the forms and images lessons use it). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .skip-link {
+          position: absolute;
+          top: -48px;
+          left: 8px;
+          padding: 4px 12px;
+          background: var(--cream);
+          color: var(--tea-dark);
+        }
+
+        .skip-link:focus {
+          top: 8px;
+        }
+
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .divider {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0 auto 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .status {
+          margin-left: 8px;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .order-link,
+        .order-btn,
+        .confirm-btn,
+        .disclosure,
+        .fav,
+        .confirm button {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .fav {
+          margin-left: 8px;
+          padding: 0 12px;
+          font-size: 14px;
+        }
+
+        .fav[aria-pressed="true"] {
+          background: var(--leaf);
+        }
+
+        .tea-options {
+          margin: 16px 0;
+        }
+
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .chips li {
+          padding: 2px 12px;
+          border: 1px solid var(--field);
+          border-radius: 999px;
+          background: #fff;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+          font-style: italic;
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .hours-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+        }
+
+        .hours-table caption {
+          text-align: start;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-table th,
+        .hours-table td {
+          padding: 4px 8px;
+          border: 1px solid var(--line);
+          text-align: start;
+        }
+
+        .hours-table thead th {
+          background: var(--cream);
+        }
+
+        .location {
+          margin: 16px 0;
+        }
+
+        .map {
+          position: relative;
+          height: 120px;
+          border: 1px solid var(--field);
+          border-radius: var(--radius);
+          background:
+            linear-gradient(90deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+            linear-gradient(0deg, transparent 40%, #fff 40%, #fff 50%, transparent 50%),
+            #d9e8c9;
+        }
+
+        .map-pin {
+          position: absolute;
+          top: 34px;
+          left: 56%;
+          width: 18px;
+          height: 18px;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          background: var(--chili);
+        }
+
+        .address {
+          margin: 4px 0 0;
+        }
+
+        .order-form {
+          margin: 16px 0;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .hint {
+          margin: 2px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .sugar {
+          margin: 12px 0 0;
+          padding: 4px 12px 8px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+        }
+
+        .sugar label {
+          display: inline-block;
+          margin: 0 12px 0 0;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .error {
+          margin: 2px 0 0;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .alert {
+          margin: 8px 0 0;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: #fde8e4;
+          color: var(--chili);
+        }
+
+        .order-status {
+          min-height: 1.8em;
+          margin: 8px 0 0;
+          color: var(--leaf);
+          font-weight: 700;
+        }
+
+        .confirm {
+          margin: 16px auto auto;
+          max-width: 320px;
+          padding: 16px;
+          border: 0;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+        }
+
+        .confirm::backdrop {
+          background: rgb(0 0 0 / 0.25);
+        }
+
+        .confirm form {
+          display: flex;
+          gap: 8px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Start state of the colour lesson (never typed, never shown):
+           pale brown text on cream (2.58:1) and on white (2.28:1), a link told
+           apart from the text around it only by its colour, a sold-out dish marked
+           only by a red name, and a phone field whose error is only a red border. */
+        .lead {
+          color: #a99a8c;
+        }
+
+        .menu-card .desc {
+          color: #b8a99a;
+        }
+
+        .note a {
+          text-decoration: none;
+        }
+
+        .sold-out .name {
+          color: var(--chili);
+        }
+
+        .order-form input.is-invalid {
+          border: 2px solid var(--chili);
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <a class="skip-link" href="#main" data-testid="skip-link">အဓိက အကြောင်းအရာသို့</a>
+
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" alt="" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+                <a class="call-link" href="tel:+959123456789" data-testid="call-link"><img src="/phone.svg" alt="ဖုန်းဆက်ရန်" width="24" height="24" /></a>
+              </div>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+              <nav class="nav" aria-label="အဓိက" data-testid="nav">
+                <ul>
+                  <li><a class="nav-link" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#order" data-testid="nav-order">မှာယူရန်</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <section class="hero" data-testid="hero">
+                <h2>မင်္ဂလာပါ</h2>
+                <p class="lead" data-contrast data-testid="hero-lead">ပူပူနွေးနွေး လက်ဖက်ရည်နဲ့ မနက်စာ</p>
+                <p class="note" data-testid="hero-note">ဆိုင်မှာ မစောင့်ချင်ရင် <a href="#order" data-testid="note-link">အွန်လိုင်းကနေ ကြိုမှာပါ</a>။</p>
+              </section>
+
+              <section class="menu-section" id="drinks" data-testid="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc" data-contrast data-testid="coffee-desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="menu-section" id="snacks" data-testid="snacks">
+                <h2>စားစရာ</h2>
+                <ul class="menu" data-testid="menu-snacks">
+                  <li class="menu-card" data-testid="card-mohinga">
+                    <h3 class="name">မုန့်ဟင်းခါး</h3>
+                    <p class="desc">ငါးဟင်းရည်နဲ့ ဆန်ခေါက်ဆွဲ</p>
+                    <span class="price">2,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card sold-out" data-testid="card-shan-noodles">
+                    <h3 class="name">ရှမ်းခေါက်ဆွဲ</h3>
+                    <p class="desc">ကြက်သားနဲ့ ရှမ်းခေါက်ဆွဲ</p>
+                    <span class="price">3,000 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+
+              <form class="order-form" id="order" aria-labelledby="order-title" data-testid="order-form">
+                <h2 id="order-title">အော်ဒါမှာရန်</h2>
+                <label for="name">နာမည်</label>
+                <input id="name" name="name" type="text" autocomplete="name" value="အောင်အောင်" data-testid="input-name" />
+                <label for="phone">ဖုန်း</label>
+                <input id="phone" name="phone" type="tel" autocomplete="tel" value="123 456" class="is-invalid" data-contrast="border" data-testid="input-phone" />
+                <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
+              </form>
+            </main>
+
+            <script type="module" src="/panel.js" data-modes="contrast" data-height="30"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "dom-accessibility-api": "0.7.1",
+            "tabbable": "6.5.0",
+            "vite": "5.4.21"
+          }
+        }
+      panel.js: |
+        // panel.js: the course's A11y panel. Pinned, never typed, never edited.
+        // It shows what assistive technology gets from the page, as real DOM in a
+        // drawer at the bottom of the preview, so the recorded lesson replays it.
+        //
+        //   <script type="module" src="/panel.js" data-modes="tree tabs" data-scope="#order"></script>
+        //
+        //   data-modes     any of: tree tabs contrast live axe (drawn in that order)
+        //   data-scope     CSS selector; tree, contrast, live and axe look only inside
+        //                  it, tabs keeps page-wide numbers but lists only stops inside
+        //   data-height    drawer height, % of the preview height (20-60, default 40)
+        //   data-axe-tags  axe rule tags to run (default: axe's default rules)
+        //
+        // A row for an element with data-testid="x" gets data-testid="a11y-x" (tree),
+        // "tab-x" (tabs) or "contrast-x" (COURSE-KIT.md lists every test id). The
+        // panel is inert: never focusable, never in the accessibility tree, never in
+        // its own results. It rewrites a section only when its text changes. Names
+        // come from dom-accessibility-api (W3C accname), tab stops from tabbable,
+        // roles from Chrome's mapping of HTML elements.
+
+        import { computeAccessibleDescription, computeAccessibleName } from "dom-accessibility-api";
+        import { isFocusable, tabbable } from "tabbable";
+
+        const tag = document.querySelector('script[src*="panel.js"]');
+        const config = {
+          modes: (tag?.dataset.modes || "tree").split(/\s+/).filter((m) => ["tree", "tabs", "contrast", "live", "axe"].includes(m)),
+          scope: tag?.dataset.scope || "",
+          height: Math.min(60, Math.max(20, Number(tag?.dataset.height) || 40)),
+          axeTags: (tag?.dataset.axeTags || "").split(/\s+/).filter(Boolean),
+        };
+        const on = (mode) => config.modes.includes(mode);
+        const words = (text) => new Set(text.split(" "));
+
+        // ---------------------------------------------------------------- roles
+
+        const TAG_ROLES = {
+          article: "article", aside: "complementary", blockquote: "blockquote", button: "button", dialog: "dialog",
+          dd: "definition", details: "group", dl: "list", dt: "term", fieldset: "group", figure: "figure", hr: "separator",
+          iframe: "iframe", li: "listitem",
+          main: "main", menu: "list", meter: "meter", nav: "navigation", ol: "list", optgroup: "group", option: "option",
+          output: "status", p: "paragraph", progress: "progressbar", search: "search", summary: "button", table: "table",
+          textarea: "textbox", tr: "row", ul: "list", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+          h5: "heading", h6: "heading",
+        };
+        const INPUT_ROLES = {
+          button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox", radio: "radio",
+          range: "slider", number: "spinbutton", search: "searchbox", hidden: "none",
+        };
+        // Roles that get a row; paragraph and generic get one only with lang, aria-live or focus.
+        const ROWS = words(
+          "alert alertdialog article banner blockquote button cell checkbox columnheader combobox complementary " +
+            "contentinfo dialog figure form grid gridcell group heading iframe img link list listbox listitem log main " +
+            "menu menubar menuitem menuitemcheckbox menuitemradio meter navigation option progressbar radio radiogroup " +
+            "region row rowheader search searchbox separator slider spinbutton status switch tab table tablist tabpanel " +
+            "term definition textbox timer toolbar tooltip tree treeitem",
+        );
+        // Roles that must have an accessible name ("⚠ no name").
+        const NEEDS_NAME = words(
+          "button link img iframe dialog alertdialog checkbox radio switch textbox searchbox combobox listbox slider " +
+            "spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem option region form progressbar meter",
+        );
+        // Controls: one that cannot take focus gets "⚠ not focusable".
+        const INTERACTIVE = words(
+          "button link checkbox radio switch textbox searchbox combobox listbox slider spinbutton tab menuitem " +
+            "menuitemcheckbox menuitemradio treeitem",
+        );
+        // Roles whose children are presentational: the row stands for the whole control.
+        const LEAF = words("button checkbox radio switch img textbox searchbox spinbutton slider progressbar meter separator iframe tab");
+        // Roles that never take a name, so the panel skips computing one.
+        const UNNAMED = words("list listitem row paragraph generic separator blockquote term definition");
+
+        const explicitRole = (el) => (el.getAttribute("role") || "").trim().split(/\s+/)[0].toLowerCase();
+        const hasName = (el) => el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby") || el.hasAttribute("title");
+        const outsideSections = (el) => !el.parentElement?.closest("article, aside, main, nav, section");
+
+        function focusable(el) {
+          try {
+            return isFocusable(el);
+          } catch {
+            return false;
+          }
+        }
+
+        function roleOf(el) {
+          const role = explicitRole(el);
+          // An author cannot take the role away from something focusable or named.
+          if (role === "none" || role === "presentation") return focusable(el) || hasName(el) ? implicitRole(el) : "none";
+          return role || implicitRole(el);
+        }
+
+        function implicitRole(el) {
+          const tagName = el.localName;
+          const cellsHidden = () => ["none", "presentation"].includes(explicitRole(el.closest("table") || el));
+          switch (tagName) {
+            case "a":
+            case "area":
+              return el.hasAttribute("href") ? "link" : "generic";
+            case "img":
+              return el.getAttribute("alt") === "" && !hasName(el) ? "none" : "img";
+            case "svg":
+              return hasName(el) || el.querySelector(":scope > title") ? "img" : "none";
+            case "input":
+              return INPUT_ROLES[el.type] || (el.hasAttribute("list") ? "combobox" : "textbox");
+            case "select":
+              return el.multiple || el.size > 1 ? "listbox" : "combobox";
+            case "header":
+              return outsideSections(el) ? "banner" : "generic";
+            case "footer":
+              return outsideSections(el) ? "contentinfo" : "generic";
+            case "section":
+              return hasName(el) ? "region" : "generic";
+            case "form":
+              return hasName(el) ? "form" : "generic";
+            case "li":
+              return el.parentElement?.matches("ul, ol, menu") ? "listitem" : "generic";
+            case "tr":
+              return cellsHidden() ? "generic" : "row";
+            case "td":
+              return cellsHidden() ? "generic" : el.closest("[role=grid], [role=treegrid]") ? "gridcell" : "cell";
+            case "th": {
+              if (cellsHidden()) return "generic";
+              const scope = el.getAttribute("scope");
+              if (scope === "row" || scope === "rowgroup") return "rowheader";
+              if (scope === "col" || scope === "colgroup" || el.closest("thead")) return "columnheader";
+              const firstOfDataRow = el.parentElement?.firstElementChild === el && el.parentElement.querySelector(":scope > td");
+              return firstOfDataRow ? "rowheader" : "columnheader";
+            }
+            default:
+              return TAG_ROLES[tagName] || "generic";
+          }
+        }
+
+        // ---------------------------------------------------------------- names and states
+
+        const squash = (text) => (text || "").replace(/\s+/g, " ").trim();
+        const segmenter = new Intl.Segmenter();
+        function clip(text, max) {
+          const graphemes = Array.from(segmenter.segment(text), (part) => part.segment);
+          return graphemes.length > max ? `${graphemes.slice(0, max - 1).join("")}…` : text;
+        }
+
+        function nameOf(el) {
+          let name = "";
+          try {
+            name = squash(computeAccessibleName(el, { computedStyleSupportsPseudoElements: true }));
+          } catch {}
+          if (name) return { name, from: "" };
+          // Two HTML-AAM rules Chrome follows and accname leaves out.
+          if (el.localName === "figure") return { name: squash(el.querySelector(":scope > figcaption")?.textContent), from: "" };
+          const placeholder = /^(input|textarea)$/.test(el.localName) ? squash(el.getAttribute("placeholder")) : "";
+          return placeholder ? { name: placeholder, from: "from placeholder" } : { name: "", from: "" };
+        }
+
+        function statesOf(el, role) {
+          const states = [];
+          const aria = (name) => el.getAttribute(`aria-${name}`);
+          const summary = el.localName === "summary";
+          if (aria("expanded") === "true" || (summary && el.parentElement?.open)) states.push("expanded");
+          else if (aria("expanded") === "false" || summary) states.push("collapsed");
+          if (aria("pressed")) states.push({ true: "pressed", false: "not pressed", mixed: "mixed" }[aria("pressed")] || "");
+          if (["checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"].includes(role)) {
+            const native = el instanceof HTMLInputElement;
+            const mixed = native ? el.indeterminate : aria("checked") === "mixed";
+            states.push(mixed ? "mixed" : (native ? el.checked : aria("checked") === "true") ? "checked" : "not checked");
+          }
+          if (aria("selected") === "true" || (el instanceof HTMLOptionElement && el.selected)) states.push("selected");
+          if (aria("current") && aria("current") !== "false") states.push(`current=${aria("current")}`);
+          if (el.hasAttribute("required") || aria("required") === "true") states.push("required");
+          if (["true", "grammar", "spelling"].includes(aria("invalid"))) states.push("invalid");
+          if (el.hasAttribute("readonly") || aria("readonly") === "true") states.push("readonly");
+          const disabled = el.matches(":disabled") || aria("disabled") === "true";
+          if (disabled) states.push("disabled");
+          const canFocus = focusable(el);
+          if (canFocus && !INTERACTIVE.has(role) && role !== "iframe") states.push("focusable");
+          if (!canFocus && !disabled && INTERACTIVE.has(role)) states.push("⚠ not focusable");
+          if (el === activeElement()) states.push("focused");
+          if (aria("live") && aria("live") !== "off") states.push(`live=${aria("live")}`);
+          return states.filter(Boolean);
+        }
+
+        function activeElement() {
+          const el = document.activeElement;
+          return el && el !== document.body && el !== document.documentElement && !host.contains(el) ? el : null;
+        }
+
+        function openModal() {
+          try {
+            return document.querySelector("dialog:modal");
+          } catch {
+            return null;
+          }
+        }
+
+        function scopeRoot() {
+          try {
+            return (config.scope && document.querySelector(config.scope)) || document.body;
+          } catch {
+            return document.body;
+          }
+        }
+
+        // ---------------------------------------------------------------- tree
+
+        function describe(el, role) {
+          const states = statesOf(el, role);
+          const extra = el.hasAttribute("lang") || states.some((s) => s === "focusable" || s === "focused" || s.startsWith("live="));
+          if (role === "none" || !(ROWS.has(role) || extra)) return null;
+          const { name, from } = UNNAMED.has(role) ? { name: "", from: "" } : nameOf(el);
+          const level = role === "heading" ? Number(el.getAttribute("aria-level")) || Number(el.localName.slice(1)) || 2 : 0;
+          const parts = [{ cls: "role", text: level ? `heading level ${level}` : role }];
+          if (name) parts.push({ cls: "name", text: `"${clip(name, 60)}"` });
+          else if (NEEDS_NAME.has(role)) parts.push({ cls: "warn", text: "⚠ no name" });
+          if (from) parts.push({ cls: "muted", text: from });
+          if (role === "list" && el.localName !== "dl") {
+            const items = Array.from(el.children).filter((c) => c.localName === "li" || explicitRole(c) === "listitem");
+            parts.push({ cls: "muted", text: `${items.length} ${items.length === 1 ? "item" : "items"}` });
+          }
+          for (const state of states) parts.push({ cls: state.startsWith("⚠") ? "warn" : "state", text: state });
+          if (el.hasAttribute("aria-describedby")) {
+            let description = "";
+            try {
+              description = squash(computeAccessibleDescription(el));
+            } catch {}
+            if (description) parts.push({ cls: "muted", text: `desc "${clip(description, 40)}"` });
+          }
+          if (el.hasAttribute("lang")) parts.push({ cls: "state", text: `lang="${el.getAttribute("lang")}"` });
+          if (!name && ["paragraph", "generic", "blockquote", "status", "alert", "log", "term", "definition"].includes(role) && squash(el.textContent)) {
+            parts.push({ cls: "muted", text: `· ${clip(squash(el.textContent), 40)}` });
+          }
+          const warnings = parts.filter((part) => part.cls === "warn").length;
+          return { role, name, states, parts, warnings, testid: el.getAttribute("data-testid") };
+        }
+
+        function buildTree() {
+          const rows = [];
+          const visit = (el, depth) => {
+            if (el === host || /^(script|style|template|noscript|head|title|meta|link)$/.test(el.localName)) return;
+            if (el.getAttribute("aria-hidden") === "true" || el.hasAttribute("inert")) return;
+            const style = getComputedStyle(el);
+            if (style.display === "none") return;
+            let childDepth = depth;
+            if (style.visibility === "visible" && el !== document.body) {
+              const role = roleOf(el);
+              const row = describe(el, role);
+              if (row) {
+                rows.push({ ...row, depth });
+                childDepth = depth + 1;
+                if (LEAF.has(role)) return;
+              }
+            }
+            if (el.localName === "svg" || el.localName === "select") return;
+            for (const child of el.children) visit(child, childDepth);
+          };
+          // While a modal dialog is open, everything outside it is inert.
+          visit(openModal() || scopeRoot(), 0);
+          return { rows, title: squash(document.title), lang: document.documentElement.getAttribute("lang") || "" };
+        }
+
+        function renderTree({ rows, title, lang }) {
+          const warnings = rows.reduce((sum, r) => sum + r.warnings, 0) + (title ? 0 : 1) + (lang ? 0 : 1);
+          const label = warnings ? `Accessibility tree · ⚠ ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : "Accessibility tree · no warnings";
+          const head = row({ testid: "a11y-summary", head: true, attrs: { "data-warnings": warnings } }, [{ text: label }]);
+          const doc = row({ testid: "a11y-document", depth: 0, attrs: { "data-title": title, "data-lang": lang } }, [
+            { cls: "role", text: "document" },
+            title ? { cls: "name", text: `"${clip(title, 50)}"` } : { cls: "warn", text: "⚠ no title" },
+            lang ? { cls: "state", text: `lang="${lang}"` } : { cls: "warn", text: "⚠ no lang" },
+          ]);
+          const body = rows.map((r) =>
+            row(
+              {
+                testid: r.testid && `a11y-${r.testid}`,
+                depth: r.depth + 1,
+                focused: r.states.includes("focused"),
+                attrs: { "data-name": r.name, "data-states": r.states.join(" ") },
+              },
+              r.parts,
+            ),
+          );
+          return [head, doc, ...body];
+        }
+
+        // ---------------------------------------------------------------- tabs
+
+        function tabStops() {
+          let stops = [];
+          try {
+            stops = tabbable(openModal() || document.body, { displayCheck: "full" });
+          } catch {}
+          // A radio group with nothing checked is one stop (its first radio), as in Chrome.
+          const groups = new Set();
+          return stops.filter((el) => {
+            if (!(el instanceof HTMLInputElement) || el.type !== "radio" || !el.name) return true;
+            const group = Array.from((el.form || document).querySelectorAll("input[type=radio]")).filter((r) => r.name === el.name);
+            if (group.some((r) => r.checked)) return true;
+            if (groups.has(group[0])) return false;
+            groups.add(group[0]);
+            return true;
+          });
+        }
+
+        let marked = new Map();
+        function buildTabs() {
+          const scope = openModal() || (config.scope ? scopeRoot() : null);
+          const stops = tabStops().map((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const text = squash(el.textContent);
+            return {
+              el,
+              order: index + 1,
+              role: roleOf(el),
+              name: nameOf(el).name,
+              text,
+              testid: el.getAttribute("data-testid"),
+              ariaHidden: Boolean(el.closest('[aria-hidden="true"]')),
+              focused: el === activeElement(),
+              x: Math.round(rect.left + scrollX),
+              y: Math.round(rect.top + scrollY),
+              listed: !scope || scope.contains(el),
+            };
+          });
+          // data-a11y-tab="n" on a listed stop is what its badge anchors to.
+          const next = new Map(stops.filter((s) => s.listed && s.order <= 60).map((s) => [s.el, String(s.order)]));
+          for (const el of marked.keys()) if (!next.has(el)) el.removeAttribute("data-a11y-tab");
+          for (const [el, order] of next) if (el.getAttribute("data-a11y-tab") !== order) el.setAttribute("data-a11y-tab", order);
+          marked = next;
+          return stops;
+        }
+
+        function renderTabs(stops) {
+          const head = row({ testid: "tab-count", head: true, attrs: { "data-count": stops.length } }, [
+            { text: `Tab order · ${stops.length} stops` },
+          ]);
+          const items = stops
+            .filter((s) => s.listed)
+            .map((s) => {
+              const parts = [{ cls: "order", text: String(s.order) }, { cls: "role", text: s.role }];
+              if (s.name) parts.push({ cls: "name", text: `"${clip(s.name, 50)}"` });
+              else if (NEEDS_NAME.has(s.role)) parts.push({ cls: "warn", text: "⚠ no name" });
+              else if (s.text) parts.push({ cls: "muted", text: `· ${clip(s.text, 40)}` });
+              if (s.ariaHidden) parts.push({ cls: "warn", text: "⚠ aria-hidden" });
+              if (s.focused) parts.push({ cls: "state", text: "focused" });
+              return row({ testid: s.testid && `tab-${s.testid}`, depth: 0, focused: s.focused, attrs: { "data-order": s.order } }, parts);
+            });
+          return [head, ...(items.length ? items : [row({}, [{ cls: "muted", text: "(no tab stops here)" }])])];
+        }
+
+        // Studio cannot press keys, so a lesson clicks two hidden panel controls
+        // (preview.click on a11y-tab-next / a11y-tab-prev) to move focus the way Tab
+        // and Shift+Tab do. Past the last stop focus leaves the page (body).
+        function moveFocus(step) {
+          const stops = tabStops();
+          const active = activeElement();
+          let next = active ? null : step > 0 ? stops[0] : stops.at(-1);
+          if (active) {
+            let index = stops.indexOf(active);
+            if (index === -1) {
+              // Focus sits outside the order: continue from its place in the page.
+              const after = stops.findIndex((el) => active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              index = (after === -1 ? stops.length : after) - (step > 0 ? 1 : 0);
+            }
+            next = stops[index + step];
+          }
+          if (next) next.focus();
+          else active?.blur();
+        }
+
+        const renderBadges = (stops) =>
+          stops
+            .filter((s) => s.listed)
+            .map(
+              (s) =>
+                `<span class="a11yp-badge${s.focused ? " is-focused" : ""}" style="--x:${s.x}px;--y:${s.y}px;position-anchor:--a11yp-${s.order}">${s.order}</span>`,
+            );
+
+        // ---------------------------------------------------------------- contrast
+
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        function parseColor(value) {
+          const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+          if (match) {
+            const [r, g, b, a = 1] = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+            return { r, g, b, a };
+          }
+          // oklch(), color(), color-mix() and friends: let a 1px canvas convert them.
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = value;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        }
+
+        const over = (top, below) => ({
+          r: top.r * top.a + below.r * (1 - top.a),
+          g: top.g * top.a + below.g * (1 - top.a),
+          b: top.b * top.a + below.b * (1 - top.a),
+          a: 1,
+        });
+
+        // The colour behind an element: its own and its ancestors' background colours
+        // stacked on a white canvas. Background images and opacity are not counted.
+        function backgroundOf(el) {
+          const layers = [];
+          let image = false;
+          for (let node = el; node instanceof Element; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            image ||= style.backgroundImage !== "none";
+            layers.push(parseColor(style.backgroundColor));
+            if (layers.at(-1).a >= 1) break;
+          }
+          return { color: layers.reduceRight((below, layer) => over(layer, below), { r: 255, g: 255, b: 255, a: 1 }), image };
+        }
+
+        function luminance({ r, g, b }) {
+          const linear = (v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        }
+
+        const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+
+        function buildContrast() {
+          const root = scopeRoot();
+          const targets = [...(root.matches("[data-contrast]") ? [root] : []), ...root.querySelectorAll("[data-contrast]")];
+          return targets.map((el) => {
+            const style = getComputedStyle(el);
+            const border = el.dataset.contrast === "border";
+            const label = el.dataset.contrastLabel || clip(squash(el.textContent) || nameOf(el).name || el.localName, 18);
+            const item = { testid: el.getAttribute("data-testid"), label, border };
+            if (!el.getClientRects().length) return { ...item, hidden: true };
+            const behind = backgroundOf(border ? el.parentElement || el : el);
+            const side = ["Top", "Right", "Bottom", "Left"].find((s) => parseFloat(style[`border${s}Width`]) > 0);
+            const ink = border ? (side ? parseColor(style[`border${side}Color`]) : behind.color) : parseColor(style.color);
+            const fg = over(ink, behind.color);
+            const [high, low] = [luminance(fg), luminance(behind.color)].sort((x, y) => y - x);
+            const ratio = (high + 0.05) / (low + 0.05);
+            const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            // Compare the exact ratio, show it cut (not rounded) to 2 places: 4.499 shows 4.49 and fails.
+            const shown = (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+            return { ...item, shown, large, fg: hex(fg), bg: hex(behind.color), image: behind.image, aa: ratio >= (border || large ? 3 : 4.5), aaa: ratio >= (large ? 4.5 : 7) };
+          });
+        }
+
+        function renderContrast(items) {
+          const rows = items.map((item) => {
+            const parts = [{ cls: "name", text: `"${item.label}"` }];
+            const attrs = {};
+            const verdict = (ok, prefix) => ({ cls: ok ? "pass" : "warn", text: `${prefix}${ok ? "pass" : "fail"}` });
+            if (item.hidden) parts.push({ cls: "muted", text: "not rendered" });
+            else if (item.border) {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail" });
+              parts.push({ cls: "role", text: "border" }, { cls: "order", text: `${item.shown}:1` }, { cls: "muted", text: "needs 3:1" }, verdict(item.aa, ""));
+            } else {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail", "data-aaa": item.aaa ? "pass" : "fail" });
+              parts.push({ cls: "order", text: `${item.shown}:1` }, verdict(item.aa, "AA "), verdict(item.aaa, "AAA "));
+              if (item.large) parts.push({ cls: "muted", text: "large text" });
+            }
+            if (item.image) parts.push({ cls: "warn", text: "⚠ background image: check by eye" });
+            const swatches = item.hidden ? "" : `<span class="a11yp-swatch" style="background:${item.fg}"></span><span class="a11yp-swatch" style="background:${item.bg}"></span>`;
+            return row({ testid: item.testid && `contrast-${item.testid}`, depth: 0, attrs, prefix: swatches }, parts);
+          });
+          const head = row({ head: true }, [{ text: "Contrast (WCAG 2)" }]);
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(mark elements with data-contrast)" }])])];
+        }
+
+        // ---------------------------------------------------------------- live regions
+
+        // A simplified screen reader: it speaks a change to a live region that was
+        // already on the page, never the text a region arrives with (except an alert).
+        const liveState = new WeakMap();
+        const liveLog = [];
+        let liveCount = 0;
+        let liveBaseline = false;
+
+        function scanLive() {
+          if (!on("live")) return false;
+          let changed = false;
+          for (const el of scopeRoot().querySelectorAll("[aria-live], [role~=status], [role~=alert], [role~=log], output")) {
+            const alert = /\balert\b/.test(el.getAttribute("role") || "");
+            const politeness = el.getAttribute("aria-live") || (alert ? "assertive" : "polite");
+            const present = !el.closest('[hidden], [aria-hidden="true"], [inert]') && el.checkVisibility();
+            const now = { present, text: squash(el.innerText) };
+            const before = liveState.get(el);
+            liveState.set(el, now);
+            if (!liveBaseline || politeness === "off" || !now.present || !now.text) continue;
+            if (before?.present ? before.text === now.text : !alert) continue;
+            liveCount += 1;
+            liveLog.push({ n: liveCount, politeness, text: now.text });
+            if (liveLog.length > 6) liveLog.shift();
+            changed = true;
+          }
+          liveBaseline = true;
+          return changed;
+        }
+
+        function renderLive() {
+          const head = row({ testid: "live-count", head: true, attrs: { "data-count": liveCount } }, [
+            { text: "Live regions · likely spoken (simplified)" },
+          ]);
+          const rows = liveLog.map((entry) =>
+            row({ testid: `live-${entry.n}`, depth: 0 }, [
+              { cls: "order", text: String(entry.n) },
+              { cls: entry.politeness === "assertive" ? "warn" : "state", text: entry.politeness },
+              { cls: "name", text: `"${clip(entry.text, 60)}"` },
+            ]),
+          );
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(nothing announced yet)" }])])];
+        }
+
+        // ---------------------------------------------------------------- axe (base-axe workspaces: axe.js sets window.a11yPanelAxe)
+
+        const axeRun = { running: false, again: false, timer: 0, state: null };
+
+        function scheduleAxe(delay = 700) {
+          if (!on("axe") || !window.a11yPanelAxe) return;
+          clearTimeout(axeRun.timer);
+          axeRun.timer = setTimeout(runAxe, delay);
+        }
+
+        async function runAxe() {
+          const axe = window.a11yPanelAxe;
+          if (axeRun.running) return void (axeRun.again = true);
+          axeRun.running = true;
+          try {
+            const context = { exclude: [["#a11y-panel"]], ...(config.scope && { include: [[config.scope]] }) };
+            const options = { resultTypes: ["violations"], ...(config.axeTags.length && { runOnly: { type: "tag", values: config.axeTags } }) };
+            const { violations } = await axe.run(context, options);
+            axeRun.state = { violations: violations.map((v) => ({ id: v.id, impact: v.impact || "minor", help: v.help, nodes: v.nodes.length })) };
+          } catch (error) {
+            axeRun.state = { error: String(error?.message || error) };
+          }
+          axeRun.running = false;
+          render();
+          if (axeRun.again) {
+            axeRun.again = false;
+            scheduleAxe(300);
+          }
+        }
+
+        function renderAxe() {
+          const { state } = axeRun;
+          const version = window.a11yPanelAxe?.version;
+          if (!version) return [row({ head: true }, [{ text: "axe · not installed in this lesson" }])];
+          if (!state || state.error) {
+            return [row({ testid: "axe-count", head: true }, [state ? { cls: "warn", text: `axe error: ${clip(state.error, 60)}` } : { text: "axe · running…" }])];
+          }
+          const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+          const issues = state.violations.length;
+          const head = row({ testid: "axe-count", head: true, attrs: { "data-count": issues } }, [
+            { text: `axe-core ${version} · ${issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "no issues"}` },
+          ]);
+          const rows = state.violations
+            .sort((a, b) => impact[a.impact] - impact[b.impact] || a.id.localeCompare(b.id))
+            .map((v) =>
+              row({ testid: `axe-${v.id}`, depth: 0, attrs: { "data-count": v.nodes } }, [
+                { cls: impact[v.impact] < 2 ? "warn" : "state", text: v.impact },
+                { cls: "role", text: v.id },
+                { cls: "order", text: `×${v.nodes}` },
+                { cls: "muted", text: v.help },
+              ]),
+            );
+          return [head, ...rows];
+        }
+
+        // ---------------------------------------------------------------- drawing
+
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+        // One row. Its textContent is the parts joined by single spaces, exactly as
+        // it reads, so expect.preview's textContains matches what learners see.
+        function row({ testid, head = false, depth = -1, focused = false, attrs = {}, prefix = "" }, parts) {
+          const classes = `a11yp-row${head ? " a11yp-head" : ""}${focused ? " is-focused" : ""}`;
+          const extra = Object.entries(attrs).map(([key, value]) => ` ${key}="${escape(value)}"`).join("");
+          const id = testid ? ` data-testid="${escape(testid)}"` : "";
+          const indent = depth >= 0 ? ` style="--d:${Math.min(depth, 8)}"` : "";
+          const spans = parts.map((p) => (p.cls ? `<span class="a11yp-${p.cls}">${escape(p.text)}</span>` : escape(p.text))).join(" ");
+          return `<div class="${classes}"${id}${indent}${extra}>${prefix}${spans}</div>`;
+        }
+
+        const C = { bg: "#202124", head: "#303134", text: "#e8eaed", role: "#aecbfa", name: "#fdd663", state: "#d7aefb", muted: "#bdc1c6", warn: "#f6aea9", pass: "#a8dab5", focus: "#123a6e", ring: "#8ab4f8" };
+        const P = "#a11y-panel";
+        const CSS = `
+        :where(html){scroll-padding-bottom:calc(${config.height}vh + 16px)}
+        ${P} .a11yp-spacer{display:block;height:${config.height}vh}
+        ${P} .a11yp-drawer{position:fixed;inset:auto 0 0 0;z-index:2147483001;box-sizing:border-box;height:${config.height}vh;margin:0;padding:0 0 8px;overflow:auto;overscroll-behavior:contain;background:${C.bg};color:${C.text};border-top:3px solid ${C.ring};font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Sangam MN","Myanmar MN","Myanmar Text",Padauk,monospace;text-align:start;letter-spacing:normal;text-transform:none;font-style:normal}
+        ${P} .a11yp-row{display:block;margin:0;padding:1px 8px 1px calc(8px + var(--d,0) * 14px);border-left:4px solid transparent;overflow-wrap:anywhere}
+        ${P} .a11yp-head{position:sticky;top:0;z-index:1;padding-left:8px;background:${C.head};font-weight:700}
+        ${P} .a11yp-row.is-focused{background:${C.focus};border-left-color:${C.ring}}
+        ${P} .a11yp-role{color:${C.role}} ${P} .a11yp-name{color:${C.name}} ${P} .a11yp-state{color:${C.state}}
+        ${P} .a11yp-muted{color:${C.muted}} ${P} .a11yp-pass{color:${C.pass}} ${P} .a11yp-order{font-weight:700}
+        ${P} .a11yp-warn{color:${C.warn};font-weight:700}
+        ${P} .a11yp-swatch{display:inline-block;width:12px;height:12px;margin-right:4px;border:1px solid ${C.muted};vertical-align:middle}
+        ${P} .a11yp-badges{display:block;position:static;height:0}
+        ${P} .a11yp-badge{position:absolute;z-index:2147483000;top:var(--y);left:var(--x);box-sizing:border-box;min-width:20px;height:20px;margin:-8px 0 0 -8px;padding:0 4px;border-radius:10px;background:#174ea6;color:#fff;font:700 13px/20px ui-monospace,Menlo,monospace;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
+        ${P} .a11yp-badge.is-focused{background:#b3261e}
+        @supports (anchor-name: --a){${P} .a11yp-badge{top:anchor(top,var(--y));left:anchor(left,var(--x));position-visibility:anchors-visible}}
+        ${Array.from({ length: 60 }, (_, i) => `[data-a11y-tab="${i + 1}"]{anchor-name:--a11yp-${i + 1}}`).join("")}`;
+
+        const host = document.createElement("div");
+        host.id = "a11y-panel";
+        host.inert = true;
+        host.innerHTML =
+          `<style>${CSS}</style><div class="a11yp-badges"></div><div class="a11yp-spacer"></div>` +
+          `<span hidden data-step="1" data-testid="a11y-tab-next"></span><span hidden data-step="-1" data-testid="a11y-tab-prev"></span>` +
+          `<div class="a11yp-drawer" data-testid="a11y-panel">` +
+          `${config.modes.map((mode) => `<div data-mode="${mode}"></div>`).join("")}</div>`;
+        document.body.append(host);
+        const drawer = host.querySelector(".a11yp-drawer");
+        const badges = host.querySelector(".a11yp-badges");
+        const sections = Object.fromEntries(Array.from(drawer.children, (el) => [el.dataset.mode, el]));
+        const written = new Map();
+
+        // Rewrite only the rows whose text changed (a focus move touches two rows);
+        // a change in the number of rows redraws the section.
+        function write(el, rows) {
+          const before = written.get(el) || [];
+          written.set(el, rows);
+          if (before.length !== rows.length || el.children.length !== rows.length) el.innerHTML = rows.join("");
+          else rows.forEach((html, i) => html !== before[i] && (el.children[i].outerHTML = html));
+        }
+
+        // Keep the focused row and the newest announcement in view inside the drawer.
+        let shown = { focus: null, live: 0 };
+        function reveal() {
+          const focus = activeElement();
+          let target = null;
+          if (focus !== shown.focus) target = drawer.querySelector(".is-focused");
+          if (liveCount !== shown.live) target = drawer.querySelector(`[data-testid="live-${liveCount}"]`);
+          shown = { focus, live: liveCount };
+          if (!target) return;
+          const headHeight = target.parentElement.firstElementChild.offsetHeight;
+          const top = target.offsetTop - headHeight;
+          const bottom = target.offsetTop + target.offsetHeight - drawer.clientHeight;
+          if (top < drawer.scrollTop) drawer.scrollTop = top;
+          else if (bottom > drawer.scrollTop) drawer.scrollTop = bottom + 8;
+        }
+
+        function render() {
+          try {
+            if (on("tree")) write(sections.tree, renderTree(buildTree()));
+            if (on("tabs")) {
+              const stops = buildTabs();
+              write(sections.tabs, renderTabs(stops));
+              write(badges, renderBadges(stops));
+            }
+            if (on("contrast")) write(sections.contrast, renderContrast(buildContrast()));
+            if (on("live")) write(sections.live, renderLive());
+            if (on("axe")) write(sections.axe, renderAxe());
+            reveal();
+          } catch {
+            // The panel must never break a lesson; the next tick tries again.
+          }
+        }
+
+        // ---------------------------------------------------------------- updates
+
+        let timer = 0;
+        const schedule = (delay = 40) => {
+          clearTimeout(timer);
+          timer = setTimeout(render, delay);
+        };
+
+        new MutationObserver((records) => {
+          if (!records.some((r) => !host.contains(r.target) && r.attributeName !== "data-a11y-tab")) return;
+          scanLive();
+          schedule();
+          if (!axeRun.running) scheduleAxe();
+        }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+
+        document.addEventListener("focusin", () => schedule(0), true);
+        document.addEventListener("focusout", () => schedule(0), true);
+        // A CSS edit swaps the stylesheet <link>; its load (and image loads) can change contrast and layout.
+        document.addEventListener("load", () => (schedule(), scheduleAxe()), true);
+        addEventListener("resize", () => schedule(100));
+        addEventListener("a11y-panel-axe", () => scheduleAxe(0));
+        host.addEventListener("click", (event) => {
+          const step = Number(event.target.closest?.("[data-step]")?.dataset.step);
+          if (step) moveFocus(step);
+        });
+        // The drawer is inert, so the wheel would scroll the page under it; scroll the drawer instead.
+        addEventListener(
+          "wheel",
+          (event) => {
+            if (event.clientY < drawer.getBoundingClientRect().top) return;
+            event.preventDefault();
+            drawer.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+          },
+          { passive: false },
+        );
+
+        // A cheap periodic pass catches what no event reports (a style change that
+        // hides something or changes a colour). Timers, not animation frames: frames
+        // never run in a hidden tab.
+        (function tick() {
+          if (scanLive()) schedule(0);
+          render();
+          setTimeout(tick, 600);
+        })();
+        scheduleAxe(0);
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      public/phone.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+          <path d="M6.6 3.5l2.6-.6 1.6 4.2-2 1.4a11 11 0 0 0 6.7 6.7l1.4-2 4.2 1.6-.6 2.6a2 2 0 0 1-2 1.6A15.5 15.5 0 0 1 3.5 4.9a2 2 0 0 1 1.6-2z" fill="#fff8ec"/>
+        </svg>
+      styles.css: ""
+
+  whiteboardAssets:
+    # Board A — how colour is seen. White = title and flow, orange/blue/violet
+    # = light → eye → brain, red/orange/green = the three HSL parts, blue =
+    # lightness circled and the point it makes.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "အရောင်ကို ဘယ်လို မြင်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-light,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 110,
+        height: 36,
+        text: "အလင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 440,
+        y: 248,
+        width: 70,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-eye,
+        kind: text,
+        x: 540,
+        y: 245,
+        width: 110,
+        height: 36,
+        text: "မျက်စိ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 690,
+        y: 248,
+        width: 70,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-brain,
+        kind: text,
+        x: 790,
+        y: 245,
+        width: 270,
+        height: 36,
+        text: "ဦးနှောက် → အရောင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-hsl,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 300,
+        height: 36,
+        text: "HSL နဲ့ ဖော်ပြရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-hue,
+        kind: text,
+        x: 330,
+        y: 395,
+        width: 560,
+        height: 36,
+        text: "Hue → ဘယ်အရောင်လဲ (0–360°)",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-sat,
+        kind: text,
+        x: 330,
+        y: 450,
+        width: 560,
+        height: 36,
+        text: "Saturation → ဘယ်လောက် ရင့်လဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-lit,
+        kind: text,
+        x: 330,
+        y: 505,
+        width: 560,
+        height: 36,
+        text: "Lightness → ဘယ်လောက် လင်းလဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-lit-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 312,
+        y: 492,
+        width: 520,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-key,
+        kind: text,
+        x: 330,
+        y: 580,
+        width: 680,
+        height: 36,
+        text: "contrast = အလင်း အမှောင် ကွာခြားမှု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+
+    # Board B — colour vision deficiency. Two menu badges (green = available,
+    # red = sold out) as most people see them, then as simulated for each
+    # type: olive pairs (deuteranopia, protanopia), grey pair (achromatopsia).
+    # Violet = how common, red = the lightness ratio of the pair.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "အရောင် ခွဲခြားရ ခက်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-stat,
+        kind: text,
+        x: 300,
+        y: 216,
+        width: 760,
+        height: 36,
+        text: "ယောက်ျား 12 ယောက်မှာ 1 · အမျိုးသမီး 200 မှာ 1",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-head-ok,
+        kind: text,
+        x: 770,
+        y: 262,
+        width: 110,
+        height: 36,
+        text: "ရနိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-head-out,
+        kind: text,
+        x: 900,
+        y: 262,
+        width: 120,
+        height: 36,
+        text: "ကုန်ပြီ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-row-typical,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 420,
+        height: 36,
+        text: "လူအများစု မြင်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-typical-ok,
+        kind: rectangle,
+        x: 770,
+        y: 306,
+        width: 100,
+        height: 40,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#2f9e44",
+      }
+    - {
+        id: b-typical-out,
+        kind: rectangle,
+        x: 900,
+        y: 306,
+        width: 100,
+        height: 40,
+        strokeColor: "#e03131",
+        backgroundColor: "#e03131",
+      }
+    - {
+        id: b-row-deutan,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 420,
+        height: 36,
+        text: "Deuteranopia · အစိမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-deutan-ok,
+        kind: rectangle,
+        x: 770,
+        y: 376,
+        width: 100,
+        height: 40,
+        strokeColor: "#8c8840",
+        backgroundColor: "#8c8840",
+      }
+    - {
+        id: b-deutan-out,
+        kind: rectangle,
+        x: 900,
+        y: 376,
+        width: 100,
+        height: 40,
+        strokeColor: "#988a3a",
+        backgroundColor: "#988a3a",
+      }
+    - {
+        id: b-row-protan,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 420,
+        height: 36,
+        text: "Protanopia · အနီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-protan-ok,
+        kind: rectangle,
+        x: 770,
+        y: 446,
+        width: 100,
+        height: 40,
+        strokeColor: "#a09848",
+        backgroundColor: "#a09848",
+      }
+    - {
+        id: b-protan-out,
+        kind: rectangle,
+        x: 900,
+        y: 446,
+        width: 100,
+        height: 40,
+        strokeColor: "#76703a",
+        backgroundColor: "#76703a",
+      }
+    - {
+        id: b-row-achromat,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 440,
+        height: 36,
+        text: "Achromatopsia · အရောင် မမြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-achromat-ok,
+        kind: rectangle,
+        x: 770,
+        y: 516,
+        width: 100,
+        height: 40,
+        strokeColor: "#8a8a8a",
+        backgroundColor: "#8a8a8a",
+      }
+    - {
+        id: b-achromat-out,
+        kind: rectangle,
+        x: 900,
+        y: 516,
+        width: 100,
+        height: 40,
+        strokeColor: "#767676",
+        backgroundColor: "#767676",
+      }
+    - {
+        id: b-ratio,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 760,
+        height: 36,
+        text: "အစိမ်းနဲ့ အနီ · အလင်း အမှောင် 1.3:1 ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+    # Board C — the contrast ratio and WCAG 2.2's thresholds. White = scale,
+    # blue = normal text, violet = large text, orange = non-text, green =
+    # exempt, red = never round up.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "Contrast ratio",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-scale,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 760,
+        height: 36,
+        text: "1:1 အရောင်တူ  ⟶  21:1 အဖြူပေါ်က အမည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-text,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 760,
+        height: 36,
+        text: "စာသား → AA 4.5:1 · AAA 7:1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-large,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 780,
+        height: 36,
+        text: "စာလုံးကြီး (24px · bold 18.66px) → AA 3:1 · AAA 4.5:1",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-ui,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 760,
+        height: 36,
+        text: "ခလုတ်ဘောင် · field ဘောင် · icon → 3:1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-exempt,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 760,
+        height: 36,
+        text: "logo · အလှဆင် → မစစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-round,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 560,
+        height: 36,
+        text: "4.49:1 → fail ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-round-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 596,
+        width: 220,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+
+    # Board D — colour media queries. Violet = dark scheme, orange = more
+    # contrast, the 2×2 grid = the four combinations (blue/violet/orange/red
+    # frames), red = the honest limit of this preview.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 46,
+        text: "User ရွေးထားတဲ့ setting",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-scheme,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 760,
+        height: 36,
+        text: "prefers-color-scheme: dark → dark mode",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-scheme-who,
+        kind: text,
+        x: 340,
+        y: 282,
+        width: 700,
+        height: 36,
+        text: "အလင်း စူးရင် မျက်စိ ကျိန်းသူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-contrast,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 760,
+        height: 36,
+        text: "prefers-contrast: more → contrast မြင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-contrast-who,
+        kind: text,
+        x: 340,
+        y: 392,
+        width: 700,
+        height: 36,
+        text: "contrast ခွဲခြားရ ခက်သူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-box-1,
+        kind: rectangle,
+        x: 300,
+        y: 456,
+        width: 170,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-box-1-text,
+        kind: text,
+        x: 320,
+        y: 468,
+        width: 130,
+        height: 36,
+        text: "light",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-box-2,
+        kind: rectangle,
+        x: 500,
+        y: 456,
+        width: 170,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-box-2-text,
+        kind: text,
+        x: 520,
+        y: 468,
+        width: 130,
+        height: 36,
+        text: "dark",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-box-3,
+        kind: rectangle,
+        x: 700,
+        y: 456,
+        width: 170,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-box-3-text,
+        kind: text,
+        x: 712,
+        y: 468,
+        width: 150,
+        height: 36,
+        text: "light+more",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-box-4,
+        kind: rectangle,
+        x: 900,
+        y: 456,
+        width: 170,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-box-4-text,
+        kind: text,
+        x: 912,
+        y: 468,
+        width: 150,
+        height: 36,
+        text: "dark+more",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-limit,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 760,
+        height: 36,
+        text: "preview က OS setting ကို မပြောင်းနိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2611
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: perceive-color
+    chapter: "အရောင်ကို ဘယ်လို မြင်လဲ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ပုံကို မမြင်ရတဲ့ သူတွေအတွက် alt text ရေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      page ကို မြင်ရပေမယ့်၊ အရောင်နဲ့ contrast ကြောင့် ဖတ်ရ ခက်နေတဲ့ သူတွေအကြောင်း
+      ကြည့်သွားပါမယ်။ [[mark:start-server]] အရင်ဆုံး ကိုယ်တွေ အရောင်ကို ဘယ်လို မြင်လဲ
+      ဆိုတာကနေ စကြည့်ရအောင်။ [[mark:draw-flow]] တကယ်တော့ ပစ္စည်းတွေမှာ အရောင် ကိုယ်တိုင်
+      မရှိပါဘူး။ ပစ္စည်းက သူ့ဆီ ကျလာတဲ့ အလင်းထဲက တချို့ကို ပြန်ပြီး ရောင်ပြန်ဟပ်တာပါ။ အဲဒီ
+      အလင်းကို မျက်စိက လက်ခံပြီး၊ ဦးနှောက်က အရောင် တစ်ခုအဖြစ် ပြောင်းပေးပါတယ်။
+      [[mark:draw-hsl]] အရောင်ကို လူ့မျက်စိ မြင်ပုံနဲ့ နီးနီးစပ်စပ် ဖော်ပြချင်ရင် HSL ဆိုတဲ့ နည်းကို
+      သုံးပါတယ်။ Hue က အနီလား၊ အစိမ်းလား၊
+      အပြာလား ဆိုတဲ့ အရောင် အမျိုးအစားပါ။ Saturation က အရောင် ဘယ်လောက် ရင့်လဲ၊
+      Lightness ကတော့ ဘယ်လောက် လင်းလဲ၊ ဘယ်လောက် မှောင်လဲ ဆိုတာပါ။ [[mark:circle-lightness]]
+      Accessibility အတွက်တော့ နောက်ဆုံး တစ်ခုက အရေးအကြီးဆုံးပါ။ စာလုံးနဲ့ နောက်ခံ
+      ကွဲကွဲပြားပြား မြင်ရဖို့က အရောင် အမျိုးအစား မတူတာထက်၊ အလင်း အမှောင် ကွာတာက
+      ပိုအရေးကြီးလို့ပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Perceive color)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "MDN — hsl() colour function"
+        url: "https://developer.mozilla.org/docs/Web/CSS/color_value/hsl"
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      # Boot + pnpm install + vite run under the two opening boards; the
+      # waitForReady sits on the preview mark more than 60 s of narration later.
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-flow
+        type: whiteboard.apply
+        at: { mark: draw-flow }
+        upsertIds: [a-light, a-arrow-1, a-eye, a-arrow-2, a-brain]
+        drawMs: 3000
+      - id: draw-hsl
+        type: whiteboard.apply
+        at: { mark: draw-hsl }
+        upsertIds: [a-hsl, a-hue, a-sat, a-lit]
+        drawMs: 3200
+      - id: circle-lightness
+        type: whiteboard.apply
+        at: { mark: circle-lightness }
+        upsertIds: [a-lit-circle, a-key]
+        drawMs: 1800
+
+  - id: color-blindness
+    chapter: "အရောင် ခွဲခြားရ ခက်တာ"
+    narration: >
+      [[mark:board-cvd]] ဒါပေမဲ့ လူတိုင်းက အရောင်ကို တစ်ပုံစံတည်း မြင်ကြတာ မဟုတ်ပါဘူး။
+      [[mark:draw-stat]] ယောက်ျား ၁၂ ယောက်မှာ တစ်ယောက်လောက်နဲ့၊ အမျိုးသမီး ၂၀၀ မှာ
+      တစ်ယောက်လောက်က color blindness လို့ ခေါ်တဲ့ အရောင် ခွဲခြားရ ခက်တာ ရှိပါတယ်။
+      [[mark:draw-typical]] ဥပမာအားဖြင့်၊ ဆိုင်ရဲ့ menu မှာ ရနိုင်တဲ့ ဟင်းလျာကို အစိမ်းရောင်နဲ့၊
+      ကုန်သွားတဲ့ ဟင်းလျာကို အနီရောင်နဲ့ ပြထားတယ် ဆိုပါစို့။ လူအများစုအတွက်တော့ ဒီ နှစ်ခုက
+      ရှင်းရှင်းလင်းလင်း ကွဲပါတယ်။ [[mark:draw-deutan]] အစိမ်းရောင် အလင်းကို သိပ်
+      မခံစားနိုင်တဲ့ deuteranopia ရှိသူအတွက်တော့၊ နှစ်ခုလုံး အဝါညိုညို အရောင်လို
+      ဖြစ်သွားပါတယ်။ [[mark:draw-protan]] အနီရောင် အလင်းကို သိပ် မခံစားနိုင်တဲ့ protanopia
+      မှာလည်း ဒီလိုပါပဲ၊ အနီဘက်က နည်းနည်း ပိုမှောင်သွားရုံပါ။ [[mark:draw-achromat]] အရမ်း
+      ရှားတဲ့ achromatopsia ရှိသူကတော့ အရောင် မမြင်ဘဲ၊ မီးခိုးရောင် အဖျော့ အရင့်လောက်ပဲ
+      မြင်ပါတယ်။ [[mark:draw-ratio]] ဒီ အစိမ်းနဲ့ အနီကို အလင်း အမှောင်နဲ့ပဲ နှိုင်းယှဉ်ကြည့်ရင်
+      ၁.၃ နဲ့ ၁ လောက်ပဲ ကွာပါတယ်။ ဆိုလိုတာက အရောင် တစ်ခုတည်းကို အားကိုးပြီး အဓိပ္ပာယ်
+      ပြောရင် လူ တော်တော်များများ လွဲသွားနိုင်ပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Measure color contrast)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "Colour Blind Awareness — about 1 in 12 men and 1 in 200 women"
+        url: "https://www.colourblindawareness.org/colour-blindness/"
+      - title: "WCAG 2.2 — Understanding 1.4.1 Use of Color"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+    actions:
+      - id: board-cvd
+        type: whiteboard.apply
+        at: { mark: board-cvd }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-stat
+        type: whiteboard.apply
+        at: { mark: draw-stat }
+        upsertIds: [b-stat]
+        drawMs: 1500
+      - id: draw-typical
+        type: whiteboard.apply
+        at: { mark: draw-typical }
+        upsertIds: [b-head-ok, b-head-out, b-row-typical, b-typical-ok, b-typical-out]
+        drawMs: 2600
+      - id: draw-deutan
+        type: whiteboard.apply
+        at: { mark: draw-deutan }
+        upsertIds: [b-row-deutan, b-deutan-ok, b-deutan-out]
+        drawMs: 1600
+      - id: draw-protan
+        type: whiteboard.apply
+        at: { mark: draw-protan }
+        upsertIds: [b-row-protan, b-protan-ok, b-protan-out]
+        drawMs: 1600
+      - id: draw-achromat
+        type: whiteboard.apply
+        at: { mark: draw-achromat }
+        upsertIds: [b-row-achromat, b-achromat-ok, b-achromat-out]
+        drawMs: 1600
+      - id: draw-ratio
+        type: whiteboard.apply
+        at: { mark: draw-ratio }
+        upsertIds: [b-ratio]
+        drawMs: 1500
+
+  - id: first-look
+    chapter: "ဆိုင်ရဲ့ page ကို တိုင်းကြည့်ရအောင်"
+    narration: >
+      [[mark:close-cvd]] ဒါဆို ဆိုင်ရဲ့ page ကို ကြည့်ရအောင်။ [[mark:preview-opens]] ညာဘက်မှာ ဆိုင်ရဲ့
+      page ကို မြင်ရပါပြီ။ page က လှပေမယ့်၊ ကြိုဆိုတဲ့ စာကြောင်းနဲ့ menu card ထဲက ဖော်ပြချက်တွေက အရမ်း
+      ဖျော့နေပါတယ်။ [[mark:read-rows]] အောက်က accessibility panel က ဒီတစ်ခါ contrast ကို ပြနေပါတယ်။
+      row တစ်ခုစီက စာသား အရောင်နဲ့ သူ့ နောက်ခံကို တိုင်းပြီး ratio နဲ့ ရလဒ်ကို ပြပါတယ်။ ကြိုဆိုတဲ့
+      စာကြောင်းက ၂.၅၈ နဲ့ ၁၊ ကော်ဖီရဲ့ ဖော်ပြချက်က ၂.၂၈ နဲ့ ၁ ပဲ ရလို့ နှစ်ခုလုံး fail ပါ။
+      [[mark:read-border]] တတိယ row ကတော့ စာသား မဟုတ်ဘဲ၊ form ထဲက ဖုန်း field ရဲ့ အနီရောင် ဘောင်ပါ။
+      သူကတော့ ၅.၄ နဲ့ ၁ ရလို့ pass ပါတယ်။ ဒီ row ကို မှတ်ထားပါ၊ နောက်မှ ပြန်လာကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.3 Contrast (Minimum)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    actions:
+      - id: close-cvd
+        type: whiteboard.apply
+        at: { mark: close-cvd }
+        open: false
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-opens }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-lead-fails
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-ratio, value: "2.58" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-lead-aa-fail
+        type: expect.preview
+        at: { afterAction: expect-lead-fails }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-aa, value: "fail" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-desc-fails
+        type: expect.preview
+        at: { mark: read-rows }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-coffee-desc }
+        attribute: { name: data-ratio, value: "2.28" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-desc-aa-fail
+        type: expect.preview
+        at: { afterAction: expect-desc-fails }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-coffee-desc }
+        attribute: { name: data-aa, value: "fail" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-border-passes
+        type: expect.preview
+        at: { mark: read-border }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-input-phone }
+        textContains: '"ဖုန်း" border 5.40:1 needs 3:1 pass'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: contrast-ratio
+    chapter: "Contrast ratio ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:board-ratio]] ဒီ ratio တွေက ဘယ်က လာတာလဲ။ [[mark:draw-scale]] contrast ratio ဆိုတာ စာလုံး
+      အရောင်နဲ့ နောက်ခံ အရောင် ဘယ်လောက် ကွာလဲ ဆိုတာကို ဂဏန်းနဲ့ ပြတာပါ။ အရောင် နှစ်ခုရဲ့ relative
+      luminance လို့ ခေါ်တဲ့ အလင်း ပမာဏကို နှိုင်းယှဉ်တာပါ။ ခုနက lightness နဲ့ ဆင်ပေမယ့်၊ မျက်စိက
+      အဝါကို အပြာထက် ပိုလင်းတယ်လို့ မြင်တာကိုပါ ထည့်တွက်ထားပါတယ်။ အရောင် တူနေရင် ၁ နဲ့ ၁ ဖြစ်ပြီး၊
+      အဖြူပေါ်က အမည်းဆိုရင် အများဆုံး ၂၁ နဲ့ ၁ ရပါတယ်။ [[mark:draw-text-rule]] WCAG ရဲ့ level AA မှာ
+      ပုံမှန် စာသားအတွက် အနည်းဆုံး ၄.၅ နဲ့ ၁ လိုပါတယ်။ level AAA ဆိုရင်တော့ ၇ နဲ့ ၁ ပါ။
+      [[mark:draw-large-rule]] စာလုံး ကြီးရင် ဖတ်ရ ပိုလွယ်လို့ စံက နည်းနည်း လျော့ပါတယ်။ ၂၄ pixel နဲ့
+      အထက်၊ ဒါမှမဟုတ် bold ဆိုရင် ၁၈.၆၆ pixel နဲ့ အထက် စာလုံးတွေအတွက် AA က ၃ နဲ့ ၁၊ AAA က ၄.၅ နဲ့ ၁
+      ပါ။ [[mark:draw-ui-rule]] စာသား မဟုတ်တဲ့ ခလုတ်ဘောင်၊ form field ဘောင်နဲ့ အရေးကြီးတဲ့ icon
+      တွေကတော့ သူ့ ဘေးက အရောင်နဲ့ ၃ နဲ့ ၁ ရှိရပါမယ်။ [[mark:draw-exempt]] logo နဲ့ အလှဆင်ဖို့ သက်သက်
+      ထည့်ထားတဲ့ အရာတွေကိုတော့ မစစ်ပါဘူး။ [[mark:draw-round]] သတိထားရမှာ တစ်ခုက ratio ကို အပေါ်
+      တိုးပြီး မယူရပါဘူး။ ၄.၄၉ နဲ့ ၁ ဆိုရင် ၄.၅ မပြည့်လို့ fail ပါပဲ။ ကိုယ်တိုင် တွက်စရာတော့
+      မလိုပါဘူး။ Chrome DevTools ရဲ့ color picker နဲ့ ဒီ panel က တွက်ပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Calculate color contrast)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — contrast ratio and relative luminance definitions"
+        url: "https://www.w3.org/TR/WCAG22/#dfn-contrast-ratio"
+      - title: "WCAG 2.2 — Understanding 1.4.3 Contrast (Minimum)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+      - title: "WCAG 2.2 — Understanding 1.4.6 Contrast (Enhanced)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html"
+      - title: "WCAG 2.2 — Understanding 1.4.11 Non-text Contrast"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+      - title: "Chrome DevTools — Accessibility features reference: contrast"
+        url: "https://developer.chrome.com/docs/devtools/accessibility/reference#contrast"
+    actions:
+      - id: board-ratio
+        type: whiteboard.apply
+        at: { mark: board-ratio }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-scale
+        type: whiteboard.apply
+        at: { mark: draw-scale }
+        upsertIds: [c-scale]
+        drawMs: 1600
+      - id: draw-text-rule
+        type: whiteboard.apply
+        at: { mark: draw-text-rule }
+        upsertIds: [c-text]
+        drawMs: 1400
+      - id: draw-large-rule
+        type: whiteboard.apply
+        at: { mark: draw-large-rule }
+        upsertIds: [c-large]
+        drawMs: 1800
+      - id: draw-ui-rule
+        type: whiteboard.apply
+        at: { mark: draw-ui-rule }
+        upsertIds: [c-ui]
+        drawMs: 1400
+      - id: draw-exempt
+        type: whiteboard.apply
+        at: { mark: draw-exempt }
+        upsertIds: [c-exempt]
+        drawMs: 1000
+      - id: draw-round
+        type: whiteboard.apply
+        at: { mark: draw-round }
+        upsertIds: [c-round, c-round-line]
+        drawMs: 1200
+
+  - id: fix-text
+    chapter: "ဖျော့နေတဲ့ စာသားကို ပြင်ရအောင်"
+    narration: >
+      [[mark:close-ratio]] ဒါဆို ဖျော့နေတဲ့ စာသား နှစ်ခုကို ပြင်ကြည့်ရအောင်။ [[mark:open-styles]]
+      ဖျော့တဲ့ အရောင်တွေက base ဖိုင်ထဲမှာ ရှိပေမယ့်၊ နောက်မှ ချိတ်ထားတဲ့ ဒီ styles ဖိုင်ထဲမှာ selector
+      တူတူနဲ့ ရေးရင် cascade အရ ကိုယ့် rule က နိုင်ပါတယ်။ [[mark:type-color]] အရောင်ကိုတော့ အညိုရင့်
+      ပေးပါမယ်။ ဆိုင်ရဲ့ အညိုရောင် ပုံစံ မပျက်ဘဲ စာလုံးကို ထင်ရှားစေချင်လို့ပါ။  ရိုက်နေတုန်း panel
+      ကို လိုက်ကြည့်ပါ။ [[mark:after-color]] ကြည့်ပါ၊ row နှစ်ခုလုံး pass ဖြစ်သွားပါပြီ။ ကြိုဆိုတဲ့
+      စာကြောင်းက ၆.၇၂ နဲ့ ၁ ရလို့ AA ကို ကျော်ပေမယ့်၊ AAA ကိုတော့ မမီသေးပါဘူး။ ကော်ဖီရဲ့
+      ဖော်ပြချက်ကတော့ ၇.၀၉ နဲ့ ၁ ရလို့ AAA ပါ pass ပါတယ်။ စာလုံး အရောင်က အတူတူပဲ ဖြစ်ပေမယ့်၊
+      ကြိုဆိုတဲ့ စာကြောင်းရဲ့ နောက်ခံက ခရင်မ်ရောင်၊ card ရဲ့ နောက်ခံက အဖြူ ဖြစ်နေလို့ပါ။ ဒါကြောင့်
+      contrast ဆိုတာ အရောင် တစ်ခုတည်းမှာ ရှိတာ မဟုတ်ဘဲ၊ အရောင် နှစ်ခု တွဲမှ တိုင်းလို့ ရတာပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.6 Contrast (Enhanced)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html"
+      - title: "MDN — named colours (saddlebrown)"
+        url: "https://developer.mozilla.org/docs/Web/CSS/named-color"
+    actions:
+      - id: close-ratio
+        type: whiteboard.apply
+        at: { mark: close-ratio }
+        open: false
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: type-color
+        type: editor.type
+        at: { mark: type-color }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: ".lead,\n.menu-card .desc {\n  color: saddlebrown;\n}\n"
+      - id: expect-lead-ratio
+        type: expect.preview
+        at: { mark: after-color }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-ratio, value: "6.72" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-lead-aa-pass
+        type: expect.preview
+        at: { afterAction: expect-lead-ratio }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-aa, value: "pass" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-lead-aaa-fail
+        type: expect.preview
+        at: { afterAction: expect-lead-aa-pass }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-aaa, value: "fail" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-desc-ratio
+        type: expect.preview
+        at: { afterAction: expect-lead-aaa-fail }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-coffee-desc }
+        attribute: { name: data-ratio, value: "7.09" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-desc-aaa-pass
+        type: expect.preview
+        at: { afterAction: expect-desc-ratio }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-coffee-desc }
+        attribute: { name: data-aaa, value: "pass" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: link-underline
+    chapter: "အရောင် တစ်ခုတည်းနဲ့ မပြောရအောင်"
+    narration: >
+      [[mark:open-index-link]] contrast ကောင်းရုံနဲ့ မပြီးသေးပါဘူး။ နောက်ထပ် စည်းကမ်း တစ်ခုက၊
+      တစ်ခုခုကို ပြောပြဖို့၊ ဒါမှမဟုတ် တစ်ခုနဲ့ တစ်ခု ခွဲပြဖို့ အရောင် တစ်ခုတည်းကို အားမကိုးရပါဘူး။
+      ဥပမာ အစိမ်းရောင် ခလုတ်ကို နှိပ်ပါ လို့ ရေးထားရင်၊ အစိမ်းကို မခွဲခြားနိုင်တဲ့ သူက ဘယ်ခလုတ်လဲ
+      မသိပါဘူး။ page ကို အဖြူအမည်းနဲ့ ကြည့်တာက ဒီ ပြဿနာကို မြန်မြန် ရှာတဲ့ နည်းပါ။ ကိုယ့် page မှာ
+      ဒီလို နေရာ သုံးခု ရှိပါတယ်။ [[mark:select-link]] ပထမ တစ်ခုက ကြိုဆိုတဲ့ နေရာက ဒီ link ပါ။
+      underline မပါဘဲ အရောင်နဲ့ပဲ ခွဲထားပါတယ်။ link ရဲ့ အညိုနဲ့ ဘေးက စာသားရဲ့ အညိုရင့်က ၂.၇၉ နဲ့ ၁ ပဲ
+      ကွာတဲ့အတွက်၊ ဒါ link လား ဆိုတာ မျက်စိနဲ့ ခွဲရ ခက်ပါတယ်။ [[mark:open-styles-link]] ဒါကြောင့်
+      styles ဖိုင်ထဲမှာ underline ကို ပြန်ထည့်ပါမယ်။ [[mark:type-underline]] အရောင်နဲ့ မဆိုင်တဲ့
+      အမှတ်အသား တစ်ခုကို ထပ်ပေးလိုက်တာပါ။ ဒီလို အမှတ်အသားက မျဉ်း ဖြစ်ဖြစ်၊ စာသား ဖြစ်ဖြစ်၊ icon
+      ဖြစ်ဖြစ် ရပါတယ်။ [[mark:after-underline]] ကြည့်ပါ၊ link အောက်မှာ မျဉ်းလေး ပေါ်လာပါပြီ။ အခုဆိုရင်
+      အရောင် မခွဲခြားနိုင်တဲ့ သူလည်း ဒါ link ဖြစ်မှန်း သိနိုင်ပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Using color)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.1 Use of Color"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+      - title: "WCAG 2.2 Technique G183 — 3:1 between link and surrounding text, plus a non-colour cue"
+        url: "https://www.w3.org/WAI/WCAG22/Techniques/general/G183"
+    actions:
+      - id: open-index-link
+        type: workspace.openFile
+        at: { mark: open-index-link }
+        path: index.html
+      - id: select-link
+        type: editor.select
+        at: { mark: select-link }
+        target:
+          { file: index.html, text: '<a href="#order" data-testid="note-link">', occurrence: 1 }
+      - id: open-styles-link
+        type: workspace.openFile
+        at: { mark: open-styles-link }
+        path: styles.css
+      - id: type-underline
+        type: editor.type
+        at: { mark: type-underline }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  color: saddlebrown;\n}\n", occurrence: 1 }
+        text: "\n.note a {\n  text-decoration: underline;\n}\n"
+      - id: expect-link-still-there
+        type: expect.preview
+        at: { mark: after-underline }
+        timeoutMs: 5000
+        target: { by: testId, value: note-link }
+        textContains: "အွန်လိုင်းကနေ ကြိုမှာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-underline-file
+        type: expect.file
+        at: { afterAction: expect-link-still-there }
+        path: styles.css
+        contains: ".note a {\n  text-decoration: underline;\n}"
+
+  - id: sold-out
+    narration: >
+      [[mark:open-index-sold]] ဒုတိယ တစ်ခုက ရှမ်းခေါက်ဆွဲပါ။ [[mark:select-sold]] ဒီ card မှာ
+      ကုန်သွားပြီလို့ မှတ်ထားတဲ့ class ပါပေမယ့်၊ screen ပေါ်မှာတော့ ဟင်းလျာ နာမည်ကို
+      အနီရောင် ပြောင်းထားတာ တစ်ခုပဲ ရှိပါတယ်။ အနီကို ခွဲမမြင်နိုင်တဲ့ သူအတွက်ကော၊ screen
+      reader သုံးတဲ့ သူအတွက်ပါ၊ ဒီ အနီရောင်က ဘာမှ မပြောပြပါဘူး။ [[mark:type-status]]
+      ဒါကြောင့် ကုန်သွားပြီ ဆိုတဲ့ စာသားကို တကယ် ထည့်ပေးပါမယ်။ [[mark:after-status]] ကြည့်ပါ၊
+      ဈေးနှုန်း ဘေးမှာ ကုန်သွားပြီ ဆိုတဲ့ စာ ပေါ်လာပါပြီ။ အနီရောင်က ဆက်ရှိနေပေမယ့်၊ အခုတော့
+      အရောင်က အပို အကူအညီ သက်သက်ပဲ ဖြစ်သွားပြီး၊ အဓိပ္ပာယ်ကို စာသားက ပြောပေးနေပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Using color)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.1 Use of Color"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+    actions:
+      - id: open-index-sold
+        type: workspace.openFile
+        at: { mark: open-index-sold }
+        path: index.html
+      - id: select-sold
+        type: editor.select
+        at: { mark: select-sold }
+        target: { file: index.html, text: '<li class="menu-card sold-out"', occurrence: 1 }
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        cadence: block
+        target: { file: index.html, after: '<span class="price">3,000 ကျပ်</span>', occurrence: 1 }
+        text: "\n            <span class=\"status\">ကုန်သွားပြီ</span>"
+      - id: scroll-to-sold
+        type: preview.scroll
+        at: { mark: after-status }
+        timeoutMs: 5000
+        top: 560
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-sold-text
+        type: expect.preview
+        at: { afterAction: scroll-to-sold }
+        timeoutMs: 5000
+        target: { by: testId, value: card-shan-noodles }
+        textContains: "ကုန်သွားပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: form-error
+    narration: >
+      [[mark:select-phone]] တတိယ တစ်ခုက form ထဲက ဖုန်း field ပါ။ ဖုန်းနံပါတ် မှားနေလို့ error
+      ပြချင်တာပါ၊ ဒါပေမဲ့ ပြထားတာက ဘောင်ကို အနီ ပြောင်းထားတာ တစ်ခုပဲ ရှိပါတယ်။ ခုနက
+      မှတ်ထားခိုင်းတဲ့ panel ထဲက row ကို ပြန်ကြည့်ပါ။ ဘောင်ရဲ့ contrast က pass ဖြစ်နေပါတယ်။
+      ဒါပေမဲ့ ဘာ မှားနေလဲ၊ ဘယ်လို ပြင်ရမလဲ ဆိုတာကို အနီရောင် ဘောင်က မပြောပြနိုင်ပါဘူး။ [[mark:type-error]]
+      ဒါကြောင့် field အောက်မှာ သတိပေး icon နဲ့ error စာသားကို ထည့်ပါမယ်။ [[mark:after-error]]
+      ကြည့်ပါ၊ ဖုန်း field အောက်မှာ ၀၉ နဲ့ စပါ ဆိုတဲ့ စာ ပေါ်လာပါပြီ။ အခု error ကို အရောင်၊ icon
+      နဲ့ စာသား သုံးမျိုးလုံးနဲ့ ပြောနေပါပြီ။ ဒီ စာကို field နဲ့ ချိတ်ပေးပြီး screen reader က
+      ဖတ်ပြအောင် လုပ်တာကိုတော့ form lesson မှာ ဆက်ကြည့်ပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Using color)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.1 Use of Color"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html"
+      - title: "WCAG 2.2 — Understanding 3.3.1 Error Identification"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html"
+    actions:
+      - id: select-phone
+        type: editor.select
+        at: { mark: select-phone }
+        target: { file: index.html, text: 'class="is-invalid"', occurrence: 1 }
+      - id: type-error
+        type: editor.type
+        at: { mark: type-error }
+        cadence: block
+        target: { file: index.html, after: 'data-testid="input-phone" />', occurrence: 1 }
+        text: "\n        <p class=\"error\">⚠ 09 နဲ့ စပါ</p>"
+      - id: scroll-to-form
+        type: preview.scroll
+        at: { mark: after-error }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-error-text
+        type: expect.preview
+        at: { afterAction: scroll-to-form }
+        timeoutMs: 5000
+        target: { by: testId, value: order-form }
+        textContains: "⚠ 09 နဲ့ စပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-border-still-passes
+        type: expect.preview
+        at: { afterAction: expect-error-text }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-input-phone }
+        attribute: { name: data-aa, value: "pass" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: media-queries
+    chapter: "User ရဲ့ setting ကို လိုက်ရအောင်"
+    narration: >
+      [[mark:board-mq]] နောက်ဆုံးအနေနဲ့၊ user ရွေးထားတဲ့ setting ကို လိုက်ပေးတဲ့ media query နှစ်ခု
+      ရှိပါတယ်။ [[mark:draw-scheme]] prefers color scheme က user ရဲ့ device မှာ dark mode ရွေးထားလား
+      စစ်ပါတယ်။ အလင်း စူးရင် မျက်စိ ကျိန်းတဲ့ သူတွေအတွက် dark theme ကို ဒီ query ထဲမှာ
+      ရေးပေးနိုင်ပါတယ်။ [[mark:draw-contrast]] prefers contrast ကတော့ user က contrast
+      ပိုမြင့်ချင်တယ်လို့ setting မှာ ဖွင့်ထားလား စစ်ပါတယ်။ contrast ခွဲခြားရ ခက်တဲ့ သူတွေအတွက်
+      အရောင်တွေကို ပိုရင့်ပေးလို့ ရပါတယ်။ contrast လျှော့ချင်သူအတွက် less တန်ဖိုးလည်း ရှိပါတယ်။
+      [[mark:draw-layers]] query နှစ်ခုကို တွဲသုံးရင်၊ အလင်းနဲ့ အမှောင်၊ contrast ပုံမှန်နဲ့ contrast
+      မြင့် ဆိုပြီး ပေါင်းစပ်မှု လေးမျိုးလုံးအတွက် သီးသန့် ရေးပေးနိုင်ပါတယ်။ [[mark:draw-limit]]
+      ဒါပေမဲ့ lesson ထဲက preview က ကွန်ပျူတာရဲ့ setting ကို ပြောင်းလို့ မရလို့၊ ဒီ query တွေရဲ့
+      ရလဒ်ကို ဒီမှာ ပြလို့ မရပါဘူး။ code ကိုပဲ ကြည့်ရအောင်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast (Color-focused media queries)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "MDN — prefers-color-scheme"
+        url: "https://developer.mozilla.org/docs/Web/CSS/@media/prefers-color-scheme"
+      - title: "MDN — prefers-contrast"
+        url: "https://developer.mozilla.org/docs/Web/CSS/@media/prefers-contrast"
+    actions:
+      - id: board-mq
+        type: whiteboard.apply
+        at: { mark: board-mq }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-scheme
+        type: whiteboard.apply
+        at: { mark: draw-scheme }
+        upsertIds: [d-scheme, d-scheme-who]
+        drawMs: 2200
+      - id: draw-contrast
+        type: whiteboard.apply
+        at: { mark: draw-contrast }
+        upsertIds: [d-contrast, d-contrast-who]
+        drawMs: 2200
+      - id: draw-layers
+        type: whiteboard.apply
+        at: { mark: draw-layers }
+        upsertIds:
+          [
+            d-box-1,
+            d-box-1-text,
+            d-box-2,
+            d-box-2-text,
+            d-box-3,
+            d-box-3-text,
+            d-box-4,
+            d-box-4-text,
+          ]
+        drawMs: 3200
+      - id: draw-limit
+        type: whiteboard.apply
+        at: { mark: draw-limit }
+        upsertIds: [d-limit]
+        drawMs: 1400
+
+  - id: contrast-rule
+    narration: >
+      [[mark:close-mq]] contrast မြင့်ချင်တဲ့ user အတွက် rule တစ်ခု ရေးကြည့်ရအောင်။
+      [[mark:open-styles-mq]] styles ဖိုင်ရဲ့ အောက်ဆုံးမှာ media query တစ်ခု ထည့်ပါမယ်။
+      [[mark:type-mq]] user က contrast မြင့်တဲ့ setting ကို ဖွင့်ထားမှသာ၊ ခုနက စာသား နှစ်ခုကို
+      အမည်းရောင် ပေးမယ့် rule ပါ။ ကျန်တဲ့ user တွေအတွက်တော့ ဘာမှ မပြောင်းပါဘူး။
+      [[mark:select-query]] ဒီ query အပိုင်းက အဲဒီ setting ကို စစ်တဲ့ နေရာပါ။ panel ကတော့
+      ခုနက ratio အတိုင်းပဲ ပြနေပါတယ်။ ကိုယ့် ကွန်ပျူတာမှာ contrast တိုးတဲ့ setting ကို ဖွင့်ပြီး
+      ဒီလို rule ပါတဲ့ page ကို ကြည့်ရင်တော့၊ စာသား နှစ်ခု အမည်း ဖြစ်သွားတာ တွေ့ရပါလိမ့်မယ်။ dark mode ကိုလည်း ဒီ ပုံစံအတိုင်း prefers color scheme နဲ့ ရေးရပါတယ်။
+    sources:
+      - title: "MDN — prefers-contrast"
+        url: "https://developer.mozilla.org/docs/Web/CSS/@media/prefers-contrast"
+      - title: "MDN — prefers-color-scheme"
+        url: "https://developer.mozilla.org/docs/Web/CSS/@media/prefers-color-scheme"
+      - title: "web.dev Learn Accessibility — Color and contrast (Prefers contrast)"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+    actions:
+      - id: close-mq
+        type: whiteboard.apply
+        at: { mark: close-mq }
+        open: false
+      - id: open-styles-mq
+        type: workspace.openFile
+        at: { mark: open-styles-mq }
+        path: styles.css
+      - id: type-mq
+        type: editor.type
+        at: { mark: type-mq }
+        cadence: line-by-line
+        target: { file: styles.css, after: "  text-decoration: underline;\n}\n", occurrence: 1 }
+        text: "\n@media (prefers-contrast: more) {\n  .lead,\n  .menu-card .desc {\n    color: black;\n  }\n}\n"
+      - id: select-query
+        type: editor.select
+        at: { mark: select-query }
+        target: { file: styles.css, text: "(prefers-contrast: more)", occurrence: 1 }
+      - id: expect-lead-unchanged
+        type: expect.preview
+        at: { afterAction: select-query }
+        timeoutMs: 5000
+        target: { by: testId, value: contrast-hero-lead }
+        attribute: { name: data-ratio, value: "6.72" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-mq-file
+        type: expect.file
+        at: { afterAction: expect-lead-unchanged }
+        path: styles.css
+        contains: "@media (prefers-contrast: more) {"
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:sel-color]] ဒါဆို ပြန်ချုပ်ရရင်၊ contrast ratio က စာလုံးနဲ့ နောက်ခံ အရောင်
+      နှစ်ခုရဲ့ အလင်း အမှောင် ကွာခြားမှုပါ။ ပုံမှန် စာသားအတွက် ၄.၅ နဲ့ ၁၊ စာလုံး အကြီးနဲ့
+      ခလုတ်ဘောင်လို အရာတွေအတွက် ၃ နဲ့ ၁ လိုပါတယ်။ [[mark:sel-underline]] ပြီးတော့ အရောင်
+      တစ်ခုတည်းနဲ့ အဓိပ္ပာယ် မပြောဘဲ၊ underline၊ စာသား၊ icon လို အမှတ်အသား တစ်ခု အမြဲ
+      တွဲပေးရပါမယ်။ [[mark:sel-mq]] user က ကိုယ်တိုင် ရွေးထားတဲ့ dark mode နဲ့ contrast setting
+      ကိုလည်း media query နဲ့ လိုက်ပေးနိုင်ပါတယ်။ နောက် lesson မှာတော့ animation နဲ့ motion က
+      တချို့ user တွေကို ဘယ်လို အခက်အခဲ ဖြစ်စေလဲ၊ user ကို ဘယ်လို ရွေးခွင့် ပေးမလဲ ဆိုတာ
+      ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Color and contrast"
+        url: "https://web.dev/learn/accessibility/color-contrast"
+      - title: "WCAG 2.2 — Understanding 1.4.3 Contrast (Minimum)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    actions:
+      - id: sel-color
+        type: editor.select
+        at: { mark: sel-color }
+        target: { file: styles.css, text: "color: saddlebrown;", occurrence: 1 }
+      - id: sel-underline
+        type: editor.select
+        at: { mark: sel-underline }
+        target: { file: styles.css, text: "text-decoration: underline;", occurrence: 1 }
+      - id: sel-mq
+        type: editor.select
+        at: { mark: sel-mq }
+        target: { file: styles.css, text: "@media (prefers-contrast: more)", occurrence: 1 }
+      - id: expect-color-file
+        type: expect.file
+        at: { afterAction: sel-mq }
+        path: styles.css
+        contains: ".lead,\n.menu-card .desc {\n  color: saddlebrown;\n}"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
