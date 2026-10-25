@@ -1,0 +1,1035 @@
+# Accessibility course, lesson 2: how accessibility is measured.
+#
+# A concept lesson: nothing runs. Deck pages (course deck) and two whiteboard
+# boards carry the lesson, and the recap highlights the key lines in notes.md.
+# Flow: why a shared yardstick is needed (the lesson 1 personas), which standard
+# to follow, what an audit is (four kinds of testing; a board shows it repeating
+# through the life cycle), WCAG and its versions, the three levels and the 86
+# success criteria of WCAG 2.2 (31 / 24 / 31), POUR built on a board with two
+# tea-shop examples landing in each principle, POUR as a way of thinking about
+# people rather than a checklist, a quiz page with its reveal, and the recap.
+#
+# Deck: every page points at the course deck's placeholder /pub URL until Chan
+# publishes it; the Director's unreachable-deck warning is expected.
+# Page plan (kit fields per page): ~/Documents/a11y-course-work/pages/a11y-course-02-measure.json
+#
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-02-measure
+  title: "Accessibility course 2: Accessibility ကို ဘယ်လို တိုင်းတာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Accessibility ကို ဘယ်လို တိုင်းတာလဲ
+
+        - audit — စံနှုန်း တစ်ခု၊ level တစ်ခုနဲ့ တိုက်စစ်တာ (design · automated · manual · assistive technology)၊ ထပ်ခါ ထပ်ခါ
+        - WCAG 2.2 — W3C ရဲ့ စံနှုန်း (2023)၊ WCAG 3 က draft သာ
+        - success criterion 86 ခု — A 31 · AA 24 · AAA 31
+        - level AA = A + AA — ဥပဒေ အများစုနဲ့ team အများစုရဲ့ ပန်းတိုင်
+        - POUR — Perceivable · Operable · Understandable · Robust
+
+        နောက် lesson: accessibility tree နဲ့ semantic HTML
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Accessibility ကို ဘယ်လို တိုင်းတာလဲ — Accessibility course</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">Accessibility course · 2</p>
+              <h1>Accessibility ကို ဘယ်လို တိုင်းတာလဲ</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #5b45e0;
+          font-weight: 600;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.6;
+        }
+      package.json: |
+        {
+          "name": "a11y-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - {
+        id: l02_p01,
+        contentType: google,
+        name: "Cover: how is accessibility measured",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p01,
+      }
+    - {
+        id: l02_p01b,
+        contentType: google,
+        name: "Whose view is right? A shared yardstick",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p01b,
+      }
+    - {
+        id: l02_p02,
+        contentType: google,
+        name: "Which standard to follow",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p02,
+      }
+    - {
+        id: l02_p03,
+        contentType: google,
+        name: "Audit: four kinds of testing",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p03,
+      }
+    - {
+        id: l02_p04,
+        contentType: google,
+        name: "W3C WCAG versions 1999-2018",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p04,
+      }
+    - {
+        id: l02_p04b,
+        contentType: google,
+        name: "WCAG versions + 2.2, WCAG 3 draft, ATAG/UAAG",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p04b,
+      }
+    - {
+        id: l02_p05,
+        contentType: google,
+        name: "86 success criteria",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p05,
+      }
+    - {
+        id: l02_p06,
+        contentType: google,
+        name: "Levels are steps",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p06,
+      }
+    - {
+        id: l02_p06b,
+        contentType: google,
+        name: "Levels: most target AA",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p06b,
+      }
+    - {
+        id: l02_p07,
+        contentType: google,
+        name: "POUR: four principles",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p07,
+      }
+    - {
+        id: l02_p08,
+        contentType: google,
+        name: "Checklist or people",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p08,
+      }
+    - {
+        id: l02_p09,
+        contentType: google,
+        name: "Quiz: colour-only sold out",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p09,
+      }
+    - {
+        id: l02_p09b,
+        contentType: google,
+        name: "Quiz answer: Perceivable",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l02_p09b,
+      }
+  whiteboardAssets:
+    # Board B1: an audit is repeated through the life cycle.
+    # ink = the timeline, orange = the first audit (baseline), green = the repeat audits,
+    # red = what can break again.
+    - {
+        id: l02-b1-title,
+        kind: text,
+        x: 290,
+        y: 170,
+        width: 480,
+        height: 50,
+        text: "audit ကို ထပ်ခါ ထပ်ခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l02-b1-arrow,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 290,
+        y: 390,
+        width: 790,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l02-b1-plan,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 80,
+        height: 36,
+        text: "plan",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-design,
+        kind: text,
+        x: 465,
+        y: 445,
+        width: 110,
+        height: 36,
+        text: "design",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-code,
+        kind: text,
+        x: 640,
+        y: 445,
+        width: 80,
+        height: 36,
+        text: "code",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-release,
+        kind: text,
+        x: 790,
+        y: 445,
+        width: 120,
+        height: 36,
+        text: "release",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-update,
+        kind: text,
+        x: 960,
+        y: 445,
+        width: 110,
+        height: 36,
+        text: "update",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-baseline,
+        kind: text,
+        x: 290,
+        y: 262,
+        width: 150,
+        height: 36,
+        text: "baseline",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b1-check0,
+        kind: freedraw,
+        stroke: "check",
+        x: 305,
+        y: 318,
+        width: 50,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l02-b1-check1,
+        kind: freedraw,
+        stroke: "check",
+        x: 485,
+        y: 318,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-check2,
+        kind: freedraw,
+        stroke: "check",
+        x: 650,
+        y: 318,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-check3,
+        kind: freedraw,
+        stroke: "check",
+        x: 815,
+        y: 318,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-check4,
+        kind: freedraw,
+        stroke: "check",
+        x: 980,
+        y: 318,
+        width: 50,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b1-break,
+        kind: text,
+        x: 520,
+        y: 530,
+        width: 480,
+        height: 40,
+        text: "feature အသစ် → ပြန်ပျက်နိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board B2: POUR as four connected parts. Boxes in a 2x2 grid that meet at a
+    # centre ellipse; two tea-shop examples land in each box.
+    # blue = Perceivable, green = Operable, orange = Understandable, violet = Robust,
+    # ink = the centre that connects them.
+    - {
+        id: l02-b2-p-box,
+        kind: rectangle,
+        x: 270,
+        y: 170,
+        width: 400,
+        height: 215,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l02-b2-p-title,
+        kind: text,
+        x: 290,
+        y: 200,
+        width: 360,
+        height: 44,
+        text: "P · သိမြင်နိုင်ရမယ်",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: l02-b2-p-ex1,
+        kind: text,
+        x: 290,
+        y: 265,
+        width: 330,
+        height: 36,
+        text: "ဆိုင်ပုံမှာ alt text",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-p-ex2,
+        kind: text,
+        x: 290,
+        y: 318,
+        width: 330,
+        height: 36,
+        text: "ကုန်သွားပြီကို စာနဲ့ပါ ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-o-box,
+        kind: rectangle,
+        x: 700,
+        y: 170,
+        width: 400,
+        height: 215,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l02-b2-o-title,
+        kind: text,
+        x: 740,
+        y: 200,
+        width: 340,
+        height: 44,
+        text: "O · အသုံးပြုနိုင်ရမယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: l02-b2-o-ex1,
+        kind: text,
+        x: 740,
+        y: 265,
+        width: 330,
+        height: 36,
+        text: "keyboard နဲ့ မှာလို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-o-ex2,
+        kind: text,
+        x: 740,
+        y: 318,
+        width: 330,
+        height: 36,
+        text: "banner ကို ရပ်လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-u-box,
+        kind: rectangle,
+        x: 270,
+        y: 425,
+        width: 400,
+        height: 215,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l02-b2-u-title,
+        kind: text,
+        x: 290,
+        y: 455,
+        width: 330,
+        height: 44,
+        text: "U · နားလည်နိုင်ရမယ်",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: l02-b2-u-ex1,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 340,
+        height: 36,
+        text: "error က ဘာပြင်ရမလဲ ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-u-ex2,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 340,
+        height: 36,
+        text: "menu က နေရာ မပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-r-box,
+        kind: rectangle,
+        x: 700,
+        y: 425,
+        width: 400,
+        height: 215,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l02-b2-r-title,
+        kind: text,
+        x: 750,
+        y: 455,
+        width: 320,
+        height: 44,
+        text: "R · ကြံ့ခိုင်ရမယ်",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: l02-b2-r-ex1,
+        kind: text,
+        x: 750,
+        y: 520,
+        width: 330,
+        height: 36,
+        text: "screen reader အမျိုးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-r-ex2,
+        kind: text,
+        x: 750,
+        y: 575,
+        width: 330,
+        height: 36,
+        text: "ဖုန်း စောင်းလည်း သုံးရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l02-b2-hub,
+        kind: ellipse,
+        x: 605,
+        y: 360,
+        width: 160,
+        height: 90,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffffff",
+      }
+    - {
+        id: l02-b2-hub-label,
+        kind: text,
+        x: 640,
+        y: 385,
+        width: 100,
+        height: 42,
+        text: "POUR",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2602
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: opening
+    chapter: "ဘယ်လို တိုင်းတာမလဲ"
+    narration: >
+      [[mark:p01]] ပြီးခဲ့တဲ့ lesson မှာ accessibility ဆိုတာ ဘာလဲ၊ ဘယ်သူတွေ အကျိုးရှိလဲ ဆိုတာ
+      ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ဆိုင်ရဲ့ page က accessible ဖြစ်ပြီလား ဆိုတာ ဘယ်လို တိုင်းတာမလဲ
+      ဆိုတာ ကြည့်ပါမယ်။ [[mark:p01b]] ဥပမာ အောင်အောင်က ဆိုင်ရဲ့ menu ကို voice control နဲ့ ဖွင့်မရဘူးလို့
+      ပြောတယ် ဆိုပါစို့။ developer ကတော့ ကိုယ့်စက်မှာ mouse နဲ့ စမ်းကြည့်တော့ ကောင်းကောင်း
+      အလုပ်လုပ်တယ်လို့ ပြန်ပြောပါတယ်။ ဒါဆို ဘယ်သူ့ အမြင်က မှန်လဲ။ အဲဒီလို အချိန်မှာ အားလုံး သဘောတူထားတဲ့
+      ပေတံ တစ်ချောင်း လိုပါတယ်။ အဲဒီ ပေတံကို accessibility စံနှုန်း၊ standard လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: How is digital accessibility measured?",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Introduction to Web Accessibility",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/",
+        }
+    actions:
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l02_p01 }
+      - { id: show-p01b, type: slide.show, at: { mark: p01b }, slideId: l02_p01b }
+
+  - id: which-standard
+    narration: >
+      [[mark:p02]] စံနှုန်းက တစ်မျိုးတည်း မဟုတ်ပါဘူး။ ဘယ်ဟာကို လိုက်နာမလဲ ဆိုတာက ကိုယ့် လုပ်ငန်း
+      အမျိုးအစား၊ ဆောက်နေတဲ့ product၊ ကိုယ့် နိုင်ငံ ဒါမှမဟုတ် ဒေသရဲ့ ဥပဒေနဲ့ မူဝါဒတွေပေါ် မူတည်ပါတယ်။
+      ဥပမာ တချို့ နိုင်ငံတွေမှာ အစိုးရ website တွေက ဥပဒေ သတ်မှတ်ထားတဲ့ စံနှုန်းကို လိုက်ရပါတယ်။ ဘာမှ
+      သီးသန့် သတ်မှတ်မထားရင်တော့၊ WCAG ရဲ့ နောက်ဆုံး version ကို လိုက်ဖို့ အကြံပြုကြပါတယ်။ ဒီ course
+      မှာလည်း ဆိုင်ရဲ့ page ကို WCAG နဲ့ပဲ တိုင်းတာသွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (introduction to accessibility testing)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Web Accessibility Laws and Policies",
+          url: "https://www.w3.org/WAI/policies/",
+        }
+    actions:
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l02_p02 }
+
+  - id: audit
+    chapter: "Accessibility audit"
+    narration: >
+      [[mark:p03]] page တစ်ခုကို စံနှုန်း တစ်ခုနဲ့ level တစ်ခုကို ပန်းတိုင်ထားပြီး တိုက်စစ်တာကို
+      accessibility audit လို့ ခေါ်ပါတယ်။ audit မှာ စစ်နည်း လေးမျိုးကို တွဲသုံးပါတယ်။ code မရေးခင် design
+      ကို စစ်တာ၊ tool တွေနဲ့ အလိုအလျောက် စစ်တာ၊ keyboard နဲ့ zoom လို လက်နဲ့ စစ်တာ၊ screen reader လို
+      assistive technology နဲ့ စမ်းတာတို့ပါ။ tool တစ်ခုတည်းက ပြဿနာ အားလုံးကို မတွေ့နိုင်လို့ လေးမျိုးလုံး
+      လိုပါတယ်။ နောက်ပိုင်း lesson တွေမှာ လက်တွေ့ လုပ်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (accessibility audit)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Evaluating Web Accessibility Overview",
+          url: "https://www.w3.org/WAI/test-evaluate/",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l02_p03 }
+
+  - id: audit-again
+    narration: >
+      [[mark:b1-line]] audit ကို တစ်ခါ လုပ်ရုံနဲ့ မပြီးပါဘူး။ project တစ်ခုမှာ plan ကနေ update အထိ
+      အဆင့်တွေ ရှိပါတယ်။ [[mark:b1-baseline]] ပထမဆုံး audit က အခု ဘယ် အခြေအနေမှာ ရှိလဲ ဆိုတဲ့ အစ
+      မှတ်တိုင်၊ baseline ကို ပေးပါတယ်။ [[mark:b1-checks]] ပြီးရင် design ပြောင်းတိုင်း၊ code ပြင်တိုင်း၊
+      update လုပ်တိုင်း ထပ်ခါ ထပ်ခါ စစ်ရပါတယ်။ [[mark:b1-break]] ဘာကြောင့်လဲဆိုတော့၊ ဒီနေ့ accessible
+      ဖြစ်နေတဲ့ page က နောက်လ ထည့်လိုက်တဲ့ feature အသစ် တစ်ခုကြောင့် ပြန်ပျက်သွားနိုင်လို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (audit multiple times through the lifecycle)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Evaluating Web Accessibility Overview",
+          url: "https://www.w3.org/WAI/test-evaluate/",
+        }
+    actions:
+      - { id: close-p03, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: b1-line,
+          type: whiteboard.apply,
+          at: { mark: b1-line },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              l02-b1-title,
+              l02-b1-arrow,
+              l02-b1-plan,
+              l02-b1-design,
+              l02-b1-code,
+              l02-b1-release,
+              l02-b1-update,
+            ],
+          drawMs: 2000,
+        }
+      - {
+          id: b1-baseline,
+          type: whiteboard.apply,
+          at: { mark: b1-baseline },
+          upsertIds: [l02-b1-check0, l02-b1-baseline],
+          drawMs: 900,
+        }
+      - {
+          id: b1-checks,
+          type: whiteboard.apply,
+          at: { mark: b1-checks },
+          upsertIds: [l02-b1-check1, l02-b1-check2, l02-b1-check3, l02-b1-check4],
+          drawMs: 1600,
+        }
+      - {
+          id: b1-break,
+          type: whiteboard.apply,
+          at: { mark: b1-break },
+          upsertIds: [l02-b1-break],
+          drawMs: 900,
+        }
+
+  - id: wcag
+    chapter: "WCAG ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:p04]] ဒါဆို WCAG ဆိုတာ ဘာလဲ။ WCAG ဆိုတာ Web Content Accessibility Guidelines ရဲ့ အတိုကောက်ပါ။
+      web စံနှုန်းတွေ သတ်မှတ်တဲ့ World Wide Web Consortium၊ အတိုကောက် W3C ဆိုတဲ့ အဖွဲ့က ထုတ်တဲ့ web accessibility
+      စံနှုန်း ဖြစ်ပါတယ်။ ကမ္ဘာတစ်ဝှမ်းက လူတွေ၊ အဖွဲ့အစည်းတွေ ပူးပေါင်းပြီး ရေးထားတာ ဖြစ်လို့၊ နိုင်ငံ
+      အများကြီးက တူညီတဲ့ စံနှုန်း တစ်ခုတည်းကို သုံးနိုင်ပါတယ်။ ပထမ version ကို ၁၉၉၉ ခုနှစ်မှာ
+      ထုတ်ခဲ့ပါတယ်။ [[mark:p04b]] အခု လက်ရှိ version ကတော့ ၂၀၂၃ ခုနှစ် အောက်တိုဘာလမှာ ထွက်ခဲ့တဲ့ WCAG ၂.၂
+      ပါ။ WCAG ၃ ကိုတော့ ရေးနေဆဲ draft ပဲ ရှိသေးလို့ စံနှုန်း မဖြစ်သေးပါဘူး။ WCAG က designer နဲ့ developer
+      တွေအတွက် အဓိက ဖြစ်ပေမယ့်၊ content ရေးသူ၊ manager တွေလည်း သိထားသင့်ပါတယ်။ website ဆောက်တဲ့ tool
+      တွေအတွက် ATAG၊ browser တွေအတွက် UAAG ဆိုတဲ့ guideline တွေလည်း သီးသန့် ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Web Content Accessibility Guidelines)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: WCAG 2 Overview (versions and dates)",
+          url: "https://www.w3.org/WAI/standards-guidelines/wcag/",
+        }
+      - {
+          title: "W3C: Web Content Accessibility Guidelines (WCAG) 2.2",
+          url: "https://www.w3.org/TR/WCAG22/",
+        }
+      - {
+          title: "W3C WAI: WCAG 3 Introduction",
+          url: "https://www.w3.org/WAI/standards-guidelines/wcag/wcag3-intro/",
+        }
+      - {
+          title: "W3C WAI: ATAG Overview",
+          url: "https://www.w3.org/WAI/standards-guidelines/atag/",
+        }
+      - {
+          title: "W3C WAI: UAAG Overview",
+          url: "https://www.w3.org/WAI/standards-guidelines/uaag/",
+        }
+    actions:
+      - { id: close-b1, type: whiteboard.apply, at: { scene: start, offsetMs: -400 }, open: false }
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l02_p04 }
+      - { id: show-p04b, type: slide.show, at: { mark: p04b }, slideId: l02_p04b }
+
+  - id: levels
+    chapter: "Level A၊ AA၊ AAA"
+    narration: >
+      [[mark:p05]] WCAG ထဲမှာ pass၊ fail စစ်လို့ရတဲ့ စည်းကမ်း တစ်ခုချင်းကို success criterion လို့
+      ခေါ်ပါတယ်။ WCAG ၂.၂ မှာ success criterion ၈၆ ခု ရှိပြီး၊ level သုံးဆင့် ခွဲထားပါတယ်။ level A မှာ ၃၁
+      ခု၊ level AA မှာ ၂၄ ခု၊ level AAA မှာ ၃၁ ခု ပါပါတယ်။ [[mark:p06]] ဒီ level တွေက လှေကား ထစ်လိုပါ။
+      level A က အနည်းဆုံး လိုအပ်ချက်တွေပါ၊ ဥပမာ အချက်အလက် ပေးတဲ့ ပုံတိုင်းမှာ စာနဲ့ အစားထိုး ဖော်ပြချက် ပါရမယ်
+      ဆိုတာမျိုးပါ။ level AA ကို ပန်းတိုင်ထားရင် level A ရော AA ရော နှစ်ခုလုံး ကိုက်ရလို့၊ စုစုပေါင်း ၅၅
+      ခုပါ။ ဥပမာ စာလုံး အရောင်နဲ့ နောက်ခံ အရောင် ဘယ်လောက် ကွာလဲ ဆိုတဲ့ contrast က အနည်းဆုံး ၄.၅ နဲ့ ၁
+      ရှိရမယ် ဆိုတာ level AA ပါ။ level AAA ကတော့ ၈၆ ခုလုံး ဖြစ်ပြီး၊ contrast ကို ၇ နဲ့ ၁ အထိ တောင်းပါတယ်။
+      [[mark:p06b]] ဥပဒေ အများစုနဲ့ team အများစုက level AA ကို ပန်းတိုင် ထားကြပါတယ်။ level AAA ကတော့
+      content တချို့မှာ မဖြစ်နိုင်လို့၊ site တစ်ခုလုံးအတွက် မဖြစ်မနေ သတ်မှတ်ဖို့ WCAG ကိုယ်တိုင်က
+      အကြံမပြုပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (levels of success criteria)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C: WCAG 2.2, Conformance (levels and the Level AAA note)",
+          url: "https://www.w3.org/TR/WCAG22/#conformance",
+        }
+      - {
+          title: "W3C WAI: What's New in WCAG 2.2 (4.1.1 Parsing removed)",
+          url: "https://www.w3.org/WAI/standards-guidelines/wcag/new-in-22/",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Non-text Content (Level A)",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Contrast (Minimum) (Level AA)",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Contrast (Enhanced) (Level AAA)",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced",
+        }
+      - {
+          title: "W3C WAI: Web Accessibility Laws and Policies",
+          url: "https://www.w3.org/WAI/policies/",
+        }
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l02_p05 }
+      - { id: show-p06, type: slide.show, at: { mark: p06 }, slideId: l02_p06 }
+      - { id: show-p06b, type: slide.show, at: { mark: p06b }, slideId: l02_p06b }
+
+  - id: pour-overview
+    chapter: "POUR: principle လေးခု"
+    narration: >
+      [[mark:p07]] success criterion ၈၆ ခုက အသေးစိတ် ကျပြီး technical ဆန်လို့၊ စလေ့လာတဲ့သူအတွက် WCAG ရဲ့
+      principle လေးခုကနေ စတာ ပိုကောင်းပါတယ်။ success criterion တွေ အားလုံးက ဒီ principle လေးခု အောက်မှာ
+      စုထားတာပါ။ Perceivable၊ Operable၊ Understandable၊ Robust ရဲ့ ရှေ့ဆုံး စာလုံးတွေကို ယူပြီး POUR လို့
+      ခေါ်ပါတယ်။ မြန်မာလို ဆိုရင် သိမြင်နိုင်ရမယ်၊ အသုံးပြုနိုင်ရမယ်၊ နားလည်နိုင်ရမယ်၊ ကြံ့ခိုင်ရမယ် ပါ။
+      ဆိုင်ရဲ့ page နဲ့ တစ်ခုချင်း ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (accessibility principles)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Accessibility Principles",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-principles/",
+        }
+    actions:
+      - { id: show-p07, type: slide.show, at: { mark: p07 }, slideId: l02_p07 }
+
+  - id: perceivable
+    narration: >
+      [[mark:b2-p]] ပထမ principle က Perceivable၊ သိမြင်နိုင်ရမယ် ဆိုတာပါ။ page ပေါ်က အရေးကြီးတဲ့
+      အချက်တိုင်းကို user က အာရုံ တစ်ခုခုနဲ့ သိနိုင်ရပါမယ်။ မမြင်ရရင် ကြားနိုင်ရမယ်၊ မကြားရရင်
+      ဖတ်နိုင်ရမယ် ဆိုတဲ့ သဘောပါ။ ကိုယ့်ကိုယ်ကို မေးရမယ့် မေးခွန်းက၊ မသန်စွမ်းမှု တစ်မျိုးမျိုး ရှိတဲ့သူ
+      မသိနိုင်မယ့် အကြောင်းအရာ ဒါမှမဟုတ် လုပ်ဆောင်ချက် ရှိနေသလား ဆိုတာပါ။ [[mark:b2-p-ex]] ဆိုင်ရဲ့ page
+      မှာဆိုရင် ဆိုင်ပုံမှာ alt text ထည့်ရပါမယ်။ alt text ဆိုတာ ပုံကို မမြင်ရတဲ့သူအတွက် ပုံရဲ့ နေရာမှာ
+      အစားထိုး ဖတ်ပြမယ့် စာပါ။ ကုန်သွားတဲ့ ဟင်းကိုလည်း အနီရောင်နဲ့ချည်း မပြဘဲ၊ ကုန်သွားပြီ ဆိုတဲ့ စာပါ
+      ထည့်ပြရပါမယ်။ ဖျော်နည်း video မှာ caption ထည့်တာလည်း ဒီ principle ထဲမှာ ပါပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Perceivable)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Accessibility Principles (Perceivable)",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-principles/#perceivable-information-and-user-interface",
+        }
+    actions:
+      - { id: close-p07, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: b2-p,
+          type: whiteboard.apply,
+          at: { mark: b2-p },
+          open: true,
+          clear: true,
+          upsertIds: [l02-b2-p-box, l02-b2-p-title],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-p-ex,
+          type: whiteboard.apply,
+          at: { mark: b2-p-ex },
+          upsertIds: [l02-b2-p-ex1, l02-b2-p-ex2],
+          drawMs: 1200,
+        }
+
+  - id: operable
+    narration: >
+      [[mark:b2-o]] ဒုတိယက Operable၊ အသုံးပြုနိုင်ရမယ် ဆိုတာပါ။ page ရဲ့ ခလုတ်၊ link၊ form တွေကို user
+      လုပ်နိုင်တဲ့ နည်းနဲ့ ထိန်းနိုင်ရပါမယ်။ user မလုပ်နိုင်တဲ့ လှုပ်ရှားမှုကို page က မတောင်းရပါဘူး။
+      မေးရမယ့် မေးခွန်းက၊ ခလုတ်တိုင်းကို ထိန်းနိုင်ရဲ့လား၊ Tab key နဲ့ သွားတဲ့ အစဉ် ရှုပ်နေသလား၊ keyboard
+      နဲ့ ဝင်သွားပြီး ပြန်ထွက်လို့ မရတဲ့ နေရာ ရှိသလား၊ touch screen မှာရော အဆင်ပြေရဲ့လား ဆိုတာပါ။
+      [[mark:b2-o-ex]] ဆိုင်ရဲ့ page မှာဆိုရင် keyboard နဲ့ရော touch နဲ့ရော မှာလို့ ရရပါမယ်။ အလိုလို
+      ရွေ့နေတဲ့ ယနေ့အထူး banner ကိုလည်း ရပ်လို့ ရရပါမယ်။ form ဖြည့်ဖို့ အချိန်လည်း လုံလောက်အောင်
+      ပေးရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Operable)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Accessibility Principles (Operable)",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-principles/#operable-user-interface-and-navigation",
+        }
+    actions:
+      - {
+          id: b2-o,
+          type: whiteboard.apply,
+          at: { mark: b2-o },
+          upsertIds: [l02-b2-o-box, l02-b2-o-title],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-o-ex,
+          type: whiteboard.apply,
+          at: { mark: b2-o-ex },
+          upsertIds: [l02-b2-o-ex1, l02-b2-o-ex2],
+          drawMs: 1200,
+        }
+
+  - id: understandable
+    narration: >
+      [[mark:b2-u]] တတိယက Understandable၊ နားလည်နိုင်ရမယ် ဆိုတာပါ။ user က page ရဲ့ အကြောင်းအရာကိုရော၊
+      ဘယ်လို သုံးရမလဲ ဆိုတာကိုရော နားလည်ရပါမယ်။ မေးရမယ့် မေးခွန်းက၊ စာတွေ ရှင်းရှင်းလင်းလင်း ရေးထားရဲ့လား၊
+      ခလုတ် နှိပ်ရင် ဘာဖြစ်မလဲ ခန့်မှန်းနိုင်ရဲ့လား၊ page ရဲ့ အစဉ်က မျက်စိနဲ့ ကြည့်သူ၊ keyboard သုံးသူ၊
+      screen reader သုံးသူ အားလုံးအတွက် အဓိပ္ပာယ် ရှိရဲ့လား ဆိုတာပါ။ [[mark:b2-u-ex]] ဆိုင်ရဲ့ page
+      မှာဆိုရင် ဖုန်းနံပါတ် မှားရင် မှားတယ် ဆိုတာချည်း မပြဘဲ ဘာပြင်ရမလဲ ပြောပြရပါမယ်။ menu ကိုလည်း page
+      တိုင်းမှာ နေရာ တစ်ခုတည်းမှာ ထားရပါမယ်။ ခက်တဲ့ စကားလုံးထက် ရိုးရှင်းတဲ့ စကားလုံးကို ရွေးသုံးတာလည်း ဒီ
+      principle ပါပဲ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Understandable)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Accessibility Principles (Understandable)",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-principles/#understandable-information-and-user-interface",
+        }
+    actions:
+      - {
+          id: b2-u,
+          type: whiteboard.apply,
+          at: { mark: b2-u },
+          upsertIds: [l02-b2-u-box, l02-b2-u-title],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-u-ex,
+          type: whiteboard.apply,
+          at: { mark: b2-u-ex },
+          upsertIds: [l02-b2-u-ex1, l02-b2-u-ex2],
+          drawMs: 1200,
+        }
+
+  - id: robust
+    narration: >
+      [[mark:b2-r]] နောက်ဆုံးက Robust၊ ကြံ့ခိုင်ရမယ် ဆိုတာပါ။ device နဲ့ browser တွေ
+      ပြောင်းလဲလာတဲ့အခါမှာလည်း၊ assistive technology အမျိုးမျိုးနဲ့ page က ဆက်ပြီး သုံးလို့ ရနေရပါမယ်။
+      မေးရမယ့် မေးခွန်းက၊ ဘယ် assistive technology တွေကို support လုပ်မလဲ၊ browser အသစ်ဆုံးမှာပဲ
+      အလုပ်လုပ်တာလား၊ screen အကျယ် အမျိုးမျိုးနဲ့ ဖုန်းကို စောင်းထားရင်ရော ရလား ဆိုတာပါ။ [[mark:b2-r-ex]]
+      ဆိုင်ရဲ့ page ကိုဆိုရင် screen reader အမျိုးမျိုးနဲ့ စမ်းရပါမယ်။ ဖုန်းကို ထောင်ကိုင်ကိုင်၊
+      စောင်းကိုင်ကိုင် menu အကုန် သုံးလို့ ရရပါမယ်။ [[mark:b2-hub]] ဒီ principle လေးခုက သီးခြားစီ မဟုတ်ဘဲ
+      အလယ်မှာ ဆုံနေပါတယ်။ ဥပမာ ကုန်သွားပြီ ဆိုတာကို မမြင်ရရင် သိမြင်နိုင်မှု မရှိသလို၊ မှာလို့ ရမလား
+      ဆိုတာကိုလည်း နားလည်နိုင်မှာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Robust)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "W3C WAI: Accessibility Principles (Robust)",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-principles/#robust-content-and-reliable-interpretation",
+        }
+    actions:
+      - {
+          id: b2-r,
+          type: whiteboard.apply,
+          at: { mark: b2-r },
+          upsertIds: [l02-b2-r-box, l02-b2-r-title],
+          drawMs: 1000,
+        }
+      - {
+          id: b2-r-ex,
+          type: whiteboard.apply,
+          at: { mark: b2-r-ex },
+          upsertIds: [l02-b2-r-ex1, l02-b2-r-ex2],
+          drawMs: 1200,
+        }
+      - {
+          id: b2-hub,
+          type: whiteboard.apply,
+          at: { mark: b2-hub },
+          upsertIds: [l02-b2-hub, l02-b2-hub-label],
+          drawMs: 900,
+        }
+
+  - id: not-a-checklist
+    narration: >
+      [[mark:p08]] POUR ရဲ့ အဓိက ရည်ရွယ်ချက်က စည်းကမ်းတွေကို အလွတ်ကျက်ပြီး အမှန်ခြစ် လိုက်ခြစ်ဖို့
+      မဟုတ်ပါဘူး။ ဘယ်ဘက်မှာ ပြထားသလို checklist သက်သက်နဲ့ပဲ စဉ်းစားရင်၊ pass ဖြစ်တာနဲ့ ပြီးပြီလို့
+      ထင်သွားတတ်ပါတယ်။ ညာဘက်ကတော့ POUR နဲ့ စဉ်းစားတဲ့ ပုံစံပါ။ မြမြ၊ အောင်အောင်၊ လှလှ၊ မောင်မောင်
+      လို တကယ့် လူတွေ ဒီ page ကို သုံးနိုင်ရဲ့လား လို့ မေးတာပါ။ success criterion တွေက တိုင်းတာဖို့ ပေတံ
+      ဖြစ်ပြီး၊ POUR ကတော့ ဘာကြောင့် တိုင်းနေလဲ ဆိုတာကို မမေ့အောင် ကူညီပေးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (conclusion)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "A List Apart: Getting to the Heart of Digital Accessibility",
+          url: "https://alistapart.com/article/getting-to-the-heart-of-digital-accessibility/",
+        }
+    actions:
+      - { id: close-b2, type: whiteboard.apply, at: { scene: start, offsetMs: -400 }, open: false }
+      - { id: show-p08, type: slide.show, at: { mark: p08 }, slideId: l02_p08 }
+
+  - id: quiz
+    chapter: "Quiz"
+    narration: >
+      [[mark:p09]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ရဲ့ menu မှာ ကုန်သွားတဲ့ ဟင်းကို အနီရောင်နဲ့ပဲ
+      ပြထားပါတယ်။ ဒါက POUR ထဲက ဘယ် principle နဲ့ မကိုက်လဲ။ Perceivable လား၊ Operable လား၊ Robust လား။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:p09b]] အဖြေကတော့ Perceivable ပါ။ အရောင် ခွဲခြားရ
+      ခက်တဲ့သူတွေနဲ့ မျက်မမြင်တွေက အနီရောင်ကို မသိနိုင်လို့ပါ။ ကုန်သွားပြီ ဆိုတဲ့ စာ ထည့်လိုက်ရင်တော့
+      လူတိုင်း သိနိုင်ပါပြီ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Measure (Perceivable)",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Use of Color",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color",
+        }
+    actions:
+      - { id: show-p09, type: slide.show, at: { mark: p09 }, slideId: l02_p09 }
+      - { id: show-p09b, type: slide.show, at: { mark: p09b }, slideId: l02_p09b }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:notes]] ဒီနေ့ လေ့လာခဲ့တာတွေကို ပြန်ချုပ်ကြည့်ရအောင်။ [[mark:sel-audit]] audit ဆိုတာ စံနှုန်း
+      တစ်ခု၊ level တစ်ခုနဲ့ စစ်နည်း အမျိုးမျိုးကို တွဲပြီး တိုက်စစ်တာ ဖြစ်ပြီး၊ တစ်ခါတည်း မဟုတ်ဘဲ ထပ်ခါ
+      ထပ်ခါ လုပ်ရပါတယ်။ [[mark:sel-wcag]] ပေတံ အဖြစ် အများဆုံး သုံးတာက WCAG ၂.၂ ပါ။ [[mark:sel-count]]
+      success criterion ၈၆ ခုကို level သုံးဆင့် ခွဲထားပြီး၊ [[mark:sel-aa]] level AA ကို ပန်းတိုင်ထားရင် A
+      ရော AA ရော ကိုက်ရပါတယ်။ [[mark:sel-pour]] success criterion တွေ အားလုံးကို POUR ဆိုတဲ့ principle
+      လေးခုနဲ့ လူကို ဗဟိုထားပြီး စဉ်းစားရပါတယ်။ နောက် lesson မှာတော့ ဆိုင်ရဲ့ code ကို စဖွင့်ပြီး၊ browser
+      က assistive technology ဆီ ပေးတဲ့ accessibility tree နဲ့ semantic HTML ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: How is digital accessibility measured?",
+          url: "https://web.dev/learn/accessibility/measure",
+        }
+      - {
+          title: "web.dev Learn Accessibility: ARIA and HTML",
+          url: "https://web.dev/learn/accessibility/aria-html",
+        }
+    actions:
+      - { id: close-p09b, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - {
+          id: sel-audit,
+          type: editor.select,
+          at: { mark: sel-audit },
+          target: { file: notes.md, text: "audit — စံနှုန်း တစ်ခု၊ level တစ်ခုနဲ့ တိုက်စစ်တာ", occurrence: 1 },
+        }
+      - {
+          id: sel-wcag,
+          type: editor.select,
+          at: { mark: sel-wcag },
+          target: { file: notes.md, text: "WCAG 2.2 — W3C ရဲ့ စံနှုန်း (2023)", occurrence: 1 },
+        }
+      - {
+          id: sel-count,
+          type: editor.select,
+          at: { mark: sel-count },
+          target:
+            {
+              file: notes.md,
+              text: "success criterion 86 ခု — A 31 · AA 24 · AAA 31",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-aa,
+          type: editor.select,
+          at: { mark: sel-aa },
+          target: { file: notes.md, text: "level AA = A + AA", occurrence: 1 },
+        }
+      - {
+          id: sel-pour,
+          type: editor.select,
+          at: { mark: sel-pour },
+          target:
+            {
+              file: notes.md,
+              text: "POUR — Perceivable · Operable · Understandable · Robust",
+              occurrence: 1,
+            },
+        }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
