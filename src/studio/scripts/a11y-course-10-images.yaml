@@ -1,0 +1,2207 @@
+# Accessibility course, lesson 10: images and alt text.
+#
+# Hands-on (tea-shop page, A11y panel mode "tree", drawer 50 % so every image
+# row fits). Start state, all fixable by insertion only:
+#   - header logo <img> with no alt (its shop name is the heading right next to it)
+#   - call link (kit block call-link-broken, test id call-link): its only content is an icon with alt=""
+#   - leaf divider <img> with no alt (decorative)
+#   - tea-house photo <img> with no alt (informative), inside a figure with a caption
+#   - "today's best sellers" bar chart as an inline <svg> with no role, name or description
+# The panel starts at 4 warnings (no-name rows) and the chart has no row at all.
+#
+# Fixes (block inserts; every HTML save reloads the page, assertions sit after):
+#   divider alt=""                        -> row gone, 3 warnings
+#   photo alt="ပြတင်းပေါက်နား …။"           -> img "…", 2 warnings
+#   call icon alt gets ဖုန်းဆက်ရန်           -> link "ဖုန်းဆက်ရန်", 1 warning
+#   <p id="chart-data"> with the numbers   -> visible text under the chart
+#   svg role="img" aria-label aria-describedby -> img "…" desc "…"
+#   logo alt=""                           -> no warnings
+# Wrong alt text (image, a file name, "ပုံ…") is shown as a "don't" board, not
+# typed into the page.
+#
+# Workspace: ws/ pinned byte-exact with tools/pin-files.ts (bun build.ts).
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-10-images
+  title: "Accessibility course 10: ပုံတွေနဲ့ alt text"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: index.html
+    files:
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture, in its accessible form: every text
+          colour passes WCAG AA, form fields have 3:1 borders, nothing hides focus.
+          A lesson keeps the sections it needs and drops any declaration its own demo
+          types or relies on being absent (COURSE-KIT.md, "Deriving a lesson
+          workspace"). Section E holds the few rules a start state pins on purpose,
+          including deliberately broken ones (a pale colour, a removed outline).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --field: #8a7866;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* A class that sets display must never un-hide a [hidden] element. */
+        [hidden] {
+          display: none !important;
+        }
+
+        /* Text for screen readers only (the forms and images lessons use it). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .skip-link {
+          position: absolute;
+          top: -48px;
+          left: 8px;
+          padding: 4px 12px;
+          background: var(--cream);
+          color: var(--tea-dark);
+        }
+
+        .skip-link:focus {
+          top: 8px;
+        }
+
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .divider {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0 auto 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .status {
+          margin-left: 8px;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .sold-out .name {
+          text-decoration: line-through;
+        }
+
+        .order-link,
+        .order-btn,
+        .confirm-btn,
+        .disclosure,
+        .fav,
+        .confirm button {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .fav {
+          margin-left: 8px;
+          padding: 0 12px;
+          font-size: 14px;
+        }
+
+        .fav[aria-pressed="true"] {
+          background: var(--leaf);
+        }
+
+        .tea-options {
+          margin: 16px 0;
+        }
+
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .chips li {
+          padding: 2px 12px;
+          border: 1px solid var(--field);
+          border-radius: 999px;
+          background: #fff;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+          font-style: italic;
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .hours-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+        }
+
+        .hours-table caption {
+          text-align: start;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-table th,
+        .hours-table td {
+          padding: 4px 8px;
+          border: 1px solid var(--line);
+          text-align: start;
+        }
+
+        .hours-table thead th {
+          background: var(--cream);
+        }
+
+        .location {
+          margin: 16px 0;
+        }
+
+        .map {
+          position: relative;
+          height: 120px;
+          border: 1px solid var(--field);
+          border-radius: var(--radius);
+          background:
+            linear-gradient(90deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+            linear-gradient(0deg, transparent 40%, #fff 40%, #fff 50%, transparent 50%),
+            #d9e8c9;
+        }
+
+        .map-pin {
+          position: absolute;
+          top: 34px;
+          left: 56%;
+          width: 18px;
+          height: 18px;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          background: var(--chili);
+        }
+
+        .address {
+          margin: 4px 0 0;
+        }
+
+        .order-form {
+          margin: 16px 0;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .hint {
+          margin: 2px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .sugar {
+          margin: 12px 0 0;
+          padding: 4px 12px 8px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+        }
+
+        .sugar label {
+          display: inline-block;
+          margin: 0 12px 0 0;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .error {
+          margin: 2px 0 0;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .alert {
+          margin: 8px 0 0;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: #fde8e4;
+          color: var(--chili);
+        }
+
+        .order-status {
+          min-height: 1.8em;
+          margin: 8px 0 0;
+          color: var(--leaf);
+          font-weight: 700;
+        }
+
+        .confirm {
+          margin: 16px auto auto;
+          max-width: 320px;
+          padding: 16px;
+          border: 0;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+        }
+
+        .confirm::backdrop {
+          background: rgb(0 0 0 / 0.25);
+        }
+
+        .confirm form {
+          display: flex;
+          gap: 8px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Empty in the kit. A start state may pin a few rules here (a pale colour for
+           the contrast lesson, outline: none for the focus lesson); each is listed in
+           the lesson's start state and never shown. */
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (the logo has no alt yet; the call-link icon has an empty alt) -->
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+                <a class="call-link" href="tel:+959123456789" data-testid="call-link"><img src="/phone.svg" alt="" width="24" height="24" /></a>
+              </div>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <!-- kit block: divider, a decorative image (no alt yet) -->
+              <img class="divider" src="/divider.svg" width="320" height="16" data-testid="divider" />
+
+              <!-- kit block: gallery, an informative image (no alt yet) -->
+              <section class="gallery" data-testid="gallery">
+                <figure class="photo">
+                  <img src="/teahouse.svg" width="240" height="150" data-testid="photo-teahouse" />
+                  <figcaption>ဆိုင်အတွင်း</figcaption>
+                </figure>
+              </section>
+
+              <!-- lesson block: sales chart, an inline SVG with no role, no name and no description yet -->
+              <section class="sales" data-testid="sales">
+                <h2>ယနေ့ အရောင်းရဆုံး</h2>
+                <svg class="chart" width="240" height="96" viewBox="0 0 240 96" data-testid="chart">
+                  <rect x="15" y="20" width="50" height="50" fill="#8b5a2b" />
+                  <rect x="95" y="37" width="50" height="33" fill="#2f6b3a" />
+                  <rect x="175" y="51" width="50" height="19" fill="#c9a227" />
+                  <text x="40" y="15" text-anchor="middle" font-size="12" fill="#2b1d14">120</text>
+                  <text x="120" y="32" text-anchor="middle" font-size="12" fill="#2b1d14">80</text>
+                  <text x="200" y="46" text-anchor="middle" font-size="12" fill="#2b1d14">45</text>
+                  <text x="40" y="90" text-anchor="middle" font-size="12" fill="#2b1d14">လက်ဖက်ရည်</text>
+                  <text x="120" y="90" text-anchor="middle" font-size="12" fill="#2b1d14">ကော်ဖီ</text>
+                  <text x="200" y="90" text-anchor="middle" font-size="12" fill="#2b1d14">မုန့်ဟင်းခါး</text>
+                </svg>
+              </section>
+            </main>
+
+            <!-- kit block: panel-script (tree only; taller drawer so every image row fits) -->
+            <script type="module" src="/panel.js" data-modes="tree" data-height="50"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "dom-accessibility-api": "0.7.1",
+            "tabbable": "6.5.0",
+            "vite": "5.4.21"
+          }
+        }
+      panel.js: |
+        // panel.js: the course's A11y panel. Pinned, never typed, never edited.
+        // It shows what assistive technology gets from the page, as real DOM in a
+        // drawer at the bottom of the preview, so the recorded lesson replays it.
+        //
+        //   <script type="module" src="/panel.js" data-modes="tree tabs" data-scope="#order"></script>
+        //
+        //   data-modes     any of: tree tabs contrast live axe (drawn in that order)
+        //   data-scope     CSS selector; tree, contrast, live and axe look only inside
+        //                  it, tabs keeps page-wide numbers but lists only stops inside
+        //   data-height    drawer height, % of the preview height (20-60, default 40)
+        //   data-axe-tags  axe rule tags to run (default: axe's default rules)
+        //
+        // A row for an element with data-testid="x" gets data-testid="a11y-x" (tree),
+        // "tab-x" (tabs) or "contrast-x" (COURSE-KIT.md lists every test id). The
+        // panel is inert: never focusable, never in the accessibility tree, never in
+        // its own results. It rewrites a section only when its text changes. Names
+        // come from dom-accessibility-api (W3C accname), tab stops from tabbable,
+        // roles from Chrome's mapping of HTML elements.
+
+        import { computeAccessibleDescription, computeAccessibleName } from "dom-accessibility-api";
+        import { isFocusable, tabbable } from "tabbable";
+
+        const tag = document.querySelector('script[src*="panel.js"]');
+        const config = {
+          modes: (tag?.dataset.modes || "tree").split(/\s+/).filter((m) => ["tree", "tabs", "contrast", "live", "axe"].includes(m)),
+          scope: tag?.dataset.scope || "",
+          height: Math.min(60, Math.max(20, Number(tag?.dataset.height) || 40)),
+          axeTags: (tag?.dataset.axeTags || "").split(/\s+/).filter(Boolean),
+        };
+        const on = (mode) => config.modes.includes(mode);
+        const words = (text) => new Set(text.split(" "));
+
+        // ---------------------------------------------------------------- roles
+
+        const TAG_ROLES = {
+          article: "article", aside: "complementary", blockquote: "blockquote", button: "button", dialog: "dialog",
+          dd: "definition", details: "group", dl: "list", dt: "term", fieldset: "group", figure: "figure", hr: "separator",
+          iframe: "iframe", li: "listitem",
+          main: "main", menu: "list", meter: "meter", nav: "navigation", ol: "list", optgroup: "group", option: "option",
+          output: "status", p: "paragraph", progress: "progressbar", search: "search", summary: "button", table: "table",
+          textarea: "textbox", tr: "row", ul: "list", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+          h5: "heading", h6: "heading",
+        };
+        const INPUT_ROLES = {
+          button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox", radio: "radio",
+          range: "slider", number: "spinbutton", search: "searchbox", hidden: "none",
+        };
+        // Roles that get a row; paragraph and generic get one only with lang, aria-live or focus.
+        const ROWS = words(
+          "alert alertdialog article banner blockquote button cell checkbox columnheader combobox complementary " +
+            "contentinfo dialog figure form grid gridcell group heading iframe img link list listbox listitem log main " +
+            "menu menubar menuitem menuitemcheckbox menuitemradio meter navigation option progressbar radio radiogroup " +
+            "region row rowheader search searchbox separator slider spinbutton status switch tab table tablist tabpanel " +
+            "term definition textbox timer toolbar tooltip tree treeitem",
+        );
+        // Roles that must have an accessible name ("⚠ no name").
+        const NEEDS_NAME = words(
+          "button link img iframe dialog alertdialog checkbox radio switch textbox searchbox combobox listbox slider " +
+            "spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem option region form progressbar meter",
+        );
+        // Controls: one that cannot take focus gets "⚠ not focusable".
+        const INTERACTIVE = words(
+          "button link checkbox radio switch textbox searchbox combobox listbox slider spinbutton tab menuitem " +
+            "menuitemcheckbox menuitemradio treeitem",
+        );
+        // Roles whose children are presentational: the row stands for the whole control.
+        const LEAF = words("button checkbox radio switch img textbox searchbox spinbutton slider progressbar meter separator iframe tab");
+        // Roles that never take a name, so the panel skips computing one.
+        const UNNAMED = words("list listitem row paragraph generic separator blockquote term definition");
+
+        const explicitRole = (el) => (el.getAttribute("role") || "").trim().split(/\s+/)[0].toLowerCase();
+        const hasName = (el) => el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby") || el.hasAttribute("title");
+        const outsideSections = (el) => !el.parentElement?.closest("article, aside, main, nav, section");
+
+        function focusable(el) {
+          try {
+            return isFocusable(el);
+          } catch {
+            return false;
+          }
+        }
+
+        function roleOf(el) {
+          const role = explicitRole(el);
+          // An author cannot take the role away from something focusable or named.
+          if (role === "none" || role === "presentation") return focusable(el) || hasName(el) ? implicitRole(el) : "none";
+          return role || implicitRole(el);
+        }
+
+        function implicitRole(el) {
+          const tagName = el.localName;
+          const cellsHidden = () => ["none", "presentation"].includes(explicitRole(el.closest("table") || el));
+          switch (tagName) {
+            case "a":
+            case "area":
+              return el.hasAttribute("href") ? "link" : "generic";
+            case "img":
+              return el.getAttribute("alt") === "" && !hasName(el) ? "none" : "img";
+            case "svg":
+              return hasName(el) || el.querySelector(":scope > title") ? "img" : "none";
+            case "input":
+              return INPUT_ROLES[el.type] || (el.hasAttribute("list") ? "combobox" : "textbox");
+            case "select":
+              return el.multiple || el.size > 1 ? "listbox" : "combobox";
+            case "header":
+              return outsideSections(el) ? "banner" : "generic";
+            case "footer":
+              return outsideSections(el) ? "contentinfo" : "generic";
+            case "section":
+              return hasName(el) ? "region" : "generic";
+            case "form":
+              return hasName(el) ? "form" : "generic";
+            case "li":
+              return el.parentElement?.matches("ul, ol, menu") ? "listitem" : "generic";
+            case "tr":
+              return cellsHidden() ? "generic" : "row";
+            case "td":
+              return cellsHidden() ? "generic" : el.closest("[role=grid], [role=treegrid]") ? "gridcell" : "cell";
+            case "th": {
+              if (cellsHidden()) return "generic";
+              const scope = el.getAttribute("scope");
+              if (scope === "row" || scope === "rowgroup") return "rowheader";
+              if (scope === "col" || scope === "colgroup" || el.closest("thead")) return "columnheader";
+              const firstOfDataRow = el.parentElement?.firstElementChild === el && el.parentElement.querySelector(":scope > td");
+              return firstOfDataRow ? "rowheader" : "columnheader";
+            }
+            default:
+              return TAG_ROLES[tagName] || "generic";
+          }
+        }
+
+        // ---------------------------------------------------------------- names and states
+
+        const squash = (text) => (text || "").replace(/\s+/g, " ").trim();
+        const segmenter = new Intl.Segmenter();
+        function clip(text, max) {
+          const graphemes = Array.from(segmenter.segment(text), (part) => part.segment);
+          return graphemes.length > max ? `${graphemes.slice(0, max - 1).join("")}…` : text;
+        }
+
+        function nameOf(el) {
+          let name = "";
+          try {
+            name = squash(computeAccessibleName(el, { computedStyleSupportsPseudoElements: true }));
+          } catch {}
+          if (name) return { name, from: "" };
+          // Two HTML-AAM rules Chrome follows and accname leaves out.
+          if (el.localName === "figure") return { name: squash(el.querySelector(":scope > figcaption")?.textContent), from: "" };
+          const placeholder = /^(input|textarea)$/.test(el.localName) ? squash(el.getAttribute("placeholder")) : "";
+          return placeholder ? { name: placeholder, from: "from placeholder" } : { name: "", from: "" };
+        }
+
+        function statesOf(el, role) {
+          const states = [];
+          const aria = (name) => el.getAttribute(`aria-${name}`);
+          const summary = el.localName === "summary";
+          if (aria("expanded") === "true" || (summary && el.parentElement?.open)) states.push("expanded");
+          else if (aria("expanded") === "false" || summary) states.push("collapsed");
+          if (aria("pressed")) states.push({ true: "pressed", false: "not pressed", mixed: "mixed" }[aria("pressed")] || "");
+          if (["checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"].includes(role)) {
+            const native = el instanceof HTMLInputElement;
+            const mixed = native ? el.indeterminate : aria("checked") === "mixed";
+            states.push(mixed ? "mixed" : (native ? el.checked : aria("checked") === "true") ? "checked" : "not checked");
+          }
+          if (aria("selected") === "true" || (el instanceof HTMLOptionElement && el.selected)) states.push("selected");
+          if (aria("current") && aria("current") !== "false") states.push(`current=${aria("current")}`);
+          if (el.hasAttribute("required") || aria("required") === "true") states.push("required");
+          if (["true", "grammar", "spelling"].includes(aria("invalid"))) states.push("invalid");
+          if (el.hasAttribute("readonly") || aria("readonly") === "true") states.push("readonly");
+          const disabled = el.matches(":disabled") || aria("disabled") === "true";
+          if (disabled) states.push("disabled");
+          const canFocus = focusable(el);
+          if (canFocus && !INTERACTIVE.has(role) && role !== "iframe") states.push("focusable");
+          if (!canFocus && !disabled && INTERACTIVE.has(role)) states.push("⚠ not focusable");
+          if (el === activeElement()) states.push("focused");
+          if (aria("live") && aria("live") !== "off") states.push(`live=${aria("live")}`);
+          return states.filter(Boolean);
+        }
+
+        function activeElement() {
+          const el = document.activeElement;
+          return el && el !== document.body && el !== document.documentElement && !host.contains(el) ? el : null;
+        }
+
+        function openModal() {
+          try {
+            return document.querySelector("dialog:modal");
+          } catch {
+            return null;
+          }
+        }
+
+        function scopeRoot() {
+          try {
+            return (config.scope && document.querySelector(config.scope)) || document.body;
+          } catch {
+            return document.body;
+          }
+        }
+
+        // ---------------------------------------------------------------- tree
+
+        function describe(el, role) {
+          const states = statesOf(el, role);
+          const extra = el.hasAttribute("lang") || states.some((s) => s === "focusable" || s === "focused" || s.startsWith("live="));
+          if (role === "none" || !(ROWS.has(role) || extra)) return null;
+          const { name, from } = UNNAMED.has(role) ? { name: "", from: "" } : nameOf(el);
+          const level = role === "heading" ? Number(el.getAttribute("aria-level")) || Number(el.localName.slice(1)) || 2 : 0;
+          const parts = [{ cls: "role", text: level ? `heading level ${level}` : role }];
+          if (name) parts.push({ cls: "name", text: `"${clip(name, 60)}"` });
+          else if (NEEDS_NAME.has(role)) parts.push({ cls: "warn", text: "⚠ no name" });
+          if (from) parts.push({ cls: "muted", text: from });
+          if (role === "list" && el.localName !== "dl") {
+            const items = Array.from(el.children).filter((c) => c.localName === "li" || explicitRole(c) === "listitem");
+            parts.push({ cls: "muted", text: `${items.length} ${items.length === 1 ? "item" : "items"}` });
+          }
+          for (const state of states) parts.push({ cls: state.startsWith("⚠") ? "warn" : "state", text: state });
+          if (el.hasAttribute("aria-describedby")) {
+            let description = "";
+            try {
+              description = squash(computeAccessibleDescription(el));
+            } catch {}
+            if (description) parts.push({ cls: "muted", text: `desc "${clip(description, 40)}"` });
+          }
+          if (el.hasAttribute("lang")) parts.push({ cls: "state", text: `lang="${el.getAttribute("lang")}"` });
+          if (!name && ["paragraph", "generic", "blockquote", "status", "alert", "log", "term", "definition"].includes(role) && squash(el.textContent)) {
+            parts.push({ cls: "muted", text: `· ${clip(squash(el.textContent), 40)}` });
+          }
+          const warnings = parts.filter((part) => part.cls === "warn").length;
+          return { role, name, states, parts, warnings, testid: el.getAttribute("data-testid") };
+        }
+
+        function buildTree() {
+          const rows = [];
+          const visit = (el, depth) => {
+            if (el === host || /^(script|style|template|noscript|head|title|meta|link)$/.test(el.localName)) return;
+            if (el.getAttribute("aria-hidden") === "true" || el.hasAttribute("inert")) return;
+            const style = getComputedStyle(el);
+            if (style.display === "none") return;
+            let childDepth = depth;
+            if (style.visibility === "visible" && el !== document.body) {
+              const role = roleOf(el);
+              const row = describe(el, role);
+              if (row) {
+                rows.push({ ...row, depth });
+                childDepth = depth + 1;
+                if (LEAF.has(role)) return;
+              }
+            }
+            if (el.localName === "svg" || el.localName === "select") return;
+            for (const child of el.children) visit(child, childDepth);
+          };
+          // While a modal dialog is open, everything outside it is inert.
+          visit(openModal() || scopeRoot(), 0);
+          return { rows, title: squash(document.title), lang: document.documentElement.getAttribute("lang") || "" };
+        }
+
+        function renderTree({ rows, title, lang }) {
+          const warnings = rows.reduce((sum, r) => sum + r.warnings, 0) + (title ? 0 : 1) + (lang ? 0 : 1);
+          const label = warnings ? `Accessibility tree · ⚠ ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : "Accessibility tree · no warnings";
+          const head = row({ testid: "a11y-summary", head: true, attrs: { "data-warnings": warnings } }, [{ text: label }]);
+          const doc = row({ testid: "a11y-document", depth: 0, attrs: { "data-title": title, "data-lang": lang } }, [
+            { cls: "role", text: "document" },
+            title ? { cls: "name", text: `"${clip(title, 50)}"` } : { cls: "warn", text: "⚠ no title" },
+            lang ? { cls: "state", text: `lang="${lang}"` } : { cls: "warn", text: "⚠ no lang" },
+          ]);
+          const body = rows.map((r) =>
+            row(
+              {
+                testid: r.testid && `a11y-${r.testid}`,
+                depth: r.depth + 1,
+                focused: r.states.includes("focused"),
+                attrs: { "data-name": r.name, "data-states": r.states.join(" ") },
+              },
+              r.parts,
+            ),
+          );
+          return [head, doc, ...body];
+        }
+
+        // ---------------------------------------------------------------- tabs
+
+        function tabStops() {
+          let stops = [];
+          try {
+            stops = tabbable(openModal() || document.body, { displayCheck: "full" });
+          } catch {}
+          // A radio group with nothing checked is one stop (its first radio), as in Chrome.
+          const groups = new Set();
+          return stops.filter((el) => {
+            if (!(el instanceof HTMLInputElement) || el.type !== "radio" || !el.name) return true;
+            const group = Array.from((el.form || document).querySelectorAll("input[type=radio]")).filter((r) => r.name === el.name);
+            if (group.some((r) => r.checked)) return true;
+            if (groups.has(group[0])) return false;
+            groups.add(group[0]);
+            return true;
+          });
+        }
+
+        let marked = new Map();
+        function buildTabs() {
+          const scope = openModal() || (config.scope ? scopeRoot() : null);
+          const stops = tabStops().map((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const text = squash(el.textContent);
+            return {
+              el,
+              order: index + 1,
+              role: roleOf(el),
+              name: nameOf(el).name,
+              text,
+              testid: el.getAttribute("data-testid"),
+              ariaHidden: Boolean(el.closest('[aria-hidden="true"]')),
+              focused: el === activeElement(),
+              x: Math.round(rect.left + scrollX),
+              y: Math.round(rect.top + scrollY),
+              listed: !scope || scope.contains(el),
+            };
+          });
+          // data-a11y-tab="n" on a listed stop is what its badge anchors to.
+          const next = new Map(stops.filter((s) => s.listed && s.order <= 60).map((s) => [s.el, String(s.order)]));
+          for (const el of marked.keys()) if (!next.has(el)) el.removeAttribute("data-a11y-tab");
+          for (const [el, order] of next) if (el.getAttribute("data-a11y-tab") !== order) el.setAttribute("data-a11y-tab", order);
+          marked = next;
+          return stops;
+        }
+
+        function renderTabs(stops) {
+          const head = row({ testid: "tab-count", head: true, attrs: { "data-count": stops.length } }, [
+            { text: `Tab order · ${stops.length} stops` },
+          ]);
+          const items = stops
+            .filter((s) => s.listed)
+            .map((s) => {
+              const parts = [{ cls: "order", text: String(s.order) }, { cls: "role", text: s.role }];
+              if (s.name) parts.push({ cls: "name", text: `"${clip(s.name, 50)}"` });
+              else if (NEEDS_NAME.has(s.role)) parts.push({ cls: "warn", text: "⚠ no name" });
+              else if (s.text) parts.push({ cls: "muted", text: `· ${clip(s.text, 40)}` });
+              if (s.ariaHidden) parts.push({ cls: "warn", text: "⚠ aria-hidden" });
+              if (s.focused) parts.push({ cls: "state", text: "focused" });
+              return row({ testid: s.testid && `tab-${s.testid}`, depth: 0, focused: s.focused, attrs: { "data-order": s.order } }, parts);
+            });
+          return [head, ...(items.length ? items : [row({}, [{ cls: "muted", text: "(no tab stops here)" }])])];
+        }
+
+        // Studio cannot press keys, so a lesson clicks two hidden panel controls
+        // (preview.click on a11y-tab-next / a11y-tab-prev) to move focus the way Tab
+        // and Shift+Tab do. Past the last stop focus leaves the page (body).
+        function moveFocus(step) {
+          const stops = tabStops();
+          const active = activeElement();
+          let next = active ? null : step > 0 ? stops[0] : stops.at(-1);
+          if (active) {
+            let index = stops.indexOf(active);
+            if (index === -1) {
+              // Focus sits outside the order: continue from its place in the page.
+              const after = stops.findIndex((el) => active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              index = (after === -1 ? stops.length : after) - (step > 0 ? 1 : 0);
+            }
+            next = stops[index + step];
+          }
+          if (next) next.focus();
+          else active?.blur();
+        }
+
+        const renderBadges = (stops) =>
+          stops
+            .filter((s) => s.listed)
+            .map(
+              (s) =>
+                `<span class="a11yp-badge${s.focused ? " is-focused" : ""}" style="--x:${s.x}px;--y:${s.y}px;position-anchor:--a11yp-${s.order}">${s.order}</span>`,
+            );
+
+        // ---------------------------------------------------------------- contrast
+
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        function parseColor(value) {
+          const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+          if (match) {
+            const [r, g, b, a = 1] = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+            return { r, g, b, a };
+          }
+          // oklch(), color(), color-mix() and friends: let a 1px canvas convert them.
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = value;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        }
+
+        const over = (top, below) => ({
+          r: top.r * top.a + below.r * (1 - top.a),
+          g: top.g * top.a + below.g * (1 - top.a),
+          b: top.b * top.a + below.b * (1 - top.a),
+          a: 1,
+        });
+
+        // The colour behind an element: its own and its ancestors' background colours
+        // stacked on a white canvas. Background images and opacity are not counted.
+        function backgroundOf(el) {
+          const layers = [];
+          let image = false;
+          for (let node = el; node instanceof Element; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            image ||= style.backgroundImage !== "none";
+            layers.push(parseColor(style.backgroundColor));
+            if (layers.at(-1).a >= 1) break;
+          }
+          return { color: layers.reduceRight((below, layer) => over(layer, below), { r: 255, g: 255, b: 255, a: 1 }), image };
+        }
+
+        function luminance({ r, g, b }) {
+          const linear = (v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        }
+
+        const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+
+        function buildContrast() {
+          const root = scopeRoot();
+          const targets = [...(root.matches("[data-contrast]") ? [root] : []), ...root.querySelectorAll("[data-contrast]")];
+          return targets.map((el) => {
+            const style = getComputedStyle(el);
+            const border = el.dataset.contrast === "border";
+            const label = el.dataset.contrastLabel || clip(squash(el.textContent) || nameOf(el).name || el.localName, 18);
+            const item = { testid: el.getAttribute("data-testid"), label, border };
+            if (!el.getClientRects().length) return { ...item, hidden: true };
+            const behind = backgroundOf(border ? el.parentElement || el : el);
+            const side = ["Top", "Right", "Bottom", "Left"].find((s) => parseFloat(style[`border${s}Width`]) > 0);
+            const ink = border ? (side ? parseColor(style[`border${side}Color`]) : behind.color) : parseColor(style.color);
+            const fg = over(ink, behind.color);
+            const [high, low] = [luminance(fg), luminance(behind.color)].sort((x, y) => y - x);
+            const ratio = (high + 0.05) / (low + 0.05);
+            const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            // Compare the exact ratio, show it cut (not rounded) to 2 places: 4.499 shows 4.49 and fails.
+            const shown = (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+            return { ...item, shown, large, fg: hex(fg), bg: hex(behind.color), image: behind.image, aa: ratio >= (border || large ? 3 : 4.5), aaa: ratio >= (large ? 4.5 : 7) };
+          });
+        }
+
+        function renderContrast(items) {
+          const rows = items.map((item) => {
+            const parts = [{ cls: "name", text: `"${item.label}"` }];
+            const attrs = {};
+            const verdict = (ok, prefix) => ({ cls: ok ? "pass" : "warn", text: `${prefix}${ok ? "pass" : "fail"}` });
+            if (item.hidden) parts.push({ cls: "muted", text: "not rendered" });
+            else if (item.border) {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail" });
+              parts.push({ cls: "role", text: "border" }, { cls: "order", text: `${item.shown}:1` }, { cls: "muted", text: "needs 3:1" }, verdict(item.aa, ""));
+            } else {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail", "data-aaa": item.aaa ? "pass" : "fail" });
+              parts.push({ cls: "order", text: `${item.shown}:1` }, verdict(item.aa, "AA "), verdict(item.aaa, "AAA "));
+              if (item.large) parts.push({ cls: "muted", text: "large text" });
+            }
+            if (item.image) parts.push({ cls: "warn", text: "⚠ background image: check by eye" });
+            const swatches = item.hidden ? "" : `<span class="a11yp-swatch" style="background:${item.fg}"></span><span class="a11yp-swatch" style="background:${item.bg}"></span>`;
+            return row({ testid: item.testid && `contrast-${item.testid}`, depth: 0, attrs, prefix: swatches }, parts);
+          });
+          const head = row({ head: true }, [{ text: "Contrast (WCAG 2)" }]);
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(mark elements with data-contrast)" }])])];
+        }
+
+        // ---------------------------------------------------------------- live regions
+
+        // A simplified screen reader: it speaks a change to a live region that was
+        // already on the page, never the text a region arrives with (except an alert).
+        const liveState = new WeakMap();
+        const liveLog = [];
+        let liveCount = 0;
+        let liveBaseline = false;
+
+        function scanLive() {
+          if (!on("live")) return false;
+          let changed = false;
+          for (const el of scopeRoot().querySelectorAll("[aria-live], [role~=status], [role~=alert], [role~=log], output")) {
+            const alert = /\balert\b/.test(el.getAttribute("role") || "");
+            const politeness = el.getAttribute("aria-live") || (alert ? "assertive" : "polite");
+            const present = !el.closest('[hidden], [aria-hidden="true"], [inert]') && el.checkVisibility();
+            const now = { present, text: squash(el.innerText) };
+            const before = liveState.get(el);
+            liveState.set(el, now);
+            if (!liveBaseline || politeness === "off" || !now.present || !now.text) continue;
+            if (before?.present ? before.text === now.text : !alert) continue;
+            liveCount += 1;
+            liveLog.push({ n: liveCount, politeness, text: now.text });
+            if (liveLog.length > 6) liveLog.shift();
+            changed = true;
+          }
+          liveBaseline = true;
+          return changed;
+        }
+
+        function renderLive() {
+          const head = row({ testid: "live-count", head: true, attrs: { "data-count": liveCount } }, [
+            { text: "Live regions · likely spoken (simplified)" },
+          ]);
+          const rows = liveLog.map((entry) =>
+            row({ testid: `live-${entry.n}`, depth: 0 }, [
+              { cls: "order", text: String(entry.n) },
+              { cls: entry.politeness === "assertive" ? "warn" : "state", text: entry.politeness },
+              { cls: "name", text: `"${clip(entry.text, 60)}"` },
+            ]),
+          );
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(nothing announced yet)" }])])];
+        }
+
+        // ---------------------------------------------------------------- axe (base-axe workspaces: axe.js sets window.a11yPanelAxe)
+
+        const axeRun = { running: false, again: false, timer: 0, state: null };
+
+        function scheduleAxe(delay = 700) {
+          if (!on("axe") || !window.a11yPanelAxe) return;
+          clearTimeout(axeRun.timer);
+          axeRun.timer = setTimeout(runAxe, delay);
+        }
+
+        async function runAxe() {
+          const axe = window.a11yPanelAxe;
+          if (axeRun.running) return void (axeRun.again = true);
+          axeRun.running = true;
+          try {
+            const context = { exclude: [["#a11y-panel"]], ...(config.scope && { include: [[config.scope]] }) };
+            const options = { resultTypes: ["violations"], ...(config.axeTags.length && { runOnly: { type: "tag", values: config.axeTags } }) };
+            const { violations } = await axe.run(context, options);
+            axeRun.state = { violations: violations.map((v) => ({ id: v.id, impact: v.impact || "minor", help: v.help, nodes: v.nodes.length })) };
+          } catch (error) {
+            axeRun.state = { error: String(error?.message || error) };
+          }
+          axeRun.running = false;
+          render();
+          if (axeRun.again) {
+            axeRun.again = false;
+            scheduleAxe(300);
+          }
+        }
+
+        function renderAxe() {
+          const { state } = axeRun;
+          const version = window.a11yPanelAxe?.version;
+          if (!version) return [row({ head: true }, [{ text: "axe · not installed in this lesson" }])];
+          if (!state || state.error) {
+            return [row({ testid: "axe-count", head: true }, [state ? { cls: "warn", text: `axe error: ${clip(state.error, 60)}` } : { text: "axe · running…" }])];
+          }
+          const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+          const issues = state.violations.length;
+          const head = row({ testid: "axe-count", head: true, attrs: { "data-count": issues } }, [
+            { text: `axe-core ${version} · ${issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "no issues"}` },
+          ]);
+          const rows = state.violations
+            .sort((a, b) => impact[a.impact] - impact[b.impact] || a.id.localeCompare(b.id))
+            .map((v) =>
+              row({ testid: `axe-${v.id}`, depth: 0, attrs: { "data-count": v.nodes } }, [
+                { cls: impact[v.impact] < 2 ? "warn" : "state", text: v.impact },
+                { cls: "role", text: v.id },
+                { cls: "order", text: `×${v.nodes}` },
+                { cls: "muted", text: v.help },
+              ]),
+            );
+          return [head, ...rows];
+        }
+
+        // ---------------------------------------------------------------- drawing
+
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+        // One row. Its textContent is the parts joined by single spaces, exactly as
+        // it reads, so expect.preview's textContains matches what learners see.
+        function row({ testid, head = false, depth = -1, focused = false, attrs = {}, prefix = "" }, parts) {
+          const classes = `a11yp-row${head ? " a11yp-head" : ""}${focused ? " is-focused" : ""}`;
+          const extra = Object.entries(attrs).map(([key, value]) => ` ${key}="${escape(value)}"`).join("");
+          const id = testid ? ` data-testid="${escape(testid)}"` : "";
+          const indent = depth >= 0 ? ` style="--d:${Math.min(depth, 8)}"` : "";
+          const spans = parts.map((p) => (p.cls ? `<span class="a11yp-${p.cls}">${escape(p.text)}</span>` : escape(p.text))).join(" ");
+          return `<div class="${classes}"${id}${indent}${extra}>${prefix}${spans}</div>`;
+        }
+
+        const C = { bg: "#202124", head: "#303134", text: "#e8eaed", role: "#aecbfa", name: "#fdd663", state: "#d7aefb", muted: "#bdc1c6", warn: "#f6aea9", pass: "#a8dab5", focus: "#123a6e", ring: "#8ab4f8" };
+        const P = "#a11y-panel";
+        const CSS = `
+        :where(html){scroll-padding-bottom:calc(${config.height}vh + 16px)}
+        ${P} .a11yp-spacer{display:block;height:${config.height}vh}
+        ${P} .a11yp-drawer{position:fixed;inset:auto 0 0 0;z-index:2147483001;box-sizing:border-box;height:${config.height}vh;margin:0;padding:0 0 8px;overflow:auto;overscroll-behavior:contain;background:${C.bg};color:${C.text};border-top:3px solid ${C.ring};font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Sangam MN","Myanmar MN","Myanmar Text",Padauk,monospace;text-align:start;letter-spacing:normal;text-transform:none;font-style:normal}
+        ${P} .a11yp-row{display:block;margin:0;padding:1px 8px 1px calc(8px + var(--d,0) * 14px);border-left:4px solid transparent;overflow-wrap:anywhere}
+        ${P} .a11yp-head{position:sticky;top:0;z-index:1;padding-left:8px;background:${C.head};font-weight:700}
+        ${P} .a11yp-row.is-focused{background:${C.focus};border-left-color:${C.ring}}
+        ${P} .a11yp-role{color:${C.role}} ${P} .a11yp-name{color:${C.name}} ${P} .a11yp-state{color:${C.state}}
+        ${P} .a11yp-muted{color:${C.muted}} ${P} .a11yp-pass{color:${C.pass}} ${P} .a11yp-order{font-weight:700}
+        ${P} .a11yp-warn{color:${C.warn};font-weight:700}
+        ${P} .a11yp-swatch{display:inline-block;width:12px;height:12px;margin-right:4px;border:1px solid ${C.muted};vertical-align:middle}
+        ${P} .a11yp-badges{display:block;position:static;height:0}
+        ${P} .a11yp-badge{position:absolute;z-index:2147483000;top:var(--y);left:var(--x);box-sizing:border-box;min-width:20px;height:20px;margin:-8px 0 0 -8px;padding:0 4px;border-radius:10px;background:#174ea6;color:#fff;font:700 13px/20px ui-monospace,Menlo,monospace;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
+        ${P} .a11yp-badge.is-focused{background:#b3261e}
+        @supports (anchor-name: --a){${P} .a11yp-badge{top:anchor(top,var(--y));left:anchor(left,var(--x));position-visibility:anchors-visible}}
+        ${Array.from({ length: 60 }, (_, i) => `[data-a11y-tab="${i + 1}"]{anchor-name:--a11yp-${i + 1}}`).join("")}`;
+
+        const host = document.createElement("div");
+        host.id = "a11y-panel";
+        host.inert = true;
+        host.innerHTML =
+          `<style>${CSS}</style><div class="a11yp-badges"></div><div class="a11yp-spacer"></div>` +
+          `<span hidden data-step="1" data-testid="a11y-tab-next"></span><span hidden data-step="-1" data-testid="a11y-tab-prev"></span>` +
+          `<div class="a11yp-drawer" data-testid="a11y-panel">` +
+          `${config.modes.map((mode) => `<div data-mode="${mode}"></div>`).join("")}</div>`;
+        document.body.append(host);
+        const drawer = host.querySelector(".a11yp-drawer");
+        const badges = host.querySelector(".a11yp-badges");
+        const sections = Object.fromEntries(Array.from(drawer.children, (el) => [el.dataset.mode, el]));
+        const written = new Map();
+
+        // Rewrite only the rows whose text changed (a focus move touches two rows);
+        // a change in the number of rows redraws the section.
+        function write(el, rows) {
+          const before = written.get(el) || [];
+          written.set(el, rows);
+          if (before.length !== rows.length || el.children.length !== rows.length) el.innerHTML = rows.join("");
+          else rows.forEach((html, i) => html !== before[i] && (el.children[i].outerHTML = html));
+        }
+
+        // Keep the focused row and the newest announcement in view inside the drawer.
+        let shown = { focus: null, live: 0 };
+        function reveal() {
+          const focus = activeElement();
+          let target = null;
+          if (focus !== shown.focus) target = drawer.querySelector(".is-focused");
+          if (liveCount !== shown.live) target = drawer.querySelector(`[data-testid="live-${liveCount}"]`);
+          shown = { focus, live: liveCount };
+          if (!target) return;
+          const headHeight = target.parentElement.firstElementChild.offsetHeight;
+          const top = target.offsetTop - headHeight;
+          const bottom = target.offsetTop + target.offsetHeight - drawer.clientHeight;
+          if (top < drawer.scrollTop) drawer.scrollTop = top;
+          else if (bottom > drawer.scrollTop) drawer.scrollTop = bottom + 8;
+        }
+
+        function render() {
+          try {
+            if (on("tree")) write(sections.tree, renderTree(buildTree()));
+            if (on("tabs")) {
+              const stops = buildTabs();
+              write(sections.tabs, renderTabs(stops));
+              write(badges, renderBadges(stops));
+            }
+            if (on("contrast")) write(sections.contrast, renderContrast(buildContrast()));
+            if (on("live")) write(sections.live, renderLive());
+            if (on("axe")) write(sections.axe, renderAxe());
+            reveal();
+          } catch {
+            // The panel must never break a lesson; the next tick tries again.
+          }
+        }
+
+        // ---------------------------------------------------------------- updates
+
+        let timer = 0;
+        const schedule = (delay = 40) => {
+          clearTimeout(timer);
+          timer = setTimeout(render, delay);
+        };
+
+        new MutationObserver((records) => {
+          if (!records.some((r) => !host.contains(r.target) && r.attributeName !== "data-a11y-tab")) return;
+          scanLive();
+          schedule();
+          if (!axeRun.running) scheduleAxe();
+        }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+
+        document.addEventListener("focusin", () => schedule(0), true);
+        document.addEventListener("focusout", () => schedule(0), true);
+        // A CSS edit swaps the stylesheet <link>; its load (and image loads) can change contrast and layout.
+        document.addEventListener("load", () => (schedule(), scheduleAxe()), true);
+        addEventListener("resize", () => schedule(100));
+        addEventListener("a11y-panel-axe", () => scheduleAxe(0));
+        host.addEventListener("click", (event) => {
+          const step = Number(event.target.closest?.("[data-step]")?.dataset.step);
+          if (step) moveFocus(step);
+        });
+        // The drawer is inert, so the wheel would scroll the page under it; scroll the drawer instead.
+        addEventListener(
+          "wheel",
+          (event) => {
+            if (event.clientY < drawer.getBoundingClientRect().top) return;
+            event.preventDefault();
+            drawer.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+          },
+          { passive: false },
+        );
+
+        // A cheap periodic pass catches what no event reports (a style change that
+        // hides something or changes a colour). Timers, not animation frames: frames
+        // never run in a hidden tab.
+        (function tick() {
+          if (scanLive()) schedule(0);
+          render();
+          setTimeout(tick, 600);
+        })();
+        scheduleAxe(0);
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      public/divider.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 16" width="320" height="16">
+          <path d="M0 8h126M194 8h126" stroke="#c9a27e" stroke-width="2"/>
+          <path d="M160 2c-6 4-6 8 0 12c6-4 6-8 0-12z" fill="#2f6b3a"/>
+          <path d="M146 8c-4-3-8-3-12 0c4 3 8 3 12 0zM174 8c4-3 8-3 12 0c-4 3-8 3-12 0z" fill="#8b5a2b"/>
+        </svg>
+      public/phone.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+          <path d="M6.6 3.5l2.6-.6 1.6 4.2-2 1.4a11 11 0 0 0 6.7 6.7l1.4-2 4.2 1.6-.6 2.6a2 2 0 0 1-2 1.6A15.5 15.5 0 0 1 3.5 4.9a2 2 0 0 1 1.6-2z" fill="#fff8ec"/>
+        </svg>
+      public/teahouse.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+          <rect width="320" height="200" fill="#f3e2c4"/>
+          <g fill="#e6cfa6">
+            <rect x="0" y="0" width="16" height="120"/><rect x="32" y="0" width="16" height="120"/><rect x="64" y="0" width="16" height="120"/>
+            <rect x="96" y="0" width="16" height="120"/><rect x="128" y="0" width="16" height="120"/><rect x="160" y="0" width="16" height="120"/>
+            <rect x="192" y="0" width="16" height="120"/><rect x="224" y="0" width="16" height="120"/><rect x="256" y="0" width="16" height="120"/>
+            <rect x="288" y="0" width="16" height="120"/>
+          </g>
+          <rect x="196" y="18" width="104" height="72" rx="6" fill="#9fd3e6" stroke="#3b2314" stroke-width="4"/>
+          <path d="M248 18v72M196 54h104" stroke="#3b2314" stroke-width="3"/>
+          <circle cx="226" cy="40" r="9" fill="#fff8ec"/>
+          <rect x="0" y="120" width="320" height="80" fill="#8b5a2b"/>
+          <g fill="#3b2314"><rect x="0" y="120" width="320" height="6"/><rect x="0" y="150" width="320" height="3"/><rect x="0" y="176" width="320" height="3"/></g>
+          <rect x="22" y="96" width="120" height="10" rx="3" fill="#c9a227"/>
+          <rect x="34" y="106" width="8" height="40" fill="#3b2314"/><rect x="122" y="106" width="8" height="40" fill="#3b2314"/>
+          <g fill="#fff8ec" stroke="#3b2314" stroke-width="2">
+            <path d="M40 80h22v10a11 11 0 0 1-22 0z"/><path d="M78 80h22v10a11 11 0 0 1-22 0z"/><path d="M112 80h22v10a11 11 0 0 1-22 0z"/>
+          </g>
+          <g fill="#2f6b3a"><circle cx="20" cy="70" r="12"/><circle cx="10" cy="84" r="10"/><circle cx="30" cy="86" r="10"/><circle cx="292" cy="104" r="14"/><circle cx="306" cy="92" r="10"/></g>
+          <rect x="284" y="110" width="20" height="24" fill="#b23a2b"/>
+          <g fill="#c9a27e"><circle cx="170" cy="160" r="5"/><circle cx="190" cy="168" r="5"/><circle cx="210" cy="158" r="5"/><circle cx="230" cy="170" r="5"/><circle cx="250" cy="160" r="5"/></g>
+        </svg>
+      styles.css: ""
+  whiteboardAssets:
+    # Board A: purpose decides the alt text.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 46,
+        text: "ပုံရဲ့ ရည်ရွယ်ချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-question,
+        kind: text,
+        x: 285,
+        y: 225,
+        width: 640,
+        height: 36,
+        text: "ပုံတွေ ဖျောက်လိုက်ရင် နားလည်သေးလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-deco-box,
+        kind: rectangle,
+        x: 270,
+        y: 290,
+        width: 400,
+        height: 140,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-deco-head,
+        kind: text,
+        x: 292,
+        y: 304,
+        width: 220,
+        height: 36,
+        text: "အလှဆင် ပုံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-deco-body,
+        kind: text,
+        x: 292,
+        y: 362,
+        width: 300,
+        height: 36,
+        text: 'alt="" → ကျော်',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-info-box,
+        kind: rectangle,
+        x: 700,
+        y: 290,
+        width: 390,
+        height: 140,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-info-head,
+        kind: text,
+        x: 722,
+        y: 304,
+        width: 330,
+        height: 36,
+        text: "အချက်အလက် ပေးတဲ့ ပုံ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-info-body,
+        kind: text,
+        x: 722,
+        y: 362,
+        width: 300,
+        height: 36,
+        text: "ဘာ ပြလဲ · တိုတို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-func-box,
+        kind: rectangle,
+        x: 270,
+        y: 460,
+        width: 400,
+        height: 140,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-func-head,
+        kind: text,
+        x: 292,
+        y: 474,
+        width: 340,
+        height: 36,
+        text: "လုပ်ဆောင်ချက် ရှိတဲ့ ပုံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-func-body,
+        kind: text,
+        x: 292,
+        y: 532,
+        width: 320,
+        height: 36,
+        text: "နှိပ်ရင် ဘာဖြစ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-complex-box,
+        kind: rectangle,
+        x: 700,
+        y: 460,
+        width: 390,
+        height: 140,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-complex-head,
+        kind: text,
+        x: 722,
+        y: 474,
+        width: 300,
+        height: 36,
+        text: "ရှုပ်ထွေးတဲ့ ပုံ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-complex-body,
+        kind: text,
+        x: 722,
+        y: 532,
+        width: 320,
+        height: 36,
+        text: "အတိုချုပ် + အသေးစိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B: ways to hide a decorative image.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "အလှဆင် ပုံကို ဖျောက်နည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-alt,
+        kind: text,
+        x: 285,
+        y: 235,
+        width: 520,
+        height: 36,
+        text: 'alt=""   ✓ အများဆုံး သုံး',
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-role,
+        kind: text,
+        x: 285,
+        y: 295,
+        width: 620,
+        height: 36,
+        text: 'role="presentation" · role="none"',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-hidden,
+        kind: text,
+        x: 285,
+        y: 355,
+        width: 560,
+        height: 36,
+        text: 'aria-hidden="true" → သတိထား',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-css,
+        kind: text,
+        x: 285,
+        y: 415,
+        width: 420,
+        height: 36,
+        text: "CSS background ပုံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-missing-box,
+        kind: rectangle,
+        x: 270,
+        y: 490,
+        width: 820,
+        height: 120,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: b-missing-head,
+        kind: text,
+        x: 292,
+        y: 502,
+        width: 440,
+        height: 36,
+        text: "alt မပါ ≠ alt အလွတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-missing-body,
+        kind: text,
+        x: 292,
+        y: 554,
+        width: 520,
+        height: 36,
+        text: "ဖိုင်နာမည်ကို ဖတ်ပြနိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C: writing good alt text.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 380,
+        height: 46,
+        text: "alt text ရေးနည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-bad-box,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 820,
+        height: 150,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: c-bad-line1,
+        kind: text,
+        x: 292,
+        y: 244,
+        width: 640,
+        height: 36,
+        text: '✗  alt="image"  ·  alt="IMG_2041.jpg"',
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-bad-line2,
+        kind: text,
+        x: 292,
+        y: 312,
+        width: 600,
+        height: 36,
+        text: "✗  ပုံ… · ဓာတ်ပုံ… နဲ့ စတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-good-box,
+        kind: rectangle,
+        x: 270,
+        y: 405,
+        width: 820,
+        height: 130,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-good-line1,
+        kind: text,
+        x: 292,
+        y: 417,
+        width: 660,
+        height: 36,
+        text: "✓  တိုတို · လူ ပြောသလို · ။ နဲ့ ဆုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-good-line2,
+        kind: text,
+        x: 292,
+        y: 477,
+        width: 600,
+        height: 36,
+        text: "✓  page ရဲ့ ဘာသာစကားနဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-repeat,
+        kind: text,
+        x: 285,
+        y: 565,
+        width: 560,
+        height: 36,
+        text: "ဘေးက စာကို ထပ်မပြော",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2610
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "ပုံတိုင်းမှာ ရည်ရွယ်ချက် ရှိပါတယ်"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ JavaScript က page ကို ပြောင်းတဲ့အခါ၊ accessibility tree ကိုပါ မှန်အောင်
+      ထိန်းပေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ပုံတွေ အကြောင်း ကြည့်ပါမယ်။ [[mark:start-server]] ပုံကို
+      မမြင်ရတဲ့သူအတွက် ပုံရဲ့ နေရာမှာ အစားထိုး ဖတ်ပြမယ့် စာကို alt text လို့ ခေါ်ပါတယ်။ alt text
+      တစ်ခုခု ထည့်လိုက်ရင် ပြီးပြီ လို့ ထင်စရာ ရှိပေမယ့်၊ တကယ်တမ်း ဘာ ရေးရမလဲ ဆိုတာက ပုံရဲ့
+      ရည်ရွယ်ချက်နဲ့ ပုံ ရှိနေတဲ့ နေရာပေါ် မူတည်ပါတယ်။ [[mark:draw-question]] ကိုယ့်ကိုယ်ကို
+      မေးကြည့်လို့ ရတဲ့ မေးခွန်း တစ်ခုက၊ page ပေါ်က ပုံတွေကို ဖျောက်လိုက်ရင် ကျန်တဲ့ အကြောင်းအရာကို
+      နားလည်သေးလား ဆိုတာပါ။ [[mark:draw-decorative]] နားလည်သေးရင် အဲဒီ ပုံက အလှဆင် ပုံ ဖြစ်ပြီး၊
+      screen reader က ကျော်သွားရပါမယ်။ [[mark:draw-informative]] ပုံက အချက်အလက် တစ်ခုခု ပေးနေရင်တော့၊
+      အဲဒီ အချက်ကို တိုတို ပြောပြရပါမယ်။ [[mark:draw-functional]] link ဒါမှမဟုတ် ခလုတ်ထဲက ပုံဆိုရင်၊
+      ပုံရဲ့ ပုံစံကို မဟုတ်ဘဲ နှိပ်ရင် ဘာဖြစ်မလဲ ဆိုတာ ပြောရပါမယ်။ [[mark:draw-complex]] ဇယား၊ မြေပုံ
+      လို ရှုပ်ထွေးတဲ့ ပုံအတွက်ကတော့ အတိုချုပ် တစ်ကြောင်းနဲ့ အသေးစိတ် ရှင်းပြချက် နှစ်ခုလုံး လိုပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Image purpose and context",
+          url: "https://web.dev/learn/accessibility/images#image_purpose_and_context",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: An alt Decision Tree",
+          url: "https://www.w3.org/WAI/tutorials/images/decision-tree/",
+        }
+    actions:
+      - id: open-purpose-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-question
+        type: whiteboard.apply
+        at: { mark: draw-question }
+        upsertIds: [a-question]
+        drawMs: 1400
+      - id: draw-decorative
+        type: whiteboard.apply
+        at: { mark: draw-decorative }
+        upsertIds: [a-deco-box, a-deco-head, a-deco-body]
+        drawMs: 1500
+      - id: draw-informative
+        type: whiteboard.apply
+        at: { mark: draw-informative }
+        upsertIds: [a-info-box, a-info-head, a-info-body]
+        drawMs: 1500
+      - id: draw-functional
+        type: whiteboard.apply
+        at: { mark: draw-functional }
+        upsertIds: [a-func-box, a-func-head, a-func-body]
+        drawMs: 1500
+      - id: draw-complex
+        type: whiteboard.apply
+        at: { mark: draw-complex }
+        upsertIds: [a-complex-box, a-complex-head, a-complex-body]
+        drawMs: 1500
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] ဆိုင်ရဲ့ page မှာ ဒီ လေးမျိုးလုံး ရှိနေပါတယ်။ HTML ဖိုင်ကို ကြည့်ရအောင်။
+      [[mark:select-logo]] header မှာ ဆိုင်ရဲ့ logo ပုံ ရှိပြီး၊ သူ့ဘေးမှာ ဆိုင်နာမည်ကို စာနဲ့
+      ရေးထားပါတယ်။ [[mark:select-call]] ညာဘက်က ဖုန်းဆက်တဲ့ link ထဲမှာတော့ ဖုန်းပုံလေး တစ်ခုပဲ ရှိပြီး၊
+      သူ့ alt က အလွတ် ဖြစ်နေပါတယ်။ [[mark:select-divider]] main ထဲမှာ အရွက်ပုံနဲ့ မျဉ်းတား ပုံ တစ်ခု
+      ရှိပါတယ်။ [[mark:select-photo]] သူ့အောက်မှာ ဆိုင်ထဲက ဓာတ်ပုံ ရှိပါတယ်။ [[mark:select-chart]]
+      နောက်ဆုံးမှာတော့ ဒီနေ့ ဘာ အရောင်းရဆုံးလဲ ဆိုတာ ပြတဲ့ ဇယား ရှိပြီး၊ SVG နဲ့ page ထဲမှာ တိုက်ရိုက်
+      ဆွဲထားတာပါ။ ဖုန်းပုံကလွဲရင် ကျန်တဲ့ ပုံတွေမှာ alt လုံးဝ မပါသေးသလို၊ ဇယားမှာလည်း name
+      မရှိသေးပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images",
+          url: "https://web.dev/learn/accessibility/images",
+        }
+      - {
+          title: "MDN: <img> alt attribute",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/img#alt",
+        }
+    actions:
+      - id: close-purpose-board
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: select-logo
+        type: editor.select
+        at: { mark: select-logo }
+        target: { file: index.html, text: '<img class="logo" src="/cup.svg"', occurrence: 1 }
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target: { file: index.html, text: '<img src="/phone.svg" alt=""', occurrence: 1 }
+      - id: select-divider
+        type: editor.select
+        at: { mark: select-divider }
+        target: { file: index.html, text: '<img class="divider" src="/divider.svg"', occurrence: 1 }
+      - id: select-photo
+        type: editor.select
+        at: { mark: select-photo }
+        target: { file: index.html, text: '<img src="/teahouse.svg"', occurrence: 1 }
+      - id: select-chart
+        type: editor.select
+        at: { mark: select-chart }
+        target: { file: index.html, text: '<svg class="chart"', occurrence: 1 }
+
+  - id: first-look
+    narration: >
+      [[mark:preview-ready]] ညာဘက်မှာ ဆိုင်ရဲ့ page ကို မြင်ရပါပြီ။ မျက်စိနဲ့ ကြည့်ရင်တော့ ပုံတွေ
+      အကုန် ကောင်းကောင်း ပေါ်နေပါတယ်။ ဒါပေမဲ့ accessibility panel ရဲ့ ထိပ်ဆုံးမှာ warning လေးခု
+      ပြနေပါတယ်။ [[mark:look-rows]] tree ထဲမှာ logo၊ မျဉ်းတား၊ ဓာတ်ပုံ သုံးခုလုံးက role က img
+      ဖြစ်ပေမယ့် name မရှိပါဘူး။ ဖုန်းဆက်တဲ့ link မှာလည်း name မရှိပါဘူး။ alt မပါတဲ့ ပုံကို screen
+      reader တချို့က ဖိုင်နာမည်နဲ့ ဖတ်ပြတတ်ပြီး၊ တချို့က ပုံ တစ်ပုံ ရှိတယ် ဆိုတာလောက်ပဲ ပြောပါတယ်။
+      ဇယားကတော့ tree ထဲမှာ လုံးဝ မပေါ်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Empty or null alt",
+          url: "https://web.dev/learn/accessibility/images#empty_or_null_alt",
+        }
+      - {
+          title: "MDN: <img> — accessibility (missing alt)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/img#accessibility",
+        }
+    actions:
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-four-warnings
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        attribute: { name: data-warnings, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-photo-unnamed
+        type: expect.preview
+        at: { mark: look-rows }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-photo-teahouse }
+        textContains: "img ⚠ no name"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-call-unnamed
+        type: expect.preview
+        at: { afterAction: expect-photo-unnamed }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-call-link }
+        textContains: "link ⚠ no name"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-logo-unnamed
+        type: expect.preview
+        at: { afterAction: expect-call-unnamed }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-logo }
+        textContains: "img ⚠ no name"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: decorative
+    chapter: "အလှဆင် ပုံ"
+    narration: >
+      [[mark:type-divider]] အလှဆင် ပုံကနေ စကြည့်ရအောင်။ မျဉ်းတား ပုံက page ကို လှအောင် လုပ်ပေးရုံပဲ
+      ဖြစ်လို့၊ alt ကို အလွတ် ထည့်ပါမယ်။ [[mark:after-divider]] tree ကို ကြည့်ပါ၊ မျဉ်းတား ပုံရဲ့ row
+      ပျောက်သွားပြီး warning သုံးခု ဖြစ်သွားပါပြီ။ alt အလွတ်ဆိုတာ ဒီ ပုံကို ကျော်သွားပါ လို့ assistive
+      technology ကို ပြောလိုက်တာပါ။ [[mark:board-decorative]] အလှဆင် ပုံကို ဖျောက်တဲ့ နည်း တခြားလည်း
+      ရှိပါသေးတယ်။ [[mark:draw-deco-role]] role ကို presentation ဒါမှမဟုတ် none ပေးရင်၊ ပုံရဲ့
+      အဓိပ္ပာယ်ကို tree ထဲကနေ ဖယ်ပေးပါတယ်။ aria hidden ကတော့ element နဲ့ သူ့အထဲက အရာ အားလုံးကို
+      ဖျောက်လို့ သတိထား သုံးရပါမယ်။ [[mark:draw-deco-css]] CSS background အဖြစ် ထည့်ထားတဲ့ ပုံကိုလည်း
+      screen reader က မသိပါဘူး။ [[mark:draw-deco-missing]] သတိထားရမှာက alt လုံးဝ မပါတာနဲ့ alt အလွတ်
+      ထည့်တာ မတူတာပါ။ alt မပါရင် screen reader က ဖိုင်နာမည်ကို ဖတ်ပြနိုင်ပါတယ်။ ပြီးတော့ အလှဆင်လား
+      မသေချာရင် ဖော်ပြချက် ထည့်ပေးတာ ပိုကောင်းပါတယ်။ ပိုနေတဲ့ ဖော်ပြချက်ကို ကျော်နားထောင်လို့ ရပေမယ့်၊
+      မရှိတဲ့ ဖော်ပြချက်ကိုတော့ ဘယ်သူမှ ကိုယ့်ဘာသာ ဖြည့်တွေးလို့ မရလို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Decorative images",
+          url: "https://web.dev/learn/accessibility/images#decorative_images",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Decorative Images",
+          url: "https://www.w3.org/WAI/tutorials/images/decorative/",
+        }
+      - {
+          title: "MDN: ARIA presentation role",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/presentation_role",
+        }
+      - {
+          title: "MDN: aria-hidden",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-hidden",
+        }
+    actions:
+      - id: type-divider-alt
+        type: editor.type
+        at: { mark: type-divider }
+        cadence: block
+        target:
+          { file: index.html, after: '<img class="divider" src="/divider.svg"', occurrence: 1 }
+        text: ' alt=""'
+      - id: expect-three-warnings
+        type: expect.preview
+        at: { mark: after-divider }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        attribute: { name: data-warnings, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: board-decorative
+        type: whiteboard.apply
+        at: { mark: board-decorative }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-alt]
+      - id: draw-deco-role
+        type: whiteboard.apply
+        at: { mark: draw-deco-role }
+        upsertIds: [b-role, b-hidden]
+        drawMs: 1600
+      - id: draw-deco-css
+        type: whiteboard.apply
+        at: { mark: draw-deco-css }
+        upsertIds: [b-css]
+        drawMs: 1000
+      - id: draw-deco-missing
+        type: whiteboard.apply
+        at: { mark: draw-deco-missing }
+        upsertIds: [b-missing-box, b-missing-head, b-missing-body]
+        drawMs: 1600
+
+  - id: informative
+    chapter: "အချက်အလက် ပေးတဲ့ ပုံ"
+    narration: >
+      [[mark:close-decorative]] ဆိုင်ထဲက ဓာတ်ပုံကတော့ မတူပါဘူး။ ဒီ ဓာတ်ပုံက ဆိုင်ထဲမှာ ဘယ်လို ရှိလဲ
+      ဆိုတာ ပြပေးနေလို့ အချက်အလက် ပေးတဲ့ ပုံပါ။ [[mark:type-photo-alt]] ဒီ page မှာ ဓာတ်ပုံရဲ့ အဓိက
+      အချက်က ဘာလဲ ဆိုတာ စဉ်းစားပြီး၊ ပြတင်းပေါက်နား ခုံတန်းရှည်နဲ့ လက်ဖက်ရည်ခွက်များ ဆိုတဲ့ alt text
+      ကို ထည့်ပါမယ်။ page ရဲ့ ဘာသာစကား ဖြစ်တဲ့ မြန်မာလိုပဲ ရေးပြီး၊ ပုဒ်မနဲ့ အဆုံးသတ်ထားပါတယ်။
+      [[mark:after-photo-alt]] ဓာတ်ပုံရဲ့ row မှာ name ပေါ်လာပြီး၊ warning နှစ်ခုပဲ ကျန်ပါတော့တယ်။
+      screen reader က ဒီ စာကို ဖတ်ပြရင်း ပုံ ဖြစ်ကြောင်းကိုလည်း သူ့ဘာသာ ပြောပြမှာပါ။ ဒါကြောင့် alt
+      ထဲမှာ ပုံ၊ ဓာတ်ပုံ ဆိုတဲ့ စကား ထည့်စရာ မလိုပါဘူး။ ဒါ့အပြင် အောက်က caption မှာ ဆိုင်အတွင်း လို့
+      ရေးထားပြီးသားမို့၊ alt မှာ အဲဒီ စကားကို ထပ်မပြောတော့ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Informative images",
+          url: "https://web.dev/learn/accessibility/images#informative_images",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Informative Images",
+          url: "https://www.w3.org/WAI/tutorials/images/informative/",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Tips and Tricks",
+          url: "https://www.w3.org/WAI/tutorials/images/tips/",
+        }
+    actions:
+      - id: close-decorative
+        type: whiteboard.apply
+        at: { mark: close-decorative }
+        open: false
+      - id: type-photo-alt
+        type: editor.type
+        at: { mark: type-photo-alt }
+        cadence: block
+        target: { file: index.html, after: '<img src="/teahouse.svg"', occurrence: 1 }
+        text: ' alt="ပြတင်းပေါက်နား ခုံတန်းရှည်နဲ့ လက်ဖက်ရည်ခွက်များ။"'
+      - id: expect-photo-named
+        type: expect.preview
+        at: { mark: after-photo-alt }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-photo-teahouse }
+        attribute: { name: data-name, value: "ပြတင်းပေါက်နား ခုံတန်းရှည်နဲ့ လက်ဖက်ရည်ခွက်များ။" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-two-warnings
+        type: expect.preview
+        at: { afterAction: expect-photo-named }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        attribute: { name: data-warnings, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: functional
+    chapter: "နှိပ်လို့ရတဲ့ ပုံ"
+    narration: >
+      [[mark:select-call-alt]] အခု header က ဖုန်းဆက်တဲ့ link ကို ပြန်ကြည့်ရအောင်။ link ထဲမှာ ဖုန်းပုံ
+      တစ်ခုပဲ ရှိပြီး၊ အဲဒီ ပုံကို alt အလွတ် ပေးထားပါတယ်။ ဒီ ပုံက အလှဆင် ပုံ မဟုတ်ဘဲ link ရဲ့
+      တစ်ခုတည်းသော အကြောင်းအရာ ဖြစ်နေလို့၊ link မှာ name မရှိ ဖြစ်နေတာပါ။ [[mark:type-call-alt]]
+      ဖုန်းပုံ ဆိုပြီး ပုံရဲ့ ပုံစံကို ပြောမယ့်အစား၊ နှိပ်ရင် ဖြစ်မယ့် အလုပ်ကို ပြောတဲ့ ဖုန်းဆက်ရန်
+      ဆိုတာကို ထည့်ပါမယ်။ [[mark:after-call-alt]] link ရဲ့ row မှာ name က ဖုန်းဆက်ရန် ဖြစ်သွားပြီး၊
+      warning တစ်ခုပဲ ကျန်ပါတော့တယ်။ screen reader က ဖုန်းဆက်ရန်၊ link လို့ ဖတ်ပြမှာပါ။ ရှာဖွေတဲ့
+      ခလုတ်ထဲက မှန်ဘီလူး ပုံ၊ ပင်မ page ကို ပြန်သွားတဲ့ logo link စတာတွေလည်း ဒီ အုပ်စုထဲ ပါပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Functional images",
+          url: "https://web.dev/learn/accessibility/images#functional_images",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Functional Images",
+          url: "https://www.w3.org/WAI/tutorials/images/functional/",
+        }
+    actions:
+      - id: select-call-alt
+        type: editor.select
+        at: { mark: select-call-alt }
+        target: { file: index.html, text: '<img src="/phone.svg" alt=""', occurrence: 1 }
+      - id: type-call-alt
+        type: editor.type
+        at: { mark: type-call-alt }
+        cadence: block
+        target: { file: index.html, after: '<img src="/phone.svg" alt="', occurrence: 1 }
+        text: "ဖုန်းဆက်ရန်"
+      - id: expect-call-named
+        type: expect.preview
+        at: { mark: after-call-alt }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-call-link }
+        textContains: 'link "ဖုန်းဆက်ရန်"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-one-warning
+        type: expect.preview
+        at: { afterAction: expect-call-named }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        attribute: { name: data-warnings, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: complex
+    chapter: "ရှုပ်ထွေးတဲ့ ပုံ"
+    narration: >
+      [[mark:look-chart]] ဇယားကို ကြည့်ရအောင်။ ဇယားကို မြင်ရတဲ့သူက လက်ဖက်ရည် အရောင်းရဆုံး ဖြစ်တာနဲ့
+      တစ်မျိုးချင်း ဘယ်လောက် ရောင်းရလဲ ဆိုတာကို တစ်ချက်ကြည့်ရုံနဲ့ သိပါတယ်။ ဒီလောက် အချက်အလက်ကို alt
+      တစ်ကြောင်းထဲ ထည့်ရင် ရှည်လွန်းသွားပါမယ်။ [[mark:type-chart-data]] ဒါကြောင့် ဇယားရဲ့ အောက်မှာ
+      ကိန်းဂဏန်းတွေကို စာနဲ့ ရေးထားတဲ့ စာပိုဒ် တစ်ခု ထည့်ပါမယ်။ [[mark:scroll-chart]] page ကို
+      အောက်ဆင်း ကြည့်ရအောင်။ [[mark:after-chart-data]] ဇယားရဲ့ အောက်မှာ စာပိုဒ် ပေါ်နေပါပြီ။ ဇယား ဖတ်ရ
+      ခက်တဲ့သူတွေအတွက်ပါ အကျိုးရှိလို့၊ ဖျောက်မထားဘဲ မြင်ရအောင် ထားတာ ပိုကောင်းပါတယ်။
+      [[mark:type-chart-role]] အခု ဇယား ကိုယ်တိုင်ကို ပြင်ပါမယ်။ page ထဲမှာ တိုက်ရိုက် ရေးထားတဲ့ SVG
+      ကို ပုံ တစ်ပုံ အဖြစ် သိအောင် role img ပေးပြီး၊ aria label နဲ့ အတိုချုပ် name ပေးပါမယ်။ aria
+      describedby နဲ့ ခုနက စာပိုဒ်ကိုလည်း ချိတ်ပေးပါမယ်။ [[mark:after-chart-role]] tree ထဲမှာ ဇယားက
+      img အဖြစ် ပေါ်လာပါပြီ။ name က လက်ဖက်ရည် အရောင်းရဆုံးကို ပြတဲ့ ဇယား ဖြစ်ပြီး၊ description ကတော့
+      ကိန်းဂဏန်းတွေ ပါတဲ့ စာပိုဒ်ပါ။ screen reader က name ကို ဖတ်ပြီးရင် description ကိုပါ
+      ဆက်ဖတ်ပြနိုင်ပါတယ်။ [[mark:select-figcaption]] ဓာတ်ပုံမှာ သုံးထားတဲ့ figure နဲ့ figcaption ကလည်း
+      ပုံနဲ့ ရှင်းပြချက်ကို တွဲပေးတဲ့ နည်း တစ်ခုပါ။ အသေးစိတ် ရှင်းပြထားတဲ့ နေရာကို link ပေးတာ၊ ဒေတာကို
+      table နဲ့ ပြတာ စတဲ့ နည်းတွေကိုလည်း သုံးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Complex images",
+          url: "https://web.dev/learn/accessibility/images#complex_images",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Complex Images",
+          url: "https://www.w3.org/WAI/tutorials/images/complex/",
+        }
+      - {
+          title: "MDN: aria-describedby",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-describedby",
+        }
+      - {
+          title: "MDN: ARIA img role (inline SVG)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/img_role",
+        }
+      - {
+          title: "MDN: <figcaption>",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/figcaption",
+        }
+    actions:
+      - id: select-chart-svg
+        type: editor.select
+        at: { mark: look-chart }
+        target:
+          { file: index.html, text: '<svg class="chart" width="240" height="96"', occurrence: 1 }
+      - id: type-chart-data
+        type: editor.type
+        at: { mark: type-chart-data }
+        cadence: block
+        target: { file: index.html, after: "</svg>", occurrence: 1 }
+        text: "\n        <p class=\"hint\" id=\"chart-data\" data-testid=\"chart-data\">လက်ဖက်ရည် 120 ခွက်၊ ကော်ဖီ 80 ခွက်၊ မုန့်ဟင်းခါး 45 ပွဲ။</p>"
+      - id: expect-chart-data
+        type: expect.preview
+        at: { mark: scroll-chart, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: chart-data }
+        textContains: "လက်ဖက်ရည် 120 ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: scroll-chart
+        type: preview.scroll
+        at: { mark: scroll-chart }
+        timeoutMs: 5000
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-chart-role
+        type: editor.type
+        at: { mark: type-chart-role }
+        cadence: block
+        target: { file: index.html, after: '<svg class="chart"', occurrence: 1 }
+        text: ' role="img" aria-label="လက်ဖက်ရည် အရောင်းရဆုံးကို ပြတဲ့ ဇယား။" aria-describedby="chart-data"'
+      - id: expect-chart-named
+        type: expect.preview
+        at: { mark: after-chart-role }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-chart }
+        attribute: { name: data-name, value: "လက်ဖက်ရည် အရောင်းရဆုံးကို ပြတဲ့ ဇယား။" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-chart-desc
+        type: expect.preview
+        at: { afterAction: expect-chart-named }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-chart }
+        textContains: 'desc "လက်ဖက်ရည် 120 ခွက်'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-figcaption
+        type: editor.select
+        at: { mark: select-figcaption }
+        target: { file: index.html, text: "<figcaption>ဆိုင်အတွင်း</figcaption>", occurrence: 1 }
+
+  - id: best-practices
+    chapter: "alt text ကောင်းကောင်း ရေးနည်း"
+    narration: >
+      [[mark:board-tips]] alt text ရေးတဲ့အခါ သတိထားစရာ တချို့ကို စုကြည့်ရအောင်။ [[mark:draw-tip-bad]]
+      image ဒါမှမဟုတ် ပုံ ဆိုတဲ့ စကားလုံး တစ်လုံးတည်း၊ ဖိုင်နာမည် စတာတွေကို alt အဖြစ် ပေးထားရင် ဘာမှ
+      မပြောပြပါဘူး။ ပုံ၊ ဓာတ်ပုံ ဆိုတဲ့ စကားနဲ့ စတာကိုလည်း ရှောင်ပါ။ [[mark:draw-tip-good]]
+      အရေးကြီးတာကို လူတစ်ယောက် ပြောသလို တိုတို ရေးပြီး၊ ပုဒ်မနဲ့ ဆုံးပါ။ စာလုံး ၁၅၀ လောက်ထက် မပိုအောင်
+      ထားဖို့ အကြံပြုကြပြီး၊ ပိုရှည်လာရင် ခုနက ဇယားလို ပုံရဲ့ ဘေးမှာ ရေးပါ။ search engine အတွက်
+      keyword တွေ စုထည့်တာကလည်း နားထောင်ရတဲ့သူကို အနှောင့်အယှက် ဖြစ်စေပါတယ်။ [[mark:draw-tip-repeat]]
+      နောက်ဆုံး အချက်က ဘေးမှာ ရှိပြီးသား စာကို ထပ်မပြောဖို့ပါ။ [[mark:close-tips]] header က logo ကို
+      ပြန်ကြည့်ရအောင်။ [[mark:select-shop-name]] logo ရဲ့ ဘေးမှာ ဆိုင်နာမည်က heading စာသား အနေနဲ့
+      ရှိပြီးသားပါ။ logo ကို ဆိုင်နာမည် alt ပေးလိုက်ရင်၊ screen reader က ဆိုင်နာမည်ကို နှစ်ခါ ဆက်တိုက်
+      ဖတ်ပြမှာပါ။ [[mark:type-logo-alt]] ဒါကြောင့် logo ကိုလည်း alt အလွတ် ပေးပါမယ်။
+      [[mark:after-logo-alt]] panel ရဲ့ ထိပ်ဆုံးမှာ warning မရှိတော့ပါဘူး။ ဒါပေမဲ့ panel က alt
+      ရှိမရှိကိုပဲ စစ်နိုင်ပြီး၊ alt text ကောင်းမကောင်းကိုတော့ ကိုယ်တိုင် ဆုံးဖြတ်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images — Alternative text best practices",
+          url: "https://web.dev/learn/accessibility/images#alternative_text_best_practices",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Tips and Tricks",
+          url: "https://www.w3.org/WAI/tutorials/images/tips/",
+        }
+      - {
+          title: "W3C WAI Images Tutorial: Decorative Images (image next to text)",
+          url: "https://www.w3.org/WAI/tutorials/images/decorative/",
+        }
+    actions:
+      - id: board-tips
+        type: whiteboard.apply
+        at: { mark: board-tips }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-tip-bad
+        type: whiteboard.apply
+        at: { mark: draw-tip-bad }
+        upsertIds: [c-bad-box, c-bad-line1, c-bad-line2]
+        drawMs: 2000
+      - id: draw-tip-good
+        type: whiteboard.apply
+        at: { mark: draw-tip-good }
+        upsertIds: [c-good-box, c-good-line1, c-good-line2]
+        drawMs: 2000
+      - id: draw-tip-repeat
+        type: whiteboard.apply
+        at: { mark: draw-tip-repeat }
+        upsertIds: [c-repeat]
+        drawMs: 1200
+      - id: close-tips
+        type: whiteboard.apply
+        at: { mark: close-tips }
+        open: false
+      - id: select-shop-name
+        type: editor.select
+        at: { mark: select-shop-name }
+        target:
+          {
+            file: index.html,
+            text: '<h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>',
+            occurrence: 1,
+          }
+      - id: type-logo-alt
+        type: editor.type
+        at: { mark: type-logo-alt }
+        cadence: block
+        target: { file: index.html, after: '<img class="logo" src="/cup.svg"', occurrence: 1 }
+        text: ' alt=""'
+      - id: expect-no-warnings
+        type: expect.preview
+        at: { mark: after-logo-alt }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        attribute: { name: data-warnings, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-no-warnings-text
+        type: expect.preview
+        at: { afterAction: expect-no-warnings }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-summary }
+        textContains: "no warnings"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ alt text ဆိုတာ ပုံကို ဖော်ပြတာထက်၊ ဒီ နေရာမှာ ပုံက ဘာ အလုပ် လုပ်နေလဲ
+      ဆိုတာကို ပြောပြတာပါ။ [[mark:recap-decorative]] အလှဆင် ပုံကို alt အလွတ်နဲ့ ကျော်ခိုင်းပါ။
+      [[mark:recap-informative]] အချက်အလက် ပေးတဲ့ ပုံမှာ အဓိက အချက်ကို တိုတို ရေးပါ။
+      [[mark:recap-functional]] link နဲ့ ခလုတ်ထဲက ပုံမှာ နှိပ်ရင် ဘာဖြစ်မလဲ ဆိုတာ ရေးပါ။
+      [[mark:recap-complex]] ရှုပ်ထွေးတဲ့ ပုံမှာ အတိုချုပ် name နဲ့ အသေးစိတ် ရှင်းပြချက်ကို တွဲပေးပါ။
+      နောက် lesson မှာတော့ အရောင်နဲ့ contrast အကြောင်း ကြည့်သွားပါမယ်။ စာလုံး အရောင်နဲ့ နောက်ခံ အရောင်
+      ဘယ်လောက် ကွာမှ ဖတ်လို့ ကောင်းလဲ ဆိုတာကို တိုင်းကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Images",
+          url: "https://web.dev/learn/accessibility/images",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Color and contrast",
+          url: "https://web.dev/learn/accessibility/color-contrast",
+        }
+    actions:
+      - id: recap-decorative
+        type: editor.select
+        at: { mark: recap-decorative }
+        target: { file: index.html, text: 'src="/divider.svg" alt=""', occurrence: 1 }
+      - id: recap-informative
+        type: editor.select
+        at: { mark: recap-informative }
+        target:
+          { file: index.html, text: 'alt="ပြတင်းပေါက်နား ခုံတန်းရှည်နဲ့ လက်ဖက်ရည်ခွက်များ။"', occurrence: 1 }
+      - id: recap-functional
+        type: editor.select
+        at: { mark: recap-functional }
+        target: { file: index.html, text: 'alt="ဖုန်းဆက်ရန်"', occurrence: 1 }
+      - id: recap-complex
+        type: editor.select
+        at: { mark: recap-complex }
+        target: { file: index.html, text: 'aria-describedby="chart-data"', occurrence: 1 }
+      - id: expect-file-divider
+        type: expect.file
+        at: { afterAction: recap-complex }
+        path: index.html
+        contains: '<img class="divider" src="/divider.svg" alt=""'
+      - id: expect-file-photo
+        type: expect.file
+        at: { afterAction: expect-file-divider }
+        path: index.html
+        contains: '<img src="/teahouse.svg" alt="ပြတင်းပေါက်နား ခုံတန်းရှည်နဲ့ လက်ဖက်ရည်ခွက်များ။"'
+      - id: expect-file-call
+        type: expect.file
+        at: { afterAction: expect-file-photo }
+        path: index.html
+        contains: '<img src="/phone.svg" alt="ဖုန်းဆက်ရန်"'
+      - id: expect-file-chart
+        type: expect.file
+        at: { afterAction: expect-file-call }
+        path: index.html
+        contains: '<svg class="chart" role="img" aria-label="လက်ဖက်ရည် အရောင်းရဆုံးကို ပြတဲ့ ဇယား။" aria-describedby="chart-data"'
+      - id: expect-file-chart-data
+        type: expect.file
+        at: { afterAction: expect-file-chart }
+        path: index.html
+        contains: '<p class="hint" id="chart-data" data-testid="chart-data">လက်ဖက်ရည် 120 ခွက်၊ ကော်ဖီ 80 ခွက်၊ မုန့်ဟင်းခါး 45 ပွဲ။</p>'
+      - id: expect-file-logo
+        type: expect.file
+        at: { afterAction: expect-file-chart-data }
+        path: index.html
+        contains: '<img class="logo" src="/cup.svg" alt=""'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
