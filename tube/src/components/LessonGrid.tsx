@@ -1,17 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useRef, useState } from "react";
 import { useSearch } from "@next-editor/infra";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import { useWarmLessonRoute } from "../hooks/useWarmLessonRoute";
 import { GALLERY_COLUMN_QUERIES } from "../lib/galleryColumns";
 import { flattenLessonPages } from "../lib/lessons";
 import { busyFadeClass } from "../lib/busyFade";
-import {
-  observeFirstRowThumbnails,
-  settleWithoutFirstRow,
-  whenFirstRowThumbnailsSettled,
-} from "../lib/firstRowThumbnails";
-import LessonCard from "./LessonCard";
+import { settleWithoutFirstRow, whenFirstRowThumbnailsSettled } from "../lib/firstRowThumbnails";
+import type { Lesson } from "../types";
+import LessonRows from "./LessonRows";
 import LessonCardSkeleton from "@app/components/LessonCardSkeleton";
 import SearchBar from "./SearchBar";
 import SearchResults from "./SearchResults";
@@ -117,34 +113,12 @@ export default function LessonGrid() {
   const skeletonsToAppend = isFetchingNextPage
     ? (columns - (lessons.length % columns)) % columns || columns
     : 0;
-  const items = [...lessons, ...Array(skeletonsToAppend).fill(null)];
+  const items: (Lesson | null)[] = [...lessons, ...Array<null>(skeletonsToAppend).fill(null)];
   const rows = chunk(items, columns);
-
-  // Virtualize rows against the page scroll, so the navbar and footer stay in
-  // normal flow (no nested scrollbar) and only on-screen cards are mounted.
-  // scrollMargin offsets the virtual list by its distance from the document top.
-  // The list mounts only once page 0 has lessons, often after this component, so
-  // it is measured whenever its node appears (a callback ref) and on resize.
-  const [listNode, setListNode] = useState<HTMLDivElement | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
-  useLayoutEffect(() => {
-    if (!listNode) return;
-    const update = () => setScrollMargin(listNode.offsetTop);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, [listNode]);
 
   // A card click opens the lesson route, which the gallery deliberately does
   // not load up front; fetch it once the first row has its thumbnails.
   useWarmLessonRoute(whenFirstRowThumbnailsSettled());
-
-  const virtualizer = useWindowVirtualizer({
-    count: rows.length,
-    estimateSize: () => 320,
-    overscan: 3,
-    scrollMargin,
-  });
 
   // Auto-load the next page when the sentinel nears the viewport. Suppressed
   // while searching: the query bar switches to backend search results
@@ -261,33 +235,7 @@ export default function LessonGrid() {
           <div className="flex justify-center py-20 text-slate-300">No lessons yet.</div>
         ) : (
           <>
-            <div ref={setListNode}>
-              <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-                {virtualizer.getVirtualItems().map((vi) => (
-                  <div
-                    key={vi.key}
-                    data-index={vi.index}
-                    ref={virtualizer.measureElement}
-                    className="absolute left-0 top-0 w-full"
-                    style={{ transform: `translateY(${vi.start - scrollMargin}px)` }}
-                  >
-                    <div
-                      ref={vi.index === 0 ? observeFirstRowThumbnails : undefined}
-                      className="grid gap-5 pb-5"
-                      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-                    >
-                      {rows[vi.index].map((lesson, idx) =>
-                        lesson ? (
-                          <LessonCard key={lesson.slug} lesson={lesson} priority={vi.index === 0} />
-                        ) : (
-                          <LessonCardSkeleton key={`skel-${idx}`} />
-                        ),
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <LessonRows rows={rows} columns={columns} />
 
             {isFetchNextPageError ? (
               <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
