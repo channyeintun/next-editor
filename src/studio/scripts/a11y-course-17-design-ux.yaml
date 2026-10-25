@@ -1,0 +1,1146 @@
+# Accessibility course, lesson 17: design and user experience.
+#
+# A concept lesson: nothing runs. Course-deck pages and two whiteboard boards
+# carry the lesson, and the recap highlights the key lines in notes.md.
+# Flow: recall lesson 16 (native details/dialog), experience differs from
+# person to person; inclusive design drawn as a Venn diagram (accessibility,
+# usability, inclusivity, the centre) and set against universal design; the
+# seven inclusive design principles; personas (what they are, two tea-shop
+# personas with goals, AT and barriers, the persona spectrum, three rules);
+# disability simulators (left column first, then the better ways); accessibility
+# heuristics (Nielsen/Molich 1990, Deque 2019, "up to 67%", a heuristic review
+# of the tea-shop design); accessibility annotations drawn live over a wireframe
+# of the tea-shop order page (landmarks, heading levels, focus order, alt text,
+# accessible names) plus a page of the other areas to annotate; a quiz page with
+# its reveal; the recap.
+#
+# Deck: every page points at the course deck's placeholder /pub URL until Chan
+# publishes it; the Director's unreachable-deck warning is expected.
+# Page plan (kit fields per page): ~/Documents/a11y-course-work/pages/a11y-course-17-design-ux.json
+#
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-17-design-ux
+  title: "Accessibility course 17: Design နဲ့ UX"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Design နဲ့ UX
+
+        - inclusive design — accessibility · usability · inclusivity၊ လူ တစ်ယောက်ကနေ စပြီး အားလုံးဆီ ချဲ့
+        - persona — မသန်စွမ်းမှု ထည့်၊ user testing ကို အစားမထိုး
+        - simulator — သတိထား၊ မသန်စွမ်းသူတွေ ကိုယ်တိုင်ရဲ့ အတွေ့အကြုံကို လေ့လာ
+        - heuristic — design ကို စောစော စစ် (Deque · bug 67% အထိ)
+        - annotation — landmark · heading · focus အစဉ် · alt text · name
+
+        နောက် lesson: automated testing
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Design နဲ့ UX — Accessibility course</title>
+            <link rel="stylesheet" href="style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <p class="course">Accessibility course · 17</p>
+              <h1>Design နဲ့ UX</h1>
+            </main>
+          </body>
+        </html>
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          background: #f0efe9;
+          color: #1e1e1e;
+        }
+
+        .card {
+          padding: 2rem 2.5rem;
+          background: #ffffff;
+          border: 2px solid #1e1e1e;
+          border-radius: 16px;
+        }
+
+        .course {
+          margin: 0 0 0.5rem;
+          color: #5b45e0;
+          font-weight: 600;
+        }
+
+        h1 {
+          margin: 0;
+          line-height: 1.6;
+        }
+      package.json: |
+        {
+          "name": "a11y-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - {
+        id: l17_p01,
+        contentType: google,
+        name: "Cover: design and UX",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p01,
+      }
+    - {
+        id: l17_p02,
+        contentType: google,
+        name: "Inclusive design principles 1-4",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p02,
+      }
+    - {
+        id: l17_p02b,
+        contentType: google,
+        name: "Inclusive design principles 5-7",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p02b,
+      }
+    - {
+        id: l17_p03,
+        contentType: google,
+        name: "What a persona is",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p03,
+      }
+    - {
+        id: l17_p04,
+        contentType: google,
+        name: "Persona: Aung Aung",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p04,
+      }
+    - {
+        id: l17_p05,
+        contentType: google,
+        name: "Persona: Mya Mya",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p05,
+      }
+    - {
+        id: l17_p06,
+        contentType: google,
+        name: "Persona spectrum: touch",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p06,
+      }
+    - {
+        id: l17_p07,
+        contentType: google,
+        name: "Persona rules",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p07,
+      }
+    - {
+        id: l17_p08,
+        contentType: google,
+        name: "Disability simulators: limits",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p08,
+      }
+    - {
+        id: l17_p08b,
+        contentType: google,
+        name: "Disability simulators: better ways",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p08b,
+      }
+    - {
+        id: l17_p09,
+        contentType: google,
+        name: "Heuristics: Nielsen and Molich",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p09,
+      }
+    - {
+        id: l17_p09b,
+        contentType: google,
+        name: "Heuristics: Deque 2019",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p09b,
+      }
+    - {
+        id: l17_p10,
+        contentType: google,
+        name: "Up to 67 percent",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p10,
+      }
+    - {
+        id: l17_p11,
+        contentType: google,
+        name: "Heuristic review: navigation and wayfinding",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p11,
+      }
+    - {
+        id: l17_p12,
+        contentType: google,
+        name: "More things to annotate",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p12,
+      }
+    - {
+        id: l17_p13,
+        contentType: google,
+        name: "Quiz: persona or testing",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p13,
+      }
+    - {
+        id: l17_p13b,
+        contentType: google,
+        name: "Quiz answer: test with real users",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l17_p13b,
+      }
+  whiteboardAssets:
+    # Board A: inclusive design as a Venn diagram.
+    # blue = accessibility, green = usability, orange = inclusivity,
+    # violet = the centre where all three meet (inclusive design).
+    - {
+        id: l17-a-acc,
+        kind: ellipse,
+        x: 320,
+        y: 180,
+        width: 280,
+        height: 280,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l17-a-acc-label,
+        kind: text,
+        x: 332,
+        y: 285,
+        width: 200,
+        height: 36,
+        text: "Accessibility",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-a-use,
+        kind: ellipse,
+        x: 540,
+        y: 180,
+        width: 280,
+        height: 280,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l17-a-use-label,
+        kind: text,
+        x: 625,
+        y: 285,
+        width: 140,
+        height: 36,
+        text: "Usability",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-a-inc,
+        kind: ellipse,
+        x: 430,
+        y: 350,
+        width: 280,
+        height: 280,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l17-a-inc-label,
+        kind: text,
+        x: 495,
+        y: 560,
+        width: 170,
+        height: 36,
+        text: "Inclusivity",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-a-dot,
+        kind: ellipse,
+        x: 552,
+        y: 384,
+        width: 36,
+        height: 36,
+        strokeColor: "#6741d9",
+        backgroundColor: "#6741d9",
+      }
+    - {
+        id: l17-a-arrow,
+        kind: freedraw,
+        stroke: "arrow-right",
+        x: 600,
+        y: 386,
+        width: 235,
+        height: 32,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-a-centre-1,
+        kind: text,
+        x: 850,
+        y: 352,
+        width: 190,
+        height: 46,
+        text: "Inclusive",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: l17-a-centre-2,
+        kind: text,
+        x: 850,
+        y: 402,
+        width: 150,
+        height: 46,
+        text: "design",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+
+    # Board B: a wireframe of the tea-shop order page, annotated live.
+    # ink = the wireframe itself, violet = landmarks, blue = heading levels,
+    # orange = focus order, green = what assistive technology should say
+    # (alt text, accessible names, labels).
+    - {
+        id: l17-b-frame,
+        kind: rectangle,
+        x: 430,
+        y: 160,
+        width: 340,
+        height: 480,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-header,
+        kind: rectangle,
+        x: 445,
+        y: 172,
+        width: 310,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-logo,
+        kind: ellipse,
+        x: 457,
+        y: 184,
+        width: 36,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-name,
+        kind: text,
+        x: 505,
+        y: 184,
+        width: 130,
+        height: 36,
+        text: "ဆိုင်နာမည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-phone,
+        kind: rectangle,
+        x: 718,
+        y: 188,
+        width: 28,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-h1-text,
+        kind: text,
+        x: 450,
+        y: 246,
+        width: 140,
+        height: 42,
+        text: "မင်္ဂလာပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: l17-b-photo,
+        kind: rectangle,
+        x: 450,
+        y: 298,
+        width: 200,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-photo-text,
+        kind: text,
+        x: 505,
+        y: 330,
+        width: 100,
+        height: 36,
+        text: "ဓာတ်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-h2-text,
+        kind: text,
+        x: 450,
+        y: 416,
+        width: 180,
+        height: 42,
+        text: "အော်ဒါမှာရန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: l17-b-label,
+        kind: text,
+        x: 450,
+        y: 466,
+        width: 90,
+        height: 36,
+        text: "နာမည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-field,
+        kind: rectangle,
+        x: 450,
+        y: 506,
+        width: 200,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-button,
+        kind: rectangle,
+        x: 665,
+        y: 506,
+        width: 90,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-button-text,
+        kind: text,
+        x: 675,
+        y: 508,
+        width: 75,
+        height: 36,
+        text: "မှာမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-footer,
+        kind: rectangle,
+        x: 445,
+        y: 578,
+        width: 310,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l17-b-footer-text,
+        kind: text,
+        x: 460,
+        y: 585,
+        width: 180,
+        height: 36,
+        text: "ဗဟန်း၊ ရန်ကုန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-lm-header,
+        kind: rectangle,
+        x: 438,
+        y: 166,
+        width: 324,
+        height: 72,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b-lm-main,
+        kind: rectangle,
+        x: 438,
+        y: 240,
+        width: 324,
+        height: 322,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b-lm-footer,
+        kind: rectangle,
+        x: 438,
+        y: 572,
+        width: 324,
+        height: 62,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l17-b-lm-header-label,
+        kind: text,
+        x: 262,
+        y: 182,
+        width: 130,
+        height: 36,
+        text: "<header>",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-lm-main-label,
+        kind: text,
+        x: 288,
+        y: 380,
+        width: 100,
+        height: 36,
+        text: "<main>",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-lm-footer-label,
+        kind: text,
+        x: 266,
+        y: 585,
+        width: 130,
+        height: 36,
+        text: "<footer>",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-tag-h1,
+        kind: text,
+        x: 650,
+        y: 250,
+        width: 50,
+        height: 36,
+        text: "H1",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-tag-h2,
+        kind: text,
+        x: 705,
+        y: 420,
+        width: 50,
+        height: 36,
+        text: "H2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-focus-1,
+        kind: ellipse,
+        x: 676,
+        y: 183,
+        width: 38,
+        height: 38,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l17-b-focus-1-n,
+        kind: text,
+        x: 688,
+        y: 184,
+        width: 16,
+        height: 36,
+        text: "1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-focus-2,
+        kind: ellipse,
+        x: 610,
+        y: 462,
+        width: 38,
+        height: 38,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l17-b-focus-2-n,
+        kind: text,
+        x: 621,
+        y: 463,
+        width: 18,
+        height: 36,
+        text: "2",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-focus-3,
+        kind: ellipse,
+        x: 700,
+        y: 462,
+        width: 38,
+        height: 38,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l17-b-focus-3-n,
+        kind: text,
+        x: 711,
+        y: 463,
+        width: 18,
+        height: 36,
+        text: "3",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-note-logo,
+        kind: text,
+        x: 810,
+        y: 160,
+        width: 230,
+        height: 36,
+        text: 'alt="" · အလှဆင်',
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-note-photo,
+        kind: text,
+        x: 810,
+        y: 330,
+        width: 290,
+        height: 36,
+        text: "alt: ဆိုင်ထဲက ခုံတန်းရှည်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-note-phone,
+        kind: text,
+        x: 810,
+        y: 210,
+        width: 250,
+        height: 36,
+        text: "name: ဖုန်းဆက်ရန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l17-b-note-label,
+        kind: text,
+        x: 810,
+        y: 506,
+        width: 200,
+        height: 36,
+        text: "label: နာမည်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2617
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: opening
+    chapter: "Code မရေးခင် design ကနေ"
+    narration: >
+      [[mark:p01]] ပြီးခဲ့တဲ့ lesson မှာ details နဲ့ dialog လို HTML ရဲ့ ကိုယ်ပိုင် element တွေနဲ့
+      component တွေကို ပြန်ဆောက်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ code မရေးခင်၊ design အဆင့်မှာ
+      accessibility ကို ဘယ်လို ထည့်စဉ်းစားမလဲ ဆိုတာ ကြည့်ပါမယ်။ [[mark:opening-why]] website တစ်ခုကို သုံးတဲ့ အတွေ့အကြုံက
+      လူတိုင်း မတူပါဘူး။ ဘယ် device သုံးနေလဲ၊ အိပ်ရေးဝလား၊ နေမကောင်း ဖြစ်နေလား၊ assistive technology
+      သုံးနေလား ဆိုတာပေါ် မူတည်ပြီး ပြောင်းနေပါတယ်။ ဒါကြောင့် design ကို လူ အမျိုးမျိုးအတွက်
+      စဉ်းစားရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and user experience",
+          url: "https://web.dev/learn/accessibility/design-ux",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Patterns, components, and design systems",
+          url: "https://web.dev/learn/accessibility/patterns",
+        }
+    actions:
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l17_p01 }
+
+  - id: inclusive-design
+    chapter: "Inclusive design"
+    narration: >
+      [[mark:venn-acc]] လူ အမျိုးမျိုးရဲ့ လိုအပ်ချက်ကို တစ်ပြိုင်နက် ဖြည့်ဖို့ နည်း တစ်ခုက inclusive
+      design ပါ။ လူကို ဗဟိုထားပြီး အရာ သုံးခုကို ပေါင်းထားတဲ့ design နည်းပါ။ ပထမက မသန်စွမ်းသူတွေ
+      သုံးနိုင်ဖို့ ဖြစ်တဲ့ accessibility ပါ။ [[mark:venn-use]] ဒုတိယက လူတိုင်း သုံးရ လွယ်ဖို့
+      ဖြစ်တဲ့ usability ပါ။ [[mark:venn-inc]] တတိယက ဘယ်သူ့ကိုမှ ချန်မထားဖို့ ဖြစ်တဲ့ inclusivity ပါ။
+      [[mark:venn-centre]] သုံးခုလုံး ဆုံတဲ့ အလယ်က inclusive design ပါ။ universal design က လူ
+      အများဆုံး သုံးနိုင်မယ့် design တစ်ခုတည်းကို ရှာပါတယ်။ inclusive design ကတော့ လူ တစ်ယောက်အတွက်
+      အရင် design လုပ်ပြီး၊ နောက်မှ တခြားသူတွေဆီ ချဲ့ပါတယ်။ [[mark:venn-example]] ဥပမာ လက်
+      တစ်ဖက်တည်းနဲ့ လက်ဖက်ရည် မှာနိုင်အောင် design လုပ်လိုက်ရင်၊ ကလေး ချီထားတဲ့ သူ၊ ဘတ်စ်ကားပေါ်မှာ
+      လက်ကိုင်တန်း ကိုင်ထားတဲ့ သူတွေပါ အကျိုး ရှိသွားပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Inclusive design",
+          url: "https://web.dev/learn/accessibility/design-ux#inclusive_design",
+        }
+      - { title: "Microsoft Inclusive Design", url: "https://inclusive.microsoft.design/" }
+      - {
+          title: "W3C WAI: Accessibility, Usability, and Inclusion",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-usability-inclusion/",
+        }
+    actions:
+      - { id: close-p01, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: venn-acc,
+          type: whiteboard.apply,
+          at: { mark: venn-acc },
+          open: true,
+          clear: true,
+          upsertIds: [l17-a-acc, l17-a-acc-label],
+          drawMs: 1200,
+        }
+      - {
+          id: venn-use,
+          type: whiteboard.apply,
+          at: { mark: venn-use },
+          upsertIds: [l17-a-use, l17-a-use-label],
+          drawMs: 1200,
+        }
+      - {
+          id: venn-inc,
+          type: whiteboard.apply,
+          at: { mark: venn-inc },
+          upsertIds: [l17-a-inc, l17-a-inc-label],
+          drawMs: 1200,
+        }
+      - {
+          id: venn-centre,
+          type: whiteboard.apply,
+          at: { mark: venn-centre },
+          upsertIds: [l17-a-dot, l17-a-arrow, l17-a-centre-1, l17-a-centre-2],
+          drawMs: 1600,
+        }
+
+  - id: principles
+    narration: >
+      [[mark:p02]] inclusive design မှာ accessibility ကို အဓိကထားတဲ့ principle ခုနစ်ခု ရှိပါတယ်။
+      ပထမက လူတိုင်းကို အရည်အသွေး တူတဲ့ အတွေ့အကြုံ ပေးဖို့ပါ။ ဒုတိယက နေရောင်အောက်မှာ ဖြစ်ဖြစ်၊
+      အသံဖွင့်လို့ မရတဲ့ နေရာမှာ ဖြစ်ဖြစ် အသုံးဝင်ဖို့ပါ။ [[mark:p02-mid]] တတိယက လူတွေ
+      ရင်းနှီးပြီးသား ပုံစံတွေကို တစ်သမတ်တည်း သုံးဖို့ပါ။ စတုတ္ထက စာလုံး ချဲ့တာ၊ animation ပိတ်တာလို
+      user ကြိုက်တဲ့ နည်းနဲ့ သုံးခွင့် ပေးဖို့ပါ။ [[mark:p02b]] ပဉ္စမက လုပ်နည်း တစ်မျိုးထက်
+      ပိုပေးဖို့ပါ၊ ဥပမာ form နဲ့ရော ဖုန်းဆက်ပြီးရော မှာလို့ ရရပါမယ်။ ဆဋ္ဌမက အဓိက အလုပ်ကို
+      ရှေ့ဆုံးမှာ ထားဖို့ပါ။ နောက်ဆုံးက feature တိုင်း တကယ် အသုံးဝင်ရဲ့လား စဉ်းစားဖို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Inclusive design principles",
+          url: "https://web.dev/learn/accessibility/design-ux#inclusive_design",
+        }
+      - {
+          title: "Inclusive Design Principles (Swan, Pouncey, Pickering, Watson)",
+          url: "https://inclusivedesignprinciples.info/",
+        }
+    actions:
+      - {
+          id: close-venn,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -400 },
+          open: false,
+        }
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l17_p02 }
+      - { id: show-p02b, type: slide.show, at: { mark: p02b }, slideId: l17_p02b }
+
+  - id: personas
+    chapter: "Persona"
+    narration: >
+      [[mark:p03]] design လုပ်တဲ့အခါ team တော်တော်များများက persona တွေကို သုံးကြပါတယ်။ persona ဆိုတာ user
+      အမျိုးအစား တစ်ခုကို ကိုယ်စားပြုတဲ့ စိတ်ကူး လူပါ။ user research က ရတဲ့ အချက်အလက်တွေကို အခြေခံပြီး
+      ဖန်တီးတာ ဖြစ်လို့၊ feature အသစ် တစ်ခုကို ဒီ လူ သုံးနိုင်မလား လို့ မြန်မြန်နဲ့ စရိတ်
+      နည်းနည်းနဲ့ စစ်ကြည့်နိုင်ပါတယ်။ [[mark:p03-ways]] persona ထဲမှာ မသန်စွမ်းမှု ထည့်လိုက်ရင်
+      inclusive design ရဲ့ tool ကောင်း တစ်ခု ဖြစ်လာပါတယ်။ မသန်စွမ်းသူ persona သီးသန့် ဖန်တီးတာ၊
+      ရှိပြီးသား persona မှာ ထည့်တာ၊ persona spectrum ဆောက်တာ စတဲ့ နည်းတွေ ရှိပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Personas",
+          url: "https://web.dev/learn/accessibility/design-ux#personas",
+        }
+      - {
+          title: "Nielsen Norman Group: Personas Make Users Memorable for Product Team Members",
+          url: "https://www.nngroup.com/articles/persona/",
+        }
+      - {
+          title: "GOV.UK Accessibility blog: Dos and don'ts on designing for accessibility",
+          url: "https://accessibility.blog.gov.uk/2016/09/02/dos-and-donts-on-designing-for-accessibility/",
+        }
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l17_p03 }
+
+  - id: persona-cards
+    narration: >
+      [[mark:p04]] ဆိုင်ရဲ့ customer တွေကို persona အဖြစ် ရေးကြည့်ရအောင်။ အောင်အောင်က အသက် ၃၄
+      နှစ်ရှိတဲ့ စာရင်းကိုင်ပါ။ wheelchair စီးပြီး လက်ကို သိပ် မလှုပ်နိုင်လို့ mouse မသုံးပါဘူး။
+      ရုံးကနေ လက်ဖက်ရည် မြန်မြန် မှာချင်ပြီး၊ voice control နဲ့ ခလုတ်ရဲ့ နာမည်ကို ပြောပြီး
+      နှိပ်ပါတယ်။ ဒါကြောင့် နာမည် မပါတဲ့ icon ခလုတ်တွေက သူ့ရဲ့ အကြီးဆုံး အခက်အခဲပါ။ [[mark:p05]]
+      မြမြကတော့ အသက် ၆၃ နှစ်ရှိတဲ့ ပင်စင်စား ဆရာမပါ။ အမြင် အားနည်းလာလို့ ဖုန်းမှာ screen magnifier
+      နဲ့ စာလုံး ချဲ့ကြည့်ပါတယ်။ ပိတ်ရက်မှာ မြေးတွေအတွက် မုန့်ဟင်းခါး မှာချင်ပေမယ့်၊ ဖျော့လွန်းတဲ့
+      စာလုံးတွေရယ်၊ ချဲ့လိုက်ရင် ပြတ်သွားတဲ့ menu ရယ်က သူ့အတွက် အခက်အခဲပါ။ persona တစ်ခုစီမှာ ပန်းတိုင်၊ သုံးတဲ့
+      assistive technology နဲ့ အခက်အခဲ ပါတာကို သတိထား ကြည့်ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Incorporate disabilities (persona example)",
+          url: "https://web.dev/learn/accessibility/design-ux#incorporate_disabilities",
+        }
+      - {
+          title: "GOV.UK Accessibility blog: Using persona profiles to test accessibility",
+          url: "https://accessibility.blog.gov.uk/2019/02/11/using-persona-profiles-to-test-accessibility/",
+        }
+      - {
+          title: "W3C WAI: How People with Disabilities Use the Web — User Stories",
+          url: "https://www.w3.org/WAI/people-use-web/user-stories/",
+        }
+    actions:
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l17_p04 }
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l17_p05 }
+
+  - id: persona-spectrum
+    narration: >
+      [[mark:p06]] persona spectrum ကတော့ မသန်စွမ်းမှုက အမြဲတမ်း၊ ယာယီ၊ အခြေအနေအရ ဖြစ်နိုင်တယ် ဆိုတာ
+      ပြပါတယ်။ ခုနက လက် တစ်ဖက်တည်း ဥပမာကို ပြန်ကြည့်ရင်၊ လက် တစ်ဖက်တည်း ရှိတဲ့ သူ၊ လက်ကျိုးထားတဲ့ သူ၊ ကလေး ချီထားတဲ့ မိဘ သုံးယောက်လုံး လက်
+      တစ်ဖက်တည်းနဲ့ သုံးရတာ ဖြစ်လို့၊ တစ်ယောက်အတွက် ဖြေရှင်းရင် သုံးယောက်လုံး အကျိုး ရှိပါတယ်။
+      [[mark:p07]] persona ရေးရင် သတိထားစရာ သုံးခု ရှိပါတယ်။ တကယ့် လူကို ကူးမရေးရသလို stereotype
+      လည်း မသုံးရပါဘူး။ မသန်စွမ်းမှု တူတဲ့ သူတွေတောင် တစ်ယောက်နဲ့ တစ်ယောက် မတူပါဘူး။ နားမကြားသူ
+      တစ်ယောက်နဲ့ တွေ့ဖူးရင်၊ နားမကြားသူ အားလုံးကို သိသွားတာ မဟုတ်ဘဲ အဲဒီ တစ်ယောက်ကိုပဲ သိတာပါ။ ပြီးတော့ persona က တကယ့် မသန်စွမ်းသူတွေနဲ့
+      user testing လုပ်တာကို အစား မထိုးနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Incorporate disabilities",
+          url: "https://web.dev/learn/accessibility/design-ux#incorporate_disabilities",
+        }
+      - {
+          title: "Microsoft Inclusive Design: Inclusive 101 toolkit (persona spectrum)",
+          url: "https://inclusive.microsoft.design/tools-and-activities/Inclusive101Guidebook.pdf",
+        }
+      - {
+          title: "Meryl Evans: Deaf Tech: Travel Through Time from Past to Future (ID24)",
+          url: "https://youtu.be/yrwKWtJdZ_c",
+        }
+    actions:
+      - { id: show-p06, type: slide.show, at: { mark: p06 }, slideId: l17_p06 }
+      - { id: show-p07, type: slide.show, at: { mark: p07 }, slideId: l17_p07 }
+
+  - id: simulators
+    chapter: "Disability simulator"
+    narration: >
+      [[mark:p08]] မျက်လုံးကို ငါးမိနစ်လောက် စည်းပြီး website သုံးကြည့်တာလို disability simulator
+      တွေကိုတော့ အရမ်း သတိထားပြီး သုံးရပါမယ်။ simulator က ပထမ ငါးမိနစ်ရဲ့ ခက်ခဲမှုကိုပဲ ပြနိုင်ပြီး၊
+      နှစ်ပေါင်းများစွာ screen reader ကို ကျွမ်းကျွမ်းကျင်ကျင် သုံးနေတဲ့ သူရဲ့ ဘဝကို မပြနိုင်ပါဘူး။
+      မသန်စွမ်းမှုကို ကြောက်စရာလို့ အထင်မှားသွားတာလည်း ဖြစ်နိုင်လို့၊ မသန်စွမ်းသူ အခွင့်အရေးအတွက်
+      လှုပ်ရှားနေတဲ့ သူ အများအပြားက simulator သုံးတာကို မထောက်ခံကြပါဘူး။ [[mark:p08b]] မျက်မမြင်တွေရဲ့
+      အဖွဲ့ကြီး တစ်ခုက ခေါင်းဆောင်ကလည်း၊ အကြီးဆုံး အတားအဆီးက မမြင်ရတာ မဟုတ်ဘဲ တခြားသူတွေရဲ့
+      အထင်မှားမှုနဲ့ မျှော်လင့်ချက် နိမ့်တာ ဖြစ်တယ်လို့ ပြောခဲ့ပါတယ်။ ဒါကြောင့် မသန်စွမ်းသူတွေ ကိုယ်တိုင် ဖန်တီးတဲ့ video၊ ဆောင်းပါးတွေကနေ
+      လေ့လာဖို့နဲ့၊ သူတို့နဲ့ တိုက်ရိုက် စမ်းသပ်ဖို့ အကြံပြုကြပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Disability simulators",
+          url: "https://web.dev/learn/accessibility/design-ux#disability_simulators",
+        }
+      - {
+          title: "Sheri Byrne-Haber: Simulating disabilities",
+          url: "https://sheribyrnehaber.medium.com/simulating-disabilities-d03986e05c1b",
+        }
+      - {
+          title: "Mark Riccobono, National Federation of the Blind (Braille Monitor)",
+          url: "https://nfb.org/sites/default/files/images/nfb/publications/bm/bm17/bm1704/bm170402.htm",
+        }
+    actions:
+      - { id: show-p08, type: slide.show, at: { mark: p08 }, slideId: l17_p08 }
+      - { id: show-p08b, type: slide.show, at: { mark: p08b }, slideId: l17_p08b }
+
+  - id: heuristics
+    chapter: "Accessibility heuristics"
+    narration: >
+      [[mark:p09]] design ကို စစ်တဲ့ နောက်ထပ် နည်းက heuristic ပါ။ heuristic ဆိုတာ design ကို
+      အကဲဖြတ်ဖို့ စည်းကမ်း တစ်စုပါ။ ၁၉၉၀ ခုနှစ်မှာ Jakob Nielsen နဲ့ Rolf Molich က usability
+      heuristic တွေကို မိတ်ဆက်ခဲ့ပြီး၊ နောက်ပိုင်းမှာ အခု လူသိများတဲ့ heuristic ဆယ်ခု ဖြစ်လာပါတယ်။ [[mark:p09b]] ၂၀၁၉ ခုနှစ်မှာတော့ Deque က accessibility
+      heuristic ဆယ်ခုကို ထုတ်ခဲ့ပြီး၊ ကိုယ်ကြိုက်တဲ့ input နဲ့ သုံးနိုင်လား၊ ဘယ်နေရာ ရောက်နေလဲ
+      သိနိုင်လား၊ လှုပ်ရှားနေတာကို ရပ်နိုင်လား စတာတွေ ပါပါတယ်။ [[mark:p10]] Deque ရဲ့ သုတေသနအရ
+      accessibility ကို design အဆင့်ကတည်းက ထည့်စဉ်းစားရင်၊ accessibility bug တွေရဲ့ ၆၇ ရာခိုင်နှုန်းအထိကို code
+      မရေးခင်မှာပဲ ကာကွယ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Accessibility heuristics",
+          url: "https://web.dev/learn/accessibility/design-ux#accessibility_heuristics",
+        }
+      - {
+          title: "Nielsen Norman Group: How to Conduct a Heuristic Evaluation",
+          url: "https://www.nngroup.com/articles/how-to-conduct-a-heuristic-evaluation/",
+        }
+      - {
+          title: "Nielsen Norman Group: 10 Usability Heuristics for User Interface Design (1990 work, final set 1994)",
+          url: "https://www.nngroup.com/articles/ten-usability-heuristics/",
+        }
+      - {
+          title: "Deque: Supporting the design phase with accessibility heuristics evaluations",
+          url: "https://www.deque.com/blog/supporting-the-design-phase-with-accessibility-heuristics-evaluations/",
+        }
+    actions:
+      - { id: show-p09, type: slide.show, at: { mark: p09 }, slideId: l17_p09 }
+      - { id: show-p09b, type: slide.show, at: { mark: p09b }, slideId: l17_p09b }
+      - { id: show-p10, type: slide.show, at: { mark: p10 }, slideId: l17_p10 }
+
+  - id: heuristic-review
+    narration: >
+      [[mark:p11]] ဆိုင်ရဲ့ order page အတွက် design အသစ်ကို navigation and wayfinding heuristic နဲ့ စစ်ကြည့်ရအောင်။ focus
+      ကို အမြဲ မြင်ရတာ၊ အပိုင်းတိုင်းမှာ heading ရှိတာ၊ link စာသား ရှင်းတာ သုံးခုက အမှန်ခြစ် ရပါတယ်။
+      ဒါပေမဲ့ page title က ဆိုင်နာမည် တစ်ခုတည်း ဖြစ်နေပြီး၊ skip link လည်း မရှိလို့ နှစ်ခု ကျပါတယ်။
+      team ထဲက လူတိုင်း အမှတ်ပေးပြီး ပေါင်းကြည့်တဲ့အခါ ဘာကို အရင် ပြင်မလဲ ဆုံးဖြတ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Accessibility heuristics (navigation and wayfinding review)",
+          url: "https://web.dev/learn/accessibility/design-ux#accessibility_heuristics",
+        }
+      - {
+          title: "Deque: Accessibility heuristics evaluations",
+          url: "https://www.deque.com/blog/supporting-the-design-phase-with-accessibility-heuristics-evaluations/",
+        }
+    actions:
+      - { id: show-p11, type: slide.show, at: { mark: p11 }, slideId: l17_p11 }
+
+  - id: annotations
+    chapter: "Accessibility annotation"
+    narration: >
+      [[mark:wf]] design ကို developer ဆီ မပို့ခင် ထည့်သင့်တာက accessibility annotation ပါ။ annotation
+      ဆိုတာ design ပေါ်မှာ developer အတွက် မှတ်ချက် ရေးထားတာပါ။ wireframe ကနေ အပြီးသတ် design အထိ
+      ဘယ်အဆင့်မှာမဆို ထည့်နိုင်ပါတယ်။ ဒါက ခုနက စစ်ခဲ့တဲ့ order page ရဲ့ wireframe ပါ။
+      [[mark:wf-landmarks]] ပထမဆုံး header၊ main၊ footer ဆိုတဲ့ landmark တွေကို ဘောင်ခတ်ပြီး
+      မှတ်ပါမယ်။ ဒါဆို developer က div တွေနဲ့ မဆောက်ဘဲ မှန်ကန်တဲ့ element တွေကို သုံးပါလိမ့်မယ်။
+      [[mark:wf-headings]] နောက်တစ်ခုက heading level ပါ။ မင်္ဂလာပါ က level တစ်၊ အော်ဒါမှာရန် က level
+      နှစ် ဖြစ်ပါတယ်။ [[mark:wf-focus]] Tab key နှိပ်ရင် focus သွားမယ့် အစဉ်ကိုလည်း နံပါတ်တပ်ပါမယ်။
+      ဖုန်း link က တစ်၊ နာမည် အကွက်က နှစ်၊ မှာမယ် ခလုတ်က သုံးပါ။ [[mark:wf-alt]] ညာဘက်မှာတော့ screen
+      reader က ဘာ ဖတ်ပြရမလဲ ရေးပါမယ်။ logo က ဆိုင်နာမည်ရဲ့ ဘေးမှာပဲ ရှိလို့ အလှဆင် ပုံ အဖြစ် alt
+      text ကို အလွတ် ထားပါမယ်။ ဓာတ်ပုံရဲ့ alt text ကိုတော့ designer က အကြံပြုထားပါတယ်။ [[mark:wf-names]] ဖုန်း icon ရဲ့ name က ဖုန်းဆက်ရန်၊
+      နာမည် အကွက်ရဲ့ label က နာမည် ဖြစ်ရပါမယ်။ ဒီ မှတ်ချက်တွေ ရှိရင် developer က ခန့်မှန်းစရာ
+      မလိုတော့ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Accessibility annotations",
+          url: "https://web.dev/learn/accessibility/design-ux#accessibility_annotations",
+        }
+      - {
+          title: "Stéphanie Walter: A designer's guide to documenting accessibility and user interactions",
+          url: "https://stephaniewalter.design/blog/a-designers-guide-to-documenting-accessibility-user-interactions/",
+        }
+      - {
+          title: "W3C WAI: Page Structure Tutorial (regions and headings)",
+          url: "https://www.w3.org/WAI/tutorials/page-structure/",
+        }
+    actions:
+      - { id: close-p11, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - id: wf
+        type: whiteboard.apply
+        at: { mark: wf }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            l17-b-frame,
+            l17-b-header,
+            l17-b-logo,
+            l17-b-name,
+            l17-b-phone,
+            l17-b-h1-text,
+            l17-b-photo,
+            l17-b-photo-text,
+            l17-b-h2-text,
+            l17-b-label,
+            l17-b-field,
+            l17-b-button,
+            l17-b-button-text,
+            l17-b-footer,
+            l17-b-footer-text,
+          ]
+        drawMs: 4000
+      - id: wf-landmarks
+        type: whiteboard.apply
+        at: { mark: wf-landmarks }
+        upsertIds:
+          [
+            l17-b-lm-header,
+            l17-b-lm-header-label,
+            l17-b-lm-main,
+            l17-b-lm-main-label,
+            l17-b-lm-footer,
+            l17-b-lm-footer-label,
+          ]
+        drawMs: 2400
+      - {
+          id: wf-headings,
+          type: whiteboard.apply,
+          at: { mark: wf-headings },
+          upsertIds: [l17-b-tag-h1, l17-b-tag-h2],
+          drawMs: 900,
+        }
+      - id: wf-focus
+        type: whiteboard.apply
+        at: { mark: wf-focus }
+        upsertIds:
+          [
+            l17-b-focus-1,
+            l17-b-focus-1-n,
+            l17-b-focus-2,
+            l17-b-focus-2-n,
+            l17-b-focus-3,
+            l17-b-focus-3-n,
+          ]
+        drawMs: 1800
+      - {
+          id: wf-alt,
+          type: whiteboard.apply,
+          at: { mark: wf-alt },
+          upsertIds: [l17-b-note-logo, l17-b-note-photo],
+          drawMs: 1600,
+        }
+      - {
+          id: wf-names,
+          type: whiteboard.apply,
+          at: { mark: wf-names },
+          upsertIds: [l17-b-note-phone, l17-b-note-label],
+          drawMs: 1600,
+        }
+
+  - id: more-annotations
+    narration: >
+      [[mark:p12]] annotation မှာ ဒီ ငါးမျိုးကိုလည်း ထည့်ပါ။ အရောင်တွဲ တိုင်းရဲ့ contrast ratio၊
+      ခလုတ်နဲ့ link ရဲ့ hover၊ focus၊ disabled ပုံစံ၊ skip link က ဘယ်ကို သွားမလဲ၊ form ရဲ့ label၊
+      error message တွေ၊ video ရဲ့ caption နဲ့ transcript တို့ပါ။ design program အများစုမှာ
+      annotation kit တွေ အဆင်သင့် ရှိသလို၊ ကိုယ့် team အတွက် ကိုယ်ပိုင် kit လည်း ဆောက်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Accessibility annotations (areas to consider)",
+          url: "https://web.dev/learn/accessibility/design-ux#accessibility_annotations",
+        }
+      - {
+          title: "Indeed accessibility annotations kit (Figma Community)",
+          url: "https://www.figma.com/community/file/953682768192596304",
+        }
+    actions:
+      - { id: close-wf, type: whiteboard.apply, at: { scene: start, offsetMs: -400 }, open: false }
+      - { id: show-p12, type: slide.show, at: { mark: p12 }, slideId: l17_p12 }
+
+  - id: quiz
+    chapter: "Quiz"
+    narration: >
+      [[mark:p13]] မေးခွန်း တစ်ခု မေးပါရစေ။ မြမြ persona ကို ရေးပြီးပြီ ဆိုရင်၊ အမြင် အားနည်းသူ user
+      တွေနဲ့ စမ်းသပ်ဖို့ လိုသေးလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:p13b]]
+      အဖြေကတော့ B ပါ။ persona က design ကို လမ်းပြပေမယ့်၊ တကယ့် user တွေနဲ့ စမ်းသပ်တာကို အစား
+      မထိုးနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and UX — Personas",
+          url: "https://web.dev/learn/accessibility/design-ux#personas",
+        }
+      - {
+          title: "W3C WAI: Involving Users in Evaluating Web Accessibility",
+          url: "https://www.w3.org/WAI/test-evaluate/involving-users/",
+        }
+    actions:
+      - { id: show-p13, type: slide.show, at: { mark: p13 }, slideId: l17_p13 }
+      - { id: show-p13b, type: slide.show, at: { mark: p13b }, slideId: l17_p13b }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:notes]] ဒါဆို ဒီ lesson မှာ လေ့လာခဲ့တာတွေကို ပြန်ချုပ်ကြည့်ရအောင်။ [[mark:sel-inclusive]] inclusive design က လူ တစ်ယောက်အတွက်
+      စ design လုပ်ပြီး အားလုံးဆီ ချဲ့ပါတယ်။ [[mark:sel-persona]] persona မှာ မသန်စွမ်းမှု
+      ထည့်ပေမယ့်၊ user testing ကိုတော့ အစား မထိုးပါဘူး။ [[mark:sel-sim]] simulator ထက်
+      မသန်စွမ်းသူတွေ ကိုယ်တိုင်ရဲ့ အတွေ့အကြုံက ပိုတန်ဖိုး ရှိပါတယ်။ [[mark:sel-heuristic]] heuristic
+      တွေနဲ့ design ကို စောစော စစ်ပါ။ [[mark:sel-annotation]] annotation နဲ့ landmark၊ heading၊
+      focus အစဉ်၊ alt text နဲ့ name ကို developer ဆီ ရှင်းရှင်း ပို့ပါ။ နောက် lesson မှာတော့
+      ဆိုင်ရဲ့ page ကို tool တွေနဲ့ အလိုအလျောက် စစ်တဲ့ automated testing ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Design and user experience",
+          url: "https://web.dev/learn/accessibility/design-ux",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Automated accessibility testing",
+          url: "https://web.dev/learn/accessibility/test-automated",
+        }
+    actions:
+      - { id: close-p13b, type: slide.close, at: { scene: start, offsetMs: -400 } }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: notes, offsetMs: 300 },
+          path: notes.md,
+        }
+      - id: sel-inclusive
+        type: editor.select
+        at: { mark: sel-inclusive }
+        target:
+          {
+            file: notes.md,
+            text: "inclusive design — accessibility · usability · inclusivity",
+            occurrence: 1,
+          }
+      - id: sel-persona
+        type: editor.select
+        at: { mark: sel-persona }
+        target:
+          { file: notes.md, text: "persona — မသန်စွမ်းမှု ထည့်၊ user testing ကို အစားမထိုး", occurrence: 1 }
+      - id: sel-sim
+        type: editor.select
+        at: { mark: sel-sim }
+        target: { file: notes.md, text: "simulator — သတိထား", occurrence: 1 }
+      - id: sel-heuristic
+        type: editor.select
+        at: { mark: sel-heuristic }
+        target: { file: notes.md, text: "heuristic — design ကို စောစော စစ်", occurrence: 1 }
+      - id: sel-annotation
+        type: editor.select
+        at: { mark: sel-annotation }
+        target:
+          {
+            file: notes.md,
+            text: "annotation — landmark · heading · focus အစဉ် · alt text · name",
+            occurrence: 1,
+          }
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
