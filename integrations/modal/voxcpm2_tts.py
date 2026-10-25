@@ -209,11 +209,22 @@ app = modal.App(APP_NAME)
 reference_cache = modal.Dict.from_name(f"{APP_NAME}-references", create_if_missing=True)
 
 
+# GPU types in order of preference. On 2026-10-25 Modal had no free L4 for ten
+# minutes and a lesson's first dialog outlasted the Worker's 280 s wait while
+# still queued; Modal falls back down this list instead of waiting for an L4.
+# The image's PyPI torch runs the same eager inference on all three.
+GPU_TYPES = ["L4", "A10G", "L40S"]
+# A Studio workflow records each lesson (about 8–15 minutes) between one
+# lesson's narration and the next. Staying warm that long keeps the next
+# lesson off a cold start, and off the GPU queue that comes with one.
+SCALEDOWN_SECONDS = 15 * 60
+
+
 @app.cls(
     image=image,
-    gpu="L4",
+    gpu=GPU_TYPES,
     max_containers=1,
-    scaledown_window=60,
+    scaledown_window=SCALEDOWN_SECONDS,
     timeout=600,
 )
 class VoxCpm2Tts:
@@ -394,7 +405,7 @@ def jobs():
 
     @web.delete("/jobs/{call_id}")
     async def cancel(call_id: str):
-        # Frees the single L4 from a job the Worker gave up on. The container
+        # Frees the single GPU from a job the Worker gave up on. The container
         # itself stays up, so the next job does not pay another cold start.
         await function_call(call_id).cancel.aio()
         return Response(status_code=204)

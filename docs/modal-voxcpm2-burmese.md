@@ -37,7 +37,7 @@ comes near that timeout.
 The browser request itself stays open while the Worker polls (Workers have no
 duration limit while the client is connected). The Worker gives up after
 280 s, which leaves about 160 s for a GPU queue on top of the slowest cold start
-and dialog seen, cancels the job so the single L4 is free for the next dialog,
+and dialog seen, cancels the job so the single GPU is free for the next dialog,
 and answers 504; "Render again" resumes from the dialog cache. It sends at most
 49 subrequests per dialog (up to three submits, up to 45 polls, one cancel),
 under the Workers Free limit of 50. A failed poll (a dropped connection, a
@@ -94,7 +94,11 @@ The deployment pins:
   per-render narrator reference
 - eager CUDA inference; VoxCPM's `torch.compile` warm-up is disabled because on
   an L4 cold start it would outlast the Worker's 280 s wait for a job
-- one L4 container maximum, scaling to zero after one idle minute
+- one GPU container maximum: an L4, or an A10G or L40S when Modal has no free L4
+  (a ranked fallback list; on 2026-10-25 no L4 was free for ten minutes and a
+  lesson's first dialog outlasted the Worker's 280 s wait while still queued)
+- scaling to zero after 15 idle minutes, so a Studio workflow keeps the warm GPU
+  while it records each lesson and the next lesson's narration skips the cold start
 - a separate CPU `jobs` web app (FastAPI only) that validates, spawns, polls,
   and cancels synthesis jobs, so a malformed request never starts an L4
 
