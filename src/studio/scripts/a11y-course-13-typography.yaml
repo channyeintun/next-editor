@@ -1,0 +1,1577 @@
+# Accessibility course (Burmese), lesson 13 of 20: readable text (typography).
+#
+# Built from template.yaml + ws/ with `bun build.ts` (pins ws/ byte-exact).
+# Narration is Burmese, written directly; voice-script.md next to this file is
+# the lint's copy. DESIGN.md is the brief. Every [[mark:…]] sits where its
+# action begins, after ။ or ၊.
+#
+# Shape: board (recall lesson 12; who struggles with text; the four areas) →
+# code tour (theme.css: an English-only text theme; styles.css empty and
+# loaded after it) → board (choosing a font: common faces, no decorative
+# faces, I l 1 and b/d, rn → m, Burmese = Unicode fonts) → Myanmar font stack
+# on body → tagline inherits the page font → Wi-Fi password in a monospace
+# face with distinct letters → board (px vs rem against the browser font-size
+# setting; zoom; 200 % at level AA) → body font size 1rem → Burmese line
+# height 1.8 (the marks above and below stop touching) → board (text spacing
+# overrides at level AA; fixed heights clip) → story start-aligned instead of
+# justified, max width in ch (no change in the narrow preview, said so) →
+# English quote back to mixed case and upright → recap board, hand-off to
+# lesson 14 (video and audio).
+#
+# No accessibility panel: nothing in this lesson changes the accessibility
+# tree, and the preview shows every change directly (DESIGN.md). So the
+# workspace pins the CSS course's vite-only package.json and no panel.js.
+#
+# Live-preview safety (PLATFORM.md §2): styles.css is the only typed file and
+# never contains url(, @import or image-set(. Font-family rules land as
+# `block` inserts (a half-typed family name is a valid unknown font and would
+# flash the default serif); line-height lands as a block (a typed "1" would
+# flash line-height 1). Keystroke-typed values have no valid prefix: 1rem,
+# start, 70ch, normal, none. Every insert that sits in front of existing code
+# ends with \n.
+#
+# Measured in headless Chrome 155 at 432 × 720 (scratch stages script, CDP
+# CSS.getPlatformFontsForNode, macOS): start — story Burmese in Noto Serif
+# Myanmar (system fallback from Georgia), 13 px / 1.2, 78 px tall; tagline in
+# Brush Script MT; Wi-Fi code in Arial (I and l identical); quote Georgia
+# italic capitals. Font stack — story in Noto Sans Myanmar, quote English in
+# Myanmar Sangam MN (sans). Tagline inherit — sans; Wi-Fi code Menlo (serifed
+# I, tailed l, slashed 0). 1rem — story 115 px tall, justified first line
+# with wide gaps. line-height 1.8 — story 173 px tall, marks clear. Start +
+# 70ch — ragged right, width unchanged (400 px < 70ch). Quote mixed case,
+# upright, at y 372–446; document 1032 tall.
+#
+# Validate with:
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-13-typography
+  title: "Accessibility course 13: ဖတ်ရလွယ်တဲ့ စာသား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course 13
+    entryFilePath: index.html
+    files:
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture. Every font size here is in rem, so it
+          follows the reader's browser font-size setting. The text theme (font family,
+          body size, line height, alignment) lives in theme.css.
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 1.375rem;
+        }
+
+        h2 {
+          font-size: 1.25rem;
+        }
+
+        h3 {
+          font-size: 1.0625rem;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        [hidden] {
+          display: none !important;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 1.125rem;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .about {
+          margin: 16px 0;
+        }
+
+        .story {
+          margin: 0;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .wifi {
+          margin: 0 0 16px;
+        }
+
+        .wifi-code {
+          padding: 2px 8px;
+          border: 1px solid var(--line);
+          border-radius: 6px;
+          background: #fff;
+          font-size: 1.125rem;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 0.875rem;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 0.875rem;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/theme.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" alt="" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+                <a class="call-link" href="tel:+959123456789" data-testid="call-link"><img src="/phone.svg" alt="ဖုန်းဆက်ရန်" width="24" height="24" /></a>
+              </div>
+              <p class="tagline" lang="en" data-testid="tagline">Yangon · since 1998</p>
+              <nav class="nav" aria-label="အဓိက" data-testid="nav">
+                <ul>
+                  <li><a class="nav-link" href="#drinks" data-testid="nav-drinks">မီနူး</a></li>
+                  <li><a class="nav-link" href="#about" data-testid="nav-about">ဆိုင်အကြောင်း</a></li>
+                </ul>
+              </nav>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <section class="about" id="about" data-testid="about">
+                <h2>ဆိုင်အကြောင်း</h2>
+                <p class="story" data-testid="story">ရွှေလက်ဖက်ရည်ဆိုင်ကို ၁၉၉၈ ခုနှစ်မှာ ဗဟန်းက လမ်းထောင့်လေး တစ်ခုမှာ စဖွင့်ခဲ့ပါတယ်။ လက်ဖက်ရည်ကို ခွက်တိုင်း လက်နဲ့ ဖျော်ပြီး၊ ပလာတာနဲ့ မုန့်ဟင်းခါးကိုလည်း ဆိုင်မှာပဲ ကိုယ်တိုင် ချက်ပါတယ်။ ရပ်ကွက်ထဲက လူကြီးတွေရော ကျောင်းသားတွေရော မနက်တိုင်း လာထိုင်ကြတဲ့ နေရာလေး ဖြစ်ပါတယ်။</p>
+              </section>
+
+              <blockquote class="quote" lang="en" data-testid="quote">
+                <p>Since 1998, the first cup of the morning has been ours.</p>
+              </blockquote>
+
+              <p class="wifi" data-testid="wifi">ဆိုင်ရဲ့ Wi-Fi စကားဝှက် <code class="wifi-code" lang="en" data-testid="wifi-code">Il1O0shwe</code></p>
+
+              <section class="menu-section" id="drinks" data-testid="drinks">
+                <h2>သောက်စရာ</h2>
+                <ul class="menu" data-testid="menu-drinks">
+                  <li class="menu-card featured" data-testid="card-laphet-yay">
+                    <h3 class="name">လက်ဖက်ရည်</h3>
+                    <p class="desc">ချိုဆိမ့် ပေါ့ဆိမ့် ကြိုက်သလို</p>
+                    <span class="price" data-testid="price-laphet-yay">1,500 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-coffee">
+                    <h3 class="name">ကော်ဖီ</h3>
+                    <p class="desc">နို့ဆီနဲ့ ကော်ဖီ</p>
+                    <span class="price">1,800 ကျပ်</span>
+                  </li>
+                  <li class="menu-card" data-testid="card-lime-juice">
+                    <h3 class="name">သံပုရာရည်</h3>
+                    <p class="desc">ရေခဲနဲ့ အေးအေး</p>
+                    <span class="price">1,200 ကျပ်</span>
+                  </li>
+                </ul>
+              </section>
+            </main>
+
+            <footer class="site-footer" data-testid="footer">
+              <p>အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန်</p>
+              <p><a href="tel:+959123456789" data-testid="footer-phone">09 123 456 789</a></p>
+            </footer>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      public/phone.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+          <path d="M6.6 3.5l2.6-.6 1.6 4.2-2 1.4a11 11 0 0 0 6.7 6.7l1.4-2 4.2 1.6-.6 2.6a2 2 0 0 1-2 1.6A15.5 15.5 0 0 1 3.5 4.9a2 2 0 0 1 1.6-2z" fill="#fff8ec"/>
+        </svg>
+      styles.css: ""
+      theme.css: |
+        /*
+          theme.css: the text theme the shop's site started from.
+          It was written for an English website and never thought about Burmese.
+          We leave this file as it is; styles.css loads after it and wins.
+        */
+
+        body {
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 13px;
+          line-height: 1.2;
+        }
+
+        .story {
+          text-align: justify;
+        }
+
+        .tagline {
+          font-family: "Brush Script MT", "Segoe Script", cursive;
+        }
+
+        .quote {
+          font-style: italic;
+          text-transform: uppercase;
+        }
+
+        .wifi-code {
+          font-family: Arial, Helvetica, sans-serif;
+        }
+  whiteboardAssets:
+    # Board 1: who struggles with text, and the four areas of the lesson.
+    - {
+        id: b1-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 380,
+        height: 46,
+        text: "ဖတ်ရလွယ်တဲ့ စာသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b1-who-1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 340,
+        height: 36,
+        text: "မြမြ · အမြင် အားနည်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-who-2,
+        kind: text,
+        x: 700,
+        y: 240,
+        width: 330,
+        height: 36,
+        text: "မောင်မောင် · dyslexia",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-who-3,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 90,
+        height: 36,
+        text: "ADHD",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-who-4,
+        kind: text,
+        x: 450,
+        y: 290,
+        width: 230,
+        height: 36,
+        text: "နေပူထဲက ဖုန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-who-5,
+        kind: text,
+        x: 740,
+        y: 290,
+        width: 300,
+        height: 36,
+        text: "မိခင်ဘာသာ မဟုတ်သူ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-1,
+        kind: rectangle,
+        x: 300,
+        y: 370,
+        width: 360,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-area-1,
+        kind: text,
+        x: 325,
+        y: 395,
+        width: 300,
+        height: 36,
+        text: "1 · font ရွေးတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-2,
+        kind: rectangle,
+        x: 720,
+        y: 370,
+        width: 360,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-area-2,
+        kind: text,
+        x: 745,
+        y: 395,
+        width: 310,
+        height: 36,
+        text: "2 · စာလုံး အရွယ်အစား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-3,
+        kind: rectangle,
+        x: 300,
+        y: 490,
+        width: 360,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-area-3,
+        kind: text,
+        x: 325,
+        y: 515,
+        width: 260,
+        height: 36,
+        text: "3 · နေရာလွတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-4,
+        kind: rectangle,
+        x: 720,
+        y: 490,
+        width: 360,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b1-area-4,
+        kind: text,
+        x: 745,
+        y: 515,
+        width: 260,
+        height: 36,
+        text: "4 · layout",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board 2: choosing a font.
+    - {
+        id: b2-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 260,
+        height: 46,
+        text: "Font ရွေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b2-common,
+        kind: text,
+        x: 340,
+        y: 240,
+        width: 420,
+        height: 36,
+        text: "နေ့တိုင်း မြင်နေကျ font",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-common-check,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 240,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-fancy,
+        kind: text,
+        x: 340,
+        y: 300,
+        width: 400,
+        height: 36,
+        text: "လက်ရေး၊ အလှဆင် font",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fancy-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 335,
+        y: 300,
+        width: 400,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-shapes,
+        kind: text,
+        x: 340,
+        y: 365,
+        width: 260,
+        height: 70,
+        text: "I  l  1   b  d",
+        strokeColor: "#f08c00",
+        fontSize: 48,
+      }
+    - {
+        id: b2-shapes-label,
+        kind: text,
+        x: 660,
+        y: 380,
+        width: 340,
+        height: 36,
+        text: "ပုံစံ ကွဲပြားရမယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-kerning,
+        kind: text,
+        x: 340,
+        y: 455,
+        width: 230,
+        height: 70,
+        text: "rn → m ?",
+        strokeColor: "#6741d9",
+        fontSize: 48,
+      }
+    - {
+        id: b2-kerning-label,
+        kind: text,
+        x: 660,
+        y: 470,
+        width: 300,
+        height: 36,
+        text: "kerning ကျဉ်းရင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b2-myanmar-box,
+        kind: rectangle,
+        x: 320,
+        y: 550,
+        width: 640,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-myanmar,
+        kind: text,
+        x: 345,
+        y: 570,
+        width: 580,
+        height: 36,
+        text: "မြန်မာစာ = Unicode font၊ စက်မှာ ပါပြီးသား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board 3: px against rem when the reader changes the browser font size.
+    - {
+        id: b3-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 230,
+        height: 46,
+        text: "px နဲ့ rem",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b3-setting,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 480,
+        height: 36,
+        text: "browser setting ·  16px → 24px",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-px,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 110,
+        height: 36,
+        text: "13px",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-px-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 318,
+        width: 90,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-px-result,
+        kind: text,
+        x: 545,
+        y: 320,
+        width: 110,
+        height: 36,
+        text: "13px",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-px-label,
+        kind: text,
+        x: 700,
+        y: 320,
+        width: 200,
+        height: 36,
+        text: "မပြောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rem,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 110,
+        height: 36,
+        text: "1rem",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rem-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 398,
+        width: 90,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b3-rem-result,
+        kind: text,
+        x: 545,
+        y: 400,
+        width: 110,
+        height: 36,
+        text: "24px",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-rem-label,
+        kind: text,
+        x: 700,
+        y: 400,
+        width: 220,
+        height: 36,
+        text: "လိုက်ကြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-zoom-box,
+        kind: rectangle,
+        x: 290,
+        y: 480,
+        width: 700,
+        height: 130,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b3-zoom,
+        kind: text,
+        x: 315,
+        y: 500,
+        width: 420,
+        height: 36,
+        text: "zoom · px ရော rem ပါ ကြီး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b3-aa,
+        kind: text,
+        x: 315,
+        y: 555,
+        width: 560,
+        height: 36,
+        text: "level AA · 200% ချဲ့ရင် စာ မပျောက်ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board 4: text spacing overrides (level AA) and fixed heights.
+    - {
+        id: b4-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 420,
+        height: 46,
+        text: "Text spacing · level AA",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b4-n1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 330,
+        height: 36,
+        text: "line height × 1.5",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n2,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 330,
+        height: 36,
+        text: "စာပိုဒ်ကြား × 2",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 330,
+        height: 36,
+        text: "စာလုံးကြား × 0.12",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-n4,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 360,
+        height: 36,
+        text: "စကားလုံးကြား × 0.16",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b4-note,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 380,
+        height: 36,
+        text: "စာ မပျောက်ရ၊ မဖြတ်ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b4-box,
+        kind: rectangle,
+        x: 760,
+        y: 250,
+        width: 260,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b4-box-text,
+        kind: text,
+        x: 780,
+        y: 265,
+        width: 200,
+        height: 110,
+        text: "စာကြောင်း ၁\nစာကြောင်း ၂\nစာကြောင်း ၃",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b4-box-label,
+        kind: text,
+        x: 760,
+        y: 410,
+        width: 300,
+        height: 36,
+        text: "အမြင့် ပုံသေ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b4-box-fix,
+        kind: text,
+        x: 760,
+        y: 470,
+        width: 300,
+        height: 36,
+        text: "စာနဲ့အတူ ကြီး ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board 5: recap.
+    - {
+        id: b5-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 300,
+        height: 46,
+        text: "ပြန်ချုပ်ရရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b5-c1,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 240,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-l1,
+        kind: text,
+        x: 345,
+        y: 240,
+        width: 520,
+        height: 36,
+        text: "မြန်မာ Unicode font ရှေ့ဆုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b5-c2,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 310,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-l2,
+        kind: text,
+        x: 345,
+        y: 310,
+        width: 320,
+        height: 36,
+        text: "font size → rem",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b5-c3,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 380,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-l3,
+        kind: text,
+        x: 345,
+        y: 380,
+        width: 620,
+        height: 36,
+        text: "line height 1.8 · အမြင့် ပုံသေ မထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b5-c4,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 450,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-l4,
+        kind: text,
+        x: 345,
+        y: 450,
+        width: 640,
+        height: 36,
+        text: "start · 80 လုံးအောက် · caps၊ italic နည်းနည်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b5-c5,
+        kind: freedraw,
+        stroke: check,
+        x: 290,
+        y: 520,
+        width: 36,
+        height: 36,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b5-l5,
+        kind: text,
+        x: 345,
+        y: 520,
+        width: 480,
+        height: 36,
+        text: "စာကို ပုံထဲ မထည့်ဘဲ HTML",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b5-next,
+        kind: text,
+        x: 345,
+        y: 595,
+        width: 440,
+        height: 36,
+        text: "နောက်တစ်ခါ · video နဲ့ audio",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2613
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "ဖတ်ရလွယ်တဲ့ စာသား ဆိုတာ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ animation တွေကို user က လျှော့လို့၊ ရပ်လို့ ရအောင် လုပ်ခဲ့ပါတယ်။ ဒီ
+      lesson မှာတော့ ဆိုင်ရဲ့ စာသားတွေကို လူတိုင်း ဖတ်ရလွယ်အောင် ပြင်ကြည့်ပါမယ်။
+      [[mark:start-server]] စာလုံးကို မြင်ရတာနဲ့ အဆင်ပြေပြေ ဖတ်နိုင်တာ မတူပါဘူး။ [[mark:draw-who]]
+      အမြင် အားနည်းတဲ့ မြမြ၊ dyslexia ရှိတဲ့ မောင်မောင်၊ အာရုံ ကြာကြာ စူးစိုက်ရ ခက်တဲ့ ADHD
+      ရှိသူတွေ အတွက်ဆိုရင်၊ font ပုံစံ၊ စာလုံး အရွယ်၊ စာကြောင်းကြားက နေရာလွတ်လို အသေးအဖွဲ ထင်ရတဲ့
+      အချက်တွေက ဖတ်နိုင်မနိုင်ကို ဆုံးဖြတ်ပါတယ်။ နေပူထဲမှာ ဖုန်းကြည့်နေရတဲ့သူ၊ မိခင်ဘာသာ မဟုတ်တဲ့
+      စာကို ဖတ်နေရတဲ့သူတွေလည်း အကျိုး ရပါတယ်။ [[mark:draw-areas]] ဒီ lesson မှာ font ရွေးတာ၊
+      စာလုံး အရွယ်အစား၊ နေရာလွတ်နဲ့ layout ဆိုတဲ့ အချက် လေးချက်ကို ဆိုင်ရဲ့ page ပေါ်မှာ တကယ်
+      ပြင်ရင်း ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography"
+        url: "https://web.dev/learn/accessibility/typography"
+      - title: "W3C WAI — Diverse abilities and barriers (cognitive, learning, and neurological)"
+        url: "https://www.w3.org/WAI/people-use-web/abilities-barriers/cognitive/"
+    actions:
+      - id: open-intro-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [b1-title]
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-who
+        type: whiteboard.apply
+        at: { mark: draw-who }
+        upsertIds: [b1-who-1, b1-who-2, b1-who-3, b1-who-4, b1-who-5]
+        drawMs: 2500
+      - id: draw-areas
+        type: whiteboard.apply
+        at: { mark: draw-areas }
+        upsertIds:
+          [b1-box-1, b1-area-1, b1-box-2, b1-area-2, b1-box-3, b1-area-3, b1-box-4, b1-area-4]
+        drawMs: 3200
+
+  - id: code-tour
+    narration: >
+      [[mark:close-intro]] ကဲ၊ code ကို ကြည့်ရအောင်။ [[mark:open-theme]] ဒါက ဆိုင်ရဲ့ စာလုံး
+      ပုံစံတွေကို သတ်မှတ်ထားတဲ့ theme ဖိုင်ပါ။ အင်္ဂလိပ် website အတွက် ရေးထားတဲ့ theme ကို
+      ယူသုံးထားလို့ မြန်မာစာကို မစဉ်းစားထားပါဘူး။ [[mark:select-body]] ဒီ body rule က page
+      တစ်ခုလုံးကို အင်္ဂလိပ် serif font နဲ့၊ pixel နဲ့ ပုံသေ ပေးထားတဲ့ စာလုံး အသေးနဲ့၊ ကျဉ်းကျဉ်း
+      line height နဲ့ ပြခိုင်းထားပါတယ်။ [[mark:select-story]] ဒီ rule က ဆိုင်အကြောင်း စာပိုဒ်ကို
+      ဘယ်ညာ နှစ်ဖက် ညီအောင် justify လုပ်ထားပြီး၊ အောက်က rule တွေမှာ လက်ရေး font၊ စာလုံးကြီး
+      အကုန်နဲ့ စာလုံးစောင်းတွေ ပါပါတယ်။ ဒီ ဖိုင်ကို ကိုယ်တို့ မထိပါဘူး။ [[mark:open-styles]]
+      ကိုယ့် CSS ဖိုင်ကို theme ရဲ့ နောက်မှာ ချိတ်ထားလို့၊ ဒီထဲမှာ ရေးတဲ့ rule က theme ထဲက
+      selector တူတဲ့ rule ကို အနိုင်ယူပါတယ်။ [[mark:preview]] ညာဘက်မှာ ဆိုင်ရဲ့ page ကို
+      မြင်ရပါပြီ။ စာလုံးတွေ သေးနေပြီး၊ မြန်မာ စာကြောင်းတွေ တစ်ကြောင်းနဲ့ တစ်ကြောင်း ကပ်နေတာကို
+      သတိထား ကြည့်ပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography"
+        url: "https://web.dev/learn/accessibility/typography"
+      - title: "MDN — Introducing the CSS cascade (source order)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Cascade"
+    actions:
+      - id: close-intro
+        type: whiteboard.apply
+        at: { mark: close-intro }
+        open: false
+      - id: open-theme
+        type: workspace.openFile
+        at: { mark: open-theme }
+        path: theme.css
+      - id: select-body
+        type: editor.select
+        at: { mark: select-body }
+        target:
+          {
+            file: theme.css,
+            text: "body {\n  font-family: Georgia, \"Times New Roman\", serif;\n  font-size: 13px;\n  line-height: 1.2;\n}",
+            occurrence: 1,
+          }
+      - id: select-story
+        type: editor.select
+        at: { mark: select-story }
+        target: { file: theme.css, text: ".story {\n  text-align: justify;\n}", occurrence: 1 }
+      - id: open-styles
+        type: workspace.openFile
+        at: { mark: open-styles }
+        path: styles.css
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-story
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: story }
+        textContains: "ဗဟန်းက လမ်းထောင့်လေး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-story }
+
+  - id: font-board
+    chapter: "Font ရွေးတာ"
+    narration: >
+      [[mark:open-font-board]] font ကနေ စကြည့်ရအောင်။ [[mark:draw-common]] လူအများ နေ့တိုင်း
+      မြင်နေကျ font တွေကို ပိုမြန်မြန် ဖတ်နိုင်တယ်လို့ လေ့လာမှုတွေက ပြပါတယ်။ font က ပိုကောင်းလို့
+      မဟုတ်ဘဲ၊ မျက်စိက ယဉ်ပါးပြီးသား ဖြစ်လို့ပါ။ [[mark:draw-fancy]] လက်ရေး ပုံစံ၊ အလှဆင်ထားတဲ့၊
+      မျဉ်း ပါးလွန်းတဲ့ font တွေကတော့ လှပေမယ့်၊ မောင်မောင်လို dyslexia ရှိသူ တော်တော်များများ
+      အတွက် ဖတ်ရ အများကြီး ပိုခက်ပါတယ်။ [[mark:draw-shapes]] font တချို့မှာ I အကြီး၊ l အသေးနဲ့ ဂဏန်း တစ် ပုံစံ
+      တူနေပြီး၊ b နဲ့ d လို ပြောင်းပြန် စာလုံးတွေကလည်း လွဲဖတ်မိစေပါတယ်။ [[mark:draw-kerning]]
+      စာလုံး နှစ်လုံးကြားက အကွာအဝေးကို kerning လို့ ခေါ်ပြီး၊ kerning ကျဉ်းလွန်းရင် r နဲ့ n ကို m
+      လို့ ဖတ်မိနိုင်ပါတယ်။ [[mark:draw-myanmar]] မြန်မာစာ
+      အတွက်တော့ Unicode font ဖြစ်ဖို့နဲ့၊ စက်အများစုမှာ ပါပြီးသား font တွေကို ရှေ့ဆုံးက ထားဖို့
+      အဓိကပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Typeface"
+        url: "https://web.dev/learn/accessibility/typography#typeface"
+      - title: "University of Michigan Dyslexia Help — Good fonts for dyslexia (study, PDF)"
+        url: "http://dyslexiahelp.umich.edu/sites/default/files/good_fonts_for_dyslexia_study.pdf"
+      - title: "Richard Ishida (W3C Internationalization) — Burmese orthography notes"
+        url: "https://r12a.github.io/scripts/mymr/my.html"
+    actions:
+      - id: open-font-board
+        type: whiteboard.apply
+        at: { mark: open-font-board, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-common
+        type: whiteboard.apply
+        at: { mark: draw-common }
+        upsertIds: [b2-common, b2-common-check]
+        drawMs: 1400
+      - id: draw-fancy
+        type: whiteboard.apply
+        at: { mark: draw-fancy }
+        upsertIds: [b2-fancy, b2-fancy-strike]
+        drawMs: 1400
+      - id: draw-shapes
+        type: whiteboard.apply
+        at: { mark: draw-shapes }
+        upsertIds: [b2-shapes, b2-shapes-label]
+        drawMs: 1400
+      - id: draw-kerning
+        type: whiteboard.apply
+        at: { mark: draw-kerning }
+        upsertIds: [b2-kerning, b2-kerning-label]
+        drawMs: 1200
+      - id: draw-myanmar
+        type: whiteboard.apply
+        at: { mark: draw-myanmar }
+        upsertIds: [b2-myanmar-box, b2-myanmar]
+        drawMs: 1400
+
+  - id: font-stack
+    narration: >
+      [[mark:close-font-board]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-font-stack]] page
+      တစ်ခုလုံးအတွက် font စာရင်း အသစ် ပေးပါမယ်။ Android၊ Apple နဲ့ Windows စက်တွေမှာ ပါပြီးသား
+      မြန်မာ Unicode font တွေကို ရှေ့က ထားပြီး၊ နောက်ဆုံးမှာ system font ကို ထားပါတယ်။ browser က
+      စာရင်းကို ရှေ့ကနေ စစ်ပြီး စက်ထဲမှာ ရှိတဲ့ ပထမဆုံး font ကို သုံးပါတယ်။ [[mark:after-font-stack]] ခုနက theme မှာ
+      မြန်မာ font မပါလို့ စက်က တွေ့ရာ font နဲ့ ဖြည့်ပြခဲ့တာပါ။ အခုတော့ ကိုယ် ရွေးထားတဲ့ font နဲ့
+      ပြနေပြီး၊ quote ထဲက အင်္ဂလိပ် စာလုံးတွေလည်း serif မဟုတ်တော့ပါဘူး။
+    sources:
+      - title: "MDN — font-family (font stacks and fallback)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-family"
+      - title: "Google Fonts — Noto Sans Myanmar"
+        url: "https://fonts.google.com/noto/specimen/Noto+Sans+Myanmar"
+      - title: "SIL — Padauk font"
+        url: "https://software.sil.org/padauk/"
+    actions:
+      - id: close-font-board
+        type: whiteboard.apply
+        at: { mark: close-font-board }
+        open: false
+      - id: type-font-stack
+        type: editor.type
+        at: { mark: type-font-stack }
+        cadence: block
+        target: { file: styles.css, after: "", occurrence: 1 }
+        text: "body {\n  font-family: \"Noto Sans Myanmar\", \"Myanmar Sangam MN\", \"Myanmar MN\",\n    \"Myanmar Text\", \"Padauk\", system-ui, sans-serif;\n}\n"
+      - id: expect-story-font
+        type: expect.preview
+        at: { mark: after-font-stack }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ရွှေလက်ဖက်ရည်ဆိုင်ကို"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: tagline-wifi
+    narration: >
+      [[mark:type-tagline]] tagline ကိုလည်း လက်ရေး font အစား page ရဲ့ font ကို inherit
+      လုပ်ခိုင်းပါမယ်။ [[mark:after-tagline]] ခေါင်းစဉ်အောက်က အင်္ဂလိပ် tagline ဖတ်ရ
+      ရှင်းသွားပါပြီ။ [[mark:type-wifi]] Wi-Fi စကားဝှက်မှာတော့ I အကြီးလား၊ l အသေးလား ခွဲမရရင်
+      customer က မှားရိုက်မိမှာပါ။ code ရေးဖို့ ဒီဇိုင်း လုပ်ထားတဲ့ monospace font တွေက ဒီလို
+      ဆင်တူတဲ့ စာလုံးတွေကို ပုံစံ ကွဲအောင် ဆွဲထားလေ့ ရှိလို့၊ စကားဝှက်ကို monospace font ပေးပါမယ်။ [[mark:after-wifi]] ကြည့်ပါ၊ I၊ l နဲ့ ဂဏန်း တစ် ပုံစံ ကွဲသွားပြီး၊
+      O နဲ့ သုညကိုလည်း ခွဲလို့ ရသွားပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Letter characteristics and kerning"
+        url: "https://web.dev/learn/accessibility/typography#letter-characteristics-and-kerning"
+      - title: "MDN — font-family (generic family monospace)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-family#monospace"
+    actions:
+      - id: type-tagline
+        type: editor.type
+        at: { mark: type-tagline }
+        cadence: block
+        target: { file: styles.css, after: "system-ui, sans-serif;\n}\n", occurrence: 1 }
+        text: "\n.tagline {\n  font-family: inherit;\n}\n"
+      - id: expect-tagline
+        type: expect.preview
+        at: { mark: after-tagline }
+        timeoutMs: 4000
+        target: { by: testId, value: tagline }
+        textContains: "Yangon"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-wifi
+        type: editor.type
+        at: { mark: type-wifi }
+        cadence: block
+        target: { file: styles.css, after: "  font-family: inherit;\n}\n", occurrence: 1 }
+        text: "\n.wifi-code {\n  font-family: Menlo, Consolas, monospace;\n}\n"
+      - id: expect-wifi
+        type: expect.preview
+        at: { mark: after-wifi }
+        timeoutMs: 4000
+        target: { by: testId, value: wifi-code }
+        textContains: "Il1O0shwe"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: size-board
+    chapter: "စာလုံး အရွယ်အစား"
+    narration: >
+      [[mark:open-size-board]] နောက်တစ်ချက်က စာလုံး အရွယ်ပါ။ မြမြလို အမြင် အားနည်းသူ
+      တော်တော်များများက browser setting မှာ default စာလုံး အရွယ်ကို ကြီးထားပါတယ်။ [[mark:draw-px]]
+      စာလုံးကို pixel နဲ့ ပုံသေ ပေးထားရင်တော့ setting ဘယ်လောက် ကြီးကြီး စာလုံးက မပြောင်းပါဘူး။
+      [[mark:draw-rem]] rem က root element ရဲ့ စာလုံး အရွယ်ကို အခြေခံတဲ့ unit ဖြစ်လို့၊ setting မပြောင်းရင် ၁ rem က ၁၆ pixel ဖြစ်ပြီး၊ setting ကို ၂၄ pixel ပြောင်းရင် ၁ rem ကလည်း ၂၄ pixel ဖြစ်သွားပါတယ်။
+      [[mark:draw-zoom]] browser zoom ကတော့ pixel ကိုပါ ချဲ့ပေးပါတယ်။ level AA မှာ စာကို ၂၀၀
+      ရာခိုင်နှုန်းထိ ချဲ့ရင် ဘာမှ မပျောက်ရဘူးလို့ သတ်မှတ်ထားလို့၊ နည်း နှစ်မျိုးလုံးနဲ့
+      အဆင်ပြေအောင် rem ကို သုံးပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Font size and typographic styling"
+        url: "https://web.dev/learn/accessibility/typography#font-size-and-typographic-styling"
+      - title: "W3C — Understanding SC 1.4.4 Resize Text (Level AA)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html"
+      - title: "MDN — CSS values and units: rem"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Values_and_units"
+    actions:
+      - id: open-size-board
+        type: whiteboard.apply
+        at: { mark: open-size-board, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b3-title, b3-setting]
+      - id: draw-px
+        type: whiteboard.apply
+        at: { mark: draw-px }
+        upsertIds: [b3-px, b3-px-arrow, b3-px-result, b3-px-label]
+        drawMs: 2000
+      - id: draw-rem
+        type: whiteboard.apply
+        at: { mark: draw-rem }
+        upsertIds: [b3-rem, b3-rem-arrow, b3-rem-result, b3-rem-label]
+        drawMs: 2000
+      - id: draw-zoom
+        type: whiteboard.apply
+        at: { mark: draw-zoom }
+        upsertIds: [b3-zoom-box, b3-zoom, b3-aa]
+        drawMs: 2000
+
+  - id: font-size
+    narration: >
+      [[mark:close-size-board]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-size]] body ထဲမှာ စာလုံး
+      အရွယ်ကို ၁ rem ထည့်ပါမယ်။ ကိုယ့် rule က theme ရဲ့ နောက်မှာ ရှိလို့ ၁၃ pixel ကို
+      အနိုင်ယူသွားမှာပါ။ [[mark:after-size]] စာလုံးတွေ ကြီးလာပြီး ဖတ်ရ သက်သာသွားပါပြီ။
+      ခေါင်းစဉ်တွေကတော့ rem နဲ့ ရေးပြီးသား ဖြစ်လို့ setting ကြီးရင် page တစ်ခုလုံး အတူတူ
+      လိုက်ကြီးပါလိမ့်မယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Font size and typographic styling"
+        url: "https://web.dev/learn/accessibility/typography#font-size-and-typographic-styling"
+      - title: "MDN — font-size"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-size"
+    actions:
+      - id: close-size-board
+        type: whiteboard.apply
+        at: { mark: close-size-board }
+        open: false
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "system-ui, sans-serif;\n", occurrence: 1 }
+        text: "  font-size: 1rem;\n"
+      - id: expect-size
+        type: expect.preview
+        at: { mark: after-size }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: line-height
+    chapter: "မြန်မာစာအတွက် line height"
+    narration: >
+      အခု ဒီ lesson ရဲ့ အရေးအကြီးဆုံး အချက်ပါ။ line height ဆိုတာ စာကြောင်း တစ်ကြောင်းက ယူတဲ့
+      အမြင့်ဖြစ်ပြီး၊ theme က စာလုံး အရွယ်ရဲ့ ၁.၂ ဆပဲ ပေးထားပါတယ်။ အင်္ဂလိပ်စာ အတွက်ဆိုရင် ရပေမယ့်၊ မြန်မာစာမှာတော့
+      ဗျည်းရဲ့ အပေါ်မှာ လုံးကြီးတင်လို သင်္ကေတတွေ၊ အောက်မှာ တစ်ချောင်းငင်၊ ဝဆွဲ၊ ဟထိုးနဲ့ ပါဌ်ဆင့်
+      စာလုံးတွေ ရှိလို့ စာကြောင်းက အပေါ်ရော အောက်ရော ပိုမြင့်ပါတယ်။ [[mark:breath-marks]]
+      ဒါကြောင့် အပေါ်ကြောင်းရဲ့ အောက်ဘက် သင်္ကေတနဲ့ အောက်ကြောင်းရဲ့ အပေါ်ဘက် သင်္ကေတ ထိလုနီးပါး
+      ဖြစ်နေတာပါ။ [[mark:type-line-height]] line height ကို ၁.၈ ထည့်ပါမယ်။
+      [[mark:after-line-height]] ကြည့်ပါ၊ စာကြောင်းတွေ ခွာသွားလို့ မျက်စိက တစ်ကြောင်းချင်း လိုက်ရ
+      လွယ်သွားပါပြီ။ WCAG ရဲ့ level AAA က စာကြောင်းကြား အနည်းဆုံး ၁.၅ ဆလို့ ပြောပေမယ့်၊ အပေါ်အောက်
+      သင်္ကေတ များတဲ့ မြန်မာစာမှာ ၁.၈ ဝန်းကျင် ပေးမှ အဆင်ပြေလို့၊ ဒီ course ရဲ့ ဆိုင် website
+      မှာလည်း ၁.၈ ကို သုံးထားပါတယ်။
+    sources:
+      - title: "W3C — Understanding SC 1.4.8 Visual Presentation (Level AAA)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/visual-presentation.html"
+      - title: "MDN — line-height"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/line-height"
+      - title: "Richard Ishida (W3C Internationalization) — Burmese orthography notes: combining marks and stacked consonants"
+        url: "https://r12a.github.io/scripts/mymr/my.html"
+    actions:
+      - id: type-line-height
+        type: editor.type
+        at: { mark: type-line-height }
+        cadence: block
+        target: { file: styles.css, after: "  font-size: 1rem;\n", occurrence: 1 }
+        text: "  line-height: 1.8;\n"
+      - id: expect-line-height
+        type: expect.preview
+        at: { mark: after-line-height }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ကျောင်းသားတွေရော"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: spacing-board
+    narration: >
+      [[mark:open-spacing-board]] နေရာလွတ်နဲ့ ပတ်သက်ပြီး level AA မှာ စည်းကမ်း တစ်ခု ရှိပါတယ်။
+      user တချို့က ဖတ်ရ လွယ်အောင် browser extension နဲ့ နေရာလွတ်တွေကို ကိုယ်တိုင် တိုးပြီး
+      ဖတ်ကြပါတယ်။ [[mark:draw-spacing-numbers]] line height ကို စာလုံး အရွယ်ရဲ့ ၁.၅ ဆ၊
+      စာပိုဒ်ကြားကို ၂ ဆ၊ စာလုံးကြားကို ၀.၁၂ ဆ၊ စကားလုံးကြားကို ၀.၁၆ ဆ အထိ တိုးလိုက်ရင်တောင် စာ
+      တစ်လုံးမှ မပျောက်ရ၊ ဘာမှ ပျက်မသွားရပါဘူး။ [[mark:draw-fixed-height]] အများဆုံး ပျက်တတ်တာက box
+      အမြင့်ကို ပုံသေ ပေးထားတဲ့ နေရာတွေပါ။ စာကြောင်း မြင့်လာတာနဲ့ စာက box အပြင် ကျွံထွက်ပြီး
+      ဖြတ်ခံရတတ်လို့၊ စာပါတဲ့ box တွေကို စာနဲ့အတူ ကြီးလာခွင့် ပေးထားပါ။
+    sources:
+      - title: "W3C — Understanding SC 1.4.12 Text Spacing (Level AA)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html"
+      - title: "web.dev Learn Accessibility — Typography: Spacing"
+        url: "https://web.dev/learn/accessibility/typography#spacing"
+    actions:
+      - id: open-spacing-board
+        type: whiteboard.apply
+        at: { mark: open-spacing-board, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b4-title]
+      - id: draw-spacing-numbers
+        type: whiteboard.apply
+        at: { mark: draw-spacing-numbers }
+        upsertIds: [b4-n1, b4-n2, b4-n3, b4-n4, b4-note]
+        drawMs: 3000
+      - id: draw-fixed-height
+        type: whiteboard.apply
+        at: { mark: draw-fixed-height }
+        upsertIds: [b4-box, b4-box-text, b4-box-label, b4-box-fix]
+        drawMs: 2400
+
+  - id: layout
+    chapter: "စာပိုဒ်ကို ချထားပုံ"
+    narration: >
+      [[mark:close-spacing-board]] editor ထဲ ပြန်သွားရအောင်။ ဆိုင်အကြောင်း စာပိုဒ်ကို ကြည့်ပါ။
+      justify လုပ်ထားလို့ browser က စာကြောင်းတိုင်း ဘယ်ညာ ညီအောင် စကားလုံးကြားက နေရာလွတ်တွေကို
+      ဆွဲဆန့်ထားပြီး၊ ပထမ စာကြောင်းမှာ နေရာလွတ်တွေ အရမ်း ကျယ်နေပါတယ်။ [[mark:type-align]] ဒီလို
+      မညီမညာ နေရာလွတ်တွေကြောင့် စကားလုံး ဘယ်မှာ ဆုံးလဲ ရှာရ ခက်ပြီး၊ space နည်းတဲ့ မြန်မာစာမှာ
+      ပိုဆိုးပါတယ်။ ဒါကြောင့် စာကို ရေးတဲ့ဘက်ကနေ ညှိတဲ့ start ကို ပေးပါမယ်။ [[mark:after-align]]
+      နေရာလွတ်တွေ ညီသွားပြီး ညာဘက် အစွန်းကတော့ တန်းမညီ ဖြစ်သွားပါတယ်။ ဒါက ဖတ်ရ ပိုလွယ်တဲ့ ပုံစံပါ။
+      [[mark:type-measure]] စာကြောင်း ရှည်လွန်းရင်လည်း နောက်တစ်ကြောင်းကို ပြန်ဆင်းတဲ့အခါ မျက်စိ
+      လမ်းပျောက်တတ်လို့၊ တစ်ကြောင်းကို စာလုံး ၈၀ အောက် ထားဖို့ အကြံပြုကြပါတယ်။ ch unit က သုည ဂဏန်း
+      တစ်လုံးစာ အကျယ် ဖြစ်လို့ max width ကို ch နဲ့ ပေးပါမယ်။ [[mark:after-measure]] ဒီ preview က
+      ဖုန်းလောက်ပဲ ကျယ်လို့ ဘာမှ မပြောင်းပေမယ့်၊ screen ကျယ်ကျယ်မှာတော့ စာပိုဒ်က စာလုံး ၇၀
+      လောက်ထက် ပိုမကျယ်တော့ပါဘူး။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Content alignment"
+        url: "https://web.dev/learn/accessibility/typography#content-alignment"
+      - title: "W3C — Understanding SC 1.4.8 Visual Presentation (Level AAA)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/visual-presentation.html"
+      - title: "MDN — text-align"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-align"
+      - title: "MDN — CSS values and units: ch"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Values_and_units"
+    actions:
+      - id: close-spacing-board
+        type: whiteboard.apply
+        at: { mark: close-spacing-board }
+        open: false
+      - id: type-align
+        type: editor.type
+        at: { mark: type-align }
+        cadence: fast-explainer
+        target:
+          {
+            file: styles.css,
+            after: "  font-family: Menlo, Consolas, monospace;\n}\n",
+            occurrence: 1,
+          }
+        text: "\n.story {\n  text-align: start;\n}\n"
+      - id: expect-align
+        type: expect.preview
+        at: { mark: after-align }
+        timeoutMs: 4000
+        target: { by: testId, value: story }
+        textContains: "ပလာတာနဲ့"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-measure
+        type: editor.type
+        at: { mark: type-measure }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  text-align: start;\n", occurrence: 1 }
+        text: "  max-width: 70ch;\n"
+      - id: expect-measure
+        type: expect.preview
+        at: { mark: after-measure }
+        timeoutMs: 4000
+        target: { by: testId, value: about }
+        textContains: "ဆိုင်အကြောင်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: caps-italic
+    chapter: "စာလုံးကြီး အကုန်နဲ့ စာလုံးစောင်း"
+    narration: >
+      နောက်ဆုံး ပြဿနာက အင်္ဂလိပ် quote ပါ။ စာလုံးကြီး အကုန်နဲ့ ရေးပြီး စောင်းထားပါတယ်။ စာလုံး
+      အသေးတွေမှာ အပေါ်ထွက်၊ အောက်ထွက် ပုံစံတွေ ရှိပေမယ့်၊ စာလုံးကြီး အကုန်ဆိုရင် စကားလုံးတိုင်း
+      အမြင့်တူ လေးထောင့်တုံးလို ဖြစ်သွားပါတယ်။ လူတွေက အဲဒီလို စာကို ဖတ်ရ ယဉ်ပါးမှု နည်းလို့
+      ဖတ်ရ ပိုနှေးပါတယ်။ [[mark:type-quote]] စာလုံးကို မတ်မတ် ပြန်ထားပြီး စာလုံးကြီး ပြောင်းထားတာကိုလည်း
+      ပယ်ပါမယ်။ စာလုံးစောင်းကလည်း dyslexia ရှိသူတွေ အတွက် ဖတ်ရ ခက်ပါတယ်။ ပြီးတော့ screen reader
+      တွေက bold နဲ့ italic ကို များသောအားဖြင့် ဖတ်မပြလို့၊ အလေးပေးချင်တဲ့ အဓိပ္ပာယ်ကိုလည်း style
+      တစ်ခုတည်းနဲ့ မပြပါနဲ့။ [[mark:after-quote]] quote က စာလုံး အကြီး အသေး ရောပြီး မတ်မတ်
+      ဖြစ်သွားလို့ ဖတ်ရ ပိုမြန်သွားပါပြီ။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Font size and typographic styling"
+        url: "https://web.dev/learn/accessibility/typography#font-size-and-typographic-styling"
+      - title: "MDN — text-transform"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/text-transform"
+      - title: "MDN — font-style"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-style"
+    actions:
+      - id: type-quote
+        type: editor.type
+        at: { mark: type-quote }
+        cadence: fast-explainer
+        target: { file: styles.css, after: "  max-width: 70ch;\n}\n", occurrence: 1 }
+        text: "\n.quote {\n  font-style: normal;\n  text-transform: none;\n}\n"
+      - id: expect-quote
+        type: expect.preview
+        at: { mark: after-quote }
+        timeoutMs: 4000
+        target: { by: testId, value: quote }
+        textContains: "the first cup of the morning"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-final-body
+        type: expect.file
+        at: { mark: after-quote }
+        path: styles.css
+        contains: "  font-size: 1rem;\n  line-height: 1.8;\n}"
+      - id: expect-final-story
+        type: expect.file
+        at: { mark: after-quote }
+        path: styles.css
+        contains: ".story {\n  text-align: start;\n  max-width: 70ch;\n}"
+      - id: expect-final-quote
+        type: expect.file
+        at: { mark: after-quote }
+        path: styles.css
+        contains: ".quote {\n  font-style: normal;\n  text-transform: none;\n}"
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:open-recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဖတ်ရလွယ်တဲ့ စာသားအတွက် အချက် ငါးချက် ရှိပါတယ်။
+      [[mark:draw-recap-1]] စာလုံး တစ်လုံးချင်း ကွဲပြားတဲ့ font ကို ရွေးပြီး၊ မြန်မာ Unicode font
+      တွေကို ရှေ့ဆုံးက ထားပါ။ [[mark:draw-recap-2]] စာလုံး အရွယ်ကို rem နဲ့ ပေးရင် setting ရော
+      zoom ရော လိုက်ပါတယ်။ [[mark:draw-recap-3]] မြန်မာစာမှာ line height ကို ၁.၈ ဝန်းကျင် ပေးပြီး
+      box အမြင့်ကို ပုံသေ မထားပါနဲ့။ [[mark:draw-recap-4]] စာပိုဒ်ကို start နဲ့ ညှိ၊ စာကြောင်း
+      အလျားကို ကန့်သတ်ပြီး၊ စာလုံးကြီး အကုန်နဲ့ စာလုံးစောင်းကို နည်းနည်းပဲ သုံးပါ။
+      [[mark:draw-recap-5]] စာကို ပုံထဲမှာ မရေးဘဲ HTML စာသား အဖြစ် ရေးပါ။ ပုံထဲက စာကို screen
+      reader က ဖတ်မပြနိုင်သလို ချဲ့ရင်လည်း ဝါးသွားလို့ပါ။ [[mark:next-lesson]] နောက် lesson
+      မှာတော့ လှလှလို နားမကြားသူတွေနဲ့ မျက်မမြင်တွေပါ video နဲ့ audio ကို သုံးနိုင်အောင် caption၊
+      transcript နဲ့ audio description တွေ အကြောင်း ကြည့်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Typography: Accessible typography takeaways"
+        url: "https://web.dev/learn/accessibility/typography#accessible-typography-takeaways"
+      - title: "W3C — Understanding SC 1.4.5 Images of Text (Level AA)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/images-of-text.html"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: open-recap, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b5-title]
+      - id: draw-recap-1
+        type: whiteboard.apply
+        at: { mark: draw-recap-1 }
+        upsertIds: [b5-c1, b5-l1]
+        drawMs: 1200
+      - id: draw-recap-2
+        type: whiteboard.apply
+        at: { mark: draw-recap-2 }
+        upsertIds: [b5-c2, b5-l2]
+        drawMs: 1000
+      - id: draw-recap-3
+        type: whiteboard.apply
+        at: { mark: draw-recap-3 }
+        upsertIds: [b5-c3, b5-l3]
+        drawMs: 1200
+      - id: draw-recap-4
+        type: whiteboard.apply
+        at: { mark: draw-recap-4 }
+        upsertIds: [b5-c4, b5-l4]
+        drawMs: 1200
+      - id: draw-recap-5
+        type: whiteboard.apply
+        at: { mark: draw-recap-5 }
+        upsertIds: [b5-c5, b5-l5]
+        drawMs: 1000
+      - id: draw-next
+        type: whiteboard.apply
+        at: { mark: next-lesson }
+        upsertIds: [b5-next]
+        drawMs: 800
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
