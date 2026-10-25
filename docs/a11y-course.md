@@ -17,28 +17,28 @@ The Burmese has **not** been reviewed by Chan yet, and no lesson has been render
 
 ## Lessons
 
-| #   | Script                              | Title                                                         | Kind                    | ≈ min |
-| --- | ----------------------------------- | ------------------------------------------------------------- | ----------------------- | ----- |
-| 1   | `a11y-course-01-why`                | Accessibility course 1: Accessibility ဆိုတာ ဘာလဲ              | concept (deck)          | 9.6   |
-| 2   | `a11y-course-02-measure`            | Accessibility course 2: Accessibility ကို ဘယ်လို တိုင်းတာလဲ   | concept (deck)          | 9.3   |
+| #   | Script                              | Title                                                       | Kind                    | ≈ min |
+| --- | ----------------------------------- | ----------------------------------------------------------- | ----------------------- | ----- |
+| 1   | `a11y-course-01-why`                | Accessibility course 1: Accessibility ဆိုတာ ဘာလဲ               | concept (deck)          | 9.6   |
+| 2   | `a11y-course-02-measure`            | Accessibility course 2: Accessibility ကို ဘယ်လို တိုင်းတာလဲ          | concept (deck)          | 9.3   |
 | 3   | `a11y-course-03-accessibility-tree` | Accessibility course 3: Accessibility tree နဲ့ semantic HTML  | hands-on                | 9.9   |
-| 4   | `a11y-course-04-aria-rules`         | Accessibility course 4: ARIA ကို ဘယ်အချိန် သုံးမလဲ            | hands-on                | 9.2   |
+| 4   | `a11y-course-04-aria-rules`         | Accessibility course 4: ARIA ကို ဘယ်အချိန် သုံးမလဲ                  | hands-on                | 9.2   |
 | 5   | `a11y-course-05-landmarks-headings` | Accessibility course 5: Landmark နဲ့ heading                  | hands-on                | 9.9   |
 | 6   | `a11y-course-06-lists-tables`       | Accessibility course 6: List နဲ့ table                        | hands-on                | 8.3   |
 | 7   | `a11y-course-07-document`           | Accessibility course 7: Page title နဲ့ ဘာသာစကား               | hands-on                | 9.9   |
-| 8   | `a11y-course-08-keyboard-focus`     | Accessibility course 8: Keyboard focus                        | hands-on                | 9.9   |
+| 8   | `a11y-course-08-keyboard-focus`     | Accessibility course 8: Keyboard focus                      | hands-on                | 9.9   |
 | 9   | `a11y-course-09-javascript`         | Accessibility course 9: JavaScript နဲ့ accessibility          | hands-on                | 9.8   |
-| 10  | `a11y-course-10-images`             | Accessibility course 10: ပုံတွေနဲ့ alt text                   | hands-on                | 8.1   |
-| 11  | `a11y-course-11-color-contrast`     | Accessibility course 11: အရောင်နဲ့ contrast                   | hands-on                | 9.9   |
+| 10  | `a11y-course-10-images`             | Accessibility course 10: ပုံတွေနဲ့ alt text                      | hands-on                | 8.1   |
+| 11  | `a11y-course-11-color-contrast`     | Accessibility course 11: အရောင်နဲ့ contrast                    | hands-on                | 9.9   |
 | 12  | `a11y-course-12-motion`             | Accessibility course 12: Animation နဲ့ motion                 | hands-on                | 7.3   |
-| 13  | `a11y-course-13-typography`         | Accessibility course 13: ဖတ်ရလွယ်တဲ့ စာသား                    | hands-on                | 9.1   |
+| 13  | `a11y-course-13-typography`         | Accessibility course 13: ဖတ်ရလွယ်တဲ့ စာသား                       | hands-on                | 9.1   |
 | 14  | `a11y-course-14-video-audio`        | Accessibility course 14: Video နဲ့ audio                      | concept (deck + editor) | 9.7   |
-| 15  | `a11y-course-15-forms`              | Accessibility course 15: Form တွေ                             | hands-on                | 9.9   |
+| 15  | `a11y-course-15-forms`              | Accessibility course 15: Form တွေ                            | hands-on                | 9.9   |
 | 16  | `a11y-course-16-patterns`           | Accessibility course 16: Pattern၊ component နဲ့ design system | hands-on                | 9.3   |
 | 17  | `a11y-course-17-design-ux`          | Accessibility course 17: Design နဲ့ UX                        | concept (deck)          | 9.0   |
-| 18  | `a11y-course-18-automated-testing`  | Accessibility course 18: Automated testing                    | hands-on (axe)          | 9.6   |
-| 19  | `a11y-course-19-manual-testing`     | Accessibility course 19: Manual testing                       | hands-on                | 9.5   |
-| 20  | `a11y-course-20-screen-readers`     | Accessibility course 20: Screen reader နဲ့ စမ်းသပ်ခြင်း       | concept + hands-on      | 9.7   |
+| 18  | `a11y-course-18-automated-testing`  | Accessibility course 18: Automated testing                  | hands-on (axe)          | 9.6   |
+| 19  | `a11y-course-19-manual-testing`     | Accessibility course 19: Manual testing                     | hands-on                | 9.5   |
+| 20  | `a11y-course-20-screen-readers`     | Accessibility course 20: Screen reader နဲ့ စမ်းသပ်ခြင်း          | concept + hands-on      | 9.7   |
 
 ## web.dev coverage
 

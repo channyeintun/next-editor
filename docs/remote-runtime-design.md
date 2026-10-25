@@ -345,7 +345,7 @@ Event:    { "t": "evt", "m": "port", "p": { … } }
 - `e.code`: Node-style errno strings (`ENOENT`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`,
   `EACCES`) plus protocol codes (`EPROTO`, `ELIMIT`, `EGONE`). The client SDK converts these to
   `Error` objects whose `message` **starts with the code** (e.g. `"ENOENT: no such file or
-directory, open '/foo'"`) — matching Node/WebContainer message shape that app code may sniff.
+  directory, open '/foo'"`) — matching Node/WebContainer message shape that app code may sniff.
 
 ### 6.2 Binary frames (WS binary frames)
 
@@ -758,7 +758,9 @@ export interface IFSWatcher {
   close(): void;
 }
 export type FSWatchOptions =
-  { encoding?: BufferEncoding | null; persistent?: boolean; recursive?: boolean } | string | null;
+  | { encoding?: BufferEncoding | null; persistent?: boolean; recursive?: boolean }
+  | string
+  | null;
 export type FSWatchCallback = (event: "rename" | "change", filename: string | Uint8Array) => void;
 export interface DirEnt<T> {
   name: T;
@@ -866,7 +868,9 @@ export interface ConsoleErrorMessage {
   stack: string;
 }
 export type PreviewMessage = (
-  UncaughtExceptionMessage | UnhandledRejectionMessage | ConsoleErrorMessage
+  | UncaughtExceptionMessage
+  | UnhandledRejectionMessage
+  | ConsoleErrorMessage
 ) &
   BasePreviewMessage;
 ```

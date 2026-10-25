@@ -226,11 +226,11 @@ if you only intend to route one subdomain to the Worker:
 
 ```toml
 [vars]
-PUBLIC_URL = "https://<your-domain>"   # must exactly match what you register in Google Cloud Console
+PUBLIC_URL = "https://<your-domain>" # must exactly match what you register in Google Cloud Console
 
 [[routes]]
-pattern = "<your-domain>"   # bare hostname, NO path glob — Custom Domains
-custom_domain = true        # cover every path by design, unlike a plain Route
+pattern = "<your-domain>" # bare hostname, NO path glob — Custom Domains
+custom_domain = true # cover every path by design, unlike a plain Route
 ```
 
 (Verified against Cloudflare's own docs, not assumed: Custom Domain

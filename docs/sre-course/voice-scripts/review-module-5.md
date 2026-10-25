@@ -8,17 +8,17 @@ scripts as their passes left them, Lesson 16 (whose bridge Lesson 17 answers), L
 [../curriculum.md](../curriculum.md) and [../glossary.md](../glossary.md). Nothing here has been voiced
 or rendered yet.
 
-| File                                  | Lesson                                    | Counted characters | ≈ min of speech |
-| ------------------------------------- | ----------------------------------------- | ------------------ | --------------- |
-| `sre-17-toil-and-automation.md`       | 17 · Toil နဲ့ automation                  | 8,803              | 10.5            |
-| `sre-18-testing-and-config.md`        | 18 · Test နဲ့ config                      | 7,953              | 9.5             |
-| `sre-19-testing-in-production.md`     | 19 · Production ထဲမှာ စမ်းသပ်ခြင်း        | 7,957              | 9.5             |
-| `sre-20-capacity-planning.md`         | 20 · Capacity ဘယ်လောက် လိုမလဲ             | 8,786              | 10.5            |
-| `sre-21-data-you-are-trusted-with.md` | 21 · ယုံကြည်ပြီး အပ်ထားတဲ့ data           | 7,978              | 9.5             |
-| `sre-22-backups-and-restores.md`      | 22 · Backup ထက် restore က ပိုအရေးကြီးတယ်  | 8,810              | 10.5            |
+| File                                  | Lesson                              | Counted characters | ≈ min of speech |
+| ------------------------------------- | ----------------------------------- | ------------------ | --------------- |
+| `sre-17-toil-and-automation.md`       | 17 · Toil နဲ့ automation              | 8,803              | 10.5            |
+| `sre-18-testing-and-config.md`        | 18 · Test နဲ့ config                  | 7,953              | 9.5             |
+| `sre-19-testing-in-production.md`     | 19 · Production ထဲမှာ စမ်းသပ်ခြင်း       | 7,957              | 9.5             |
+| `sre-20-capacity-planning.md`         | 20 · Capacity ဘယ်လောက် လိုမလဲ            | 8,786              | 10.5            |
+| `sre-21-data-you-are-trusted-with.md` | 21 · ယုံကြည်ပြီး အပ်ထားတဲ့ data            | 7,978              | 9.5             |
+| `sre-22-backups-and-restores.md`      | 22 · Backup ထက် restore က ပိုအရေးကြီးတယ် | 8,810              | 10.5            |
 | `sre-23-containing-failure.md`        | 23 · Failure ကို ဘောင်ခတ်ထားတဲ့ design    | 8,818              | 10.5            |
-| `sre-24-overload-change-emergency.md` | 24 · Overload နဲ့ emergency mode          | 8,773              | 10.4            |
-| `sre-25-platform-engineering.md`      | 25 · မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင် | 8,782              | 10.5            |
+| `sre-24-overload-change-emergency.md` | 24 · Overload နဲ့ emergency mode      | 8,773              | 10.4            |
+| `sre-25-platform-engineering.md`      | 25 · မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်         | 8,782              | 10.5            |
 
 Lessons 17, 20 and 22–25 have a budget of 8,400 characters ±5% (7,980 to 8,820). Lessons 18, 19 and 21
 have 7,600 ±5% (7,220 to 7,980). All nine sit near the top of their window, as the earlier modules do;
@@ -192,18 +192,18 @@ below, and finished the work.
 
 Each lesson's last question asks what the next cover asks:
 
-| From | Bridge asks                                                                                                                      | Next cover asks                          |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| L16  | Module 5: a four-person SRE team, and over half the week is toil: ဘယ်ကနေ စမလဲ?                                                   | ဘယ်ကနေ စမလဲ?                             |
-| L17  | a payday evening, tests green, a console edit, no traffic to Operator A: test တွေက ဘာကို တစ်ခါမှ မကြည့်ခဲ့လဲ?                    | test တွေက ဘာကို မကြည့်ခဲ့လဲ?             |
-| L18  | the week the nightly diff starts, pricing's canary passes, Bill Pay times out: ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့တာလဲ?                      | ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့လဲ?               |
-| L19  | Thingyan in six weeks, last year 20,000 a second at midnight: ဒီနှစ်အတွက် ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?                            | ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?              |
-| L20  | during the preparation, a user asks Ma Su's team to delete her account: သူ့ data တွေက တကယ်တော့ ဘယ်မှာ ရှိနေလဲ?                   | သူ့ data တွေ ဘယ်မှာ ရှိလဲ?               |
-| L21  | the month-end close finds a cashback bug older than the oldest backup: နောက်ပြန် ဘယ်အထိ သွားလို့ ရမလဲ?                           | (l22_p01b) နောက်ပြန် ဘယ်အထိ သွားနိုင်လဲ? |
-| L22  | one night, half a price list, top-ups stop everywhere at 1 a.m.: ကြိုမစီစဉ်ထားတဲ့ failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?                | failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?          |
-| L23  | Thingyan midnight, 20,000 a second into a service built for 3,000, servers restarting: ပြိုမကျဘဲ ဘယ်လို တည်ငြိမ်အောင် ထိန်းမလဲ?  | ပြိုမကျဘဲ ဘယ်လို ထိန်းမလဲ?               |
-| L24  | the next year's freeze: a Top-up deploy goes out, the rule lived on a wiki: မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင် ဘယ်လို လုပ်မလဲ? | မှန်တဲ့နည်းကို ဘယ်လို လွယ်စေမလဲ?         |
-| L25  | Module 6: coding agents, merges 15 → 120 a day: SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?                                               | (L26) ဘာတွေ ပြောင်းသွားမလဲ?              |
+| From | Bridge asks                                                                                                        | Next cover asks                 |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| L16  | Module 5: a four-person SRE team, and over half the week is toil: ဘယ်ကနေ စမလဲ?                                       | ဘယ်ကနေ စမလဲ?                      |
+| L17  | a payday evening, tests green, a console edit, no traffic to Operator A: test တွေက ဘာကို တစ်ခါမှ မကြည့်ခဲ့လဲ?                | test တွေက ဘာကို မကြည့်ခဲ့လဲ?            |
+| L18  | the week the nightly diff starts, pricing's canary passes, Bill Pay times out: ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့တာလဲ?                   | ဘယ်သူ့ဘက်ကို ကြည့်နေခဲ့လဲ?                 |
+| L19  | Thingyan in six weeks, last year 20,000 a second at midnight: ဒီနှစ်အတွက် ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?                         | ဘယ်လောက်အထိ ပြင်ဆင်ထားရမလဲ?           |
+| L20  | during the preparation, a user asks Ma Su's team to delete her account: သူ့ data တွေက တကယ်တော့ ဘယ်မှာ ရှိနေလဲ?               | သူ့ data တွေ ဘယ်မှာ ရှိလဲ?              |
+| L21  | the month-end close finds a cashback bug older than the oldest backup: နောက်ပြန် ဘယ်အထိ သွားလို့ ရမလဲ?                      | (l22_p01b) နောက်ပြန် ဘယ်အထိ သွားနိုင်လဲ? |
+| L22  | one night, half a price list, top-ups stop everywhere at 1 a.m.: ကြိုမစီစဉ်ထားတဲ့ failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?                | failure ကို ဘယ်လို ဘောင်ခတ်မလဲ?         |
+| L23  | Thingyan midnight, 20,000 a second into a service built for 3,000, servers restarting: ပြိုမကျဘဲ ဘယ်လို တည်ငြိမ်အောင် ထိန်းမလဲ? | ပြိုမကျဘဲ ဘယ်လို ထိန်းမလဲ?               |
+| L24  | the next year's freeze: a Top-up deploy goes out, the rule lived on a wiki: မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင် ဘယ်လို လုပ်မလဲ?       | မှန်တဲ့နည်းကို ဘယ်လို လွယ်စေမလဲ?             |
+| L25  | Module 6: coding agents, merges 15 → 120 a day: SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?                                        | (L26) ဘာတွေ ပြောင်းသွားမလဲ?         |
 
 - Each hook takes up the bridge before it. L17, L19, L20, L22, L23, L24 and L25 ask the bridge's
   question in its words, and so does L26. L18 tells the same evening and answers at once ("config ကိုတော့

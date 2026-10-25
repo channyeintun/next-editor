@@ -116,7 +116,7 @@ The diff-match-patch port moved from AssemblyScript to **Rust** (`no_std`,
 - **Compression:** still fflate.
 - **WASM:** `src/core/dmp/build/next-editor-dmp.wasm`, **~6.7 KB, zero imports**
   (`WebAssembly.Module.imports()` is `[]`), committed. Built with `bun run
-build:wasm` → `cargo build` (opt-level=3 + LTO) then `wasm-opt -all -O3`. Stays
+  build:wasm` → `cargo build` (opt-level=3 + LTO) then `wasm-opt -all -O3`. Stays
   import-free via `#![no_std]` + a panic handler that traps (`unreachable`), a
   self-contained `memory.grow` allocator, and the `-unknown` (non-WASI) target.
 

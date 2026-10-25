@@ -5,13 +5,13 @@ them before any YAML is built. Each script follows its lesson spec in
 [../curriculum.md](../curriculum.md) and uses the terms in [../glossary.md](../glossary.md). Nothing
 here has been voiced or rendered yet.
 
-| File                             | Lesson                              | Counted characters | ≈ min of speech |
-| -------------------------------- | ----------------------------------- | ------------------ | --------------- |
-| `sre-01-why-reliability-now.md`  | 1 · SRE ဘာကြောင့် လိုလာတာလဲ         | 7,894              | 9.4             |
-| `sre-02-what-sre-is.md`          | 2 · SRE ဆိုတာ ဘာလဲ                  | 7,923              | 9.4             |
-| `sre-03-value-of-reliability.md` | 3 · Reliability ရဲ့ တန်ဖိုး         | 7,867              | 9.4             |
+| File                             | Lesson                        | Counted characters | ≈ min of speech |
+| -------------------------------- | ----------------------------- | ------------------ | --------------- |
+| `sre-01-why-reliability-now.md`  | 1 · SRE ဘာကြောင့် လိုလာတာလဲ        | 7,894              | 9.4             |
+| `sre-02-what-sre-is.md`          | 2 · SRE ဆိုတာ ဘာလဲ               | 7,923              | 9.4             |
+| `sre-03-value-of-reliability.md` | 3 · Reliability ရဲ့ တန်ဖိုး        | 7,867              | 9.4             |
 | `sre-04-production-then-now.md`  | 4 · Production ဘယ်လို ပြောင်းလဲလာလဲ | 7,926              | 9.4             |
-| `sre-05-reliability-culture.md`  | 5 · Reliability ယဉ်ကျေးမှု          | 7,928              | 9.4             |
+| `sre-05-reliability-culture.md`  | 5 · Reliability ယဉ်ကျေးမှု       | 7,928              | 9.4             |
 
 The budget is 7,600 characters ±5%, so each lesson must land between 7,220 and 7,980. Minutes are
 estimated at VoxCPM2's pace of about 14 Burmese characters a second. Pauses, page changes and gaps
@@ -86,13 +86,13 @@ the glossary. These are the changes from the separately reviewed drafts:
     this.
 - **Bridges.** Each lesson's last question now asks the same thing as the next lesson's cover:
 
-  | From | Bridge asks                                           | Next cover asks                      |
-  | ---- | ----------------------------------------------------- | ------------------------------------ |
-  | L01  | typo, 20 minutes of 10× fees: ဘာကို အရင်ဆုံး ပြင်မလဲ? | ဘာကို အရင် ပြင်မလဲ?                  |
-  | L02  | shop QR down 30 minutes: 30 minutes, or much bigger?  | ဘယ်ဂဏန်းက တကယ့် ကုန်ကျစရိတ်လဲ?       |
-  | L03  | all green, Bank Y 20 seconds: dashboard or user?      | ဘယ်သူ မှန်လဲ?                        |
-  | L04  | 9 p.m., developer ကိုမင်း, laughed at: ပြောရဲပါ့မလား? | ကိုမင်း ပြောရဲပါ့မလား?               |
-  | L05  | Thiri full-time; finance wants 100%: how reliable?    | (L06) How reliable should Top-up be? |
+  | From | Bridge asks                                          | Next cover asks                      |
+  | ---- | ---------------------------------------------------- | ------------------------------------ |
+  | L01  | typo, 20 minutes of 10× fees: ဘာကို အရင်ဆုံး ပြင်မလဲ?       | ဘာကို အရင် ပြင်မလဲ?                       |
+  | L02  | shop QR down 30 minutes: 30 minutes, or much bigger? | ဘယ်ဂဏန်းက တကယ့် ကုန်ကျစရိတ်လဲ?                |
+  | L03  | all green, Bank Y 20 seconds: dashboard or user?     | ဘယ်သူ မှန်လဲ?                             |
+  | L04  | 9 p.m., developer ကိုမင်း, laughed at: ပြောရဲပါ့မလား?     | ကိုမင်း ပြောရဲပါ့မလား?                    |
+  | L05  | Thiri full-time; finance wants 100%: how reliable?   | (L06) How reliable should Top-up be? |
 
 - **Less templated.** Five lessons had opened the recap, the pause question ("ကဲ၊ မေးခွန်း တစ်ခု
   မေးပါရစေ … ဆိုပါစို့"), the answer, the bridge and the This week page with the same words. Each lesson
@@ -197,10 +197,10 @@ They use the same layout as Module 1 (see "How to read a script") and were read 
 the approved Module 1 scripts, the fact sheet, the story spine and the glossary. Nothing here has been
 voiced or rendered yet.
 
-| File                                | Lesson                              | Counted characters | ≈ min of speech |
-| ----------------------------------- | ----------------------------------- | ------------------ | --------------- |
-| `sre-06-slo-error-budget.md`        | 6 · SLO နဲ့ error budget            | 8,807              | 10.5            |
-| `sre-07-slo-from-the-users-side.md` | 7 · User ဘက်က ကြည့်တဲ့ SLO          | 8,799              | 10.5            |
+| File                                | Lesson                             | Counted characters | ≈ min of speech |
+| ----------------------------------- | ---------------------------------- | ------------------ | --------------- |
+| `sre-06-slo-error-budget.md`        | 6 · SLO နဲ့ error budget             | 8,807              | 10.5            |
+| `sre-07-slo-from-the-users-side.md` | 7 · User ဘက်က ကြည့်တဲ့ SLO              | 8,799              | 10.5            |
 | `sre-08-observability.md`           | 8 · Monitoring ကနေ observability ဆီ | 8,784              | 10.5            |
 
 The budget is 8,400 characters ±5%, so each lesson must land between 7,980 and 8,820. All three sit
@@ -269,12 +269,12 @@ covers these files too.
   - L07 Scene 1 now says "ဘယ်သူတွေကို ပျမ်းမျှခဲ့လဲ", the same words as its chapter label and l07_p01b.
 - **Bridges.** Each lesson's last question asks the same thing as the next lesson's cover:
 
-  | From | Bridge asks                                                     | Next cover asks                    |
-  | ---- | --------------------------------------------------------------- | ---------------------------------- |
-  | L05  | Thiri full-time; finance wants 100%: how reliable?              | Top-up ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ? |
-  | L06  | Eats: every SLO green, orders stuck: what did we forget?        | ဘာကို တိုင်းဖို့ မေ့ခဲ့လဲ?         |
-  | L07  | Top-up never confirms, refunds for top-ups that worked: inside? | system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?  |
-  | L08  | 2 a.m. alert into a muted 60-person Viber group: ဘယ်သူ ဖြေမလဲ?  | (L09) Who answers at 2 a.m.?       |
+  | From | Bridge asks                                                     | Next cover asks              |
+  | ---- | --------------------------------------------------------------- | ---------------------------- |
+  | L05  | Thiri full-time; finance wants 100%: how reliable?              | Top-up ဘယ်လောက် စိတ်ချရဖို့ လိုလဲ?     |
+  | L06  | Eats: every SLO green, orders stuck: what did we forget?        | ဘာကို တိုင်းဖို့ မေ့ခဲ့လဲ?               |
+  | L07  | Top-up never confirms, refunds for top-ups that worked: inside? | system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?      |
+  | L08  | 2 a.m. alert into a muted 60-person Viber group: ဘယ်သူ ဖြေမလဲ?     | (L09) Who answers at 2 a.m.? |
 
   L09 is not written yet. Its cover question should end on the same "ဘယ်သူ ဖြေမလဲ?".
 

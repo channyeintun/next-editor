@@ -32,40 +32,40 @@ budget:** a lesson explains at most 8 ideas (about one per concept scene) and me
 a sentence each; anything beyond that is left out on purpose and recorded in the private coverage map.
 Catalog titles are "SRE from zero N: <Burmese title>".
 
-| #   | Script                               | Burmese title                              | Topic                                                    | ≈ min | Chars |
-| --- | ------------------------------------ | ------------------------------------------ | -------------------------------------------------------- | ----- | ----- |
-| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                    | running software is the long, hard part                  | 10    | 7,600 |
-| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                             | what users feel, shrinking incidents, the Padauk loop    | 10    | 7,600 |
-| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                    | the real outage bill, and why 100% is wrong              | 10    | 7,600 |
-| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ            | cloud, golden paths, gray failure                        | 10    | 7,600 |
-| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                     | bad news, blameless reviews, no heroes                   | 10    | 7,600 |
-| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                       | agreeing on "reliable enough"                            | 11    | 8,400 |
-| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                     | three ways a green SLO can lie                           | 11    | 8,400 |
-| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ            | seeing production clearly                                | 11    | 8,400 |
-| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                | rotations people can sustain, incident roles             | 10    | 7,600 |
-| 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ            | the payday incident, minute by minute                    | 10    | 7,600 |
-| 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem                  | a postmortem meeting that teaches                        | 10    | 7,600 |
-| 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ      | near misses, drift, good days, cliffs                    | 11    | 8,400 |
-| 13  | `sre-13-stpa-and-cast`               | Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST   | control loops: STPA before, CAST after                   | 11    | 8,400 |
-| 14  | `sre-14-becoming-an-sre`             | SRE တစ်ယောက် ဖြစ်လာဖို့                    | hiring, onboarding, a team that survives people leaving  | 11    | 8,400 |
+| #   | Script                               | Burmese title                      | Topic                                                    | ≈ min | Chars |
+| --- | ------------------------------------ | ---------------------------------- | -------------------------------------------------------- | ----- | ----- |
+| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | running software is the long, hard part                  | 10    | 7,600 |
+| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | what users feel, shrinking incidents, the Padauk loop    | 10    | 7,600 |
+| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | the real outage bill, and why 100% is wrong              | 10    | 7,600 |
+| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | cloud, golden paths, gray failure                        | 10    | 7,600 |
+| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | bad news, blameless reviews, no heroes                   | 10    | 7,600 |
+| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | agreeing on "reliable enough"                            | 11    | 8,400 |
+| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | three ways a green SLO can lie                           | 11    | 8,400 |
+| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | seeing production clearly                                | 11    | 8,400 |
+| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | rotations people can sustain, incident roles             | 10    | 7,600 |
+| 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ           | the payday incident, minute by minute                    | 10    | 7,600 |
+| 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem              | a postmortem meeting that teaches                        | 10    | 7,600 |
+| 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ          | near misses, drift, good days, cliffs                    | 11    | 8,400 |
+| 13  | `sre-13-stpa-and-cast`               | Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST    | control loops: STPA before, CAST after                   | 11    | 8,400 |
+| 14  | `sre-14-becoming-an-sre`             | SRE တစ်ယောက် ဖြစ်လာဖို့                  | hiring, onboarding, a team that survives people leaving  | 11    | 8,400 |
 | 15  | `sre-15-where-sre-lives`             | SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ                 | team placement, limits on ops work, honest scorecards    | 11    | 8,400 |
-| 16  | `sre-16-engagement-models`           | Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ         | outcomes instead of carrying the pager                   | 11    | 8,400 |
-| 17  | `sre-17-toil-and-automation`         | Toil နဲ့ automation                        | measuring toil, automating safely                        | 11    | 8,400 |
-| 18  | `sre-18-testing-and-config`          | Test နဲ့ config                            | what tests prove, config as dangerous as code            | 10    | 7,600 |
-| 19  | `sre-19-testing-in-production`       | Production ထဲမှာ စမ်းသပ်ခြင်း              | canaries, fault experiments, game days                   | 10    | 7,600 |
-| 20  | `sre-20-capacity-planning`           | Capacity ဘယ်လောက် လိုမလဲ                   | forecasting Thingyan, zones, shared pools                | 11    | 8,400 |
-| 21  | `sre-21-data-you-are-trusted-with`   | ယုံကြည်ပြီး အပ်ထားတဲ့ data                 | deletion, classes, integrity, access                     | 10    | 7,600 |
-| 22  | `sre-22-backups-and-restores`        | Backup ထက် restore က ပိုအရေးကြီးတယ်        | three data incidents and the restore drill               | 11    | 8,400 |
-| 23  | `sre-23-containing-failure`          | Failure ကို ဘောင်ခတ်ထားတဲ့ design          | risk, failure domains, dependencies, bad input           | 11    | 8,400 |
-| 24  | `sre-24-overload-change-emergency`   | Overload နဲ့ emergency mode                | cascades, safe change, when your own tools are down      | 11    | 8,400 |
-| 25  | `sre-25-platform-engineering`        | မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်       | golden paths, shift down, exceptions                     | 11    | 8,400 |
-| 26  | `sre-26-when-ai-writes-the-code`     | AI က code ရေးတဲ့ခေတ်                       | what changes when agents write code                      | 11    | 8,400 |
-| 27  | `sre-27-reliability-for-ai-features` | AI feature တွေရဲ့ reliability              | when 200 OK isn't enough                                 | 11    | 8,400 |
+| 16  | `sre-16-engagement-models`           | Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ           | outcomes instead of carrying the pager                   | 11    | 8,400 |
+| 17  | `sre-17-toil-and-automation`         | Toil နဲ့ automation                  | measuring toil, automating safely                        | 11    | 8,400 |
+| 18  | `sre-18-testing-and-config`          | Test နဲ့ config                      | what tests prove, config as dangerous as code            | 10    | 7,600 |
+| 19  | `sre-19-testing-in-production`       | Production ထဲမှာ စမ်းသပ်ခြင်း           | canaries, fault experiments, game days                   | 10    | 7,600 |
+| 20  | `sre-20-capacity-planning`           | Capacity ဘယ်လောက် လိုမလဲ                | forecasting Thingyan, zones, shared pools                | 11    | 8,400 |
+| 21  | `sre-21-data-you-are-trusted-with`   | ယုံကြည်ပြီး အပ်ထားတဲ့ data                | deletion, classes, integrity, access                     | 10    | 7,600 |
+| 22  | `sre-22-backups-and-restores`        | Backup ထက် restore က ပိုအရေးကြီးတယ်     | three data incidents and the restore drill               | 11    | 8,400 |
+| 23  | `sre-23-containing-failure`          | Failure ကို ဘောင်ခတ်ထားတဲ့ design        | risk, failure domains, dependencies, bad input           | 11    | 8,400 |
+| 24  | `sre-24-overload-change-emergency`   | Overload နဲ့ emergency mode          | cascades, safe change, when your own tools are down      | 11    | 8,400 |
+| 25  | `sre-25-platform-engineering`        | မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်             | golden paths, shift down, exceptions                     | 11    | 8,400 |
+| 26  | `sre-26-when-ai-writes-the-code`     | AI က code ရေးတဲ့ခေတ်                  | what changes when agents write code                      | 11    | 8,400 |
+| 27  | `sre-27-reliability-for-ai-features` | AI feature တွေရဲ့ reliability         | when 200 OK isn't enough                                 | 11    | 8,400 |
 | 28  | `sre-28-ai-in-production-safely`     | AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း | Ops Buddy earns its access                               | 11    | 8,400 |
-| 29  | `sre-29-where-ai-helps-operations`   | AI က operations မှာ ဘယ်နေရာ ကူညီလဲ         | complaints, incidents, toil and reviews                  | 10    | 7,600 |
-| 30  | `sre-30-the-first-sre`               | ပထမဆုံး SRE                                | Ko Min's first 30 days at a small company                | 10    | 7,600 |
-| 31  | `sre-31-sre-in-legacy-and-regulated` | ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE              | banks, vendors, crises, one problem through three lenses | 11    | 8,400 |
-| 32  | `sre-32-the-road-ahead`              | SRE ရဲ့ ရှေ့ခရီး                           | risk as an early signal, agents, what lasts              | 11    | 8,400 |
+| 29  | `sre-29-where-ai-helps-operations`   | AI က operations မှာ ဘယ်နေရာ ကူညီလဲ      | complaints, incidents, toil and reviews                  | 10    | 7,600 |
+| 30  | `sre-30-the-first-sre`               | ပထမဆုံး SRE                          | Ko Min's first 30 days at a small company                | 10    | 7,600 |
+| 31  | `sre-31-sre-in-legacy-and-regulated` | ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE             | banks, vendors, crises, one problem through three lenses | 11    | 8,400 |
+| 32  | `sre-32-the-road-ahead`              | SRE ရဲ့ ရှေ့ခရီး                        | risk as an early signal, agents, what lasts              | 11    | 8,400 |
 
 **Total: 32 lessons, about 339 minutes (5 h 39 min), about 258,000 narration characters.**
 
@@ -170,14 +170,14 @@ gateway), rider dispatch, config service, CI/CD pipeline, monitoring stack.
 
 Burmese names are written and spoken in Burmese script. Nobody is a real person.
 
-| Person                     | Role                                     | Arc                                                                                                                                                                                                                                               |
-| -------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ma Thiri** (မသီရိ)       | backend developer on Top-up              | asked to "look after reliability" on the side (L01) → first full-time SRE (from L06) → leads the reliability team (L15–L22) → platform and reliability lead (L25) → the generalist who directs agents with principles (L32). The learner's guide. |
+| Person                  | Role                                     | Arc                                                                                                                                                                                                                                               |
+| ----------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ma Thiri** (မသီရိ)      | backend developer on Top-up              | asked to "look after reliability" on the side (L01) → first full-time SRE (from L06) → leads the reliability team (L15–L22) → platform and reliability lead (L25) → the generalist who directs agents with principles (L32). The learner's guide. |
 | **Ko Nay Lin** (ကိုနေလင်း) | co-founder and CTO                       | wants speed and "100%" (L03, L06) → sits in the first blameless review (L05) → learns to fund reliability (L15, L25) → executive sponsor (L31)                                                                                                    |
-| **Ma Hnin** (မနှင်း)       | product manager (Wallet, later Eats)     | the business voice; owns SLO targets with engineering (L06); sets an SLO at design time (L16)                                                                                                                                                     |
+| **Ma Hnin** (မနှင်း)      | product manager (Wallet, later Eats)     | the business voice; owns SLO targets with engineering (L06); sets an SLO at design time (L16)                                                                                                                                                     |
 | **Ko Zaw** (ကိုဇော်)       | former bank systems administrator        | the second SRE, systems-leaning (L14); starts Ops Buddy in dry-run mode (L28); leads the bank and vendor work (L31)                                                                                                                               |
 | **Ko Min** (ကိုမင်း)       | junior developer                         | the quiet warning (L05) → handed a task in the payday incident (L10) → writes the Wallet retry change (L11) → onboarded properly (L14) → first SRE at Padauk Parcel (L30). The learner's peer.                                                    |
-| **Ma Su** (မစု)            | customer support lead                    | sees problems first on Facebook and Viber (L06, L12, L29); reads the support timeline in postmortems (L11)                                                                                                                                        |
+| **Ma Su** (မစု)          | customer support lead                    | sees problems first on Facebook and Viber (L06, L12, L29); reads the support timeline in postmortems (L11)                                                                                                                                        |
 | **Ko Aung** (ကိုအောင်)     | the only person who can rerun settlement | the hero antipattern (L05) → paired with Ko Zaw (L14)                                                                                                                                                                                             |
 
 ### Story spine

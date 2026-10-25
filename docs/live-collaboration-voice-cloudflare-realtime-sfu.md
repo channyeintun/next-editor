@@ -579,9 +579,9 @@ Facts verified against the npm registry and the exact installed package source:
   `PartyTracksConfig.prefix`, with `apiExtraParams` appended as query string):
   `POST {prefix}/sessions/new`, `GET {prefix}/generate-ice-servers` (called
   only when `iceServers` is absent from the config), `POST
-{prefix}/sessions/{sessionId}/tracks/new` (push and pull), `PUT
-{prefix}/sessions/{sessionId}/renegotiate`, `PUT
-{prefix}/sessions/{sessionId}/tracks/update` (simulcast only — the gateway
+  {prefix}/sessions/{sessionId}/tracks/new` (push and pull), `PUT
+  {prefix}/sessions/{sessionId}/renegotiate`, `PUT
+  {prefix}/sessions/{sessionId}/tracks/update` (simulcast only — the gateway
   fails it closed), `PUT {prefix}/sessions/{sessionId}/tracks/close`. Custom
   `headers` from the config are appended to every request.
 - Upstream base URL used by Cloudflare's own server helper:
@@ -598,9 +598,9 @@ Facts verified against the npm registry and the exact installed package source:
   reacquires the device; `push()` may re-emit `TrackMetadata`, so the
   protocol tolerates published-track metadata replacement.
 - `TrackMetadata` shape: `{ location?, trackName?, sessionId?, mid?,
-simulcast? }`.
+  simulcast? }`.
 - `createAudioSink({ audioElement })` returns `{ attach(track$):
-Subscription, setSinkId, devices$, cleanup, isSinkIdSupported }`.
+  Subscription, setSinkId, devices$, cleanup, isSinkIdSupported }`.
 
 Recorded deviations:
 

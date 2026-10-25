@@ -6,12 +6,12 @@ read them together against the approved scripts for Lessons 1–8, the fact shee
 first-use table, the lesson specs in [../curriculum.md](../curriculum.md) and
 [../glossary.md](../glossary.md). Nothing here has been voiced or rendered yet.
 
-| File                                 | Lesson                                        | Counted characters | ≈ min of speech |
-| ------------------------------------ | --------------------------------------------- | ------------------ | --------------- |
+| File                                 | Lesson                               | Counted characters | ≈ min of speech |
+| ------------------------------------ | ------------------------------------ | ------------------ | --------------- |
 | `sre-09-sustainable-on-call.md`      | 9 · ရေရှည် လုပ်နိုင်တဲ့ on-call               | 7,976              | 9.5             |
-| `sre-10-working-an-incident.md`      | 10 · Incident တစ်ခုကို အစကနေ အဆုံးထိ          | 7,960              | 9.5             |
-| `sre-11-postmortems.md`              | 11 · သင်ခန်းစာ ရတဲ့ postmortem                | 7,920              | 9.4             |
-| `sre-12-how-complex-systems-fail.md` | 12 · ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ    | 8,784              | 10.5            |
+| `sre-10-working-an-incident.md`      | 10 · Incident တစ်ခုကို အစကနေ အဆုံးထိ        | 7,960              | 9.5             |
+| `sre-11-postmortems.md`              | 11 · သင်ခန်းစာ ရတဲ့ postmortem           | 7,920              | 9.4             |
+| `sre-12-how-complex-systems-fail.md` | 12 · ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ       | 8,784              | 10.5            |
 | `sre-13-stpa-and-cast.md`            | 13 · Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST | 8,808              | 10.5            |
 
 Lessons 9–11 have a budget of 7,600 characters ±5% (7,220 to 7,980). Lessons 12 and 13 are the two
@@ -86,14 +86,14 @@ pages and passed QA. The deck builder measures the fetch size as usual.
     still small and encouraging, and closer to a real first pass.
 - **Bridges.** Each lesson's last question now asks what the next cover asks:
 
-  | From | Bridge asks                                                                           | Next cover asks                                                    |
-  | ---- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-  | L08  | 2 a.m. alert into a muted 60-person Viber group: ဘယ်သူ ဖြေမလဲ?                        | မနက် 2 နာရီ ဘယ်သူ ဖြေမလဲ?                                          |
-  | L09  | payday 6:40 p.m., Top-up burn-rate page, support says no airtime: ဘယ်ကနေ စမလဲ?        | ဘယ်ကနေ စမလဲ?                                                       |
-  | L10  | a week later, Wallet charges twice in a promotion; no blame: ဘာ သင်ခန်းစာ ယူမလဲ?      | ဘာ သင်ခန်းစာ ယူမလဲ?                                                |
-  | L11  | next payday, a near miss with nobody's mistake, saved by luck: why do they fail so?   | ဘယ်သူမှ မမှားဘဲ ဘာကြောင့် ပျက်လဲ?                                  |
-  | L12  | payroll and fraud engine both as designed, 2,800 wallets frozen: root cause ဘယ်မှာလဲ? | ဒီတစ်ခါ root cause က ဘယ်မှာလဲ?                                     |
-  | L13  | Thiri alone on reliability: who to hire, how do newcomers learn safely?               | (L14) Padauk ဘယ်သူ့ကို ခန့်မလဲ? · လူသစ် ဘေးကင်းကင်း ဘယ်လို သင်မလဲ? |
+  | From | Bridge asks                                                                         | Next cover asks                                   |
+  | ---- | ----------------------------------------------------------------------------------- | ------------------------------------------------- |
+  | L08  | 2 a.m. alert into a muted 60-person Viber group: ဘယ်သူ ဖြေမလဲ?                         | မနက် 2 နာရီ ဘယ်သူ ဖြေမလဲ?                              |
+  | L09  | payday 6:40 p.m., Top-up burn-rate page, support says no airtime: ဘယ်ကနေ စမလဲ?        | ဘယ်ကနေ စမလဲ?                                        |
+  | L10  | a week later, Wallet charges twice in a promotion; no blame: ဘာ သင်ခန်းစာ ယူမလဲ?        | ဘာ သင်ခန်းစာ ယူမလဲ?                                   |
+  | L11  | next payday, a near miss with nobody's mistake, saved by luck: why do they fail so? | ဘယ်သူမှ မမှားဘဲ ဘာကြောင့် ပျက်လဲ?                          |
+  | L12  | payroll and fraud engine both as designed, 2,800 wallets frozen: root cause ဘယ်မှာလဲ?  | ဒီတစ်ခါ root cause က ဘယ်မှာလဲ?                         |
+  | L13  | Thiri alone on reliability: who to hire, how do newcomers learn safely?             | (L14) Padauk ဘယ်သူ့ကို ခန့်မလဲ? · လူသစ် ဘေးကင်းကင်း ဘယ်လို သင်မလဲ? |
   - L12's cover had no question. Its question slot held "ဒေါသထွက်တဲ့ post တွေက ဖမ်းမိ: ကံ". Line 3 now
     reads "review · check · canary လွတ်၊ post တွေက ဖမ်းမိ: ကံ" (50 of 56), and the question is "ဘယ်သူမှ
     မမှားဘဲ ဘာကြောင့် ပျက်လဲ?" (33 of 34). Both lean on the bridge's "ဘယ်သူမှ မမှားဘဲ".

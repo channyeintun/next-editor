@@ -98,9 +98,7 @@ the Worker route intercepts first. ✅ Proxied wildcard records are available on
 The matching Worker route goes in `infra/wrangler.toml` (Phase 4.1), e.g. for Option B:
 
 ```toml
-routes = [
-  { pattern = "*-preview.example.com/*", zone_name = "example.com" },
-]
+routes = [{ pattern = "*-preview.example.com/*", zone_name = "example.com" }]
 ```
 
 (wrangler creates/updates the route on deploy — no dashboard route work needed.)

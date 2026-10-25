@@ -283,7 +283,7 @@ clear error rather than an execution. Two things follow for authoring:
   them. A fixture that pins `registers` replays those lines; one that omits the
   field replays none. Pin them when the narration points at a register.
 - **The exit status is always printed** (`[asm-run] Program exited with status
-0`), because a program that exits non-zero has said something.
+  0`), because a program that exits non-zero has said something.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 

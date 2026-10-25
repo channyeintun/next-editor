@@ -22,40 +22,40 @@ the source of truth for the spoken text.
 Lengths are estimates at VoxCPM2's Burmese pace (about 14 characters a second); the real voice
 decides the final length. Total: about 270,000 narration characters, roughly 5 h 20 min.
 
-| #   | Script                               | Title                                      | Deck   | ≈ min |
-| --- | ------------------------------------ | ------------------------------------------ | ------ | ----- |
-| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                    | SRE 1  | 9.4   |
-| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                             | SRE 1  | 9.4   |
-| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                    | SRE 1  | 9.4   |
-| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ            | SRE 1  | 9.4   |
-| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                     | SRE 1  | 9.5   |
-| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                       | SRE 2  | 10.5  |
-| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                     | SRE 2  | 10.5  |
-| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ            | SRE 2  | 10.5  |
-| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                | SRE 3  | 9.5   |
-| 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ            | SRE 3  | 9.5   |
-| 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem                  | SRE 3  | 9.4   |
-| 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ      | SRE 3  | 10.5  |
-| 13  | `sre-13-stpa-and-cast`               | Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST   | SRE 3  | 10.5  |
-| 14  | `sre-14-becoming-an-sre`             | SRE တစ်ယောက် ဖြစ်လာဖို့                    | SRE 4  | 10.5  |
+| #   | Script                               | Title                              | Deck   | ≈ min |
+| --- | ------------------------------------ | ---------------------------------- | ------ | ----- |
+| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | SRE 1  | 9.4   |
+| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | SRE 1  | 9.4   |
+| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | SRE 1  | 9.4   |
+| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | SRE 1  | 9.4   |
+| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | SRE 1  | 9.5   |
+| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | SRE 2  | 10.5  |
+| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | SRE 2  | 10.5  |
+| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | SRE 2  | 10.5  |
+| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | SRE 3  | 9.5   |
+| 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ           | SRE 3  | 9.5   |
+| 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem              | SRE 3  | 9.4   |
+| 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ          | SRE 3  | 10.5  |
+| 13  | `sre-13-stpa-and-cast`               | Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST    | SRE 3  | 10.5  |
+| 14  | `sre-14-becoming-an-sre`             | SRE တစ်ယောက် ဖြစ်လာဖို့                  | SRE 4  | 10.5  |
 | 15  | `sre-15-where-sre-lives`             | SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ                 | SRE 4  | 10.4  |
-| 16  | `sre-16-engagement-models`           | Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ         | SRE 4  | 10.5  |
-| 17  | `sre-17-toil-and-automation`         | Toil နဲ့ automation                        | SRE 5A | 10.5  |
-| 18  | `sre-18-testing-and-config`          | Test နဲ့ config                            | SRE 5A | 9.5   |
-| 19  | `sre-19-testing-in-production`       | Production ထဲမှာ စမ်းသပ်ခြင်း              | SRE 5A | 9.5   |
-| 20  | `sre-20-capacity-planning`           | Capacity ဘယ်လောက် လိုမလဲ                   | SRE 5B | 10.5  |
-| 21  | `sre-21-data-you-are-trusted-with`   | ယုံကြည်ပြီး အပ်ထားတဲ့ data                 | SRE 5B | 9.5   |
-| 22  | `sre-22-backups-and-restores`        | Backup ထက် restore က ပိုအရေးကြီးတယ်        | SRE 5B | 10.5  |
-| 23  | `sre-23-containing-failure`          | Failure ကို ဘောင်ခတ်ထားတဲ့ design          | SRE 5C | 10.5  |
-| 24  | `sre-24-overload-change-emergency`   | Overload နဲ့ emergency mode                | SRE 5C | 10.4  |
-| 25  | `sre-25-platform-engineering`        | မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်       | SRE 5C | 10.5  |
-| 26  | `sre-26-when-ai-writes-the-code`     | AI က code ရေးတဲ့ခေတ်                       | SRE 6A | 10.4  |
-| 27  | `sre-27-reliability-for-ai-features` | AI feature တွေရဲ့ reliability              | SRE 6A | 10.5  |
+| 16  | `sre-16-engagement-models`           | Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ           | SRE 4  | 10.5  |
+| 17  | `sre-17-toil-and-automation`         | Toil နဲ့ automation                  | SRE 5A | 10.5  |
+| 18  | `sre-18-testing-and-config`          | Test နဲ့ config                      | SRE 5A | 9.5   |
+| 19  | `sre-19-testing-in-production`       | Production ထဲမှာ စမ်းသပ်ခြင်း           | SRE 5A | 9.5   |
+| 20  | `sre-20-capacity-planning`           | Capacity ဘယ်လောက် လိုမလဲ                | SRE 5B | 10.5  |
+| 21  | `sre-21-data-you-are-trusted-with`   | ယုံကြည်ပြီး အပ်ထားတဲ့ data                | SRE 5B | 9.5   |
+| 22  | `sre-22-backups-and-restores`        | Backup ထက် restore က ပိုအရေးကြီးတယ်     | SRE 5B | 10.5  |
+| 23  | `sre-23-containing-failure`          | Failure ကို ဘောင်ခတ်ထားတဲ့ design        | SRE 5C | 10.5  |
+| 24  | `sre-24-overload-change-emergency`   | Overload နဲ့ emergency mode          | SRE 5C | 10.4  |
+| 25  | `sre-25-platform-engineering`        | မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်             | SRE 5C | 10.5  |
+| 26  | `sre-26-when-ai-writes-the-code`     | AI က code ရေးတဲ့ခေတ်                  | SRE 6A | 10.4  |
+| 27  | `sre-27-reliability-for-ai-features` | AI feature တွေရဲ့ reliability         | SRE 6A | 10.5  |
 | 28  | `sre-28-ai-in-production-safely`     | AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း | SRE 6A | 10.5  |
-| 29  | `sre-29-where-ai-helps-operations`   | AI က operations မှာ ဘယ်နေရာ ကူညီလဲ         | SRE 6A | 9.5   |
-| 30  | `sre-30-the-first-sre`               | ပထမဆုံး SRE                                | SRE 6B | 9.5   |
-| 31  | `sre-31-sre-in-legacy-and-regulated` | ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE              | SRE 6B | 10.5  |
-| 32  | `sre-32-the-road-ahead`              | SRE ရဲ့ ရှေ့ခရီး                           | SRE 6B | 10.5  |
+| 29  | `sre-29-where-ai-helps-operations`   | AI က operations မှာ ဘယ်နေရာ ကူညီလဲ      | SRE 6A | 9.5   |
+| 30  | `sre-30-the-first-sre`               | ပထမဆုံး SRE                          | SRE 6B | 9.5   |
+| 31  | `sre-31-sre-in-legacy-and-regulated` | ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE             | SRE 6B | 10.5  |
+| 32  | `sre-32-the-road-ahead`              | SRE ရဲ့ ရှေ့ခရီး                        | SRE 6B | 10.5  |
 
 Catalog titles are "SRE from zero N: <title>", so the catalog groups them; add them to one playlist in
 this order. Modules: 1 Why SRE (1–5), 2 Agree and notice (6–8), 3 Respond and learn (9–13), 4 People

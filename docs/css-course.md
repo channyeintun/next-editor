@@ -22,51 +22,51 @@ marks (`[[mark:…]]`) in place and order.
 Lengths are estimates at Burmese VoxCPM2 pace (70 ms per character); the real voice decides the final
 length. Total ≈ 10 hours 46 minutes.
 
-| #   | Script                                  | Title                                             | ≈ min |
-| --- | --------------------------------------- | ------------------------------------------------- | ----- |
-| 1   | `css-course-01-basics`                  | CSS course 1: CSS အခြေခံ                          | 18    |
-| 2   | `css-course-02-box-model`               | CSS course 2: Box model                           | 19    |
-| 3   | `css-course-03-selectors`               | CSS course 3: Selector တွေ အပိုင်း 1              | 15    |
-| 4   | `css-course-04-complex-selectors`       | CSS course 4: Selector တွေ အပိုင်း 2              | 15    |
+| #   | Script                                  | Title                                          | ≈ min |
+| --- | --------------------------------------- | ---------------------------------------------- | ----- |
+| 1   | `css-course-01-basics`                  | CSS course 1: CSS အခြေခံ                        | 18    |
+| 2   | `css-course-02-box-model`               | CSS course 2: Box model                        | 19    |
+| 3   | `css-course-03-selectors`               | CSS course 3: Selector တွေ အပိုင်း 1               | 15    |
+| 4   | `css-course-04-complex-selectors`       | CSS course 4: Selector တွေ အပိုင်း 2               | 15    |
 | 5   | `css-course-05-cascade`                 | CSS course 5: Cascade နဲ့ layer တွေ               | 15    |
-| 6   | `css-course-06-specificity`             | CSS course 6: Specificity                         | 15    |
-| 7   | `css-course-07-inheritance`             | CSS course 7: Inheritance                         | 15    |
-| 8   | `css-course-08-nesting`                 | CSS course 8: Nesting                             | 15    |
+| 6   | `css-course-06-specificity`             | CSS course 6: Specificity                      | 15    |
+| 7   | `css-course-07-inheritance`             | CSS course 7: Inheritance                      | 15    |
+| 8   | `css-course-08-nesting`                 | CSS course 8: Nesting                          | 15    |
 | 9   | `css-course-09-color`                   | CSS course 9: အရောင် ရေးနည်းတွေ                   | 15    |
-| 10  | `css-course-10-sizing-units`            | CSS course 10: Unit တွေနဲ့ အရွယ်အစား              | 15    |
-| 11  | `css-course-11-custom-properties`       | CSS course 11: Custom property တွေ                | 15    |
-| 12  | `css-course-12-functions`               | CSS course 12: CSS function တွေ                   | 15    |
+| 10  | `css-course-10-sizing-units`            | CSS course 10: Unit တွေနဲ့ အရွယ်အစား                | 15    |
+| 11  | `css-course-11-custom-properties`       | CSS course 11: Custom property တွေ              | 15    |
+| 12  | `css-course-12-functions`               | CSS course 12: CSS function တွေ                 | 15    |
 | 13  | `css-course-13-layout-flow`             | CSS course 13: Layout နည်းလမ်းတွေ                 | 15    |
-| 14  | `css-course-14-position-transform`      | CSS course 14: Position နဲ့ transform             | 15    |
-| 15  | `css-course-15-flexbox`                 | CSS course 15: Flexbox အပိုင်း 1၊ axis နဲ့ wrap   | 14    |
-| 16  | `css-course-16-flex-sizing`             | CSS course 16: Flexbox အပိုင်း 2၊ item အရွယ်အစား  | 15    |
+| 14  | `css-course-14-position-transform`      | CSS course 14: Position နဲ့ transform            | 15    |
+| 15  | `css-course-15-flexbox`                 | CSS course 15: Flexbox အပိုင်း 1၊ axis နဲ့ wrap     | 14    |
+| 16  | `css-course-16-flex-sizing`             | CSS course 16: Flexbox အပိုင်း 2၊ item အရွယ်အစား    | 15    |
 | 17  | `css-course-17-flex-alignment`          | CSS course 17: Flexbox အပိုင်း 3၊ alignment       | 15    |
-| 18  | `css-course-18-grid`                    | CSS course 18: Grid အပိုင်း 1၊ track နဲ့ fr       | 13    |
-| 19  | `css-course-19-grid-placement`          | CSS course 19: Grid အပိုင်း 2၊ line နဲ့ placement | 14    |
-| 20  | `css-course-20-grid-areas`              | CSS course 20: Grid အပိုင်း 3၊ area နဲ့ subgrid   | 15    |
-| 21  | `css-course-21-logical-properties`      | CSS course 21: Logical property တွေ               | 14    |
-| 22  | `css-course-22-spacing`                 | CSS course 22: Spacing                            | 14    |
-| 23  | `css-course-23-z-index`                 | CSS course 23: Z-index နဲ့ stacking context       | 14    |
-| 24  | `css-course-24-overflow`                | CSS course 24: Overflow                           | 15    |
-| 25  | `css-course-25-media-container-queries` | CSS course 25: Media query နဲ့ container query    | 15    |
-| 26  | `css-course-26-pseudo-elements`         | CSS course 26: Pseudo-element တွေ                 | 15    |
-| 27  | `css-course-27-pseudo-classes`          | CSS course 27: Pseudo-class တွေ                   | 15    |
-| 28  | `css-course-28-focus-cursors`           | CSS course 28: Focus နဲ့ cursor                   | 15    |
-| 29  | `css-course-29-lists-counters`          | CSS course 29: List နဲ့ counter                   | 14    |
+| 18  | `css-course-18-grid`                    | CSS course 18: Grid အပိုင်း 1၊ track နဲ့ fr         | 13    |
+| 19  | `css-course-19-grid-placement`          | CSS course 19: Grid အပိုင်း 2၊ line နဲ့ placement   | 14    |
+| 20  | `css-course-20-grid-areas`              | CSS course 20: Grid အပိုင်း 3၊ area နဲ့ subgrid     | 15    |
+| 21  | `css-course-21-logical-properties`      | CSS course 21: Logical property တွေ             | 14    |
+| 22  | `css-course-22-spacing`                 | CSS course 22: Spacing                         | 14    |
+| 23  | `css-course-23-z-index`                 | CSS course 23: Z-index နဲ့ stacking context      | 14    |
+| 24  | `css-course-24-overflow`                | CSS course 24: Overflow                        | 15    |
+| 25  | `css-course-25-media-container-queries` | CSS course 25: Media query နဲ့ container query   | 15    |
+| 26  | `css-course-26-pseudo-elements`         | CSS course 26: Pseudo-element တွေ               | 15    |
+| 27  | `css-course-27-pseudo-classes`          | CSS course 27: Pseudo-class တွေ                 | 15    |
+| 28  | `css-course-28-focus-cursors`           | CSS course 28: Focus နဲ့ cursor                  | 15    |
+| 29  | `css-course-29-lists-counters`          | CSS course 29: List နဲ့ counter                  | 14    |
 | 30  | `css-course-30-typography`              | CSS course 30: Typography အပိုင်း 1၊ font         | 15    |
 | 31  | `css-course-31-text-layout`             | CSS course 31: Typography အပိုင်း 2၊ စာသား        | 15    |
-| 32  | `css-course-32-gradients`               | CSS course 32: Gradient                           | 15    |
-| 33  | `css-course-33-backgrounds`             | CSS course 33: နောက်ခံ                            | 15    |
-| 34  | `css-course-34-borders-shadows`         | CSS course 34: Border နဲ့ shadow                  | 16    |
-| 35  | `css-course-35-shapes-clipping`         | CSS course 35: Path၊ shape၊ clipping နဲ့ masking  | 15    |
-| 36  | `css-course-36-filters`                 | CSS course 36: Filter                             | 14    |
-| 37  | `css-course-37-blend-modes`             | CSS course 37: Blend mode                         | 15    |
-| 38  | `css-course-38-transitions`             | CSS course 38: Transition                         | 15    |
-| 39  | `css-course-39-animations`              | CSS course 39: Animation နဲ့ keyframe             | 16    |
-| 40  | `css-course-40-anchor-positioning`      | CSS course 40: Anchor positioning                 | 15    |
-| 41  | `css-course-41-popover-dialog`          | CSS course 41: Popover နဲ့ dialog                 | 16    |
-| 42  | `css-course-42-view-transitions`        | CSS course 42: View transition                    | 16    |
-| 43  | `css-course-43-tailwind`                | CSS course 43: Tailwind CSS                       | 16    |
+| 32  | `css-course-32-gradients`               | CSS course 32: Gradient                        | 15    |
+| 33  | `css-course-33-backgrounds`             | CSS course 33: နောက်ခံ                           | 15    |
+| 34  | `css-course-34-borders-shadows`         | CSS course 34: Border နဲ့ shadow                 | 16    |
+| 35  | `css-course-35-shapes-clipping`         | CSS course 35: Path၊ shape၊ clipping နဲ့ masking | 15    |
+| 36  | `css-course-36-filters`                 | CSS course 36: Filter                          | 14    |
+| 37  | `css-course-37-blend-modes`             | CSS course 37: Blend mode                      | 15    |
+| 38  | `css-course-38-transitions`             | CSS course 38: Transition                      | 15    |
+| 39  | `css-course-39-animations`              | CSS course 39: Animation နဲ့ keyframe            | 16    |
+| 40  | `css-course-40-anchor-positioning`      | CSS course 40: Anchor positioning              | 15    |
+| 41  | `css-course-41-popover-dialog`          | CSS course 41: Popover နဲ့ dialog                | 16    |
+| 42  | `css-course-42-view-transitions`        | CSS course 42: View transition                 | 16    |
+| 43  | `css-course-43-tailwind`                | CSS course 43: Tailwind CSS                    | 16    |
 
 Lessons 1 and 2 were the pilot and run longer (18–19 minutes); every later lesson was held to 12–16.
 

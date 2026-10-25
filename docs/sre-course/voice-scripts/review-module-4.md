@@ -7,10 +7,10 @@ consistency pass left them, the fact sheet, the story spine, the first-use table
 [../curriculum.md](../curriculum.md) and [../glossary.md](../glossary.md). Nothing here has been voiced
 or rendered yet.
 
-| File                          | Lesson                                  | Counted characters | ≈ min of speech |
-| ----------------------------- | --------------------------------------- | ------------------ | --------------- |
-| `sre-14-becoming-an-sre.md`   | 14 · SRE တစ်ယောက် ဖြစ်လာဖို့            | 8,806              | 10.5            |
-| `sre-15-where-sre-lives.md`   | 15 · SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ         | 8,775              | 10.4            |
+| File                          | Lesson                        | Counted characters | ≈ min of speech |
+| ----------------------------- | ----------------------------- | ------------------ | --------------- |
+| `sre-14-becoming-an-sre.md`   | 14 · SRE တစ်ယောက် ဖြစ်လာဖို့        | 8,806              | 10.5            |
+| `sre-15-where-sre-lives.md`   | 15 · SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ       | 8,775              | 10.4            |
 | `sre-16-engagement-models.md` | 16 · Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ | 8,807              | 10.5            |
 
 All three lessons have a budget of 8,400 characters ±5% (7,980 to 8,820), and all three sit near the
@@ -74,12 +74,12 @@ question at 32 s. Every page line is inside the kit's limits.
     ask for it, and Scene 2 already says why a separate team keeps its focus.
 - **Bridges.** Each lesson's last question asks what the next cover asks:
 
-  | From | Bridge asks                                                                                          | Next cover asks                                              |
-  | ---- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+  | From | Bridge asks                                                                                          | Next cover asks                             |
+  | ---- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------- |
   | L13  | Thiri alone on the reliability side: who to hire, how do newcomers learn safely?                     | Padauk ဘယ်သူ့ကို ခန့်မလဲ? · လူသစ် ဘေးကင်းကင်း ဘယ်လို သင်မလဲ? |
-  | L14  | Ko Zaw starts on Monday, two SREs are not a rotation: ဘယ်မှာ ထားပြီး ဘာတွေကို တာဝန်ယူခိုင်းမလဲ?      | ဘယ်မှာ ထားပြီး ဘာ တာဝန်ပေးမလဲ?                               |
-  | L15  | soon after the charter, Bill Pay asks the three-person team to take its whole on-call: what instead? | SRE က ဘာကို ယူသင့်လဲ?                                        |
-  | L16  | Module 5: a four-person SRE team, and over half the week is toil: ဘယ်ကနေ စမလဲ?                       | (L17) ဘယ်ကနေ စမလဲ?                                           |
+  | L14  | Ko Zaw starts on Monday, two SREs are not a rotation: ဘယ်မှာ ထားပြီး ဘာတွေကို တာဝန်ယူခိုင်းမလဲ?                  | ဘယ်မှာ ထားပြီး ဘာ တာဝန်ပေးမလဲ?                   |
+  | L15  | soon after the charter, Bill Pay asks the three-person team to take its whole on-call: what instead? | SRE က ဘာကို ယူသင့်လဲ?                             |
+  | L16  | Module 5: a four-person SRE team, and over half the week is toil: ဘယ်ကနေ စမလဲ?                         | (L17) ဘယ်ကနေ စမလဲ?                            |
   - Each hook repeats the bridge before it: L14 asks in L13's words ("ဘေးကင်းကင်း", which the Module 3
     pass chose), L15 in L14's, and L16 opens on L15's "မကြာခင်မှာပဲ".
   - L15's bridge opened on "နောက်တော့", L06's opener. It now opens "charter ရေးပြီး မကြာခင်မှာပဲ …".

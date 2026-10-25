@@ -17,8 +17,8 @@ keep the marks (`[[mark:…]]`) in place and order.
 Lengths are estimates at Burmese VoxCPM2 pace (~14 characters per second); the real voice decides
 the final length.
 
-| #   | Script                                           | Title                                                       | Runtime | ≈ min |
-| --- | ------------------------------------------------ | ----------------------------------------------------------- | ------- | ----- |
+| #   | Script                                           | Title                                                     | Runtime | ≈ min |
+| --- | ------------------------------------------------ | --------------------------------------------------------- | ------- | ----- |
 | 1   | `react-crash-course-01-components-jsx`           | React crash course 1: Component နဲ့ JSX                     | Vite 5  | 11    |
 | 2   | `react-crash-course-02-props-lists`              | React crash course 2: Props၊ list နဲ့ condition             | Vite 5  | 11    |
 | 3   | `react-crash-course-03-state-events`             | React crash course 3: State နဲ့ event                       | Vite 5  | 11    |
@@ -28,10 +28,10 @@ the final length.
 | 7   | `react-crash-course-07-effects-custom-hooks`     | React crash course 7: Effect နဲ့ custom hook                | Vite 5  | 12    |
 | 8   | `react-crash-course-08-performance-transitions`  | React crash course 8: Performance နဲ့ transition            | Vite 5  | 10    |
 | 9   | `react-crash-course-09-suspense-errors`          | React crash course 9: Suspense၊ use နဲ့ error boundary      | Vite 5  | 12    |
-| 10  | `react-crash-course-10-actions-forms`            | React crash course 10: Action နဲ့ form hook တွေ             | Vite 5  | 12    |
+| 10  | `react-crash-course-10-actions-forms`            | React crash course 10: Action နဲ့ form hook တွေ              | Vite 5  | 12    |
 | 11  | `react-crash-course-11-activity-view-transition` | React crash course 11: Activity နဲ့ ViewTransition          | Vite 5  | 11    |
 | 12  | `react-crash-course-12-server-components`        | React crash course 12: Server Component နဲ့ Server Function | RSC     | 10    |
-| 13  | `react-crash-course-13-react-19-3-recap`         | React crash course 13: React 19.3 နဲ့ အနှစ်ချုပ်            | RSC     | 10    |
+| 13  | `react-crash-course-13-react-19-3-recap`         | React crash course 13: React 19.3 နဲ့ အနှစ်ချုပ်                | RSC     | 10    |
 
 Thumbnails (1280×720) are in [react-crash-course-thumbnails/](./react-crash-course-thumbnails/).
 They are rendered from [react-crash-course-thumbnail.html](./react-crash-course-thumbnail.html) with

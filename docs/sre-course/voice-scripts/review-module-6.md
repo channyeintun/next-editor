@@ -7,15 +7,15 @@ the Module 3 and 4 scripts as their passes left them, Lesson 25 (whose bridge Le
 fact sheet, the story spine, the first-use table, the lesson specs in [../curriculum.md](../curriculum.md)
 and [../glossary.md](../glossary.md). Nothing here has been voiced or rendered yet.
 
-| File                                    | Lesson                                          | Counted characters | ≈ min of speech |
-| --------------------------------------- | ----------------------------------------------- | ------------------ | --------------- |
-| `sre-26-when-ai-writes-the-code.md`     | 26 · AI က code ရေးတဲ့ခေတ်                       | 8,764              | 10.4            |
-| `sre-27-reliability-for-ai-features.md` | 27 · AI feature တွေရဲ့ reliability              | 8,811              | 10.5            |
+| File                                    | Lesson                                  | Counted characters | ≈ min of speech |
+| --------------------------------------- | --------------------------------------- | ------------------ | --------------- |
+| `sre-26-when-ai-writes-the-code.md`     | 26 · AI က code ရေးတဲ့ခေတ်                  | 8,764              | 10.4            |
+| `sre-27-reliability-for-ai-features.md` | 27 · AI feature တွေရဲ့ reliability         | 8,811              | 10.5            |
 | `sre-28-ai-in-production-safely.md`     | 28 · AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း | 8,798              | 10.5            |
-| `sre-29-where-ai-helps-operations.md`   | 29 · AI က operations မှာ ဘယ်နေရာ ကူညီလဲ         | 7,959              | 9.5             |
-| `sre-30-the-first-sre.md`               | 30 · ပထမဆုံး SRE                                | 7,967              | 9.5             |
-| `sre-31-sre-in-legacy-and-regulated.md` | 31 · ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE              | 8,801              | 10.5            |
-| `sre-32-the-road-ahead.md`              | 32 · SRE ရဲ့ ရှေ့ခရီး                           | 8,806              | 10.5            |
+| `sre-29-where-ai-helps-operations.md`   | 29 · AI က operations မှာ ဘယ်နေရာ ကူညီလဲ      | 7,959              | 9.5             |
+| `sre-30-the-first-sre.md`               | 30 · ပထမဆုံး SRE                          | 7,967              | 9.5             |
+| `sre-31-sre-in-legacy-and-regulated.md` | 31 · ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE             | 8,801              | 10.5            |
+| `sre-32-the-road-ahead.md`              | 32 · SRE ရဲ့ ရှေ့ခရီး                        | 8,806              | 10.5            |
 
 Lessons 26–28, 31 and 32 have a budget of 8,400 characters ±5% (7,980 to 8,820). Lessons 29 and 30 have
 7,600 ±5% (7,220 to 7,980). All seven sit near the top, as the earlier modules do. The module comes to
@@ -93,16 +93,16 @@ Every spoken number is in Burmese digits: `burmese-digits.py` changed no lines o
     (21). The l32_p01b caption matches it.
 - **Bridges.** Each lesson's last question asks what the next cover asks:
 
-  | From | Bridge asks                                                                                       | Next cover asks                    |
-  | ---- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
-  | L25  | Module 6: coding agents, merges 15 → 120 a day: SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?                | ဘာတွေ ပြောင်းသွားမလဲ?              |
-  | L26  | Ask Padauk: success code on 99.9% of chats, refund tickets for the wrong transactions             | success code ဘယ်တော့ မလုံလောက်လဲ?  |
-  | L27  | the other direction: Ops Buddy asks for production access: ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?     | ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ? |
-  | L28  | brakes in place; Friday promo, dashboard 99.7%, angry comments: alert ဘာလို့ မတက်ခဲ့တာလဲ?         | alert ဘာလို့ မတက်ခဲ့တာလဲ?          |
-  | L29  | Padauk buys a Mandalay delivery startup, Ko Min its first SRE: ကိုမင်း ဘယ်ကနေ စမလဲ?               | ကိုမင်း ဘယ်ကနေ စမလဲ?               |
-  | L30  | wallets locked at midnight, a 5-minute fix, 70 minutes locked: ကျန်တဲ့ မိနစ် ၆၅ က ဘယ်ရောက်သွားလဲ? | မိနစ် 65 ဘယ်ရောက်သွားလဲ?           |
-  | L31  | the year-end review: three months of uptime said nothing: ဒါဆို ဘာက ကြိုပြောနိုင်မလဲ?             | ဘာက ကြိုပြောနိုင်မလဲ?              |
-  | L32  | the course closes: Padauk's story, like reliability, keeps going                                  | —                                  |
+  | From | Bridge asks                                                                              | Next cover asks             |
+  | ---- | ---------------------------------------------------------------------------------------- | --------------------------- |
+  | L25  | Module 6: coding agents, merges 15 → 120 a day: SRE အလုပ်မှာ ဘာတွေ ပြောင်းသွားမလဲ?              | ဘာတွေ ပြောင်းသွားမလဲ?           |
+  | L26  | Ask Padauk: success code on 99.9% of chats, refund tickets for the wrong transactions    | success code ဘယ်တော့ မလုံလောက်လဲ? |
+  | L27  | the other direction: Ops Buddy asks for production access: ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?      | ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?    |
+  | L28  | brakes in place; Friday promo, dashboard 99.7%, angry comments: alert ဘာလို့ မတက်ခဲ့တာလဲ?       | alert ဘာလို့ မတက်ခဲ့တာလဲ?          |
+  | L29  | Padauk buys a Mandalay delivery startup, Ko Min its first SRE: ကိုမင်း ဘယ်ကနေ စမလဲ?           | ကိုမင်း ဘယ်ကနေ စမလဲ?             |
+  | L30  | wallets locked at midnight, a 5-minute fix, 70 minutes locked: ကျန်တဲ့ မိနစ် ၆၅ က ဘယ်ရောက်သွားလဲ? | မိနစ် 65 ဘယ်ရောက်သွားလဲ?          |
+  | L31  | the year-end review: three months of uptime said nothing: ဒါဆို ဘာက ကြိုပြောနိုင်မလဲ?            | ဘာက ကြိုပြောနိုင်မလဲ?             |
+  | L32  | the course closes: Padauk's story, like reliability, keeps going                         | —                           |
   - Each hook repeats the bridge before it. L26 asks in L25's words, L27 in L26's ("success code
     ပြန်လာရုံနဲ့ …"), L28 in L27's ("ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?", word order aligned), and L31 in
     L30's. L30's bridge used to ask "ဘာလို့ မိနစ် ၇၀ ကြာခဲ့တာလဲ?" while L31 asked where the 65 minutes
